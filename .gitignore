@@ -1,0 +1,24 @@
+skills-lock.json
+
+# Dependencies
+node_modules/
+
+# Local environment and Convex deployment selection
+.env
+.env.*
+!.env.example
+
+# Build, test, and framework output
+coverage/
+dist/
+dist-ssr/
+.output/
+.tanstack/
+.vinxi/
+.nitro/
+*.tsbuildinfo
+
+# Local tooling
+.DS_Store
+*.local
+__unconfig*
