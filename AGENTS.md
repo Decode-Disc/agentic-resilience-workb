@@ -43,6 +43,7 @@ Do not rewrite product requirements as part of implementation. Material changes 
 - Keep the application, source code, schemas, fixtures, tests, UI copy, and documentation in English, even if the user communicates in French.
 - Use current primary documentation before recalled APIs. For library or API documentation, generated integration code, setup, or configuration, consult both Context7 and DeepWiki as required by the repository instructions, then verify against the installed package version.
 - Preserve user changes. Inspect the working tree before edits and do not overwrite unrelated work.
+- Use appropriate skills for the tasks you're working on (e.g. `ai-skd` for working with ai-sdk, convex skills when using convex, `high-end-visual-design` + `frontend-ui-engineering` + `gpt-taste` for well build ui, `hyperframes` + `hyperframes-animation` for high end animations).
 
 ## Candidature Priority and Proportionality
 
