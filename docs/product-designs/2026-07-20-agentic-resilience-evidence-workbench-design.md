@@ -243,6 +243,8 @@ draft
 → completed
 ```
 
+Execution status is tracked separately as `idle`, `running`, `paused`, `failed`, `cancelled`, or `completed`; a pause identifies the pending human checkpoint. Operational `WorkflowStep`, `AuditEvent`, and `CheckpointDecision` records support this lifecycle without becoming analytical artifacts.
+
 ## Technical Architecture
 
 ```text
@@ -304,6 +306,7 @@ Provider selection remains automatic. Provider details are inspectable in run de
 The prototype is private and invitation-only.
 
 - Exactly five invitation records are created.
+- One invitation belongs to the administrator and four to analysts. Convex Auth anonymous sessions are admitted through high-entropy, single-use invitation codes whose plaintext is never persisted.
 - Each admitted visitor may reserve at most three analyses in total.
 - Limits are enforced in server-side Convex mutations and persist across sessions.
 - Analysis reservations are atomic.
@@ -438,3 +441,4 @@ The MVP is complete when an invited analyst can:
 - [ADR-004: Use SEC, Exa, and Unstructured for source acquisition](../decisions/004-use-sec-exa-and-unstructured-for-source-acquisition.md)
 - [ADR-005: Enforce prototype provider cost ceilings (superseded)](../decisions/005-enforce-prototype-provider-cost-ceilings.md)
 - [ADR-006: Use lightweight prototype usage guards](../decisions/006-use-lightweight-prototype-usage-guards.md)
+- [ADR-007: Use anonymous Convex Auth with one-time invitations](../decisions/007-use-anonymous-convex-auth-with-one-time-invitations.md)

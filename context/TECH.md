@@ -66,6 +66,8 @@ The completed design contains these explicit concepts:
 - `BriefRevision`
 - `ProviderCall`
 
+The persistence backbone also uses `WorkflowStep`, `AuditEvent`, and `CheckpointDecision` as operational support records. `RunEvent` remains exclusively the product-progress stream; security, invitation, and quota history belongs in `AuditEvent`.
+
 This is the completed domain model, not an instruction to scaffold unused records. Introduce each concept when observable behavior requires it while preserving these boundaries and names unless an explicit design change is approved.
 
 Use runtime validation for persisted and external data. Represent lifecycle states with closed unions or enums matching the design. Preserve source-corpus versions and assessment revisions; later additions must not silently mutate an existing result.
@@ -103,6 +105,8 @@ draft
 ```
 
 Enforce transitions server-side. A client must not bypass checkpoints or directly mark workflow stages complete.
+
+Track execution separately from the analytical lifecycle with `idle`, `running`, `paused`, `failed`, `cancelled`, and `completed`. A paused run records whether it awaits source review or assessment review. This separation keeps failure and cancellation from inventing analytical stages.
 
 Retries, resumptions, and cancellation must be durable and idempotent. They must not duplicate claims, quota reservations, provider-call records, or external side effects. Persisted `RunEvent` records are the only source of UI progress.
 
@@ -170,6 +174,7 @@ Neither CLIProxyAPI production readiness nor precise dossier economics is a prer
 ## Access, Quotas, and Resource Guards
 
 - Create exactly five invitation records through an idempotent seed or administrative setup path.
+- Use Convex Auth anonymous sessions with single-use, server-digested invitation codes as defined by ADR-007. Keep one invitation role as administrator and four as analysts.
 - Admit at most five distinct visitors in total.
 - Allow each admitted visitor to reserve at most three analyses in total.
 - Enforce both limits atomically in server-side Convex mutations and persist them across sessions.
@@ -300,5 +305,6 @@ Never present cached, seeded, or precomputed output as live. Label showcase and 
 - ADR-004: SEC, Exa, and Unstructured source-acquisition boundaries.
 - ADR-005: retained historical cost-ceiling decision, superseded by ADR-006.
 - ADR-006: lightweight prototype usage guards.
+- ADR-007: anonymous Convex Auth with one-time invitation codes.
 
 Read the corresponding record in `docs/decisions/` before revisiting any of these decisions.

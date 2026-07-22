@@ -29,28 +29,28 @@ Outcome: a runnable, testable application foundation ready for product work.
 
 Outcome: the minimum typed, persisted model needed to express real product state.
 
-- [ ] Define the first required domain schemas and runtime validators.
-- [ ] Enforce research-run and workflow-step lifecycle transitions server-side.
-- [ ] Persist append-only run events and audit events in Convex.
-- [ ] Verify valid transitions, invalid transitions, and audit preservation.
+- [x] Define the first required domain schemas and runtime validators.
+- [x] Enforce research-run and workflow-step lifecycle transitions server-side.
+- [x] Persist append-only run events and audit events in Convex.
+- [x] Verify valid transitions, invalid transitions, and audit preservation.
 
 ## Phase 2 — Private Access and Quotas
 
 Outcome: only invited visitors can reserve analyses within the prototype limits.
 
-- [ ] Seed exactly five invitations through an idempotent setup path.
-- [ ] Implement server-side visitor admission and authorization.
-- [ ] Reserve at most three analyses per admitted visitor atomically.
-- [ ] Verify concurrency, persistence across sessions, and audited quota restoration.
+- [x] Seed exactly five invitations through an idempotent setup path.
+- [x] Implement server-side visitor admission and authorization.
+- [x] Reserve at most three analyses per admitted visitor atomically.
+- [x] Verify concurrency, persistence across sessions, and audited quota restoration.
 
 ## Phase 3 — Durable Workflow Skeleton
 
 Outcome: a deterministic research run can progress, pause, resume, fail, retry, and cancel durably.
 
-- [ ] Implement the provider-independent Convex Workflow skeleton.
-- [ ] Make persisted `RunEvent` records the only source of UI progress.
-- [ ] Add the durable source-approval and analyst-review checkpoints.
-- [ ] Verify resumption, bounded retries, cancellation, and idempotency with deterministic adapters.
+- [x] Implement the provider-independent Convex Workflow skeleton.
+- [x] Make persisted `RunEvent` records the only source of UI progress.
+- [x] Add the durable source-approval and analyst-review checkpoints.
+- [x] Verify resumption, bounded retries, cancellation, and idempotency with deterministic adapters.
 
 ## Phase 4 — Company and Corpus Discovery
 
