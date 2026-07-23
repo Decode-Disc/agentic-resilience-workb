@@ -1,50 +1,178 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.3/schema.json",
-  "vcs": {
-    "enabled": true,
-    "clientKind": "git",
-    "useIgnoreFile": true
-  },
-  "files": {
-    "ignoreUnknown": true,
-    "includes": [
-      "src/**",
-      "convex/**",
-      "*.ts",
-      "*.json",
-      "!src/routeTree.gen.ts",
-      "!convex/_generated"
-    ]
-  },
-  "formatter": {
-    "enabled": true,
-    "indentStyle": "space",
-    "indentWidth": 2,
-    "lineWidth": 100
-  },
-  "assist": {
-    "actions": {
-      "source": {
-        "organizeImports": "on"
-      }
-    }
-  },
-  "linter": {
-    "enabled": true,
-    "rules": {
-      "preset": "recommended"
-    }
-  },
-  "css": {
-    "parser": {
-      "tailwindDirectives": true
-    }
-  },
-  "javascript": {
+    "$schema": "https://biomejs.dev/schemas/2.5.3/schema.json",
+    "vcs": {
+      "enabled": true,
+      "clientKind": "git",
+      "useIgnoreFile": true
+    },
+    "files": {
+      "ignoreUnknown": true,
+      "includes": [
+        "src/**",
+        "convex/**",
+        "scripts/**",
+        "*.ts",
+        "*.json",
+        "!src/routeTree.gen.ts",
+        "!convex/_generated"
+      ]
+    },
     "formatter": {
-      "quoteStyle": "double",
-      "semicolons": "asNeeded",
-      "trailingCommas": "all"
-    }
-  }
+      "enabled": true,
+      "indentStyle": "space",
+        "indentWidth": 4,
+        "lineWidth": 80
+      },
+      "assist": {
+        "actions": {
+          "source": {
+            "organizeImports": "on"
+          }
+        }
+      },
+      "linter": {
+        "enabled": true,
+        "rules": {
+            "preset": "recommended",
+            "correctness": {
+              "recommended": true,
+              "useExhaustiveDependencies": "warn",
+              "useHookAtTopLevel": "error"
+            },
+            "suspicious": {
+              "recommended": true,
+              "noExplicitAny": "error",
+              "noArrayIndexKey": "error"
+            },
+            "style": {
+              "recommended": true,
+              "useConst": "error",
+              "useImportType": "error",
+              "useExportType": "error",
+              "useNamingConvention": "off"
+            },
+            "a11y": {
+              "recommended": true,
+              "useButtonType": "error",
+              "useAnchorContent": "error"
+            }
+          }
+        },
+        "css": {
+          "parser": {
+            "tailwindDirectives": true
+          }
+        },
+        "javascript": {
+          "formatter": {
+            "quoteStyle": "single",
+            "jsxQuoteStyle": "double",
+            "semicolons": "always",
+            "trailingCommas": "all",
+            "arrowParentheses": "always",
+            "bracketSpacing": true
+          }
+        },
+        "json": {
+          "formatter": {
+            "trailingCommas": "none"
+          }
+        },
+        "overrides": [
+          {
+            "includes": [
+              "src/**/*.{js,jsx,ts,tsx}"
+            ],
+            "linter": {
+              "rules": {
+                "style": {
+                  "noRestrictedImports": {
+                    "level": "error",
+                    "options": {
+                      "patterns": [
+                        {
+                          "group": [
+                            "../*",
+                            "../../*",
+                            "../../../*",
+                            "../../../../*"
+                          ],
+                          "message": "Use '@/' alias."
+                        },
+                        {
+                          "group": [
+                            "../convex/*",
+                            "../../convex/*",
+                            "../../../convex/*",
+                            "../../../../convex/*"
+                          ],
+                          "message": "Use '@convex/' alias."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "includes": [
+              "convex/**/*.{js,jsx,ts,tsx}"
+            ],
+            "linter": {
+              "rules": {
+                "style": {
+                  "noRestrictedImports": {
+                    "level": "error",
+                    "options": {
+                      "patterns": [
+                        {
+                          "group": [
+                            "../*",
+                            "../../*",
+                            "../../../*",
+                            "../../../../*"
+                          ],
+                          "message": "Use '@convex/' alias."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "includes": [
+              "src/__tests__/**/*.{ts,tsx}"
+            ],
+            "linter": {
+              "rules": {
+                "suspicious": {
+                  "noExplicitAny": "off"
+                }
+              }
+            }
+          },
+          {
+            "includes": [
+              "src/components/ui/**/*.{ts,tsx}"
+            ],
+            "linter": {
+              "rules": {
+                "correctness": {
+                  "useExhaustiveDependencies": "off"
+                },
+                "a11y": {
+                  "useSemanticElements": "off",
+                  "useKeyWithClickEvents": "off",
+                  "useFocusableInteractive": "off",
+                  "useAriaPropsForRole": "off",
+                  "noLabelWithoutControl": "off",
+                  "noSvgWithoutTitle": "off"
+                }
+              }
+            }
+          }
+    ]
 }

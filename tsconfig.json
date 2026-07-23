@@ -1,27 +1,53 @@
 {
-  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts", "vitest.config.ts"],
-  "compilerOptions": {
-    "target": "ES2022",
-    "jsx": "react-jsx",
-    "module": "ESNext",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["vite/client"],
-    "paths": {
-      "@/*": ["./src/*"]
-    },
-    "moduleResolution": "Bundler",
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
-    "isolatedModules": true,
-    "noEmit": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true,
-    "forceConsistentCasingInFileNames": true
-  }
+    "include": [
+      "src/**/*.ts",
+      "src/**/*.tsx",
+      "scripts/**/*.ts",
+      "vite.config.ts",
+      "vitest.config.ts"
+    ],
+    "exclude": [
+      "node_modules",
+      "dist",
+      "docs"
+    ],
+    "compilerOptions": {
+        "target": "ESNext",
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
+        "jsx": "react-jsx",
+        "lib": [
+          "ES2022",
+          "DOM",
+          "DOM.Iterable"
+        ],
+        "types": [
+          "vite/client",
+          "vitest/globals",
+          "node"
+        ],
+        "allowImportingTsExtensions": true,
+        "allowJs": false,
+        "verbatimModuleSyntax": true,
+        "isolatedModules": true,
+        "noEmit": true,
+        "strict": true,
+        "skipLibCheck": true,
+        "noImplicitAny": true,
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": false,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "noFallthroughCasesInSwitch": true,
+        "noUncheckedSideEffectImports": true,
+        "forceConsistentCasingInFileNames": true,
+        "paths": {
+          "@/*": [
+            "./src/*"
+          ],
+          "@convex/*": [
+            "./convex/*"
+          ]
+        }
+      }
 }

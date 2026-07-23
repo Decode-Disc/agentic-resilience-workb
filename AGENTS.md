@@ -43,7 +43,7 @@ Do not rewrite product requirements as part of implementation. Material changes 
 - Keep the application, source code, schemas, fixtures, tests, UI copy, and documentation in English, even if the user communicates in French.
 - Use current primary documentation before recalled APIs. For library or API documentation, generated integration code, setup, or configuration, consult both Context7 and DeepWiki as required by the repository instructions, then verify against the installed package version.
 - Preserve user changes. Inspect the working tree before edits and do not overwrite unrelated work.
-- Use appropriate skills for the tasks you're working on (e.g. `ai-skd` for working with ai-sdk, convex skills when using convex, `high-end-visual-design` + `frontend-ui-engineering` + `gpt-taste` for well build ui, `hyperframes` + `hyperframes-animation` for high end animations).
+- Use appropriate skills for the tasks you're working on (e.g. `ai-skd` for working with ai-sdk, convex skills when using convex, `high-end-visual-design` + `frontend-ui-engineering` + `gpt-taste` for well build ui, `hyperframes` + `hyperframes-animation` for high end animations, `shadcn` skill when working with shadcn components).
 
 ## Candidature Priority and Proportionality
 
@@ -120,6 +120,122 @@ Keep domain rules out of UI components. Keep provider-specific types and model n
 
 Protect every exposed server operation with the authorization, validation, idempotency, resource, and security controls appropriate to that operation. Never rely on disabled UI controls for enforcement.
 
+## Frontend Standards
+
+These rules govern the React + TanStack Start + Convex + shadcn/ui (`base-luma` style, `hugeicons` library) layer of the prototype. They are enforced by Biome where the rule is statically detectable; the rest is review-time.
+
+### Key principles
+
+- **Design system continuity**
+    - Do not reintroduce starter-kit visual patterns, generic SaaS dashboard defaults, or one-off styling that bypasses the `base-luma` shadcn theme in `src/styles.css`.
+    - If a new visual pattern is needed, extend the shared design system (tokens, variants) rather than creating a local exception on a single page.
+    - Before styling a new page, layout, evidence view, or shared primitive, verify it still matches the dedicated design system.
+- **Consistency**
+    - Maintain consistent UI patterns and layouts across the workbench.
+    - Never use hardcoded urls. Route through TanStack Router's typed navigation (`<Link>`, `useNavigate`, `redirect`) and Convex HttpApi routes.
+- **Reusability**
+    - Build reusable components for common UI elements. Abstract shared logic into modules under `src/lib/` or `src/hooks/`.
+    - Keep domain rules out of UI components (see *Implementation Discipline*). UI components render state; they do not own workflow transitions, claim classification, or evidence policy.
+- **Type Safety (single source of truth)**
+    - Do NOT manually redefine TypeScript interfaces for Convex data. Use the generated Convex types (`@convex/_generated/api`, `@convex/_generated/dataModel`) as the single source of truth.
+    - Do NOT hand-write DTOs for server responses. Convex's `api.*` references and `ConvexReactClient` types already contract every query, mutation, and action.
+- **High-end visual design**
+    - Use ui components from `@/components/ui/*` and shadcn primitives. Those components were handpicked and vetted for consistency with the design system.
+    - Do not hand-roll bespoke visual patterns for standard UI elements (buttons, inputs, modals, toasts, tables, etc.).
+
+### Import paths
+
+- **`@/` alias is mandatory for any cross-directory import.** `../` and deeper relative parent paths are strictly prohibited. This is enforced by Biome (`style.noRestrictedImports`).
+- Same-directory `./` imports are acceptable (e.g., `import Foo from './foo'`).
+- For `convex/` modules imported from `src/`, use `@convex/...` (configured in `tsconfig.json` and `vite.config.ts` `resolve.tsconfigPaths`).
+- `import.meta.glob` patterns must start with `/` (project-root absolute) or `./` (relative). Vite's glob plugin does not honor aliases. `import.meta.glob('@convex/*.ts')` will fail at build time with a cryptic error. Enforced by `scripts/check-imports.ts`.
+- TS-to-TS imports must not use `.js` extensions unless a real `.js` runtime sibling exists (e.g., a `.d.ts` + `.js` paired shim). Enforced by `scripts/check-imports.ts`.
+- Examples:
+    - ❌ `import { X } from '../../types/ui'`
+    - ✅ `import type { X } from '@/types/ui'`
+    - ❌ `import schema from '../../convex/schema'`
+    - ✅ `import schema from '@convex/schema'`
+    - ❌ `import.meta.glob('@convex/**/*.ts')`
+    - ✅ `import.meta.glob('/convex/**/*.ts')`
+
+### React 19 & TanStack Start critical standards
+
+1.  **No `defaultProps`**: React 19 removed `defaultProps` for function components. Use ES6 default parameters in the function signature.
+    ```tsx
+    // ✅ Correct
+    function Button({ size = 'md' }: ButtonProps) { ... }
+    ```
+2.  **No `propTypes`**: removed API. Rely on TypeScript interfaces.
+3.  **Strict `ref` cleanups**: ref callbacks must return `undefined` or a cleanup function.
+    - ❌ `ref={current => (instance = current)}` (implicitly returns the node)
+    - ✅ `ref={current => { instance = current; }}` (returns undefined)
+4.  **No `forwardRef`**: pass `ref` directly as a prop in function components.
+5.  **Data fetching & mutations**: use the Convex React hooks (`useQuery`, `useMutation`, `useAction`, `usePaginatedQuery`) wired through `@convex-dev/react-query` where query-cache integration is needed. Do not bypass Convex with ad-hoc `fetch()` calls to Convex's HTTP API unless the integration explicitly requires HTTP transport (see `convex/http.ts` for the narrow cases).
+6.  **Optimistic / pending state**: use Convex's built-in optimistic updates (`useMutation` with `optimisticUpdate`) or `@tanstack/react-query`'s `useMutation` for non-Convex server-side effects. Do not hand-roll optimistic state for data owned by Convex.
+7.  **Server functions**: prefer TanStack Start server functions (`createServerFn`) for pure SSR/edge concerns (auth context, redirects, server-only computations). Do not put evidence policy, claim classification, or workflow logic in server functions — that belongs in Convex.
+
+### Icons
+
+- Always render icons through the shared `Icon` component at `src/components/icon.tsx` (`import Icon from '@/components/icon'`).
+- Prefer Hugeicons for standard icons. Use Lucide only when a Hugeicons equivalent does not exist. Do not mix icon libraries in a single component.
+- `Icon` accepts both Hugeicons icon nodes (`@hugeicons/core-free-icons`) and Lucide components (`lucide-react`) via the `PlatformIcon` union — keep that abstraction as the single icon surface.
+    ```tsx
+    import Icon from '@/components/icon';
+    import { AArrowDownIcon } from '@hugeicons/core-free-icons';
+
+    function MyButton() {
+        return (
+            <button className="btn-primary">
+                <Icon iconNode={AArrowDownIcon} size={16} />
+                Export
+            </button>
+        );
+    }
+    ```
+- Do not import `HugeiconsIcon` or `LucideIcon` directly in feature components. Go through `Icon`.
+
+### Toasts and notifications
+
+- The global `Toaster` is mounted once in the root layout via the Sonner wrapper at `src/components/ui/sonner.tsx`.
+- Trigger toasts imperatively from anywhere: `import { toast } from 'sonner'`. `toast.success(...)`, `toast.error(...)`, `toast.info(...)`, `toast.warning(...)` accept rich content.
+- **Severity mapping**:
+    - Use `toast.success` when an analyst-side action completed and confirmation is needed (saved override, approved source set, brief exported).
+    - Use `toast.error` for non-field-specific failures (permission denied, provider call breached its ceiling, server-side business rule).
+    - Use `toast.warning` for recoverable conditions that need acknowledgement (idempotent retry applied, fallback path used).
+- **Field-level errors must NOT be toasted.** Validation errors belonging to a specific input should render inline next to the field via the input-error pattern.
+- Do not replatform the flash layer; the Sonner wrapper already wires theme + icons.
+
+### Loading, empty, and error states
+
+Every async region — evidence queries, source discovery, assessment review — must expose explicit states:
+
+- **Loading**: skeleton or placeholder that preserves layout dimensions. Never swap a populated region for a spinner-only state that causes layout shift.
+- **Empty**: an explicit empty state (use `Empty` from `@/components/ui/empty` or equivalent) when there is genuinely nothing to show. The empty state must be visually distinct from "still loading."
+- **Error**: surface the actionable error inline (retry, contact support). Do not swallow Convex errors into a generic blank screen.
+- **Insufficient evidence**: per Product Invariant 15, a weak evidence base yields `0 / Mixed or unclear`, `Hypothesis`, `Unknown`, or `insufficient public evidence`. The UI must render these states visibly, not collapse them into a fake-confident view.
+
+### Error handling and validation
+
+- Prefer early returns for error / guarded conditions. Guard clauses first; main flow un-indented.
+- For form validation surfaced from Convex mutations, parse the error shape and route field-level errors inline; reserve toasts for the non-field remainder.
+- Custom error types live under `src/lib/errors/` (or equivalent). Do not throw ad-hoc `Error('foo')` from feature code — inherit from a named class so the UI can branch on type.
+
+### Charts
+
+- Use the shared shadcn chart primitives from `@/components/ui/*` and Recharts. Compose Recharts components directly; do not wrap them in bespoke chart abstractions.
+- Every chart container must pair loading/empty/error states and keep container layout stable across transitions (no reflow when data arrives).
+- Anti-patterns: custom SVG logic for standard analytics, global tooltip/legend overrides injected into charts that do not need them.
+
+### Anti-patterns (do not)
+
+- Bypassing Convex with direct HTTP fetches when a Convex hook fits.
+- Storing evidence, claims, or workflow state in React component state instead of Convex (violates the *state owner* invariant).
+- Hand-defining Convex payload types instead of importing from `@convex/_generated/api`.
+- Importing `HugeiconsIcon` / `LucideIcon` directly in feature components instead of going through `Icon`.
+- Toasting field-level validation errors.
+- Using `<Input type="date" />` or `<Input type="datetime-local" />` — use a shared date picker built on shadcn primitives when date input is needed.
+- Rendering hidden chain-of-thought, agent activity theatre, or simulated progress in the UI (violates Product Invariant 13).
+
 ## Test-Driven Development
 
 Every production behavior change, bug fix, domain rule, or workflow transition must follow:
@@ -135,10 +251,14 @@ RED → verify the expected failure → GREEN → REFACTOR → verify the releva
 - Run the focused test, the affected suite, and the project quality checks defined in ``.
 - Default and CI tests must not call paid or nondeterministic providers.
 - Do not complete work with `.skip`, `.only`, hidden failures, unexplained warnings, or flaky retries.
+- Write Vitest tests for components that own non-trivial rendering logic, using React Testing Library when browser-style rendering helpers are needed. Import real production modules; mock only external boundaries.
+- Do not test pure Convex logic through the React layer. Convex-side behavior is tested via the `src/__tests__` integration suite using `convexTest`.
+- Provide a JSDoc comment on any shared component, hook, or utility whose intent isn't obvious from the name.
+- Keep all source code, schemas, copy, and documentation in English — even when communicating with the user in French.
 
 Documentation-only edits do not require a failing automated test. Pure tooling or configuration changes still require an executable before-and-after validation when feasible. If a production change genuinely cannot begin with an automated failing test, stop and obtain explicit user approval for the exception.
 
-Always refer refer to `tdd` skill for complete guidance for test-driven-development.
+**Always refer refer to `tdd` skill for complete guidance for test-driven-development and `vitest` skill for guidance on testing with Vitest.**
 
 ## Demo Integrity and Human Authority
 
