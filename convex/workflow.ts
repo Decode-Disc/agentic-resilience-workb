@@ -1,27 +1,29 @@
-import { WorkflowManager, defineEvent } from "@convex-dev/workflow"
-import { v } from "convex/values"
+import { defineEvent, WorkflowManager } from '@convex-dev/workflow';
+import { v } from 'convex/values';
 
-import { components } from "./_generated/api"
+import { components } from './_generated/api';
 
 export const workflow = new WorkflowManager(components.workflow, {
-  workpoolOptions: {
-    defaultRetryBehavior: {
-      maxAttempts: 3,
-      initialBackoffMs: 100,
-      base: 2,
+    workpoolOptions: {
+        defaultRetryBehavior: {
+            maxAttempts: 3,
+            initialBackoffMs: 100,
+            base: 2,
+        },
+        retryActionsByDefault: true,
     },
-    retryActionsByDefault: true,
-  },
-})
+});
 
-const checkpointDecisionValidator = v.object({ decisionId: v.id("checkpointDecisions") })
+const checkpointDecisionValidator = v.object({
+    decisionId: v.id('checkpointDecisions'),
+});
 
 export const sourceReviewApproved = defineEvent({
-  name: "sourceReviewApproved",
-  validator: checkpointDecisionValidator,
-})
+    name: 'sourceReviewApproved',
+    validator: checkpointDecisionValidator,
+});
 
 export const assessmentReviewApproved = defineEvent({
-  name: "assessmentReviewApproved",
-  validator: checkpointDecisionValidator,
-})
+    name: 'assessmentReviewApproved',
+    validator: checkpointDecisionValidator,
+});

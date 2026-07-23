@@ -1,7 +1,7 @@
-import workflow from "@convex-dev/workflow/convex.config"
-import { defineApp } from "convex/server"
+import workflow from '@convex-dev/workflow/convex.config';
+import { defineApp } from 'convex/server';
 
-const app = defineApp()
-app.use(workflow)
+const app = defineApp();
+app.use(workflow);
 
-export default app
+export default app;
