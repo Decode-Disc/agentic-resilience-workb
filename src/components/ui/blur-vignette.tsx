@@ -20,17 +20,16 @@ const BlurVignetteContext = createContext<BlurVignetteContextProps>({
 export const useBlurVignetteContext = () => useContext(BlurVignetteContext);
 
 interface BlurVignetteProps {
-    classname?: string;
+    className?: string;
     children: React.ReactNode;
     radius?: string;
     inset?: string;
     transitionLength?: string;
     blur?: string;
-    blurclassname?: string;
 }
 
 export const BlurVignette: React.FC<BlurVignetteProps> = ({
-    classname,
+    className,
     children,
     radius = '24px',
     inset = '20px',
@@ -42,10 +41,7 @@ export const BlurVignette: React.FC<BlurVignetteProps> = ({
             value={{ radius, inset, transitionLength, blur }}
         >
             <div
-                className={cn(
-                    'relative aspect-square overflow-hidden',
-                    classname,
-                )}
+                className={cn('relative overflow-hidden', className)}
                 style={{ borderRadius: radius }}
             >
                 {children}
@@ -55,27 +51,29 @@ export const BlurVignette: React.FC<BlurVignetteProps> = ({
 };
 interface BlurVignetteArticleProps {
     children?: React.ReactNode;
-    classname?: string;
+    className?: string;
 }
 
 export const BlurVignetteArticle: React.FC<BlurVignetteArticleProps> = ({
     children,
-    classname,
+    className,
 }) => {
     const { radius, inset, transitionLength, blur } = useBlurVignetteContext();
 
     return (
         <div
-            className={cn(
-                'blur-vignette bottom-0 left-0 w-full h-full z-1',
-                classname,
-            )}
+            className={cn('absolute inset-0 z-1', className)}
             style={
                 {
                     '--radius': radius,
                     '--inset': inset,
                     '--transition-length': transitionLength,
                     '--blur': blur,
+                    filter: 'blur(var(--blur))',
+                    maskImage:
+                        'radial-gradient(ellipse at center, transparent 0 30%, black 66%, transparent 100%)',
+                    WebkitMaskImage:
+                        'radial-gradient(ellipse at center, transparent 0 30%, black 66%, transparent 100%)',
                 } as React.CSSProperties
             }
         >
