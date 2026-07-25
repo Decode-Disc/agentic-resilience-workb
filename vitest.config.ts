@@ -6,7 +6,7 @@ export default defineConfig({
     plugins: [viteReact()],
     test: {
         environment: 'jsdom',
-        include: ['src/**/*.test.{ts,tsx}'],
-        setupFiles: ['./src/__tests__/_setup.ts'],
+        include: ['src/__tests__/**/*.test.{ts,tsx}'],
+        setupFiles: ['./src/__tests__/setup/cleanup.ts'],
     },
 });

@@ -14,7 +14,8 @@
         "*.ts",
         "*.json",
         "!src/routeTree.gen.ts",
-        "!convex/_generated"
+        "!convex/_generated",
+        "!docs/*"
       ]
     },
     "formatter": {

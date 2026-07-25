@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseClientEnv } from './env-schema';
+import { parseClientEnv } from '@/config/env-schema';
 
 describe('parseClientEnv', () => {
     it('accepts the local Convex URL written by the development CLI', () => {
