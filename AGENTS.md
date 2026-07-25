@@ -43,7 +43,7 @@ Do not rewrite product requirements as part of implementation. Material changes 
 - Keep the application, source code, schemas, fixtures, tests, UI copy, and documentation in English, even if the user communicates in French.
 - Use current primary documentation before recalled APIs. For library or API documentation, generated integration code, setup, or configuration, consult both Context7 and DeepWiki as required by the repository instructions, then verify against the installed package version.
 - Preserve user changes. Inspect the working tree before edits and do not overwrite unrelated work.
-- Use appropriate skills for the tasks you're working on (e.g. `ai-skd` for working with ai-sdk, convex skills when using convex, `high-end-visual-design` + `frontend-ui-engineering` + `gpt-taste` for well build ui, `hyperframes` + `hyperframes-animation` for high end animations, `shadcn` skill when working with shadcn components).
+- Use appropriate skills for the tasks you're working on (e.g. `ai-skd` for working with ai-sdk, convex skills when using convex, `frontend-ui-engineering` + `high-end-visual-design` + `frontend-design` for well build ui, `interaction-design` for motion and interaction animations).
 
 ## Candidature Priority and Proportionality
 
@@ -127,7 +127,9 @@ These rules govern the React + TanStack Start + Convex + shadcn/ui (`base-luma` 
 ### Key principles
 
 - **Design system continuity**
-    - Do not reintroduce starter-kit visual patterns, generic SaaS dashboard defaults, or one-off styling that bypasses the `base-luma` shadcn theme in `src/styles.css`.
+    - Do not reintroduce starter-kit visual patterns, generic SaaS dashboard defaults, or one-off styling that bypasses the `base-luma` shadcn contract. `src/styles.css` imports the unchanged base preset followed by the active semantic theme in `src/assets/styles/themes/evidence-workbench.css`.
+    - The theme file is the single source of truth for color, radius, and elevation tokens. Never hardcode hex/oklch values in components; reference semantic tokens or Tailwind utilities derived from them.
+    - Reusable surface treatments already exist as utilities: `surface-panel` (quiet card), `surface-floating` (elevated, frosted), `text-micro` (mono uppercase micro-label), `text-display` (display heading). Prefer these and the `LiquidGlassCard` / `GridCard` primitives over local re-implementations.
     - If a new visual pattern is needed, extend the shared design system (tokens, variants) rather than creating a local exception on a single page.
     - Before styling a new page, layout, evidence view, or shared primitive, verify it still matches the dedicated design system.
 - **Consistency**
@@ -139,9 +141,38 @@ These rules govern the React + TanStack Start + Convex + shadcn/ui (`base-luma` 
 - **Type Safety (single source of truth)**
     - Do NOT manually redefine TypeScript interfaces for Convex data. Use the generated Convex types (`@convex/_generated/api`, `@convex/_generated/dataModel`) as the single source of truth.
     - Do NOT hand-write DTOs for server responses. Convex's `api.*` references and `ConvexReactClient` types already contract every query, mutation, and action.
-- **High-end visual design**
+- **High-end, institutional, differentiating visual design**
+    - The workbench targets a sophisticated audience (Raphaëlle d'Ornano, analysts familiar with institutional research). The UI must read as **institutional-grade — sober, rigorous, trustworthy — yet unmistakably modern and differentiated**. The bar is "high-end research terminal", not "generic SaaS dashboard" or "v0-generated admin panel".
+    - **Visual direction (three blended references, in `inspirations/`):**
+        1. **Qatalog** — institutional near-neutral canvas, crisp hairline borders, generous negative space, typographic restraint.
+        2. **Volvo EX30 liquid-glass concept** — frosted translucent surfaces with an inset top highlight and a 1px inner rim, soft diffuse shadows, used surgically to separate layers.
+        3. **Decoding Discontinuity** — the purple and green identity are the *only* chromatic signals. Everything else is neutral.
+    - **Color discipline:**
+        - The canvas, surfaces, text, and borders live on a near-neutral `oklch(… 308)` axis with minimal chroma. `--primary` is institutional ink, **not purple**. Do not introduce purple as a dominant fill, section background, or large surface color.
+        - `--brand-purple` is a **recognition accent** used in small, deliberate moments: mono eyebrows (`text-micro text-brand-purple`), focus rings (`--ring`), `::selection`, nav-trigger hover/open, the closest orbital ring tint, and the landing gradient bloom. It signals identity, never decorates.
+        - `--brand-green` / `--approved` is the positive/approved signal. `--accent` is a green-tinted neutral.
+        - Evidence classification tokens (`--evidence-fact`, `--evidence-inference`, `--evidence-hypothesis`, `--evidence-unknown`, `--counter-evidence`, `--review`) are the semantic palette for claims and badges. They are the only other chromatic set and must not be repurposed for general UI.
+        - The landing gradient is a single quiet violet-to-green bloom at the foot, never a saturated hero flood.
+    - **Surface and elevation language:**
+        - Two shadow tiers only: `--surface-shadow-soft` (cards, panels) and `--surface-shadow-floating` (header, popovers, focal glass cards). Both combine an inset top highlight, an inner 1px rim, and a soft diffuse drop. Reach for `surface-panel` / `surface-floating` utilities or `LiquidGlassCard` instead of hand-rolling shadows.
+        - Frosted glass = `backdrop-blur` over a semi-transparent card fill, paired with the inset highlight. Use it for floating/focal elements (header pill, matrix preview, capability chips), not for every card.
+        - Borders are hairline (`border-border/60`–`/70`) and the primary separator. Let borders and negative space do the structural work; reserve shadow for genuine layer separation.
+    - **Typography and accent moments:**
+        - Geist for sans and heading, mono for source citations and micro-labels. Display headings use `text-display`; section labels use `text-section` or `text-micro` (mono, uppercase, tracked).
+        - The base should feel quiet so the signal (evidence, claims, assessments) carries weight. A small set of accent moments — a purple eyebrow, a green approval badge, a single glass card — is more effective than a uniformly decorated surface.
+    - Lean into differentiating details: refined micro-interactions, considered empty/loading states, elevation and depth used surgically, transitions that connect cause and effect instead of decorating it. The "wow" must come from craft and intentionality, not from gratuitous animation or novelty effects.
     - Use ui components from `@/components/ui/*` and shadcn primitives. Those components were handpicked and vetted for consistency with the design system.
     - Do not hand-roll bespoke visual patterns for standard UI elements (buttons, inputs, modals, toasts, tables, etc.).
+    - **Anti-patterns to avoid:** purple-dominant surfaces or gradients, generic SaaS "feature grid" styling, heavy color floods, decorative drop shadows unmoored from the two-tier elevation system, mixing in a third chromatic identity beyond purple/green, and recoloring evidence-classification tokens for non-evidence UI.
+- **Motion design as a differentiator**
+    - Motion is a first-class differentiator for this prototype. Use it to **clarify causality and reinforce the evidence-flow narrative**: stream tokens into place, reveal evidence as it is approved, seat assessments after human checkpoints, cascade claims into the matrix. Animation should make the workflow legible, never theatrical.
+    - Prefer `motion/react` (Motion, already a dependency) for component-enter/exit, layout transitions, and shared-element choreography. Reach for GSAP (via the `gsap-*` skills) only when Motion is genuinely insufficient — e.g., scroll-pinned sequences, SVG draw-on, or timeline-heavy landing moments.
+    - Animation principles to enforce:
+        - **Ease over linear**: organic curves (`cubic-bezier(0.32, 0.72, 0, 1)`, Motion presets) — never bare `linear`.
+        - **Stagger, don't dump**: reveal lists with small per-item delays; never animate ten cards in lock-step.
+        - **Reduce, don't remove**: respect `prefers-reduced-motion`. Keep functional transitions (state change feedback), drop ornamental ones.
+        - **Substance over spectacle**: every motion choice either improves comprehension or signals state. If an animation only exists to "look cool", remove it — it competes with the evidence for attention.
+    - Do not simulate progress, animate hidden chain-of-thought, or add agent-activity theatre (Product Invariant 13). Motion visualizes persisted workflow events, never fabricated activity.
 
 ### Import paths
 
@@ -252,7 +283,8 @@ RED → verify the expected failure → GREEN → REFACTOR → verify the releva
 - Default and CI tests must not call paid or nondeterministic providers.
 - Do not complete work with `.skip`, `.only`, hidden failures, unexplained warnings, or flaky retries.
 - Write Vitest tests for components that own non-trivial rendering logic, using React Testing Library when browser-style rendering helpers are needed. Import real production modules; mock only external boundaries.
-- Do not test pure Convex logic through the React layer. Convex-side behavior is tested via the `src/__tests__` integration suite using `convexTest`.
+- Keep every test file under `src/__tests__/`; never colocate tests with production modules. Organize tests into domain-based subdirectories that mirror the tested boundary, for example `components/`, `routes/`, `config/`, `design-system/`, and `convex/<domain>/`. Keep shared test setup under `src/__tests__/setup/` and feature-specific helpers beside the tests that use them.
+- Do not test pure Convex logic through the React layer. Convex-side behavior is tested under `src/__tests__/convex/<domain>/` using `convexTest`.
 - Provide a JSDoc comment on any shared component, hook, or utility whose intent isn't obvious from the name.
 - Keep all source code, schemas, copy, and documentation in English — even when communicating with the user in French.
 
