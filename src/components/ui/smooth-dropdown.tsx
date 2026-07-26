@@ -1,8 +1,6 @@
-"use client";
+'use client';
 
-import {
-    MoreHorizontalCircle01Icon,
-} from '@hugeicons/core-free-icons';
+import { MoreHorizontalCircle01Icon } from '@hugeicons/core-free-icons';
 import { motion } from 'motion/react';
 import {
     type CSSProperties,
@@ -17,7 +15,6 @@ import Icon from '@/components/icon';
 import { uiLayerClasses } from '@/lib/ui-layers';
 import { cn } from '@/lib/utils';
 import type { PlatformIcon } from '@/types/ui';
-
 
 type RenderState = {
     isActive: boolean;
@@ -55,6 +52,19 @@ export interface SmoothDropdownProps {
     closedHeight?: number;
     defaultActiveItemId?: string;
     style?: CSSProperties;
+    /**
+     * Optional controlled open state. When omitted, the dropdown manages its
+     * own open/close toggling exactly as before. When provided, the parent
+     * owns the open state and must apply changes via `onOpenChange`.
+     */
+    open?: boolean;
+    /**
+     * Optional controlled default. Same contract as `open` but uncontrolled:
+     * used only for the initial render when `open` is not provided.
+     */
+    defaultOpen?: boolean;
+    /** Notified whenever the dropdown requests an open state change. */
+    onOpenChange?: (open: boolean) => void;
 }
 
 const easeOutQuint: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -73,11 +83,22 @@ export function SmoothDropdwon({
     closedHeight = 40,
     defaultActiveItemId,
     style,
+    open: openProp,
+    defaultOpen = false,
+    onOpenChange,
 }: SmoothDropdownProps) {
-    const [isOpen, setIsOpen] = useState(false);
+    const [internalOpen, setInternalOpen] = useState(defaultOpen);
+    const isControlled = openProp !== undefined;
+    const isOpen = isControlled ? Boolean(openProp) : internalOpen;
+
+    const requestOpenChange = (next: boolean) => {
+        if (!isControlled) {
+            setInternalOpen(next);
+        }
+        onOpenChange?.(next);
+    };
     const [activeItem, setActiveItem] = useState<string | null>(
-        defaultActiveItemId ??
-        null,
+        defaultActiveItemId ?? null,
     );
     const [hoveredItem, setHoveredItem] = useState<string | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -95,7 +116,8 @@ export function SmoothDropdwon({
 
         const updateHeight = () => {
             const nextHeight =
-                contentElement.getBoundingClientRect().height || contentElement.scrollHeight;
+                contentElement.getBoundingClientRect().height ||
+                contentElement.scrollHeight;
 
             setContentHeight((currentHeight) =>
                 currentHeight === nextHeight ? currentHeight : nextHeight,
@@ -135,7 +157,7 @@ export function SmoothDropdwon({
                 !menuRef.current?.contains(target) &&
                 !insideRadixPortal
             ) {
-                setIsOpen(false);
+                requestOpenChange(false);
             }
         };
 
@@ -144,7 +166,7 @@ export function SmoothDropdwon({
         }
         return () =>
             document.removeEventListener('mousedown', handleClickOutside);
-    }, [isOpen]);
+    }, [isOpen, isControlled]);
 
     const openHeight = Math.max(closedHeight, Math.ceil(contentHeight));
     const opensToLeft = openFrom === 'right';
@@ -186,7 +208,9 @@ export function SmoothDropdwon({
     const effectiveOpenWidth = (() => {
         if (!containerRef.current) return openWidth;
         const rect = containerRef.current.getBoundingClientRect();
-        const available = opensToLeft ? rect.right : window.innerWidth - rect.left;
+        const available = opensToLeft
+            ? rect.right
+            : window.innerWidth - rect.left;
         return Math.min(openWidth, Math.floor(available));
     })();
     const itemClosedOffset = opensToLeft ? 8 : -8;
@@ -208,13 +232,14 @@ export function SmoothDropdwon({
         );
     };
 
-    const menuOriginClass = openPosition === 'top'
-        ? opensToLeft
-            ? 'origin-bottom-right'
-            : 'origin-bottom-left'
-        : opensToLeft
-            ? 'origin-top-right'
-            : 'origin-top-left';
+    const menuOriginClass =
+        openPosition === 'top'
+            ? opensToLeft
+                ? 'origin-bottom-right'
+                : 'origin-bottom-left'
+            : opensToLeft
+                ? 'origin-top-right'
+                : 'origin-top-left';
 
     const menuPositionClass = cn(
         'absolute cursor-pointer overflow-hidden border border-border bg-popover shadow-lg',
@@ -290,15 +315,16 @@ export function SmoothDropdwon({
                                 ? hoveredItem === item.id
                                 : isActive;
 
-                            const itemDuration = isDestructive
-                                ? 0.12
-                                : 0.15;
+                            const itemDuration = isDestructive ? 0.12 : 0.15;
                             const itemDelay = isOpen ? 0.06 + index * 0.02 : 0;
 
                             return (
                                 <motion.li
                                     key={item.id}
-                                    initial={{ opacity: 0, x: itemClosedOffset }}
+                                    initial={{
+                                        opacity: 0,
+                                        x: itemClosedOffset,
+                                    }}
                                     animate={{
                                         opacity: isOpen ? 1 : 0,
                                         x: isOpen ? 0 : itemClosedOffset,
@@ -308,13 +334,19 @@ export function SmoothDropdwon({
                                         duration: itemDuration,
                                         ease: easeOutQuint,
                                     }}
-                                    onClick={() => {
+                                    onClick={(event) => {
+                                        // Stop the click from bubbling back up to
+                                        // the menu surface (which re-opens when
+                                        // closed) — otherwise selecting an item
+                                        // closes then immediately reopens the
+                                        // picker in the same event tick.
+                                        event.stopPropagation();
                                         setActiveItem(item.id);
 
                                         item.onSelect?.();
 
                                         if (item.closeOnSelect !== false) {
-                                            setIsOpen(false);
+                                            requestOpenChange(false);
                                         }
                                     }}
                                     onMouseEnter={() => setHoveredItem(item.id)}
@@ -416,7 +448,7 @@ export function SmoothDropdwon({
                 isPortalled && isOpen && menuOriginClass,
             )}
             style={isPortalled && isOpen ? portalStyle : undefined}
-            onClick={() => !isOpen && setIsOpen(true)}
+            onClick={() => !isOpen && requestOpenChange(true)}
         >
             {menuContent}
         </motion.div>
@@ -426,6 +458,7 @@ export function SmoothDropdwon({
         <div
             ref={containerRef}
             data-testid="smooth-dropdown-container"
+            data-open={isOpen ? 'true' : undefined}
             className={cn('relative not-prose', className)}
             style={{ width: closedWidth, height: closedHeight, ...style }}
         >
@@ -435,7 +468,7 @@ export function SmoothDropdwon({
                         type="button"
                         aria-label="Open dropdown"
                         className="absolute inset-0 cursor-pointer overflow-hidden rounded-md border border-border bg-popover shadow-lg"
-                        onClick={() => setIsOpen(true)}
+                        onClick={() => requestOpenChange(true)}
                     >
                         <div className="absolute inset-0 flex items-center justify-center">
                             {trigger ?? (
