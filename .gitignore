@@ -25,7 +25,9 @@ __unconfig*
 .pi/
 .factory/
 .vscode/
+
 .extract-design-system/
+inspirations/
 tmp/
 
 skills-lock.json
