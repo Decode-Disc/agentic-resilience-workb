@@ -6,7 +6,7 @@ import {
     Cancel01Icon,
     ChevronDownIcon,
     FileAddIcon,
-    Plus,
+    MoreVerticalSquare01Icon,
     Search01Icon,
 } from '@hugeicons/core-free-icons';
 import { useMemo, useRef, useState } from 'react';
@@ -14,13 +14,36 @@ import { useMemo, useRef, useState } from 'react';
 import Icon from '@/components/icon';
 import { Button } from '@/components/ui/button';
 import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { type DroppedFile, FileDropzone } from '@/components/ui/file-dropzone';
+import {
     InputGroup,
     InputGroupAddon,
     InputGroupInput,
 } from '@/components/ui/input-group';
 import type { SmoothDropdownItem } from '@/components/ui/smooth-dropdown';
 import { SmoothDropdwon } from '@/components/ui/smooth-dropdown';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { PlatformIcon } from '@/types/ui';
 
@@ -99,6 +122,12 @@ export function ResearchComposer({
         useState<CompanyResult | null>(null);
     const [companyQuery, setCompanyQuery] = useState('');
     const [pickerOpen, setPickerOpen] = useState(false);
+    /**
+     * Reference attachments staged locally by the analyst. The composer keeps
+     * them in UI state — actual ingestion ships with the source-acquisition
+     * slice, so no server function is involved at this stage.
+     */
+    const [attachments, setAttachments] = useState<DroppedFile[]>([]);
     const containerRef = useRef<HTMLDivElement>(null);
 
     const filteredCompanies = useMemo(() => {
@@ -146,9 +175,9 @@ export function ResearchComposer({
 
     const handleSend = () => {
         if (!companyResolved) {
-        // No target company yet: surface the picker to attract attention
-        // rather than failing silently. Selecting a company remains the
-        // precondition to actually start the analysis.
+            // No target company yet: surface the picker to attract attention
+            // rather than failing silently. Selecting a company remains the
+            // precondition to actually start the analysis.
             setPickerOpen(true);
             return;
         }
@@ -230,14 +259,11 @@ export function ResearchComposer({
                             </div>
                         }
                     />
-                    <ToolbarIconButton
-                        label="Attach reference"
-                        icon={FileAddIcon}
+                    <AttachReferencesButton
+                        attachments={attachments}
+                        onAttachmentsChange={setAttachments}
                     />
-                    <ToolbarIconButton
-                        label="More options"
-                        icon={Plus}
-                    />
+                    <MoreOptionsButton />
                 </div>
 
                 <Button
@@ -404,19 +430,120 @@ function ToolbarIconButton({
 }) {
     return (
         <Tooltip>
-            <TooltipTrigger render={<Button
-            type="button"
-                variant="secondary"
-            aria-label={label}
-            onClick={onClick}
-            disabled={disabled}
-                className="size-8 rounded-full"
-        >
-            <Icon iconNode={icon} size={16} />
-            </Button>} />
+            <TooltipTrigger
+                render={
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        aria-label={label}
+                        onClick={onClick}
+                        disabled={disabled}
+                        className="size-8 rounded-full"
+                    >
+                        <Icon iconNode={icon} size={16} />
+                    </Button>
+                }
+            />
             <TooltipContent side="top" align="center">
                 <span className="text-xs opacity-80">{label}</span>
             </TooltipContent>
         </Tooltip>
+    );
+}
+
+/**
+ * "Attach references" toolbar action. Opens a Dialog hosting the FileDropzone
+ * so the analyst can stage reference files alongside their research request.
+ *
+ * Attachments stay local to the composer surface for now — real ingestion
+ * ships with the source-acquisition slice. The dialog footer surfaces the
+ * attachment count and offers a confirm step that simply closes the dialog.
+ */
+function AttachReferencesButton({
+    attachments,
+    onAttachmentsChange,
+}: {
+    attachments: DroppedFile[];
+    onAttachmentsChange: (files: DroppedFile[]) => void;
+}) {
+    return (
+        <Dialog>
+            <DialogTrigger
+                render={
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        aria-label="Attach references"
+                        aria-haspopup="dialog"
+                        className="size-8 rounded-full"
+                    >
+                        <Icon iconNode={FileAddIcon} size={16} />
+                    </Button>
+                }
+            />
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>Attach references</DialogTitle>
+                    <DialogDescription>
+                        Stage reference files alongside the research request.
+                        Nothing is uploaded in this prototype — files stay local
+                        until source acquisition ships.
+                    </DialogDescription>
+                </DialogHeader>
+                <FileDropzone
+                    onFilesDropped={onAttachmentsChange}
+                    accept="image/*,.pdf,.doc,.docx"
+                    maxSize={5 * 1024 * 1024}
+                    maxFiles={5}
+                    initialFiles={attachments}
+                />
+                <DialogFooter showCloseButton>
+                    <Button type="button" variant="default">
+                        {attachments.length > 0
+                            ? `Attach ${attachments.length} file${attachments.length === 1 ? '' : 's'}`
+                            : 'Done'}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+/**
+ * "More options" toolbar action. Opens a DropdownMenu reserved for future
+ * composer actions (history, templates, exports…). Today it surfaces a label
+ * + a placeholder item so the empty-state is intentional and discoverable
+ * rather than silently hidden.
+ */
+function MoreOptionsButton() {
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger
+                render={
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        aria-label="More options"
+                        aria-haspopup="menu"
+                        className="size-8 rounded-full"
+                    >
+                        <Icon iconNode={MoreVerticalSquare01Icon} size={16} />
+                    </Button>
+                }
+            />
+            <DropdownMenuContent
+                align="end"
+                sideOffset={6}
+                className="min-w-52"
+            >
+                <DropdownMenuGroup>
+                    <DropdownMenuLabel>More options</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem disabled>
+                        More actions coming soon
+                    </DropdownMenuItem>
+                </DropdownMenuGroup>
+            </DropdownMenuContent>
+        </DropdownMenu>
     );
 }

@@ -252,3 +252,15 @@ export const listMyEvents = query({
             .collect();
     },
 });
+
+export const listAnalyzedCompanies = query({
+    args: {},
+    handler: async (ctx) => {
+        const runs = await ctx.db.query('researchRuns').take(10);
+        return runs.map((run) => ({
+            id: run._id,
+            name: `Research Run (${run.lifecycleState})`,
+            status: run.lifecycleState,
+        }));
+    },
+});

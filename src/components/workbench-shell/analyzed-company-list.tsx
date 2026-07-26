@@ -1,11 +1,20 @@
 import { api } from '@convex/_generated/api';
-import { Add01Icon, Cancel01Icon } from '@hugeicons/core-free-icons';
-import { Link } from '@tanstack/react-router';
+import {
+    Add01Icon,
+    Cancel01Icon,
+    ChevronDownIcon,
+} from '@hugeicons/core-free-icons';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { useQuery } from 'convex/react';
 import Icon from '@/components/icon';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
+import {
+    NestedMenu,
+    type NestedMenuSectionProps,
+} from '@/components/ui/nested-menu';
 import { Separator } from '@/components/ui/separator';
+import { useResponsive } from '@/hooks/use-responsive';
 import { cn } from '@/lib/utils';
 
 export interface CompanyItem {
@@ -54,6 +63,9 @@ export function AnalyzedCompanyList({
     onSelectCompany,
     className,
 }: AnalyzedCompanyListProps) {
+    const { isMobile } = useResponsive();
+    const navigate = useNavigate();
+
     const convexCompanies = useQuery(api.researchRuns.listAnalyzedCompanies);
 
     const hasConvexData =
@@ -68,6 +80,112 @@ export function AnalyzedCompanyList({
 
     const isUsingMock = !hasConvexData;
 
+    const activeCompany =
+        companies.find((c) => c.id === activeCompanyId) ?? companies[0];
+
+    if (isMobile) {
+        const menuSections: NestedMenuSectionProps[] = [
+            {
+                title: 'Analyzed Companies',
+                items: [
+                    ...companies.map((company) => {
+                        const isActive = activeCompanyId === company.id;
+                        return {
+                            key: company.id,
+                            label: company.ticker
+                                ? `${company.name} (${company.ticker})`
+                                : company.name,
+                            separator: true,
+                            icon: isActive
+                                ? ({ className }: { className?: string }) => (
+                                    <span
+                                        className={cn(
+                                            'size-2 rounded-full bg-brand-purple shrink-0',
+                                            className,
+                                        )}
+                                        aria-hidden="true"
+                                    />
+                                )
+                                : undefined,
+                            onSelect: () => {
+                                onSelectCompany?.(company);
+                                void navigate({
+                                    to: '/prototype/workspace',
+                                    search: { variant: 'a' },
+                                });
+                            },
+                        };
+                    }),
+                    {
+                        key: 'start-new-analysis',
+                        label: 'Start new analysis',
+                        className: buttonVariants({
+                            variant: 'secondary',
+                            size: 'sm',
+                            className: 'w-full my-1',
+                        }),
+                        icon: ({ className }: { className?: string }) => (
+                            <Icon
+                                iconNode={Add01Icon}
+                                className={cn('size-4', className)}
+                            />
+                        ),
+                        onSelect: () => {
+                            void navigate({ to: '/workspace/start' });
+                        },
+                    },
+                ],
+            },
+        ];
+
+        return (
+            <div className={cn('flex items-center gap-2 py-0.5', className)}>
+                <NestedMenu
+                    sections={menuSections}
+                    side="bottom"
+                    align="start"
+                    trigger={
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2 text-xs font-medium"
+                        >
+                            {activeCompany ? (
+                                <>
+                                    <span
+                                        className="size-1.5 rounded-full bg-brand-purple shrink-0"
+                                        aria-hidden="true"
+                                    />
+                                    <span className="truncate max-w-[140px]">
+                                        {activeCompany.name}
+                                    </span>
+                                </>
+                            ) : (
+                                <span>Companies</span>
+                            )}
+                            <Icon
+                                iconNode={ChevronDownIcon}
+                                className="size-3.5 text-muted-foreground shrink-0"
+                            />
+                        </Button>
+                    }
+                />
+
+                {isUsingMock && (
+                    <Badge
+                        variant="regular"
+                        color="amber"
+                        showDot
+                        className="text-[10px] font-mono font-medium shrink-0"
+                        title="Convex company schema/data pending. Displaying showcase mock companies."
+                    >
+                        Mock data
+                    </Badge>
+                )}
+            </div>
+        );
+    }
+
     return (
         <div
             className={cn(
@@ -80,7 +198,9 @@ export function AnalyzedCompanyList({
                     const isActive = activeCompanyId === company.id;
                     return (
                         <div
-                            key={company.id} className="flex items-center gap-0.5">
+                            key={company.id}
+                            className="flex items-center gap-0.5"
+                        >
                             <Button
                                 render={
                                     <Link
@@ -101,17 +221,31 @@ export function AnalyzedCompanyList({
                                     />
                                 )}
                                 <span className="truncate max-w-[140px] sm:max-w-[180px]">
-                                    {company.name}
+                                    {`${company.name} (${company.ticker})`}
                                 </span>
                             </Button>
-                            <button type="button" className="cursor-pointer text-muted-foreground hover:text-destructive" aria-label="Remove company" onClick={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault();
-                                console.log(`Remove company ${company.name}`);
-                            }}>
-                                <Icon iconNode={Cancel01Icon} className="size-4" data-icon="inline-end" />
+                            <button
+                                type="button"
+                                className="cursor-pointer text-muted-foreground hover:text-destructive"
+                                aria-label="Remove company"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    console.log(
+                                        `Remove company ${company.name}`,
+                                    );
+                                }}
+                            >
+                                <Icon
+                                    iconNode={Cancel01Icon}
+                                    className="size-4"
+                                    data-icon="inline-end"
+                                />
                             </button>
-                            <Separator orientation="vertical" className="shrink-0 mx-2" />
+                            <Separator
+                                orientation="vertical"
+                                className="shrink-0 mx-2"
+                            />
                         </div>
                     );
                 })}
