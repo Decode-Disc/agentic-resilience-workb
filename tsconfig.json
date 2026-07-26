@@ -1,31 +1,19 @@
 {
     "include": [
-      "src/**/*.ts",
-      "src/**/*.tsx",
-      "scripts/**/*.ts",
-      "vite.config.ts",
-      "vitest.config.ts"
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "scripts/**/*.ts",
+        "vite.config.ts",
+        "vitest.config.ts"
     ],
-    "exclude": [
-      "node_modules",
-      "dist",
-      "docs"
-    ],
+    "exclude": ["node_modules", "dist", "docs"],
     "compilerOptions": {
         "target": "ESNext",
         "module": "ESNext",
         "moduleResolution": "Bundler",
         "jsx": "react-jsx",
-        "lib": [
-          "ES2022",
-          "DOM",
-          "DOM.Iterable"
-        ],
-        "types": [
-          "vite/client",
-          "vitest/globals",
-          "node"
-        ],
+        "lib": ["ES2022", "DOM", "DOM.Iterable"],
+        "types": ["vite/client", "vitest/globals", "node"],
         "allowImportingTsExtensions": true,
         "allowJs": false,
         "verbatimModuleSyntax": true,
@@ -42,12 +30,8 @@
         "noUncheckedSideEffectImports": true,
         "forceConsistentCasingInFileNames": true,
         "paths": {
-          "@/*": [
-            "./src/*"
-          ],
-          "@convex/*": [
-            "./convex/*"
-          ]
+            "@/*": ["./src/*"],
+            "@convex/*": ["./convex/*"]
         }
-      }
+    }
 }

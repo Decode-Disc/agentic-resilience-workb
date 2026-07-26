@@ -6,9 +6,8 @@ import {
     ZapIcon,
 } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { ShieldCheck, Sparkles, Users, Zap } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 const INITIAL_CHIPS = [
@@ -45,8 +44,9 @@ const Bucket = () => {
     useEffect(() => {
         const interval = setInterval(() => {
             setItems((prev) => {
-                const [first, ...rest] = prev;
-                return [...rest, first];
+                const first = prev[0];
+                if (!first) return prev;
+                return [...prev.slice(1), first];
             });
         }, 2000);
 

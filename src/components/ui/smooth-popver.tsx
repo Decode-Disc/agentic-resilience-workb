@@ -33,7 +33,9 @@ function useCultPopoverContext(): CultPopoverContextValue {
     const context = React.useContext(CultPopoverContext);
 
     if (!context) {
-        throw new Error('Cult popover components must be used within <Popover>.');
+        throw new Error(
+            'Cult popover components must be used within <Popover>.',
+        );
     }
 
     return context;
@@ -135,7 +137,11 @@ function PopoverTrigger({
     }
 
     return (
-        <PopoverPrimitive.Trigger data-slot="popover-trigger" asChild {...props}>
+        <PopoverPrimitive.Trigger
+            data-slot="popover-trigger"
+            asChild
+            {...props}
+        >
             <motion.button
                 layoutId={`cult-popover-${uniqueId}`}
                 className={cn(
@@ -233,7 +239,10 @@ function PopoverDescription({
 }: React.ComponentProps<'p'>) {
     return (
         <p
-            className={cn('text-sm text-zinc-500 dark:text-zinc-400', className)}
+            className={cn(
+                'text-sm text-zinc-500 dark:text-zinc-400',
+                className,
+            )}
             {...props}
         />
     );
@@ -257,7 +266,10 @@ function PopoverForm({ children, onSubmit, className }: PopoverFormProps) {
     };
 
     return (
-        <form className={cn('flex h-full flex-col', className)} onSubmit={handleSubmit}>
+        <form
+            className={cn('flex h-full flex-col', className)}
+            onSubmit={handleSubmit}
+        >
             {children}
         </form>
     );
@@ -286,7 +298,10 @@ function PopoverLabel({ children, className }: PopoverLabelProps) {
     );
 }
 
-function PopoverTextarea({ className, ...props }: React.ComponentProps<'textarea'>) {
+function PopoverTextarea({
+    className,
+    ...props
+}: React.ComponentProps<'textarea'>) {
     const { note, setNote } = useCultPopoverContext();
 
     return (
@@ -303,7 +318,12 @@ function PopoverTextarea({ className, ...props }: React.ComponentProps<'textarea
 }
 
 function PopoverFooter({ className, ...props }: React.ComponentProps<'div'>) {
-    return <div className={cn('flex justify-between px-4 py-3', className)} {...props} />;
+    return (
+        <div
+            className={cn('flex justify-between px-4 py-3', className)}
+            {...props}
+        />
+    );
 }
 
 function PopoverCloseButton({
@@ -327,12 +347,19 @@ function PopoverCloseButton({
             aria-label="Close popover"
             {...props}
         >
-            <Icon iconNode={Cancel01Icon} size={16} className="text-zinc-900 dark:text-zinc-100" />
+            <Icon
+                iconNode={Cancel01Icon}
+                size={16}
+                className="text-zinc-900 dark:text-zinc-100"
+            />
         </button>
     );
 }
 
-function PopoverSubmitButton({ className, ...props }: React.ComponentProps<'button'>) {
+function PopoverSubmitButton({
+    className,
+    ...props
+}: React.ComponentProps<'button'>) {
     return (
         <button
             className={cn(
@@ -352,7 +379,10 @@ function PopoverBody({ className, ...props }: React.ComponentProps<'div'>) {
     return <div className={cn('p-4', className)} {...props} />;
 }
 
-function PopoverButton({ className, ...props }: React.ComponentProps<'button'>) {
+function PopoverButton({
+    className,
+    ...props
+}: React.ComponentProps<'button'>) {
     return (
         <button
             type="button"

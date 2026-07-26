@@ -4,9 +4,8 @@ import {
     Scripts,
 } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
-
+import favicon from '@/favicon.svg?url';
 import type { AppRouterContext } from '@/integrations/convex/router-context';
-
 import appCss from '@/styles.css?url';
 
 export const Route = createRootRouteWithContext<AppRouterContext>()({
@@ -26,7 +25,7 @@ export const Route = createRootRouteWithContext<AppRouterContext>()({
                     'An evidence-first research workbench for assessing architectural resilience in the agentic economy.',
             },
         ],
-        links: [{ rel: 'stylesheet', href: appCss }],
+        links: [{ rel: 'stylesheet', href: appCss }, { rel: 'icon', href: favicon }],
     }),
     notFoundComponent: () => (
         <main className="mx-auto flex min-h-svh w-full max-w-3xl flex-col justify-center gap-3 px-5 py-16">

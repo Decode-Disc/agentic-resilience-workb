@@ -204,6 +204,12 @@ These rules govern the React + TanStack Start + Convex + shadcn/ui (`base-luma` 
 5.  **Data fetching & mutations**: use the Convex React hooks (`useQuery`, `useMutation`, `useAction`, `usePaginatedQuery`) wired through `@convex-dev/react-query` where query-cache integration is needed. Do not bypass Convex with ad-hoc `fetch()` calls to Convex's HTTP API unless the integration explicitly requires HTTP transport (see `convex/http.ts` for the narrow cases).
 6.  **Optimistic / pending state**: use Convex's built-in optimistic updates (`useMutation` with `optimisticUpdate`) or `@tanstack/react-query`'s `useMutation` for non-Convex server-side effects. Do not hand-roll optimistic state for data owned by Convex.
 7.  **Server functions**: prefer TanStack Start server functions (`createServerFn`) for pure SSR/edge concerns (auth context, redirects, server-only computations). Do not put evidence policy, claim classification, or workflow logic in server functions — that belongs in Convex.
+8.  **Route files must export ONLY `Route`**: TanStack Router code-splits each route file into its own lazy-loaded chunk. If a route file exports anything beyond `export const Route` (a `default` component, a named function, a re-export), TanStack cannot isolate that code into the route's chunk — it gets pulled into the parent layout bundle and loaded even when the route is not active, defeating lazy loading and bloating the initial payload. This triggers the console warning: `"These exports … will not be code-split and will increase your bundle size."`
+    - ✅ Every route file must have a single export: `export const Route = createFileRoute('…')({ component: MyComponent })`.
+    - ✅ `export type …` and `export interface …` are allowed (pure types, zero runtime cost).
+    - ❌ `export default function …`, `export function …`, `export const …` (anything not `Route`), `export { … }` are forbidden in route files.
+    - ✅ Components referenced by `Route` live in a sibling file (e.g. `start-route-component.tsx`) and are imported into the route file.
+    - Enforced by `scripts/check-imports.ts` (the `EXTRA_ROUTE_EXPORT` rule).
 
 ### Icons
 

@@ -1,179 +1,171 @@
 {
     "$schema": "https://biomejs.dev/schemas/2.5.3/schema.json",
     "vcs": {
-      "enabled": true,
-      "clientKind": "git",
-      "useIgnoreFile": true
+        "enabled": true,
+        "clientKind": "git",
+        "useIgnoreFile": true
     },
     "files": {
-      "ignoreUnknown": true,
-      "includes": [
-        "src/**",
-        "convex/**",
-        "scripts/**",
-        "*.ts",
-        "*.json",
-        "!src/routeTree.gen.ts",
-        "!convex/_generated",
-        "!docs/*"
-      ]
+        "ignoreUnknown": true,
+        "includes": [
+            "src/**",
+            "convex/**",
+            "scripts/**",
+            "*.ts",
+            "*.json",
+            "!src/routeTree.gen.ts",
+            "!convex/_generated",
+            "!docs/*"
+        ]
     },
     "formatter": {
-      "enabled": true,
-      "indentStyle": "space",
+        "enabled": true,
+        "indentStyle": "space",
         "indentWidth": 4,
         "lineWidth": 80
-      },
-      "assist": {
+    },
+    "assist": {
         "actions": {
-          "source": {
-            "organizeImports": "on"
-          }
+            "source": {
+                "organizeImports": "on"
+            }
         }
-      },
-      "linter": {
+    },
+    "linter": {
         "enabled": true,
         "rules": {
             "preset": "recommended",
             "correctness": {
-              "recommended": true,
-              "useExhaustiveDependencies": "warn",
-              "useHookAtTopLevel": "error"
+                "recommended": true,
+                "useExhaustiveDependencies": "warn",
+                "useHookAtTopLevel": "error"
             },
             "suspicious": {
-              "recommended": true,
-              "noExplicitAny": "error",
-              "noArrayIndexKey": "error"
+                "recommended": true,
+                "noExplicitAny": "error",
+                "noArrayIndexKey": "error"
             },
             "style": {
-              "recommended": true,
-              "useConst": "error",
-              "useImportType": "error",
-              "useExportType": "error",
-              "useNamingConvention": "off"
+                "recommended": true,
+                "useConst": "error",
+                "useImportType": "error",
+                "useExportType": "error",
+                "useNamingConvention": "off"
             },
             "a11y": {
-              "recommended": true,
-              "useButtonType": "error",
-              "useAnchorContent": "error"
+                "recommended": true,
+                "useButtonType": "error",
+                "useAnchorContent": "error"
             }
-          }
-        },
-        "css": {
-          "parser": {
+        }
+    },
+    "css": {
+        "parser": {
             "tailwindDirectives": true
-          }
-        },
-        "javascript": {
-          "formatter": {
+        }
+    },
+    "javascript": {
+        "formatter": {
             "quoteStyle": "single",
             "jsxQuoteStyle": "double",
             "semicolons": "always",
             "trailingCommas": "all",
             "arrowParentheses": "always",
             "bracketSpacing": true
-          }
-        },
-        "json": {
-          "formatter": {
+        }
+    },
+    "json": {
+        "formatter": {
             "trailingCommas": "none"
-          }
+        }
+    },
+    "overrides": [
+        {
+            "includes": ["src/**/*.{js,jsx,ts,tsx}"],
+            "linter": {
+                "rules": {
+                    "style": {
+                        "noRestrictedImports": {
+                            "level": "error",
+                            "options": {
+                                "patterns": [
+                                    {
+                                        "group": [
+                                            "../*",
+                                            "../../*",
+                                            "../../../*",
+                                            "../../../../*"
+                                        ],
+                                        "message": "Use '@/' alias."
+                                    },
+                                    {
+                                        "group": [
+                                            "../convex/*",
+                                            "../../convex/*",
+                                            "../../../convex/*",
+                                            "../../../../convex/*"
+                                        ],
+                                        "message": "Use '@convex/' alias."
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
         },
-        "overrides": [
-          {
-            "includes": [
-              "src/**/*.{js,jsx,ts,tsx}"
-            ],
+        {
+            "includes": ["convex/**/*.{js,jsx,ts,tsx}"],
             "linter": {
-              "rules": {
-                "style": {
-                  "noRestrictedImports": {
-                    "level": "error",
-                    "options": {
-                      "patterns": [
-                        {
-                          "group": [
-                            "../*",
-                            "../../*",
-                            "../../../*",
-                            "../../../../*"
-                          ],
-                          "message": "Use '@/' alias."
-                        },
-                        {
-                          "group": [
-                            "../convex/*",
-                            "../../convex/*",
-                            "../../../convex/*",
-                            "../../../../convex/*"
-                          ],
-                          "message": "Use '@convex/' alias."
+                "rules": {
+                    "style": {
+                        "noRestrictedImports": {
+                            "level": "error",
+                            "options": {
+                                "patterns": [
+                                    {
+                                        "group": [
+                                            "../*",
+                                            "../../*",
+                                            "../../../*",
+                                            "../../../../*"
+                                        ],
+                                        "message": "Use '@convex/' alias."
+                                    }
+                                ]
+                            }
                         }
-                      ]
                     }
-                  }
                 }
-              }
             }
-          },
-          {
-            "includes": [
-              "convex/**/*.{js,jsx,ts,tsx}"
-            ],
+        },
+        {
+            "includes": ["src/__tests__/**/*.{ts,tsx}"],
             "linter": {
-              "rules": {
-                "style": {
-                  "noRestrictedImports": {
-                    "level": "error",
-                    "options": {
-                      "patterns": [
-                        {
-                          "group": [
-                            "../*",
-                            "../../*",
-                            "../../../*",
-                            "../../../../*"
-                          ],
-                          "message": "Use '@convex/' alias."
-                        }
-                      ]
+                "rules": {
+                    "suspicious": {
+                        "noExplicitAny": "off"
                     }
-                  }
                 }
-              }
             }
-          },
-          {
-            "includes": [
-              "src/__tests__/**/*.{ts,tsx}"
-            ],
+        },
+        {
+            "includes": ["src/components/ui/**/*.{ts,tsx}"],
             "linter": {
-              "rules": {
-                "suspicious": {
-                  "noExplicitAny": "off"
+                "rules": {
+                    "correctness": {
+                        "useExhaustiveDependencies": "off"
+                    },
+                    "a11y": {
+                        "useSemanticElements": "off",
+                        "useKeyWithClickEvents": "off",
+                        "useFocusableInteractive": "off",
+                        "useAriaPropsForRole": "off",
+                        "noLabelWithoutControl": "off",
+                        "noSvgWithoutTitle": "off"
+                    }
                 }
-              }
             }
-          },
-          {
-            "includes": [
-              "src/components/ui/**/*.{ts,tsx}"
-            ],
-            "linter": {
-              "rules": {
-                "correctness": {
-                  "useExhaustiveDependencies": "off"
-                },
-                "a11y": {
-                  "useSemanticElements": "off",
-                  "useKeyWithClickEvents": "off",
-                  "useFocusableInteractive": "off",
-                  "useAriaPropsForRole": "off",
-                  "noLabelWithoutControl": "off",
-                  "noSvgWithoutTitle": "off"
-                }
-              }
-            }
-          }
+        }
     ]
 }

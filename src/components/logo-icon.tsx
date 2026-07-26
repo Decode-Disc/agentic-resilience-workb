@@ -56,13 +56,7 @@ function LogoIconIMG({
     dark = false,
     ...props
 }: ImgHTMLAttributes<HTMLImageElement> & { dark?: boolean }) {
-    return (
-        <img
-            src={dark ? imgDark : imgLight}
-            alt={alt}
-            {...props}
-        />
-    );
+    return <img src={dark ? imgDark : imgLight} alt={alt} {...props} />;
 }
 
 function AppLogo() {
@@ -74,7 +68,7 @@ function AppLogo() {
         >
             <LogoIconIMG className="size-8 rounded-full" dark />
         </span>
-    )
+    );
 }
 
 export { AppLogo, LogoIconIMG, LogoIconSVG };

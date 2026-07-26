@@ -1,7 +1,6 @@
 import tailwindcss from '@tailwindcss/vite';
 import { tanstackStart } from '@tanstack/react-start/plugin/vite';
 import viteReact from '@vitejs/plugin-react';
-import path from 'path';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -13,8 +12,11 @@ export default defineConfig({
         watch: {
             ignored: [
                 '**/.ai/**',
-                '**/.pi/**',
                 '**/.codex/**',
+                '**/.pi/**',
+                '**/.github/**',
+                '**/context/**',
+                '**/docs/**',
                 '**/src/__tests__/**',
             ],
         },

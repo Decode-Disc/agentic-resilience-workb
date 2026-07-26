@@ -21,17 +21,17 @@
         "SFMono-Regular", "Cascadia Code", "Roboto Mono", ui-monospace,
         monospace;
 
-    --radius-sm: calc(var(--radius) * 0.6);
-    --radius-md: calc(var(--radius) * 0.8);
+    --radius-sm: calc(var(--radius) * 0.4);
+    --radius-md: calc(var(--radius) * 0.6);
     --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) * 1.4);
-    --radius-2xl: calc(var(--radius) * 1.8);
-    --radius-3xl: calc(var(--radius) * 2.2);
-    --radius-4xl: calc(var(--radius) * 2.6);
+    --radius-xl: calc(var(--radius) * 1.2);
+    --radius-2xl: calc(var(--radius) * 1.4);
+    --radius-3xl: calc(var(--radius) * 1.8);
+    --radius-4xl: calc(var(--radius) * 2.2);
 }
 
 :root {
-    --brand-green: oklch(0.7285 0.0968 186.7);
+    --brand-green: oklch(88.01% 0.051 137.14);
     --brand-purple: oklch(0.415 0.2019 300.7);
 
     --background: oklch(0.9522 0.0022 308);
@@ -42,12 +42,12 @@
     --popover-foreground: oklch(0.1811 0.0092 308);
     --primary: oklch(0.2231 0.0092 308);
     --primary-foreground: oklch(0.985 0.002 308);
-    --secondary: oklch(0.9331 0.0042 308);
+    --secondary: oklch(0.91 0 0);
     --secondary-foreground: oklch(0.2568 0.0092 308);
     --muted: oklch(0.9231 0.0033 308);
     --muted-foreground: oklch(0.4842 0.0126 308);
-    --accent: color-mix(in oklab, var(--brand-green) 20%, white);
-    --accent-foreground: oklch(0.31 0.055 190);
+    --accent: color-mix(in oklab, var(--brand-purple) 50%, white);
+    --accent-foreground: oklch(0.415 0.2019 300.7);
     --destructive: oklch(0.514 0.1407 13.48);
     --destructive-foreground: oklch(0.985 0.002 308);
     --border: oklch(0.8853 0.0044 308);
@@ -107,6 +107,7 @@
 
 .dark {
     --brand-purple: oklch(0.7024 0.146 308.49);
+    --brand-green: oklch(88.01% 0.051 137.14);
 
     --background: oklch(0.1911 0.0071 308);
     --foreground: oklch(0.9622 0.0042 308);
@@ -120,7 +121,7 @@
     --secondary-foreground: oklch(0.9302 0.0084 308);
     --muted: oklch(0.2691 0.0102 308);
     --muted-foreground: oklch(0.7282 0.0124 308);
-    --accent: color-mix(in oklab, var(--brand-green) 28%, black);
+    --accent: color-mix(in oklab, var(--brand-purple) 58%, black);
     --accent-foreground: oklch(0.92 0.035 186.7);
     --destructive: oklch(0.676 0.159 13.8);
     --destructive-foreground: oklch(0.985 0.002 308);

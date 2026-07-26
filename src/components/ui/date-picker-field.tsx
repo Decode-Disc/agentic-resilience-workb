@@ -136,23 +136,25 @@ export default function DatePickerField({
 
     return (
         <Popover>
-            <PopoverTrigger render={
-                <Button
-                    id={id}
-                    variant="outline"
-                    type="button"
-                    disabled={disabled}
-                    className={cn(
-                        'w-full justify-start text-left font-normal',
-                        !value && 'text-muted-foreground',
-                        className,
-                    )}
-                    data-slot="date-trigger"
-                >
-                    <CalendarIcon className="mr-2 size-4" />
-                    {displayValue || placeholder}
-                </Button>}>
-            </PopoverTrigger>
+            <PopoverTrigger
+                render={
+                    <Button
+                        id={id}
+                        variant="outline"
+                        type="button"
+                        disabled={disabled}
+                        className={cn(
+                            'w-full justify-start text-left font-normal',
+                            !value && 'text-muted-foreground',
+                            className,
+                        )}
+                        data-slot="date-trigger"
+                    >
+                        <CalendarIcon className="mr-2 size-4" />
+                        {displayValue || placeholder}
+                    </Button>
+                }
+            ></PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
                 <div className="p-3">
                     <Calendar

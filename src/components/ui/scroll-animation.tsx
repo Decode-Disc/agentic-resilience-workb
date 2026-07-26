@@ -177,7 +177,7 @@ function ScrollElement({
     const baseVariants = variants ?? DIRECTION_VARIANTS[direction];
     const modifiedVariants = useMemo<Variants>(() => {
         const hiddenVariant =
-            baseVariants.hidden ?? DIRECTION_VARIANTS[direction].hidden;
+            baseVariants.hidden ?? DIRECTION_VARIANTS[direction].hidden ?? {};
         const visibleVariant = (baseVariants.visible ??
             DIRECTION_VARIANTS[direction].visible) as Record<
             string,

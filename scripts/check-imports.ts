@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, type Dirent } from 'node:fs';
+import { type Dirent, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17,8 +17,7 @@ const IGNORE = new Set([
  * dynamic import() string arguments. Matches `../`, `../../` etc. but
  * allows `./` (same dir) and aliased imports like `@convex/...`.
  */
-const RELATIVE_PARENT =
-    /(?:import\.meta\.glob|import\s*\()\s*['"]\.\.+/;
+const RELATIVE_PARENT = /(?:import\.meta\.glob|import\s*\()\s*['"]\.\.+/;
 
 /**
  * Flags `import.meta.glob()` patterns whose first non-quote character is
@@ -30,8 +29,22 @@ const RELATIVE_PARENT =
  *
  * Capture group 1 holds the offending prefix character.
  */
-const INVALID_GLOB_PREFIX =
-    /import\.meta\.glob\(\s*['"]([^'"/.][^'"]*)/;
+const INVALID_GLOB_PREFIX = /import\.meta\.glob\(\s*['"]([^'"/.][^'"]*)/;
+
+/**
+ * Matches a non-Route, non-type `export` in a route file. TanStack Router
+ * requires route files to export ONLY `export const Route`. Any additional
+ * export — default, named, re-export — breaks code-splitting and triggers
+ * the console warning: "These exports … will not be code-split …".
+ *
+ * Allowed: `export const Route = …`, `export type …`, `export interface …`.
+ * Flagged: `export default …`, `export const X = …`, `export function …`,
+ * `export class …`, `export { … }`.
+ */
+const EXTRA_ROUTE_EXPORT = /^export\s+(?!const\s+Route\b|type\s|interface\s)/;
+
+/** Only files whose relative path starts with this are checked. */
+const ROUTES_DIR = 'src/routes/';
 
 /**
  * Matches a TypeScript static `import ... from '...'` or `export ... from '...'`
@@ -87,6 +100,7 @@ for (const file of walk(ROOT)) {
     }
     const rel = relative(ROOT, file);
     const dir = dirname(file);
+    const isRouteFile = rel.startsWith(ROUTES_DIR);
     const text = readFileSync(file, 'utf8');
     const lines = text.split('\n');
 
@@ -113,6 +127,12 @@ for (const file of walk(ROOT)) {
         if (specifier !== undefined && !jsExtensionNeedsJs(specifier, dir)) {
             console.error(
                 `${rel}:${i + 1} '.js' extension in TypeScript import with no matching '.js' file — drop it or rename source to '.ts'`,
+            );
+            failed = true;
+        }
+        if (isRouteFile && EXTRA_ROUTE_EXPORT.test(line)) {
+            console.error(
+                `${rel}:${i + 1} route files must only export 'Route'. Move this export to a separate file so TanStack Router can code-split it`,
             );
             failed = true;
         }

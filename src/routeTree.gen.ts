@@ -9,38 +9,79 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WorkspaceRouteRouteImport } from './routes/workspace/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as WorkspaceStartRouteImport } from './routes/workspace/start'
+import { Route as PrototypeWorkspaceRouteImport } from './routes/prototype.workspace'
 
+const WorkspaceRouteRoute = WorkspaceRouteRouteImport.update({
+  id: '/workspace',
+  path: '/workspace',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WorkspaceStartRoute = WorkspaceStartRouteImport.update({
+  id: '/start',
+  path: '/start',
+  getParentRoute: () => WorkspaceRouteRoute,
+} as any)
+const PrototypeWorkspaceRoute = PrototypeWorkspaceRouteImport.update({
+  id: '/prototype/workspace',
+  path: '/prototype/workspace',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/workspace': typeof WorkspaceRouteRouteWithChildren
+  '/prototype/workspace': typeof PrototypeWorkspaceRoute
+  '/workspace/start': typeof WorkspaceStartRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/workspace': typeof WorkspaceRouteRouteWithChildren
+  '/prototype/workspace': typeof PrototypeWorkspaceRoute
+  '/workspace/start': typeof WorkspaceStartRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/workspace': typeof WorkspaceRouteRouteWithChildren
+  '/prototype/workspace': typeof PrototypeWorkspaceRoute
+  '/workspace/start': typeof WorkspaceStartRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/workspace' | '/prototype/workspace' | '/workspace/start'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/workspace' | '/prototype/workspace' | '/workspace/start'
+  id:
+    | '__root__'
+    | '/'
+    | '/workspace'
+    | '/prototype/workspace'
+    | '/workspace/start'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  WorkspaceRouteRoute: typeof WorkspaceRouteRouteWithChildren
+  PrototypeWorkspaceRoute: typeof PrototypeWorkspaceRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/workspace': {
+      id: '/workspace'
+      path: '/workspace'
+      fullPath: '/workspace'
+      preLoaderRoute: typeof WorkspaceRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,11 +89,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/workspace/start': {
+      id: '/workspace/start'
+      path: '/start'
+      fullPath: '/workspace/start'
+      preLoaderRoute: typeof WorkspaceStartRouteImport
+      parentRoute: typeof WorkspaceRouteRoute
+    }
+    '/prototype/workspace': {
+      id: '/prototype/workspace'
+      path: '/prototype/workspace'
+      fullPath: '/prototype/workspace'
+      preLoaderRoute: typeof PrototypeWorkspaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
+interface WorkspaceRouteRouteChildren {
+  WorkspaceStartRoute: typeof WorkspaceStartRoute
+}
+
+const WorkspaceRouteRouteChildren: WorkspaceRouteRouteChildren = {
+  WorkspaceStartRoute: WorkspaceStartRoute,
+}
+
+const WorkspaceRouteRouteWithChildren = WorkspaceRouteRoute._addFileChildren(
+  WorkspaceRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  WorkspaceRouteRoute: WorkspaceRouteRouteWithChildren,
+  PrototypeWorkspaceRoute: PrototypeWorkspaceRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

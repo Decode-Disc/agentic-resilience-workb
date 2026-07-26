@@ -47,7 +47,7 @@ describe('IndexPage', () => {
             screen
                 .getByRole('link', { name: 'Open workbench' })
                 .getAttribute('href'),
-        ).toContain('/prototype/workspace');
+        ).toContain('/workspace/start');
         expect(screen.queryByText(/analysis complete/i)).toBeNull();
         expect(
             screen.queryByText(/pricing|get started|free trial/i),

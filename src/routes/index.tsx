@@ -27,7 +27,8 @@ import {
     AccordionItem,
     AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { BackgroundImageTexture } from '@/components/ui/bg-image-texture';
+import { Button } from '@/components/ui/button';
 import { GridCard } from '@/components/ui/grid-card';
 import { LiquidGlassCard } from '@/components/ui/liquid-glass';
 import {
@@ -159,16 +160,13 @@ const capabilities = [
 
 function WorkbenchLink({ mobile = false }: { mobile?: boolean }) {
     return (
-        <Link
-            to="/prototype/workspace"
-            search={{ variant: 'a' }}
-            className={buttonVariants({
-                size: mobile ? 'lg' : 'sm',
-                className: mobile ? 'w-full' : undefined,
-            })}
+        <Button
+            size={mobile ? 'default' : 'sm'}
+            render={<Link to="/workspace/start" />}
+            className={mobile ? 'w-full' : undefined}
         >
             Open workbench
-        </Link>
+        </Button>
     );
 }
 
@@ -344,14 +342,10 @@ function MatrixPreview() {
             borderRadius="var(--radius-2xl)"
         >
             <div className="flex justify-center py-2">
-                <Link
-                    to="/prototype/workspace"
-                    search={{ variant: 'a' }}
-                    className={buttonVariants({ size: 'lg' })}
-                >
-                    Enter the workbench
+                <Button render={<Link to="/workspace/start" />} size="lg">
+                    Start the research
                     <Icon iconNode={ArrowRight01Icon} className="size-4" />
-                </Link>
+                </Button>
             </div>
             <div className="p-5 sm:p-7">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -452,7 +446,7 @@ function CapabilityGrid() {
  * Standalone project home page. It introduces the evidence-first thesis without
  * mounting the authenticated workbench shell.
  */
-export function IndexPage() {
+function IndexPage() {
     const reduceMotion = useReducedMotion();
 
     return (
@@ -467,6 +461,13 @@ export function IndexPage() {
                 <div className="absolute top-[20rem] left-1/2 size-[62rem] -translate-x-1/2 rounded-full border border-border/70" />
                 <div className="absolute top-[13rem] left-1/2 size-[84rem] -translate-x-1/2 rounded-full border border-dashed border-border/60" />
             </div>
+
+
+            <BackgroundImageTexture
+                opacity={0.7}
+                variant="groovepaper"
+                className="absolute inset-0"
+            />
 
             <main className="relative z-10 mx-auto flex w-full min-h-0 max-w-3xl flex-col items-center px-4 pb-10 pt-20">
                 <motion.section
