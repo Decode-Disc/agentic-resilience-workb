@@ -1,6 +1,6 @@
 # Evidence Workbench Design System
 
-**Status:** active  
+**Status:** active; refined for the selected navigation-rail workspace on 2026-07-27
 **Theme:** `src/assets/styles/themes/evidence-workbench.css`  
 **Tailwind entrypoint:** `src/styles.css`
 
@@ -37,6 +37,8 @@ The shared utilities are intentionally limited to:
 
 - `surface-panel` for a standard opaque panel;
 - `surface-floating` for elevated navigation and overlays;
+- `text-display` for restrained display headings;
+- `text-section` for section headings;
 - `text-micro` for compact uppercase metadata.
 
 ## Token vocabulary
@@ -73,15 +75,24 @@ the classification by itself.
 
 The system combines:
 
-- pale layered surfaces, generous radii, and diffused depth
-  from the supplied references;
-- Eden's Geist typography, compact information hierarchy, and restrained
-  metadata;
-- controlled violet and green variants derived from Decoding Discontinuity.
+- Qatalog's institutional near-neutral canvas, hairline borders, and generous
+  negative space;
+- the Volvo EX30 concept's frosted surfaces, inset top highlight, inner rim, and
+  soft diffuse depth, used only for floating or focal layers;
+- Geist typography, compact information hierarchy, and restrained metadata;
+- controlled purple and green recognition signals derived from Decoding
+  Discontinuity.
 
-The primary color is violet. The semantic accent is a light derivative of
-Decoding Discontinuity's `#54bbb1` green, measured from its current publication
-visuals. Eden's extracted mint `#c8e0bf` is not copied.
+The primary color is institutional ink, not purple. Purple is a small
+recognition accent for focus, micro-labels, selection, navigation-trigger state,
+and the quiet landing bloom. Green is the approved/positive signal and may tint
+neutral accent surfaces. Evidence classification and counter-evidence colors
+are reserved for their domain meaning.
+
+The selected research workspace uses a persistent navigation rail. Apply
+`surface-floating` or `LiquidGlassCard` to the rail and contextual layer, while
+the evidence matrix remains the visual and analytical center. On desktop the
+context panel is retractable; on smaller screens it becomes a drawer.
 
 ## Guardrails
 
@@ -91,5 +102,7 @@ visuals. Eden's extracted mint `#c8e0bf` is not copied.
 - Extend shared shadcn primitives instead of restyling standard controls on one
   page.
 - Use motion only to clarify a user action or persisted state.
+- Animate progressive map or brief contributions only after their persisted
+  workflow event exists.
 - Keep evidence, provenance, uncertainty, and analyst control more prominent
   than decoration.

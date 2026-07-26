@@ -89,7 +89,7 @@ These rules are non-negotiable:
 14. Retries and workflow resumes must not duplicate claims, quota reservations, provider-call records, or external side effects.
 15. A weak evidence base may yield `0 / Mixed or unclear`, `Hypothesis`, `Unknown`, or `insufficient public evidence`. Never force a confident answer.
 
-The exact domain records, workflow states, assessment dimensions, provider boundaries, and enforcement mechanisms are defined in `` and the product design.
+The exact domain records, workflow states, assessment dimensions, provider boundaries, and enforcement mechanisms are defined in `context/TECH.md` and the product design.
 
 ## Terminology and Product Guardrails
 
@@ -114,7 +114,7 @@ Do not implement the following without a new explicit decision:
 
 ## Implementation Discipline
 
-Build the smallest runnable vertical slice that preserves the relevant invariants. Introduce domain concepts when observable behavior requires them rather than scaffolding unused abstractions. Follow the implementation sequence in `` unless measured evidence justifies a change.
+Build the smallest runnable vertical slice that preserves the relevant invariants. Introduce domain concepts when observable behavior requires them rather than scaffolding unused abstractions. Follow the implementation sequence in `context/TECH.md` unless measured evidence justifies a change.
 
 Keep domain rules out of UI components. Keep provider-specific types and model names out of domain records and workflow business logic. Convex remains the state owner.
 
@@ -285,7 +285,7 @@ RED → verify the expected failure → GREEN → REFACTOR → verify the releva
 - Import the real production module. Mock only nondeterministic or external boundaries.
 - Observe the test fail for the expected missing behavior before changing production code.
 - Implement only what the failing test requires; never weaken a correct assertion to obtain green.
-- Run the focused test, the affected suite, and the project quality checks defined in ``.
+- Run the focused test, the affected suite, and the project quality checks defined in `context/TECH.md`.
 - Default and CI tests must not call paid or nondeterministic providers.
 - Do not complete work with `.skip`, `.only`, hidden failures, unexplained warnings, or flaky retries.
 - Write Vitest tests for components that own non-trivial rendering logic, using React Testing Library when browser-style rendering helpers are needed. Import real production modules; mock only external boundaries.
@@ -306,7 +306,7 @@ The analyst must be able to inspect evidence, uncertainty, counter-evidence, pro
 
 ## Completion and Communication
 
-Use the product design's Definition of Done as the MVP acceptance checklist. Before declaring a meaningful implementation complete, run the applicable checks defined in `` and report:
+Use the product design's Definition of Done as the MVP acceptance checklist. Before declaring a meaningful implementation complete, run the applicable checks defined in `context/TECH.md` and report:
 
 - what user-visible or invariant-backed behavior now works;
 - files and architectural boundaries changed;

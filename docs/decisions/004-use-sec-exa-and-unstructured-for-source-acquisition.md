@@ -4,6 +4,9 @@
 
 Accepted
 
+Manual PDF upload superseded by ADR-011; all other acquisition boundaries
+remain accepted.
+
 ## Date
 
 2026-07-20
@@ -29,7 +32,9 @@ Use the following provider boundaries for the prototype:
 
 - Query SEC EDGAR directly for company identity, filings, and filing metadata.
 - Use Exa Search for general web discovery, with contents disabled during the discovery stage.
-- Accept analyst-supplied URLs and PDF uploads as proposed sources.
+- Accept analyst-supplied URLs and PDF uploads as proposed sources. The manual
+  PDF-upload portion of this historical decision is superseded by ADR-011;
+  current MVP intake accepts public HTTPS URLs only.
 - Persist candidate metadata and the reason for selection without treating search snippets or provider summaries as evidence.
 
 ### Retrieval and normalization after approval

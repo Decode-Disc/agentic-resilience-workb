@@ -2,11 +2,11 @@
 
 ## Status
 
-Validated baseline design.
+Validated design. Refined for Roadmap Phases 4–8 on 2026-07-27.
 
 ## Date
 
-2026-07-20
+2026-07-20; revised 2026-07-27
 
 ## Purpose
 
@@ -36,21 +36,34 @@ The MVP supports technology companies listed in the United States. This scope pr
 ## Core User Journey
 
 ```text
-Company
+Company preflight and confirmation
+→ Quota reservation and authoritative revalidation
+→ Public-evidence sufficiency checkpoint when needed
 → Source discovery
 → Mandatory source review
 → Evidence extraction
-→ Contradiction search
-→ Dimension assessment
-→ Analyst review
-→ Architecture map and draft brief
+→ Typed validation and targeted semantic verification
+→ Exception-driven claim and dimension review
+→ Progressive architecture map and draft brief
 ```
 
 ### 1. Company resolution
 
-The analyst enters a company name or ticker. The system resolves the legal entity, ticker, exchange, investor-relations presence, and SEC identity. Before starting paid research, it estimates whether enough public material is available.
+The analyst enters a company name, ticker, or SEC URL and may add an optional
+research angle. The angle prioritizes discovery and presentation; it cannot
+change the ten dimensions, evidence rules, or deliverables.
 
-The system may return `insufficient public evidence` rather than promise a low-quality assessment.
+The system performs a non-billable preflight resolution and displays the legal
+entity, ticker, exchange, investor-relations presence, and SEC identity for
+confirmation. After confirmation, it atomically reserves the analysis and
+authoritatively revalidates the canonical company identity before paid research.
+
+The system then estimates whether enough public material is available. If the
+evidence base appears insufficient, the workflow pauses instead of failing. The
+analyst may add public HTTPS URLs and rerun the check, end with
+`insufficient_public_evidence`, or force continuation with a required,
+append-only rationale. A forced continuation never relaxes corpus approval,
+provenance, claim classification, or confidence rules.
 
 ### 2. Source discovery
 
@@ -58,9 +71,16 @@ The system creates a research plan tailored to the company and searches by sourc
 
 ### 3. Mandatory source checkpoint
 
-The workflow stops after discovery. The analyst reviews the proposed corpus, accepts or rejects individual sources, adds URLs, or uploads PDFs. No evidence extraction or scoring starts before explicit approval.
+The workflow stops after discovery. The analyst reviews the proposed corpus,
+accepts or rejects individual sources, leaves candidates pending, or adds public
+HTTPS URLs. No retrieval, evidence extraction, or assessment starts before
+explicit approval.
 
-The approved corpus is versioned. Later additions create a new assessment revision rather than silently mutating an existing result.
+An approved `CorpusRevision` contains accepted sources only. Pending sources
+remain visible but cannot contribute downstream. Accepting one later creates
+`CorpusRevision N+1` and reopens the source checkpoint rather than mutating an
+existing result. Local file and PDF upload is outside the MVP; an approved
+public PDF URL may still be normalized after approval.
 
 ### 4. Evidence matrix
 
@@ -71,19 +91,40 @@ Approved documents are normalized into precisely locatable passages. The system 
 - `Hypothesis`: a plausible proposition requiring investigation.
 - `Unknown`: a material question without sufficient evidence.
 
-Each claim links to exact source passages and is marked as supporting or challenging an assessment dimension.
+Each claim links to exact source passages. One canonical claim may inform
+several dimensions; claim approval and dimension-link decisions remain
+separate.
+
+The default review is exception-driven. Typed AI tasks propose complete claim
+packages, while application-owned deterministic policies validate provenance,
+coverage, corroboration, and rule outcomes. The analyst may approve a reviewed
+group in one action; the server still persists individual append-only
+decisions. A correction produces a cited replacement claim and visible diff
+instead of mutating the original.
 
 ### 5. Architectural assessment
 
-The system proposes a position, evidence confidence, and three-year direction for each dimension. It must show supporting claims, counter-evidence, and critical unknowns before presenting a score.
+The system proposes a position, evidence confidence, and three-year direction
+for each dimension. It must show supporting claims, counter-evidence, and
+critical unknowns before presenting a score. A dimension becomes reviewable
+when the claims and dimension links feeding that proposal have decisions;
+unrelated dimensions may remain locked.
 
 ### 6. Analyst review
 
-The analyst may accept or override a proposed score. Overrides require a written justification. The AI proposal, analyst decision, and full revision history remain visible.
+The analyst makes one atomic decision per dimension covering position,
+confidence, and three-year direction. Field-level overrides require a written
+justification. The AI proposal, deterministic policy inputs and outcomes,
+analyst decision, and full revision history remain visible.
 
 ### 7. Derived outputs
 
-The architecture map and draft brief are projections of validated evidence. They cannot introduce unsupported entities, relationships, or assertions.
+The architecture map and draft brief are progressive projections of validated
+evidence. After each dimension decision, the application updates only the
+affected relationships and sections, displays the new persisted contribution,
+and keeps incomplete coverage visible. They cannot introduce unsupported
+entities, relationships, or assertions and become final only after all ten
+dimension decisions.
 
 ## Information Architecture
 
@@ -102,6 +143,17 @@ The main screens are:
 
 The product should look like an institutional research tool, not a generic AI chat application. A chat interface may be added later as a secondary navigation mechanism, but it is not the primary interaction model.
 
+The research workspace uses a persistent navigation rail showing `Progress`,
+`Sources`, `Evidence`, `Assessment`, `Map`, and `Brief`. All sections remain
+visible; completed sections remain revisitable, and locked sections explain
+their exact persisted prerequisite. On desktop, the selected item opens in a
+retractable contextual panel beside the primary workspace. On smaller screens,
+that panel becomes a drawer.
+
+Source review is a dedicated workspace mode with the candidate list in the
+primary area and source detail in the contextual panel. The matrix is never
+shown as if unapproved sources had already produced evidence.
+
 ## Evidence Model
 
 The evidence matrix is the primary interface over an underlying evidence graph.
@@ -116,16 +168,22 @@ ResearchRun
 ResearchPlan
 RunEvent
 Source
+SourceDecision
+CorpusRevision
 SourceVersion
 SourcePassage
 Claim
 ClaimEvidence
+ClaimDecision
+ClaimDimensionDecision
 Relationship
 AssessmentDimension
 ScoreProposal
-AnalystDecision
+AssessmentDecision
 BriefRevision
 ProviderCall
+AITaskResult
+PolicyEvaluation
 ```
 
 Important invariants:
@@ -134,8 +192,12 @@ Important invariants:
 - A source rejected at the checkpoint cannot contribute to later claims or scores.
 - A generated brief can use only analyst-approved claims.
 - Human decisions are append-only audit events, not destructive replacements.
+- Corpus, claim, dimension-link, assessment, map, and brief history is
+  revision-aware.
 - A map relationship must be backed by validated claims.
 - A retry must not duplicate claims, quota reservations, or billing records.
+- AI results are typed proposals. Application-owned, versioned policy determines
+  structural validity and quality gates.
 
 ## Assessment Dimensions
 
@@ -202,22 +264,34 @@ A source receives a relevance estimate, not a truth score. Truth is evaluated at
 
 The source checkpoint shows why each source was selected, which dimensions it may inform, its date and authority, duplicate or superseding versions, and extraction restrictions.
 
+The start surface offers three coverage presets: `Balanced` by default,
+`First-party depth`, and `Independent scrutiny`. They adjust discovery priority
+and bounded query budgets; they cannot disable regulatory coverage, provenance,
+extraction validation, or counter-evidence work. Pipeline stages are not
+presented as optional "evidence layer" switches.
+
 ## Orchestration
 
 The workflow is deterministic and staged. Specialized model calls are used where they provide a clear separation of concerns; the product does not expose a theatrical swarm of agents.
 
 ```text
-Resolve company
+Preflight-resolve company
+→ Confirm company and reserve analysis
+→ Revalidate canonical identity
+→ Check public-evidence sufficiency
+→ Await evidence decision when insufficient
 → Build research plan
 → Discover sources in parallel
-→ Persist proposed corpus
-→ Await source approval
+→ Persist proposed CorpusRevision
+→ Await corpus-revision approval
 → Retrieve and normalize approved sources
 → Extract passages and atomic claims
-→ Search for counter-evidence
+→ Validate typed results and run targeted semantic checks
+→ Search for counter-evidence within the approved corpus
 → Propose dimension assessments
-→ Await analyst review
-→ Generate derived views
+→ Await exception-driven analyst decisions by dimension
+→ Incrementally update derived views
+→ Finalize after all ten dimensions
 ```
 
 The progress interface displays only real persisted events. It may show stages, counts, durations, failures, and retries, but never hidden chain-of-thought or simulated agent conversations.
@@ -231,17 +305,32 @@ Workflow step states:
 - `failed`
 - `skipped`
 
-Research run states:
+Research run lifecycle remains a product projection rather than a log of every
+provider call. It must distinguish evidence-sufficiency review from corpus
+review and preserve a completion outcome:
 
 ```text
 draft
+→ checking_public_evidence
+→ awaiting_evidence_sufficiency_review (when required)
 → discovering_sources
 → awaiting_source_review
+→ corpus_approved
 → extracting_evidence
 → assessing_dimensions
 → awaiting_assessment_review
 → completed
 ```
+
+`completionOutcome` is `completed_assessment` or
+`insufficient_public_evidence`. A later explicit corpus revision may start a
+new workflow execution generation for the same dossier without erasing the
+previous completed revision.
+
+`corpus_approved` is an honest vertical-slice handoff. The approved revision is
+immutable and the Phase 4 execution may end with `executionStatus = idle`
+without claiming that evidence extraction has started. A later workflow version
+resumes from that persisted state.
 
 Execution status is tracked separately as `idle`, `running`, `paused`, `failed`, `cancelled`, or `completed`; a pause identifies the pending human checkpoint. Operational `WorkflowStep`, `AuditEvent`, and `CheckpointDecision` records support this lifecycle without becoming analytical artifacts.
 
@@ -273,6 +362,10 @@ Workflow code requests capabilities rather than concrete model names:
 source-relevance      → fast, low-cost, structured
 claim-extraction      → precise, long-context
 contradiction-search  → strong reasoning
+claim-entailment      → bounded semantic verification
+contradiction-verification → bounded semantic verification
+dimension-relevance   → bounded semantic verification
+claim-correction      → grounded replacement proposal
 dimension-assessment  → strongest suitable reasoning
 brief-generation      → grounded synthesis and writing
 ```
@@ -301,6 +394,19 @@ Every provider call records:
 
 Provider selection remains automatic. Provider details are inspectable in run details but are not exposed as a primary user control.
 
+The application owns routing, bounded retry, and fallback. OpenRouter uses
+`@openrouter/ai-sdk-provider`; private CLIProxyAPI transport uses
+`@ai-sdk/openai-compatible`. SEC uses direct HTTP. Exa discovery uses
+metadata-only search before approval and `getContents` only after approval.
+The current Unstructured Pipeline Jobs API uses a bounded direct-HTTP adapter
+rather than the JavaScript client for the legacy Partition endpoint.
+
+Each configured task declares its primary provider and optional fallback.
+Provider-internal routing may preserve the same configured model under explicit
+parameter and privacy constraints, but it may not silently change the
+application-selected task or model. Every retry and fallback attempt is a
+separate `ProviderCall`.
+
 ## Access and Prototype Guards
 
 The prototype is private and invitation-only.
@@ -313,8 +419,21 @@ The prototype is private and invitation-only.
 - Technical retries and workflow resumes do not consume another analysis.
 - Abandoned or voluntarily deleted analyses remain counted.
 - Administrative quota restoration requires an audited reason.
+- A visitor may have only one workflow with `executionStatus = running`.
+  Dossiers paused at a human checkpoint do not block another launch.
 
-The workflow also uses simple configurable safety guards: bounded retries, limits on research breadth and document pages, provider-call limits where useful, provider-side spending controls when available, and an emergency switch that prevents new paid work. Provider usage, latency, and reported cost are recorded when available, but the prototype does not implement transactional dollar reservations, settlement accounting, or precise per-dossier cost enforcement.
+The workflow also uses simple configurable safety guards: bounded retries,
+limits on research breadth and document pages, provider-call limits where
+useful, provider-side spending controls when available, and an emergency switch
+that prevents new paid work. Provider usage, latency, and reported cost are
+recorded when available, but the prototype does not implement transactional
+dollar reservations, settlement accounting, or precise per-dossier cost
+enforcement.
+
+The administrator receives a minimal operational view for active workflows,
+human checkpoints, failures, provider calls, available usage/cost, audited quota
+restoration, and the paid-work emergency switch. It is not a dynamic provider
+or policy configuration console.
 
 ## Error Handling
 
@@ -324,6 +443,11 @@ The workflow also uses simple configurable safety guards: bounded retries, limit
 - An insufficiently supported claim is downgraded to `Hypothesis` or `Unknown`.
 - A weak evidence base produces `0 / Mixed or unclear`, not a forced directional score.
 - Provider output that fails schema validation is retried under bounded policy and never persisted as validated evidence.
+- Structural failures such as rejected-source provenance or an unresolved
+  locator cannot be overridden. Analytical policy outcomes may be overridden
+  with a persisted reason.
+- An insufficient-evidence result pauses for URL addition, justified
+  continuation, or explicit completion; it is not rendered as a generic error.
 - Human decisions are never overwritten by a workflow retry or later provider response.
 - Cancellation may allow an already-running external request to finish, but its result must not advance a cancelled run.
 
@@ -340,7 +464,16 @@ The recording must not present cached or precomputed output as live work.
 
 ## Evaluation Strategy
 
-A small, manually curated evaluation set will cover two or three companies with different architectural profiles. Each case includes an approved corpus, expected claims, known contradictions, and deliberately unresolved questions.
+CCC Intelligent Solutions is curated first under its accepted bounded showcase
+scope. Expected claims, known contradictions, and deliberately unresolved
+questions are defined only after manual corpus approval. That same curated
+dossier then becomes the first regression corpus; a parallel "golden" CCC
+dossier is not created.
+
+Small deterministic fixtures isolate policy rules such as rejected-source
+exclusion, locator validity, contradiction handling, duplicate detection, and
+coverage thresholds. ServiceNow or another company is added only if the CCC
+vertical slice reveals a measured evaluation gap.
 
 Evaluation dimensions:
 
@@ -374,7 +507,7 @@ Included:
 - invitation access and persistent quotas;
 - US-listed technology company resolution;
 - automated source discovery and research planning;
-- manual URL and PDF addition;
+- manual public HTTPS URL addition;
 - mandatory corpus approval;
 - passage and claim extraction;
 - counter-evidence discovery;
@@ -395,6 +528,7 @@ Explicitly excluded:
 - non-US markets;
 - continuous company monitoring;
 - simultaneous analyst collaboration;
+- local file and PDF upload;
 - model fine-tuning;
 - general-purpose web crawling;
 - autonomous publication without review;
@@ -403,7 +537,9 @@ Explicitly excluded:
 ## Critical Uncertainties
 
 1. Search and document-extraction quality, especially reproducible web and PDF locators.
-2. The showcase company that best demonstrates original, nuanced architectural judgment to Raphaëlle.
+2. Whether the bounded CCC public corpus can distinguish economic orchestration
+   from carrier-owned rules, network participation, and replaceable workflow
+   modules.
 3. The minimum evidence-question set needed for each assessment dimension.
 
 ## Failure Conditions
@@ -423,15 +559,22 @@ The prototype fails its purpose if any of the following are true:
 The MVP is complete when an invited analyst can:
 
 1. Start an analysis for a supported company within enforced quotas.
-2. Observe real source-discovery progress.
-3. Review and approve a proposed source corpus.
-4. Resume a durable workflow after that approval.
-5. Inspect atomic claims with precise citations and counter-evidence.
-6. Review dimension scores, confidence, and three-year direction.
-7. Override a score with an audited justification.
-8. View an evidence-backed architecture map.
-9. Generate a draft brief containing only approved claims.
-10. Inspect the methodology, limitations, provider usage, and duration.
+2. Confirm the preflight company identity before quota reservation.
+3. Resolve an evidence-sufficiency checkpoint through URL addition, explicit
+   completion, or a justified override.
+4. Observe real source-discovery progress.
+5. Review and approve a versioned source corpus while leaving candidates
+   pending when appropriate.
+6. Resume a durable workflow after that approval.
+7. Review typed, policy-evaluated claims through an exception-driven surface
+   with precise citations and counter-evidence.
+8. Review atomic dimension decisions for position, confidence, and three-year
+   direction.
+9. Correct or override a proposal with an audited justification.
+10. Observe the architecture map and draft brief evolve from approved claims
+    without hiding incomplete coverage.
+11. Inspect the methodology, limitations, provider usage, and duration.
+12. Allow an administrator to inspect operations and stop new paid work.
 
 ## Related Decisions
 
@@ -442,3 +585,7 @@ The MVP is complete when an invited analyst can:
 - [ADR-005: Enforce prototype provider cost ceilings (superseded)](../decisions/005-enforce-prototype-provider-cost-ceilings.md)
 - [ADR-006: Use lightweight prototype usage guards](../decisions/006-use-lightweight-prototype-usage-guards.md)
 - [ADR-007: Use anonymous Convex Auth with one-time invitations](../decisions/007-use-anonymous-convex-auth-with-one-time-invitations.md)
+- [ADR-008: Use versioned research revisions and exception-driven review](../decisions/008-use-versioned-research-revisions-and-exception-driven-review.md)
+- [ADR-009: Use typed AI tasks and deterministic policy adjudication](../decisions/009-use-typed-ai-tasks-and-deterministic-policy-adjudication.md)
+- [ADR-010: Keep provider routing, retries, and fallback application-controlled](../decisions/010-keep-provider-routing-retries-and-fallback-application-controlled.md)
+- [ADR-011: Restrict manual source intake to public HTTPS URLs](../decisions/011-restrict-manual-source-intake-to-public-https-urls.md)

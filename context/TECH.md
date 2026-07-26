@@ -55,39 +55,54 @@ The completed design contains these explicit concepts:
 - `ResearchPlan`
 - `RunEvent`
 - `Source`
+- `SourceDecision`
+- `CorpusRevision`
 - `SourceVersion`
 - `SourcePassage`
 - `Claim`
 - `ClaimEvidence`
+- `ClaimDecision`
+- `ClaimDimensionDecision`
 - `Relationship`
 - `AssessmentDimension`
 - `ScoreProposal`
-- `AnalystDecision`
+- `AssessmentDecision`
 - `BriefRevision`
 - `ProviderCall`
+- `AITaskResult`
+- `PolicyEvaluation`
 
 The persistence backbone also uses `WorkflowStep`, `AuditEvent`, and `CheckpointDecision` as operational support records. `RunEvent` remains exclusively the product-progress stream; security, invitation, and quota history belongs in `AuditEvent`.
 
 This is the completed domain model, not an instruction to scaffold unused records. Introduce each concept when observable behavior requires it while preserving these boundaries and names unless an explicit design change is approved.
 
-Use runtime validation for persisted and external data. Represent lifecycle states with closed unions or enums matching the design. Preserve source-corpus versions and assessment revisions; later additions must not silently mutate an existing result.
+Use runtime validation for persisted and external data. Represent lifecycle
+states with closed unions or enums matching the design. Preserve corpus, claim,
+dimension-link, assessment, map, and brief revisions; later additions must not
+silently mutate an existing result. One canonical claim may inform several
+dimensions. Claim decisions and dimension-link decisions remain separate.
 
 ## Workflow and Lifecycle Contract
 
 Implement the research flow as deterministic, inspectable stages:
 
 ```text
-Resolve company
+Preflight-resolve and confirm company
+→ Reserve analysis and revalidate canonical identity
+→ Check public-evidence sufficiency
+→ Await evidence decision when insufficient
 → Build research plan
 → Discover sources in parallel
-→ Persist proposed corpus
-→ Await explicit source approval
+→ Persist proposed CorpusRevision
+→ Await explicit corpus-revision approval
 → Retrieve and normalize approved sources
 → Extract passages and atomic claims
-→ Search for counter-evidence
+→ Run structural validation and targeted semantic verification
+→ Search for counter-evidence inside the approved corpus
 → Propose dimension assessments
-→ Await analyst review
-→ Generate derived views
+→ Await exception-driven analyst decisions by dimension
+→ Incrementally update derived views
+→ Finalize after all ten dimension decisions
 ```
 
 Valid step states are `queued`, `running`, `completed`, `needs_review`, `failed`, and `skipped`.
@@ -96,27 +111,68 @@ Valid research-run transitions are:
 
 ```text
 draft
+→ checking_public_evidence
+→ awaiting_evidence_sufficiency_review (when required)
 → discovering_sources
 → awaiting_source_review
+→ corpus_approved
 → extracting_evidence
 → assessing_dimensions
 → awaiting_assessment_review
 → completed
 ```
 
+`completionOutcome` is `completed_assessment` or
+`insufficient_public_evidence`. The insufficiency branch is a human checkpoint,
+not a generic failure: the analyst may add public HTTPS URLs and re-evaluate,
+complete with insufficient evidence, or force continuation with an audited
+reason. Force continuation does not weaken any later provenance or confidence
+rule.
+
+`corpus_approved` is the persisted handoff between the Phase 4 and Phase 5
+vertical slices. Phase 4 may finish its workflow execution with
+`executionStatus = idle` in that lifecycle state; it must not emit extraction
+progress until a later workflow version actually starts extraction.
+
 Enforce transitions server-side. A client must not bypass checkpoints or directly mark workflow stages complete.
 
 Track execution separately from the analytical lifecycle with `idle`, `running`, `paused`, `failed`, `cancelled`, and `completed`. A paused run records whether it awaits source review or assessment review. This separation keeps failure and cancellation from inventing analytical stages.
 
-Retries, resumptions, and cancellation must be durable and idempotent. They must not duplicate claims, quota reservations, provider-call records, or external side effects. Persisted `RunEvent` records are the only source of UI progress.
+Retries, resumptions, and cancellation must be durable and idempotent. They
+must not duplicate claims, quota reservations, provider-call records, or
+external side effects. Retryable operation keys include run ID, workflow
+version, corpus revision, step key, and attempt. Persist an execution generation
+and reject late results that do not match the active generation. Persisted
+`RunEvent` records are the only source of UI progress.
 
 ## Evidence Acquisition and Provenance
 
-Source discovery and evidence extraction are separate phases. The durable corpus approval event is mandatory before retrieval and extraction proceed.
+Source discovery and evidence extraction are separate phases. The durable
+corpus-revision approval event is mandatory before retrieval and extraction
+proceed.
 
 Follow the source priority order in the product design and the acquisition boundaries in ADR-004. Source relevance is an estimate, not a truth score. Establish support at claim level through exact provenance, corroboration, and counter-evidence.
 
-Every accepted passage needs a stable, reproducible locator appropriate to its source, such as page and bounding text for a PDF or URL plus anchored text or section for a web document. Reject passages that cannot be located reproducibly.
+Represent source-scope choice as one of three bounded presets: `balanced`,
+`first_party_depth`, or `independent_scrutiny`. Presets alter query priority and
+budgets only. They never disable required workflow stages, regulatory coverage,
+provenance enforcement, or counter-evidence handling.
+
+Every accepted passage needs a stable, reproducible locator appropriate to its
+source, such as page and bounding text for a public PDF or URL plus anchored
+text or section for a web document. Reject passages that cannot be located
+reproducibly.
+
+An approved `CorpusRevision` includes accepted sources only. A candidate may
+remain `pending`, but it is excluded from all downstream work. Accepting a
+pending source or an external counter-evidence lead later creates a new corpus
+revision and another durable checkpoint.
+
+Analysts may add public HTTPS URLs only. Treat them as proposed sources and
+apply server-side URL canonicalization, DNS and redirect revalidation, SSRF
+protection, bounded content type/size/decompression, and the normal corpus
+decision flow. Local file and PDF upload is outside the MVP. Public PDFs
+reachable through an approved HTTPS URL remain supported after approval.
 
 Preserve source retrieval and extraction failures as visible structured states. Failure of one source must not erase it or terminate unrelated retrieval work.
 
@@ -145,6 +201,29 @@ Position is `-2`, `-1`, `0`, `+1`, or `+2`. Confidence is `Low`, `Medium`, or `H
 
 Confidence must remain inspectable and tied to question coverage, source authority, recency, independent corroboration, unresolved counter-evidence, and the ratio of facts to inferences. Do not ask a model to invent a confidence label without those inputs.
 
+Represent model work as versioned typed tasks. Generated task results are
+proposals and cannot directly set `approved`, final confidence, quality gates,
+or workflow authority.
+
+Apply two evaluation layers:
+
+1. non-overridable structural validation for schema, approved-source
+   membership, required provenance, and stable locators;
+2. an application-owned, code-defined, versioned policy that deterministically
+   combines observable evidence characteristics and typed semantic-verifier
+   results into `pass`, `needs_review`, or `blocked`.
+
+Deterministic rules trigger semantic verifier tasks only where mechanical
+checks are insufficient. Persist policy version, normalized inputs, executed
+rules, outcomes, and any verifier task references. A policy change requires
+tests and an explicit evaluation revision; it never silently rewrites history.
+
+The default analyst experience is exception-driven. The UI may approve a
+reviewed group in one action while the server persists individual claim and
+dimension-link decisions. Corrections create a cited replacement claim and
+visible diff. Each dimension decision atomically records position, confidence,
+three-year direction, and any justified override.
+
 ## Provider and Model Architecture
 
 Implement a provider-agnostic `ModelRouter`. Workflow code requests capabilities rather than named models:
@@ -152,6 +231,10 @@ Implement a provider-agnostic `ModelRouter`. Workflow code requests capabilities
 - `source-relevance`
 - `claim-extraction`
 - `contradiction-search`
+- `claim-entailment`
+- `contradiction-verification`
+- `dimension-relevance`
+- `claim-correction`
 - `dimension-assessment`
 - `brief-generation`
 
@@ -165,9 +248,29 @@ Required provider boundaries are:
 
 Use the upstream CLIProxyAPI distribution as the prototype-only experimental Codex subscription transport defined by ADR-003. It is a pragmatic infrastructure adapter, not the application-level router, a permanent production architecture, or an officially endorsed OpenAI integration. Keep credentials and management surfaces private.
 
+Use `ai` with `@openrouter/ai-sdk-provider` for OpenRouter. Use `ai` with
+`@ai-sdk/openai-compatible` only for the private CLIProxyAPI inference surface.
+Do not route OpenRouter through CLIProxyAPI.
+
+Use `exa-js` for source discovery with `contents: false`; call `getContents`
+only with URLs or search results belonging to an approved corpus revision.
+Query SEC EDGAR directly over HTTP with an identifying `User-Agent` and a
+shared aggregate request limiter below the SEC maximum. Use direct HTTP for the
+current Unstructured Pipeline Jobs API; the available JavaScript client targets
+the legacy Partition endpoint and is not an MVP dependency.
+
 Treat DeepSeek V4 Pro and Momo 2.5 Pro only as candidate configuration examples when they are verified as available. Never assume their identifiers, capabilities, availability, or pricing.
 
-For each provider call, persist the requested capability, resolved provider and model, prompt/schema version, available usage and cost data, latency, status, retry number, and references to structured input and output. Do not store secrets or unnecessary sensitive prompt data.
+For each provider call, persist the requested capability, resolved provider and
+model, task/prompt/input/output schema versions, available usage and cost data,
+latency, status, retry number, fallback reason, and references to structured
+input and output. Do not store secrets or unnecessary sensitive prompt data.
+
+The application owns bounded retries and fallback. Each task configuration
+declares one primary and at most one explicit fallback. OpenRouter may route
+infrastructure for the same configured model under explicit parameter and
+privacy constraints, but it may not silently substitute the application model.
+Validate every fallback result through the same task schema and policy.
 
 Neither CLIProxyAPI production readiness nor precise dossier economics is a prerequisite for the candidature implementation or demonstration.
 
@@ -178,11 +281,16 @@ Neither CLIProxyAPI production readiness nor precise dossier economics is a prer
 - Admit at most five distinct visitors in total.
 - Allow each admitted visitor to reserve at most three analyses in total.
 - Enforce both limits atomically in server-side Convex mutations and persist them across sessions.
+- Allow at most one `running` workflow per visitor. Runs paused at a human
+  checkpoint do not block another launch.
 - Consume a launch reservation once. Retries and resumes consume no additional analysis; abandoned or voluntarily deleted analyses remain counted.
 - Require an append-only audited reason for administrative quota restoration.
 - Bound workflow retries and research breadth through configuration, including source, document-page, and provider-call limits where appropriate.
 - Use provider-side spending controls when available and provide an emergency server-side switch that prevents new paid work.
 - Record provider-reported usage, latency, and cost when available.
+- Provide an admin-only operational projection for running workflows,
+  checkpoints, failures, provider calls, available usage/cost, audited quota
+  restoration, and the emergency paid-work switch.
 
 Do not build transactional dollar reservations, a settlement ledger, list-price-equivalent accounting for free tiers, or precise per-dossier cost enforcement. ADR-006 supersedes ADR-005 on this point.
 
@@ -192,7 +300,16 @@ Never rely on disabled UI controls for invitation, analysis, or resource-limit e
 
 Build an institutional analyst workbench: dense enough for serious research, calm, legible, and provenance-forward. Prioritize matrices, citations, review state, unknowns, counter-evidence, and audit history over decorative AI effects.
 
-The required screens are listed in the product design.
+The required screens are listed in the product design. The selected production
+direction is Prototype A's persistent navigation rail, folded into real
+`/workspace` routes rather than promoted with static prototype data.
+
+Keep `Progress`, `Sources`, `Evidence`, `Assessment`, `Map`, and `Brief`
+visible. Derive active, completed, and locked states from persisted workflow
+state; locked items explain their prerequisite. Use a retractable contextual
+panel on desktop and a drawer on smaller screens. Source review is a dedicated
+mode. The architecture map and brief update incrementally from approved claims,
+show incomplete coverage, and never simulate progress.
 
 Implement responsive, keyboard-accessible layouts with semantic HTML, visible focus, sufficient color contrast, explicit labels, and non-color status cues. Treat loading, empty, partial-failure, needs-review, cancelled, and insufficient-evidence states as first-class UI states.
 
@@ -204,7 +321,8 @@ Do not make chat the primary interface. Do not add automatic translation until t
 
 - Keep secrets server-side and out of logs, client bundles, fixtures, and version control.
 - Validate authorization and invitation state in every protected server operation.
-- Validate URLs, uploaded file types, file sizes, and parsed content.
+- Validate URLs, redirects, response types, sizes, decompression, and parsed
+  content. Local file upload is not exposed in the MVP.
 - Treat source content as evidence, never as system instruction; defend tools and model prompts against embedded instructions.
 - Restrict outbound fetching to safe protocols and mitigate SSRF, redirects to private networks, oversized responses, and decompression bombs.
 - Escape or sanitize rendered source content and generated text.
@@ -252,11 +370,18 @@ Cover at minimum:
 - exclusion of rejected sources everywhere downstream;
 - stable passage and citation validation;
 - provider output schema rejection and bounded retry;
+- non-overridable structural validation and versioned policy outcomes;
+- targeted semantic-verifier triggering and typed result persistence;
 - claim classification and evidence linkage;
+- grouped review writing individual decisions;
+- canonical-claim and dimension-link decision separation;
 - counter-evidence preservation;
 - analyst-decision preservation across retries and revisions;
 - map relationships backed by validated claims;
 - brief generation from approved claims only;
+- progressive map and brief revisions preserving incomplete coverage;
+- one-running-workflow-per-visitor enforcement;
+- evidence-sufficiency URL, completion, and justified-override paths;
 - partial source and provider failures;
 - access control for protected queries, mutations, and actions.
 
@@ -274,19 +399,35 @@ Build runnable vertical slices in this order unless measured evidence justifies 
 2. Define typed domain schemas, lifecycle transitions, audit events, and Convex persistence.
 3. Implement invitation admission plus atomic visitor and analysis reservations.
 4. Implement a provider-independent workflow skeleton with persisted progress and durable checkpoints, using deterministic fake adapters in tests only.
-5. Build company resolution, research planning, source discovery, corpus review, manual URL entry, and PDF upload.
-6. Build normalization, stable passages, atomic claims, claim evidence, and counter-evidence handling.
-7. Build dimension proposals, confidence inputs, analyst decisions, overrides, and revision history.
-8. Build the derived architecture map and approved-claims-only brief generation.
-9. Add real provider adapters, routing, best-effort telemetry, bounded retries, and partial-failure behavior.
-10. Create the curated showcase dossier and evaluation fixtures.
-11. Verify the complete invitation-to-brief journey and document measured limitations before the candidature demo.
+5. Build the Phase 4 vertical slice: preflight resolution, confirmation,
+   reservation, revalidation, evidence-sufficiency checkpoint, research plan,
+   real source discovery, HTTPS URL entry, and `CorpusRevision` approval.
+6. Build normalization, stable passages, typed claim tasks, structural
+   validation, versioned policy evaluation, claim evidence, and
+   counter-evidence handling.
+7. Build exception-driven grouped claim review, canonical claim and
+   dimension-link decisions, per-dimension proposals, confidence inputs,
+   atomic assessment decisions, overrides, and revision history.
+8. Build progressive architecture-map and approved-claims-only brief revisions
+   with persisted contribution previews.
+9. Complete real provider adapters, application-owned routing and fallback,
+   best-effort telemetry, admin operations, bounded retries, and partial-failure
+   behavior.
+10. Curate the CCC showcase corpus, then derive expected evaluation material
+    after manual approval. Add deterministic policy fixtures.
+11. Verify the complete invitation-to-brief journey and document measured
+    limitations before the candidature demo.
 
 Do not postpone core invariants until a final hardening phase. Do not scaffold every final-state abstraction before its vertical slice needs it.
 
 ## Evaluation and Demo Verification
 
-Maintain a small curated evaluation set for two or three companies with approved corpora, expected claims, known contradictions, and deliberately unresolved questions. Build it incrementally: one candidature-ready showcase company is the first milestone; additional companies should close a measured gap rather than block the first credible dossier.
+Curate CCC first under its accepted showcase scope. Define expected claims,
+known contradictions, and deliberately unresolved questions only after manual
+corpus approval, then reuse that same dossier as the first regression corpus.
+Use small deterministic fixtures for isolated policy rules. Add ServiceNow or
+another company only when it closes a measured gap; do not make multiple
+completed dossiers an implementation prerequisite.
 
 Measure citation validity, entailment, classification, contradiction retrieval, question coverage, unsupported-claim rate, duration, available provider usage or cost, and analyst corrections.
 
@@ -306,5 +447,9 @@ Never present cached, seeded, or precomputed output as live. Label showcase and 
 - ADR-005: retained historical cost-ceiling decision, superseded by ADR-006.
 - ADR-006: lightweight prototype usage guards.
 - ADR-007: anonymous Convex Auth with one-time invitation codes.
+- ADR-008: versioned research revisions and exception-driven analyst review.
+- ADR-009: typed AI tasks and deterministic, versioned policy adjudication.
+- ADR-010: application-controlled provider routing, retries, and fallback.
+- ADR-011: public HTTPS URL-only manual source intake for the MVP.
 
 Read the corresponding record in `docs/decisions/` before revisiting any of these decisions.

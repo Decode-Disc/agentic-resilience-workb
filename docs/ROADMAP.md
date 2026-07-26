@@ -56,16 +56,18 @@ Outcome: a deterministic research run can progress, pause, resume, fail, retry, 
 
 Outcome: an analyst can start a real company investigation and approve a proposed source corpus.
 
-- [ ] Resolve supported US-listed technology companies and detect insufficient public evidence.
-- [ ] Build and persist a company-specific research plan.
-- [ ] Discover and rank proposed sources with visible, real progress.
-- [ ] Build corpus review with accept, reject, manual URL, and PDF upload paths.
-- [ ] Version the approved corpus and prevent extraction before explicit approval.
+- [ ] Preflight-resolve, confirm, reserve, and authoritatively revalidate a supported US-listed technology company.
+- [ ] Pause on insufficient public evidence with HTTPS URL addition, explicit completion, or justified force-continuation paths.
+- [ ] Build and persist a company-specific research plan with one of the approved source-coverage presets.
+- [ ] Discover and rank proposed SEC and web sources with visible, persisted progress.
+- [ ] Approve a versioned corpus containing accepted sources while preserving rejected and pending candidates.
+- [ ] End the Phase 4 execution honestly at the persisted `corpus_approved` handoff.
+- [ ] Enforce one running workflow per visitor and prevent extraction before explicit corpus-revision approval.
 
 ### Demonstration Checkpoint A — Honest Live Run
 
 - [ ] Start a genuinely new company run.
-- [ ] Show real company resolution, source discovery, and persisted progress.
+- [ ] Show confirmed company resolution, source discovery, and persisted progress.
 - [ ] Stop at the explicit corpus-approval checkpoint.
 - [ ] Confirm that no cached or precomputed work is presented as live.
 
@@ -75,8 +77,10 @@ Outcome: approved sources become inspectable, precisely cited evidence rather th
 
 - [ ] Retrieve and normalize approved sources with visible partial failures.
 - [ ] Create stable, reproducible source passages and locators.
-- [ ] Extract atomic `Fact`, `Inference`, `Hypothesis`, and `Unknown` claims.
-- [ ] Link every material claim to exact passages and relevant dimensions.
+- [ ] Extract typed atomic `Fact`, `Inference`, `Hypothesis`, and `Unknown` claim proposals.
+- [ ] Apply non-overridable structural validation and versioned deterministic policy evaluation.
+- [ ] Trigger typed semantic verification only when deterministic rules require it.
+- [ ] Link each canonical material claim to exact passages and separately decided dimension links.
 - [ ] Preserve supporting evidence, counter-evidence, and critical unknowns.
 - [ ] Exclude rejected sources from every downstream artifact.
 
@@ -86,8 +90,10 @@ Outcome: analysts can inspect and revise evidence-backed proposals across all te
 
 - [ ] Propose separate position, confidence, and three-year direction outputs.
 - [ ] Derive confidence from inspectable evidence characteristics.
-- [ ] Show supporting claims, counter-evidence, and unknowns before review.
-- [ ] Implement accept and justified override decisions.
+- [ ] Present exception-driven grouped claim review while persisting individual append-only decisions.
+- [ ] Unlock dimension review when its claims and dimension links have decisions.
+- [ ] Record one atomic assessment decision per dimension with justified field overrides.
+- [ ] Support AI-assisted cited replacement claims without mutating original proposals.
 - [ ] Preserve proposals, analyst decisions, overrides, and revision history append-only.
 - [ ] Verify weak-evidence outcomes without forcing certainty or an aggregate score.
 
@@ -95,10 +101,12 @@ Outcome: analysts can inspect and revise evidence-backed proposals across all te
 
 Outcome: validated evidence produces useful secondary views without introducing unsupported assertions.
 
-- [ ] Build an evidence-backed architecture map with uncertainty and coverage cues.
+- [ ] Build a progressively updated evidence-backed architecture map with uncertainty and coverage cues.
 - [ ] Require validated supporting claims for every map relationship.
-- [ ] Generate a draft brief from analyst-approved claims only.
+- [ ] Incrementally compose a draft brief from analyst-approved claims only.
 - [ ] Preserve brief revisions and their evidence inputs.
+- [ ] Show the persisted map and brief contribution after each dimension decision.
+- [ ] Keep incomplete coverage explicit until all ten dimensions are decided.
 - [ ] Add the methodology and limitations surface.
 
 ## Phase 8 — Real Providers and Operational Guards
@@ -106,11 +114,13 @@ Outcome: validated evidence produces useful secondary views without introducing 
 Outcome: the deterministic workflow can use real services safely through provider-independent boundaries.
 
 - [ ] Implement capability-based model routing and configuration-driven model selection.
-- [ ] Add the approved Codex subscription transport and OpenRouter adapters.
-- [ ] Add the approved discovery, retrieval, and normalization adapters.
+- [ ] Add direct AI SDK adapters for OpenRouter and the approved Codex subscription transport.
+- [ ] Add SEC HTTP, Exa SDK, and Unstructured Pipeline Jobs HTTP adapters.
+- [ ] Keep retries and explicit fallback application-controlled and fully audited.
 - [ ] Validate structured provider output before it becomes usable evidence.
 - [ ] Record best-effort usage, latency, status, retries, and reported cost.
 - [ ] Enforce configurable breadth limits, bounded retries, and the paid-work emergency switch.
+- [ ] Add the minimal admin operations surface for runs, checkpoints, provider calls, quota restoration, and paid-work shutdown.
 - [ ] Verify partial failures and late results cannot corrupt or advance cancelled runs.
 
 ## Phase 9 — CCC Showcase and Evaluation
@@ -120,6 +130,8 @@ Outcome: one carefully curated dossier demonstrates original, contested, and mea
 - [ ] Freeze the CCC source cutoff date and bounded workflow scope.
 - [ ] Curate and approve a corpus with suitable independent evidence.
 - [ ] Define expected claims, known contradictions, and deliberate unknowns after manual review.
+- [ ] Reuse the curated CCC dossier as the first regression corpus instead of creating a parallel golden dossier.
+- [ ] Add small deterministic fixtures for isolated policy rules.
 - [ ] Include at least one material, justified analyst override.
 - [ ] Evaluate citation validity, entailment, classification, contradiction retrieval, and unsupported-claim rate.
 - [ ] Record duration, available provider usage or cost, and analyst corrections.
@@ -150,10 +162,12 @@ Outcome: the complete invitation-to-brief journey is reliable, honest, and ready
 - [ ] An invited analyst can start an analysis within enforced quotas.
 - [ ] Real source-discovery progress is visible from persisted events.
 - [ ] The analyst can approve a proposed corpus and resume the durable workflow.
+- [ ] An evidence-sufficiency checkpoint supports URL addition, honest completion, and justified continuation.
 - [ ] Atomic claims have precise citations, counter-evidence, and explicit unknowns.
+- [ ] Structural validity and analytical policy outcomes remain distinct and auditable.
 - [ ] All ten dimensions expose position, confidence, and three-year direction for review.
 - [ ] Analyst overrides require justification and remain auditable.
 - [ ] The architecture map is backed by validated claims.
-- [ ] The draft brief contains only analyst-approved claims.
+- [ ] The progressive map and draft brief contain only analyst-approved claims and show incomplete coverage.
 - [ ] Methodology, limitations, provider usage, and duration are inspectable.
 - [ ] No aggregate resilience score, investment recommendation, simulated progress, or unlabeled precomputed output is present.
