@@ -11,7 +11,9 @@
  * borders (Qatalog), frosted liquid-glass surfaces with an inset top highlight
  * and soft diffuse shadows (Volvo EX30 concept), while the Decoding
  * Discontinuity purple and green remain the only chromatic signals.
+ * Not all tokens are overrided from base preset, only those that are relevant to the Evidence Workbench theme.
  */
+
 @theme {
     --font-sans:
         "Geist Variable", "Geist", "Segoe UI", ui-sans-serif, sans-serif;
@@ -46,12 +48,10 @@
     --secondary-foreground: oklch(0.2568 0.0092 308);
     --muted: oklch(0.9231 0.0033 308);
     --muted-foreground: oklch(0.4842 0.0126 308);
-    --accent: color-mix(in oklab, var(--brand-purple) 50%, white);
+    --accent: color-mix(in oklab, var(--brand-purple) 12%, white);
     --accent-foreground: oklch(0.415 0.2019 300.7);
-    --destructive: oklch(0.514 0.1407 13.48);
-    --destructive-foreground: oklch(0.985 0.002 308);
-    --border: oklch(0.8853 0.0044 308);
-    --input: oklch(0.8653 0.0058 308);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
     --ring: oklch(0.415 0.2019 300.7);
 
     --evidence-fact: oklch(0.4856 0.1016 258.76);
@@ -121,12 +121,10 @@
     --secondary-foreground: oklch(0.9302 0.0084 308);
     --muted: oklch(0.2691 0.0102 308);
     --muted-foreground: oklch(0.7282 0.0124 308);
-    --accent: color-mix(in oklab, var(--brand-purple) 58%, black);
+    --accent: color-mix(in oklab, var(--brand-purple) 20%, black);
     --accent-foreground: oklch(0.92 0.035 186.7);
-    --destructive: oklch(0.676 0.159 13.8);
-    --destructive-foreground: oklch(0.985 0.002 308);
-    --border: oklch(0.3181 0.0122 308);
-    --input: oklch(0.3581 0.0138 308);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
     --ring: oklch(0.7024 0.146 308.49);
 
     --evidence-fact: oklch(0.72 0.105 258.76);

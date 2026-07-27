@@ -23,6 +23,10 @@ type ConfiguredInvitation = {
     code: string;
 };
 
+const invitationCodePattern = /^\d{4}$/;
+const invitationClaimWindowMs = 15 * 60 * 1_000;
+const invitationClaimLimits = [{ key: 'global', maximumAttempts: 25 }] as const;
+
 function parseConfiguredInvitations(
     value: string,
 ): Array<ConfiguredInvitation> {
@@ -39,7 +43,7 @@ function parseConfiguredInvitations(
                 (entry.role === 'admin' || entry.role === 'analyst') &&
                 'code' in entry &&
                 typeof entry.code === 'string' &&
-                entry.code.length >= 16,
+                invitationCodePattern.test(entry.code),
         )
     ) {
         throw new Error('INVITATION_SEED_CONFIG is invalid');
@@ -82,13 +86,34 @@ export const seedForSetup = internalMutation({
                 )
                 .unique();
             if (existing) {
-                if (
-                    existing.role !== invitation.role ||
-                    existing.codeDigest !== invitation.codeDigest
-                ) {
+                if (existing.role !== invitation.role) {
                     throw new Error(
                         `Invitation slot ${invitation.slotKey} already has different configuration`,
                     );
+                }
+                if (existing.codeDigest !== invitation.codeDigest) {
+                    const digestOwner = await ctx.db
+                        .query('invitations')
+                        .withIndex('by_code_digest', (query) =>
+                            query.eq('codeDigest', invitation.codeDigest),
+                        )
+                        .unique();
+                    if (digestOwner && digestOwner._id !== existing._id) {
+                        throw new Error(
+                            `Invitation slot ${invitation.slotKey} uses a code assigned to another slot`,
+                        );
+                    }
+                    await ctx.db.patch(existing._id, {
+                        codeDigest: invitation.codeDigest,
+                    });
+                    await ctx.db.insert('auditEvents', {
+                        actor: { type: 'system' },
+                        action: 'invitation_code_rotated',
+                        targetType: 'invitation',
+                        targetId: existing._id,
+                        reason: 'Configured invitation OTP rotation',
+                        occurredAt: now,
+                    });
                 }
                 continue;
             }
@@ -157,15 +182,74 @@ export const claim = action({
         if (!authUserId) {
             throw new Error('Not authenticated');
         }
+        if (!invitationCodePattern.test(args.code)) {
+            throw new Error('Invitation code must contain exactly four digits');
+        }
         const pepper = process.env.INVITATION_CODE_PEPPER;
         if (!pepper) {
             throw new Error('Invitation claim is not configured');
         }
+        await ctx.runMutation(internal.invitations.consumeClaimAttempt, {
+            authUserId,
+        });
         const codeDigest = await digestInvitationCode(args.code, pepper);
         return ctx.runMutation(internal.invitations.claimDigest, {
             authUserId,
             codeDigest,
         });
+    },
+});
+
+export const consumeClaimAttempt = internalMutation({
+    args: { authUserId: v.id('users') },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const now = Date.now();
+        const limits = [
+            ...invitationClaimLimits,
+            {
+                key: `auth:${args.authUserId}`,
+                maximumAttempts: 5,
+            },
+        ];
+
+        for (const limit of limits) {
+            const existing = await ctx.db
+                .query('invitationClaimRateLimits')
+                .withIndex('by_key', (query) => query.eq('key', limit.key))
+                .unique();
+            const windowExpired =
+                !existing ||
+                now - existing.windowStartedAt >= invitationClaimWindowMs;
+
+            if (!existing) {
+                await ctx.db.insert('invitationClaimRateLimits', {
+                    key: limit.key,
+                    attempts: 1,
+                    windowStartedAt: now,
+                    updatedAt: now,
+                });
+                continue;
+            }
+            if (windowExpired) {
+                await ctx.db.patch(existing._id, {
+                    attempts: 1,
+                    windowStartedAt: now,
+                    updatedAt: now,
+                });
+                continue;
+            }
+            if (existing.attempts >= limit.maximumAttempts) {
+                throw new Error(
+                    'Too many invitation attempts. Try again later.',
+                );
+            }
+            await ctx.db.patch(existing._id, {
+                attempts: existing.attempts + 1,
+                updatedAt: now,
+            });
+        }
+        return null;
     },
 });
 
@@ -241,7 +325,11 @@ export const rotateAdminFromConfig = internalAction({
     handler: async (ctx): Promise<null> => {
         const pepper = process.env.INVITATION_CODE_PEPPER;
         const recoveryCode = process.env.INVITATION_ADMIN_RECOVERY_CODE;
-        if (!pepper || !recoveryCode || recoveryCode.length < 16) {
+        if (
+            !pepper ||
+            !recoveryCode ||
+            !invitationCodePattern.test(recoveryCode)
+        ) {
             throw new Error('Admin invitation recovery is not configured');
         }
         const codeDigest = await digestInvitationCode(recoveryCode, pepper);

@@ -4,51 +4,116 @@ import { v } from 'convex/values';
 import { internal } from './_generated/api';
 import { internalMutation } from './_generated/server';
 import {
-    assessmentReviewApproved,
-    sourceReviewApproved,
+    corpusRevisionApproved,
+    evidenceSufficiencyDecided,
     workflow,
 } from './workflow';
 
 export const run = workflow
     .define({ args: { runId: v.id('researchRuns') }, returns: v.null() })
     .handler(async (step, args): Promise<null> => {
+        const availability = await step.runAction(
+            internal.companyResolution.revalidateRun,
+            {
+                runId: args.runId,
+            },
+            { retry: false },
+        );
         await step.runMutation(internal.researchRuns.transition, {
             runId: args.runId,
-            lifecycleState: 'discovering_sources',
+            lifecycleState: 'checking_public_evidence',
             executionStatus: 'running',
-            stepKey: 'resolve_company',
+            stepKey: 'check_public_evidence',
         });
+        while (true) {
+            const evaluation = await step.runMutation(
+                internal.evidenceSufficiency.evaluateForRun,
+                {
+                    runId: args.runId,
+                    secFilingCount: availability.secFilingCount,
+                    investorRelationsPresent:
+                        availability.investorRelationsPresent,
+                },
+            );
+            if (evaluation.outcome === 'sufficient') {
+                await step.runMutation(internal.researchRuns.transition, {
+                    runId: args.runId,
+                    lifecycleState: 'discovering_sources',
+                    executionStatus: 'running',
+                    stepKey: 'discover_sources',
+                });
+                await step.runMutation(internal.researchPlanning.createForRun, {
+                    runId: args.runId,
+                });
+                await step.runAction(
+                    internal.sourceDiscoveryActions.discoverForRun,
+                    {
+                        runId: args.runId,
+                        cik: availability.cik,
+                        filings: availability.filings,
+                    },
+                    { retry: false },
+                );
+                break;
+            }
+            await step.runMutation(internal.researchRuns.transition, {
+                runId: args.runId,
+                lifecycleState: 'awaiting_evidence_sufficiency_review',
+                executionStatus: 'paused',
+                stepKey: 'evidence_sufficiency_review',
+            });
+            const decision = await step.awaitEvent(evidenceSufficiencyDecided);
+            if (decision.kind === 'complete_insufficient') {
+                await step.runMutation(
+                    internal.evidenceSufficiency.completeInsufficient,
+                    { runId: args.runId },
+                );
+                return null;
+            }
+            if (decision.kind === 'force_continue') {
+                await step.runMutation(internal.researchRuns.transition, {
+                    runId: args.runId,
+                    lifecycleState: 'discovering_sources',
+                    executionStatus: 'running',
+                    stepKey: 'discover_sources',
+                });
+                await step.runMutation(internal.researchPlanning.createForRun, {
+                    runId: args.runId,
+                });
+                await step.runAction(
+                    internal.sourceDiscoveryActions.discoverForRun,
+                    {
+                        runId: args.runId,
+                        cik: availability.cik,
+                        filings: availability.filings,
+                    },
+                    { retry: false },
+                );
+                break;
+            }
+            await step.runMutation(internal.researchRuns.transition, {
+                runId: args.runId,
+                lifecycleState: 'checking_public_evidence',
+                executionStatus: 'running',
+                stepKey: 'check_public_evidence',
+            });
+        }
         await step.runMutation(internal.researchRuns.transition, {
             runId: args.runId,
             lifecycleState: 'awaiting_source_review',
             executionStatus: 'paused',
             stepKey: 'source_review',
         });
-        await step.awaitEvent(sourceReviewApproved);
-        await step.runMutation(internal.researchRuns.transition, {
+        const approval = await step.awaitEvent(corpusRevisionApproved);
+        await step.runMutation(internal.sources.verifyApprovedHandoff, {
             runId: args.runId,
-            lifecycleState: 'extracting_evidence',
-            executionStatus: 'running',
-            stepKey: 'extract_evidence',
+            corpusRevisionId: approval.corpusRevisionId,
         });
         await step.runMutation(internal.researchRuns.transition, {
             runId: args.runId,
-            lifecycleState: 'assessing_dimensions',
-            executionStatus: 'running',
-            stepKey: 'assess_dimensions',
-        });
-        await step.runMutation(internal.researchRuns.transition, {
-            runId: args.runId,
-            lifecycleState: 'awaiting_assessment_review',
-            executionStatus: 'paused',
-            stepKey: 'assessment_review',
-        });
-        await step.awaitEvent(assessmentReviewApproved);
-        await step.runMutation(internal.researchRuns.transition, {
-            runId: args.runId,
-            lifecycleState: 'completed',
-            executionStatus: 'completed',
-            stepKey: 'generate_derived_views',
+            lifecycleState: 'corpus_approved',
+            executionStatus: 'idle',
+            stepKey: 'source_review',
         });
         return null;
     });
@@ -67,8 +132,10 @@ export const onComplete = internalMutation({
         const run = await ctx.db.get(args.context.runId);
         if (
             !run ||
+            run.workflowId !== args.workflowId ||
             run.executionStatus === 'completed' ||
-            run.executionStatus === 'cancelled'
+            run.executionStatus === 'cancelled' ||
+            run.executionStatus === 'failed'
         ) {
             return null;
         }

@@ -188,7 +188,7 @@ function SortableListItem({
                             </AnimatePresence>
 
                             {/* List Item Children */}
-                            {renderExtra && renderExtra(item)}
+                            {renderExtra?.(item)}
                         </motion.div>
                     </div>
                     <div

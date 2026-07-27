@@ -25,7 +25,10 @@ export const Route = createRootRouteWithContext<AppRouterContext>()({
                     'An evidence-first research workbench for assessing architectural resilience in the agentic economy.',
             },
         ],
-        links: [{ rel: 'stylesheet', href: appCss }, { rel: 'icon', href: favicon }],
+        links: [
+            { rel: 'stylesheet', href: appCss },
+            { rel: 'icon', href: favicon },
+        ],
     }),
     notFoundComponent: () => (
         <main className="mx-auto flex min-h-svh w-full max-w-3xl flex-col justify-center gap-3 px-5 py-16">

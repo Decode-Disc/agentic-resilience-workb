@@ -19,11 +19,29 @@ export const startReserved = internalMutation({
             throw new Error('Active analysis reservation not found');
         }
         if (
+            !run.companyId ||
+            !run.companyPreflightId ||
+            !run.activeCorpusRevisionId
+        ) {
+            throw new Error('A confirmed company reservation is required');
+        }
+        if (
             run.lifecycleState !== 'draft' ||
             run.executionStatus !== 'idle' ||
             run.workflowId
         ) {
             throw new Error('Research run cannot be started');
+        }
+        const concurrent = await ctx.db
+            .query('researchRuns')
+            .withIndex('by_owner_and_execution_status', (query) =>
+                query
+                    .eq('ownerVisitorId', run.ownerVisitorId)
+                    .eq('executionStatus', 'running'),
+            )
+            .first();
+        if (concurrent) {
+            throw new Error('A research workflow is already running');
         }
         const workflowId = await workflow.start(
             ctx,
@@ -36,7 +54,9 @@ export const startReserved = internalMutation({
         );
         await ctx.db.patch(run._id, {
             workflowId,
-            workflowVersion: 1,
+            workflowVersion: 2,
+            executionStatus: 'running',
+            executionGeneration: run.executionGeneration + 1,
             updatedAt: Date.now(),
         });
         return workflowId;
@@ -171,6 +191,7 @@ export const cancel = mutation({
         const now = Date.now();
         await ctx.db.patch(run._id, {
             executionStatus: 'cancelled',
+            executionGeneration: run.executionGeneration + 1,
             nextEventSequence: run.nextEventSequence + 1,
             updatedAt: now,
         });
@@ -262,6 +283,7 @@ export const retry = mutation({
         const now = Date.now();
         await ctx.db.patch(run._id, {
             executionStatus: 'paused',
+            executionGeneration: run.executionGeneration + 1,
             retryCount: retryCount + 1,
             nextEventSequence: run.nextEventSequence + 1,
             updatedAt: now,

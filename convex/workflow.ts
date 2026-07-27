@@ -23,7 +23,33 @@ export const sourceReviewApproved = defineEvent({
     validator: checkpointDecisionValidator,
 });
 
+export const corpusRevisionApproved = defineEvent({
+    name: 'corpusRevisionApproved',
+    validator: v.object({
+        decisionId: v.id('checkpointDecisions'),
+        corpusRevisionId: v.id('corpusRevisions'),
+    }),
+});
+
 export const assessmentReviewApproved = defineEvent({
     name: 'assessmentReviewApproved',
     validator: checkpointDecisionValidator,
+});
+
+export const evidenceSufficiencyDecided = defineEvent({
+    name: 'evidenceSufficiencyDecided',
+    validator: v.union(
+        v.object({
+            kind: v.literal('recheck'),
+            decisionId: v.id('checkpointDecisions'),
+        }),
+        v.object({
+            kind: v.literal('force_continue'),
+            decisionId: v.id('checkpointDecisions'),
+        }),
+        v.object({
+            kind: v.literal('complete_insufficient'),
+            decisionId: v.id('checkpointDecisions'),
+        }),
+    ),
 });

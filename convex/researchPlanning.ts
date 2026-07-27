@@ -1,0 +1,106 @@
+import { v } from 'convex/values';
+
+import { internalMutation, internalQuery } from './_generated/server';
+import { buildResearchPlan } from './domain/researchPlan';
+
+const planQueryValidator = v.object({
+    query: v.string(),
+    category: v.string(),
+    dimensionKeys: v.array(v.string()),
+});
+
+export const createForRun = internalMutation({
+    args: { runId: v.id('researchRuns') },
+    returns: v.id('researchPlans'),
+    handler: async (ctx, args) => {
+        const run = await ctx.db.get(args.runId);
+        if (
+            !run?.companyId ||
+            !run.coveragePreset ||
+            run.lifecycleState !== 'discovering_sources' ||
+            run.executionStatus !== 'running'
+        ) {
+            throw new Error('Research run is missing planning inputs');
+        }
+        const existing = await ctx.db
+            .query('researchPlans')
+            .withIndex('by_run_and_version', (query) =>
+                query.eq('runId', run._id).eq('version', 1),
+            )
+            .unique();
+        if (existing) {
+            return existing._id;
+        }
+        const company =
+            run.companySnapshot ?? (await ctx.db.get(run.companyId));
+        if (!company) {
+            throw new Error('Confirmed company was not found');
+        }
+        const plan = buildResearchPlan({
+            company,
+            coveragePreset: run.coveragePreset,
+            researchAngle: run.researchAngle,
+        });
+        const now = Date.now();
+        const planId = await ctx.db.insert('researchPlans', {
+            runId: run._id,
+            version: 1,
+            ...plan,
+            createdAt: now,
+        });
+        await ctx.db.patch(run._id, {
+            nextEventSequence: run.nextEventSequence + 1,
+            updatedAt: now,
+        });
+        await ctx.db.insert('runEvents', {
+            runId: run._id,
+            sequence: run.nextEventSequence + 1,
+            type: 'research_plan_created',
+            lifecycleState: run.lifecycleState,
+            executionStatus: run.executionStatus,
+            stepKey: 'build_research_plan',
+            messageKey: 'research_plan_created',
+            total: plan.queries.length,
+            occurredAt: now,
+        });
+        return planId;
+    },
+});
+
+export const getDiscoveryContext = internalQuery({
+    args: { runId: v.id('researchRuns') },
+    returns: v.object({
+        cik: v.string(),
+        corpusRevisionId: v.id('corpusRevisions'),
+        executionGeneration: v.number(),
+        queries: v.array(planQueryValidator),
+    }),
+    handler: async (ctx, args) => {
+        const run = await ctx.db.get(args.runId);
+        if (
+            !run?.companyId ||
+            !run.activeCorpusRevisionId ||
+            run.lifecycleState !== 'discovering_sources' ||
+            run.executionStatus !== 'running'
+        ) {
+            throw new Error('Research run is missing discovery inputs');
+        }
+        const company =
+            run.companySnapshot ?? (await ctx.db.get(run.companyId));
+        const plan = await ctx.db
+            .query('researchPlans')
+            .withIndex('by_run_and_version', (query) =>
+                query.eq('runId', run._id).eq('version', 1),
+            )
+            .unique();
+        if (!company || !plan) {
+            throw new Error('Research discovery context was not found');
+        }
+        return {
+            cik: company.cik,
+            corpusRevisionId: run.activeCorpusRevisionId,
+            executionGeneration: run.executionGeneration,
+            queries: plan.queries,
+        };
+    },
+});

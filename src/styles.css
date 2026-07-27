@@ -22,6 +22,10 @@
     ::selection {
         @apply bg-brand-purple text-primary-foreground;
     }
+
+    *[data-slot='dropdown-menu-content']{
+        @apply rounded-xl!;
+    }
 }
 
 @utility surface-panel {

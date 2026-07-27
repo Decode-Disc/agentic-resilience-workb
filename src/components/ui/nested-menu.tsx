@@ -165,7 +165,7 @@ export function NestedMenuTooltip({
                                     'flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm outline-none transition-colors',
                                     'hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground',
                                     item.variant === 'danger' &&
-                                    'text-destructive hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10',
+                                        'text-destructive hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10',
                                     item.className,
                                 )}
                                 onClick={() => {
@@ -232,7 +232,7 @@ export function NestedMenuItemComponent({
                 'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm outline-none transition-colors',
                 'hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground',
                 item.variant === 'danger' &&
-                'text-destructive hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10',
+                    'text-destructive hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10',
                 item.className,
             )}
             onClick={() => !item.hasSubmenu && item.onSelect?.()}

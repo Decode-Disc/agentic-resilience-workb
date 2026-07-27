@@ -11,10 +11,27 @@ export const invitationStatusValidator = v.union(
     v.literal('revoked'),
 );
 
+export const coveragePresetValidator = v.union(
+    v.literal('balanced'),
+    v.literal('first_party_depth'),
+    v.literal('independent_scrutiny'),
+);
+
+export const companySnapshotValidator = v.object({
+    cik: v.string(),
+    legalName: v.string(),
+    ticker: v.string(),
+    exchange: v.string(),
+    investorRelationsUrl: v.optional(v.string()),
+});
+
 export const researchRunLifecycleValidator = v.union(
     v.literal('draft'),
+    v.literal('checking_public_evidence'),
+    v.literal('awaiting_evidence_sufficiency_review'),
     v.literal('discovering_sources'),
     v.literal('awaiting_source_review'),
+    v.literal('corpus_approved'),
     v.literal('extracting_evidence'),
     v.literal('assessing_dimensions'),
     v.literal('awaiting_assessment_review'),
@@ -41,6 +58,8 @@ export const workflowStepStateValidator = v.union(
 
 export const workflowStepKeyValidator = v.union(
     v.literal('resolve_company'),
+    v.literal('check_public_evidence'),
+    v.literal('evidence_sufficiency_review'),
     v.literal('build_research_plan'),
     v.literal('discover_sources'),
     v.literal('source_review'),
@@ -56,6 +75,11 @@ export const runEventTypeValidator = v.union(
     v.literal('run_failed'),
     v.literal('run_cancelled'),
     v.literal('run_retried'),
+    v.literal('company_confirmed'),
+    v.literal('evidence_sufficiency_evaluated'),
+    v.literal('research_plan_created'),
+    v.literal('source_discovery_progress'),
+    v.literal('corpus_revision_approved'),
 );
 
 export const auditActorValidator = v.union(
@@ -68,7 +92,15 @@ export const auditEventActionValidator = v.union(
     v.literal('invitation_claimed'),
     v.literal('invitation_revoked'),
     v.literal('invitation_reissued'),
+    v.literal('invitation_code_rotated'),
     v.literal('analysis_reserved'),
     v.literal('quota_restored'),
     v.literal('checkpoint_decided'),
+    v.literal('company_confirmed'),
+    v.literal('evidence_sufficiency_overridden'),
+    v.literal('evidence_sufficiency_completed'),
+    v.literal('source_decided'),
+    v.literal('manual_source_added'),
+    v.literal('corpus_revision_approved'),
+    v.literal('paid_work_toggled'),
 );

@@ -1,180 +1,118 @@
-import { digestInvitationCode } from '@convex/domain/invitationCodes';
+import type { Id } from '@convex/_generated/dataModel';
 import schema from '@convex/schema';
 import { makeFunctionReference } from 'convex/server';
 import { convexTest } from 'convex-test';
-import { expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import workflowTest from './workflow-test-register.js';
 
 const modules = import.meta.glob('/convex/**/*.ts');
-
-const seedInvitations = makeFunctionReference<
-    'mutation',
-    {
-        invitations: Array<{
-            slotKey: string;
-            role: 'admin' | 'analyst';
-            codeDigest: string;
-        }>;
-    },
-    { created: number; total: number }
->('invitations:seedForSetup');
-const claimInvitation = makeFunctionReference<
-    'action',
-    { code: string },
-    { visitorId: string; role: 'admin' | 'analyst' }
->('invitations:claim');
-const reserveAnalysis = makeFunctionReference<
+const reserve = makeFunctionReference<
     'mutation',
     { idempotencyKey: string },
-    { runId: string; remainingAnalyses: number }
+    { runId: Id<'researchRuns'>; remainingAnalyses: number }
 >('researchRuns:reserve');
 const startReserved = makeFunctionReference<
     'mutation',
-    { runId: string },
+    { runId: Id<'researchRuns'> },
     string
 >('workflowControls:startReserved');
-const approveCheckpoint = makeFunctionReference<
-    'mutation',
+const confirmAndStart = makeFunctionReference<
+    'action',
     {
-        runId: string;
-        checkpoint: 'source_review' | 'assessment_review';
-        decisionKey: string;
+        preflightId: Id<'companyPreflights'>;
+        idempotencyKey: string;
+        coveragePreset: 'balanced';
     },
-    { accepted: boolean }
->('workflowControls:approveCheckpoint');
+    { runId: Id<'researchRuns'>; remainingAnalyses: number }
+>('researchLaunch:confirmAndStart');
 const cancelRun = makeFunctionReference<
     'mutation',
-    { runId: string },
+    { runId: Id<'researchRuns'> },
     { cancelled: boolean }
 >('workflowControls:cancel');
-const failCheckpoint = makeFunctionReference<
+const getRun = makeFunctionReference<
+    'query',
+    { runId: Id<'researchRuns'> },
+    unknown
+>('researchRuns:get');
+const transition = makeFunctionReference<
     'mutation',
     {
-        runId: string;
-        checkpoint: 'source_review' | 'assessment_review';
-        error: string;
+        runId: Id<'researchRuns'>;
+        lifecycleState: 'checking_public_evidence';
+        executionStatus: 'running';
+        stepKey: 'check_public_evidence';
     },
     null
->('workflowControls:failCheckpoint');
-const retryRun = makeFunctionReference<
-    'mutation',
-    { runId: string },
-    { retryCount: number }
->('workflowControls:retry');
-const getRun = makeFunctionReference<'query', { runId: string }, unknown>(
-    'researchRuns:get',
-);
-const listMyEvents = makeFunctionReference<
-    'query',
-    { runId: string },
-    Array<unknown>
->('researchRuns:listMyEvents');
+>('researchRuns:transition');
 
-test('a reserved workflow pauses and resumes through both human checkpoints', async () => {
-    vi.useFakeTimers();
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => vi.useRealTimers());
+
+async function createVisitor(t: ReturnType<typeof convexTest>) {
+    return t.run(async (ctx) => {
+        const userId = await ctx.db.insert('users', { isAnonymous: true });
+        const invitationId = await ctx.db.insert('invitations', {
+            slotKey: 'durable-analyst',
+            role: 'analyst',
+            codeDigest: 'durable',
+            status: 'claimed',
+            createdAt: 1,
+        });
+        const visitorId = await ctx.db.insert('visitors', {
+            authUserId: userId,
+            invitationId,
+            role: 'analyst',
+            status: 'active',
+            analysesReserved: 0,
+            admittedAt: 1,
+        });
+        return { userId, visitorId };
+    });
+}
+
+test('an unbound quota reservation cannot start the Phase 4 workflow', async () => {
     const t = convexTest(schema, modules);
     workflowTest.register(t);
-    process.env.INVITATION_CODE_PEPPER = 'workflow-test-pepper';
-    const code = 'workflow-analyst-code';
-    const invitations = await Promise.all(
-        ['admin', 'analyst-1', 'analyst-2', 'analyst-3', 'analyst-4'].map(
-            async (slotKey, index) => ({
-                slotKey,
-                role: index === 0 ? ('admin' as const) : ('analyst' as const),
-                codeDigest: await digestInvitationCode(
-                    index === 1 ? code : `unused-${index}`,
-                    'workflow-test-pepper',
-                ),
-            }),
-        ),
-    );
-    await t.mutation(seedInvitations, { invitations });
-    const userId = await t.run((ctx) =>
-        ctx.db.insert('users', { isAnonymous: true }),
-    );
-    const analyst = t.withIdentity({ subject: `${userId}|workflow-session` });
-    await analyst.action(claimInvitation, { code });
-    const { runId } = await analyst.mutation(reserveAnalysis, {
-        idempotencyKey: 'workflow-run',
+    const { userId } = await createVisitor(t);
+    const analyst = t.withIdentity({ subject: `${userId}|unbound` });
+    const { runId } = await analyst.mutation(reserve, {
+        idempotencyKey: 'unbound-reservation',
     });
 
-    await t.mutation(startReserved, { runId });
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
-    await expect(t.query(getRun, { runId })).resolves.toMatchObject({
-        lifecycleState: 'awaiting_source_review',
-        executionStatus: 'paused',
-    });
-    await expect(analyst.query(listMyEvents, { runId })).resolves.toEqual(
-        expect.arrayContaining([
-            expect.objectContaining({ type: 'run_created' }),
-            expect.objectContaining({
-                lifecycleState: 'awaiting_source_review',
-            }),
-        ]),
+    await expect(t.mutation(startReserved, { runId })).rejects.toThrow(
+        'confirmed company',
     );
-
-    await expect(
-        analyst.mutation(approveCheckpoint, {
-            runId,
-            checkpoint: 'source_review',
-            decisionKey: 'source-decision-1',
-        }),
-    ).resolves.toEqual({ accepted: true });
-    await expect(
-        analyst.mutation(approveCheckpoint, {
-            runId,
-            checkpoint: 'source_review',
-            decisionKey: 'source-decision-1',
-        }),
-    ).resolves.toEqual({ accepted: false });
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
-    await expect(t.query(getRun, { runId })).resolves.toMatchObject({
-        lifecycleState: 'awaiting_assessment_review',
-        executionStatus: 'paused',
-    });
-
-    await analyst.mutation(approveCheckpoint, {
-        runId,
-        checkpoint: 'assessment_review',
-        decisionKey: 'assessment-decision-1',
-    });
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
-    await expect(t.query(getRun, { runId })).resolves.toMatchObject({
-        lifecycleState: 'completed',
-        executionStatus: 'completed',
-    });
-    vi.useRealTimers();
 });
 
-test('cancellation is terminal and idempotent', async () => {
-    vi.useFakeTimers();
+test('cancellation of a confirmed workflow is terminal and idempotent', async () => {
     const t = convexTest(schema, modules);
     workflowTest.register(t);
-    process.env.INVITATION_CODE_PEPPER = 'cancel-test-pepper';
-    const code = 'cancel-analyst-code';
-    const invitations = await Promise.all(
-        ['admin', 'analyst-1', 'analyst-2', 'analyst-3', 'analyst-4'].map(
-            async (slotKey, index) => ({
-                slotKey,
-                role: index === 0 ? ('admin' as const) : ('analyst' as const),
-                codeDigest: await digestInvitationCode(
-                    index === 1 ? code : `unused-${index}`,
-                    'cancel-test-pepper',
-                ),
-            }),
-        ),
-    );
-    await t.mutation(seedInvitations, { invitations });
-    const userId = await t.run((ctx) =>
-        ctx.db.insert('users', { isAnonymous: true }),
-    );
-    const analyst = t.withIdentity({ subject: `${userId}|cancel-session` });
-    await analyst.action(claimInvitation, { code });
-    const { runId } = await analyst.mutation(reserveAnalysis, {
-        idempotencyKey: 'cancel-run',
+    const { userId, visitorId } = await createVisitor(t);
+    const preflightId = await t.run(async (ctx) => {
+        const companyId = await ctx.db.insert('companies', {
+            cik: '1818201',
+            legalName: 'CCC Intelligent Solutions Holdings Inc.',
+            ticker: 'CCCS',
+            exchange: 'NASDAQ',
+            canonicalizedAt: 1,
+        });
+        return ctx.db.insert('companyPreflights', {
+            ownerVisitorId: visitorId,
+            query: 'CCCS',
+            companyId,
+            resolverVersion: 'sec-company-v1',
+            status: 'resolved',
+            expiresAt: Date.now() + 60_000,
+            createdAt: 1,
+        });
     });
-    await t.mutation(startReserved, { runId });
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const analyst = t.withIdentity({ subject: `${userId}|cancel` });
+    const { runId } = await analyst.action(confirmAndStart, {
+        preflightId,
+        idempotencyKey: 'cancel-confirmed',
+        coveragePreset: 'balanced',
+    });
 
     await expect(analyst.mutation(cancelRun, { runId })).resolves.toEqual({
         cancelled: true,
@@ -182,70 +120,17 @@ test('cancellation is terminal and idempotent', async () => {
     await expect(analyst.mutation(cancelRun, { runId })).resolves.toEqual({
         cancelled: false,
     });
-    await expect(
-        analyst.mutation(approveCheckpoint, {
-            runId,
-            checkpoint: 'source_review',
-            decisionKey: 'late-source-decision',
-        }),
-    ).rejects.toThrow('not awaiting this checkpoint');
     await expect(t.query(getRun, { runId })).resolves.toMatchObject({
         executionStatus: 'cancelled',
+        workflowVersion: 2,
+        executionGeneration: 2,
     });
-    vi.useRealTimers();
-});
-
-test('a failed workflow can be retried only twice', async () => {
-    vi.useFakeTimers();
-    const t = convexTest(schema, modules);
-    workflowTest.register(t);
-    process.env.INVITATION_CODE_PEPPER = 'retry-test-pepper';
-    const code = 'retry-analyst-code';
-    const invitations = await Promise.all(
-        ['admin', 'analyst-1', 'analyst-2', 'analyst-3', 'analyst-4'].map(
-            async (slotKey, index) => ({
-                slotKey,
-                role: index === 0 ? ('admin' as const) : ('analyst' as const),
-                codeDigest: await digestInvitationCode(
-                    index === 1 ? code : `unused-${index}`,
-                    'retry-test-pepper',
-                ),
-            }),
-        ),
-    );
-    await t.mutation(seedInvitations, { invitations });
-    const userId = await t.run((ctx) =>
-        ctx.db.insert('users', { isAnonymous: true }),
-    );
-    const analyst = t.withIdentity({ subject: `${userId}|retry-session` });
-    await analyst.action(claimInvitation, { code });
-    const { runId } = await analyst.mutation(reserveAnalysis, {
-        idempotencyKey: 'retry-run',
-    });
-    await t.mutation(startReserved, { runId });
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
-
-    for (let retryCount = 1; retryCount <= 2; retryCount += 1) {
-        await t.mutation(failCheckpoint, {
+    await expect(
+        t.mutation(transition, {
             runId,
-            checkpoint: 'source_review',
-            error: `Deterministic source checkpoint failure ${retryCount}`,
-        });
-        await t.finishAllScheduledFunctions(vi.runAllTimers);
-        await expect(analyst.mutation(retryRun, { runId })).resolves.toEqual({
-            retryCount,
-        });
-        await t.finishAllScheduledFunctions(vi.runAllTimers);
-    }
-
-    await t.mutation(failCheckpoint, {
-        runId,
-        checkpoint: 'source_review',
-        error: 'Deterministic terminal failure',
-    });
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
-    await expect(analyst.mutation(retryRun, { runId })).rejects.toThrow(
-        'Retry limit reached',
-    );
-    vi.useRealTimers();
+            lifecycleState: 'checking_public_evidence',
+            executionStatus: 'running',
+            stepKey: 'check_public_evidence',
+        }),
+    ).rejects.toThrow('terminal');
 });

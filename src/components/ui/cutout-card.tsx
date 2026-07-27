@@ -306,21 +306,18 @@ export function CutoutCorner({
     ...props
 }: CutoutCornerProps) {
     return (
-        <>
-            {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative corner mask; hidden from AT via aria-hidden */}
-            <svg
-                aria-hidden
-                className={cn(className)}
-                data-slot="cutout-corner"
-                height={size}
-                viewBox={viewBox}
-                width={size}
-                xmlns="http://www.w3.org/2000/svg"
-                {...props}
-            >
-                <path d={CORNER_PATH} fill="currentColor" />
-            </svg>
-        </>
+        <svg
+            aria-hidden
+            className={cn(className)}
+            data-slot="cutout-corner"
+            height={size}
+            viewBox={viewBox}
+            width={size}
+            xmlns="http://www.w3.org/2000/svg"
+            {...props}
+        >
+            <path d={CORNER_PATH} fill="currentColor" />
+        </svg>
     );
 }
 

@@ -24,19 +24,19 @@ type RenderState = {
 
 export type SmoothDropdownItem =
     | {
-        id: string;
-        type?: 'item';
-        label: string;
-        icon?: PlatformIcon | ReactNode;
-        variant?: 'default' | 'destructive';
-        closeOnSelect?: boolean;
-        onSelect?: () => void;
-        renderLabel?: (state: RenderState) => ReactNode;
-    }
+          id: string;
+          type?: 'item';
+          label: string;
+          icon?: PlatformIcon | ReactNode;
+          variant?: 'default' | 'destructive';
+          closeOnSelect?: boolean;
+          onSelect?: () => void;
+          renderLabel?: (state: RenderState) => ReactNode;
+      }
     | {
-        id: string;
-        type: 'divider';
-    };
+          id: string;
+          type: 'divider';
+      };
 
 export interface SmoothDropdownProps {
     items: SmoothDropdownItem[];
@@ -47,6 +47,7 @@ export interface SmoothDropdownProps {
     portalContainer?: Element | DocumentFragment | null;
     className?: string;
     menuClassName?: string;
+    itemsAriaLabel?: string;
     closedWidth?: number;
     openWidth?: number;
     closedHeight?: number;
@@ -78,6 +79,7 @@ export function SmoothDropdwon({
     portalContainer = null,
     className,
     menuClassName,
+    itemsAriaLabel = 'Dropdown options',
     closedWidth = 40,
     openWidth = 220,
     closedHeight = 40,
@@ -238,8 +240,8 @@ export function SmoothDropdwon({
                 ? 'origin-bottom-right'
                 : 'origin-bottom-left'
             : opensToLeft
-                ? 'origin-top-right'
-                : 'origin-top-left';
+              ? 'origin-top-right'
+              : 'origin-top-left';
 
     const menuPositionClass = cn(
         'absolute cursor-pointer overflow-hidden border border-border bg-popover shadow-lg',
@@ -290,7 +292,11 @@ export function SmoothDropdwon({
                 >
                     {header ? <div className="mb-2">{header}</div> : null}
 
-                    <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+                    <div
+                        role="listbox"
+                        aria-label={itemsAriaLabel}
+                        className="m-0 flex list-none flex-col gap-0.5 p-0"
+                    >
                         {items.map((item, index) => {
                             if (item.type === 'divider') {
                                 return (
@@ -317,10 +323,20 @@ export function SmoothDropdwon({
 
                             const itemDuration = isDestructive ? 0.12 : 0.15;
                             const itemDelay = isOpen ? 0.06 + index * 0.02 : 0;
+                            const selectItem = () => {
+                                setActiveItem(item.id);
+                                item.onSelect?.();
+                                if (item.closeOnSelect !== false) {
+                                    requestOpenChange(false);
+                                }
+                            };
 
                             return (
-                                <motion.li
+                                <motion.div
                                     key={item.id}
+                                    role="option"
+                                    aria-selected={isActive}
+                                    tabIndex={isOpen ? 0 : -1}
                                     initial={{
                                         opacity: 0,
                                         x: itemClosedOffset,
@@ -341,12 +357,16 @@ export function SmoothDropdwon({
                                         // closes then immediately reopens the
                                         // picker in the same event tick.
                                         event.stopPropagation();
-                                        setActiveItem(item.id);
-
-                                        item.onSelect?.();
-
-                                        if (item.closeOnSelect !== false) {
-                                            requestOpenChange(false);
+                                        selectItem();
+                                    }}
+                                    onKeyDown={(event) => {
+                                        if (
+                                            event.key === 'Enter' ||
+                                            event.key === ' '
+                                        ) {
+                                            event.preventDefault();
+                                            event.stopPropagation();
+                                            selectItem();
                                         }
                                     }}
                                     onMouseEnter={() => setHoveredItem(item.id)}
@@ -356,10 +376,10 @@ export function SmoothDropdwon({
                                         isDestructive && showIndicator
                                             ? 'text-destructive'
                                             : isActive
-                                                ? 'text-foreground'
-                                                : isDestructive
-                                                    ? 'text-foreground/80 hover:text-destructive'
-                                                    : 'text-foreground/80 hover:text-foreground',
+                                              ? 'text-foreground'
+                                              : isDestructive
+                                                ? 'text-foreground/80 hover:text-destructive'
+                                                : 'text-foreground/80 hover:text-foreground',
                                     )}
                                 >
                                     {showIndicator && (
@@ -411,10 +431,10 @@ export function SmoothDropdwon({
                                             {item.label}
                                         </span>
                                     )}
-                                </motion.li>
+                                </motion.div>
                             );
                         })}
-                    </ul>
+                    </div>
                 </motion.div>
             </div>
         </>

@@ -58,13 +58,7 @@ const rotateAdminInvitation = makeFunctionReference<
     null
 >('invitations:rotateAdminFromConfig');
 
-const invitationCodes = [
-    'admin-code',
-    'analyst-code-1',
-    'analyst-code-2',
-    'analyst-code-3',
-    'analyst-code-4',
-];
+const invitationCodes = ['1000', '2000', '3000', '4000', '5000'];
 const invitationPepper = 'test-only-invitation-pepper';
 
 async function buildInvitationSeed(): Promise<Array<SeedEntry>> {
@@ -107,26 +101,26 @@ test('the deployment bootstrap seeds configured invitations without exposing cod
     const t = convexTest(schema, modules);
     process.env.INVITATION_CODE_PEPPER = invitationPepper;
     process.env.INVITATION_SEED_CONFIG = JSON.stringify([
-        { slotKey: 'admin', role: 'admin', code: 'configured-admin-code' },
+        { slotKey: 'admin', role: 'admin', code: '1000' },
         {
             slotKey: 'analyst-1',
             role: 'analyst',
-            code: 'configured-analyst-code-1',
+            code: '2000',
         },
         {
             slotKey: 'analyst-2',
             role: 'analyst',
-            code: 'configured-analyst-code-2',
+            code: '3000',
         },
         {
             slotKey: 'analyst-3',
             role: 'analyst',
-            code: 'configured-analyst-code-3',
+            code: '4000',
         },
         {
             slotKey: 'analyst-4',
             role: 'analyst',
-            code: 'configured-analyst-code-4',
+            code: '5000',
         },
     ]);
 
@@ -142,6 +136,42 @@ test('the deployment bootstrap seeds configured invitations without exposing cod
             total: 5,
         },
     );
+});
+
+test('the deployment bootstrap rotates configured OTPs without recreating invitation slots', async () => {
+    const t = convexTest(schema, modules);
+    process.env.INVITATION_CODE_PEPPER = invitationPepper;
+    process.env.INVITATION_SEED_CONFIG = JSON.stringify([
+        { slotKey: 'admin', role: 'admin', code: '1000' },
+        { slotKey: 'analyst-1', role: 'analyst', code: '2000' },
+        { slotKey: 'analyst-2', role: 'analyst', code: '3000' },
+        { slotKey: 'analyst-3', role: 'analyst', code: '4000' },
+        { slotKey: 'analyst-4', role: 'analyst', code: '5000' },
+    ]);
+    await t.action(bootstrapConfiguredInvitations, {});
+
+    process.env.INVITATION_SEED_CONFIG = JSON.stringify([
+        { slotKey: 'admin', role: 'admin', code: '1111' },
+        { slotKey: 'analyst-1', role: 'analyst', code: '2222' },
+        { slotKey: 'analyst-2', role: 'analyst', code: '3333' },
+        { slotKey: 'analyst-3', role: 'analyst', code: '4444' },
+        { slotKey: 'analyst-4', role: 'analyst', code: '5555' },
+    ]);
+
+    await expect(t.action(bootstrapConfiguredInvitations, {})).resolves.toEqual(
+        {
+            created: 0,
+            total: 5,
+        },
+    );
+
+    const userId = await t.run((ctx) =>
+        ctx.db.insert('users', { isAnonymous: true }),
+    );
+    const user = t.withIdentity({ subject: `${userId}|rotated-session` });
+    await expect(
+        user.action(claimInvitation, { code: '2222' }),
+    ).resolves.toMatchObject({ role: 'analyst' });
 });
 
 test('an authenticated user claims one invitation exactly once', async () => {
@@ -180,6 +210,41 @@ test('an authenticated user claims one invitation exactly once', async () => {
     await expect(
         secondUser.action(claimInvitation, { code: invitationCodes[1] ?? '' }),
     ).rejects.toThrow('Invitation is not available');
+});
+
+test('invitation claims reject values outside the four-digit OTP contract', async () => {
+    const t = convexTest(schema, modules);
+    process.env.INVITATION_CODE_PEPPER = invitationPepper;
+    const userId = await t.run((ctx) =>
+        ctx.db.insert('users', { isAnonymous: true }),
+    );
+    const user = t.withIdentity({ subject: `${userId}|session` });
+
+    await expect(
+        user.action(claimInvitation, { code: '12345' }),
+    ).rejects.toThrow('Invitation code must contain exactly four digits');
+});
+
+test('invitation claims lock one anonymous session after five failed OTP attempts', async () => {
+    const t = convexTest(schema, modules);
+    process.env.INVITATION_CODE_PEPPER = invitationPepper;
+    await t.mutation(seedInvitations, {
+        invitations: await buildInvitationSeed(),
+    });
+    const userId = await t.run((ctx) =>
+        ctx.db.insert('users', { isAnonymous: true }),
+    );
+    const user = t.withIdentity({ subject: `${userId}|session` });
+
+    for (const code of ['0101', '0102', '0103', '0104', '0105']) {
+        await expect(user.action(claimInvitation, { code })).rejects.toThrow(
+            'Invitation is not available',
+        );
+    }
+
+    await expect(
+        user.action(claimInvitation, { code: invitationCodes[1] ?? '' }),
+    ).rejects.toThrow('Too many invitation attempts');
 });
 
 test('an admitted visitor atomically reserves at most three analyses', async () => {
@@ -263,8 +328,7 @@ test('the invited admin restores an unused reservation with an audited reason', 
 test('the break-glass path revokes a lost admin session before reissuing its slot', async () => {
     const t = convexTest(schema, modules);
     process.env.INVITATION_CODE_PEPPER = invitationPepper;
-    process.env.INVITATION_ADMIN_RECOVERY_CODE =
-        'replacement-admin-code-with-enough-entropy';
+    process.env.INVITATION_ADMIN_RECOVERY_CODE = '9000';
     const invitationSeed = await buildInvitationSeed();
     await t.mutation(seedInvitations, { invitations: invitationSeed });
     const oldAdminUserId = await t.run((ctx) =>
@@ -288,7 +352,7 @@ test('the break-glass path revokes a lost admin session before reissuing its slo
     });
     await expect(
         newAdmin.action(claimInvitation, {
-            code: 'replacement-admin-code-with-enough-entropy',
+            code: '9000',
         }),
     ).resolves.toMatchObject({ role: 'admin' });
 });

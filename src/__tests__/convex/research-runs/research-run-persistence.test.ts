@@ -14,9 +14,12 @@ const transition = makeFunctionReference<
     'mutation',
     {
         runId: string;
-        lifecycleState: 'discovering_sources' | 'awaiting_source_review';
+        lifecycleState:
+            | 'checking_public_evidence'
+            | 'discovering_sources'
+            | 'awaiting_source_review';
         executionStatus: 'running' | 'paused';
-        stepKey: 'resolve_company' | 'source_review';
+        stepKey: 'check_public_evidence' | 'discover_sources' | 'source_review';
     },
     null
 >('researchRuns:transition');
@@ -49,19 +52,19 @@ const listAuditEvents = makeFunctionReference<
     Array<unknown>
 >('audit:listByTarget');
 
-test('a draft research run advances through the server transition boundary', async () => {
+test('a draft research run begins with the public-evidence check', async () => {
     const t = convexTest(schema, modules);
     const runId = await t.mutation(createDraft, {});
 
     await t.mutation(transition, {
         runId,
-        lifecycleState: 'discovering_sources',
+        lifecycleState: 'checking_public_evidence',
         executionStatus: 'running',
-        stepKey: 'resolve_company',
+        stepKey: 'check_public_evidence',
     });
 
     await expect(t.query(getRun, { runId })).resolves.toMatchObject({
-        lifecycleState: 'discovering_sources',
+        lifecycleState: 'checking_public_evidence',
         executionStatus: 'running',
     });
     await expect(t.query(listRunEvents, { runId })).resolves.toMatchObject([
@@ -69,7 +72,7 @@ test('a draft research run advances through the server transition boundary', asy
         {
             sequence: 2,
             type: 'run_transitioned',
-            lifecycleState: 'discovering_sources',
+            lifecycleState: 'checking_public_evidence',
             executionStatus: 'running',
         },
     ]);
@@ -80,9 +83,15 @@ test('a research run can pause at the source-review checkpoint', async () => {
     const runId = await t.mutation(createDraft, {});
     await t.mutation(transition, {
         runId,
+        lifecycleState: 'checking_public_evidence',
+        executionStatus: 'running',
+        stepKey: 'check_public_evidence',
+    });
+    await t.mutation(transition, {
+        runId,
         lifecycleState: 'discovering_sources',
         executionStatus: 'running',
-        stepKey: 'resolve_company',
+        stepKey: 'discover_sources',
     });
 
     await t.mutation(transition, {
@@ -100,7 +109,7 @@ test('a research run can pause at the source-review checkpoint', async () => {
     await expect(t.query(listSteps, { runId })).resolves.toEqual(
         expect.arrayContaining([
             expect.objectContaining({
-                key: 'resolve_company',
+                key: 'discover_sources',
                 state: 'completed',
             }),
             expect.objectContaining({

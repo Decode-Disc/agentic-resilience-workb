@@ -237,18 +237,18 @@ export function FileDropzone({
                                         reducedMotion
                                             ? undefined
                                             : {
-                                                y: [0, -10, 0],
-                                                scale: [1, 1.05, 1],
-                                            }
+                                                  y: [0, -10, 0],
+                                                  scale: [1, 1.05, 1],
+                                              }
                                     }
                                     transition={
                                         reducedMotion
                                             ? undefined
                                             : {
-                                                repeat: Number.POSITIVE_INFINITY,
-                                                duration: 2,
-                                                ease: 'easeInOut',
-                                            }
+                                                  repeat: Number.POSITIVE_INFINITY,
+                                                  duration: 2,
+                                                  ease: 'easeInOut',
+                                              }
                                     }
                                 >
                                     <Icon
