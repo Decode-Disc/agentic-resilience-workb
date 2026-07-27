@@ -1,30 +1,101 @@
-import { Home01Icon } from '@hugeicons/core-free-icons';
-import { Link } from '@tanstack/react-router';
-import type { ReactNode } from 'react';
+import { api } from '@convex/_generated/api';
+import { useAuthActions } from '@convex-dev/auth/react';
+import {
+    ChevronDownIcon,
+    Home01Icon,
+    Login02Icon,
+    Logout01Icon,
+    Settings02Icon,
+    UserCircleIcon,
+} from '@hugeicons/core-free-icons';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { useQuery } from 'convex/react';
+import { type ReactNode, useState } from 'react';
+import { toast } from 'sonner';
 
 import Icon from '@/components/icon';
 import { Button } from '@/components/ui/button';
+import {
+    NestedMenu,
+    type NestedMenuSectionProps,
+} from '@/components/ui/nested-menu';
 import { AnalyzedCompanyList } from '@/components/workbench-shell/analyzed-company-list';
+import { InvitationAccessDrawer } from '@/components/workspace/invitation-access-drawer';
 
 export interface WorkbenchShellProps {
     children: ReactNode;
-    activeCompanyId?: string;
+    activeRunId?: string;
 }
 
-export function WorkbenchShell({
-    children,
-    activeCompanyId,
-}: WorkbenchShellProps) {
+function OperationsMenuIcon({ className }: { className?: string }) {
+    return <Icon iconNode={Settings02Icon} className={className} />;
+}
+
+function LogoutMenuIcon({ className }: { className?: string }) {
+    return <Icon iconNode={Logout01Icon} className={className} />;
+}
+
+export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
+    const visitor = useQuery(api.visitors.current);
+    const navigate = useNavigate();
+    const { signOut } = useAuthActions();
+    const [isSigningOut, setIsSigningOut] = useState(false);
+    const [invitationOpen, setInvitationOpen] = useState(false);
+
+    const logout = async () => {
+        if (isSigningOut) {
+            return;
+        }
+        setIsSigningOut(true);
+        try {
+            await signOut();
+            await navigate({ to: '/workspace/start' });
+        } catch {
+            toast.error('Could not log out. Try again.');
+            setIsSigningOut(false);
+        }
+    };
+
+    const sessionMenuSections: NestedMenuSectionProps[] = [
+        {
+            items: [
+                ...(visitor?.role === 'admin'
+                    ? [
+                          {
+                              key: 'operations',
+                              label: 'Operations',
+                              icon: OperationsMenuIcon,
+                              onSelect: () => {
+                                  void navigate({
+                                      to: '/workspace/admin',
+                                  });
+                              },
+                          },
+                      ]
+                    : []),
+                {
+                    key: 'logout',
+                    label: isSigningOut ? 'Signing out…' : 'Logout',
+                    icon: LogoutMenuIcon,
+                    variant: 'danger',
+                    onSelect: () => {
+                        void logout();
+                    },
+                },
+            ],
+        },
+    ];
+
     return (
         <div className="min-h-svh bg-background text-foreground">
-            <header className="sticky top-0 z-30 border-b border-border/60 bg-background/95 backdrop-blur-md">
+            <header className="sticky top-0 z-30 border-b border-border bg-card/80 backdrop-blur-md">
                 <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
                     <div className="flex min-w-0 items-center gap-3">
                         {/* Home Button / Link using shadcn Button */}
                         <Button
                             render={<Link to="/" />}
                             nativeButton={false}
-                            variant="outline"
+                            variant="secondary"
                             size="sm"
                             aria-label="Go to Home"
                             title="Go to Home"
@@ -46,14 +117,46 @@ export function WorkbenchShell({
 
                         {/* Horizontal Analyzed Companies List */}
                         <AnalyzedCompanyList
-                            activeCompanyId={activeCompanyId}
+                            activeRunId={activeRunId}
+                            enabled={visitor !== undefined && visitor !== null}
+                            isAdmissionLoading={visitor === undefined}
                         />
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-                        <span className="hidden rounded-full border border-border/60 bg-muted/50 px-2.5 py-0.5 font-mono text-[11px] font-medium text-muted-foreground sm:inline-block">
-                            Research prototype
-                        </span>
+                        {visitor?.status === 'active' ? (
+                            <NestedMenu
+                                sections={sessionMenuSections}
+                                side="bottom"
+                                align="end"
+                                trigger={
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        aria-label="Workspace menu"
+                                    >
+                                        <Icon iconNode={UserCircleIcon} />
+                                        <span className="hidden sm:inline">
+                                            Account
+                                        </span>
+                                        <Icon
+                                            iconNode={ChevronDownIcon}
+                                            data-icon="inline-end"
+                                        />
+                                    </Button>
+                                }
+                            />
+                        ) : visitor === null ? (
+                            <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => setInvitationOpen(true)}
+                            >
+                                <Icon iconNode={Login02Icon} />
+                                Go to workspace
+                            </Button>
+                        ) : null}
                     </div>
                 </div>
             </header>
@@ -61,6 +164,14 @@ export function WorkbenchShell({
             <main className="mx-auto w-full max-w-8xl px-4 py-4 sm:px-6">
                 {children}
             </main>
+
+            {invitationOpen ? (
+                <InvitationAccessDrawer
+                    open
+                    onOpenChange={setInvitationOpen}
+                    onAdmitted={() => undefined}
+                />
+            ) : null}
         </div>
     );
 }

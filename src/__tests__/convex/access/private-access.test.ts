@@ -138,7 +138,7 @@ test('the deployment bootstrap seeds configured invitations without exposing cod
     );
 });
 
-test('the deployment bootstrap rotates configured OTPs without recreating invitation slots', async () => {
+test('configured code rotation preserves the visitor and revokes its old session', async () => {
     const t = convexTest(schema, modules);
     process.env.INVITATION_CODE_PEPPER = invitationPepper;
     process.env.INVITATION_SEED_CONFIG = JSON.stringify([
@@ -149,6 +149,16 @@ test('the deployment bootstrap rotates configured OTPs without recreating invita
         { slotKey: 'analyst-4', role: 'analyst', code: '5000' },
     ]);
     await t.action(bootstrapConfiguredInvitations, {});
+    const oldUserId = await t.run((ctx) =>
+        ctx.db.insert('users', { isAnonymous: true }),
+    );
+    const oldUser = t.withIdentity({ subject: `${oldUserId}|old-session` });
+    const firstAdmission = await oldUser.action(claimInvitation, {
+        code: '2000',
+    });
+    await oldUser.mutation(reserveAnalysis, {
+        idempotencyKey: 'run-before-configured-rotation',
+    });
 
     process.env.INVITATION_SEED_CONFIG = JSON.stringify([
         { slotKey: 'admin', role: 'admin', code: '1111' },
@@ -164,6 +174,10 @@ test('the deployment bootstrap rotates configured OTPs without recreating invita
             total: 5,
         },
     );
+    await expect(oldUser.query(currentVisitor, {})).resolves.toMatchObject({
+        _id: firstAdmission.visitorId,
+        status: 'revoked',
+    });
 
     const userId = await t.run((ctx) =>
         ctx.db.insert('users', { isAnonymous: true }),
@@ -171,10 +185,16 @@ test('the deployment bootstrap rotates configured OTPs without recreating invita
     const user = t.withIdentity({ subject: `${userId}|rotated-session` });
     await expect(
         user.action(claimInvitation, { code: '2222' }),
-    ).resolves.toMatchObject({ role: 'analyst' });
+    ).resolves.toEqual(firstAdmission);
+    await expect(user.query(currentVisitor, {})).resolves.toMatchObject({
+        _id: firstAdmission.visitorId,
+        authUserId: userId,
+        status: 'active',
+        analysesReserved: 1,
+    });
 });
 
-test('an authenticated user claims one invitation exactly once', async () => {
+test('an access code reconnects its visitor with a new anonymous session', async () => {
     const t = convexTest(schema, modules);
     process.env.INVITATION_CODE_PEPPER = invitationPepper;
     const invitationSeed = await buildInvitationSeed();
@@ -188,12 +208,14 @@ test('an authenticated user claims one invitation exactly once', async () => {
     const firstUser = t.withIdentity({ subject: `${firstUserId}|session-1` });
     const secondUser = t.withIdentity({ subject: `${secondUserId}|session-2` });
 
-    await expect(
-        firstUser.action(claimInvitation, { code: invitationCodes[1] ?? '' }),
-    ).resolves.toMatchObject({
+    const firstAdmission = await firstUser.action(claimInvitation, {
+        code: invitationCodes[1] ?? '',
+    });
+    expect(firstAdmission).toMatchObject({
         role: 'analyst',
     });
     await expect(firstUser.query(currentVisitor, {})).resolves.toMatchObject({
+        _id: firstAdmission.visitorId,
         authUserId: firstUserId,
         role: 'analyst',
         status: 'active',
@@ -204,15 +226,38 @@ test('an authenticated user claims one invitation exactly once', async () => {
     await expect(
         resumedSession.query(currentVisitor, {}),
     ).resolves.toMatchObject({
+        _id: firstAdmission.visitorId,
         authUserId: firstUserId,
         status: 'active',
     });
+
     await expect(
-        secondUser.action(claimInvitation, { code: invitationCodes[1] ?? '' }),
-    ).rejects.toThrow('Invitation is not available');
+        secondUser.action(claimInvitation, {
+            code: invitationCodes[1] ?? '',
+        }),
+    ).resolves.toEqual(firstAdmission);
+    await expect(firstUser.query(currentVisitor, {})).resolves.toBeNull();
+    await expect(secondUser.query(currentVisitor, {})).resolves.toMatchObject({
+        _id: firstAdmission.visitorId,
+        authUserId: secondUserId,
+        role: 'analyst',
+        status: 'active',
+    });
+    await expect(
+        t.query(listAuditEvents, {
+            targetType: 'visitor',
+            targetId: firstAdmission.visitorId,
+        }),
+    ).resolves.toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                action: 'visitor_session_rebound',
+            }),
+        ]),
+    );
 });
 
-test('invitation claims reject values outside the four-digit OTP contract', async () => {
+test('access codes reject values outside the four-digit contract', async () => {
     const t = convexTest(schema, modules);
     process.env.INVITATION_CODE_PEPPER = invitationPepper;
     const userId = await t.run((ctx) =>
@@ -222,10 +267,10 @@ test('invitation claims reject values outside the four-digit OTP contract', asyn
 
     await expect(
         user.action(claimInvitation, { code: '12345' }),
-    ).rejects.toThrow('Invitation code must contain exactly four digits');
+    ).rejects.toThrow('Access code must contain exactly four digits');
 });
 
-test('invitation claims lock one anonymous session after five failed OTP attempts', async () => {
+test('access codes lock one anonymous session after five failed attempts', async () => {
     const t = convexTest(schema, modules);
     process.env.INVITATION_CODE_PEPPER = invitationPepper;
     await t.mutation(seedInvitations, {
@@ -238,13 +283,13 @@ test('invitation claims lock one anonymous session after five failed OTP attempt
 
     for (const code of ['0101', '0102', '0103', '0104', '0105']) {
         await expect(user.action(claimInvitation, { code })).rejects.toThrow(
-            'Invitation is not available',
+            'Access code is not available',
         );
     }
 
     await expect(
         user.action(claimInvitation, { code: invitationCodes[1] ?? '' }),
-    ).rejects.toThrow('Too many invitation attempts');
+    ).rejects.toThrow('Too many access code attempts');
 });
 
 test('an admitted visitor atomically reserves at most three analyses', async () => {
@@ -325,7 +370,7 @@ test('the invited admin restores an unused reservation with an audited reason', 
     ).resolves.toMatchObject({ remainingAnalyses: 2 });
 });
 
-test('the break-glass path revokes a lost admin session before reissuing its slot', async () => {
+test('admin code rotation preserves the visitor while replacing its session', async () => {
     const t = convexTest(schema, modules);
     process.env.INVITATION_CODE_PEPPER = invitationPepper;
     process.env.INVITATION_ADMIN_RECOVERY_CODE = '9000';
@@ -343,7 +388,12 @@ test('the break-glass path revokes a lost admin session before reissuing its slo
     const newAdmin = t.withIdentity({
         subject: `${newAdminUserId}|new-admin-session`,
     });
-    await oldAdmin.action(claimInvitation, { code: invitationCodes[0] ?? '' });
+    const firstAdmission = await oldAdmin.action(claimInvitation, {
+        code: invitationCodes[0] ?? '',
+    });
+    await oldAdmin.mutation(reserveAnalysis, {
+        idempotencyKey: 'admin-run-before-rotation',
+    });
 
     await t.action(rotateAdminInvitation, {});
 
@@ -351,8 +401,13 @@ test('the break-glass path revokes a lost admin session before reissuing its slo
         status: 'revoked',
     });
     await expect(
-        newAdmin.action(claimInvitation, {
-            code: '9000',
-        }),
-    ).resolves.toMatchObject({ role: 'admin' });
+        newAdmin.action(claimInvitation, { code: '9000' }),
+    ).resolves.toEqual(firstAdmission);
+    await expect(newAdmin.query(currentVisitor, {})).resolves.toMatchObject({
+        _id: firstAdmission.visitorId,
+        authUserId: newAdminUserId,
+        role: 'admin',
+        status: 'active',
+        analysesReserved: 1,
+    });
 });

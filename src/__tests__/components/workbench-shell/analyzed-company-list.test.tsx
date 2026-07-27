@@ -1,62 +1,184 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { ComponentProps } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
-const mockNavigate = vi.fn();
-
-vi.mock('@tanstack/react-router', async (importOriginal) => {
-    const router =
-        await importOriginal<typeof import('@tanstack/react-router')>();
-
-    return {
-        ...router,
-        useNavigate: () => mockNavigate,
-        Link: ({
-            to,
-            search: _search,
-            children,
-            ...props
-        }: ComponentProps<'a'> & {
-            to: string;
-            search?: Record<string, string>;
-        }) => (
-            <a href={to} {...props}>
-                {children}
-            </a>
-        ),
-    };
-});
-
-vi.mock('convex/react', () => ({
-    useQuery: vi.fn().mockReturnValue(undefined),
+const { navigate, useQuery, useResponsive } = vi.hoisted(() => ({
+    navigate: vi.fn(),
+    useQuery: vi.fn(),
+    useResponsive: vi.fn(),
 }));
 
-const mockIsMobile = vi.fn().mockReturnValue(false);
-
-vi.mock('@/hooks/use-responsive', () => ({
-    useResponsive: () => ({
-        isMobile: mockIsMobile(),
-        isDesktop: !mockIsMobile(),
-    }),
+vi.mock(import('convex/react'), () => ({ useQuery }));
+vi.mock(import('@/hooks/use-responsive'), () => ({ useResponsive }));
+vi.mock('@tanstack/react-router', () => ({
+    Link: ({
+        children,
+        to,
+        params,
+        search: _search,
+        ...props
+    }: ComponentProps<'a'> & {
+        to: string;
+        params?: { runId?: string };
+        search?: unknown;
+    }) => (
+        <a
+            href={params?.runId ? to.replace('$runId', params.runId) : to}
+            {...props}
+        >
+            {children}
+        </a>
+    ),
+    useNavigate: () => navigate,
 }));
 
 import { AnalyzedCompanyList } from '@/components/workbench-shell/analyzed-company-list';
 
-describe('AnalyzedCompanyList', () => {
-    it('renders horizontal company items on desktop with mock data fallback and notification', () => {
-        mockIsMobile.mockReturnValue(false);
-        render(<AnalyzedCompanyList />);
+beforeEach(() => {
+    navigate.mockReset();
+    useQuery.mockReset();
+    useResponsive.mockReset();
+    useResponsive.mockReturnValue({ isMobile: false, isDesktop: true });
+});
 
-        expect(screen.getByText(/ServiceNow Inc\./i)).toBeTruthy();
-        expect(screen.getByText(/CCC Intelligent Solutions/i)).toBeTruthy();
-        expect(screen.getByText(/Mock data/i)).toBeTruthy();
+afterEach(() => {
+    vi.restoreAllMocks();
+});
+
+test('keeps horizontal company navigation on desktop', () => {
+    useQuery.mockReturnValue([
+        {
+            runId: 'run-1',
+            company: {
+                legalName: 'CCC Intelligent Solutions Holdings Inc.',
+                ticker: 'CCCS',
+                exchange: 'NASDAQ',
+                cik: '1818201',
+            },
+            lifecycleState: 'awaiting_source_review',
+            executionStatus: 'paused',
+            updatedAt: 2,
+            providerFailures: [],
+        },
+        {
+            runId: 'run-2',
+            company: {
+                legalName: 'ServiceNow Inc.',
+                ticker: 'NOW',
+                exchange: 'NYSE',
+                cik: '1373715',
+            },
+            lifecycleState: 'discovering_sources',
+            executionStatus: 'running',
+            updatedAt: 1,
+            providerFailures: [],
+        },
+    ]);
+
+    render(<AnalyzedCompanyList activeRunId="run-1" />);
+
+    const navigation = screen.getByRole('navigation', {
+        name: /Analyzed companies/i,
+    });
+    expect(navigation).toBeTruthy();
+    expect(screen.queryByText(/Mock data/i)).toBeNull();
+    const activeCompany = screen.getByRole('link', {
+        name: /CCC Intelligent Solutions.*CCCS/i,
+    });
+    expect(activeCompany).toHaveProperty(
+        'href',
+        'http://localhost:3000/workspace/run-1',
+    );
+    expect(activeCompany.getAttribute('aria-current')).toBe('page');
+    expect(
+        screen.getByRole('link', { name: /ServiceNow.*NOW/i }),
+    ).toHaveProperty('href', 'http://localhost:3000/workspace/run-2');
+    expect(screen.getAllByRole('separator')).toHaveLength(2);
+    expect(
+        screen.getByRole('link', { name: /Start a company dossier/i }),
+    ).toHaveProperty('href', 'http://localhost:3000/workspace/start');
+});
+
+test('keeps the compact company menu on mobile', async () => {
+    useResponsive.mockReturnValue({ isMobile: true, isDesktop: false });
+    useQuery.mockReturnValue([
+        {
+            runId: 'run-1',
+            company: {
+                legalName: 'CCC Intelligent Solutions Holdings Inc.',
+                ticker: 'CCCS',
+                exchange: 'NASDAQ',
+                cik: '1818201',
+            },
+            lifecycleState: 'awaiting_source_review',
+            executionStatus: 'paused',
+            updatedAt: 2,
+            providerFailures: [],
+        },
+        {
+            runId: 'run-2',
+            company: {
+                legalName: 'ServiceNow Inc.',
+                ticker: 'NOW',
+                exchange: 'NYSE',
+                cik: '1373715',
+            },
+            lifecycleState: 'discovering_sources',
+            executionStatus: 'running',
+            updatedAt: 1,
+            providerFailures: [],
+        },
+    ]);
+
+    render(<AnalyzedCompanyList activeRunId="run-1" />);
+
+    const trigger = screen.getByRole('button', {
+        name: /CCC Intelligent Solutions/i,
+    });
+    expect(
+        screen.queryByRole('navigation', { name: /Analyzed companies/i }),
+    ).toBeNull();
+
+    fireEvent.click(trigger);
+    fireEvent.click(
+        await screen.findByRole('button', { name: /ServiceNow.*NOW/i }),
+    );
+
+    expect(navigate).toHaveBeenCalledWith({
+        to: '/workspace/$runId',
+        params: { runId: 'run-2' },
+        search: { section: 'progress' },
+    });
+    expect(screen.queryByText(/Mock data/i)).toBeNull();
+});
+
+test('distinguishes loading from the empty state', () => {
+    useQuery.mockReturnValue(undefined);
+    const { rerender } = render(<AnalyzedCompanyList />);
+    expect(screen.getByLabelText(/Loading research dossiers/i)).toBeTruthy();
+
+    useQuery.mockReturnValue([]);
+    rerender(<AnalyzedCompanyList />);
+    expect(screen.getByText(/No research dossiers yet/i)).toBeTruthy();
+});
+
+test('skips the owner query when no admitted visitor is available', () => {
+    useQuery.mockReturnValue(undefined);
+    const { container } = render(<AnalyzedCompanyList enabled={false} />);
+
+    expect(useQuery.mock.calls.at(-1)?.[1]).toBe('skip');
+    expect(container.innerHTML).toBe('');
+});
+
+test('keeps a compact error state when company runs fail', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    useQuery.mockImplementation(() => {
+        throw new Error('Company runs unavailable');
     });
 
-    it('renders nested menu dropdown on mobile view', () => {
-        mockIsMobile.mockReturnValue(true);
-        render(<AnalyzedCompanyList />);
+    render(<AnalyzedCompanyList />);
 
-        expect(screen.getByText(/ServiceNow Inc\./i)).toBeTruthy();
-        expect(screen.getByText(/Mock data/i)).toBeTruthy();
-    });
+    expect(screen.getByRole('alert').textContent).toMatch(
+        /Research dossiers are temporarily unavailable/i,
+    );
 });

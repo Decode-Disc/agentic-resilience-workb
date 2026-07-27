@@ -1,133 +1,149 @@
 import { api } from '@convex/_generated/api';
-import {
-    Add01Icon,
-    Cancel01Icon,
-    ChevronDownIcon,
-} from '@hugeicons/core-free-icons';
+import { Add01Icon, ChevronDownIcon, Tick02Icon } from '@hugeicons/core-free-icons';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useQuery } from 'convex/react';
+import React, { Component, type ReactNode } from 'react';
 import Icon from '@/components/icon';
-import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
     NestedMenu,
     type NestedMenuSectionProps,
 } from '@/components/ui/nested-menu';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useResponsive } from '@/hooks/use-responsive';
 import { cn } from '@/lib/utils';
 
-export interface CompanyItem {
-    id: string;
-    name: string;
-    ticker?: string;
-    status?: string;
-}
-
 export interface AnalyzedCompanyListProps {
-    activeCompanyId?: string;
-    onSelectCompany?: (company: CompanyItem) => void;
+    activeRunId?: string;
     className?: string;
+    enabled?: boolean;
+    isAdmissionLoading?: boolean;
 }
 
-const MOCK_COMPANIES: CompanyItem[] = [
-    {
-        id: 'servicenow',
-        name: 'ServiceNow Inc.',
-        ticker: 'NOW',
-        status: 'completed',
-    },
-    {
-        id: 'ccc-intelligent-solutions',
-        name: 'CCC Intelligent Solutions',
-        ticker: 'CCCS',
-        status: 'completed',
-    },
-    {
-        id: 'crowdstrike',
-        name: 'CrowdStrike Holdings',
-        ticker: 'CRWD',
-        status: 'in_progress',
-    },
-];
+/** Owner-scoped run navigation with explicit loading and empty states. */
+export function AnalyzedCompanyList(props: AnalyzedCompanyListProps) {
+    return (
+        <AnalyzedCompanyListErrorBoundary className={props.className}>
+            <AnalyzedCompanyListContent {...props} />
+        </AnalyzedCompanyListErrorBoundary>
+    );
+}
 
-/**
- * AnalyzedCompanyList
- *
- * Consumes analyzed companies directly from Convex (`api.researchRuns.listAnalyzedCompanies`).
- * NOTE: If Convex query returns empty array or is not yet fully populated with company records on backend,
- * it falls back to curated showcase mock companies and displays a visible 'Mock data' indicator.
- */
-export function AnalyzedCompanyList({
-    activeCompanyId,
-    onSelectCompany,
+function StartButton({ className }: { className?: string }) {
+    return (
+        <Button
+            render={<Link to="/workspace/start" />}
+            nativeButton={false}
+            variant="ghost"
+            size="sm"
+            aria-label="Start a company dossier"
+            title="Start a company dossier"
+            className={cn('rounded-sm bg-background', className)}
+        >
+            <span className="start-double-slash">{'//'}</span>
+            <span className="start-label">start</span>
+        </Button>
+    );
+}
+
+function AnalyzedCompanyListContent({
+    activeRunId,
     className,
+    enabled = true,
+    isAdmissionLoading = false,
 }: AnalyzedCompanyListProps) {
     const { isMobile } = useResponsive();
     const navigate = useNavigate();
+    const runs = useQuery(api.researchRuns.listMine, enabled ? {} : 'skip');
 
-    const convexCompanies = useQuery(api.researchRuns.listAnalyzedCompanies);
+    if (isAdmissionLoading || (enabled && runs === undefined)) {
+        return (
+            <div
+                role="status"
+                className={cn('flex items-center gap-2', className)}
+                aria-label="Loading research dossiers"
+                aria-busy="true"
+            >
+                {[...Array(3)].map((_) => (
+                    <React.Fragment key={crypto.randomUUID()}>
+                        <Skeleton
+                            className="h-8 w-44 rounded-sm"
+                        />
+                        <Separator orientation="vertical" className="mx-2 shrink-0" />
+                    </React.Fragment>
+                ))}
+            </div>
+        );
+    }
 
-    const hasConvexData =
-        Array.isArray(convexCompanies) && convexCompanies.length > 0;
-    const companies: CompanyItem[] = hasConvexData
-        ? convexCompanies.map((c) => ({
-            id: c.id,
-            name: c.name,
-            status: c.status,
-        }))
-        : MOCK_COMPANIES;
+    if (!enabled) {
+        return null;
+    }
 
-    const isUsingMock = !hasConvexData;
+    const availableRuns = runs ?? [];
 
-    const activeCompany =
-        companies.find((c) => c.id === activeCompanyId) ?? companies[0];
+    if (availableRuns.length === 0) {
+        return (
+            <div className={cn('flex items-center gap-2', className)}>
+                <span className="text-xs text-muted-foreground">
+                    No research dossiers yet
+                </span>
+                <StartButton />
+            </div>
+        );
+    }
 
     if (isMobile) {
+        const activeRun = availableRuns.find(
+            (run) => run.runId === activeRunId,
+        );
         const menuSections: NestedMenuSectionProps[] = [
             {
-                title: 'Analyzed Companies',
+                title: 'Research dossiers',
                 items: [
-                    ...companies.map((company) => {
-                        const isActive = activeCompanyId === company.id;
-                        return {
-                            key: company.id,
-                            label: company.ticker
-                                ? `${company.name} (${company.ticker})`
-                                : company.name,
-                            separator: true,
-                            icon: isActive
-                                ? ({ className }: { className?: string }) => (
-                                    <span
-                                        className={cn(
-                                            'size-2 rounded-full bg-brand-purple shrink-0',
-                                            className,
-                                        )}
-                                        aria-hidden="true"
-                                    />
-                                )
-                                : undefined,
-                            onSelect: () => {
-                                onSelectCompany?.(company);
-                                void navigate({
-                                    to: '/prototype/workspace',
-                                    search: { variant: 'a' },
-                                });
-                            },
-                        };
-                    }),
+                    ...availableRuns.flatMap((run) =>
+                        run.company
+                            ? [
+                                  {
+                                      key: run.runId,
+                                      label: `${run.company.legalName} (${run.company.ticker})`,
+                                      separator: true,
+                                      icon:
+                                          activeRunId === run.runId
+                                              ? ({
+                                                    className: iconClassName,
+                                                }: {
+                                                    className?: string;
+                                                }) => (
+                                                  <Icon iconNode={Tick02Icon} className={cn('size-4 shrink-0 text-brand-purple', iconClassName)} />
+                                                )
+                                              : undefined,
+                                      onSelect: () => {
+                                          void navigate({
+                                              to: '/workspace/$runId',
+                                              params: { runId: run.runId },
+                                              search: {
+                                                  section: 'progress',
+                                              },
+                                          });
+                                      },
+                                  },
+                              ]
+                            : [],
+                    ),
                     {
                         key: 'start-new-analysis',
-                        label: 'Start new analysis',
+                        label: 'Start a company dossier',
                         className: buttonVariants({
                             variant: 'secondary',
                             size: 'sm',
-                            className: 'w-full my-1',
+                            className: 'my-1 w-full',
                         }),
-                        icon: ({ className }: { className?: string }) => (
+                        icon: ({ className: iconClassName }) => (
                             <Icon
                                 iconNode={Add01Icon}
-                                className={cn('size-4', className)}
+                                className={cn('size-4', iconClassName)}
                             />
                         ),
                         onSelect: () => {
@@ -150,132 +166,119 @@ export function AnalyzedCompanyList({
                             size="sm"
                             className="gap-2 text-xs font-medium"
                         >
-                            {activeCompany ? (
+                            {activeRun?.company ? (
                                 <>
                                     <span
-                                        className="size-1.5 rounded-full bg-brand-purple shrink-0"
+                                        className="size-1.5 shrink-0 rounded-full bg-brand-purple"
                                         aria-hidden="true"
                                     />
-                                    <span className="truncate max-w-[140px]">
-                                        {activeCompany.name}
+                                    <span className="max-w-[140px] truncate">
+                                        {activeRun.company.legalName}
                                     </span>
                                 </>
                             ) : (
-                                <span>Companies</span>
+                                <span>Dossiers</span>
                             )}
                             <Icon
                                 iconNode={ChevronDownIcon}
-                                className="size-3.5 text-muted-foreground shrink-0"
+                                className="size-3.5 shrink-0 text-muted-foreground"
                             />
                         </Button>
                     }
                 />
-
-                {isUsingMock && (
-                    <Badge
-                        variant="regular"
-                        color="amber"
-                        showDot
-                        className="text-[10px] font-mono font-medium shrink-0"
-                        title="Convex company schema/data pending. Displaying showcase mock companies."
-                    >
-                        Mock data
-                    </Badge>
-                )}
             </div>
         );
     }
 
     return (
-        <div
+        <nav
             className={cn(
                 'flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5',
                 className,
             )}
+            aria-label="Analyzed companies"
         >
-            <div className="flex items-center gap-2 shrink-0">
-                {companies.map((company) => {
-                    const isActive = activeCompanyId === company.id;
-                    return (
+            <div className="flex shrink-0 items-center gap-2">
+                <StartButton />
+                {availableRuns.map((run, index) =>
+                    run.company ? (
                         <div
-                            key={company.id}
+                            key={run.runId}
                             className="flex items-center gap-0.5"
                         >
-                            <Button
-                                render={
-                                    <Link
-                                        to="/prototype/workspace"
-                                        search={{ variant: 'a' }}
-                                    />
+                            <Link
+                                to="/workspace/$runId"
+                                params={{ runId: run.runId }}
+                                search={{ section: 'progress' }}
+                                aria-current={
+                                    activeRunId === run.runId
+                                        ? 'page'
+                                        : undefined
                                 }
-                                nativeButton={false}
-                                variant={isActive ? 'outline' : 'link'}
-                                size="sm"
-                                onClick={() => onSelectCompany?.(company)}
-                                className="h-8 gap-2 px-0 text-xs font-medium"
+                                className={buttonVariants({
+                                    variant: 'outline',
+                                    size: 'sm',
+                                    className:
+                                        cn('h-8 gap-1 px-0 text-xs font-medium *',
+                                            activeRunId === run.runId
+                                                ? 'bg-accent/40! border-accent-foreground/50!'
+                                                : 'border-none'),
+                                })}
                             >
-                                {isActive && (
-                                    <span
-                                        className="size-1.5 rounded-full bg-brand-purple"
-                                        aria-hidden="true"
-                                    />
-                                )}
-                                <span className="truncate max-w-[140px] sm:max-w-[180px]">
-                                    {`${company.name} (${company.ticker})`}
+                                {activeRunId === run.runId ? (
+                                    <Icon iconNode={Tick02Icon} className="size-4 shrink-0 text-brand-purple" />
+                                ) : null}
+                                <span className="max-w-[140px] truncate sm:max-w-[180px]">
+                                    {`${run.company.legalName} (${run.company.ticker})`}
                                 </span>
-                            </Button>
-                            <button
-                                type="button"
-                                className="cursor-pointer text-muted-foreground hover:text-destructive"
-                                aria-label="Remove company"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    console.log(
-                                        `Remove company ${company.name}`,
-                                    );
-                                }}
-                            >
-                                <Icon
-                                    iconNode={Cancel01Icon}
-                                    className="size-4"
-                                    data-icon="inline-end"
+                            </Link>
+                            {index < availableRuns.length - 1 ? (
+                                <Separator
+                                    orientation="vertical"
+                                    className="mx-2 shrink-0"
                                 />
-                            </button>
-                            <Separator
-                                orientation="vertical"
-                                className="shrink-0 mx-2"
-                            />
+                            ) : null}
                         </div>
-                    );
-                })}
+                    ) : null,
+                )}
+            </div>
+        </nav>
+    );
+}
 
-                {/* Add / Start new analysis button */}
+class AnalyzedCompanyListErrorBoundary extends Component<
+    { children: ReactNode; className?: string },
+    { hasError: boolean }
+> {
+    state = { hasError: false };
+
+    static getDerivedStateFromError() {
+        return { hasError: true };
+    }
+
+    render() {
+        if (!this.state.hasError) {
+            return this.props.children;
+        }
+
+        return (
+            <div
+                role="alert"
+                className={cn(
+                    'flex items-center gap-2 py-0.5 text-xs text-muted-foreground',
+                    this.props.className,
+                )}
+            >
+                <span>Research dossiers are temporarily unavailable</span>
                 <Button
-                    render={<Link to="/workspace/start" />}
-                    nativeButton={false}
+                    type="button"
                     variant="ghost"
-                    size="icon-sm"
-                    className="border border-border/60"
-                    aria-label="Start new company analysis"
-                    title="Start new company analysis"
+                    size="xs"
+                    onClick={() => this.setState({ hasError: false })}
                 >
-                    <Icon iconNode={Add01Icon} data-icon="inline-start" />
+                    Retry
                 </Button>
             </div>
-
-            {/* Notification when mock data fallback is active */}
-            {isUsingMock && (
-                <Badge
-                    variant="regular"
-                    color="amber"
-                    showDot
-                    className="hidden text-[10px] font-mono font-medium md:inline-flex"
-                    title="Convex company schema/data pending. Displaying showcase mock companies."
-                >
-                    Mock data
-                </Badge>
-            )}
-        </div>
-    );
+        );
+    }
 }
