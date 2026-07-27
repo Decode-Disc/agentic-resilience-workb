@@ -70,6 +70,87 @@ describe('createSecCompanyResolver', () => {
     });
 
     test.each([
+        'service now',
+        'servce now',
+    ])('finds a concatenated company name from %s', async (query) => {
+        const resolver = createSecCompanyResolver({
+            fetch: vi.fn(async () =>
+                Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            fields: ['cik', 'name', 'ticker', 'exchange'],
+                            data: [
+                                [1373715, 'ServiceNow, Inc.', 'NOW', 'NYSE'],
+                                [
+                                    1713683,
+                                    'ServiceTitan, Inc.',
+                                    'TTAN',
+                                    'Nasdaq',
+                                ],
+                            ],
+                        }),
+                        { status: 200 },
+                    ),
+                ),
+            ),
+            now: () => 1_000,
+            userAgent: 'Evidence Workbench test@example.com',
+            reserveRequest: vi.fn(async () => undefined),
+            recordAttempt: vi.fn(async (attempt: { status: string }) => ({
+                shouldExecute: attempt.status === 'started',
+            })),
+        });
+
+        await expect(resolver.search(query)).resolves.toEqual([
+            {
+                cik: '1373715',
+                legalName: 'ServiceNow, Inc.',
+                ticker: 'NOW',
+                exchange: 'NYSE',
+                investorRelationsUrl: undefined,
+            },
+        ]);
+    });
+
+    test('does not add fuzzy noise to deterministic name matches', async () => {
+        const resolver = createSecCompanyResolver({
+            fetch: vi.fn(async () =>
+                Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            fields: ['cik', 'name', 'ticker', 'exchange'],
+                            data: [
+                                [1373715, 'ServiceNow, Inc.', 'NOW', 'NYSE'],
+                                [
+                                    1713683,
+                                    'ServiceTitan, Inc.',
+                                    'TTAN',
+                                    'Nasdaq',
+                                ],
+                                [1631574, 'FirstService Corp', 'FSV', 'Nasdaq'],
+                            ],
+                        }),
+                        { status: 200 },
+                    ),
+                ),
+            ),
+            now: () => 1_000,
+            userAgent: 'Evidence Workbench test@example.com',
+            reserveRequest: vi.fn(async () => undefined),
+            recordAttempt: vi.fn(async (attempt: { status: string }) => ({
+                shouldExecute: attempt.status === 'started',
+            })),
+        });
+
+        await expect(resolver.search('servicenow')).resolves.toEqual([
+            expect.objectContaining({
+                legalName: 'ServiceNow, Inc.',
+                ticker: 'NOW',
+            }),
+        ]);
+    });
+
+    test.each([
         'CCCS',
         '0001818201',
         'https://www.sec.gov/edgar/browse/?CIK=0001818201',

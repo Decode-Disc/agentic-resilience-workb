@@ -2,6 +2,7 @@ import type {
     SecCompanyMatch,
     SecCompanyResolver,
 } from '@convex/companyResolution';
+import Fuse from 'fuse.js';
 
 type ProviderAttempt = {
     operation: 'resolve_company' | 'revalidate_company';
@@ -25,6 +26,7 @@ type SecCompanyResolverDependencies = {
 
 const MAX_SEC_ATTEMPTS = 2;
 const MAX_COMPANY_SEARCH_RESULTS = 8;
+const MAX_FUZZY_COMPANY_SCORE = 0.45;
 
 class SecRetryableError extends Error {
     constructor(message: string) {
@@ -71,6 +73,34 @@ function normalizeSearchText(value: string): string {
         .replace(/[^a-z0-9]+/g, ' ')
         .trim()
         .replace(/\s+/g, ' ');
+}
+
+function deterministicSearchScore(
+    entry: CompanyIndexEntry,
+    normalizedQuery: string,
+    searchedCik: string | null,
+): number | null {
+    const normalizedName = normalizeSearchText(entry.legalName);
+    const normalizedTicker = entry.ticker.toLowerCase();
+    if (entry.cik === searchedCik) {
+        return 0;
+    }
+    if (normalizedTicker === normalizedQuery) {
+        return 1;
+    }
+    if (normalizedName === normalizedQuery) {
+        return 2;
+    }
+    if (normalizedName.startsWith(normalizedQuery)) {
+        return 3;
+    }
+    if (normalizedTicker.startsWith(normalizedQuery)) {
+        return 4;
+    }
+    if (normalizedName.includes(normalizedQuery)) {
+        return 5;
+    }
+    return null;
 }
 
 function extractCikSearch(query: string): string | null {
@@ -332,35 +362,15 @@ export function createSecCompanyResolver(
             );
             const normalizedQuery = normalizeSearchText(query);
             const searchedCik = extractCikSearch(query);
-            return parseCompanyIndex(value)
+            const companies = parseCompanyIndex(value);
+            const deterministicMatches = companies
                 .flatMap((entry) => {
-                    const normalizedName = normalizeSearchText(entry.legalName);
-                    const normalizedTicker = entry.ticker.toLowerCase();
-                    const score =
-                        entry.cik === searchedCik
-                            ? 0
-                            : normalizedTicker === normalizedQuery
-                              ? 1
-                              : normalizedName === normalizedQuery
-                                ? 2
-                                : normalizedName.startsWith(normalizedQuery)
-                                  ? 3
-                                  : normalizedTicker.startsWith(normalizedQuery)
-                                    ? 4
-                                    : normalizedName.includes(normalizedQuery)
-                                      ? 5
-                                      : null;
-                    return score === null
-                        ? []
-                        : [
-                              {
-                                  score,
-                                  company: {
-                                      ...entry,
-                                      investorRelationsUrl: undefined,
-                                  },
-                              },
-                          ];
+                    const score = deterministicSearchScore(
+                        entry,
+                        normalizedQuery,
+                        searchedCik,
+                    );
+                    return score === null ? [] : [{ score, company: entry }];
                 })
                 .sort(
                     (left, right) =>
@@ -368,9 +378,39 @@ export function createSecCompanyResolver(
                         left.company.legalName.localeCompare(
                             right.company.legalName,
                         ),
+                );
+            if (deterministicMatches.length > 0) {
+                return deterministicMatches
+                    .slice(0, MAX_COMPANY_SEARCH_RESULTS)
+                    .map(({ company }) => ({
+                        ...company,
+                        investorRelationsUrl: undefined,
+                    }));
+            }
+
+            const fuzzyMatches = new Fuse(companies, {
+                keys: ['legalName'],
+                includeScore: true,
+                threshold: 0.3,
+                ignoreLocation: true,
+                ignoreDiacritics: true,
+                minMatchCharLength: 2,
+                useTokenSearch: true,
+                tokenMatch: 'all',
+            })
+                .search(normalizedQuery, {
+                    limit: MAX_COMPANY_SEARCH_RESULTS,
+                })
+                .filter(
+                    ({ score }) =>
+                        score !== undefined && score <= MAX_FUZZY_COMPANY_SCORE,
                 )
-                .slice(0, MAX_COMPANY_SEARCH_RESULTS)
-                .map(({ company }) => company);
+                .map(({ item }) => item);
+
+            return fuzzyMatches.map((company) => ({
+                ...company,
+                investorRelationsUrl: undefined,
+            }));
         },
         revalidate,
         inspectEvidence,
