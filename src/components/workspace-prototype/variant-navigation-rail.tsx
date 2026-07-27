@@ -64,7 +64,7 @@ export function VariantNavigationRail() {
                                                     <Button
                                                         variant={
                                                             section.name ===
-                                                                'Evidence'
+                                                            'Evidence'
                                                                 ? 'secondary'
                                                                 : 'ghost'
                                                         }

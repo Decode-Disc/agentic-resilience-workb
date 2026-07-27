@@ -29,6 +29,18 @@ vi.mock('convex/react', () => ({
     useQuery: vi.fn().mockReturnValue(undefined),
 }));
 
+vi.mock('@convex-dev/auth/react', async (importOriginal) => {
+    const auth =
+        await importOriginal<typeof import('@convex-dev/auth/react')>();
+    return {
+        ...auth,
+        useAuthActions: () => ({
+            signIn: vi.fn(),
+            signOut: vi.fn(),
+        }),
+    };
+});
+
 import { WorkspacePrototype } from '@/components/workspace-prototype/workspace-prototype';
 
 class ResizeObserverMock {

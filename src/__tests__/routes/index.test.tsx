@@ -25,7 +25,7 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
     };
 });
 
-import { IndexPage } from '@/routes/index';
+import { IndexPage } from '@/components/landing/index-page';
 
 describe('IndexPage', () => {
     it('centers the evidence matrix without product marketing', () => {
