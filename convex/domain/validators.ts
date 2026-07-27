@@ -93,6 +93,7 @@ export const auditEventActionValidator = v.union(
     v.literal('invitation_revoked'),
     v.literal('invitation_reissued'),
     v.literal('invitation_code_rotated'),
+    v.literal('visitor_session_rebound'),
     v.literal('analysis_reserved'),
     v.literal('quota_restored'),
     v.literal('checkpoint_decided'),

@@ -103,6 +103,25 @@ export const seedForSetup = internalMutation({
                             `Invitation slot ${invitation.slotKey} uses a code assigned to another slot`,
                         );
                     }
+                    if (existing.claimedByVisitorId) {
+                        const visitor = await ctx.db.get(
+                            existing.claimedByVisitorId,
+                        );
+                        if (visitor?.status === 'active') {
+                            await ctx.db.patch(visitor._id, {
+                                status: 'revoked',
+                                revokedAt: now,
+                            });
+                            await ctx.db.insert('auditEvents', {
+                                actor: { type: 'system' },
+                                action: 'invitation_revoked',
+                                targetType: 'visitor',
+                                targetId: visitor._id,
+                                reason: 'Configured access code rotation',
+                                occurredAt: now,
+                            });
+                        }
+                    }
                     await ctx.db.patch(existing._id, {
                         codeDigest: invitation.codeDigest,
                     });
@@ -111,7 +130,7 @@ export const seedForSetup = internalMutation({
                         action: 'invitation_code_rotated',
                         targetType: 'invitation',
                         targetId: existing._id,
-                        reason: 'Configured invitation OTP rotation',
+                        reason: 'Configured access code rotation',
                         occurredAt: now,
                     });
                 }
@@ -183,11 +202,11 @@ export const claim = action({
             throw new Error('Not authenticated');
         }
         if (!invitationCodePattern.test(args.code)) {
-            throw new Error('Invitation code must contain exactly four digits');
+            throw new Error('Access code must contain exactly four digits');
         }
         const pepper = process.env.INVITATION_CODE_PEPPER;
         if (!pepper) {
-            throw new Error('Invitation claim is not configured');
+            throw new Error('Access code verification is not configured');
         }
         await ctx.runMutation(internal.invitations.consumeClaimAttempt, {
             authUserId,
@@ -241,7 +260,7 @@ export const consumeClaimAttempt = internalMutation({
             }
             if (existing.attempts >= limit.maximumAttempts) {
                 throw new Error(
-                    'Too many invitation attempts. Try again later.',
+                    'Too many access code attempts. Try again later.',
                 );
             }
             await ctx.db.patch(existing._id, {
@@ -290,11 +309,37 @@ export const claimDigest = internalMutation({
                 query.eq('codeDigest', args.codeDigest),
             )
             .unique();
-        if (invitation?.status !== 'available') {
-            throw new Error('Invitation is not available');
+        if (!invitation) {
+            throw new Error('Access code is not available');
         }
 
         const now = Date.now();
+        if (invitation.status === 'claimed') {
+            if (!invitation.claimedByVisitorId) {
+                throw new Error('Access code is not available');
+            }
+            const visitor = await ctx.db.get(invitation.claimedByVisitorId);
+            if (!visitor) {
+                throw new Error('Access code is not available');
+            }
+            await ctx.db.patch(visitor._id, {
+                authUserId: args.authUserId,
+                status: 'active',
+                revokedAt: undefined,
+            });
+            await ctx.db.insert('auditEvents', {
+                actor: { type: 'visitor', visitorId: visitor._id },
+                action: 'visitor_session_rebound',
+                targetType: 'visitor',
+                targetId: visitor._id,
+                occurredAt: now,
+            });
+            return {
+                visitorId: visitor._id,
+                role: visitor.role,
+            };
+        }
+
         const visitorId = await ctx.db.insert('visitors', {
             authUserId: args.authUserId,
             invitationId: invitation._id,
@@ -330,7 +375,7 @@ export const rotateAdminFromConfig = internalAction({
             !recoveryCode ||
             !invitationCodePattern.test(recoveryCode)
         ) {
-            throw new Error('Admin invitation recovery is not configured');
+            throw new Error('Admin access code recovery is not configured');
         }
         const codeDigest = await digestInvitationCode(recoveryCode, pepper);
         await ctx.runMutation(internal.invitations.rotateAdminDigest, {
@@ -376,13 +421,22 @@ export const rotateAdminDigest = internalMutation({
                 occurredAt: now,
             });
         }
-        await ctx.db.patch(invitation._id, {
-            codeDigest: args.codeDigest,
-            status: 'available',
-            claimedByVisitorId: undefined,
-            claimedAt: undefined,
-            revokedAt: undefined,
-        });
+        await ctx.db.patch(
+            invitation._id,
+            invitation.claimedByVisitorId
+                ? {
+                      codeDigest: args.codeDigest,
+                      status: 'claimed',
+                      revokedAt: undefined,
+                  }
+                : {
+                      codeDigest: args.codeDigest,
+                      status: 'available',
+                      claimedByVisitorId: undefined,
+                      claimedAt: undefined,
+                      revokedAt: undefined,
+                  },
+        );
         await ctx.db.insert('auditEvents', {
             actor: { type: 'system' },
             action: 'invitation_reissued',
