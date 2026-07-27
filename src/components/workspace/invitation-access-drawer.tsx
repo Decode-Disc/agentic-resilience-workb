@@ -24,7 +24,7 @@ import {
     InputOTPSlot,
 } from '@/components/ui/input-otp';
 import { Label } from '@/components/ui/label';
-import { invitationErrorMessage } from '@/lib/presentation/research-copy';
+import { accessCodeErrorMessage } from '@/lib/presentation/research-copy';
 
 type Admission = FunctionReturnType<typeof api.invitations.claim>;
 const invitationOtpSlots = [0, 1, 2, 3] as const;
@@ -35,7 +35,7 @@ export interface InvitationAccessDrawerProps {
     onAdmitted: (admission: Admission) => void | Promise<void>;
 }
 
-/** Collects a one-time invitation without displacing the current route state. */
+/** Collects a reusable workspace access code without displacing route state. */
 export function InvitationAccessDrawer({
     open,
     onOpenChange,
@@ -50,7 +50,7 @@ export function InvitationAccessDrawer({
         event.preventDefault();
         const normalizedCode = code.trim();
         if (!/^\d{4}$/.test(normalizedCode)) {
-            setError('Enter the four-digit invitation code.');
+            setError('Enter the four-digit access code.');
             return;
         }
 
@@ -62,7 +62,7 @@ export function InvitationAccessDrawer({
             setCode('');
             onOpenChange(false);
         } catch (caughtError) {
-            setError(invitationErrorMessage(caughtError));
+            setError(accessCodeErrorMessage(caughtError));
         } finally {
             setIsSubmitting(false);
         }
@@ -81,19 +81,19 @@ export function InvitationAccessDrawer({
                         Protected access
                     </DrawerTitle>
                     <DrawerDescription>
-                        Enter your invitation code to continue to the research
+                        Enter your access code to continue to the research
                         workspace.
                     </DrawerDescription>
                 </DrawerHeader>
 
                 <form
-                    aria-label="Invitation access"
+                    aria-label="Workspace access"
                     className="mx-auto w-full max-w-xl space-y-4 px-5 pt-5"
                     onSubmit={submit}
                 >
                     <div className="flex flex-col gap-1 items-center">
                         <Label htmlFor="invitation-code" className="text-sm">
-                            Invitation code
+                            Access code
                         </Label>
                         <InputOTP
                             id="invitation-code"
@@ -132,8 +132,7 @@ export function InvitationAccessDrawer({
                             </p>
                         ) : (
                             <p className="text-xs text-muted-foreground">
-                                Use the four digits included with your
-                                invitation.
+                                Use your four-digit workspace code.
                             </p>
                         )}
                     </div>
