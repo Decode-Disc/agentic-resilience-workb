@@ -88,6 +88,7 @@ These rules are non-negotiable:
 13. UI progress comes only from persisted workflow events. Never simulate progress or expose hidden chain-of-thought.
 14. Retries and workflow resumes must not duplicate claims, quota reservations, provider-call records, or external side effects.
 15. A weak evidence base may yield `0 / Mixed or unclear`, `Hypothesis`, `Unknown`, or `insufficient public evidence`. Never force a confident answer.
+16. User-facing product copy is written for the intended audience and the decision or action in front of them. Analyst-facing surfaces describe evidence, uncertainty, consequences, and next actions. They never expose implementation architecture, deployment configuration, provider credentials, access topology, invitation inventory, quota mechanics, persistence mechanics, internal workflow states, roadmap phases, or raw backend errors.
 
 The exact domain records, workflow states, assessment dimensions, provider boundaries, and enforcement mechanisms are defined in `context/TECH.md` and the product design.
 
@@ -123,6 +124,15 @@ Protect every exposed server operation with the authorization, validation, idemp
 ## Frontend Standards
 
 These rules govern the React + TanStack Start + Convex + shadcn/ui (`base-luma` style, `hugeicons` library) layer of the prototype. They are enforced by Biome where the rule is statically detectable; the rest is review-time.
+
+### User-facing product copy
+
+- Technical requirements, implementation plans, ADRs, and backend terminology are internal product truth, not ready-made interface copy. Translate them into the minimum information the user needs to understand what happened, why it matters, and what to do next.
+- Public and analyst-facing surfaces must never render raw exceptions, request IDs, server function names, internal enum or event keys, environment-variable names, provider error codes, invitation-pool details, anonymous-session mechanics, or deployment instructions.
+- Translate persisted workflow and provider state at the presentation boundary. Keep the domain value as the source of truth, but render an audience-appropriate label, consequence, and next action.
+- Operational terminology and diagnostic detail are permitted only inside explicitly protected administration surfaces. Even there, lead with a readable status and present raw technical detail secondarily.
+- Preserve user-relevant integrity disclosures such as `illustrative`, `showcase`, or `not live`. These labels protect the audience and are not implementation leakage.
+- Tests for new or changed analyst-facing states must verify both the intended actionable copy and the absence of raw backend or workflow details.
 
 ### Key principles
 
@@ -316,3 +326,14 @@ Use the product design's Definition of Done as the MVP acceptance checklist. Bef
 - the next smallest coherent slice.
 
 Do not hide failing checks, unsupported provider behavior, incomplete security controls, or mocked integrations behind optimistic wording.
+
+<!-- convex-ai-start -->
+
+This project uses [Convex](https://convex.dev) as its backend.
+
+When working on Convex code, **always read
+`convex/_generated/ai/guidelines.md` first** for important guidelines on
+how to correctly use Convex APIs and patterns. The file contains rules that
+override what you may have learned about Convex from training data.
+
+<!-- convex-ai-end -->
