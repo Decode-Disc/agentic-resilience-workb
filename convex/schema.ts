@@ -53,6 +53,14 @@ export default defineSchema({
         ticker: v.string(),
         exchange: v.string(),
         investorRelationsUrl: v.optional(v.string()),
+        websiteUrl: v.optional(v.string()),
+        websiteUrlSource: v.optional(
+            v.union(
+                v.literal('sec_ir'),
+                v.literal('exa'),
+                v.literal('probe'),
+            ),
+        ),
         canonicalizedAt: v.number(),
     }).index('by_cik', ['cik']),
     companyPreflights: defineTable({

@@ -1,100 +1,65 @@
 'use client';
 
+import { api } from '@convex/_generated/api';
 import {
+    ArrowLeft01Icon,
     ArrowRight01Icon,
     Building2Icon,
     Cancel01Icon,
     ChevronDownIcon,
-    FileAddIcon,
-    MoreVerticalSquare01Icon,
+    Plus,
     Search01Icon,
 } from '@hugeicons/core-free-icons';
-import { useMemo, useRef, useState } from 'react';
-
+import { useNavigate } from '@tanstack/react-router';
+import { useAction, useQuery } from 'convex/react';
+import type { FunctionReturnType } from 'convex/server';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { useRef, useState } from 'react';
+import { CompanyFaviconAvatar } from '@/components/company-favicon-avatar';
 import Icon from '@/components/icon';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from '@/components/ui/dialog';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuGroup,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { type DroppedFile, FileDropzone } from '@/components/ui/file-dropzone';
 import {
     InputGroup,
     InputGroupAddon,
     InputGroupInput,
 } from '@/components/ui/input-group';
-import type { SmoothDropdownItem } from '@/components/ui/smooth-dropdown';
+import { Skeleton } from '@/components/ui/skeleton';
 import { SmoothDropdwon } from '@/components/ui/smooth-dropdown';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { CompanyResolutionCard } from '@/components/workspace/company-resolution-card';
 import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from '@/components/ui/tooltip';
+    MoreOptionsButton,
+    PublicReferencesDialog,
+    ToolbarIconButton,
+} from '@/components/workspace/composer-toolbar-actions';
+import {
+    type CoveragePreset,
+    CoveragePresetPicker,
+} from '@/components/workspace/coverage-preset-picker';
+import { InvitationAccessDrawer } from '@/components/workspace/invitation-access-drawer';
+import { useAnonymousSession } from '@/hooks/use-anonymous-session';
+import { useResponsive } from '@/hooks/use-responsive';
+import { companyLookupErrorMessage } from '@/lib/presentation/research-copy';
 import { cn } from '@/lib/utils';
-import type { PlatformIcon } from '@/types/ui';
 
-/**
- * Fictional company result surfaced by the "Company to investigate" picker.
- *
- * This prototype only persists UI state — these rows stand in for a future
- * Convex-backed SEC company lookup and are deliberately synthetic. Results
- * only appear once the analyst types a query; until then the picker shows an
- * empty-state hint. Selecting a result moves that company into the dossier
- * research context.
- */
-interface CompanyResult {
-    id: string;
-    name: string;
-    ticker: string;
-    sector: string;
-}
+type PreflightResult = FunctionReturnType<
+    typeof api.companyResolution.preflight
+>;
+type CompanyCandidate = FunctionReturnType<
+    typeof api.companyResolution.search
+>[number];
 
-const COMPANY_CATALOG: readonly CompanyResult[] = [
-    {
-        id: 'snow',
-        name: 'ServiceNow',
-        ticker: 'NOW',
-        sector: 'Enterprise software',
-    },
-    {
-        id: 'crm',
-        name: 'Salesforce',
-        ticker: 'CRM',
-        sector: 'Enterprise software',
-    },
-    {
-        id: 'mdb',
-        name: 'MongoDB',
-        ticker: 'MDB',
-        sector: 'Data infrastructure',
-    },
-    {
-        id: 'ddog',
-        name: 'Datadog',
-        ticker: 'DDOG',
-        sector: 'Observability',
-    },
-    {
-        id: 'nety',
-        name: 'NetEase',
-        ticker: 'NTES',
-        sector: 'Consumer internet',
-    },
-] as const;
+const viewEnterTransition = {
+    type: 'spring' as const,
+    stiffness: 360,
+    damping: 30,
+    mass: 0.8,
+};
+const viewExitTransition = {
+    duration: 0.14,
+    ease: [0.32, 0.72, 0, 1] as const,
+};
 
 export interface ResearchComposerProps {
     className?: string;
@@ -102,188 +67,534 @@ export interface ResearchComposerProps {
 }
 
 /**
- * Central research composer for `/workspace/start`, adapted from the Qatalog
- * central zone reference (`docs/examples/qatalog-central-zone.md`):
- *
- * - One textarea where the analyst writes the research request directly
- *   (replaces the separate "Company" + "Focus" inputs).
- * - A "Company to investigate" SmoothDropdown bound to a fictional company lookup.
- *   Results render only once a query is typed, and selecting one sets it as the
- *   dossier's research context. The catalog stands in for the future SEC lookup.
- * - Composing surface only: maintains local prompt + selected company state.
- *   No workflow, no Convex writes — those come with the resolution slice.
+ * Preserves the established research composer while owning the real two-step
+ * company resolution and launch boundary.
  */
 export function ResearchComposer({
     className,
     placeholderText = 'How can I help? Describe the resilience question to investigate.',
 }: ResearchComposerProps) {
-    const [prompt, setPrompt] = useState('');
-    const [selectedCompany, setSelectedCompany] =
-        useState<CompanyResult | null>(null);
-    const [companyQuery, setCompanyQuery] = useState('');
-    const [pickerOpen, setPickerOpen] = useState(false);
-    /**
-     * Reference attachments staged locally by the analyst. The composer keeps
-     * them in UI state — actual ingestion ships with the source-acquisition
-     * slice, so no server function is involved at this stage.
-     */
-    const [attachments, setAttachments] = useState<DroppedFile[]>([]);
-    const containerRef = useRef<HTMLDivElement>(null);
-
-    const filteredCompanies = useMemo(() => {
-        const q = companyQuery.trim().toLowerCase();
-        if (!q) return [];
-        return COMPANY_CATALOG.filter(
-            (c) =>
-                c.name.toLowerCase().includes(q) ||
-                c.ticker.toLowerCase().includes(q) ||
-                c.sector.toLowerCase().includes(q),
-        );
-    }, [companyQuery]);
-
-    const hasQuery = companyQuery.trim().length > 0;
-
-    const clearSelection = () => {
-        setSelectedCompany(null);
-        setCompanyQuery('');
-    };
-
-    const companyItems: SmoothDropdownItem[] = filteredCompanies.map(
-        (company) => ({
-            id: company.id,
-            label: company.name,
-            icon: Building2Icon,
-            onSelect: () => setSelectedCompany(company),
-            renderLabel: () => (
-                <span className="flex flex-col">
-                    <span className="text-sm font-medium text-foreground">
-                        {company.name}
-                    </span>
-                    <span className="font-mono text-[11px] text-muted-foreground">
-                        {company.ticker} · {company.sector}
-                    </span>
-                </span>
-            ),
-        }),
+    const navigate = useNavigate();
+    const searchCompanies = useAction(api.companyResolution.search);
+    const preflight = useAction(api.companyResolution.preflight);
+    const confirmAndStart = useAction(api.researchLaunch.confirmAndStart);
+    const reduceMotion = useReducedMotion();
+    const { isSessionReady, sessionError } = useAnonymousSession();
+    const visitor = useQuery(
+        api.visitors.current,
+        isSessionReady ? {} : 'skip',
     );
+    const [researchAngle, setResearchAngle] = useState('');
+    const [companyQuery, setCompanyQuery] = useState('');
+    const [coveragePreset, setCoveragePreset] =
+        useState<CoveragePreset>('balanced');
+    const [resolution, setResolution] = useState<PreflightResult | null>(null);
+    const [companyCandidates, setCompanyCandidates] = useState<
+        Array<CompanyCandidate>
+    >([]);
+    const { isMobile } = useResponsive();
+    const [hasSearched, setHasSearched] = useState(false);
+    const [view, setView] = useState<'compose' | 'confirm'>('compose');
+    const [pickerOpen, setPickerOpen] = useState(false);
+    const [isSearching, setIsSearching] = useState(false);
+    const [selectingCik, setSelectingCik] = useState<string | null>(null);
+    const [isLaunching, setIsLaunching] = useState(false);
+    const [lookupError, setLookupError] = useState<string | null>(null);
+    const [launchError, setLaunchError] = useState<string | null>(null);
+    const [invitationOpen, setInvitationOpen] = useState(false);
+    const [referencesOpen, setReferencesOpen] = useState(false);
+    const [manualSourceUrls, setManualSourceUrls] = useState<Array<string>>([]);
+    const launchKey = useRef<string | null>(null);
 
-    // The send button stays UX-enabled at all times. Programmatic gating in
-    // `handleSend` decides whether to actually start the analysis or to nudge
-    // the analyst toward the missing precondition first — a disabled button
-    // hides the intent, an attention nudge teaches the flow.
-    const companyResolved = selectedCompany !== null;
-
-    const handleSend = () => {
-        if (!companyResolved) {
-            // No target company yet: surface the picker to attract attention
-            // rather than failing silently. Selecting a company remains the
-            // precondition to actually start the analysis.
+    const searchForCompanies = async () => {
+        if (!isSessionReady) {
+            setLookupError(
+                sessionError ?? 'Preparing your research workspace…',
+            );
             setPickerOpen(true);
             return;
         }
-        // Real submission ships with the resolution slice. For now the
-        // surface is intentionally inert once the precondition is met.
+
+        const query = companyQuery.trim();
+        if (!query) {
+            setLookupError('Enter a company name, ticker, CIK, or SEC URL.');
+            setPickerOpen(true);
+            return;
+        }
+
+        setLookupError(null);
+        setLaunchError(null);
+        setIsSearching(true);
+        setHasSearched(false);
+
+        try {
+            const results = await searchCompanies({ query });
+            setCompanyCandidates([...results]);
+            setHasSearched(true);
+            setPickerOpen(true);
+        } catch {
+            setCompanyCandidates([]);
+            setLookupError("We couldn't search for companies. Try again.");
+            setHasSearched(true);
+        } finally {
+            setIsSearching(false);
+        }
+    };
+
+    const selectCompany = async (candidate: CompanyCandidate) => {
+        if (selectingCik) {
+            return;
+        }
+        setLookupError(null);
+        setSelectingCik(candidate.cik);
+        try {
+            const result = await preflight({ cik: candidate.cik });
+            setResolution(result);
+            setPickerOpen(false);
+            launchKey.current = null;
+        } catch (error) {
+            setLookupError(companyLookupErrorMessage(error));
+            setPickerOpen(true);
+        } finally {
+            setSelectingCik(null);
+        }
+    };
+
+    const clearResolution = () => {
+        setResolution(null);
+        setCompanyQuery('');
+        setCompanyCandidates([]);
+        setHasSearched(false);
+        setView('compose');
+        setLookupError(null);
+        setLaunchError(null);
+        launchKey.current = null;
+    };
+
+    const startResearch = async () => {
+        if (!resolution || isLaunching) {
+            if (!resolution) {
+                setPickerOpen(true);
+            }
+            return;
+        }
+
+        setIsLaunching(true);
+        setLaunchError(null);
+        launchKey.current ??= crypto.randomUUID();
+
+        try {
+            const result = await confirmAndStart({
+                preflightId: resolution.preflightId,
+                idempotencyKey: launchKey.current,
+                coveragePreset,
+                researchAngle: researchAngle.trim() || undefined,
+                manualSourceUrls:
+                    manualSourceUrls.length > 0 ? manualSourceUrls : undefined,
+            });
+            await navigate({
+                to: '/workspace/$runId',
+                params: { runId: result.runId },
+                search: { section: 'progress' },
+            });
+        } catch {
+            setLaunchError(
+                "We couldn't start this research dossier. Try again.",
+            );
+            setIsLaunching(false);
+        }
+    };
+
+    const launch = () => {
+        if (!resolution || isLaunching) {
+            if (!resolution) {
+                setPickerOpen(true);
+            }
+            return;
+        }
+
+        if (visitor?.status !== 'active') {
+            setInvitationOpen(true);
+            return;
+        }
+
+        void startResearch();
     };
 
     return (
-        <div
-            ref={containerRef}
-            className={cn(
-                'w-full rounded-lg border border-primary/80 bg-card shadow-lg',
-                className,
-            )}
-        >
-            {/* Prompt area + resolved company badge */}
-            <div className="relative">
-                {selectedCompany ? (
-                    <CompanyContextBadge
-                        company={selectedCompany}
-                        onRemove={clearSelection}
-                    />
-                ) : null}
-                <textarea
-                    value={prompt}
-                    onChange={(event) => setPrompt(event.target.value)}
-                    placeholder={placeholderText}
-                    aria-label="Research request"
-                    rows={3}
-                    className={cn(
-                        'block w-full resize-none rounded-t-2xl bg-transparent px-5 pt-5 pb-3 text-[15px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground',
-                        selectedCompany && 'pt-12',
-                    )}
-                />
-            </div>
-
-            {/* Inline toolbar */}
-            <div className="flex items-center justify-between gap-3 border-t border-border/20 px-3 py-3">
-                <div className="bg-secondary/30 p-1 rounded-sm flex items-center gap-2">
-                    <SmoothDropdwon
-                        items={companyItems}
-                        open={pickerOpen}
-                        onOpenChange={setPickerOpen}
-                        openWidth={320}
-                        closedWidth={215}
-                        closedHeight={36}
-                        defaultActiveItemId={selectedCompany?.id}
-                        trigger={
-                            <CompanyPickerTrigger
-                                label={
-                                    selectedCompany?.name ??
-                                    'Company to investigate'
-                                }
-                                ticker={selectedCompany?.ticker}
-                                highlighted={selectedCompany !== null}
-                            />
-                        }
-                        header={
-                            <div className="flex flex-col gap-2">
-                                <CompanySearchField
-                                    value={companyQuery}
-                                    onChange={setCompanyQuery}
-                                />
-                                <ClearSelectionButton
-                                    disabled={selectedCompany === null}
-                                    onClick={clearSelection}
-                                />
-                                {!hasQuery ? (
-                                    <span className="px-2 py-1 text-xs text-muted-foreground">
-                                        Type a name or ticker to search for a
-                                        company to investigate.
-                                    </span>
-                                ) : filteredCompanies.length === 0 ? (
-                                    <span className="px-2 py-1 text-xs text-muted-foreground">
-                                        No matching company. Try another ticker
-                                        or name.
-                                    </span>
+        <>
+            <section
+                className={cn(
+                    'w-full overflow-visible',
+                    className,
+                )}
+                aria-label="Research launch"
+            >
+                <AnimatePresence initial={false} mode="wait">
+                    {view === 'compose' ? (
+                        <motion.div
+                            key="compose"
+                            className="rounded-lg border border-accent/60 bg-card shadow-lg"
+                            initial={
+                                reduceMotion
+                                    ? false
+                                    : { opacity: 0, scale: 0.97 }
+                            }
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={
+                                reduceMotion
+                                    ? {
+                                        opacity: 1,
+                                        transition: { duration: 0 },
+                                    }
+                                    : {
+                                        opacity: 0,
+                                        scale: 0.985,
+                                        transition: viewExitTransition,
+                                    }
+                            }
+                            transition={
+                                reduceMotion
+                                    ? { duration: 0 }
+                                    : viewEnterTransition
+                            }
+                            style={{ transformOrigin: '50% 45%' }}
+                        >
+                            <div className="relative">
+                                {resolution ? (
+                                    <CompanyContextBadge
+                                        company={resolution.company}
+                                        onRemove={clearResolution}
+                                    />
                                 ) : null}
+                                <label htmlFor="research-angle" className="sr-only">
+                                    Research request — optional research angle
+                                </label>
+                                <textarea
+                                    id="research-angle"
+                                    value={researchAngle}
+                                    onChange={(event) =>
+                                        setResearchAngle(event.target.value)
+                                    }
+                                    placeholder={placeholderText}
+                                    rows={3}
+                                    className={cn(
+                                        'block w-full resize-none rounded-t-lg bg-transparent px-5 pt-5 pb-3 text-[15px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground',
+                                        resolution && 'pt-14',
+                                    )}
+                                />
                             </div>
-                        }
-                    />
-                    <AttachReferencesButton
-                        attachments={attachments}
-                        onAttachmentsChange={setAttachments}
-                    />
-                    <MoreOptionsButton />
-                </div>
 
-                <Button
-                    type="button"
-                    aria-label="Send request"
-                    onClick={handleSend}
-                    className="size-10 rounded-full"
-                >
-                    <Icon iconNode={ArrowRight01Icon} size={18} />
-                </Button>
-            </div>
-        </div>
+                            <div className="flex items-center justify-between gap-3 border-t border-border/20 px-3 py-3">
+                                <div className="flex items-center gap-2 rounded-sm bg-secondary/30 p-1">
+                                    <SmoothDropdwon
+                                        items={companyCandidates.map(
+                                            (candidate) => ({
+                                                id: `${candidate.cik}-${candidate.ticker}`,
+                                                label: `${candidate.legalName} ${candidate.ticker} ${candidate.exchange} CIK ${candidate.cik}`,
+                                                closeOnSelect: false,
+                                                onSelect: () =>
+                                                    void selectCompany(candidate),
+                                                renderLabel: () => (
+                                                    <CompanyCandidateLabel
+                                                        company={candidate}
+                                                        selecting={
+                                                            selectingCik ===
+                                                            candidate.cik
+                                                        }
+                                                    />
+                                                ),
+                                            }),
+                                        )}
+                                        open={pickerOpen}
+                                        onOpenChange={setPickerOpen}
+                                        openWidth={isMobile ? 300 : 400}
+                                        closedWidth={215}
+                                        closedHeight={36}
+                                        itemsAriaLabel="Company search results"
+                                        className={pickerOpen ? 'z-10' : undefined}
+                                        trigger={
+                                            <CompanyPickerTrigger
+                                                label={
+                                                    resolution
+                                                        ? resolution.company
+                                                            .legalName
+                                                        : 'Company to investigate'
+                                                }
+                                                ticker={resolution?.company.ticker}
+                                                highlighted={resolution !== null}
+                                            />
+                                        }
+                                        header={
+                                            <CompanyLookup
+                                                companyQuery={companyQuery}
+                                                isSearching={isSearching}
+                                                lookupError={
+                                                    sessionError ?? lookupError
+                                                }
+                                                hasResolution={resolution !== null}
+                                                hasSearched={hasSearched}
+                                                resultCount={
+                                                    companyCandidates.length
+                                                }
+                                                onCompanyQueryChange={(next) => {
+                                                    setCompanyQuery(next);
+                                                    setHasSearched(false);
+                                                    setCompanyCandidates([]);
+                                                    setLookupError(null);
+                                                }}
+                                                onClear={clearResolution}
+                                                onSearch={() =>
+                                                    void searchForCompanies()
+                                                }
+                                                sessionReady={isSessionReady}
+                                            />
+                                    }
+                                    />
+                                    <ToolbarIconButton
+                                        label="Attach references"
+                                        icon={Plus}
+                                        count={manualSourceUrls.length}
+                                        onClick={() => setReferencesOpen(true)}
+                                    />
+                                    <MoreOptionsButton />
+                                </div>
+
+                                <Button
+                                    type="button"
+                                    aria-label={
+                                        resolution ? 'Continue' : 'Send request'
+                                    }
+                                    onClick={() =>
+                                        resolution
+                                            ? setView('confirm')
+                                            : setPickerOpen(true)
+                                    }
+                                    className="size-10 rounded-full"
+                                >
+                                    <Icon iconNode={ArrowRight01Icon} size={18} />
+                                </Button>
+                            </div>
+                        </motion.div>
+                    ) : resolution ? (
+                        <motion.div
+                            key="confirm"
+                            className="rounded-lg space-y-5 bg-card/60 px-4 py-5"
+                            initial={
+                                reduceMotion
+                                    ? false
+                                    : { opacity: 0, scale: 0.96 }
+                            }
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={
+                                reduceMotion
+                                    ? {
+                                        opacity: 1,
+                                        transition: { duration: 0 },
+                                    }
+                                    : {
+                                        opacity: 0,
+                                        scale: 0.985,
+                                        transition: viewExitTransition,
+                                    }
+                            }
+                            transition={
+                                reduceMotion
+                                    ? { duration: 0 }
+                                    : viewEnterTransition
+                            }
+                            style={{ transformOrigin: '50% 45%' }}
+                        >
+                            <CompanyResolutionCard company={resolution.company} />
+                            <CoveragePresetPicker
+                                value={coveragePreset}
+                                onChange={setCoveragePreset}
+                            />
+                            {launchError ? (
+                                <p
+                                    role="alert"
+                                    className="text-sm text-destructive"
+                                >
+                                    {launchError}
+                                </p>
+                            ) : null}
+                            <div className="flex items-center justify-between gap-3 border-t border-border/40 pt-4">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    onClick={() => setView('compose')}
+                                    disabled={isLaunching}
+                                >
+                                    <Icon iconNode={ArrowLeft01Icon} />
+                                    Back
+                                </Button>
+                                <Button
+                                    type="button"
+                                    aria-label="Confirm and start"
+                                    onClick={launch}
+                                    disabled={isLaunching}
+                                    className="rounded-full px-4"
+                                >
+                                    {isLaunching
+                                        ? 'Starting…'
+                                        : 'Confirm and start'}
+                                    <Icon iconNode={ArrowRight01Icon} size={18} />
+                                </Button>
+                            </div>
+                        </motion.div>
+                    ) : null}
+                </AnimatePresence>
+            </section>
+
+            <InvitationAccessDrawer
+                open={invitationOpen}
+                onOpenChange={setInvitationOpen}
+                onAdmitted={() => startResearch()}
+            />
+            <PublicReferencesDialog
+                open={referencesOpen}
+                onOpenChange={setReferencesOpen}
+                urls={manualSourceUrls}
+                onUrlsChange={setManualSourceUrls}
+            />
+        </>
     );
 }
 
-/**
- * Pill-shaped trigger shown when the company picker is closed. Shows a
- * building mark, the resolved company (or the "Company to investigate" placeholder
- * before any selection), and a chevron.
- */
+function CompanyLookup({
+    companyQuery,
+    isSearching,
+    lookupError,
+    hasResolution,
+    hasSearched,
+    resultCount,
+    onCompanyQueryChange,
+    onClear,
+    onSearch,
+    sessionReady,
+}: {
+    companyQuery: string;
+    isSearching: boolean;
+    lookupError: string | null;
+    hasResolution: boolean;
+    hasSearched: boolean;
+    resultCount: number;
+    onCompanyQueryChange: (next: string) => void;
+    onClear: () => void;
+    onSearch: () => void;
+    sessionReady: boolean;
+}) {
+    return (
+        <form
+            aria-label="Company lookup"
+            className="flex flex-col gap-2"
+            onSubmit={(event) => {
+                event.preventDefault();
+                onSearch();
+            }}
+        >
+            <InputGroup>
+                <InputGroupAddon>
+                    <Icon
+                        iconNode={Search01Icon}
+                        size={15}
+                        className="text-muted-foreground"
+                    />
+                </InputGroupAddon>
+                <InputGroupInput
+                    value={companyQuery}
+                    onChange={(event) =>
+                        onCompanyQueryChange(event.target.value)
+                    }
+                    placeholder="Search company by Name, ticker, CIK, or SEC URL"
+                    aria-label="Company search"
+                    aria-invalid={Boolean(lookupError)}
+                    autoComplete="off"
+                />
+            </InputGroup>
+            <div className="flex items-center gap-2">
+                <Button
+                    type="submit"
+                    variant="secondary"
+                    size="sm"
+                    disabled={isSearching || !sessionReady}
+                    className="flex-1"
+                >
+                    <Icon iconNode={Search01Icon} />
+                    {isSearching
+                        ? 'Searching…'
+                        : sessionReady
+                            ? 'Search'
+                            : 'Preparing workspace…'}
+                </Button>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={onClear}
+                    disabled={!hasResolution && companyQuery.length === 0}
+                >
+                    <Icon iconNode={Cancel01Icon} />
+                    Clear
+                </Button>
+            </div>
+            {isSearching ? (
+                <div
+                    role="status"
+                    aria-label="Searching companies"
+                    aria-busy="true"
+                    className="space-y-2 rounded-lg border border-border/60 p-3"
+                >
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                </div>
+            ) : lookupError ? (
+                <p role="alert" className="px-1 text-xs text-destructive">
+                    {lookupError}
+                </p>
+            ) : hasSearched && resultCount === 0 ? (
+                <p role="status" className="px-1 text-xs text-muted-foreground">
+                    No matching companies.
+                </p>
+            ) : null}
+        </form>
+    );
+}
+
+function CompanyCandidateLabel({
+    company,
+    selecting,
+}: {
+    company: CompanyCandidate;
+    selecting: boolean;
+}) {
+    return (
+
+        <span className="flex min-w-0 items-center gap-3 pr-2">
+            <CompanyFaviconAvatar company={company} />
+            <Tooltip>
+                <TooltipTrigger render={
+                    <span className="min-w-0 flex-1">
+                        <span className="block max-w-60 md:max-w-80 truncate font-medium text-foreground">
+                            {company.legalName}
+                        </span>
+                        <span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">
+                            {company.ticker} · {company.exchange} · CIK {company.cik}
+                        </span>
+                    </span>} />
+                <TooltipContent>
+                    <p>{company.legalName}</p>
+                </TooltipContent>
+            </Tooltip>
+            {selecting ? (
+                <span className="shrink-0 text-xs text-muted-foreground">
+                    Selecting…
+                </span>
+            ) : null}
+        </span>
+    );
+}
+
 function CompanyPickerTrigger({
     label,
     ticker,
@@ -295,9 +606,10 @@ function CompanyPickerTrigger({
 }) {
     return (
         <Button
+            type="button"
             variant="ghost"
             className={cn(
-                'inline-flex h-9 items-center gap-2 text-sm transition-colors w-full',
+                'inline-flex h-9 w-full items-center gap-2 text-sm transition-colors',
                 highlighted && 'ring-2 ring-primary text-accent-foreground',
             )}
         >
@@ -306,7 +618,9 @@ function CompanyPickerTrigger({
                 size={16}
                 className="text-muted-foreground"
             />
-            <span className="font-medium">{label}</span>
+            <span className="min-w-0 flex-1 truncate text-left font-medium">
+                {label}
+            </span>
             {ticker ? (
                 <span className="font-mono text-[11px] text-muted-foreground">
                     {ticker}
@@ -317,233 +631,32 @@ function CompanyPickerTrigger({
     );
 }
 
-/**
- * Removable company badge anchored at the top-left of the prompt area.
- * Surfaces the resolved dossier context and exposes a cancel control that
- * clears the selection (and the picker query) without touching the prompt.
- */
 function CompanyContextBadge({
     company,
     onRemove,
 }: {
-    company: CompanyResult;
+        company: PreflightResult['company'];
     onRemove: () => void;
 }) {
     return (
-        <div
-            data-testid="research-company-badge"
-            className="pointer-events-none absolute inset-x-3 top-3 z-10 flex"
-        >
-            <span className="pointer-events-auto inline-flex items-center gap-1.5 bg-accent/20 px-1 text-xs text-foreground shadow-sm backdrop-blur-sm">
-                <span className="text-micro">Context company:</span>
-                <span className="font-semibold">{company.name}</span>
+        <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex">
+            <Badge variant="outline" color="sky" showDot className="rounded-none pointer-events-auto inline-flex max-w-full items-center gap-1.5 px-1 text-xs shadow-sm backdrop-blur-sm">
+                <span className="text-micro">Selected company:</span>
+                <span className="max-w-60 truncate font-medium">
+                    {company.legalName}
+                </span>
                 <span className="font-mono text-[10px] text-muted-foreground">
                     {company.ticker}
                 </span>
                 <button
                     type="button"
-                    aria-label="Remove company from context"
+                    aria-label="Remove selected company"
                     onClick={onRemove}
-                    className="ml-0.5 inline-flex size-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
+                    className="ml-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
                 >
                     <Icon iconNode={Cancel01Icon} size={12} />
                 </button>
-            </span>
+            </Badge>
         </div>
-    );
-}
-
-/**
- * Search input rendered inside the SmoothDropdown header. Local-only filter
- * until the company resolution lookup ships.
- */
-function CompanySearchField({
-    value,
-    onChange,
-}: {
-    value: string;
-    onChange: (next: string) => void;
-}) {
-    return (
-        <InputGroup className="">
-            <InputGroupAddon>
-                <Icon
-                    iconNode={Search01Icon}
-                    size={15}
-                    className="text-muted-foreground"
-                />
-            </InputGroupAddon>
-            <InputGroupInput
-                value={value}
-                onChange={(event) => onChange(event.target.value)}
-                placeholder="Search company or ticker"
-                aria-label="Search companies"
-            />
-        </InputGroup>
-    );
-}
-
-/**
- * Dedicated "Clear selection" control rendered in the dropdown header, right
- * under the search field. Stays always visible but is inert until a company
- * is resolved, so it never collides visually with the result rows below it.
- */
-function ClearSelectionButton({
-    disabled,
-    onClick,
-}: {
-    disabled: boolean;
-    onClick: () => void;
-}) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            disabled={disabled}
-            aria-label="Clear selection"
-            className={cn(
-                'inline-flex items-center justify-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors',
-                disabled
-                    ? 'cursor-not-allowed border-border/40 text-muted-foreground/40'
-                    : 'border-border/70 bg-card text-muted-foreground hover:border-destructive/40 hover:bg-destructive/5 hover:text-destructive',
-            )}
-        >
-            <Icon iconNode={Cancel01Icon} size={13} />
-            Clear selection
-        </button>
-    );
-}
-
-/**
- * Compact icon button used on the composer toolbar (search / attach / clear).
- */
-function ToolbarIconButton({
-    label,
-    icon,
-    onClick,
-    disabled = false,
-}: {
-    label: string;
-    icon: PlatformIcon;
-        onClick?: () => void;
-        disabled?: boolean;
-}) {
-    return (
-        <Tooltip>
-            <TooltipTrigger
-                render={
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        aria-label={label}
-                        onClick={onClick}
-                        disabled={disabled}
-                        className="size-8 rounded-full"
-                    >
-                        <Icon iconNode={icon} size={16} />
-                    </Button>
-                }
-            />
-            <TooltipContent side="top" align="center">
-                <span className="text-xs opacity-80">{label}</span>
-            </TooltipContent>
-        </Tooltip>
-    );
-}
-
-/**
- * "Attach references" toolbar action. Opens a Dialog hosting the FileDropzone
- * so the analyst can stage reference files alongside their research request.
- *
- * Attachments stay local to the composer surface for now — real ingestion
- * ships with the source-acquisition slice. The dialog footer surfaces the
- * attachment count and offers a confirm step that simply closes the dialog.
- */
-function AttachReferencesButton({
-    attachments,
-    onAttachmentsChange,
-}: {
-    attachments: DroppedFile[];
-    onAttachmentsChange: (files: DroppedFile[]) => void;
-}) {
-    return (
-        <Dialog>
-            <DialogTrigger
-                render={
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        aria-label="Attach references"
-                        aria-haspopup="dialog"
-                        className="size-8 rounded-full"
-                    >
-                        <Icon iconNode={FileAddIcon} size={16} />
-                    </Button>
-                }
-            />
-            <DialogContent className="sm:max-w-lg">
-                <DialogHeader>
-                    <DialogTitle>Attach references</DialogTitle>
-                    <DialogDescription>
-                        Stage reference files alongside the research request.
-                        Nothing is uploaded in this prototype — files stay local
-                        until source acquisition ships.
-                    </DialogDescription>
-                </DialogHeader>
-                <FileDropzone
-                    onFilesDropped={onAttachmentsChange}
-                    accept="image/*,.pdf,.doc,.docx"
-                    maxSize={5 * 1024 * 1024}
-                    maxFiles={5}
-                    initialFiles={attachments}
-                />
-                <DialogFooter showCloseButton>
-                    <Button type="button" variant="default">
-                        {attachments.length > 0
-                            ? `Attach ${attachments.length} file${attachments.length === 1 ? '' : 's'}`
-                            : 'Done'}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    );
-}
-
-/**
- * "More options" toolbar action. Opens a DropdownMenu reserved for future
- * composer actions (history, templates, exports…). Today it surfaces a label
- * + a placeholder item so the empty-state is intentional and discoverable
- * rather than silently hidden.
- */
-function MoreOptionsButton() {
-    return (
-        <DropdownMenu>
-            <DropdownMenuTrigger
-                render={
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        aria-label="More options"
-                        aria-haspopup="menu"
-                        className="size-8 rounded-full"
-                    >
-                        <Icon iconNode={MoreVerticalSquare01Icon} size={16} />
-                    </Button>
-                }
-            />
-            <DropdownMenuContent
-                align="end"
-                sideOffset={6}
-                className="min-w-52"
-            >
-                <DropdownMenuGroup>
-                    <DropdownMenuLabel>More options</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem disabled>
-                        More actions coming soon
-                    </DropdownMenuItem>
-                </DropdownMenuGroup>
-            </DropdownMenuContent>
-        </DropdownMenu>
     );
 }

@@ -50,6 +50,8 @@ describe('createSecCompanyResolver', () => {
                 ticker: 'INS',
                 exchange: 'NYSE',
                 investorRelationsUrl: undefined,
+                websiteUrl: undefined,
+                websiteUrlSource: undefined,
             },
             {
                 cik: '1818201',
@@ -57,6 +59,8 @@ describe('createSecCompanyResolver', () => {
                 ticker: 'CCCS',
                 exchange: 'NASDAQ',
                 investorRelationsUrl: undefined,
+                websiteUrl: undefined,
+                websiteUrlSource: undefined,
             },
         ]);
         expect(reserveRequest).toHaveBeenCalledTimes(1);
@@ -108,6 +112,8 @@ describe('createSecCompanyResolver', () => {
                 ticker: 'NOW',
                 exchange: 'NYSE',
                 investorRelationsUrl: undefined,
+                websiteUrl: undefined,
+                websiteUrlSource: undefined,
             },
         ]);
     });
@@ -227,6 +233,8 @@ describe('createSecCompanyResolver', () => {
                 ticker: 'CCCS',
                 exchange: 'NASDAQ',
                 investorRelationsUrl: undefined,
+                websiteUrl: undefined,
+                websiteUrlSource: undefined,
             },
             filingCount: 2,
             filings: [

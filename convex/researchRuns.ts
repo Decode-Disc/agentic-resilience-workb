@@ -308,6 +308,10 @@ async function projectRun(ctx: QueryCtx, run: Doc<'researchRuns'>) {
                   ticker: companySnapshot.ticker,
                   exchange: companySnapshot.exchange,
                   cik: companySnapshot.cik,
+                  investorRelationsUrl:
+                      companySnapshot.investorRelationsUrl ??
+                      company?.investorRelationsUrl,
+                  websiteUrl: companySnapshot.websiteUrl ?? company?.websiteUrl,
               }
             : null,
         lifecycleState: run.lifecycleState,

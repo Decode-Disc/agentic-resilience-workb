@@ -87,8 +87,16 @@ describe('WorkbenchShell', () => {
         );
 
         const homeLink = screen.getByRole('button', { name: /Go to Home/i });
+        const dossiersLink = screen.getByRole('button', {
+            name: /Go to dossiers/i,
+        });
         expect(homeLink).toBeTruthy();
         expect(homeLink.getAttribute('href')).toBe('/');
+        expect(dossiersLink.getAttribute('href')).toBe('/workspace/dossiers');
+        expect(
+            homeLink.compareDocumentPosition(dossiersLink) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
     });
 
     it('renders custom children when provided', () => {
@@ -126,12 +134,72 @@ describe('WorkbenchShell', () => {
             screen.queryByRole('button', { name: /Workspace menu/i }),
         ).toBeNull();
         fireEvent.click(
-            screen.getByRole('button', { name: /Go to workspace/i }),
+            screen.getByRole('button', { name: /Workspace/i }),
         );
 
         expect(
             await screen.findByRole('heading', { name: /Protected access/i }),
         ).toBeTruthy();
+    });
+
+    it('sends an analyst to their dossiers after workspace access', async () => {
+        useQuery.mockReturnValue(null);
+        claimInvitation.mockResolvedValue({
+            visitorId: 'visitor-analyst',
+            role: 'analyst',
+        });
+
+        render(
+            <WorkbenchShell>
+                <div>Page content</div>
+            </WorkbenchShell>,
+        );
+
+        fireEvent.click(
+            screen.getByRole('button', { name: /Workspace/i }),
+        );
+        fireEvent.change(await screen.findByLabelText(/Access code/i), {
+            target: { value: '4207' },
+        });
+        fireEvent.submit(
+            screen.getByRole('form', { name: /Workspace access/i }),
+        );
+
+        await waitFor(() =>
+            expect(navigate).toHaveBeenCalledWith({
+                to: '/workspace/dossiers',
+            }),
+        );
+    });
+
+    it('sends an admin to operations after workspace access', async () => {
+        useQuery.mockReturnValue(null);
+        claimInvitation.mockResolvedValue({
+            visitorId: 'visitor-admin',
+            role: 'admin',
+        });
+
+        render(
+            <WorkbenchShell>
+                <div>Page content</div>
+            </WorkbenchShell>,
+        );
+
+        fireEvent.click(
+            screen.getByRole('button', { name: /Workspace/i }),
+        );
+        fireEvent.change(await screen.findByLabelText(/Access code/i), {
+            target: { value: '4207' },
+        });
+        fireEvent.submit(
+            screen.getByRole('form', { name: /Workspace access/i }),
+        );
+
+        await waitFor(() =>
+            expect(navigate).toHaveBeenCalledWith({
+                to: '/workspace/admin',
+            }),
+        );
     });
 
     it('lets an admitted analyst sign out without exposing admin operations', async () => {
@@ -149,7 +217,7 @@ describe('WorkbenchShell', () => {
         expect(screen.queryByText('Research prototype')).toBeNull();
         expect(screen.getByText('Account')).toBeTruthy();
         expect(
-            screen.queryByRole('button', { name: /Go to workspace/i }),
+            screen.queryByRole('button', { name: /Workspace/i }),
         ).toBeNull();
         fireEvent.click(
             screen.getByRole('button', { name: /Workspace menu/i }),

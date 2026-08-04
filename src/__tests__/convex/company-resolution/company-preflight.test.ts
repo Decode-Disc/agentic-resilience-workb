@@ -108,6 +108,69 @@ describe('preflightCompanyWithResolver', () => {
         ).rejects.toThrow('valid CIK');
         expect(resolver.revalidate).not.toHaveBeenCalled();
     });
+
+    test('uses the website resolver when provided to enrich the company snapshot', async () => {
+        const resolvedCompany = { ...company, websiteUrl: undefined };
+        const resolver: SecCompanyResolver = {
+            search: vi.fn(async () => [resolvedCompany]),
+            revalidate: vi.fn(async () => resolvedCompany),
+        };
+        const persist = vi.fn(async (input) => ({
+            preflightId: 'preflight-2',
+            company: input.company,
+            expiresAt: input.expiresAt,
+        }));
+        // SEC IR url is a vendor subdomain → classifyIr rejects, Exa resolves.
+        const resolveWebsite = vi.fn(async () => ({
+            url: 'https://servicenow.com/',
+            source: 'exa' as const,
+        }));
+
+        const result = await preflightCompanyWithResolver(
+            { cik: '1818201' },
+            {
+                resolver,
+                now: () => 1_000,
+                persist,
+                resolveWebsite,
+            },
+        );
+
+        expect(resolveWebsite).toHaveBeenCalledTimes(1);
+        expect(persist).toHaveBeenCalledWith(
+            expect.objectContaining({
+                company: expect.objectContaining({
+                    websiteUrl: 'https://servicenow.com/',
+                    websiteUrlSource: 'exa',
+                }),
+            }),
+        );
+        expect(result.company.websiteUrl).toBe('https://servicenow.com/');
+        expect(result.company.websiteUrlSource).toBe('exa');
+    });
+
+    test('leaves websiteUrl unchanged when no resolver is wired (backward-compat)', async () => {
+        const resolver: SecCompanyResolver = {
+            search: vi.fn(async () => [company]),
+            revalidate: vi.fn(async () => company),
+        };
+        const persist = vi.fn(async (input) => ({
+            preflightId: 'preflight-3',
+            company: input.company,
+            expiresAt: input.expiresAt,
+        }));
+
+        const result = await preflightCompanyWithResolver(
+            { cik: '1818201' },
+            {
+                resolver,
+                now: () => 1_000,
+                persist,
+            },
+        );
+
+        expect(result.company.websiteUrl).toBeUndefined();
+    });
 });
 
 test('searches for multiple matching companies without persisting a preflight', async () => {

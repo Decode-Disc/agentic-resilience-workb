@@ -1,5 +1,7 @@
 import { getAuthUserId } from '@convex-dev/auth/server';
+import { makeFunctionReference } from 'convex/server';
 import { v } from 'convex/values';
+import Exa from 'exa-js';
 
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
@@ -11,7 +13,12 @@ import {
     internalQuery,
 } from './_generated/server';
 import { companySnapshotValidator } from './domain/validators';
-import { createSecCompanyResolver } from './integrations/sec';
+import { createExaWebsiteAdapter } from './integrations/exa';
+import {
+    classifyIrAsWebsite,
+    createSecCompanyResolver,
+} from './integrations/sec';
+import { resolveWebsiteUrl } from './integrations/websiteResolver';
 
 const secCompanyMatchValidator = companySnapshotValidator;
 
@@ -21,6 +28,8 @@ export type SecCompanyMatch = {
     ticker: string;
     exchange: string;
     investorRelationsUrl?: string;
+    websiteUrl?: string;
+    websiteUrlSource?: 'sec_ir' | 'exa' | 'probe';
 };
 
 export interface SecCompanyResolver {
@@ -64,6 +73,11 @@ export async function searchCompaniesWithResolver(
 /**
  * Revalidates an explicitly selected CIK and persists an expiring confirmation
  * token without reserving quota or starting durable work.
+ *
+ * When `resolveWebsite` is provided, the company snapshot is enriched with its
+ * marketing `websiteUrl` (and `websiteUrlSource`) before persistence. The dep
+ * is optional only for backward-compat with existing tests; the live
+ * `preflight` action always wires it.
  */
 export async function preflightCompanyWithResolver<PreflightId extends string>(
     args: { cik: string },
@@ -71,6 +85,10 @@ export async function preflightCompanyWithResolver<PreflightId extends string>(
         resolver: SecCompanyResolver;
         now: () => number;
         persist: PersistPreflight<PreflightId>;
+        resolveWebsite?: (company: SecCompanyMatch) => Promise<{
+            url: string;
+            source: 'sec_ir' | 'exa' | 'probe';
+        } | null>;
     },
 ): Promise<CompanyPreflightResult<PreflightId>> {
     const rawCik = args.cik.trim();
@@ -82,12 +100,117 @@ export async function preflightCompanyWithResolver<PreflightId extends string>(
     if (company.cik !== cik) {
         throw new Error('Selected company identity could not be verified');
     }
+
+    const enriched = dependencies.resolveWebsite
+        ? await enrichCompanyWithWebsite(company, dependencies.resolveWebsite)
+        : company;
+
     return dependencies.persist({
         query: cik,
-        company,
+        company: enriched,
         expiresAt: dependencies.now() + PREFLIGHT_TTL_MS,
         resolverVersion: RESOLVER_VERSION,
     });
+}
+
+/**
+ * Augments a SEC-resolved company with its marketing website URL using the
+ * injected resolver. Errors from the resolver are swallowed: a transient
+ * provider failure must not break preflight (Product Invariant: honest
+ * failure beats confident wrongness). The auditor can spot persistent
+ * failures via the `providerCalls` records kept by the live wiring.
+ */
+async function enrichCompanyWithWebsite(
+    company: SecCompanyMatch,
+    resolve: (
+        company: SecCompanyMatch,
+    ) => Promise<{ url: string; source: 'sec_ir' | 'exa' | 'probe' } | null>,
+): Promise<SecCompanyMatch> {
+    try {
+        const resolution = await resolve(company);
+        if (!resolution) {
+            return company;
+        }
+        return {
+            ...company,
+            websiteUrl: resolution.url,
+            websiteUrlSource: resolution.source,
+        };
+    } catch {
+        return company;
+    }
+}
+
+type WebsiteBackfillResult = Pick<
+    SecCompanyMatch,
+    'websiteUrl' | 'websiteUrlSource'
+>;
+
+/**
+ * Resolves website metadata for a legacy run whose company snapshot predates
+ * `websiteUrl`. Existing metadata wins without another provider call;
+ * otherwise a successful resolution is persisted through the injected
+ * boundary. This enriches only company display metadata, never analyst
+ * decisions, evidence, or workflow state.
+ */
+export async function backfillRunCompanyWebsiteWithResolver<
+    RunId extends string,
+    CompanyId extends string,
+>(
+    args: {
+        runId: RunId;
+        companyId: CompanyId;
+        company: SecCompanyMatch;
+        companySnapshot?: SecCompanyMatch;
+    },
+    dependencies: {
+        resolveWebsite: (company: SecCompanyMatch) => Promise<{
+            url: string;
+            source: 'sec_ir' | 'exa' | 'probe';
+        } | null>;
+        persist: (input: {
+            runId: RunId;
+            companyId: CompanyId;
+            websiteUrl: string;
+            websiteUrlSource?: 'sec_ir' | 'exa' | 'probe';
+        }) => Promise<void>;
+    },
+): Promise<WebsiteBackfillResult> {
+    if (args.companySnapshot?.websiteUrl) {
+        return {
+            websiteUrl: args.companySnapshot.websiteUrl,
+            websiteUrlSource: args.companySnapshot.websiteUrlSource,
+        };
+    }
+    if (args.company.websiteUrl) {
+        await dependencies.persist({
+            runId: args.runId,
+            companyId: args.companyId,
+            websiteUrl: args.company.websiteUrl,
+            ...(args.company.websiteUrlSource
+                ? { websiteUrlSource: args.company.websiteUrlSource }
+                : {}),
+        });
+        return {
+            websiteUrl: args.company.websiteUrl,
+            websiteUrlSource: args.company.websiteUrlSource,
+        };
+    }
+
+    const resolution = await dependencies.resolveWebsite(args.company);
+    if (!resolution) {
+        return {};
+    }
+    await dependencies.persist({
+        runId: args.runId,
+        companyId: args.companyId,
+        websiteUrl: resolution.url,
+        websiteUrlSource: resolution.source,
+    });
+    return {
+        websiteUrl: resolution.url,
+        websiteUrlSource: resolution.source,
+    };
 }
 
 export const persistPreflight = internalMutation({
@@ -196,7 +319,7 @@ export const search = action({
         if (!authUserId) {
             throw new Error('Not authenticated');
         }
-        return [
+        const results = [
             ...(await searchCompaniesWithResolver(args, {
                 resolver: createPublicCompanyResolver(
                     ctx,
@@ -204,6 +327,35 @@ export const search = action({
                 ),
             })),
         ];
+        // Best-effort enrichment: resolve marketing website URLs for the top
+        // candidates so the search dropdown can render favicons. Wrapped in a
+        // try-catch so a transient Exa failure never breaks the core search
+        // flow — candidates without a websiteUrl fall back to the building
+        // icon in the UI.
+        try {
+            const ENRICH_LIMIT = 3;
+            for (
+                let i = 0;
+                i < Math.min(ENRICH_LIMIT, results.length);
+                i += 1
+            ) {
+                const candidate = results[i];
+                if (candidate && !candidate.websiteUrl) {
+                    const resolution =
+                        await resolveWebsiteForCompany(candidate);
+                    if (resolution) {
+                        results[i] = {
+                            ...candidate,
+                            websiteUrl: resolution.url,
+                            websiteUrlSource: resolution.source,
+                        };
+                    }
+                }
+            }
+        } catch {
+            // Enrichment is best-effort; core search results are still valid.
+        }
+        return results;
     },
 });
 
@@ -231,9 +383,200 @@ export const preflight = action({
                     internal.companyResolution.persistPreflight,
                     input,
                 ),
+            resolveWebsite: (company) => resolveWebsiteForCompany(company),
         });
     },
 });
+
+const websiteBackfillResultValidator = v.object({
+    websiteUrl: v.optional(v.string()),
+    websiteUrlSource: v.optional(
+        v.union(v.literal('sec_ir'), v.literal('exa'), v.literal('probe')),
+    ),
+});
+
+type RunCompanyForWebsiteBackfill = {
+    runId: Id<'researchRuns'>;
+    companyId: Id<'companies'>;
+    company: SecCompanyMatch;
+    companySnapshot?: SecCompanyMatch;
+};
+
+const getRunCompanyForWebsiteBackfillRef = makeFunctionReference<
+    'query',
+    { runId: Id<'researchRuns'>; authUserId: Id<'users'> },
+    RunCompanyForWebsiteBackfill
+>('companyResolution:getRunCompanyForWebsiteBackfill');
+
+const persistRunCompanyWebsiteRef = makeFunctionReference<
+    'mutation',
+    {
+        runId: Id<'researchRuns'>;
+        companyId: Id<'companies'>;
+        websiteUrl: string;
+        websiteUrlSource?: 'sec_ir' | 'exa' | 'probe';
+    },
+    null
+>('companyResolution:persistRunCompanyWebsite');
+
+/**
+ * Lazily enriches an admitted visitor's legacy run with a marketing website.
+ * The UI calls this only when `listMine` projects a company without one. The
+ * persistence mutation is idempotent, so reactive renders cannot duplicate
+ * updates once a URL exists.
+ */
+export const ensureRunCompanyWebsite = action({
+    args: { runId: v.id('researchRuns') },
+    returns: websiteBackfillResultValidator,
+    handler: async (ctx, args): Promise<WebsiteBackfillResult> => {
+        const authUserId = await getAuthUserId(ctx);
+        if (!authUserId) {
+            throw new Error('Not authenticated');
+        }
+        const runCompany: RunCompanyForWebsiteBackfill = await ctx.runQuery(
+            getRunCompanyForWebsiteBackfillRef,
+            { runId: args.runId, authUserId },
+        );
+        return backfillRunCompanyWebsiteWithResolver(runCompany, {
+            resolveWebsite: resolveWebsiteForCompany,
+            persist: async (input): Promise<void> => {
+                await ctx.runMutation(persistRunCompanyWebsiteRef, input);
+            },
+        });
+    },
+});
+
+export const getRunCompanyForWebsiteBackfill = internalQuery({
+    args: {
+        runId: v.id('researchRuns'),
+        authUserId: v.id('users'),
+    },
+    returns: v.object({
+        runId: v.id('researchRuns'),
+        companyId: v.id('companies'),
+        company: secCompanyMatchValidator,
+        companySnapshot: v.optional(secCompanyMatchValidator),
+    }),
+    handler: async (ctx, args) => {
+        const visitor = await ctx.db
+            .query('visitors')
+            .withIndex('by_auth_user_id', (query) =>
+                query.eq('authUserId', args.authUserId),
+            )
+            .unique();
+        const run = await ctx.db.get(args.runId);
+        if (
+            visitor?.status !== 'active' ||
+            run?.ownerVisitorId !== visitor._id
+        ) {
+            throw new Error('Unauthorized');
+        }
+        if (!run.companyId) {
+            throw new Error('Research run has no confirmed company');
+        }
+        const company = await ctx.db.get(run.companyId);
+        if (!company) {
+            throw new Error('Confirmed company was not found');
+        }
+        return {
+            runId: run._id,
+            companyId: company._id,
+            company: {
+                cik: company.cik,
+                legalName: company.legalName,
+                ticker: company.ticker,
+                exchange: company.exchange,
+                investorRelationsUrl: company.investorRelationsUrl,
+                websiteUrl: company.websiteUrl,
+                websiteUrlSource: company.websiteUrlSource,
+            },
+            companySnapshot: run.companySnapshot,
+        };
+    },
+});
+
+export const persistRunCompanyWebsite = internalMutation({
+    args: {
+        runId: v.id('researchRuns'),
+        companyId: v.id('companies'),
+        websiteUrl: v.string(),
+        websiteUrlSource: v.optional(
+            v.union(v.literal('sec_ir'), v.literal('exa'), v.literal('probe')),
+        ),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const run = await ctx.db.get(args.runId);
+        const company = await ctx.db.get(args.companyId);
+        if (!run || run.companyId !== args.companyId || !company) {
+            throw new Error('Research run company metadata is unavailable');
+        }
+
+        const snapshot = run.companySnapshot ?? {
+            cik: company.cik,
+            legalName: company.legalName,
+            ticker: company.ticker,
+            exchange: company.exchange,
+            investorRelationsUrl: company.investorRelationsUrl,
+            websiteUrl: company.websiteUrl,
+            websiteUrlSource: company.websiteUrlSource,
+        };
+        if (snapshot.websiteUrl) {
+            return null;
+        }
+
+        const now = Date.now();
+        await ctx.db.patch(company._id, {
+            websiteUrl: args.websiteUrl,
+            ...(args.websiteUrlSource
+                ? { websiteUrlSource: args.websiteUrlSource }
+                : {}),
+            canonicalizedAt: now,
+        });
+        await ctx.db.patch(run._id, {
+            companySnapshot: {
+                ...snapshot,
+                websiteUrl: args.websiteUrl,
+                ...(args.websiteUrlSource
+                    ? { websiteUrlSource: args.websiteUrlSource }
+                    : {}),
+            },
+            updatedAt: now,
+        });
+        return null;
+    },
+});
+
+/**
+ * Builds the website-resolution closure for a single company using Exa's
+ * semantic company search as the primary source. SEC IR classification and
+ * HEAD-probe are layered by `resolveWebsiteUrl`. Exa is optional: when no key
+ * is configured the resolver returns null gracefully, and the company
+ * snapshot keeps its (likely empty) `websiteUrl` from `parseSubmission`.
+ */
+async function resolveWebsiteForCompany(
+    company: SecCompanyMatch,
+): Promise<{ url: string; source: 'sec_ir' | 'exa' | 'probe' } | null> {
+    const exaKey = process.env.EXA_API_KEY?.trim();
+    if (!exaKey) {
+        return null;
+    }
+    const client = new Exa(exaKey);
+    const adapter = createExaWebsiteAdapter({
+        search: (query, options) => client.search(query, options),
+    });
+    return resolveWebsiteUrl(
+        {
+            legalName: company.legalName,
+            ticker: company.ticker,
+            investorRelationsUrl: company.investorRelationsUrl,
+        },
+        {
+            exaSearch: (query) => adapter.search(query),
+            classifyIr: classifyIrAsWebsite,
+        },
+    );
+}
 
 export const getRunCompany = internalQuery({
     args: { runId: v.id('researchRuns') },
@@ -263,6 +606,7 @@ export const getRunCompany = internalQuery({
                 ticker: snapshot.ticker,
                 exchange: snapshot.exchange,
                 investorRelationsUrl: snapshot.investorRelationsUrl,
+                websiteUrl: snapshot.websiteUrl,
             },
         };
     },

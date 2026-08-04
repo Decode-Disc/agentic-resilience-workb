@@ -24,6 +24,7 @@ import type * as exaDiscoveryActions from "../exaDiscoveryActions.js";
 import type * as http from "../http.js";
 import type * as integrations_exa from "../integrations/exa.js";
 import type * as integrations_sec from "../integrations/sec.js";
+import type * as integrations_websiteResolver from "../integrations/websiteResolver.js";
 import type * as invitations from "../invitations.js";
 import type * as providerCalls from "../providerCalls.js";
 import type * as researchLaunch from "../researchLaunch.js";
@@ -61,6 +62,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "integrations/exa": typeof integrations_exa;
   "integrations/sec": typeof integrations_sec;
+  "integrations/websiteResolver": typeof integrations_websiteResolver;
   invitations: typeof invitations;
   providerCalls: typeof providerCalls;
   researchLaunch: typeof researchLaunch;

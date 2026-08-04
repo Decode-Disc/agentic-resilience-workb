@@ -1,14 +1,22 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
-const { navigate, useQuery, useResponsive } = vi.hoisted(() => ({
+const {
+    ensureRunCompanyWebsite,
+    navigate,
+    useAction,
+    useQuery,
+    useResponsive,
+} = vi.hoisted(() => ({
+    ensureRunCompanyWebsite: vi.fn(async () => ({})),
     navigate: vi.fn(),
+    useAction: vi.fn(),
     useQuery: vi.fn(),
     useResponsive: vi.fn(),
 }));
 
-vi.mock(import('convex/react'), () => ({ useQuery }));
+vi.mock(import('convex/react'), () => ({ useAction, useQuery }));
 vi.mock(import('@/hooks/use-responsive'), () => ({ useResponsive }));
 vi.mock('@tanstack/react-router', () => ({
     Link: ({
@@ -35,9 +43,12 @@ vi.mock('@tanstack/react-router', () => ({
 import { AnalyzedCompanyList } from '@/components/workbench-shell/analyzed-company-list';
 
 beforeEach(() => {
+    ensureRunCompanyWebsite.mockReset();
     navigate.mockReset();
+    useAction.mockReset();
     useQuery.mockReset();
     useResponsive.mockReset();
+    useAction.mockReturnValue(ensureRunCompanyWebsite);
     useResponsive.mockReturnValue({ isMobile: false, isDesktop: true });
 });
 
@@ -93,10 +104,10 @@ test('keeps horizontal company navigation on desktop', () => {
     expect(
         screen.getByRole('link', { name: /ServiceNow.*NOW/i }),
     ).toHaveProperty('href', 'http://localhost:3000/workspace/run-2');
-    expect(screen.getAllByRole('separator')).toHaveLength(2);
+    expect(screen.getAllByRole('separator')).toHaveLength(1);
     expect(
-        screen.getByRole('link', { name: /Start a company dossier/i }),
-    ).toHaveProperty('href', 'http://localhost:3000/workspace/start');
+        screen.getByRole('button', { name: /Go to dossiers/i }),
+    ).toHaveProperty('href', 'http://localhost:3000/workspace/dossiers');
 });
 
 test('keeps the compact company menu on mobile', async () => {
@@ -168,6 +179,47 @@ test('skips the owner query when no admitted visitor is available', () => {
 
     expect(useQuery.mock.calls.at(-1)?.[1]).toBe('skip');
     expect(container.innerHTML).toBe('');
+});
+
+test('backfills one legacy company website without re-resolving known URLs', async () => {
+    useQuery.mockReturnValue([
+        {
+            runId: 'legacy-run',
+            company: {
+                legalName: 'ServiceNow, Inc.',
+                ticker: 'NOW',
+                exchange: 'NYSE',
+                cik: '1373715',
+            },
+            lifecycleState: 'awaiting_source_review',
+            executionStatus: 'paused',
+            updatedAt: 2,
+            providerFailures: [],
+        },
+        {
+            runId: 'resolved-run',
+            company: {
+                legalName: 'Microsoft Corporation',
+                ticker: 'MSFT',
+                exchange: 'NASDAQ',
+                cik: '789019',
+                websiteUrl: 'https://microsoft.com/',
+            },
+            lifecycleState: 'awaiting_source_review',
+            executionStatus: 'paused',
+            updatedAt: 1,
+            providerFailures: [],
+        },
+    ]);
+
+    render(<AnalyzedCompanyList />);
+
+    await waitFor(() => {
+        expect(ensureRunCompanyWebsite).toHaveBeenCalledWith({
+            runId: 'legacy-run',
+        });
+    });
+    expect(ensureRunCompanyWebsite).toHaveBeenCalledTimes(1);
 });
 
 test('keeps a compact error state when company runs fail', () => {

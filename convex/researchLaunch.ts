@@ -188,6 +188,8 @@ export const confirmAndStartReserved = internalMutation({
             ticker: company.ticker,
             exchange: company.exchange,
             investorRelationsUrl: company.investorRelationsUrl,
+            websiteUrl: company.websiteUrl,
+            websiteUrlSource: company.websiteUrlSource,
         };
 
         const runId = await ctx.db.insert('researchRuns', {

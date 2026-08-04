@@ -54,11 +54,19 @@ test('projects only the current visitor runs with canonical company data', async
             legalName: 'CCC Intelligent Solutions Holdings Inc.',
             ticker: 'CCCS',
             exchange: 'NASDAQ',
+            websiteUrl: 'https://cccis.com/',
+            websiteUrlSource: 'exa',
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert('researchRuns', {
             ownerVisitorId: visitorId,
             companyId,
+            companySnapshot: {
+                cik: '1818201',
+                legalName: 'CCC Intelligent Solutions Holdings Inc.',
+                ticker: 'CCCS',
+                exchange: 'NASDAQ',
+            },
             reservationKey: 'mine',
             reservationStatus: 'consumed',
             executionGeneration: 1,
@@ -94,6 +102,7 @@ test('projects only the current visitor runs with canonical company data', async
         company: {
             legalName: 'CCC Intelligent Solutions Holdings Inc.',
             ticker: 'CCCS',
+            websiteUrl: 'https://cccis.com/',
         },
         lifecycleState: 'awaiting_source_review',
         executionStatus: 'paused',

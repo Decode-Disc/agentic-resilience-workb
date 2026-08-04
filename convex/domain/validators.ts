@@ -23,6 +23,26 @@ export const companySnapshotValidator = v.object({
     ticker: v.string(),
     exchange: v.string(),
     investorRelationsUrl: v.optional(v.string()),
+    /**
+     * Marketing/customer website URL of the company (e.g. servicenow.com),
+     * distinct from the investor-relations URL. Resolved at preflight by
+     * classifyIrAsWebsite today (SEC IR accepted only when not an IR-vendor
+     * subdomain). The Exa + HEAD-probe cascade is the next slice and will
+     * populate this field for the long tail of companies whose SEC IR URL is
+     * a vendor subdomain.
+     */
+    websiteUrl: v.optional(v.string()),
+    /**
+     * Provenance of the websiteUrl resolution. 'sec_ir' today — Exa and
+     * HEAD-probe sources will be added with the cascade slice.
+     */
+    websiteUrlSource: v.optional(
+        v.union(
+            v.literal('sec_ir'),
+            v.literal('exa'),
+            v.literal('probe'),
+        ),
+    ),
 });
 
 export const researchRunLifecycleValidator = v.union(

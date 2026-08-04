@@ -175,6 +175,49 @@ function parseCompanyIndex(value: unknown): ReadonlyArray<CompanyIndexEntry> {
     });
 }
 
+const IR_SUBDOMAIN_PREFIXES = ['investor.', 'investors.', 'ir.'];
+const IR_VENDOR_HOSTS = new Set([
+    'q4ir.com',
+    'q4inc.com',
+    'nasdaqomx.com',
+]);
+
+/**
+ * Decides whether a SEC `investorWebsite` URL can double as the company's
+ * marketing/customer website. Returns the URL only when it is HTTPS, hosted on
+ * a non-IR subdomain, and not on a known IR-vendor host (q4ir, q4inc,
+ * nasdaqomx). Otherwise returns `undefined` so the website cascade can move on
+ * to Exa / HEAD-probe / fallback.
+ *
+ * Note: this is a conservative filter. Some companies host their IR page on a
+ * /investors path of the root domain (e.g. acme.com/investors); those are
+ * accepted as the marketing website, since the host is the company root.
+ */
+export function classifyIrAsWebsite(investorRelationsUrl: string | undefined): string | undefined {
+    if (!investorRelationsUrl) {
+        return undefined;
+    }
+    let url: URL;
+    try {
+        url = new URL(investorRelationsUrl);
+    } catch {
+        return undefined;
+    }
+    if (url.protocol !== 'https:') {
+        return undefined;
+    }
+    const hostname = url.hostname.toLowerCase();
+    if (IR_SUBDOMAIN_PREFIXES.some((prefix) => hostname.startsWith(prefix))) {
+        return undefined;
+    }
+    const bosslessHost = hostname.replace(/^www\./, '');
+    const baseDomain = bosslessHost.split('.').slice(-2).join('.');
+    if (IR_VENDOR_HOSTS.has(baseDomain) || IR_VENDOR_HOSTS.has(bosslessHost)) {
+        return undefined;
+    }
+    return investorRelationsUrl;
+}
+
 function parseSubmission(value: unknown): SecCompanyMatch {
     if (
         typeof value !== 'object' ||
@@ -198,12 +241,19 @@ function parseSubmission(value: unknown): SecCompanyMatch {
         value.investorWebsite.length > 0
             ? value.investorWebsite
             : undefined;
+    // Today: SEC IR url doubles as the marketing website only when it isn't an
+    // IR-vendor subdomain (investor./ir./q4ir./…). The Exa + HEAD-probe
+    // cascade is the next slice and will populate websiteUrl for the long
+    // tail of companies whose SEC IR url is a vendor subdomain.
+    const websiteUrl = classifyIrAsWebsite(investorRelationsUrl);
     return {
         cik: normalizeCik(value.cik),
         legalName: value.name,
         ticker: value.tickers[0].toUpperCase(),
         exchange: normalizeExchange(value.exchanges[0]),
         investorRelationsUrl,
+        websiteUrl,
+        websiteUrlSource: websiteUrl ? 'sec_ir' : undefined,
     };
 }
 
@@ -385,6 +435,8 @@ export function createSecCompanyResolver(
                     .map(({ company }) => ({
                         ...company,
                         investorRelationsUrl: undefined,
+                        websiteUrl: undefined,
+                        websiteUrlSource: undefined,
                     }));
             }
 
@@ -410,6 +462,8 @@ export function createSecCompanyResolver(
             return fuzzyMatches.map((company) => ({
                 ...company,
                 investorRelationsUrl: undefined,
+                websiteUrl: undefined,
+                websiteUrlSource: undefined,
             }));
         },
         revalidate,

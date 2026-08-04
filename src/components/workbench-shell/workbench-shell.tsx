@@ -2,6 +2,7 @@ import { api } from '@convex/_generated/api';
 import { useAuthActions } from '@convex-dev/auth/react';
 import {
     ChevronDownIcon,
+    Folder02Icon,
     Home01Icon,
     Login02Icon,
     Logout01Icon,
@@ -19,8 +20,10 @@ import {
     NestedMenu,
     type NestedMenuSectionProps,
 } from '@/components/ui/nested-menu';
+import { Separator } from '@/components/ui/separator';
 import { AnalyzedCompanyList } from '@/components/workbench-shell/analyzed-company-list';
 import { InvitationAccessDrawer } from '@/components/workspace/invitation-access-drawer';
+import { getWorkspaceDestination } from '@/lib/workspace/access-destination';
 
 export interface WorkbenchShellProps {
     children: ReactNode;
@@ -110,9 +113,21 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                             </span>
                         </Button>
 
-                        <div
-                            className="h-4 w-px bg-border/60 shrink-0"
-                            aria-hidden="true"
+                        <Button
+                            render={<Link to="/workspace/start" />}
+                            nativeButton={false}
+                            variant="default"
+                            size="sm"
+                            aria-label="Start a company dossier"
+                            title="Start a company dossier"
+                            className="rounded-sm"
+                        >
+                            <span className="start-double-slash">{'//'}</span>
+                            <span className="start-label">start</span>
+                        </Button>
+
+                        <Separator orientation="vertical"
+                            className="shrink-0"
                         />
 
                         {/* Horizontal Analyzed Companies List */}
@@ -132,7 +147,8 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                                 trigger={
                                     <Button
                                         type="button"
-                                        variant="outline"
+                                        variant="secondary"
+                                        className="border border-primary"
                                         size="sm"
                                         aria-label="Workspace menu"
                                     >
@@ -151,10 +167,12 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                             <Button
                                 type="button"
                                 size="sm"
+                                    variant="secondary"
+                                    className="border border-primary"
                                 onClick={() => setInvitationOpen(true)}
                             >
                                 <Icon iconNode={Login02Icon} />
-                                Go to workspace
+                                    Workspace
                             </Button>
                         ) : null}
                     </div>
@@ -169,7 +187,11 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                 <InvitationAccessDrawer
                     open
                     onOpenChange={setInvitationOpen}
-                    onAdmitted={() => undefined}
+                    onAdmitted={({ role }) => {
+                        void navigate({
+                            to: getWorkspaceDestination(role),
+                        });
+                    }}
                 />
             ) : null}
         </div>
