@@ -265,14 +265,14 @@ describe('ResearchComposer', () => {
         );
         expect(
             await screen.findByRole('heading', {
-                name: /Add public references/i,
+                name: /Add public sources/i,
             }),
         ).toBeTruthy();
 
         fireEvent.change(screen.getByLabelText(/Public source link/i), {
             target: { value: 'http://example.com/private-report' },
         });
-        fireEvent.click(screen.getByRole('button', { name: /Save/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Add source/i }));
         expect((await screen.findByRole('alert')).textContent).toMatch(
             /beginning with https:\/\//i,
         );
@@ -280,7 +280,7 @@ describe('ResearchComposer', () => {
         fireEvent.change(screen.getByLabelText(/Public source link/i), {
             target: { value: 'https://example.com/public-report' },
         });
-        fireEvent.click(screen.getByRole('button', { name: /Save/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Add source/i }));
         expect(
             screen.getByText('https://example.com/public-report'),
         ).toBeTruthy();
@@ -288,7 +288,7 @@ describe('ResearchComposer', () => {
         fireEvent.change(screen.getByLabelText(/Public source link/i), {
             target: { value: 'https://example.com/investor-update' },
         });
-        fireEvent.click(screen.getByRole('button', { name: /Save/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Add source/i }));
         expect(
             screen.getByText('https://example.com/investor-update'),
         ).toBeTruthy();

@@ -26,11 +26,15 @@ import {
 } from '@/components/ui/input-group';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SmoothDropdwon } from '@/components/ui/smooth-dropdown';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { AddSourceDialog } from '@/components/workspace/add-source-dialog';
 import { CompanyResolutionCard } from '@/components/workspace/company-resolution-card';
 import {
     MoreOptionsButton,
-    PublicReferencesDialog,
     ToolbarIconButton,
 } from '@/components/workspace/composer-toolbar-actions';
 import {
@@ -224,10 +228,7 @@ export function ResearchComposer({
     return (
         <>
             <section
-                className={cn(
-                    'w-full overflow-visible',
-                    className,
-                )}
+                className={cn('w-full overflow-visible', className)}
                 aria-label="Research launch"
             >
                 <AnimatePresence initial={false} mode="wait">
@@ -244,14 +245,14 @@ export function ResearchComposer({
                             exit={
                                 reduceMotion
                                     ? {
-                                        opacity: 1,
-                                        transition: { duration: 0 },
-                                    }
+                                          opacity: 1,
+                                          transition: { duration: 0 },
+                                      }
                                     : {
-                                        opacity: 0,
-                                        scale: 0.985,
-                                        transition: viewExitTransition,
-                                    }
+                                          opacity: 0,
+                                          scale: 0.985,
+                                          transition: viewExitTransition,
+                                      }
                             }
                             transition={
                                 reduceMotion
@@ -267,7 +268,10 @@ export function ResearchComposer({
                                         onRemove={clearResolution}
                                     />
                                 ) : null}
-                                <label htmlFor="research-angle" className="sr-only">
+                                <label
+                                    htmlFor="research-angle"
+                                    className="sr-only"
+                                >
                                     Research request — optional research angle
                                 </label>
                                 <textarea
@@ -294,7 +298,9 @@ export function ResearchComposer({
                                                 label: `${candidate.legalName} ${candidate.ticker} ${candidate.exchange} CIK ${candidate.cik}`,
                                                 closeOnSelect: false,
                                                 onSelect: () =>
-                                                    void selectCompany(candidate),
+                                                    void selectCompany(
+                                                        candidate,
+                                                    ),
                                                 renderLabel: () => (
                                                     <CompanyCandidateLabel
                                                         company={candidate}
@@ -312,17 +318,23 @@ export function ResearchComposer({
                                         closedWidth={215}
                                         closedHeight={36}
                                         itemsAriaLabel="Company search results"
-                                        className={pickerOpen ? 'z-10' : undefined}
+                                        className={
+                                            pickerOpen ? 'z-10' : undefined
+                                        }
                                         trigger={
                                             <CompanyPickerTrigger
                                                 label={
                                                     resolution
                                                         ? resolution.company
-                                                            .legalName
+                                                              .legalName
                                                         : 'Company to investigate'
                                                 }
-                                                ticker={resolution?.company.ticker}
-                                                highlighted={resolution !== null}
+                                                ticker={
+                                                    resolution?.company.ticker
+                                                }
+                                                highlighted={
+                                                    resolution !== null
+                                                }
                                             />
                                         }
                                         header={
@@ -332,12 +344,16 @@ export function ResearchComposer({
                                                 lookupError={
                                                     sessionError ?? lookupError
                                                 }
-                                                hasResolution={resolution !== null}
+                                                hasResolution={
+                                                    resolution !== null
+                                                }
                                                 hasSearched={hasSearched}
                                                 resultCount={
                                                     companyCandidates.length
                                                 }
-                                                onCompanyQueryChange={(next) => {
+                                                onCompanyQueryChange={(
+                                                    next,
+                                                ) => {
                                                     setCompanyQuery(next);
                                                     setHasSearched(false);
                                                     setCompanyCandidates([]);
@@ -349,7 +365,7 @@ export function ResearchComposer({
                                                 }
                                                 sessionReady={isSessionReady}
                                             />
-                                    }
+                                        }
                                     />
                                     <ToolbarIconButton
                                         label="Attach references"
@@ -372,7 +388,10 @@ export function ResearchComposer({
                                     }
                                     className="size-10 rounded-full"
                                 >
-                                    <Icon iconNode={ArrowRight01Icon} size={18} />
+                                    <Icon
+                                        iconNode={ArrowRight01Icon}
+                                        size={18}
+                                    />
                                 </Button>
                             </div>
                         </motion.div>
@@ -389,14 +408,14 @@ export function ResearchComposer({
                             exit={
                                 reduceMotion
                                     ? {
-                                        opacity: 1,
-                                        transition: { duration: 0 },
-                                    }
+                                          opacity: 1,
+                                          transition: { duration: 0 },
+                                      }
                                     : {
-                                        opacity: 0,
-                                        scale: 0.985,
-                                        transition: viewExitTransition,
-                                    }
+                                          opacity: 0,
+                                          scale: 0.985,
+                                          transition: viewExitTransition,
+                                      }
                             }
                             transition={
                                 reduceMotion
@@ -405,7 +424,9 @@ export function ResearchComposer({
                             }
                             style={{ transformOrigin: '50% 45%' }}
                         >
-                            <CompanyResolutionCard company={resolution.company} />
+                            <CompanyResolutionCard
+                                company={resolution.company}
+                            />
                             <CoveragePresetPicker
                                 value={coveragePreset}
                                 onChange={setCoveragePreset}
@@ -438,7 +459,10 @@ export function ResearchComposer({
                                     {isLaunching
                                         ? 'Starting…'
                                         : 'Confirm and start'}
-                                    <Icon iconNode={ArrowRight01Icon} size={18} />
+                                    <Icon
+                                        iconNode={ArrowRight01Icon}
+                                        size={18}
+                                    />
                                 </Button>
                             </div>
                         </motion.div>
@@ -451,7 +475,7 @@ export function ResearchComposer({
                 onOpenChange={setInvitationOpen}
                 onAdmitted={() => startResearch()}
             />
-            <PublicReferencesDialog
+            <AddSourceDialog
                 open={referencesOpen}
                 onOpenChange={setReferencesOpen}
                 urls={manualSourceUrls}
@@ -524,8 +548,8 @@ function CompanyLookup({
                     {isSearching
                         ? 'Searching…'
                         : sessionReady
-                            ? 'Search'
-                            : 'Preparing workspace…'}
+                          ? 'Search'
+                          : 'Preparing workspace…'}
                 </Button>
                 <Button
                     type="button"
@@ -569,19 +593,22 @@ function CompanyCandidateLabel({
     selecting: boolean;
 }) {
     return (
-
         <span className="flex min-w-0 items-center gap-3 pr-2">
             <CompanyFaviconAvatar company={company} />
             <Tooltip>
-                <TooltipTrigger render={
-                    <span className="min-w-0 flex-1">
-                        <span className="block max-w-60 md:max-w-80 truncate font-medium text-foreground">
-                            {company.legalName}
+                <TooltipTrigger
+                    render={
+                        <span className="min-w-0 flex-1">
+                            <span className="block max-w-60 md:max-w-80 truncate font-medium text-foreground">
+                                {company.legalName}
+                            </span>
+                            <span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">
+                                {company.ticker} · {company.exchange} · CIK{' '}
+                                {company.cik}
+                            </span>
                         </span>
-                        <span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">
-                            {company.ticker} · {company.exchange} · CIK {company.cik}
-                        </span>
-                    </span>} />
+                    }
+                />
                 <TooltipContent>
                     <p>{company.legalName}</p>
                 </TooltipContent>
@@ -635,12 +662,17 @@ function CompanyContextBadge({
     company,
     onRemove,
 }: {
-        company: PreflightResult['company'];
+    company: PreflightResult['company'];
     onRemove: () => void;
 }) {
     return (
         <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex">
-            <Badge variant="outline" color="sky" showDot className="rounded-none pointer-events-auto inline-flex max-w-full items-center gap-1.5 px-1 text-xs shadow-sm backdrop-blur-sm">
+            <Badge
+                variant="outline"
+                color="sky"
+                showDot
+                className="rounded-none pointer-events-auto inline-flex max-w-full items-center gap-1.5 px-1 text-xs shadow-sm backdrop-blur-sm"
+            >
                 <span className="text-micro">Selected company:</span>
                 <span className="max-w-60 truncate font-medium">
                     {company.legalName}

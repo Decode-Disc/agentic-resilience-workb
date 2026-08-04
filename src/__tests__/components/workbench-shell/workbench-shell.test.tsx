@@ -88,14 +88,14 @@ describe('WorkbenchShell', () => {
 
         const homeLink = screen.getByRole('button', { name: /Go to Home/i });
         const dossiersLink = screen.getByRole('button', {
-            name: /Go to dossiers/i,
+            name: /Start a company dossier/i,
         });
         expect(homeLink).toBeTruthy();
         expect(homeLink.getAttribute('href')).toBe('/');
-        expect(dossiersLink.getAttribute('href')).toBe('/workspace/dossiers');
+        expect(dossiersLink.getAttribute('href')).toBe('/workspace/start');
         expect(
             homeLink.compareDocumentPosition(dossiersLink) &
-            Node.DOCUMENT_POSITION_FOLLOWING,
+                Node.DOCUMENT_POSITION_FOLLOWING,
         ).toBeTruthy();
     });
 
@@ -133,9 +133,7 @@ describe('WorkbenchShell', () => {
         expect(
             screen.queryByRole('button', { name: /Workspace menu/i }),
         ).toBeNull();
-        fireEvent.click(
-            screen.getByRole('button', { name: /Workspace/i }),
-        );
+        fireEvent.click(screen.getByRole('button', { name: /Workspace/i }));
 
         expect(
             await screen.findByRole('heading', { name: /Protected access/i }),
@@ -155,9 +153,7 @@ describe('WorkbenchShell', () => {
             </WorkbenchShell>,
         );
 
-        fireEvent.click(
-            screen.getByRole('button', { name: /Workspace/i }),
-        );
+        fireEvent.click(screen.getByRole('button', { name: /Workspace/i }));
         fireEvent.change(await screen.findByLabelText(/Access code/i), {
             target: { value: '4207' },
         });
@@ -185,9 +181,7 @@ describe('WorkbenchShell', () => {
             </WorkbenchShell>,
         );
 
-        fireEvent.click(
-            screen.getByRole('button', { name: /Workspace/i }),
-        );
+        fireEvent.click(screen.getByRole('button', { name: /Workspace/i }));
         fireEvent.change(await screen.findByLabelText(/Access code/i), {
             target: { value: '4207' },
         });
@@ -217,14 +211,14 @@ describe('WorkbenchShell', () => {
         expect(screen.queryByText('Research prototype')).toBeNull();
         expect(screen.getByText('Account')).toBeTruthy();
         expect(
-            screen.queryByRole('button', { name: /Workspace/i }),
+            screen.queryByRole('button', { name: /^Workspace access$/i }),
         ).toBeNull();
         fireEvent.click(
             screen.getByRole('button', { name: /Workspace menu/i }),
         );
-        expect(screen.queryByRole('button', { name: 'Operations' })).toBeNull();
+        expect(screen.queryByText('Operations')).toBeNull();
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Logout' }));
+        fireEvent.click(await screen.findByText('Logout'));
 
         await waitFor(() => expect(signOut).toHaveBeenCalledOnce());
         expect(navigate).toHaveBeenCalledWith({ to: '/workspace/start' });

@@ -126,7 +126,8 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                             <span className="start-label">start</span>
                         </Button>
 
-                        <Separator orientation="vertical"
+                        <Separator
+                            orientation="vertical"
                             className="shrink-0"
                         />
 
@@ -167,12 +168,12 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                             <Button
                                 type="button"
                                 size="sm"
-                                    variant="secondary"
-                                    className="border border-primary"
+                                variant="secondary"
+                                className="border border-primary"
                                 onClick={() => setInvitationOpen(true)}
                             >
                                 <Icon iconNode={Login02Icon} />
-                                    Workspace
+                                Workspace
                             </Button>
                         ) : null}
                     </div>
