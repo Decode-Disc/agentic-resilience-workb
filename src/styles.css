@@ -6,6 +6,20 @@
 
 @custom-variant dark (&:is(.dark *));
 
+
+@theme inline {
+    --color-info: var(--color-sky-500);
+    --color-success: var(--color-green-500);
+    --color-danger: var(--color-red-500);
+    --color-warning: var(--color-amber-500);
+
+    --radius-badge: calc(var(--radius) - 0.25rem);
+    --radius-input: calc(var(--radius) - 0.35rem);
+    --input-height: calc(var(--spacing) * 11);
+    --input-group-child-height: calc(var(--spacing) * 9);
+    --input-group-height: calc(var(--spacing) * 11);
+}
+
 @layer base {
     * {
         @apply border-border outline-ring/50;
@@ -23,8 +37,30 @@
         @apply bg-brand-purple text-primary-foreground;
     }
 
-    *[data-slot='dropdown-menu-content']{
+    button,
+    input[type='button'],
+    input[type='submit'],
+    a[data-slot='dropdown-menu-item'] {
+        @apply cursor-pointer!;
+    }
+
+    *[data-slot="dropdown-menu-content"] {
         @apply rounded-xl!;
+    }
+}
+
+@layer components {
+    .start-double-slash {
+        @apply text-accent-foreground;
+    }
+
+    /* The selected source remains legible without competing with the panel divider. */
+    .source-selection-bridge {
+        background-image: linear-gradient(
+            to right,
+            color-mix(in oklab, var(--brand-green) 26%, transparent),
+            color-mix(in oklab, var(--brand-green) 10%, transparent)
+        );
     }
 }
 

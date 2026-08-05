@@ -22,12 +22,22 @@ import {
     EmptyTitle,
 } from '@/components/ui/empty';
 import { LiquidGlassCard } from '@/components/ui/liquid-glass';
+import {
+    ResizableHandle,
+    ResizablePanel,
+    ResizablePanelGroup,
+} from '@/components/ui/resizable';
 import { AddSourceDialog } from '@/components/workspace/add-source-dialog';
 import { SourceContextPanel } from '@/components/workspace/source-context-panel';
+import {
+    getSourceDecisionActiveButtonClassName,
+    getSourceDecisionButtonLabel,
+    getSourceDecisionIconClassName,
+    sourceDecisionDefinitions,
+} from '@/components/workspace/source-decision';
 import { useResponsive } from '@/hooks/use-responsive';
 import {
     sourceCategoryLabel,
-    sourceDecisionLabel,
     sourceOriginLabel,
 } from '@/lib/presentation/research-copy';
 import { cn } from '@/lib/utils';
@@ -58,7 +68,7 @@ export function SourceReview({
         review.sources[0]?.sourceId ?? null,
     );
     const [drawerOpen, setDrawerOpen] = useState(false);
-    const { isMobile } = useResponsive();
+    const { isTabletOrBelow } = useResponsive();
     const selected =
         review.sources.find(({ sourceId }) => sourceId === selectedId) ?? null;
 
@@ -159,127 +169,59 @@ export function SourceReview({
                     className="text-xs mb-4"
                 />
             ) : null}
-            <div className="grid items-stretch gap-3 lg:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]">
-                <LiquidGlassCard
-                    data-slot="source-master-list"
-                    className="min-h-0 overflow-hidden p-3"
-                    glowIntensity="xs"
-                    shadowIntensity="sm"
-                    whileHover={undefined}
-                    whileTap={undefined}
+            {isTabletOrBelow ? (
+                <SourceMasterList
+                    review={review}
+                    selectedId={selectedId}
+                    onDecide={onDecide}
+                    onSelect={(sourceId) => {
+                        setSelectedId(sourceId);
+                        setDrawerOpen(true);
+                    }}
+                />
+            ) : (
+                <ResizablePanelGroup
+                    data-group="source-review"
+                    orientation="horizontal"
+                    defaultLayout={{
+                        'source-master-list': 36,
+                        'source-context': 64,
+                    }}
+                    className="min-h-168"
                 >
-                    <header className="flex items-center justify-between gap-3 px-1 pb-3">
-                        <p className="text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
-                            Candidate sources
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">
-                            {review.sources.length} total
-                        </p>
-                    </header>
-                    <ul className="space-y-1.5">
-                        {review.sources.map((source) => {
-                            const isActive = selectedId === source.sourceId;
-                            return (
-                                <li key={source.sourceId}>
-                                    <button
-                                        type="button"
-                                        aria-pressed={isActive}
-                                        data-slot="source-row"
-                                        data-active={
-                                            isActive ? 'true' : undefined
-                                        }
-                                        aria-label={`Open ${source.title} for review`}
-                                        onClick={() => {
-                                            setSelectedId(source.sourceId);
-                                            if (isMobile) {
-                                                setDrawerOpen(true);
-                                            }
-                                        }}
-                                        className={cn(
-                                            'group/source-row relative flex w-full items-start gap-3 rounded-2xl border p-3 text-left transition-[background-image,background-color,border-color,box-shadow] duration-200',
-                                            isActive
-                                                ? 'source-selection-bridge border-brand-green/40 text-foreground ring-1 ring-brand-green/30'
-                                                : 'border-border/50 bg-card hover:bg-muted/60',
-                                        )}
-                                    >
-                                        <FaviconAvatar
-                                            canonicalUrl={source.canonicalUrl}
-                                            size="default"
-                                        />
-                                        <span className="min-w-0 flex-1">
-                                            <span className="block truncate text-sm font-semibold">
-                                                {source.title}
-                                            </span>
-                                            <span className="mt-1 block truncate font-mono text-[11px] text-muted-foreground">
-                                                {sourceOriginLabel(
-                                                    source.origin,
-                                                )}
-                                                {' · '}
-                                                {sourceCategoryLabel(
-                                                    source.category,
-                                                )}
-                                            </span>
-                                        </span>
-                                        <DecisionDot
-                                            decision={source.decision}
-                                        />
-                                    </button>
-                                    <div className="mt-1 flex flex-wrap gap-1 px-1">
-                                        {(
-                                            [
-                                                'accepted',
-                                                'rejected',
-                                                'pending',
-                                            ] as const
-                                        ).map((decision) => (
-                                            <Button
-                                                key={decision}
-                                                type="button"
-                                                size="xs"
-                                                variant={
-                                                    source.decision === decision
-                                                        ? 'secondary'
-                                                        : 'ghost'
-                                                }
-                                                aria-pressed={
-                                                    source.decision === decision
-                                                }
-                                                aria-label={`${sourceDecisionVerb(decision)} ${source.title} as ${decision}`}
-                                                onClick={() =>
-                                                    void onDecide(
-                                                        source.sourceId,
-                                                        decision,
-                                                    )
-                                                }
-                                            >
-                                                {sourceDecisionLabel(decision)}
-                                            </Button>
-                                        ))}
-                                    </div>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                </LiquidGlassCard>
-                <div className="relative min-w-0">
-                    {selected && !isMobile ? (
-                        <span
-                            aria-hidden="true"
-                            data-slot="source-bridge"
-                            className="source-bridge pointer-events-none absolute -left-3 top-12 z-20 hidden h-24 w-6 lg:block"
+                    <ResizablePanel
+                        id="source-master-list"
+                        data-panel="source-master-list"
+                        minSize="18rem"
+                    >
+                        <SourceMasterList
+                            review={review}
+                            selectedId={selectedId}
+                            onDecide={onDecide}
+                            onSelect={setSelectedId}
+                            className="h-full"
                         />
-                    ) : null}
-                    {!isMobile && selected ? (
-                        <SourceContextPanel source={selected} />
-                    ) : (
-                        <div className="surface-panel hidden h-full min-h-64 items-center justify-center rounded-2xl text-sm text-muted-foreground lg:flex">
-                            Select a source to review its preview and
-                            provenance.
+                    </ResizablePanel>
+                    <ResizableHandle withHandle />
+                    <ResizablePanel
+                        id="source-context"
+                        data-panel="source-context"
+                        minSize="24rem"
+                    >
+                        <div className="h-full min-w-0 pl-3">
+                            {selected ? (
+                                <SourceContextPanel source={selected} />
+                            ) : (
+                                <div className="surface-panel flex h-full min-h-64 items-center justify-center rounded-2xl text-sm text-muted-foreground">
+                                    Select a source to review its preview and
+                                    provenance.
+                                </div>
+                            )}
                         </div>
-                    )}
-                </div>
-            </div>
-            {isMobile ? (
+                    </ResizablePanel>
+                </ResizablePanelGroup>
+            )}
+            {isTabletOrBelow ? (
                 <Drawer
                     open={drawerOpen}
                     onOpenChange={setDrawerOpen}
@@ -305,31 +247,143 @@ export function SourceReview({
     );
 }
 
-const DECISION_VERB: Record<SourceDecision, string> = {
-    accepted: 'Accept',
-    rejected: 'Reject',
-    pending: 'Keep',
-};
-
-function sourceDecisionVerb(decision: SourceDecision): string {
-    return DECISION_VERB[decision];
-}
-
-function DecisionDot({ decision }: { decision: SourceDecision }) {
-    if (decision === 'pending') {
-        return null;
-    }
-    const tone =
-        decision === 'accepted'
-            ? 'bg-approved text-approved-foreground'
-            : 'bg-counter-evidence/70 text-background';
+function SourceMasterList({
+    review,
+    selectedId,
+    onDecide,
+    onSelect,
+    className,
+}: {
+    review: SourceReviewProjection;
+    selectedId: Id<'sources'> | null;
+    onDecide: (
+        sourceId: Id<'sources'>,
+        decision: SourceDecision,
+    ) => void | Promise<void>;
+    onSelect: (sourceId: Id<'sources'>) => void;
+    className?: string;
+}) {
     return (
-        <span
-            aria-hidden="true"
-            className={cn(
-                'mt-1 inline-flex size-2 shrink-0 rounded-full ring-2 ring-background',
-                tone,
-            )}
-        />
+        <LiquidGlassCard
+            data-slot="source-master-list"
+            className={cn('min-h-0 overflow-hidden p-3', className)}
+            glowIntensity="xs"
+            shadowIntensity="sm"
+            whileHover={undefined}
+            whileTap={undefined}
+        >
+                    <header className="flex items-center justify-between gap-3 px-1 pb-3">
+                        <p className="text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
+                            Candidate sources
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                            {review.sources.length} total
+                        </p>
+                    </header>
+            <ul className="space-y-3">
+                        {review.sources.map((source) => {
+                            const isActive = selectedId === source.sourceId;
+                            return (
+                                <li
+                                    key={source.sourceId}
+                                    className="flex flex-col items-center"
+                                >
+                                    <span className="border border-border bg-secondary/50 px-2 rounded-t-md w-full max-w-[calc(100%-2rem)] truncate text-[10px] text-start font-medium">
+                                        {source.canonicalUrl}
+                                    </span>
+                                    <div
+                                        className={cn(
+                                            'group/source-row relative flex min-h-28 w-full flex-col justify-between rounded-2xl border p-3 transition-[background-image,background-color,border-color,box-shadow] duration-200',
+                                            isActive
+                                                ? 'source-selection-bridge border-brand-green/40 text-foreground ring-1 ring-brand-green/30'
+                                                : 'border-border/50 bg-card hover:bg-muted/60',
+                                        )}
+                                    >
+                                        <button
+                                            type="button"
+                                            aria-pressed={isActive}
+                                            data-slot="source-row"
+                                            data-active={
+                                                isActive ? 'true' : undefined
+                                            }
+                                            aria-label={`Open ${source.title} for review`}
+                                            className="flex w-full items-start gap-3 text-left text-wrap"
+                                            onClick={() => onSelect(source.sourceId)}
+                                        >
+                                            <FaviconAvatar
+                                                canonicalUrl={source.canonicalUrl}
+                                                size="default"
+                                            />
+                                            <span className="min-w-0 flex-1">
+                                                <span className="block truncate text-sm font-semibold">
+                                                    {source.title}
+                                                </span>
+                                                <span className="mt-1 block truncate font-mono text-[11px] text-muted-foreground">
+                                                    {sourceOriginLabel(
+                                                        source.origin,
+                                                    )}
+                                                    {' · '}
+                                                    {sourceCategoryLabel(
+                                                        source.category,
+                                                    )}
+                                                </span>
+                                            </span>
+                                        </button>
+                                        <div className="mt-3 flex flex-wrap gap-1 px-1">
+                                            {sourceDecisionDefinitions.map(
+                                                (definition) => {
+                                                    const isSelected =
+                                                        source.decision ===
+                                                        definition.decision;
+                                                    const buttonLabel =
+                                                        getSourceDecisionButtonLabel(
+                                                            definition.decision,
+                                                            isSelected,
+                                                        );
+                                                    return (
+                                            <Button
+                                                            key={definition.decision}
+                                                type="button"
+                                                size="xs"
+                                                            variant="outline"
+                                                            aria-pressed={isSelected}
+                                                            aria-label={`${buttonLabel} ${source.title} as ${definition.decision}`}
+                                                            data-status={
+                                                                isSelected
+                                                                    ? definition.status
+                                                                    : undefined
+                                                }
+                                                            className={
+                                                                isSelected
+                                                                    ? getSourceDecisionActiveButtonClassName(
+                                                                        definition.decision,
+                                                                    )
+                                                                    : undefined
+                                                }
+                                                onClick={() =>
+                                                    void onDecide(
+                                                        source.sourceId,
+                                                        definition.decision,
+                                                    )
+                                                }
+                                            >
+                                                            <Icon
+                                                                iconNode={definition.icon}
+                                                                className={getSourceDecisionIconClassName(
+                                                                    definition.decision,
+                                                                )}
+                                                            />
+                                                            {buttonLabel}
+                                            </Button>
+                                                    );
+                                                },
+                                            )}
+                                        </div>
+                                    </div>
+                                </li>
+                            );
+                        })}
+                    </ul>
+        </LiquidGlassCard>
     );
 }
