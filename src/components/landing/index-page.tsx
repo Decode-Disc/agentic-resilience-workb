@@ -6,10 +6,13 @@ import {
     CheckmarkCircle02Icon,
     FileSearchIcon,
     Menu01Icon,
+    Sparkles,
     UserCheck01Icon,
 } from '@hugeicons/core-free-icons';
 import { Link } from '@tanstack/react-router';
 import { motion, useReducedMotion } from 'motion/react';
+import type React from 'react';
+import { useEffect, useRef } from 'react';
 
 import Icon from '@/components/icon';
 import { AppLogo } from '@/components/logo-icon';
@@ -27,10 +30,13 @@ import {
     AccordionItem,
     AccordionTrigger,
 } from '@/components/ui/accordion';
+import { Badge } from '@/components/ui/badge';
 import { BackgroundImageTexture } from '@/components/ui/bg-image-texture';
 import { Button } from '@/components/ui/button';
 import { GridCard } from '@/components/ui/grid-card';
 import { LiquidGlassCard } from '@/components/ui/liquid-glass';
+import { LiquidMetalBorderButton } from '@/components/ui/liquid-metal-border-button';
+import MotionAnimatePresence from "@/components/ui/motion-animate-presence";
 import {
     Sheet,
     SheetClose,
@@ -161,7 +167,8 @@ const capabilities = [
 function WorkbenchLink({ mobile = false }: { mobile?: boolean }) {
     return (
         <Button
-            size={mobile ? 'default' : 'sm'}
+            size="default"
+            nativeButton={false}
             render={<Link to="/workspace/start" />}
             className={mobile ? 'w-full' : undefined}
         >
@@ -205,7 +212,7 @@ function NavigationPanel({
 function LandingHeader() {
     return (
         <header className="fixed top-4 left-1/2 z-50 w-[min(calc(100%-1.5rem),64rem)] -translate-x-1/2">
-            <div className="flex h-14 items-center justify-between gap-4 rounded-full border border-border/70 bg-card/72 px-3 shadow-floating backdrop-blur-xl sm:px-4">
+            <div className="flex h-14 items-center justify-between gap-4 rounded-full border border-border/70 bg-card/30 px-3 shadow-floating backdrop-blur-xl sm:px-4">
                 <div className="flex min-w-0 items-center gap-2.5">
                     <AppLogo />
                     <span className="hidden text-base font-semibold tracking-tight sm:block">
@@ -306,6 +313,7 @@ function LandingHeader() {
                                 </Accordion>
                             </div>
                             <SheetClose
+                                nativeButton={false}
                                 render={
                                     <a
                                         href="#capabilities"
@@ -335,72 +343,74 @@ function MatrixPreview() {
 
     return (
         <LiquidGlassCard
-            className="w-full text-left bg-secondary/20 border border-brand-purple/20"
-            blurIntensity="xl"
+            className="relative w-full text-left bg-card/80 border border-brand-purple/20"
+            blurIntensity="md"
             glowIntensity="sm"
             shadowIntensity="md"
             borderRadius="var(--radius-2xl)"
         >
-            <div className="flex justify-center py-2">
-                <Button render={<Link to="/workspace/start" />} size="lg">
-                    Start the research
-                    <Icon iconNode={ArrowRight01Icon} className="size-4" />
-                </Button>
-            </div>
-            <div className="p-5 sm:p-7">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                        <p className="text-micro text-brand-purple">
-                            Primary artifact
-                        </p>
-                        <h2 className="mt-1.5 text-xl font-medium tracking-tight">
-                            Evidence matrix
-                        </h2>
+            <Noise patternAlpha={12} className="absolute inset-0" />
+
+            <BackgroundImageTexture opacity={1} variant="groovepaper">
+                <div className="p-5 sm:p-7">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <p className="text-micro text-brand-purple">
+                                Primary artifact
+                            </p>
+                            <h2 className="mt-1.5 text-xl font-medium tracking-tight">
+                                Evidence matrix
+                            </h2>
+                        </div>
+                        <span className="rounded-full border border-border/80 bg-muted/60 px-3 py-1 text-[0.6875rem] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+                            Illustrative preview
+                        </span>
                     </div>
-                    <span className="rounded-full border border-border/80 bg-muted/60 px-3 py-1 text-[0.6875rem] font-medium tracking-[0.08em] text-muted-foreground uppercase">
-                        Illustrative preview
-                    </span>
-                </div>
 
-                <ul className="mt-5 list-none divide-y divide-border/60 border-y border-border/60">
-                    {matrixClaims.map((row, index) => (
-                        <motion.li
-                            key={row.classification}
-                            initial={
-                                reduceMotion ? false : { opacity: 0, y: 10 }
-                            }
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{
-                                duration: reduceMotion ? 0 : 0.5,
-                                delay: reduceMotion ? 0 : 0.25 + index * 0.09,
-                                ease: easeOrganic,
-                            }}
-                            className="grid gap-x-4 gap-y-1 py-3.5 sm:grid-cols-[1fr_auto] sm:items-center"
-                        >
-                            <div className="min-w-0">
-                                <p className="text-sm leading-6">{row.claim}</p>
-                                <p className="mt-0.5 font-mono text-[0.6875rem] tracking-wide text-muted-foreground">
-                                    {row.source}
-                                </p>
-                            </div>
-                            <span
-                                className={cn(
-                                    'w-fit rounded-full px-2.5 py-0.5 text-xs font-medium',
-                                    row.badgeClassName,
-                                )}
+                    <ul className="mt-5 list-none divide-y divide-border/60 border-y border-border/60">
+                        {matrixClaims.map((row, index) => (
+                            <motion.li
+                                key={row.classification}
+                                initial={
+                                    reduceMotion ? false : { opacity: 0, y: 10 }
+                                }
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{
+                                    duration: reduceMotion ? 0 : 0.5,
+                                    delay: reduceMotion
+                                        ? 0
+                                        : 0.25 + index * 0.09,
+                                    ease: easeOrganic,
+                                }}
+                                className="grid gap-x-4 gap-y-1 py-3.5 sm:grid-cols-[1fr_auto] sm:items-center"
                             >
-                                {row.classification}
-                            </span>
-                        </motion.li>
-                    ))}
-                </ul>
+                                <div className="min-w-0">
+                                    <p className="text-sm leading-6">
+                                        {row.claim}
+                                    </p>
+                                    <p className="mt-0.5 font-mono text-[0.6875rem] tracking-wide text-muted-foreground">
+                                        {row.source}
+                                    </p>
+                                </div>
+                                <span
+                                    className={cn(
+                                        'w-fit rounded-full px-2.5 py-0.5 text-xs font-medium',
+                                        row.badgeClassName,
+                                    )}
+                                >
+                                    {row.classification}
+                                </span>
+                            </motion.li>
+                        ))}
+                    </ul>
 
-                <p className="mt-4 text-xs leading-5 text-muted-foreground">
-                    Static illustration. In the workbench, every claim is
-                    extracted from analyst-approved sources and remains tied to
-                    a locatable passage.
-                </p>
-            </div>
+                    <p className="mt-4 text-xs leading-5 text-muted-foreground">
+                        Static illustration. In the workbench, every claim is
+                        extracted from analyst-approved sources and remains tied
+                        to a locatable passage.
+                    </p>
+                </div>
+            </BackgroundImageTexture>
         </LiquidGlassCard>
     );
 }
@@ -421,26 +431,80 @@ function CapabilityGrid() {
             aria-label="Evidence matrix capabilities"
         >
             {capabilities.map((capability) => (
-                <li
-                    key={capability.title}
-                    className="bg-card/78 p-5 backdrop-blur-md"
-                >
-                    <Icon
-                        iconNode={capability.icon}
-                        className="size-[1.125rem] text-muted-foreground"
-                        strokeWidth={1.8}
-                    />
-                    <h3 className="mt-3 text-sm font-medium tracking-tight">
-                        {capability.title}
-                    </h3>
-                    <p className="mt-1 text-sm leading-5 text-muted-foreground">
-                        {capability.description}
-                    </p>
-                </li>
+                <GridCard key={capability.title} tone="primary">
+                    <li className="bg-card/10 p-5 backdrop-blur-md">
+                        <Icon
+                            iconNode={capability.icon}
+                            className="size-[1.125rem] text-muted-foreground"
+                            strokeWidth={1.8}
+                        />
+                        <h3 className="mt-3 text-sm font-medium tracking-tight">
+                            {capability.title}
+                        </h3>
+                        <p className="mt-1 text-sm leading-5 text-muted-foreground">
+                            {capability.description}
+                        </p>
+                    </li>
+                </GridCard>
             ))}
         </motion.ul>
     );
 }
+
+/** Inline Noise overlay */
+const Noise: React.FC<{
+    patternRefreshInterval?: number;
+    patternAlpha?: number;
+    className?: string;
+}> = ({ patternRefreshInterval = 2, patternAlpha = 16, className }) => {
+    const ref = useRef<HTMLCanvasElement | null>(null);
+    useEffect(() => {
+        const canvas = ref.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d', { alpha: true });
+        if (!ctx) return;
+        let frame = 0;
+        let id = 0;
+        const size = 1024;
+        const resize = () => {
+            canvas.width = size;
+            canvas.height = size;
+            canvas.style.width = '100vw';
+            canvas.style.height = '100vh';
+        };
+        const draw = () => {
+            const img = ctx.createImageData(size, size);
+            const data = img.data;
+            for (let i = 0; i < data.length; i += 4) {
+                const v = Math.random() * 255;
+                data[i] = v;
+                data[i + 1] = v;
+                data[i + 2] = v;
+                data[i + 3] = patternAlpha;
+            }
+            ctx.putImageData(img, 0, 0);
+        };
+        const loop = () => {
+            if (frame % patternRefreshInterval === 0) draw();
+            frame++;
+            id = requestAnimationFrame(loop);
+        };
+        addEventListener('resize', resize);
+        resize();
+        loop();
+        return () => {
+            removeEventListener('resize', resize);
+            cancelAnimationFrame(id);
+        };
+    }, [patternRefreshInterval, patternAlpha]);
+    return (
+        <canvas
+            ref={ref}
+            className={cn('pointer-events-none', className)}
+            style={{ imageRendering: 'pixelated' }}
+        />
+    );
+};
 
 /**
  * Standalone project home page. It introduces the evidence-first thesis without
@@ -451,24 +515,23 @@ export function IndexPage() {
 
     return (
         <div className="relative isolate min-h-screen overflow-x-clip bg-(image:--landing-gradient)">
+            {/* SaaS Purple spotlight */}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_620px_at_50%_200px,rgba(103,37,235,0.35),transparent_70%)]" />
+            {/* Soft grid with top fade */}
+            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#94a3b81f_1px,transparent_1px),linear-gradient(to_bottom,#94a3b81f_1px,transparent_1px)] bg-[size:22px_22px] [mask-image:radial-gradient(ellipse_85%_55%_at_50%_15%,#000_75%,transparent_100%)] [-webkit-mask-image:radial-gradient(ellipse_85%_55%_at_50%_15%,#000_75%,transparent_100%)] [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat]" />
+
             <LandingHeader />
 
             <div
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-x-0 top-0 hidden h-[68rem] lg:block"
             >
-                <div className="absolute top-[26rem] left-1/2 size-[44rem] -translate-x-1/2 rounded-full border border-dashed border-brand-purple/15" />
-                <div className="absolute top-[20rem] left-1/2 size-[62rem] -translate-x-1/2 rounded-full border border-border/70" />
-                <div className="absolute top-[13rem] left-1/2 size-[84rem] -translate-x-1/2 rounded-full border border-dashed border-border/60" />
-            </div>
+                <div className="absolute top-[26rem] left-1/2 size-[44rem] -translate-x-1/2 rounded-full border border-dashed border-brand-purple/30" />
+                <div className="absolute top-[20rem] left-1/2 size-[62rem] -translate-x-1/2 rounded-full border border-brand-purple/15" />
+                <div className="absolute top-[13rem] left-1/2 size-[84rem] -translate-x-1/2 rounded-full border border-dashed border-brand-purple/40" />
+            </div>  
 
-            <BackgroundImageTexture
-                opacity={0.7}
-                variant="groovepaper"
-                className="absolute inset-0"
-            />
-
-            <main className="relative z-10 mx-auto flex w-full min-h-0 max-w-3xl flex-col items-center px-4 pb-10 pt-20">
+            <main className="relative z-10 mx-auto flex w-full min-h-0 max-w-3xl flex-col items-center px-4 pb-10 pt-20 md:pt-30">
                 <motion.section
                     initial={reduceMotion ? false : { opacity: 0, y: 14 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -479,20 +542,32 @@ export function IndexPage() {
                     className="flex max-w-[36rem] flex-col gap-4 items-center text-center"
                     aria-labelledby="index-title"
                 >
-                    <p className="text-micro text-brand-purple">
+                    <Badge variant="fancy" color="indigo" className="rounded-none p-2.5 font-mono font-medium tracking-[0.12em] uppercase">
+                        <Icon iconNode={Sparkles} className="size-8" />
                         Agentic Resilience Evidence Workbench
-                    </p>
+                    </Badge>
                     <h1
                         id="index-title"
                         className="text-5xl leading-[0.96] font-medium tracking-[-0.045em] text-balance sm:text-6xl lg:text-[4.4rem]"
                     >
                         Evidence before conclusions.
                     </h1>
-                    <p className="max-w-lg text-base leading-7 text-muted-foreground">
+                    <p className="max-w-lg text-lg leading-7 text-foreground/90">
                         An inspectable research dossier for assessing
                         architectural resilience in the agentic economy.
                     </p>
-                    <p className="text-xs text-muted-foreground">
+                    <div className="flex justify-center">
+                        <Link to="/workspace/start">
+                            <LiquidMetalBorderButton>
+                                Start the research
+                                <Icon
+                                    iconNode={ArrowRight01Icon}
+                                    className="size-4"
+                                />
+                            </LiquidMetalBorderButton>
+                        </Link>
+                    </div>
+                    <p className="text-micro text-[10px]">
                         Private research prototype · invitation only
                     </p>
                 </motion.section>
@@ -508,7 +583,9 @@ export function IndexPage() {
                     className="mt-5 w-full"
                     aria-label="Evidence matrix preview"
                 >
-                    <MatrixPreview />
+                    <MotionAnimatePresence preset="zoom" delay={0.2}>
+                        <MatrixPreview />
+                    </MotionAnimatePresence>
                 </motion.section>
 
                 <section
@@ -516,10 +593,12 @@ export function IndexPage() {
                     className="mt-10 w-full scroll-mt-24"
                     aria-label="How it holds up"
                 >
+                    <MotionAnimatePresence infinite preset="slide-up">
                     <CapabilityGrid />
+                    </MotionAnimatePresence>
                 </section>
 
-                <footer className="mt-14 w-full border-t border-border/60 pt-6 pb-2 text-center">
+                <footer className="mt-14 w-full border-t border-border pt-6 pb-2 text-center">
                     <p className="text-xs leading-5 text-muted-foreground">
                         No aggregate resilience score. No investment
                         recommendation. Analyst judgment remains final.
