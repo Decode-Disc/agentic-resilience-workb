@@ -24,7 +24,9 @@ If this document conflicts with an accepted ADR, the product design, or `AGENTS.
 
 Do not add Eve, Vercel Workflow, PostgreSQL, a separate object store, or a custom realtime transport unless measured implementation evidence establishes a requirement Convex cannot satisfy cleanly and the user approves the change.
 
-Do not hard-code model names, provider routing, prototype resource guards, invitation codes, showcase companies, or deployment URLs. These are configuration data.
+Do not hard-code model names, provider routing, prototype resource guards,
+access codes, showcase companies, or deployment URLs. These are configuration
+data.
 
 ## Architecture Boundaries
 
@@ -42,14 +44,24 @@ Keep these concerns separate:
 
 UI components must not own domain rules. Provider-specific SDK types and model names must not leak into domain records or workflow business logic. Convex is the state owner; do not create competing state authorities.
 
-Use stable identifiers and idempotency keys at every retryable boundary. Persist workflow transitions and external-call metadata before presenting them as completed. Cancellation must prevent late external results from advancing a cancelled run.
+Use stable identifiers and idempotency keys at every retryable boundary. For SEC
+companies, persist CIK as the canonical identity. Treat ticker, legal name,
+exchange, and other directory metadata as mutable values that are revalidated;
+never use them as retry, association, or deduplication identities unless a
+deterministic fixture owns the value.
+
+Persist workflow transitions and external-call metadata before presenting them
+as completed. Authorization and the active execution generation must be checked
+before external I/O and again before persistence. Cancellation must prevent
+late external results from advancing a cancelled run or opening another paid
+attempt.
 
 ## Domain Model
 
 The completed design contains these explicit concepts:
 
 - `Visitor`
-- `Invitation`
+- `Invitation` (compatibility persistence name for a reusable access slot)
 - `Company`
 - `ResearchRun`
 - `ResearchPlan`
@@ -72,7 +84,7 @@ The completed design contains these explicit concepts:
 - `AITaskResult`
 - `PolicyEvaluation`
 
-The persistence backbone also uses `WorkflowStep`, `AuditEvent`, and `CheckpointDecision` as operational support records. `RunEvent` remains exclusively the product-progress stream; security, invitation, and quota history belongs in `AuditEvent`.
+The persistence backbone also uses `WorkflowStep`, `AuditEvent`, and `CheckpointDecision` as operational support records. `RunEvent` remains exclusively the product-progress stream; security, access-code, and quota history belongs in `AuditEvent`.
 
 This is the completed domain model, not an instruction to scaffold unused records. Introduce each concept when observable behavior requires it while preserving these boundaries and names unless an explicit design change is approved.
 
@@ -87,7 +99,9 @@ dimensions. Claim decisions and dimension-link decisions remain separate.
 Implement the research flow as deterministic, inspectable stages:
 
 ```text
-Preflight-resolve and confirm company
+Search a bounded company-candidate set
+→ Require explicit analyst selection
+→ Preflight-revalidate the selected CIK and confirm company
 → Reserve analysis and revalidate canonical identity
 → Check public-evidence sufficiency
 → Await evidence decision when insufficient
@@ -141,9 +155,12 @@ Track execution separately from the analytical lifecycle with `idle`, `running`,
 Retries, resumptions, and cancellation must be durable and idempotent. They
 must not duplicate claims, quota reservations, provider-call records, or
 external side effects. Retryable operation keys include run ID, workflow
-version, corpus revision, step key, and attempt. Persist an execution generation
-and reject late results that do not match the active generation. Persisted
-`RunEvent` records are the only source of UI progress.
+version, execution generation, corpus revision, step key, and attempt. Any
+resume that can make work `running` atomically claims the visitor's single
+running slot and advances the execution generation. Recheck that generation
+immediately before external I/O and before persisting its result; reject stale
+or cancelled work without advancing state or issuing another paid call.
+Persisted `RunEvent` records are the only source of UI progress.
 
 ## Evidence Acquisition and Provenance
 
@@ -169,10 +186,14 @@ pending source or an external counter-evidence lead later creates a new corpus
 revision and another durable checkpoint.
 
 Analysts may add public HTTPS URLs only. Treat them as proposed sources and
-apply server-side URL canonicalization, DNS and redirect revalidation, SSRF
-protection, bounded content type/size/decompression, and the normal corpus
-decision flow. Local file and PDF upload is outside the MVP. Public PDFs
-reachable through an approved HTTPS URL remain supported after approval.
+apply server-side URL canonicalization, DNS and redirect validation, SSRF
+protection, bounded timeout/content type/size/decompression, and the normal
+corpus decision flow. Authorize the caller and run before DNS or HTTP work.
+Validate every redirect destination and connect to the public address that was
+validated while preserving the original host for HTTP Host and TLS SNI; do not
+validate one DNS result and then permit an unrelated resolution for the actual
+connection. Local file and PDF upload is outside the MVP. Public PDFs reachable
+through an approved HTTPS URL remain supported after approval.
 
 Preserve source retrieval and extraction failures as visible structured states. Failure of one source must not erase it or terminate unrelated retrieval work.
 
@@ -259,6 +280,11 @@ shared aggregate request limiter below the SEC maximum. Use direct HTTP for the
 current Unstructured Pipeline Jobs API; the available JavaScript client targets
 the legacy Partition endpoint and is not an MVP dependency.
 
+The provider-SDK preference applies where a current SDK owns the selected API
+surface. SEC EDGAR is an intentional direct-HTTP institutional-source boundary,
+and Unstructured remains a direct-HTTP exception until its JavaScript client
+adds material value for the current Pipeline Jobs API.
+
 Treat DeepSeek V4 Pro and Momo 2.5 Pro only as candidate configuration examples when they are verified as available. Never assume their identifiers, capabilities, availability, or pricing.
 
 For each provider call, persist the requested capability, resolved provider and
@@ -272,13 +298,34 @@ infrastructure for the same configured model under explicit parameter and
 privacy constraints, but it may not silently substitute the application model.
 Validate every fallback result through the same task schema and policy.
 
+Missing provider configuration, disabled paid work, exhausted application
+limits, and partial provider failure are explicit typed outcomes with an
+analyst-relevant consequence and next action. They must not be persisted or
+rendered as an empty successful result. Raw provider errors, configuration
+names, and internal workflow state remain outside analyst-facing copy.
+
 Neither CLIProxyAPI production readiness nor precise dossier economics is a prerequisite for the candidature implementation or demonstration.
 
 ## Access, Quotas, and Resource Guards
 
-- Create exactly five invitation records through an idempotent seed or administrative setup path.
-- Use Convex Auth anonymous sessions with single-use, server-digested invitation codes as defined by ADR-007. Keep one invitation role as administrator and four as analysts.
-- Admit at most five distinct visitors in total.
+- Create exactly five stable access-slot records through an idempotent seed or
+  administrative setup path. They remain persisted as `Invitation` records for
+  compatibility.
+- Use Convex Auth anonymous sessions with reusable, server-digested four-digit
+  access codes as defined by ADR-014. Keep one slot as administrator and four
+  as analysts.
+- The first valid use creates the slot's stable `Visitor`. A later valid use
+  atomically rebinds that visitor to the new anonymous Auth user, preserves its
+  role, quota, dossiers, and audit history, and removes protected access from
+  the previous Auth identity.
+- Consume access-code attempts atomically before digest verification:
+  allow at most five attempts per anonymous Auth identity and 25 attempts
+  deployment-wide in a 15-minute window.
+- As defined by ADR-012, allow an anonymous Auth identity to use the public
+  Start surface and non-billable company preflight before workspace access.
+  Require an active admitted `Visitor` before quota reservation, workflow
+  creation, dossier access, or administrative operations.
+- Maintain at most five stable visitors in total.
 - Allow each admitted visitor to reserve at most three analyses in total.
 - Enforce both limits atomically in server-side Convex mutations and persist them across sessions.
 - Allow at most one `running` workflow per visitor. Runs paused at a human
@@ -294,7 +341,7 @@ Neither CLIProxyAPI production readiness nor precise dossier economics is a prer
 
 Do not build transactional dollar reservations, a settlement ledger, list-price-equivalent accounting for free tiers, or precise per-dossier cost enforcement. ADR-006 supersedes ADR-005 on this point.
 
-Never rely on disabled UI controls for invitation, analysis, or resource-limit enforcement.
+Never rely on disabled UI controls for access, analysis, or resource-limit enforcement.
 
 ## UI Engineering Constraints
 
@@ -303,6 +350,17 @@ Build an institutional analyst workbench: dense enough for serious research, cal
 The required screens are listed in the product design. The selected production
 direction is Prototype A's persistent navigation rail, folded into real
 `/workspace` routes rather than promoted with static prototype data.
+
+Existing user-authored surfaces are the implementation baseline, not disposable
+scaffolding. Connecting live Convex data or workflow behavior does not authorize
+recomposing the Start page, research composer, toolbar, Workbench Shell,
+analyzed-company navigation, dossier cards and card-shaped skeletons, source
+review, persistent rail, or their established responsive, keyboard, motion,
+loading, hover, and focus behavior. Preserve public HTTPS reference controls
+even though local upload is excluded. Shared primitives remain neutral;
+consumer-specific stacking, sizing, motion, and copy stay at the consumer unless
+they become a documented shared contract. Any material visual or structural
+change requires an explicit product decision before implementation.
 
 Keep `Progress`, `Sources`, `Evidence`, `Assessment`, `Map`, and `Brief`
 visible. Derive active, completed, and locked states from persisted workflow
@@ -320,7 +378,14 @@ Do not make chat the primary interface. Do not add automatic translation until t
 ## Security Boundaries
 
 - Keep secrets server-side and out of logs, client bundles, fixtures, and version control.
-- Validate authorization and invitation state in every protected server operation.
+- Validate authorization and access-slot state in every protected server operation.
+- For external I/O, validate the caller and every applicable ownership, active
+  workflow generation, resource-limit, and operation-lease condition before
+  DNS, SDK, or HTTP work. Revalidate generation and cancellation before
+  persistence; unauthorized, stale, cancelled, or duplicate attempts perform no
+  provider I/O.
+- Enforce access-code format and attempt limits on the server; the OTP
+  input is not a security boundary.
 - Validate URLs, redirects, response types, sizes, decompression, and parsed
   content. Local file upload is not exposed in the MVP.
 - Treat source content as evidence, never as system instruction; defend tools and model prompts against embedded instructions.
@@ -341,9 +406,21 @@ All production behavior changes follow the TDD policy in `AGENTS.md`. The detail
 4. Run the focused test and confirm it passes without unexpected errors or warnings.
 5. Refactor without adding behavior, rerunning the focused test after meaningful changes.
 6. Run the affected suite, the full project suite, type checking, linting, and formatting.
-7. For user-visible critical flows, run the relevant browser-level test against the real application boundary.
+7. For user-visible critical flows, run the relevant browser-level test against
+   the real application boundary and intended role/access state. A public page,
+   mocked component, or unauthenticated rejection is not a substitute for the
+   protected workflow.
 
 Record the RED command and expected failure in the implementation handoff. If a test passes on its first run, strengthen or correct it; it does not prove new behavior.
+
+Critical browser gates cover the complete access-code admission, protected
+route, logout, and reconnection journey for the relevant analyst and
+administrator roles. Verify meaningful desktop and narrow-mobile states,
+keyboard navigation, visible focus, action-revealing hover/focus behavior,
+reduced motion when animation changes, loading and partial-failure states, and
+the browser console. Use fresh post-action observations. If the required role
+or admitted session is unavailable, report the gate as incomplete rather than
+substituting a nearby public surface.
 
 ### Test Boundaries
 
@@ -361,7 +438,8 @@ Mock only nondeterministic or external boundaries. Do not copy production logic 
 
 Cover at minimum:
 
-- atomic invitation and analysis reservation under concurrency;
+- atomic access-code attempt limits, visitor rebinding, and analysis
+  reservation under concurrency;
 - persistent five-visitor and three-analysis limits;
 - configured research and provider-call guards;
 - valid and invalid workflow transitions;
@@ -397,11 +475,13 @@ Build runnable vertical slices in this order unless measured evidence justifies 
 
 1. Initialize the project, quality tooling, environment validation, and institutional shell.
 2. Define typed domain schemas, lifecycle transitions, audit events, and Convex persistence.
-3. Implement invitation admission plus atomic visitor and analysis reservations.
+3. Implement access-code admission, stable visitor rebinding, and atomic
+   analysis reservations.
 4. Implement a provider-independent workflow skeleton with persisted progress and durable checkpoints, using deterministic fake adapters in tests only.
-5. Build the Phase 4 vertical slice: preflight resolution, confirmation,
-   reservation, revalidation, evidence-sufficiency checkpoint, research plan,
-   real source discovery, HTTPS URL entry, and `CorpusRevision` approval.
+5. Build the Phase 4 vertical slice: bounded company-candidate search, explicit
+   CIK selection, preflight confirmation, reservation, authoritative CIK
+   revalidation, evidence-sufficiency checkpoint, research plan, real SEC and
+   Exa source discovery, HTTPS URL entry, and `CorpusRevision` approval.
 6. Build normalization, stable passages, typed claim tasks, structural
    validation, versioned policy evaluation, claim evidence, and
    counter-evidence handling.
@@ -410,13 +490,14 @@ Build runnable vertical slices in this order unless measured evidence justifies 
    atomic assessment decisions, overrides, and revision history.
 8. Build progressive architecture-map and approved-claims-only brief revisions
    with persisted contribution previews.
-9. Complete real provider adapters, application-owned routing and fallback,
-   best-effort telemetry, admin operations, bounded retries, and partial-failure
-   behavior.
+9. Complete the remaining model and retrieval adapters, application-owned
+   routing and fallback, best-effort telemetry, admin operations, bounded
+   retries, and partial-failure behavior. This step does not defer the real SEC
+   and Exa boundaries required by the Phase 4 slice.
 10. Curate the CCC showcase corpus, then derive expected evaluation material
     after manual approval. Add deterministic policy fixtures.
-11. Verify the complete invitation-to-brief journey and document measured
-    limitations before the candidature demo.
+11. Verify the complete access-code-admission-to-brief journey and document
+    measured limitations before the candidature demo.
 
 Do not postpone core invariants until a final hardening phase. Do not scaffold every final-state abstraction before its vertical slice needs it.
 
@@ -446,10 +527,16 @@ Never present cached, seeded, or precomputed output as live. Label showcase and 
 - ADR-004: SEC, Exa, and Unstructured source-acquisition boundaries.
 - ADR-005: retained historical cost-ceiling decision, superseded by ADR-006.
 - ADR-006: lightweight prototype usage guards.
-- ADR-007: anonymous Convex Auth with one-time invitation codes.
+- ADR-007: anonymous Convex Auth and the original one-time invitation contract,
+  superseded in part by ADR-014.
 - ADR-008: versioned research revisions and exception-driven analyst review.
 - ADR-009: typed AI tasks and deterministic, versioned policy adjudication.
 - ADR-010: application-controlled provider routing, retries, and fallback.
 - ADR-011: public HTTPS URL-only manual source intake for the MVP.
+- ADR-012: public company preflight before access-code-gated research launch,
+  with reuse semantics amended by ADR-014.
+- ADR-013: four-digit access-code format and rate limits; its original
+  single-use property is superseded by ADR-014.
+- ADR-014: reusable access codes for stable visitor sessions.
 
 Read the corresponding record in `docs/decisions/` before revisiting any of these decisions.

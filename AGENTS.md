@@ -43,7 +43,7 @@ Do not rewrite product requirements as part of implementation. Material changes 
 - Keep the application, source code, schemas, fixtures, tests, UI copy, and documentation in English, even if the user communicates in French.
 - Use current primary documentation before recalled APIs. For library or API documentation, generated integration code, setup, or configuration, consult both Context7 and DeepWiki as required by the repository instructions, then verify against the installed package version.
 - Preserve user changes. Inspect the working tree before edits and do not overwrite unrelated work.
-- Use appropriate skills for the tasks you're working on (e.g. `ai-skd` for working with ai-sdk, convex skills when using convex, `frontend-ui-engineering` + `high-end-visual-design` + `frontend-design` for well build ui, `interaction-design` for motion and interaction animations).
+- Use appropriate skills for the tasks you're working on (e.g. `ai-sdk` for working with AI SDK, Convex skills when using Convex, `frontend-ui-engineering` + `high-end-visual-design` + `frontend-design` for well-built UI, and `motion-react` for motion and interaction animations).
 
 ## Candidature Priority and Proportionality
 
@@ -118,6 +118,88 @@ Do not implement the following without a new explicit decision:
 Build the smallest runnable vertical slice that preserves the relevant invariants. Introduce domain concepts when observable behavior requires them rather than scaffolding unused abstractions. Follow the implementation sequence in `context/TECH.md` unless measured evidence justifies a change.
 
 Keep domain rules out of UI components. Keep provider-specific types and model names out of domain records and workflow business logic. Convex remains the state owner.
+
+### Centralization and Shared Ownership
+
+- Give each shared responsibility one explicit owner. A decision's labels, semantic status, iconography, presentation tokens, validation, or policy must not be redefined independently by multiple consumers.
+- When a concept is rendered or interpreted in more than one surface, expose it through a focused shared helper, hook, component, or domain module at the owning boundary. Consumers compose that API; they do not copy its mapping, constants, or conditional logic.
+- Prefer existing shared primitives and generated contracts over local replicas. Before adding a mapping, type, visual treatment, or utility, check whether the project already has an appropriate owner.
+- Centralize durable knowledge, not incidental markup. Do not introduce a generic abstraction until at least two consumers share a stable responsibility or a single owner clearly reduces change amplification.
+- Keep shared modules deep: expose the smallest useful API, retain implementation details internally, and make exceptional behavior opt-in with sensible defaults.
+
+### Implementation Planning and Scope Fidelity
+
+- Use the project `implementation-plan` skill whenever creating, revising, or
+  reviewing a multi-step implementation plan. That skill extends the principal
+  `writing-plans` skill with this repository's product, UI-preservation,
+  provider-safety, and verification contracts. If the principal skill is not
+  available, report the missing dependency instead of silently inventing a
+  substitute process.
+- Planning and implementation are separate authorizations. A request to
+  diagnose, brainstorm, review, or revise a plan does not authorize production
+  code, dependency, schema, environment, deployment, or data changes.
+- Before planning changes to an existing feature, reconstruct the current
+  behavior from the working tree, routes, tests, browser state, and relevant
+  history. Classify each affected surface or contract as `preserve`, `modify`,
+  `replace`, or `remove`, and provide evidence for every item not marked
+  `preserve`.
+- Words such as `connect`, `integrate`, `refactor`, `reuse`, or `make real` do
+  not authorize a redesign, structural rewrite, deletion of an affordance, or
+  replacement of an established interaction. Material product or visual
+  changes require an explicit user decision before they enter a plan.
+- Treat user-provided components, screenshots, prototypes, code examples, and
+  named visual references as acceptance evidence. Preserve their defining
+  structure, states, and interactions unless the user explicitly approves a
+  deviation.
+- Do not turn an implementation assumption into a test or documented product
+  requirement. If a requirement is ambiguous, surface the decision before
+  encoding it. When implementation evidence invalidates a plan, stop and revise
+  the plan and authoritative documentation before continuing.
+- Keep examples resilient to external drift. Persist and test stable identity
+  keys such as SEC CIK; treat ticker, company name, provider availability,
+  model identifiers, pricing, and returned metadata as mutable unless a
+  deterministic fixture owns the value.
+
+### Existing-Surface Preservation
+
+- Existing user-authored UI is the baseline, not disposable scaffolding. Add
+  the required behavior behind or within it. Do not replace a page, shell,
+  navigation pattern, composer, card composition, or motion language merely
+  because a simpler implementation is available.
+- Preserve established layout hierarchy, responsive behavior, visual
+  primitives, interaction states, keyboard behavior, motion, and loading
+  silhouettes. For changed user-facing surfaces, capture a pre-change browser
+  baseline and verify the same surface after the change at desktop and mobile
+  sizes.
+- Do not remove a useful affordance because one possible transport is outside
+  the MVP. Separate the supported intent from the unsupported mechanism. For
+  example, public HTTPS references remain valid even though local file upload
+  is excluded.
+- Shared UI primitives remain neutral and configurable. A stacking, sizing,
+  copy, motion, or styling requirement belonging to one consumer must be
+  applied by that consumer unless the behavior is a documented shared
+  contract. Never introduce a global primitive default solely to repair one
+  screen.
+- A skeleton must preserve the geometry and semantic regions of the loaded
+  component. Rendering a generic rectangle for a distinctive card, matrix, or
+  review surface is not an acceptable loading state.
+
+### Provider and Durable-Workflow Planning
+
+- Every planned external-I/O boundary must specify authorization before I/O,
+  validation, resource limits, timeout, bounded retry, idempotency key,
+  provider-call telemetry, cancellation behavior, and the typed outcome for
+  missing configuration or partial failure.
+- For URL retrieval, require authorization before DNS resolution, validation of
+  every redirect, and connection to the public address that was validated so a
+  later DNS resolution cannot redirect the request into a private network.
+- For retryable or durable work, bind each attempt to the active run, workflow
+  version, execution generation, corpus revision, step, and attempt. Check the
+  active generation before the external call and again before persistence;
+  late or cancelled results cannot advance state or trigger another paid call.
+- Any resume that can make work `running` must claim the visitor's execution
+  slot atomically. Provider absence or disabled paid work is an explicit typed
+  blocked or reviewable state, never a silent empty success.
 
 Protect every exposed server operation with the authorization, validation, idempotency, resource, and security controls appropriate to that operation. Never rely on disabled UI controls for enforcement.
 
@@ -324,6 +406,8 @@ Use the product design's Definition of Done as the MVP acceptance checklist. Bef
 - cost or deployment implications;
 - assumptions, remaining gaps, and blocked uncertainties;
 - the next smallest coherent slice.
+
+For a critical user journey, a public or unauthenticated page render does not prove the protected workflow. Verify the complete path with the intended role and access state, including reconnection when access is durable. Browser gates must cover the meaningful desktop and mobile states, keyboard access, relevant focus/hover interactions, reduced motion where animation changes, and console errors. If credentials or an admitted session are unavailable, report the gate as incomplete rather than substituting a component test or a nearby public screen.
 
 Do not hide failing checks, unsupported provider behavior, incomplete security controls, or mocked integrations behind optimistic wording.
 

@@ -1,8 +1,14 @@
 # Phase 4 Company and Corpus Discovery Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use
-> `executing-plans` to implement this plan task-by-task. Steps use checkbox
-> (`- [ ]`) syntax for tracking.
+> **Plan status:** Reconciled on 2026-08-05 with the current Phase 4
+> implementation attempt, ADR-012 through ADR-014, and the implementation
+> post-mortem. Checkboxes describe the required corrective execution sequence;
+> they are not delivery evidence.
+>
+> **For agentic workers:** REQUIRED SUB-SKILLS: Read `writing-plans`, then the
+> project `implementation-plan` skill, before revising this document. Use
+> `executing-plans` only after explicit implementation authorization. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver the first honest live vertical slice from company preflight
 through an immutable approved `CorpusRevision`, ending at the persisted
@@ -23,7 +29,9 @@ Hugeicons through the shared `Icon`, Motion, pnpm, Node 24.
 ## Global Constraints
 
 - Read `AGENTS.md`, `context/PROJECT.md`, `context/TECH.md`, ADR-004, and
-  ADR-008 through ADR-011 before executing.
+  ADR-008 through ADR-014 before executing.
+- Reconstruct the current worktree, routes, tests, and browser baseline before
+  changing an existing surface. Planning does not authorize implementation.
 - All production behavior follows one-test-at-a-time RED → GREEN → REFACTOR.
 - Default and CI tests never call SEC, Exa, or another nondeterministic or paid
   provider.
@@ -39,11 +47,34 @@ Hugeicons through the shared `Icon`, Motion, pnpm, Node 24.
   server functions. Reserve `createServerFn` and server routes for genuine
   request-scoped web concerns such as SSR-only computation, redirects, cookies,
   or intentionally exposed HTTP endpoints.
-- A manual source is a public HTTPS URL candidate. Do not wire file upload or
-  pasted text into production.
+- Preserve the existing Start page, composer, toolbar, Workbench Shell,
+  `AnalyzedCompanyList`, persistent rail, source-review composition, shared
+  `CutoutCard` composition, and their motion/responsive behavior. This plan
+  connects real data and workflow behavior; it does not authorize redesigning
+  those surfaces.
+- Preserve the existing reference affordance and allow multiple public HTTPS
+  URL candidates. Local file upload, pasted document bodies, and local PDF
+  upload remain outside the MVP.
+- Keep shared UI primitives neutral and configurable. Apply consumer-specific
+  stacking, dimensions, motion, and copy at the consumer boundary.
+- User-facing copy describes evidence, consequences, and next actions. It must
+  not expose invitation inventory, quota mechanics, environment variables,
+  provider error codes, raw Convex errors, internal event keys, lifecycle
+  literals, or roadmap phases.
+- Use the reusable four-digit access-code contract from ADR-014. The public
+  Start surface establishes anonymous Auth silently; code admission occurs only
+  when confirming a launch or entering a protected route. Logout, reconnection,
+  role routing, and visitor rebinding are part of the verified journey.
 - Exa search uses `contents: false`; `getContents` remains outside Phase 4.
 - Use one active `executionStatus = running` workflow per visitor. Human-paused
   runs do not block a launch.
+- Authorize ownership before external I/O. Bind retryable calls to workflow
+  version, execution generation, corpus revision, step, and attempt; recheck the
+  active generation before I/O and before persistence. Cancelled or stale work
+  cannot advance state or open another provider attempt.
+- URL retrieval validates every redirect and connects to the public address
+  that was validated. Provider absence or disabled paid work is a typed,
+  actionable state, never a silent empty success.
 - Route files export only `Route`. Cross-directory imports use `@/` or
   `@convex/`.
 - Keep product copy and source code in English.
@@ -53,6 +84,40 @@ Hugeicons through the shared `Icon`, Motion, pnpm, Node 24.
 - Do not commit or push unless the user explicitly requests it.
 
 ---
+
+## Preservation Contract
+
+| Surface | Direction | Required preservation |
+|---|---|---|
+| `/workspace/start` | Modify behavior only | Existing hierarchy, evidence-layer composition, compact composer, toolbar, spacing, and visual language |
+| `ResearchComposer` | Modify behavior only | Company picker, research direction, reference controls, explicit Continue/Back transition, and pop/fade motion |
+| `SmoothDropdown` | Preserve shared defaults | Consumer supplies local stacking; search returns selectable candidates and never auto-selects |
+| `WorkbenchShell` | Modify data only | Existing shell composition, responsive account controls, navigation placement, and route-aware state |
+| `AnalyzedCompanyList` | Modify data/navigation only | Existing Qatalog-inspired desktop list, mobile `NestedMenu`, separators, active indicator, and compact new-analysis action |
+| Dossier `CutoutCard` and skeleton | Preserve | Media, overlay, cutouts, pin, inset label, staggered content, footer, hover/focus action, and matching loading geometry |
+| Persistent workspace rail | Modify state only | Six visible sections, responsive contextual panel/drawer, and persisted active/completed/locked states |
+| Shared UI primitives | Preserve neutral API | No global default introduced to repair one consumer |
+
+Any structural, visual, motion, or affordance change outside this table requires
+an explicit user decision and a plan revision before code changes. Removing an
+unsupported transport must not remove a supported intent: public HTTPS
+references remain available although local upload is excluded.
+
+Before modifying a listed surface, capture its current browser state at desktop
+and narrow mobile sizes. After implementation, compare the same states and
+verify keyboard focus, hover/focus actions, reduced motion when relevant,
+loading geometry, and console output. Component tests alone do not authorize a
+visual divergence.
+
+## Non-goals
+
+- Redesigning the Start page, composer, Workbench Shell, dossier cards, or
+  workspace navigation.
+- Replacing established shared primitives with simpler local markup.
+- Adding local file/PDF upload, a general-purpose crawler, chat-first UI, or
+  simulated workflow activity.
+- Exposing internal architecture, access topology, provider configuration, raw
+  errors, or workflow mechanics in analyst-facing copy.
 
 ## Runtime Responsibility Map
 
@@ -144,7 +209,8 @@ type SourceReviewDecision = 'accepted' | 'rejected' | 'pending';
 Public Convex boundaries:
 
 ```ts
-api.companyResolution.preflight({ query })
+api.companyResolution.search({ query })
+api.companyResolution.preflight({ cik })
 api.researchLaunch.confirmAndStart(input)
 api.researchRuns.getMine({ runId })
 api.researchRuns.listMine({})
@@ -179,6 +245,46 @@ type WorkspaceSection =
     | 'map'
     | 'brief';
 ```
+
+## Security and Durable-Execution Matrix
+
+| Boundary | Authorization and validation before I/O | Durable identity and concurrency | Cancellation, retry, and failure outcome | Required proof |
+|---|---|---|---|---|
+| SEC company search and preflight | Public search remains bounded and validates normalized input; preflight validates CIK and output shape before persistence | Stable company identity is CIK; operation records use the normalized request and attempt, while ticker and name remain revalidated metadata | Bounded timeout and retry; typed unavailable, malformed-response, and rate-limited results; no raw provider error in public copy | Adapter tests plus a bounded live lookup by known CIK; live assertions do not pin mutable ticker metadata |
+| Exa source discovery | Run ownership and active generation are checked before SDK construction or request dispatch | Lease key includes run, workflow version, generation, corpus revision, query step, and attempt; duplicate execution cannot issue a second paid call | Application-owned retry/fallback ceiling; cancellation and generation are rechecked before persistence; missing configuration and partial results remain typed and visible | Negative spies for unauthorized, cancelled, stale, and duplicate attempts; bounded live call only after explicit approval |
+| Analyst-added public HTTPS source | Run ownership is checked before DNS or HTTP; scheme, host, resolved addresses, response size/type, and every redirect are validated | Operation key binds the source URL to run, generation, corpus revision, step, and attempt; replay returns the durable result | Connect to the validated public address with the original host/SNI; reject private or changed destinations; cancellation or stale generation cannot persist metadata or advance the run | Deterministic DNS-rebinding, private-redirect, replay, timeout, and oversized-response tests with zero-I/O assertions on rejected authorization |
+| Sufficiency recheck or forced continuation | Owner, decision payload, current checkpoint, and latest corpus revision are validated in the mutation | The same mutation atomically claims the visitor's single running slot and increments the execution generation | A competing run leaves this run paused; late work from the prior generation is ignored; retries reuse the durable decision result | Convex concurrency tests for recheck, force, competing run, duplicate decision key, cancellation, and late persistence |
+| Corpus approval and workflow resume | Owner and complete source-review state are validated before transition | Approval decision and running-slot claim are atomic; the resumed generation is persisted before scheduling work | Duplicate approval is idempotent; stale or cancelled callbacks cannot emit later events or start extraction | Convex tests for incomplete review, foreign run, duplicate approval, competing run, stale callback, and single resume |
+
+No task may weaken these rows to accommodate a provider SDK. Provider-specific
+types stay inside `convex/integrations/*`; durable domain records retain the
+application-owned operation identity and typed outcome.
+
+## User-Facing Copy Contract
+
+| Durable or provider state | Analyst-facing message | Available next action | Must never be rendered |
+|---|---|---|---|
+| Company lookup temporarily unavailable | The company directory could not be checked right now; no dossier was started | Retry the lookup or return to the current workspace | Provider code, endpoint, request ID, stack trace, environment-variable name |
+| Discovery unavailable because paid work is disabled or unconfigured | Source discovery is not available for this run yet | Return later, review already available sources, or use an enabled analyst action | API-key name, deployment configuration, quota mechanics, internal workflow state |
+| Partial discovery result | Some candidate sources are ready for review; the missing portion is identified without overstating coverage | Review the available sources, retry the failed portion when permitted, or add public HTTPS sources | Raw SDK response, prompt, provider retry counters, internal event keys |
+| Insufficient public evidence | The current public evidence cannot support a reliable assessment | Recheck after adding sources, continue with an audited reason, or complete as insufficient | Model self-confidence, fabricated score, backend enum, persistence mechanics |
+| Corpus ready for analyst approval | Candidate sources have been reviewed and the accepted set is ready to lock | Approve the corpus or revise a source decision | Extraction internals, hidden reasoning, future roadmap phases |
+| Access required or role mismatch | Access is required for this workspace, or this account cannot open the requested area | Enter the reusable access code, reconnect, sign out, or return to the permitted area | Access-code inventory, digests, anonymous-session mechanics, role topology |
+
+Presentation tests must assert both the actionable message and the absence of
+the forbidden details. Protected administration may show secondary diagnostic
+detail only after a readable status and only when the role permits it.
+
+## Verification Matrix
+
+| Exit criterion | Deterministic proof | Browser proof | Live proof | Blocking condition |
+|---|---|---|---|---|
+| Public Start preserves the accepted composition while using real company candidates | Route and component tests cover explicit selection, multiple HTTPS references, access drawer, and absence of auto-selection | Fresh desktop and narrow-mobile snapshots; keyboard, focus, hover, Back/Continue motion, reduced motion, and console checks | SEC lookup by known CIK after deterministic gates | Any unapproved visual restructuring, missing reference affordance, simulated state, or console error |
+| Admission, reconnection, and role routing match the reusable access-code contract | Convex and route tests cover public anonymous Start, admission confirmation, logout, stable visitor rebind, analyst route, and administrator route | Exercise the whole journey as the intended analyst and administrator roles | Deployment smoke test with configured reusable code, without printing it | Testing only a public page, mocked context, or unauthenticated rejection |
+| Workflow reaches durable human checkpoints without duplicate work | Convex tests cover atomic slot claims, idempotency, generation checks, cancellation, late results, and persisted events | Observe persisted progress, sufficiency actions, source review, approval, and `corpus_approved` after reload | One explicitly approved bounded Exa run with recorded request count and latency | Duplicate provider call, state advanced by stale work, or UI activity not backed by persisted events |
+| Public URLs are retrieved without SSRF or replay gaps | Adapter/action tests cover authorization-before-I/O, DNS rebinding, every redirect, size/type/time limits, replay, and cancellation | Add and review more than one valid HTTPS source; verify inline actionable failures | Optional bounded public URL fetch after deterministic safety gates | A second unvalidated DNS resolution, private redirect, or provider I/O before authorization |
+| Existing workbench and dossier surfaces remain visually intact | Component tests preserve owned slots, states, source selection, and neutral primitive defaults | Before/after desktop and mobile evidence for the rail, shell, source panel, dossier card, isomorphic skeleton, keyboard, hover, focus, reduced motion, and console | Not required | Replacement by generic cards/navigation/skeletons or a consumer-specific global primitive default |
+| Full quality gate remains honest | Focused suites, affected suites, then all commands in `context/TECH.md` with failures attributed | Critical journey uses real protected routes and removes temporary QA fixtures | Live gates remain separately reported and bounded | Targeted green tests used to claim completion while required full, browser, or live gates are missing |
 
 ---
 
@@ -603,8 +709,8 @@ Expected: both files pass with no warning.
 
 **Files:**
 
-- Create: `convex/domain/publicSourceUrl.ts`
-- Create: `convex/sourceActions.ts`
+- Modify: `convex/domain/publicSourceUrl.ts`
+- Modify: `convex/sourceActions.ts`
 - Test: `src/__tests__/convex/sources/public-source-url.test.ts`
 
 **Interfaces:**
@@ -613,15 +719,16 @@ Expected: both files pass with no warning.
 - Produces:
 
 ```ts
-type PublicSourceUrl = {
+type PublicSourceTarget = {
     canonicalUrl: string;
     hostname: string;
+    approvedAddresses: ReadonlyArray<string>;
 };
 
 async function validatePublicSourceUrl(
     rawUrl: string,
     resolveAddresses: (hostname: string) => Promise<ReadonlyArray<string>>,
-): Promise<PublicSourceUrl>;
+): Promise<PublicSourceTarget>;
 ```
 
 - [ ] **Step 1: Write parameterized RED tests**
@@ -652,6 +759,7 @@ test('canonicalizes a public HTTPS URL', async () => {
     ).resolves.toEqual({
         canonicalUrl: 'https://example.com/report',
         hostname: 'example.com',
+        approvedAddresses: ['93.184.216.34'],
     });
 });
 
@@ -661,6 +769,24 @@ test('rejects a hostname resolving to a private address', async () => {
             '10.0.0.1',
         ]),
     ).rejects.toThrow('public network');
+});
+
+test('connects to the validated public address instead of resolving again', async () => {
+    const target = await validatePublicSourceUrl(
+        'https://example.com/report',
+        async () => ['93.184.216.34'],
+    );
+    const attempts: Array<{ address: string; servername: string }> = [];
+
+    await expect(fetchPublicSourceMetadata(target, {
+        connect: async ({ address, servername }) => {
+            attempts.push({ address, servername });
+            throw new Error('expected test stop');
+        },
+    })).rejects.toThrow('expected test stop');
+    expect(attempts).toEqual([
+        { address: '93.184.216.34', servername: 'example.com' },
+    ]);
 });
 ```
 
@@ -685,7 +811,15 @@ or unspecified. Remove fragments and the default port from the canonical URL.
 Keep DNS and network I/O in the `"use node"` action module. Fetch metadata with
 `redirect: 'manual'`, validate each redirect through the same function, cap
 redirects at 5, response bytes at 2 MiB, and timeout at 10 seconds. Persist no
-body before corpus approval.
+body before corpus approval. Connect each request to one of the public addresses
+returned by validation while preserving the original hostname for HTTP Host and
+TLS SNI. Do not validate an address and then let `fetch` perform an unrelated
+DNS lookup.
+
+The public action must authorize the visitor and run ownership before DNS or
+HTTP work. Add a negative action test whose DNS and fetch spies remain untouched
+for an unknown or foreign run. Provider-call telemetry and the operation lease
+are created only after authorization succeeds.
 
 - [ ] **Step 4: Verify GREEN**
 
@@ -697,22 +831,25 @@ Run the focused file and expect all cases to pass.
 
 **Files:**
 
-- Create: `convex/integrations/sec.ts`
-- Create: `convex/providerCalls.ts`
-- Create: `convex/companyResolution.ts`
+- Modify: `convex/integrations/sec.ts`
+- Modify: `convex/providerCalls.ts`
+- Modify: `convex/companyResolution.ts`
 - Modify: `convex/schema.ts`
 - Test: `src/__tests__/convex/company-resolution/company-preflight.test.ts`
 - Test: `src/__tests__/convex/integrations/sec-adapter.test.ts`
 
 **Interfaces:**
 
-- Consumes: a company name, ticker, or SEC company URL.
-- Produces: `CompanyPreflightResult`.
+- Consumes: a partial company name, ticker, CIK, or SEC company URL for search,
+  followed by an explicitly selected CIK for preflight.
+- Produces: a bounded list of `SecCompanyMatch` candidates, then
+  `CompanyPreflightResult`.
 - Runtime ownership:
     - `convex/integrations/sec.ts` implements the external transport and mapping
       only. It has no Convex registration and no database access.
-    - `convex/companyResolution.ts` exports the authenticated public Convex
-      Action and composes the production adapter.
+    - `convex/companyResolution.ts` exports the anonymous-Auth-backed public
+      Convex Action and composes the production adapter. Access-code admission
+      is not required for this non-billable boundary.
     - `convex/providerCalls.ts` exposes internal mutations for atomic rate-limit
       reservations and attempt persistence.
     - TanStack Start calls the generated Convex action directly; it does not
@@ -729,7 +866,7 @@ type SecCompanyMatch = {
 };
 
 interface SecCompanyResolver {
-    resolve(query: string): Promise<ReadonlyArray<SecCompanyMatch>>;
+    search(query: string): Promise<ReadonlyArray<SecCompanyMatch>>;
     revalidate(cik: string): Promise<SecCompanyMatch>;
 }
 ```
@@ -737,25 +874,37 @@ interface SecCompanyResolver {
 - [ ] **Step 1: Write the preflight service and persistence RED tests**
 
 Test the exported application service with an injected `SecCompanyResolver`,
-then authenticate an admitted visitor and exercise the real internal persistence
-mutation with that typed result. Do not expose a test-only Convex action.
+then authenticate an anonymous Convex Auth identity and exercise the real
+internal persistence mutation with that typed result. Do not expose a test-only
+Convex action.
 Assert:
 
 ```ts
+await expect(analyst.action(searchCompanies, { query: 'CCC' })).resolves.toEqual([
+    expect.objectContaining({
+        legalName: 'CCC Intelligent Solutions Holdings Inc.',
+        cik: '1818201',
+        ticker: expect.any(String),
+        exchange: expect.any(String),
+    }),
+]);
+
 await expect(
-    analyst.action(preflightCompany, { query: 'CCCS' }),
+    analyst.action(preflightCompany, { cik: '1818201' }),
 ).resolves.toMatchObject({
     company: {
         legalName: 'CCC Intelligent Solutions Holdings Inc.',
-        ticker: 'CCCS',
-        exchange: 'NASDAQ',
         cik: '1818201',
+        ticker: expect.any(String),
+        exchange: expect.any(String),
     },
 });
 ```
 
-Also assert unauthenticated rejection, empty query rejection, ambiguous-result
-rejection, and a finite expiration timestamp.
+Also assert unauthenticated rejection, empty search rejection, partial-name
+matching, ticker/CIK/SEC-URL matching, explicit CIK revalidation, and a finite
+expiration timestamp. CIK is the stable assertion. Ticker and exchange are
+revalidated metadata and must not be pinned to a recalled live value.
 
 - [ ] **Step 2: Verify RED**
 
@@ -769,6 +918,13 @@ contact. Add an atomic provider-rate-limit reservation that spaces aggregate SEC
 requests by at least 125 ms. Persist started/succeeded/failed `ProviderCall`
 records around each request.
 
+Keep CIK, SEC URL, and exact ticker paths deterministic. Normalize legal names
+for punctuation, spacing, diacritics, and compact-word comparison. Use Fuse.js
+only when deterministic company-name matching returns no result, with bounded
+token search, a tested score cutoff, and no fuzzy matching for short tickers.
+Deterministic matches must never be polluted with fuzzy candidates. Cover
+spaced, concatenated, misspelled, and false-positive company-name cases.
+
 Keep the transport in `convex/integrations/sec.ts`. Export a factory that accepts
 `fetch`, clock, user-agent, rate-limit reservation, and attempt-recorder
 dependencies and returns `SecCompanyResolver`. The adapter must return only
@@ -779,17 +935,27 @@ authority.
 
 - [ ] **Step 4: Implement the public preflight action**
 
-Authenticate the active visitor, normalize a query to 1–160 characters, resolve
-exactly one supported US-listed technology company, upsert by CIK, and insert a
-15-minute `companyPreflights` record. Do not reserve an analysis or start a
-workflow. Keep the orchestration in an exported function that accepts
-`SecCompanyResolver`; the public Convex action supplies the production SEC
-adapter and deterministic tests supply a fake.
+Authenticate the anonymous Convex Auth identity without requiring an admitted
+visitor. The search Action normalizes a query to 1–160 characters and returns
+at most eight ranked SEC-index candidates without persisting a selection or
+revalidating every result. The preflight Action accepts only the explicitly
+selected CIK, revalidates that company through SEC submissions data, upserts it
+by CIK, and inserts a 15-minute `companyPreflights` record owned by that Auth
+user. Do not reserve an analysis or start a workflow. Keep both orchestrations
+in exported functions that accept `SecCompanyResolver`; the public Convex
+Actions supply the production SEC adapter and deterministic tests supply a
+fake.
+
+Map configuration, provider, and authorization failures to typed application
+errors. The Start presentation boundary translates them into actionable
+analyst copy; it never renders raw Convex messages, request IDs, function names,
+or environment-variable instructions.
 
 The Action uses `ctx.runMutation` for rate-limit reservations, provider-call
 attempts, and final preflight persistence. It does not write the database
 directly. Do not add a TanStack Start server function: Task 8 invokes
-`api.companyResolution.preflight` through the generated Convex client.
+`api.companyResolution.search` and `api.companyResolution.preflight` through the
+generated Convex client.
 
 - [ ] **Step 5: Verify GREEN**
 
@@ -802,7 +968,7 @@ Run both company-resolution and SEC-adapter test files. Provider tests inject
 
 **Files:**
 
-- Create: `convex/researchLaunch.ts`
+- Modify: `convex/researchLaunch.ts`
 - Modify: `convex/researchRuns.ts`
 - Modify: `convex/workflowControls.ts`
 - Modify: `convex/researchWorkflow.ts`
@@ -826,7 +992,8 @@ owned preflight:
 4. starts workflow version 2 and execution generation 1;
 5. revalidates the CIK before evidence checks.
 
-Use the existing invitation helper pattern and deterministic resolver.
+Use the reusable access-code admission helper pattern from ADR-014 and a
+deterministic resolver. Do not recreate one-time invitation semantics in tests.
 
 - [ ] **Step 2: Write the concurrency RED test**
 
@@ -874,8 +1041,8 @@ Run research-launch, private-access, and durable-workflow suites.
 
 **Files:**
 
-- Create: `convex/domain/evidenceAvailabilityPolicy.ts`
-- Create: `convex/evidenceSufficiency.ts`
+- Modify: `convex/domain/evidenceAvailabilityPolicy.ts`
+- Modify: `convex/evidenceSufficiency.ts`
 - Modify: `convex/workflow.ts`
 - Modify: `convex/researchWorkflow.ts`
 - Modify: `convex/domain/validators.ts`
@@ -900,7 +1067,12 @@ Use deterministic availability inputs:
 - `complete_insufficient` ends with lifecycle `completed` and
   `completionOutcome = insufficient_public_evidence`;
 - `recheck` returns to `checking_public_evidence` without consuming another
-  analysis.
+  analysis;
+- `recheck` and `force_continue` atomically reclaim the visitor's running slot,
+  increment the execution generation, and remain paused if another run is
+  already running;
+- cancellation before or during resume prevents an event or late result from
+  advancing the run.
 
 - [ ] **Step 2: Verify RED**
 
@@ -944,6 +1116,12 @@ After each `recheck`, recompute availability using the new validated manual
 candidate count. On force, proceed without changing the policy result. On
 completion, set the honest completion outcome and return.
 
+The same mutation that resumes executable work must claim the visitor's
+`running` slot and advance the execution generation before sending the workflow
+event. The workflow validates that generation before its next external call and
+before persistence. A competing run or cancellation leaves the checkpoint
+intact and records no false progress.
+
 - [ ] **Step 6: Verify GREEN**
 
 Run the focused workflow test with fake timers and
@@ -957,10 +1135,10 @@ Run the focused workflow test with fake timers and
 
 - Modify: `package.json`
 - Modify: `pnpm-lock.yaml`
-- Create: `convex/domain/researchPlan.ts`
-- Create: `convex/integrations/exa.ts`
-- Create: `convex/researchPlanning.ts`
-- Create: `convex/sourceDiscovery.ts`
+- Modify: `convex/domain/researchPlan.ts`
+- Modify: `convex/integrations/exa.ts`
+- Modify: `convex/researchPlanning.ts`
+- Modify: `convex/sourceDiscovery.ts`
 - Modify: `convex/researchWorkflow.ts`
 - Test: `src/__tests__/convex/research-plans/research-plan.test.ts`
 - Test: `src/__tests__/convex/integrations/exa-adapter.test.ts`
@@ -1005,6 +1183,16 @@ Inject a fake Exa client and assert the adapter passes:
 
 Assert the adapter maps URL, title, published date, and provider reference into
 application-owned candidate metadata. It must not persist snippets as evidence.
+Also assert:
+
+- missing Exa configuration produces typed `exa_not_configured` blocked or
+  reviewable state rather than an empty successful discovery;
+- a started operation lease prevents the same external call from executing
+  twice;
+- cancellation or generation change during the call rejects the late result
+  and opens no fallback or retry attempt;
+- partial query failure remains visible while unrelated successful metadata is
+  preserved.
 
 - [ ] **Step 4: Verify RED**
 
@@ -1027,6 +1215,12 @@ function or SDK type. `sourceDiscovery.ts` is the Action/workflow boundary that
 records attempts and passes mapped candidates to internal persistence
 mutations. Do not introduce a TanStack Start server-function path for discovery.
 
+Before each call, authorize the run and reserve an operation lease keyed by
+run, workflow version, execution generation, corpus revision, query/step, and
+attempt. Recheck the active generation before candidate persistence. Bounded
+fallback may start only when the same active generation permits it; a cancelled
+or stale attempt cannot trigger another paid call.
+
 - [ ] **Step 7: Persist candidates as pending decisions**
 
 For every new source, insert a `pending` `SourceDecision` tied to the draft
@@ -1042,7 +1236,8 @@ reasoning, or synthetic percentages.
 - [ ] **Step 9: Verify GREEN**
 
 Run plan, adapter, source-discovery, and workflow tests. Confirm no test accesses
-the network.
+the network. Include cancellation-during-call, duplicate-attempt,
+missing-configuration, and late-result regression cases.
 
 ---
 
@@ -1050,7 +1245,7 @@ the network.
 
 **Files:**
 
-- Create: `convex/sources.ts`
+- Modify: `convex/sources.ts`
 - Modify: `convex/sourceActions.ts`
 - Modify: `convex/researchWorkflow.ts`
 - Modify: `convex/workflow.ts`
@@ -1071,13 +1266,21 @@ Cover:
   decision;
 - another visitor cannot read or decide the source;
 - manual HTTPS URL becomes a pending candidate;
+- multiple manual HTTPS URLs can be added without removing the existing
+  reference affordance;
 - unsafe/manual duplicate URL is rejected;
+- a foreign or unknown run is rejected before DNS resolution or HTTP fetch;
+- DNS rebinding and a redirect to a private address are rejected without a
+  second unvalidated resolution;
+- repeated operation key replays persisted metadata without another request;
 - revision approval succeeds with accepted plus pending sources;
 - accepted count must be at least one;
 - rejected and pending source IDs are absent from the approved source
   projection;
 - approval is idempotent by decision key;
 - a second mutation cannot modify an approved revision;
+- approval atomically claims the running slot before workflow resumption and
+  remains reviewable if another run already owns it;
 - approval transitions the run to `corpus_approved` and `idle`.
 
 - [ ] **Step 2: Verify RED**
@@ -1093,7 +1296,10 @@ append-only source decision per source. Reject changes to an approved revision.
 
 Run the Task 2 URL safety boundary, fetch bounded metadata only, deduplicate by
 canonical URL, persist origin `analyst_url`, and append the initial pending
-decision. Content retrieval remains forbidden.
+decision. Content retrieval remains forbidden. Authorize ownership before DNS
+or HTTP, connect to the validated public address, validate every redirect, and
+wrap the request in a replayable provider-call lease with latency and typed
+failure telemetry.
 
 - [ ] **Step 5: Implement revision approval and the workflow handoff**
 
@@ -1103,13 +1309,16 @@ In one mutation:
 - verify the revision is draft and belongs to the run;
 - compute accepted/rejected/pending counts from effective decisions;
 - require at least one accepted source;
+- atomically claim the visitor's running slot and increment execution
+  generation before resuming;
 - mark the revision approved and bind it to the run;
 - append checkpoint and audit records;
 - send a typed `corpusRevisionApproved` workflow event.
 
 The resumed workflow verifies the approved revision ID, transitions lifecycle
 to `corpus_approved` with execution `idle`, and returns successfully without
-emitting extraction progress.
+emitting extraction progress. A cancellation or generation mismatch before the
+handoff leaves no late transition or duplicate event.
 
 - [ ] **Step 6: Verify GREEN**
 
@@ -1122,15 +1331,23 @@ must show an approved revision and no `extract_evidence` step or event.
 
 **Files:**
 
-- Modify: `src/components/workspace/research-composer.tsx`
-- Create: `src/components/workspace/company-resolution-card.tsx`
-- Create: `src/components/workspace/coverage-preset-picker.tsx`
-- Modify: `src/routes/workspace/start.tsx`
+- Preserve visual structure / Modify behavior:
+  `src/components/workspace/research-composer.tsx`
+- Modify: `src/components/workspace/company-resolution-card.tsx`
+- Modify: `src/components/workspace/coverage-preset-picker.tsx`
+- Modify: `src/components/workspace/composer-toolbar-actions.tsx`
+- Modify: `src/components/workspace/invitation-access-drawer.tsx`
+- Modify: `src/components/workspace/protected-workspace-route.tsx`
+- Modify: `src/components/workspace/invitation-access-context.tsx`
+- Preserve visual structure / Modify behavior: `src/routes/workspace/start.tsx`
+- Modify: `src/routes/workspace/_protected/route.tsx`
 - Test: `src/__tests__/routes/start.test.tsx`
+- Test: `src/__tests__/routes/protected-workspace-route.test.tsx`
 
 **Interfaces:**
 
-- Consumes: `api.companyResolution.preflight` and
+- Consumes: `api.companyResolution.search`,
+  `api.companyResolution.preflight`, reusable access-code admission, and
   `api.researchLaunch.confirmAndStart`.
 - Produces: typed navigation to `/workspace/$runId`.
 - Runtime boundary: the component uses generated Convex React hooks directly.
@@ -1141,7 +1358,11 @@ must show an approved revision and no `extract_evidence` step or event.
 
 Test that:
 
-- typing a name/ticker submits a preflight request;
+- searching by partial name, ticker, CIK, or SEC URL returns selectable company
+  candidates without submitting a preflight;
+- selecting a candidate explicitly submits preflight for its CIK;
+- selection never changes view automatically; only Continue opens
+  confirmation;
 - the resolved company card displays legal name, ticker, exchange, and CIK;
 - no quota is consumed before confirmation;
 - the default preset is `Balanced`;
@@ -1149,48 +1370,91 @@ Test that:
 - field-level query errors render inline;
 - provider/permission failures render an actionable inline error or non-field
   toast according to `AGENTS.md`;
-- attachment/file-drop production controls are absent.
+- company resolution is available before access-code admission;
+- confirming as an unadmitted visitor opens the access-code top drawer and
+  launches only after successful reusable-code admission;
+- logout followed by the same code rebinds the same stable visitor, dossiers,
+  role, and quota; the previous Auth identity loses protected access;
+- admitted administrators route to Operations and analysts route to Dossiers;
+- protected workspace children remain unmounted until an active visitor is
+  resolved;
+- `ToolbarIconButton` and the reference affordance remain in their established
+  position, support multiple public HTTPS URLs, and show their count;
+- local file/drop/upload controls remain absent;
+- analyst copy contains no invitation inventory, quota mechanics, environment
+  names, provider codes, raw errors, or internal workflow literals.
 
 - [ ] **Step 2: Verify RED**
 
-Expected: existing fictional-catalog and attachment tests fail against the new
-contract before production changes.
+Expected: fictional-catalog and auto-selection tests fail against the new
+contract before production changes. Existing visual-preservation assertions
+remain green until behavior intentionally changes.
 
 - [ ] **Step 3: Refactor the composer into a controlled boundary**
 
-Use generated Convex API types; do not hand-write server DTOs. Keep the optional
-research angle and company query in UI state only until submitted. Present
+Preserve the existing Start-page hierarchy, evidence-layer composition,
+compact composer, toolbar, and motion. Do not replace them with a generic form
+or a newly composed page. Use generated Convex API types; do not hand-write
+server DTOs. Keep the optional research angle and company query in UI state only
+until submitted. Present
 coverage presets as `Balanced`, `First-party depth`, and
 `Independent scrutiny`; they adjust priorities, not required workflow stages.
-Invoke preflight and confirmation with `useAction` against the generated
-`api.companyResolution` and `api.researchLaunch` references. Do not add
-`createServerFn`, an internal HTTP route, or an ad-hoc `fetch` wrapper.
+Invoke search, preflight, and confirmation with `useAction` against the
+generated `api.companyResolution` and `api.researchLaunch` references. Do not
+add `createServerFn`, an internal HTTP route, or an ad-hoc `fetch` wrapper.
+Establish the anonymous Convex Auth session silently for the public Start
+surface. Keep `/workspace/start` outside the pathless protected layout.
+
+Preserve `SmoothDropdown` as a configurable shared primitive. Apply the
+composer's stacking class at the composer boundary; do not add a shared z-index
+default for this one toolbar. Preserve `ToolbarIconButton` and route its
+reference action to the multiple-HTTPS-URL flow without reintroducing local
+upload.
 
 - [ ] **Step 4: Add the confirmation card and launch state**
 
-Preserve layout dimensions with a skeleton during preflight. Require explicit
-confirmation. Disable duplicate submission only while the mutation is pending;
-server idempotency remains authoritative.
+Preserve layout dimensions with a skeleton during search and preflight. Require
+explicit candidate selection and keep the populated composer available so the
+analyst can complete the research direction and references. Only an explicit
+Continue action replaces the composer in place with the confirmation controls
+rather than appending them below it. Do not add numbered steps or redundant view
+titles. A Back control restores the populated composer. Disable duplicate
+submission only while the mutation is pending; server
+idempotency remains authoritative. Request access-code admission in the shared
+top drawer only at confirmation or on direct entry to a protected route. Use
+pop/fade causality rather than slide motion and preserve the populated composer
+on Back. Respect reduced motion.
 
-- [ ] **Step 5: Verify GREEN**
+- [ ] **Step 5: Verify access, copy, and visual preservation**
 
-Run `src/__tests__/routes/start.test.tsx` and expect all composer/start behavior
-to pass.
+Verify analyst and administrator admission, logout/reconnection with the same
+code, role destinations, protected-route gating, actionable copy, and absence
+of raw technical details. Compare the pre-change and post-change Start surface
+at desktop and narrow mobile sizes. Exercise keyboard selection, Continue/Back,
+reference count, hover/focus states, reduced motion, and console output.
+
+- [ ] **Step 6: Verify GREEN**
+
+Run Start, protected-route, access-context, and Workbench Shell tests and expect
+all behavior to pass without weakening existing layout or interaction
+assertions.
 
 ---
 
-### Task 9: Fold Prototype A into the Production Run Workspace
+### Task 9: Connect Real Workspace State Without Replacing the Existing UI
 
 **Files:**
 
-- Create: `src/routes/workspace/$runId.tsx`
-- Create: `src/components/workspace/run-route-component.tsx`
-- Create: `src/components/workspace/workspace-navigation-rail.tsx`
-- Create: `src/components/workspace/run-progress.tsx`
-- Create: `src/components/workspace/source-review.tsx`
-- Create: `src/components/workspace/source-context-panel.tsx`
-- Modify: `src/components/workbench-shell/workbench-shell.tsx`
-- Modify: `src/components/workbench-shell/analyzed-company-list.tsx`
+- Modify: `src/routes/workspace/_protected/$runId.tsx`
+- Modify: `src/components/workspace/run-route-component.tsx`
+- Modify: `src/components/workspace/workspace-navigation-rail.tsx`
+- Modify: `src/components/workspace/run-progress.tsx`
+- Modify: `src/components/workspace/source-review.tsx`
+- Modify: `src/components/workspace/source-context-panel.tsx`
+- Preserve visual structure / Modify data:
+  `src/components/workbench-shell/workbench-shell.tsx`
+- Preserve visual structure / Modify data and navigation:
+  `src/components/workbench-shell/analyzed-company-list.tsx`
 - Test: `src/__tests__/routes/run-workspace.test.tsx`
 - Test: `src/__tests__/components/workbench-shell/analyzed-company-list.test.tsx`
 
@@ -1215,7 +1479,13 @@ Assert:
 - approving with pending sources shows the exclusion consequence;
 - `corpus_approved` displays a truthful handoff and no extraction activity;
 - loading uses stable skeletons, empty is distinct, and partial discovery
-  failures remain visible.
+  failures remain visible;
+- Workbench Shell and `AnalyzedCompanyList` retain their established desktop
+  and mobile composition, separators, active indicator, compact new-analysis
+  action, and `NestedMenu` behavior;
+- no raw provider error, event key, internal lifecycle literal, environment
+  variable, quota mechanism, or “Phase 4” copy reaches the analyst;
+- selecting a newly added source updates the context panel reactively.
 
 - [ ] **Step 2: Verify RED**
 
@@ -1237,12 +1507,25 @@ Reuse `LiquidGlassCard`, `ResizablePanelGroup`, `ScrollArea`,
 `useResponsive`, `surface-floating`, and shared icons. Do not import
 `prototype-data.ts`, `PrototypeNotice`, or variant-switching code.
 
+Reuse means preserve the existing production composition and replace only
+static data and inactive controls with real projections. It does not authorize
+a generic rail, generic SaaS cards, a simplified header, or new local styling.
+Capture the current shell and workspace before changes and list the exact
+visible differences expected; when only data changes, the expected visual
+difference is limited to real content and states.
+
 - [ ] **Step 5: Make company navigation real**
 
 Change `AnalyzedCompanyList` to owner-scoped run/company data and typed links to
 `/workspace/$runId`. Remove the mock fallback from production navigation; show
 loading, empty, and error states explicitly. Keep the curated showcase clearly
 labelled when it is added through Phase 9 data.
+
+Preserve the Qatalog-inspired desktop list, mobile `NestedMenu`, separators,
+purple active indicator, name/ticker presentation, and compact start action.
+Do not restore or invent a destructive control without a real audited server
+contract. Translate loading, empty, and error states inside the same compact
+navigation footprint.
 
 - [ ] **Step 6: Verify GREEN**
 
@@ -1256,15 +1539,20 @@ pnpm generate:routes
 node --experimental-strip-types scripts/check-imports.ts
 ```
 
+Then verify the real workspace in desktop and narrow mobile viewports with an
+admitted analyst session. Exercise rail navigation, reactive source selection,
+desktop panel/mobile drawer, keyboard focus, loading geometry, and console
+output. A public Start render or mocked projection is not this gate.
+
 ---
 
 ### Task 10: Add the Minimal Admin Operations Surface
 
 **Files:**
 
-- Create: `convex/adminOperations.ts`
-- Create: `src/routes/workspace/admin.tsx`
-- Create: `src/components/admin/operations-page.tsx`
+- Modify: `convex/adminOperations.ts`
+- Modify: `src/routes/workspace/_protected/admin.tsx`
+- Modify: `src/components/admin/operations-page.tsx`
 - Modify: `src/components/workbench-shell/workbench-shell.tsx`
 - Test: `src/__tests__/convex/admin/admin-operations.test.ts`
 - Test: `src/__tests__/routes/admin-operations.test.tsx`
@@ -1297,7 +1585,8 @@ return secrets, prompt bodies, invitation digests, or provider credentials.
 Use the current visitor role to expose a typed admin link. Render an explicit
 confirmation dialog for disabling paid work, inline operational errors, and the
 existing audited quota-restore mutation. Do not add dynamic provider, model, or
-policy editing.
+policy editing. Keep operational copy readable first; raw diagnostic detail is
+secondary and remains inside this protected administration surface.
 
 - [ ] **Step 5: Verify GREEN**
 
@@ -1309,8 +1598,8 @@ Run the focused Convex and route tests.
 
 **Files:**
 
-- Create: `src/__tests__/live/sec.contract.test.ts`
-- Create: `src/__tests__/live/exa.contract.test.ts`
+- Modify: `src/__tests__/live/sec.contract.test.ts`
+- Modify: `src/__tests__/live/exa.contract.test.ts`
 - Modify: `.env.example`
 - Modify: `context/TECH.md` only if implementation evidence changes a documented
   boundary
@@ -1326,25 +1615,33 @@ Run the focused Convex and route tests.
 - [ ] **Step 1: Add explicit live-test guards**
 
 Live files must exit without a provider call unless
-`RUN_LIVE_PROVIDER_TESTS=1`. Bound SEC requests to one known company lookup and
+`RUN_LIVE_PROVIDER_TESTS=1`. Bound SEC requests to one known CIK lookup and
 Exa to one metadata-only query with at most two results and
-`contents: false`.
+`contents: false`. Assert the SEC identity and response shape without pinning a
+mutable ticker. Validate that local test-process variables and Convex deployment
+environment variables are configured separately; never print either value.
 
 - [ ] **Step 2: Run focused deterministic verification**
 
 ```bash
 TMPDIR=/tmp TEMP=/tmp pnpm exec vitest run \
   src/__tests__/convex/company-resolution \
+  src/__tests__/convex/access \
   src/__tests__/convex/research-runs \
   src/__tests__/convex/sources \
   src/__tests__/convex/workflows \
   src/__tests__/convex/admin \
   src/__tests__/routes/start.test.tsx \
+  src/__tests__/routes/protected-workspace-route.test.tsx \
   src/__tests__/routes/run-workspace.test.tsx \
   src/__tests__/routes/admin-operations.test.tsx
 ```
 
-Expected: all affected deterministic tests pass with no paid requests.
+Expected: all affected deterministic tests pass with no paid requests. The
+suite includes authorization-before-I/O, DNS pinning and redirects, operation
+lease replay, cancellation during a provider call, generation mismatch, late
+result rejection, atomic resume, missing provider configuration, access-code
+rebinding, and analyst/admin authorization.
 
 - [ ] **Step 3: Run project quality gates**
 
@@ -1367,17 +1664,38 @@ direction.
 Use the project's AXI-first browser procedure on desktop and a narrow mobile
 viewport. Verify:
 
-1. preflight resolution and confirmation;
-2. no reservation before confirmation;
-3. persisted progress after launch;
-4. insufficiency checkpoint URL and override paths using deterministic test
+1. public Start establishes anonymous Auth without asking for a code;
+2. partial name, spaced/misspelled name, ticker, CIK, and SEC URL searches show
+   bounded candidates without auto-selection;
+3. explicit selection stays in the composer until Continue; Back restores the
+   company, direction, and references;
+4. multiple HTTPS references and their toolbar count remain available while
+   local file upload remains absent;
+5. no reservation occurs before confirmation;
+6. confirmation opens the top access-code drawer; admitted analysts reach
+   Dossiers and administrators reach Operations;
+7. logout and reuse of the same code restore the same visitor, role, quota, and
+   dossiers while invalidating the previous Auth identity;
+8. persisted progress appears after launch;
+9. insufficiency checkpoint URL and override paths work using deterministic test
    data;
-5. source review with pending candidates;
-6. immutable corpus approval;
-7. `corpus_approved` handoff with Evidence/Assessment/Map/Brief visibly locked;
-8. responsive context drawer;
-9. admin operations authorization and paid-work switch;
-10. no console errors or simulated progress.
+10. source review handles pending candidates and reactive source selection;
+11. immutable corpus approval claims the execution slot safely;
+12. `corpus_approved` shows Evidence/Assessment/Map/Brief visibly locked and no
+    extraction activity;
+13. Workbench Shell, Qatalog navigation, persistent rail, dossier cards,
+    matching skeletons, desktop panel, and mobile drawer preserve their visual
+    contracts;
+14. keyboard, hover/focus actions, and reduced motion behave correctly;
+15. analyst-facing copy contains no raw error, request ID, provider code,
+    environment name, access inventory, quota mechanics, or roadmap phase;
+16. console output contains no errors and all progress is persisted, never
+    simulated.
+
+Capture fresh snapshots after each meaningful action. Run the protected journey
+with real admitted analyst and administrator states. A public page render,
+mocked component, or expected `Not authenticated` response does not satisfy this
+gate. Remove temporary QA routes and fixtures after verification.
 
 - [ ] **Step 5: Run bounded live contracts only with explicit approval**
 
@@ -1390,7 +1708,9 @@ pnpm exec vitest run src/__tests__/live
 ```
 
 Report exact request counts, latency, returned metadata shape, and any provider
-usage/cost. Never include secrets.
+usage/cost. Never include secrets. Re-run cancellation and generation guards
+with deterministic adapters after live contracts so provider evidence cannot
+replace durable-execution evidence.
 
 - [ ] **Step 6: Update roadmap evidence**
 
@@ -1424,6 +1744,20 @@ real company resolution
   domain state and durable execution, Actions own external I/O orchestration,
   mutations own persistence, and `convex/integrations/*` adapters own transport
   mapping without becoming a second public API.
+- Preservation consistency: existing Start, composer, toolbar, shell,
+  navigation, rail, cards, skeletons, source review, motion, and responsive
+  behavior change only where this plan explicitly says so.
+- Access consistency: public preflight, top-drawer reusable code admission,
+  stable visitor rebinding, role routing, logout, and reconnection match
+  ADR-012 through ADR-014.
+- External-I/O consistency: authorization precedes I/O; DNS targets, leases,
+  retries, generations, cancellation, atomic resume, late results, and missing
+  configuration all have deterministic regression coverage.
+- Copy consistency: presentation mappings expose evidence, consequences, and
+  next actions without leaking backend or deployment language.
+- Verification consistency: the actual admitted desktop/mobile journey is a
+  blocking gate; targeted tests and public-page smoke checks cannot substitute
+  for it.
 - Placeholder scan: the plan contains no unspecified implementation steps or
   generated-file edits.
 - Honesty gate: the final Phase 4 state is `corpus_approved` plus `idle`; no
