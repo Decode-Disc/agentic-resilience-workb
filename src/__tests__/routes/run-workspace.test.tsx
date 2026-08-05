@@ -481,8 +481,18 @@ describe('production run workspace', () => {
             />,
         );
 
-        // Preview is the initial detail surface for the selected source.
-        expect(screen.getByTitle('Preview of Independent report')).toBeTruthy();
+        // Preview opens the selected publisher page externally by default.
+        expect(
+            screen.getByRole('heading', {
+                name: 'Open Independent report in a new tab',
+            }),
+        ).toBeTruthy();
+        expect(
+            screen.getByRole('link', {
+                name: 'Open original in a new tab',
+            }),
+        ).toBeTruthy();
+        expect(document.querySelector('iframe')).toBeNull();
         // Source details remain available without losing the calibrated copy.
         fireEvent.click(screen.getByRole('tab', { name: /Source details/i }));
         expect(
