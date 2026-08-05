@@ -1,36 +1,36 @@
-import schema from '@convex/schema';
-import type { Id } from '@convex/_generated/dataModel';
-import { makeFunctionReference } from 'convex/server';
-import { convexTest } from 'convex-test';
-import { expect, test } from 'vitest';
-import rateLimiterTest from './rate-limiter-test-register.js';
+import type { Id } from "@convex/_generated/dataModel";
+import schema from "@convex/schema";
+import { makeFunctionReference } from "convex/server";
+import { convexTest } from "convex-test";
+import { expect, test } from "vitest";
+import rateLimiterTest from "./rate-limiter-test-register.js";
 
-const modules = import.meta.glob('/convex/**/*.ts');
+const modules = import.meta.glob("/convex/**/*.ts");
 const reserveSecRateLimit = makeFunctionReference<
-    'mutation',
+    "mutation",
     Record<string, never>,
     { retryAfter?: number }
->('providerCalls:reserveSecRateLimit');
+>("providerCalls:reserveSecRateLimit");
 const recordAttempt = makeFunctionReference<
-    'mutation',
+    "mutation",
     {
-        runId?: Id<'researchRuns'>;
+        runId?: Id<"researchRuns">;
         executionGeneration?: number;
-        service: 'sec';
+        service: "sec";
         operation: string;
         operationKey: string;
-        status: 'started' | 'succeeded';
+        status: "started" | "succeeded";
         attempt: number;
         latencyMs?: number;
     },
     {
-        providerCallId: Id<'providerCalls'>;
+        providerCallId: Id<"providerCalls">;
         shouldExecute: boolean;
-        status: 'started' | 'succeeded';
+        status: "started" | "succeeded";
     }
->('providerCalls:recordAttempt');
+>("providerCalls:recordAttempt");
 
-test('reserves SEC call slots through the rate-limiter component', async () => {
+test("reserves SEC call slots through the rate-limiter component", async () => {
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
 
@@ -43,13 +43,14 @@ test('reserves SEC call slots through the rate-limiter component', async () => {
     // Token bucket with 8 tokens/sec — three calls should all succeed immediately
     expect(
         reservations.every(
-            (r) => typeof r.retryAfter === 'number' || r.retryAfter === undefined,
+            (r) =>
+                typeof r.retryAfter === "number" || r.retryAfter === undefined,
         ),
     ).toBe(true);
     expect(reservations.filter((r) => (r.retryAfter ?? 0) > 0).length).toBe(0);
 });
 
-test('enforces SEC rate limit when bucket is exhausted', async () => {
+test("enforces SEC rate limit when bucket is exhausted", async () => {
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
 
@@ -63,63 +64,63 @@ test('enforces SEC rate limit when bucket is exhausted', async () => {
     expect(rateLimited.length).toBeGreaterThanOrEqual(1);
 });
 
-test('completes one persisted provider attempt', async () => {
+test("completes one persisted provider attempt", async () => {
     const t = convexTest(schema, modules);
     const input = {
-        service: 'sec' as const,
-        operation: 'resolve_company',
-        operationKey: 'resolve:CCCS',
+        service: "sec" as const,
+        operation: "resolve_company",
+        operationKey: "resolve:CCCS",
         attempt: 1,
     };
 
     const started = await t.mutation(recordAttempt, {
         ...input,
-        status: 'started',
+        status: "started",
     });
     expect(started.shouldExecute).toBe(true);
     const replay = await t.mutation(recordAttempt, {
         ...input,
-        status: 'started',
+        status: "started",
     });
     expect(replay).toEqual({
         providerCallId: started.providerCallId,
         shouldExecute: false,
-        status: 'started',
+        status: "started",
     });
     await expect(
         t.mutation(recordAttempt, {
             ...input,
-            status: 'succeeded',
+            status: "succeeded",
             latencyMs: 42,
         }),
     ).resolves.toEqual({
         providerCallId: started.providerCallId,
         shouldExecute: false,
-        status: 'succeeded',
+        status: "succeeded",
     });
     await expect(
         t.run(async (ctx) => ctx.db.get(started.providerCallId)),
     ).resolves.toMatchObject({
-        status: 'succeeded',
+        status: "succeeded",
         latencyMs: 42,
     });
 });
 
-test('separates runs and retry attempts', async () => {
+test("separates runs and retry attempts", async () => {
     const t = convexTest(schema, modules);
     const [runA, runB] = await t.run(async (ctx) =>
         Promise.all([
-            ctx.db.insert('researchRuns', {
-                lifecycleState: 'discovering_sources',
-                executionStatus: 'running',
+            ctx.db.insert("researchRuns", {
+                lifecycleState: "discovering_sources",
+                executionStatus: "running",
                 executionGeneration: 1,
                 nextEventSequence: 1,
                 createdAt: 1,
                 updatedAt: 1,
             }),
-            ctx.db.insert('researchRuns', {
-                lifecycleState: 'discovering_sources',
-                executionStatus: 'running',
+            ctx.db.insert("researchRuns", {
+                lifecycleState: "discovering_sources",
+                executionStatus: "running",
                 executionGeneration: 1,
                 nextEventSequence: 1,
                 createdAt: 1,
@@ -132,28 +133,28 @@ test('separates runs and retry attempts', async () => {
         t.mutation(recordAttempt, {
             runId: runA,
             executionGeneration: 1,
-            service: 'sec',
-            operation: 'revalidate_company',
-            operationKey: 'shared-logical-key',
-            status: 'started',
+            service: "sec",
+            operation: "revalidate_company",
+            operationKey: "shared-logical-key",
+            status: "started",
             attempt: 1,
         }),
         t.mutation(recordAttempt, {
             runId: runB,
             executionGeneration: 1,
-            service: 'sec',
-            operation: 'revalidate_company',
-            operationKey: 'shared-logical-key',
-            status: 'started',
+            service: "sec",
+            operation: "revalidate_company",
+            operationKey: "shared-logical-key",
+            status: "started",
             attempt: 1,
         }),
         t.mutation(recordAttempt, {
             runId: runA,
             executionGeneration: 1,
-            service: 'sec',
-            operation: 'revalidate_company',
-            operationKey: 'shared-logical-key',
-            status: 'started',
+            service: "sec",
+            operation: "revalidate_company",
+            operationKey: "shared-logical-key",
+            status: "started",
             attempt: 2,
         }),
     ]);
@@ -164,12 +165,12 @@ test('separates runs and retry attempts', async () => {
     expect(starts.every(({ shouldExecute }) => shouldExecute)).toBe(true);
 });
 
-test('refuses a new provider lease after execution cancellation', async () => {
+test("refuses a new provider lease after execution cancellation", async () => {
     const t = convexTest(schema, modules);
     const runId = await t.run((ctx) =>
-        ctx.db.insert('researchRuns', {
-            lifecycleState: 'discovering_sources',
-            executionStatus: 'cancelled',
+        ctx.db.insert("researchRuns", {
+            lifecycleState: "discovering_sources",
+            executionStatus: "cancelled",
             executionGeneration: 2,
             nextEventSequence: 1,
             createdAt: 1,
@@ -181,11 +182,11 @@ test('refuses a new provider lease after execution cancellation', async () => {
         t.mutation(recordAttempt, {
             runId,
             executionGeneration: 1,
-            service: 'sec',
-            operation: 'discover_sources',
-            operationKey: 'cancelled-generation',
-            status: 'started',
+            service: "sec",
+            operation: "discover_sources",
+            operationKey: "cancelled-generation",
+            status: "started",
             attempt: 2,
         }),
-    ).rejects.toThrow('no longer active');
+    ).rejects.toThrow("no longer active");
 });

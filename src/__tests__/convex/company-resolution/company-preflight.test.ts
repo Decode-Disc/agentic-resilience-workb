@@ -2,22 +2,22 @@ import {
     preflightCompanyWithResolver,
     type SecCompanyResolver,
     searchCompaniesWithResolver,
-} from '@convex/companyResolution';
-import schema from '@convex/schema';
-import { makeFunctionReference } from 'convex/server';
-import { convexTest } from 'convex-test';
-import { afterEach, describe, expect, test, vi } from 'vitest';
-import rateLimiterTest from '../integrations/rate-limiter-test-register.js';
+} from "@convex/companyResolution";
+import schema from "@convex/schema";
+import { makeFunctionReference } from "convex/server";
+import { convexTest } from "convex-test";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
 
 const company = {
-    legalName: 'CCC Intelligent Solutions Holdings Inc.',
-    ticker: 'CCCS',
-    exchange: 'NASDAQ',
-    cik: '1818201',
-    investorRelationsUrl: 'https://ir.cccis.com/',
+    legalName: "CCC Intelligent Solutions Holdings Inc.",
+    ticker: "CCCS",
+    exchange: "NASDAQ",
+    cik: "1818201",
+    investorRelationsUrl: "https://ir.cccis.com/",
 };
 
-const modules = import.meta.glob('/convex/**/*.ts');
+const modules = import.meta.glob("/convex/**/*.ts");
 const originalFetch = globalThis.fetch;
 const originalSecUserAgent = process.env.SEC_USER_AGENT;
 
@@ -32,7 +32,7 @@ afterEach(() => {
 });
 
 const persistPreflight = makeFunctionReference<
-    'mutation',
+    "mutation",
     {
         query: string;
         company: typeof company;
@@ -44,33 +44,33 @@ const persistPreflight = makeFunctionReference<
         company: typeof company;
         expiresAt: number;
     }
->('companyResolution:persistPreflight');
+>("companyResolution:persistPreflight");
 const preflightCompany = makeFunctionReference<
-    'action',
+    "action",
     { cik: string },
     unknown
->('companyResolution:preflight');
+>("companyResolution:preflight");
 const searchCompanies = makeFunctionReference<
-    'action',
+    "action",
     { query: string },
     unknown
->('companyResolution:search');
+>("companyResolution:search");
 
-describe('preflightCompanyWithResolver', () => {
-    test('revalidates the explicitly selected CIK without reserving an analysis', async () => {
+describe("preflightCompanyWithResolver", () => {
+    test("revalidates the explicitly selected CIK without reserving an analysis", async () => {
         const resolver: SecCompanyResolver = {
             search: vi.fn(async () => [company]),
             revalidate: vi.fn(async () => company),
         };
         const persist = vi.fn(async (input) => ({
-            preflightId: 'preflight-1',
+            preflightId: "preflight-1",
             company: input.company,
             expiresAt: input.expiresAt,
         }));
 
         await expect(
             preflightCompanyWithResolver(
-                { cik: '  1818201  ' },
+                { cik: "  1818201  " },
                 {
                     resolver,
                     now: () => 1_000,
@@ -78,20 +78,20 @@ describe('preflightCompanyWithResolver', () => {
                 },
             ),
         ).resolves.toEqual({
-            preflightId: 'preflight-1',
+            preflightId: "preflight-1",
             company,
             expiresAt: 901_000,
         });
         expect(persist).toHaveBeenCalledWith({
-            query: '1818201',
+            query: "1818201",
             company,
             expiresAt: 901_000,
-            resolverVersion: 'sec-company-v2',
+            resolverVersion: "sec-company-v2",
         });
-        expect(resolver.revalidate).toHaveBeenCalledWith('1818201');
+        expect(resolver.revalidate).toHaveBeenCalledWith("1818201");
     });
 
-    test('rejects an invalid selected CIK', async () => {
+    test("rejects an invalid selected CIK", async () => {
         const resolver: SecCompanyResolver = {
             search: vi.fn(async () => [company]),
             revalidate: vi.fn(async () => company),
@@ -99,36 +99,36 @@ describe('preflightCompanyWithResolver', () => {
 
         await expect(
             preflightCompanyWithResolver(
-                { cik: 'not-a-cik' },
+                { cik: "not-a-cik" },
                 {
                     resolver,
                     now: () => 1_000,
                     persist: vi.fn(),
                 },
             ),
-        ).rejects.toThrow('valid CIK');
+        ).rejects.toThrow("valid CIK");
         expect(resolver.revalidate).not.toHaveBeenCalled();
     });
 
-    test('uses the website resolver when provided to enrich the company snapshot', async () => {
+    test("uses the website resolver when provided to enrich the company snapshot", async () => {
         const resolvedCompany = { ...company, websiteUrl: undefined };
         const resolver: SecCompanyResolver = {
             search: vi.fn(async () => [resolvedCompany]),
             revalidate: vi.fn(async () => resolvedCompany),
         };
         const persist = vi.fn(async (input) => ({
-            preflightId: 'preflight-2',
+            preflightId: "preflight-2",
             company: input.company,
             expiresAt: input.expiresAt,
         }));
         // SEC IR url is a vendor subdomain → classifyIr rejects, Exa resolves.
         const resolveWebsite = vi.fn(async () => ({
-            url: 'https://servicenow.com/',
-            source: 'exa' as const,
+            url: "https://servicenow.com/",
+            source: "exa" as const,
         }));
 
         const result = await preflightCompanyWithResolver(
-            { cik: '1818201' },
+            { cik: "1818201" },
             {
                 resolver,
                 now: () => 1_000,
@@ -141,28 +141,28 @@ describe('preflightCompanyWithResolver', () => {
         expect(persist).toHaveBeenCalledWith(
             expect.objectContaining({
                 company: expect.objectContaining({
-                    websiteUrl: 'https://servicenow.com/',
-                    websiteUrlSource: 'exa',
+                    websiteUrl: "https://servicenow.com/",
+                    websiteUrlSource: "exa",
                 }),
             }),
         );
-        expect(result.company.websiteUrl).toBe('https://servicenow.com/');
-        expect(result.company.websiteUrlSource).toBe('exa');
+        expect(result.company.websiteUrl).toBe("https://servicenow.com/");
+        expect(result.company.websiteUrlSource).toBe("exa");
     });
 
-    test('leaves websiteUrl unchanged when no resolver is wired (backward-compat)', async () => {
+    test("leaves websiteUrl unchanged when no resolver is wired (backward-compat)", async () => {
         const resolver: SecCompanyResolver = {
             search: vi.fn(async () => [company]),
             revalidate: vi.fn(async () => company),
         };
         const persist = vi.fn(async (input) => ({
-            preflightId: 'preflight-3',
+            preflightId: "preflight-3",
             company: input.company,
             expiresAt: input.expiresAt,
         }));
 
         const result = await preflightCompanyWithResolver(
-            { cik: '1818201' },
+            { cik: "1818201" },
             {
                 resolver,
                 now: () => 1_000,
@@ -174,12 +174,12 @@ describe('preflightCompanyWithResolver', () => {
     });
 });
 
-test('searches for multiple matching companies without persisting a preflight', async () => {
+test("searches for multiple matching companies without persisting a preflight", async () => {
     const secondCompany = {
         ...company,
-        cik: '1000001',
-        legalName: 'Intelligent Systems Corporation',
-        ticker: 'INS',
+        cik: "1000001",
+        legalName: "Intelligent Systems Corporation",
+        ticker: "INS",
     };
     const resolver: SecCompanyResolver = {
         search: vi.fn(async () => [secondCompany, company]),
@@ -187,17 +187,17 @@ test('searches for multiple matching companies without persisting a preflight', 
     };
 
     await expect(
-        searchCompaniesWithResolver({ query: ' intelligent ' }, { resolver }),
+        searchCompaniesWithResolver({ query: " intelligent " }, { resolver }),
     ).resolves.toEqual([secondCompany, company]);
-    expect(resolver.search).toHaveBeenCalledWith('intelligent');
+    expect(resolver.search).toHaveBeenCalledWith("intelligent");
     expect(resolver.revalidate).not.toHaveBeenCalled();
 });
 
-test('persists a preflight for an anonymous session before admission', async () => {
+test("persists a preflight for an anonymous session before admission", async () => {
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
     const userId = await t.run(async (ctx) => {
-        const userId = await ctx.db.insert('users', { isAnonymous: true });
+        const userId = await ctx.db.insert("users", { isAnonymous: true });
         return userId;
     });
     const anonymousSession = t.withIdentity({
@@ -205,10 +205,10 @@ test('persists a preflight for an anonymous session before admission', async () 
     });
 
     const result = await anonymousSession.mutation(persistPreflight, {
-        query: 'CCCS',
+        query: "CCCS",
         company,
         expiresAt: 901_000,
-        resolverVersion: 'sec-company-v1',
+        resolverVersion: "sec-company-v1",
     });
 
     expect(result).toMatchObject({
@@ -216,46 +216,46 @@ test('persists a preflight for an anonymous session before admission', async () 
         expiresAt: 901_000,
     });
     await expect(
-        t.run(async (ctx) => ctx.db.query('companyPreflights').collect()),
+        t.run(async (ctx) => ctx.db.query("companyPreflights").collect()),
     ).resolves.toHaveLength(1);
 });
 
-test('rejects unauthenticated preflight persistence', async () => {
+test("rejects unauthenticated preflight persistence", async () => {
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
 
     await expect(
         t.mutation(persistPreflight, {
-            query: 'CCCS',
+            query: "CCCS",
             company,
             expiresAt: 901_000,
-            resolverVersion: 'sec-company-v1',
+            resolverVersion: "sec-company-v1",
         }),
-    ).rejects.toThrow('Not authenticated');
+    ).rejects.toThrow("Not authenticated");
 });
 
-test('rejects an unauthenticated public preflight', async () => {
+test("rejects an unauthenticated public preflight", async () => {
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
 
     await expect(
-        t.action(preflightCompany, { cik: '1818201' }),
-    ).rejects.toThrow('Not authenticated');
+        t.action(preflightCompany, { cik: "1818201" }),
+    ).rejects.toThrow("Not authenticated");
 });
 
-test('searches and preflights a selected company for an anonymous session before admission', async () => {
-    process.env.SEC_USER_AGENT = 'Evidence Workbench test@example.com';
+test("searches and preflights a selected company for an anonymous session before admission", async () => {
+    process.env.SEC_USER_AGENT = "Evidence Workbench test@example.com";
     globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
-        if (String(input).endsWith('/files/company_tickers_exchange.json')) {
+        if (String(input).endsWith("/files/company_tickers_exchange.json")) {
             return new Response(
                 JSON.stringify({
-                    fields: ['cik', 'name', 'ticker', 'exchange'],
+                    fields: ["cik", "name", "ticker", "exchange"],
                     data: [
                         [
                             1818201,
-                            'CCC Intelligent Solutions Holdings Inc.',
-                            'CCCS',
-                            'Nasdaq',
+                            "CCC Intelligent Solutions Holdings Inc.",
+                            "CCCS",
+                            "Nasdaq",
                         ],
                     ],
                 }),
@@ -264,11 +264,11 @@ test('searches and preflights a selected company for an anonymous session before
         }
         return new Response(
             JSON.stringify({
-                cik: '0001818201',
-                name: 'CCC Intelligent Solutions Holdings Inc.',
-                tickers: ['CCCS'],
-                exchanges: ['Nasdaq'],
-                filings: { recent: { accessionNumber: ['0001'] } },
+                cik: "0001818201",
+                name: "CCC Intelligent Solutions Holdings Inc.",
+                tickers: ["CCCS"],
+                exchanges: ["Nasdaq"],
+                filings: { recent: { accessionNumber: ["0001"] } },
             }),
             { status: 200 },
         );
@@ -276,30 +276,30 @@ test('searches and preflights a selected company for an anonymous session before
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
     const userId = await t.run((ctx) =>
-        ctx.db.insert('users', { isAnonymous: true }),
+        ctx.db.insert("users", { isAnonymous: true }),
     );
     const anonymousSession = t.withIdentity({
         subject: `${userId}|public-preflight-session`,
     });
 
     await expect(
-        anonymousSession.action(searchCompanies, { query: 'CCC' }),
+        anonymousSession.action(searchCompanies, { query: "CCC" }),
     ).resolves.toEqual([
         expect.objectContaining({
-            legalName: 'CCC Intelligent Solutions Holdings Inc.',
-            ticker: 'CCCS',
-            exchange: 'NASDAQ',
-            cik: '1818201',
+            legalName: "CCC Intelligent Solutions Holdings Inc.",
+            ticker: "CCCS",
+            exchange: "NASDAQ",
+            cik: "1818201",
         }),
     ]);
     await expect(
-        anonymousSession.action(preflightCompany, { cik: '1818201' }),
+        anonymousSession.action(preflightCompany, { cik: "1818201" }),
     ).resolves.toMatchObject({
         company: {
-            legalName: 'CCC Intelligent Solutions Holdings Inc.',
-            ticker: 'CCCS',
-            exchange: 'NASDAQ',
-            cik: '1818201',
+            legalName: "CCC Intelligent Solutions Holdings Inc.",
+            ticker: "CCCS",
+            exchange: "NASDAQ",
+            cik: "1818201",
         },
     });
 });

@@ -1,24 +1,24 @@
-import { getAuthUserId } from '@convex-dev/auth/server';
-import { makeFunctionReference } from 'convex/server';
-import { v } from 'convex/values';
-import Exa from 'exa-js';
+import { getAuthUserId } from "@convex-dev/auth/server";
+import { makeFunctionReference } from "convex/server";
+import { v } from "convex/values";
+import Exa from "exa-js";
 
-import { internal } from './_generated/api';
-import type { Id } from './_generated/dataModel';
+import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import {
     type ActionCtx,
     action,
     internalAction,
     internalMutation,
     internalQuery,
-} from './_generated/server';
-import { companySnapshotValidator } from './domain/validators';
-import { createExaWebsiteAdapter } from './integrations/exa';
+} from "./_generated/server";
+import { companySnapshotValidator } from "./domain/validators";
+import { createExaWebsiteAdapter } from "./integrations/exa";
 import {
     classifyIrAsWebsite,
     createSecCompanyResolver,
-} from './integrations/sec';
-import { resolveWebsiteUrl } from './integrations/websiteResolver';
+} from "./integrations/sec";
+import { resolveWebsiteUrl } from "./integrations/websiteResolver";
 
 const secCompanyMatchValidator = companySnapshotValidator;
 
@@ -29,7 +29,7 @@ export type SecCompanyMatch = {
     exchange: string;
     investorRelationsUrl?: string;
     websiteUrl?: string;
-    websiteUrlSource?: 'sec_ir' | 'exa' | 'probe';
+    websiteUrlSource?: "sec_ir" | "exa" | "probe";
 };
 
 export interface SecCompanyResolver {
@@ -38,7 +38,7 @@ export interface SecCompanyResolver {
 }
 
 export type CompanyPreflightResult<
-    PreflightId extends string = Id<'companyPreflights'>,
+    PreflightId extends string = Id<"companyPreflights">,
 > = {
     preflightId: PreflightId;
     company: SecCompanyMatch;
@@ -53,7 +53,7 @@ type PersistPreflight<PreflightId extends string> = (input: {
 }) => Promise<CompanyPreflightResult<PreflightId>>;
 
 const PREFLIGHT_TTL_MS = 15 * 60 * 1_000;
-const RESOLVER_VERSION = 'sec-company-v2';
+const RESOLVER_VERSION = "sec-company-v2";
 
 /**
  * Searches the SEC company index without persisting a selection or reserving
@@ -65,7 +65,7 @@ export async function searchCompaniesWithResolver(
 ): Promise<ReadonlyArray<SecCompanyMatch>> {
     const query = args.query.trim();
     if (query.length === 0 || query.length > 160) {
-        throw new Error('Company query must contain 1 to 160 characters');
+        throw new Error("Company query must contain 1 to 160 characters");
     }
     return dependencies.resolver.search(query);
 }
@@ -87,18 +87,18 @@ export async function preflightCompanyWithResolver<PreflightId extends string>(
         persist: PersistPreflight<PreflightId>;
         resolveWebsite?: (company: SecCompanyMatch) => Promise<{
             url: string;
-            source: 'sec_ir' | 'exa' | 'probe';
+            source: "sec_ir" | "exa" | "probe";
         } | null>;
     },
 ): Promise<CompanyPreflightResult<PreflightId>> {
     const rawCik = args.cik.trim();
     if (!/^\d{1,10}$/.test(rawCik)) {
-        throw new Error('Selected company must have a valid CIK');
+        throw new Error("Selected company must have a valid CIK");
     }
-    const cik = rawCik.replace(/^0+/, '') || '0';
+    const cik = rawCik.replace(/^0+/, "") || "0";
     const company = await dependencies.resolver.revalidate(cik);
     if (company.cik !== cik) {
-        throw new Error('Selected company identity could not be verified');
+        throw new Error("Selected company identity could not be verified");
     }
 
     const enriched = dependencies.resolveWebsite
@@ -124,7 +124,7 @@ async function enrichCompanyWithWebsite(
     company: SecCompanyMatch,
     resolve: (
         company: SecCompanyMatch,
-    ) => Promise<{ url: string; source: 'sec_ir' | 'exa' | 'probe' } | null>,
+    ) => Promise<{ url: string; source: "sec_ir" | "exa" | "probe" } | null>,
 ): Promise<SecCompanyMatch> {
     try {
         const resolution = await resolve(company);
@@ -143,7 +143,7 @@ async function enrichCompanyWithWebsite(
 
 type WebsiteBackfillResult = Pick<
     SecCompanyMatch,
-    'websiteUrl' | 'websiteUrlSource'
+    "websiteUrl" | "websiteUrlSource"
 >;
 
 /**
@@ -166,13 +166,13 @@ export async function backfillRunCompanyWebsiteWithResolver<
     dependencies: {
         resolveWebsite: (company: SecCompanyMatch) => Promise<{
             url: string;
-            source: 'sec_ir' | 'exa' | 'probe';
+            source: "sec_ir" | "exa" | "probe";
         } | null>;
         persist: (input: {
             runId: RunId;
             companyId: CompanyId;
             websiteUrl: string;
-            websiteUrlSource?: 'sec_ir' | 'exa' | 'probe';
+            websiteUrlSource?: "sec_ir" | "exa" | "probe";
         }) => Promise<void>;
     },
 ): Promise<WebsiteBackfillResult> {
@@ -221,30 +221,30 @@ export const persistPreflight = internalMutation({
         resolverVersion: v.string(),
     },
     returns: v.object({
-        preflightId: v.id('companyPreflights'),
+        preflightId: v.id("companyPreflights"),
         company: secCompanyMatchValidator,
         expiresAt: v.number(),
     }),
     handler: async (ctx, args) => {
         const authUserId = await getAuthUserId(ctx);
         if (!authUserId) {
-            throw new Error('Not authenticated');
+            throw new Error("Not authenticated");
         }
         const visitor = await ctx.db
-            .query('visitors')
-            .withIndex('by_auth_user_id', (query) =>
-                query.eq('authUserId', authUserId),
+            .query("visitors")
+            .withIndex("by_auth_user_id", (query) =>
+                query.eq("authUserId", authUserId),
             )
             .unique();
 
         const now = Date.now();
         const existingCompany = await ctx.db
-            .query('companies')
-            .withIndex('by_cik', (query) => query.eq('cik', args.company.cik))
+            .query("companies")
+            .withIndex("by_cik", (query) => query.eq("cik", args.company.cik))
             .unique();
         const companyId = existingCompany
             ? existingCompany._id
-            : await ctx.db.insert('companies', {
+            : await ctx.db.insert("companies", {
                   ...args.company,
                   canonicalizedAt: now,
               });
@@ -255,15 +255,15 @@ export const persistPreflight = internalMutation({
             });
         }
 
-        const preflightId = await ctx.db.insert('companyPreflights', {
+        const preflightId = await ctx.db.insert("companyPreflights", {
             ownerAuthUserId: authUserId,
             ownerVisitorId:
-                visitor?.status === 'active' ? visitor._id : undefined,
+                visitor?.status === "active" ? visitor._id : undefined,
             query: args.query,
             companyId,
             companySnapshot: args.company,
             resolverVersion: args.resolverVersion,
-            status: 'resolved',
+            status: "resolved",
             expiresAt: args.expiresAt,
             createdAt: now,
         });
@@ -281,7 +281,7 @@ function createPublicCompanyResolver(
 ): SecCompanyResolver {
     const userAgent = process.env.SEC_USER_AGENT?.trim();
     if (!userAgent) {
-        throw new Error('SEC company resolution is not configured');
+        throw new Error("SEC company resolution is not configured");
     }
     return createSecCompanyResolver({
         fetch: globalThis.fetch,
@@ -300,7 +300,7 @@ function createPublicCompanyResolver(
             const result = await ctx.runMutation(
                 internal.providerCalls.recordAttempt,
                 {
-                    service: 'sec',
+                    service: "sec",
                     ...attempt,
                 },
             );
@@ -316,7 +316,7 @@ export const search = action({
     handler: async (ctx, args): Promise<Array<SecCompanyMatch>> => {
         const authUserId = await getAuthUserId(ctx);
         if (!authUserId) {
-            throw new Error('Not authenticated');
+            throw new Error("Not authenticated");
         }
         const results = [
             ...(await searchCompaniesWithResolver(args, {
@@ -361,14 +361,14 @@ export const search = action({
 export const preflight = action({
     args: { cik: v.string() },
     returns: v.object({
-        preflightId: v.id('companyPreflights'),
+        preflightId: v.id("companyPreflights"),
         company: secCompanyMatchValidator,
         expiresAt: v.number(),
     }),
     handler: async (ctx, args): Promise<CompanyPreflightResult> => {
         const authUserId = await getAuthUserId(ctx);
         if (!authUserId) {
-            throw new Error('Not authenticated');
+            throw new Error("Not authenticated");
         }
         const resolver = createPublicCompanyResolver(
             ctx,
@@ -390,33 +390,33 @@ export const preflight = action({
 const websiteBackfillResultValidator = v.object({
     websiteUrl: v.optional(v.string()),
     websiteUrlSource: v.optional(
-        v.union(v.literal('sec_ir'), v.literal('exa'), v.literal('probe')),
+        v.union(v.literal("sec_ir"), v.literal("exa"), v.literal("probe")),
     ),
 });
 
 type RunCompanyForWebsiteBackfill = {
-    runId: Id<'researchRuns'>;
-    companyId: Id<'companies'>;
+    runId: Id<"researchRuns">;
+    companyId: Id<"companies">;
     company: SecCompanyMatch;
     companySnapshot?: SecCompanyMatch;
 };
 
 const getRunCompanyForWebsiteBackfillRef = makeFunctionReference<
-    'query',
-    { runId: Id<'researchRuns'>; authUserId: Id<'users'> },
+    "query",
+    { runId: Id<"researchRuns">; authUserId: Id<"users"> },
     RunCompanyForWebsiteBackfill
->('companyResolution:getRunCompanyForWebsiteBackfill');
+>("companyResolution:getRunCompanyForWebsiteBackfill");
 
 const persistRunCompanyWebsiteRef = makeFunctionReference<
-    'mutation',
+    "mutation",
     {
-        runId: Id<'researchRuns'>;
-        companyId: Id<'companies'>;
+        runId: Id<"researchRuns">;
+        companyId: Id<"companies">;
         websiteUrl: string;
-        websiteUrlSource?: 'sec_ir' | 'exa' | 'probe';
+        websiteUrlSource?: "sec_ir" | "exa" | "probe";
     },
     null
->('companyResolution:persistRunCompanyWebsite');
+>("companyResolution:persistRunCompanyWebsite");
 
 /**
  * Lazily enriches an admitted visitor's legacy run with a marketing website.
@@ -425,12 +425,12 @@ const persistRunCompanyWebsiteRef = makeFunctionReference<
  * updates once a URL exists.
  */
 export const ensureRunCompanyWebsite = action({
-    args: { runId: v.id('researchRuns') },
+    args: { runId: v.id("researchRuns") },
     returns: websiteBackfillResultValidator,
     handler: async (ctx, args): Promise<WebsiteBackfillResult> => {
         const authUserId = await getAuthUserId(ctx);
         if (!authUserId) {
-            throw new Error('Not authenticated');
+            throw new Error("Not authenticated");
         }
         const runCompany: RunCompanyForWebsiteBackfill = await ctx.runQuery(
             getRunCompanyForWebsiteBackfillRef,
@@ -447,35 +447,35 @@ export const ensureRunCompanyWebsite = action({
 
 export const getRunCompanyForWebsiteBackfill = internalQuery({
     args: {
-        runId: v.id('researchRuns'),
-        authUserId: v.id('users'),
+        runId: v.id("researchRuns"),
+        authUserId: v.id("users"),
     },
     returns: v.object({
-        runId: v.id('researchRuns'),
-        companyId: v.id('companies'),
+        runId: v.id("researchRuns"),
+        companyId: v.id("companies"),
         company: secCompanyMatchValidator,
         companySnapshot: v.optional(secCompanyMatchValidator),
     }),
     handler: async (ctx, args) => {
         const visitor = await ctx.db
-            .query('visitors')
-            .withIndex('by_auth_user_id', (query) =>
-                query.eq('authUserId', args.authUserId),
+            .query("visitors")
+            .withIndex("by_auth_user_id", (query) =>
+                query.eq("authUserId", args.authUserId),
             )
             .unique();
         const run = await ctx.db.get(args.runId);
         if (
-            visitor?.status !== 'active' ||
+            visitor?.status !== "active" ||
             run?.ownerVisitorId !== visitor._id
         ) {
-            throw new Error('Unauthorized');
+            throw new Error("Unauthorized");
         }
         if (!run.companyId) {
-            throw new Error('Research run has no confirmed company');
+            throw new Error("Research run has no confirmed company");
         }
         const company = await ctx.db.get(run.companyId);
         if (!company) {
-            throw new Error('Confirmed company was not found');
+            throw new Error("Confirmed company was not found");
         }
         return {
             runId: run._id,
@@ -496,11 +496,11 @@ export const getRunCompanyForWebsiteBackfill = internalQuery({
 
 export const persistRunCompanyWebsite = internalMutation({
     args: {
-        runId: v.id('researchRuns'),
-        companyId: v.id('companies'),
+        runId: v.id("researchRuns"),
+        companyId: v.id("companies"),
         websiteUrl: v.string(),
         websiteUrlSource: v.optional(
-            v.union(v.literal('sec_ir'), v.literal('exa'), v.literal('probe')),
+            v.union(v.literal("sec_ir"), v.literal("exa"), v.literal("probe")),
         ),
     },
     returns: v.null(),
@@ -508,7 +508,7 @@ export const persistRunCompanyWebsite = internalMutation({
         const run = await ctx.db.get(args.runId);
         const company = await ctx.db.get(args.companyId);
         if (!run || run.companyId !== args.companyId || !company) {
-            throw new Error('Research run company metadata is unavailable');
+            throw new Error("Research run company metadata is unavailable");
         }
 
         const snapshot = run.companySnapshot ?? {
@@ -555,7 +555,7 @@ export const persistRunCompanyWebsite = internalMutation({
  */
 async function resolveWebsiteForCompany(
     company: SecCompanyMatch,
-): Promise<{ url: string; source: 'sec_ir' | 'exa' | 'probe' } | null> {
+): Promise<{ url: string; source: "sec_ir" | "exa" | "probe" } | null> {
     const exaKey = process.env.EXA_API_KEY?.trim();
     if (!exaKey) {
         return null;
@@ -578,7 +578,7 @@ async function resolveWebsiteForCompany(
 }
 
 export const getRunCompany = internalQuery({
-    args: { runId: v.id('researchRuns') },
+    args: { runId: v.id("researchRuns") },
     returns: v.object({
         executionGeneration: v.number(),
         company: secCompanyMatchValidator,
@@ -587,15 +587,15 @@ export const getRunCompany = internalQuery({
         const run = await ctx.db.get(args.runId);
         if (
             !run?.companyId ||
-            run.executionStatus !== 'running' ||
-            !['draft', 'checking_public_evidence'].includes(run.lifecycleState)
+            run.executionStatus !== "running" ||
+            !["draft", "checking_public_evidence"].includes(run.lifecycleState)
         ) {
-            throw new Error('Research run has no confirmed company');
+            throw new Error("Research run has no confirmed company");
         }
         const company = await ctx.db.get(run.companyId);
         const snapshot = run.companySnapshot ?? company;
         if (!snapshot) {
-            throw new Error('Confirmed company was not found');
+            throw new Error("Confirmed company was not found");
         }
         return {
             executionGeneration: run.executionGeneration,
@@ -613,7 +613,7 @@ export const getRunCompany = internalQuery({
 
 export const verifyRevalidation = internalMutation({
     args: {
-        runId: v.id('researchRuns'),
+        runId: v.id("researchRuns"),
         executionGeneration: v.number(),
         resolved: secCompanyMatchValidator,
     },
@@ -623,7 +623,7 @@ export const verifyRevalidation = internalMutation({
         if (
             !run?.companyId ||
             run.executionGeneration !== args.executionGeneration ||
-            run.executionStatus !== 'running'
+            run.executionStatus !== "running"
         ) {
             return false;
         }
@@ -638,17 +638,17 @@ export const verifyRevalidation = internalMutation({
         }
         const now = Date.now();
         await ctx.db.patch(run._id, {
-            executionStatus: 'failed',
+            executionStatus: "failed",
             nextEventSequence: run.nextEventSequence + 1,
             updatedAt: now,
         });
-        await ctx.db.insert('runEvents', {
+        await ctx.db.insert("runEvents", {
             runId: run._id,
             sequence: run.nextEventSequence + 1,
-            type: 'run_failed',
+            type: "run_failed",
             lifecycleState: run.lifecycleState,
-            executionStatus: 'failed',
-            failureCode: 'company_identity_mismatch',
+            executionStatus: "failed",
+            failureCode: "company_identity_mismatch",
             occurredAt: now,
         });
         return false;
@@ -656,7 +656,7 @@ export const verifyRevalidation = internalMutation({
 });
 
 export const revalidateRun = internalAction({
-    args: { runId: v.id('researchRuns') },
+    args: { runId: v.id("researchRuns") },
     returns: v.object({
         cik: v.string(),
         secFilingCount: v.number(),
@@ -690,7 +690,7 @@ export const revalidateRun = internalAction({
         );
         const userAgent = process.env.SEC_USER_AGENT?.trim();
         if (!userAgent) {
-            throw new Error('SEC company resolution is not configured');
+            throw new Error("SEC company resolution is not configured");
         }
         const resolver = createSecCompanyResolver({
             fetch: globalThis.fetch,
@@ -702,7 +702,9 @@ export const revalidateRun = internalAction({
                     {},
                 );
                 if (retryAfter && retryAfter > 0) {
-                    await new Promise((resolve) => setTimeout(resolve, retryAfter));
+                    await new Promise((resolve) =>
+                        setTimeout(resolve, retryAfter),
+                    );
                 }
             },
             recordAttempt: async (attempt) => {
@@ -712,8 +714,8 @@ export const revalidateRun = internalAction({
                         runId: args.runId,
                         executionGeneration: current.executionGeneration,
                         workflowVersion: 2,
-                        stepKey: 'check_public_evidence',
-                        service: 'sec',
+                        stepKey: "check_public_evidence",
+                        service: "sec",
                         ...attempt,
                     },
                 );
@@ -731,7 +733,7 @@ export const revalidateRun = internalAction({
             },
         );
         if (!valid) {
-            throw new Error('Confirmed company identity changed');
+            throw new Error("Confirmed company identity changed");
         }
         return {
             cik: evidence.company.cik,

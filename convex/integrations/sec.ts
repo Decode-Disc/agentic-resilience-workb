@@ -176,11 +176,7 @@ function parseCompanyIndex(value: unknown): ReadonlyArray<CompanyIndexEntry> {
 }
 
 const IR_SUBDOMAIN_PREFIXES = ['investor.', 'investors.', 'ir.'];
-const IR_VENDOR_HOSTS = new Set([
-    'q4ir.com',
-    'q4inc.com',
-    'nasdaqomx.com',
-]);
+const IR_VENDOR_HOSTS = new Set(['q4ir.com', 'q4inc.com', 'nasdaqomx.com']);
 
 /**
  * Decides whether a SEC `investorWebsite` URL can double as the company's
@@ -193,7 +189,9 @@ const IR_VENDOR_HOSTS = new Set([
  * /investors path of the root domain (e.g. acme.com/investors); those are
  * accepted as the marketing website, since the host is the company root.
  */
-export function classifyIrAsWebsite(investorRelationsUrl: string | undefined): string | undefined {
+export function classifyIrAsWebsite(
+    investorRelationsUrl: string | undefined,
+): string | undefined {
     if (!investorRelationsUrl) {
         return undefined;
     }

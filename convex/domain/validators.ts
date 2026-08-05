@@ -37,11 +37,7 @@ export const companySnapshotValidator = v.object({
      * HEAD-probe sources will be added with the cascade slice.
      */
     websiteUrlSource: v.optional(
-        v.union(
-            v.literal('sec_ir'),
-            v.literal('exa'),
-            v.literal('probe'),
-        ),
+        v.union(v.literal('sec_ir'), v.literal('exa'), v.literal('probe')),
     ),
 });
 

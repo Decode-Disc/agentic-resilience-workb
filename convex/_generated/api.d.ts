@@ -27,6 +27,7 @@ import type * as integrations_sec from "../integrations/sec.js";
 import type * as integrations_websiteResolver from "../integrations/websiteResolver.js";
 import type * as invitations from "../invitations.js";
 import type * as providerCalls from "../providerCalls.js";
+import type * as rateLimiter from "../rateLimiter.js";
 import type * as researchLaunch from "../researchLaunch.js";
 import type * as researchPlanning from "../researchPlanning.js";
 import type * as researchRuns from "../researchRuns.js";
@@ -65,6 +66,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/websiteResolver": typeof integrations_websiteResolver;
   invitations: typeof invitations;
   providerCalls: typeof providerCalls;
+  rateLimiter: typeof rateLimiter;
   researchLaunch: typeof researchLaunch;
   researchPlanning: typeof researchPlanning;
   researchRuns: typeof researchRuns;
@@ -106,4 +108,5 @@ export declare const internal: FilterApi<
 
 export declare const components: {
   workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
+  rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
 };

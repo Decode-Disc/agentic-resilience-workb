@@ -1,9 +1,8 @@
+import { createExaWebsiteAdapter } from '@convex/integrations/exa';
+import { classifyIrAsWebsite } from '@convex/integrations/sec';
+import { resolveWebsiteUrl } from '@convex/integrations/websiteResolver';
 import Exa from 'exa-js';
 import { expect, test } from 'vitest';
-
-import { createExaWebsiteAdapter } from '@convex/integrations/exa';
-import { resolveWebsiteUrl } from '@convex/integrations/websiteResolver';
-import { classifyIrAsWebsite } from '@convex/integrations/sec';
 
 /**
  * Live integration check that the website resolver picks the right marketing
@@ -53,24 +52,22 @@ test('website resolver picks the marketing homepage for known companies', async 
     ];
 
     for (const c of cases) {
-        const result = await resolveWebsiteUrl(
-            c,
-            {
-                exaSearch: (query) => adapter.search(query),
-                classifyIr: classifyIrAsWebsite,
-            },
-        );
+        const result = await resolveWebsiteUrl(c, {
+            exaSearch: (query) => adapter.search(query),
+            classifyIr: classifyIrAsWebsite,
+        });
         expect(result, `no website resolved for ${c.legalName}`).not.toBeNull();
-         const hostname = new URL(result?.url ?? '').hostname.toLowerCase().replace(/^www\./, '');
-        const matches =
-            c.expectedHostname.endsWith('.')
-                ? hostname.startsWith(c.expectedHostname)
-                : hostname === c.expectedHostname ||
-                  hostname.endsWith(`.${c.expectedHostname}`);
+        const hostname = new URL(result?.url ?? '').hostname
+            .toLowerCase()
+            .replace(/^www\./, '');
+        const matches = c.expectedHostname.endsWith('.')
+            ? hostname.startsWith(c.expectedHostname)
+            : hostname === c.expectedHostname ||
+              hostname.endsWith(`.${c.expectedHostname}`);
         expect(
             matches,
-             `${c.legalName}: expected ${c.expectedHostname} but got ${hostname} (url ${result?.url ?? '<unknown>'})`,
+            `${c.legalName}: expected ${c.expectedHostname} but got ${hostname} (url ${result?.url ?? '<unknown>'})`,
         ).toBe(true);
-         expect(result?.source).toBe('exa');
+        expect(result?.source).toBe('exa');
     }
 });

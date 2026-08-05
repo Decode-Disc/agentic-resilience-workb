@@ -1,9 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
-
 import {
     backfillRunCompanyWebsiteWithResolver,
     type SecCompanyMatch,
 } from '@convex/companyResolution';
+import { describe, expect, it, vi } from 'vitest';
 
 const legacyCompany: SecCompanyMatch = {
     cik: '1373715',

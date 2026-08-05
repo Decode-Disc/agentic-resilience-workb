@@ -1,12 +1,12 @@
-import type { Id } from '@convex/_generated/dataModel';
-import schema from '@convex/schema';
-import { makeFunctionReference } from 'convex/server';
-import { convexTest } from 'convex-test';
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import rateLimiterTest from '../integrations/rate-limiter-test-register.js';
-import workflowTest from '../workflows/workflow-test-register.js';
+import type { Id } from "@convex/_generated/dataModel";
+import schema from "@convex/schema";
+import { makeFunctionReference } from "convex/server";
+import { convexTest } from "convex-test";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
+import workflowTest from "../workflows/workflow-test-register.js";
 
-const modules = import.meta.glob('/convex/**/*.ts');
+const modules = import.meta.glob("/convex/**/*.ts");
 const originalFetch = globalThis.fetch;
 const originalSecUserAgent = process.env.SEC_USER_AGENT;
 
@@ -24,118 +24,118 @@ afterEach(() => {
     vi.useRealTimers();
 });
 const confirmAndStart = makeFunctionReference<
-    'action',
+    "action",
     {
-        preflightId: Id<'companyPreflights'>;
+        preflightId: Id<"companyPreflights">;
         idempotencyKey: string;
         coveragePreset:
-            | 'balanced'
-            | 'first_party_depth'
-            | 'independent_scrutiny';
+            | "balanced"
+            | "first_party_depth"
+            | "independent_scrutiny";
         researchAngle?: string;
     },
-    { runId: Id<'researchRuns'>; remainingAnalyses: number }
->('researchLaunch:confirmAndStart');
+    { runId: Id<"researchRuns">; remainingAnalyses: number }
+>("researchLaunch:confirmAndStart");
 const confirmAndStartReserved = makeFunctionReference<
-    'mutation',
+    "mutation",
     {
-        preflightId: Id<'companyPreflights'>;
+        preflightId: Id<"companyPreflights">;
         idempotencyKey: string;
-        coveragePreset: 'balanced';
+        coveragePreset: "balanced";
         manualSources: Array<{
             canonicalUrl: string;
             title: string;
             providerReference: string;
         }>;
     },
-    { runId: Id<'researchRuns'>; remainingAnalyses: number }
->('researchLaunch:confirmAndStartReserved');
+    { runId: Id<"researchRuns">; remainingAnalyses: number }
+>("researchLaunch:confirmAndStartReserved");
 const authorizeLaunchPreparation = makeFunctionReference<
-    'query',
+    "query",
     {
-        preflightId: Id<'companyPreflights'>;
+        preflightId: Id<"companyPreflights">;
         idempotencyKey: string;
     },
     { shouldPrepareManualSources: boolean }
->('researchLaunch:authorizeLaunchPreparation');
+>("researchLaunch:authorizeLaunchPreparation");
 const getRun = makeFunctionReference<
-    'query',
-    { runId: Id<'researchRuns'> },
+    "query",
+    { runId: Id<"researchRuns"> },
     unknown
->('researchRuns:get');
+>("researchRuns:get");
 const getMine = makeFunctionReference<
-    'query',
-    { runId: Id<'researchRuns'> },
+    "query",
+    { runId: Id<"researchRuns"> },
     unknown
->('researchRuns:getMine');
+>("researchRuns:getMine");
 const transition = makeFunctionReference<
-    'mutation',
+    "mutation",
     {
-        runId: Id<'researchRuns'>;
+        runId: Id<"researchRuns">;
         lifecycleState:
-            | 'checking_public_evidence'
-            | 'awaiting_evidence_sufficiency_review';
-        executionStatus: 'running' | 'paused';
-        stepKey: 'check_public_evidence' | 'evidence_sufficiency_review';
+            | "checking_public_evidence"
+            | "awaiting_evidence_sufficiency_review";
+        executionStatus: "running" | "paused";
+        stepKey: "check_public_evidence" | "evidence_sufficiency_review";
     },
     null
->('researchRuns:transition');
+>("researchRuns:transition");
 const decideSufficiency = makeFunctionReference<
-    'mutation',
+    "mutation",
     {
-        runId: Id<'researchRuns'>;
+        runId: Id<"researchRuns">;
         decision:
-            | { kind: 'recheck'; decisionKey: string }
+            | { kind: "recheck"; decisionKey: string }
             | {
-                  kind: 'force_continue';
+                  kind: "force_continue";
                   decisionKey: string;
                   reason: string;
               }
             | {
-                  kind: 'complete_insufficient';
+                  kind: "complete_insufficient";
                   decisionKey: string;
                   reason: string;
               };
     },
     { accepted: boolean }
->('evidenceSufficiency:decide');
+>("evidenceSufficiency:decide");
 
 async function createAdmittedPreflight(
     t: ReturnType<typeof convexTest>,
 ): Promise<{
-    userId: Id<'users'>;
-    preflightId: Id<'companyPreflights'>;
+    userId: Id<"users">;
+    preflightId: Id<"companyPreflights">;
 }> {
     return t.run(async (ctx) => {
-        const userId = await ctx.db.insert('users', { isAnonymous: true });
-        const invitationId = await ctx.db.insert('invitations', {
-            slotKey: 'analyst-1',
-            role: 'analyst',
-            codeDigest: 'launch-test-digest',
-            status: 'claimed',
+        const userId = await ctx.db.insert("users", { isAnonymous: true });
+        const invitationId = await ctx.db.insert("invitations", {
+            slotKey: "analyst-1",
+            role: "analyst",
+            codeDigest: "launch-test-digest",
+            status: "claimed",
             createdAt: 1,
         });
-        const visitorId = await ctx.db.insert('visitors', {
+        const visitorId = await ctx.db.insert("visitors", {
             authUserId: userId,
             invitationId,
-            role: 'analyst',
-            status: 'active',
+            role: "analyst",
+            status: "active",
             analysesReserved: 0,
             admittedAt: 1,
         });
-        const companyId = await ctx.db.insert('companies', {
-            cik: '1818201',
-            legalName: 'CCC Intelligent Solutions Holdings Inc.',
-            ticker: 'CCCS',
-            exchange: 'NASDAQ',
+        const companyId = await ctx.db.insert("companies", {
+            cik: "1818201",
+            legalName: "CCC Intelligent Solutions Holdings Inc.",
+            ticker: "CCCS",
+            exchange: "NASDAQ",
             canonicalizedAt: Date.now(),
         });
-        const preflightId = await ctx.db.insert('companyPreflights', {
+        const preflightId = await ctx.db.insert("companyPreflights", {
             ownerVisitorId: visitorId,
-            query: 'CCCS',
+            query: "CCCS",
             companyId,
-            resolverVersion: 'sec-company-v1',
-            status: 'resolved',
+            resolverVersion: "sec-company-v1",
+            status: "resolved",
             expiresAt: Date.now() + 60_000,
             createdAt: Date.now(),
         });
@@ -143,7 +143,7 @@ async function createAdmittedPreflight(
     });
 }
 
-test('confirms a preflight and starts workflow version 2 once', async () => {
+test("confirms a preflight and starts workflow version 2 once", async () => {
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
     workflowTest.register(t);
@@ -152,15 +152,15 @@ test('confirms a preflight and starts workflow version 2 once', async () => {
 
     const first = await analyst.action(confirmAndStart, {
         preflightId,
-        idempotencyKey: 'launch-cccs',
-        coveragePreset: 'balanced',
-        researchAngle: 'Focus on claims workflow control.',
+        idempotencyKey: "launch-cccs",
+        coveragePreset: "balanced",
+        researchAngle: "Focus on claims workflow control.",
     });
     const replay = await analyst.action(confirmAndStart, {
         preflightId,
-        idempotencyKey: 'launch-cccs',
-        coveragePreset: 'balanced',
-        researchAngle: 'Focus on claims workflow control.',
+        idempotencyKey: "launch-cccs",
+        coveragePreset: "balanced",
+        researchAngle: "Focus on claims workflow control.",
     });
 
     expect(replay).toEqual(first);
@@ -168,45 +168,45 @@ test('confirms a preflight and starts workflow version 2 once', async () => {
         t.query(getRun, { runId: first.runId }),
     ).resolves.toMatchObject({
         companyPreflightId: preflightId,
-        coveragePreset: 'balanced',
-        researchAngle: 'Focus on claims workflow control.',
-        reservationStatus: 'consumed',
-        executionStatus: 'running',
+        coveragePreset: "balanced",
+        researchAngle: "Focus on claims workflow control.",
+        reservationStatus: "consumed",
+        executionStatus: "running",
         executionGeneration: 1,
         workflowVersion: 2,
     });
     await expect(
-        t.run(async (ctx) => ctx.db.query('corpusRevisions').collect()),
+        t.run(async (ctx) => ctx.db.query("corpusRevisions").collect()),
     ).resolves.toEqual([
         expect.objectContaining({
             runId: first.runId,
             revision: 1,
-            status: 'draft',
+            status: "draft",
         }),
     ]);
     await t.run(async (ctx) => {
         const run = await ctx.db.get(first.runId);
         if (!run?.companyId) {
-            throw new Error('Confirmed company missing');
+            throw new Error("Confirmed company missing");
         }
         await ctx.db.patch(run.companyId, {
-            legalName: 'Changed canonical company name',
-            ticker: 'NEW',
-            exchange: 'NYSE',
+            legalName: "Changed canonical company name",
+            ticker: "NEW",
+            exchange: "NYSE",
         });
     });
     await expect(
         analyst.query(getMine, { runId: first.runId }),
     ).resolves.toMatchObject({
         company: {
-            legalName: 'CCC Intelligent Solutions Holdings Inc.',
-            ticker: 'CCCS',
-            exchange: 'NASDAQ',
+            legalName: "CCC Intelligent Solutions Holdings Inc.",
+            ticker: "CCCS",
+            exchange: "NASDAQ",
         },
     });
 });
 
-test('persists validated launch references as pending sources in corpus revision 1', async () => {
+test("persists validated launch references as pending sources in corpus revision 1", async () => {
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
     workflowTest.register(t);
@@ -217,13 +217,13 @@ test('persists validated launch references as pending sources in corpus revision
 
     const { runId } = await analyst.mutation(confirmAndStartReserved, {
         preflightId,
-        idempotencyKey: 'launch-with-public-reference',
-        coveragePreset: 'balanced',
+        idempotencyKey: "launch-with-public-reference",
+        coveragePreset: "balanced",
         manualSources: [
             {
-                canonicalUrl: 'https://example.com/public-report',
-                title: 'Public report',
-                providerReference: 'launch_url_metadata:public-report',
+                canonicalUrl: "https://example.com/public-report",
+                title: "Public report",
+                providerReference: "launch_url_metadata:public-report",
             },
         ],
     });
@@ -231,15 +231,15 @@ test('persists validated launch references as pending sources in corpus revision
     const persisted = await t.run(async (ctx) => {
         const run = await ctx.db.get(runId);
         const sources = await ctx.db
-            .query('sources')
-            .withIndex('by_run_and_url', (query) => query.eq('runId', runId))
+            .query("sources")
+            .withIndex("by_run_and_url", (query) => query.eq("runId", runId))
             .collect();
         const decisions = await ctx.db
-            .query('sourceDecisions')
-            .withIndex('by_revision_and_source', (query) =>
+            .query("sourceDecisions")
+            .withIndex("by_revision_and_source", (query) =>
                 query.eq(
-                    'corpusRevisionId',
-                    run?.activeCorpusRevisionId as Id<'corpusRevisions'>,
+                    "corpusRevisionId",
+                    run?.activeCorpusRevisionId as Id<"corpusRevisions">,
                 ),
             )
             .collect();
@@ -248,21 +248,21 @@ test('persists validated launch references as pending sources in corpus revision
 
     expect(persisted.sources).toEqual([
         expect.objectContaining({
-            canonicalUrl: 'https://example.com/public-report',
-            title: 'Public report',
-            origin: 'analyst_url',
-            category: 'analyst_supplied',
+            canonicalUrl: "https://example.com/public-report",
+            title: "Public report",
+            origin: "analyst_url",
+            category: "analyst_supplied",
         }),
     ]);
     expect(persisted.decisions).toEqual([
         expect.objectContaining({
             runId,
-            decision: 'pending',
+            decision: "pending",
         }),
     ]);
 });
 
-test('skips manual source preparation when the launch key already owns a run', async () => {
+test("skips manual source preparation when the launch key already owns a run", async () => {
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
     workflowTest.register(t);
@@ -273,52 +273,52 @@ test('skips manual source preparation when the launch key already owns a run', a
 
     await analyst.action(confirmAndStart, {
         preflightId,
-        idempotencyKey: 'already-prepared-launch',
-        coveragePreset: 'balanced',
+        idempotencyKey: "already-prepared-launch",
+        coveragePreset: "balanced",
     });
 
     await expect(
         analyst.query(authorizeLaunchPreparation, {
             preflightId,
-            idempotencyKey: 'already-prepared-launch',
+            idempotencyKey: "already-prepared-launch",
         }),
     ).resolves.toEqual({ shouldPrepareManualSources: false });
 });
 
-test('adopts a pre-admission preflight for the admitted session', async () => {
+test("adopts a pre-admission preflight for the admitted session", async () => {
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
     workflowTest.register(t);
     const { userId, visitorId, preflightId } = await t.run(async (ctx) => {
-        const userId = await ctx.db.insert('users', { isAnonymous: true });
-        const companyId = await ctx.db.insert('companies', {
-            cik: '1818201',
-            legalName: 'CCC Intelligent Solutions Holdings Inc.',
-            ticker: 'CCCS',
-            exchange: 'NASDAQ',
+        const userId = await ctx.db.insert("users", { isAnonymous: true });
+        const companyId = await ctx.db.insert("companies", {
+            cik: "1818201",
+            legalName: "CCC Intelligent Solutions Holdings Inc.",
+            ticker: "CCCS",
+            exchange: "NASDAQ",
             canonicalizedAt: Date.now(),
         });
-        const preflightId = await ctx.db.insert('companyPreflights', {
+        const preflightId = await ctx.db.insert("companyPreflights", {
             ownerAuthUserId: userId,
-            query: 'CCCS',
+            query: "CCCS",
             companyId,
-            resolverVersion: 'sec-company-v1',
-            status: 'resolved',
+            resolverVersion: "sec-company-v1",
+            status: "resolved",
             expiresAt: Date.now() + 60_000,
             createdAt: Date.now(),
         });
-        const invitationId = await ctx.db.insert('invitations', {
-            slotKey: 'analyst-1',
-            role: 'analyst',
-            codeDigest: 'pre-admission-launch-digest',
-            status: 'claimed',
+        const invitationId = await ctx.db.insert("invitations", {
+            slotKey: "analyst-1",
+            role: "analyst",
+            codeDigest: "pre-admission-launch-digest",
+            status: "claimed",
             createdAt: 1,
         });
-        const visitorId = await ctx.db.insert('visitors', {
+        const visitorId = await ctx.db.insert("visitors", {
             authUserId: userId,
             invitationId,
-            role: 'analyst',
-            status: 'active',
+            role: "analyst",
+            status: "active",
             analysesReserved: 0,
             admittedAt: 1,
         });
@@ -330,8 +330,8 @@ test('adopts a pre-admission preflight for the admitted session', async () => {
 
     const result = await admittedSession.action(confirmAndStart, {
         preflightId,
-        idempotencyKey: 'launch-after-admission',
-        coveragePreset: 'balanced',
+        idempotencyKey: "launch-after-admission",
+        coveragePreset: "balanced",
     });
 
     await expect(
@@ -339,16 +339,16 @@ test('adopts a pre-admission preflight for the admitted session', async () => {
     ).resolves.toMatchObject({
         ownerAuthUserId: userId,
         ownerVisitorId: visitorId,
-        status: 'consumed',
+        status: "consumed",
     });
     await expect(
         admittedSession.query(getMine, { runId: result.runId }),
     ).resolves.toMatchObject({
-        company: { ticker: 'CCCS' },
+        company: { ticker: "CCCS" },
     });
 });
 
-test('allows exactly one running workflow per visitor', async () => {
+test("allows exactly one running workflow per visitor", async () => {
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
     workflowTest.register(t);
@@ -356,14 +356,14 @@ test('allows exactly one running workflow per visitor', async () => {
     const secondPreflightId = await t.run(async (ctx) => {
         const first = await ctx.db.get(preflightId);
         if (!first) {
-            throw new Error('Test preflight not found');
+            throw new Error("Test preflight not found");
         }
-        return ctx.db.insert('companyPreflights', {
+        return ctx.db.insert("companyPreflights", {
             ownerVisitorId: first.ownerVisitorId,
             query: first.query,
             companyId: first.companyId,
             resolverVersion: first.resolverVersion,
-            status: 'resolved',
+            status: "resolved",
             createdAt: Date.now(),
             expiresAt: Date.now() + 60_000,
         });
@@ -373,13 +373,13 @@ test('allows exactly one running workflow per visitor', async () => {
     const starts = await Promise.allSettled([
         analyst.action(confirmAndStart, {
             preflightId,
-            idempotencyKey: 'concurrent-a',
-            coveragePreset: 'balanced',
+            idempotencyKey: "concurrent-a",
+            coveragePreset: "balanced",
         }),
         analyst.action(confirmAndStart, {
             preflightId: secondPreflightId,
-            idempotencyKey: 'concurrent-b',
-            coveragePreset: 'balanced',
+            idempotencyKey: "concurrent-b",
+            coveragePreset: "balanced",
         }),
     ]);
 
@@ -387,52 +387,52 @@ test('allows exactly one running workflow per visitor', async () => {
         (
             result,
         ): result is PromiseFulfilledResult<{
-            runId: Id<'researchRuns'>;
+            runId: Id<"researchRuns">;
             remainingAnalyses: number;
-        }> => result.status === 'fulfilled',
+        }> => result.status === "fulfilled",
     );
     expect(fulfilled).toHaveLength(1);
-    expect(starts.filter(({ status }) => status === 'rejected')).toHaveLength(
+    expect(starts.filter(({ status }) => status === "rejected")).toHaveLength(
         1,
     );
 
     const runningRunId = fulfilled[0]?.value.runId;
     if (!runningRunId) {
-        throw new Error('Expected one running research run');
+        throw new Error("Expected one running research run");
     }
     await t.mutation(transition, {
         runId: runningRunId,
-        lifecycleState: 'checking_public_evidence',
-        executionStatus: 'running',
-        stepKey: 'check_public_evidence',
+        lifecycleState: "checking_public_evidence",
+        executionStatus: "running",
+        stepKey: "check_public_evidence",
     });
     await t.mutation(transition, {
         runId: runningRunId,
-        lifecycleState: 'awaiting_evidence_sufficiency_review',
-        executionStatus: 'paused',
-        stepKey: 'evidence_sufficiency_review',
+        lifecycleState: "awaiting_evidence_sufficiency_review",
+        executionStatus: "paused",
+        stepKey: "evidence_sufficiency_review",
     });
 
     await expect(
         analyst.action(confirmAndStart, {
             preflightId: secondPreflightId,
-            idempotencyKey: 'concurrent-b-retry',
-            coveragePreset: 'balanced',
+            idempotencyKey: "concurrent-b-retry",
+            coveragePreset: "balanced",
         }),
     ).resolves.toMatchObject({ remainingAnalyses: 1 });
 });
 
-test('revalidates the confirmed CIK before evidence checks', async () => {
-    process.env.SEC_USER_AGENT = 'Evidence Workbench test@example.com';
+test("revalidates the confirmed CIK before evidence checks", async () => {
+    process.env.SEC_USER_AGENT = "Evidence Workbench test@example.com";
     const fetchImplementation = vi.fn(async () =>
         Promise.resolve(
             new Response(
                 JSON.stringify({
-                    cik: '0001818201',
-                    name: 'CCC Intelligent Solutions Holdings Inc.',
-                    tickers: ['CCCS'],
-                    exchanges: ['Nasdaq'],
-                    filings: { recent: { accessionNumber: ['0001'] } },
+                    cik: "0001818201",
+                    name: "CCC Intelligent Solutions Holdings Inc.",
+                    tickers: ["CCCS"],
+                    exchanges: ["Nasdaq"],
+                    filings: { recent: { accessionNumber: ["0001"] } },
                 }),
                 { status: 200 },
             ),
@@ -447,35 +447,35 @@ test('revalidates the confirmed CIK before evidence checks', async () => {
 
     const { runId } = await analyst.action(confirmAndStart, {
         preflightId,
-        idempotencyKey: 'revalidate-cccs',
-        coveragePreset: 'balanced',
+        idempotencyKey: "revalidate-cccs",
+        coveragePreset: "balanced",
     });
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
     expect(fetchImplementation).toHaveBeenCalledWith(
-        'https://data.sec.gov/submissions/CIK0001818201.json',
+        "https://data.sec.gov/submissions/CIK0001818201.json",
         expect.objectContaining({
             headers: expect.objectContaining({
-                'User-Agent': 'Evidence Workbench test@example.com',
+                "User-Agent": "Evidence Workbench test@example.com",
             }),
         }),
     );
     await expect(t.query(getRun, { runId })).resolves.toMatchObject({
-        lifecycleState: 'awaiting_source_review',
-        executionStatus: 'paused',
+        lifecycleState: "awaiting_source_review",
+        executionStatus: "paused",
     });
 });
 
-test('pauses when revalidation finds no public evidence', async () => {
-    process.env.SEC_USER_AGENT = 'Evidence Workbench test@example.com';
+test("pauses when revalidation finds no public evidence", async () => {
+    process.env.SEC_USER_AGENT = "Evidence Workbench test@example.com";
     globalThis.fetch = vi.fn(async () =>
         Promise.resolve(
             new Response(
                 JSON.stringify({
-                    cik: '0001818201',
-                    name: 'CCC Intelligent Solutions Holdings Inc.',
-                    tickers: ['CCCS'],
-                    exchanges: ['Nasdaq'],
+                    cik: "0001818201",
+                    name: "CCC Intelligent Solutions Holdings Inc.",
+                    tickers: ["CCCS"],
+                    exchanges: ["Nasdaq"],
                     filings: { recent: { accessionNumber: [] } },
                 }),
                 { status: 200 },
@@ -492,43 +492,43 @@ test('pauses when revalidation finds no public evidence', async () => {
 
     const { runId } = await analyst.action(confirmAndStart, {
         preflightId,
-        idempotencyKey: 'insufficient-cccs',
-        coveragePreset: 'balanced',
+        idempotencyKey: "insufficient-cccs",
+        coveragePreset: "balanced",
     });
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
     await expect(t.query(getRun, { runId })).resolves.toMatchObject({
-        lifecycleState: 'awaiting_evidence_sufficiency_review',
-        executionStatus: 'paused',
-        pauseReason: 'evidence_sufficiency_review',
+        lifecycleState: "awaiting_evidence_sufficiency_review",
+        executionStatus: "paused",
+        pauseReason: "evidence_sufficiency_review",
     });
     await expect(
         analyst.mutation(decideSufficiency, {
             runId,
             decision: {
-                kind: 'complete_insufficient',
-                decisionKey: 'complete-insufficient-cccs',
-                reason: 'Public evidence cannot support a credible assessment.',
+                kind: "complete_insufficient",
+                decisionKey: "complete-insufficient-cccs",
+                reason: "Public evidence cannot support a credible assessment.",
             },
         }),
     ).resolves.toEqual({ accepted: true });
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     await expect(t.query(getRun, { runId })).resolves.toMatchObject({
-        lifecycleState: 'completed',
-        executionStatus: 'completed',
+        lifecycleState: "completed",
+        executionStatus: "completed",
     });
 });
 
-test('requires a justified force-continuation decision', async () => {
-    process.env.SEC_USER_AGENT = 'Evidence Workbench test@example.com';
+test("requires a justified force-continuation decision", async () => {
+    process.env.SEC_USER_AGENT = "Evidence Workbench test@example.com";
     globalThis.fetch = vi.fn(async () =>
         Promise.resolve(
             new Response(
                 JSON.stringify({
-                    cik: '0001818201',
-                    name: 'CCC Intelligent Solutions Holdings Inc.',
-                    tickers: ['CCCS'],
-                    exchanges: ['Nasdaq'],
+                    cik: "0001818201",
+                    name: "CCC Intelligent Solutions Holdings Inc.",
+                    tickers: ["CCCS"],
+                    exchanges: ["Nasdaq"],
                     filings: { recent: { accessionNumber: [] } },
                 }),
                 { status: 200 },
@@ -542,8 +542,8 @@ test('requires a justified force-continuation decision', async () => {
     const analyst = t.withIdentity({ subject: `${userId}|force-session` });
     const { runId } = await analyst.action(confirmAndStart, {
         preflightId,
-        idempotencyKey: 'force-cccs',
-        coveragePreset: 'balanced',
+        idempotencyKey: "force-cccs",
+        coveragePreset: "balanced",
     });
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
@@ -551,25 +551,25 @@ test('requires a justified force-continuation decision', async () => {
         analyst.mutation(decideSufficiency, {
             runId,
             decision: {
-                kind: 'force_continue',
-                decisionKey: 'force-short',
-                reason: 'too short',
+                kind: "force_continue",
+                decisionKey: "force-short",
+                reason: "too short",
             },
         }),
-    ).rejects.toThrow('12 characters');
+    ).rejects.toThrow("12 characters");
     await expect(
         analyst.mutation(decideSufficiency, {
             runId,
             decision: {
-                kind: 'force_continue',
-                decisionKey: 'force-valid',
-                reason: 'Proceed with explicitly limited public evidence.',
+                kind: "force_continue",
+                decisionKey: "force-valid",
+                reason: "Proceed with explicitly limited public evidence.",
             },
         }),
     ).resolves.toEqual({ accepted: true });
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     await expect(t.query(getRun, { runId })).resolves.toMatchObject({
-        lifecycleState: 'awaiting_source_review',
-        executionStatus: 'paused',
+        lifecycleState: "awaiting_source_review",
+        executionStatus: "paused",
     });
 });

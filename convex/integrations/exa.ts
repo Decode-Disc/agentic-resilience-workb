@@ -60,9 +60,7 @@ export type ExaCompanySearchClient = {
  * so the website resolver stays provider-agnostic.
  */
 export function createExaWebsiteAdapter(client: ExaCompanySearchClient): {
-    search(
-        query: string,
-    ): Promise<
+    search(query: string): Promise<
         ReadonlyArray<{
             url: string;
             entityName: string;
