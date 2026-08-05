@@ -41,7 +41,7 @@ import {
     type CoveragePreset,
     CoveragePresetPicker,
 } from '@/components/workspace/coverage-preset-picker';
-import { InvitationAccessDrawer } from '@/components/workspace/invitation-access-drawer';
+import { useInvitationAccess } from '@/components/workspace/invitation-access-context';
 import { useAnonymousSession } from '@/hooks/use-anonymous-session';
 import { useResponsive } from '@/hooks/use-responsive';
 import { companyLookupErrorMessage } from '@/lib/presentation/research-copy';
@@ -105,7 +105,7 @@ export function ResearchComposer({
     const [isLaunching, setIsLaunching] = useState(false);
     const [lookupError, setLookupError] = useState<string | null>(null);
     const [launchError, setLaunchError] = useState<string | null>(null);
-    const [invitationOpen, setInvitationOpen] = useState(false);
+    const { openInvitationDrawer } = useInvitationAccess();
     const [referencesOpen, setReferencesOpen] = useState(false);
     const [manualSourceUrls, setManualSourceUrls] = useState<Array<string>>([]);
     const launchKey = useRef<string | null>(null);
@@ -218,7 +218,11 @@ export function ResearchComposer({
         }
 
         if (visitor?.status !== 'active') {
-            setInvitationOpen(true);
+            openInvitationDrawer({
+                onSuccess: () => {
+                    void startResearch();
+                },
+            });
             return;
         }
 
@@ -470,11 +474,6 @@ export function ResearchComposer({
                 </AnimatePresence>
             </section>
 
-            <InvitationAccessDrawer
-                open={invitationOpen}
-                onOpenChange={setInvitationOpen}
-                onAdmitted={() => startResearch()}
-            />
             <AddSourceDialog
                 open={referencesOpen}
                 onOpenChange={setReferencesOpen}

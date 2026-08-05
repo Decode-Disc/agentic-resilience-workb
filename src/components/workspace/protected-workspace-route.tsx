@@ -3,9 +3,9 @@
 import { api } from '@convex/_generated/api';
 import { Outlet, useNavigate } from '@tanstack/react-router';
 import { useQuery } from 'convex/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { InvitationAccessDrawer } from '@/components/workspace/invitation-access-drawer';
+import { useInvitationAccess } from '@/components/workspace/invitation-access-context';
 import { useAnonymousSession } from '@/hooks/use-anonymous-session';
 import { getWorkspaceDestination } from '@/lib/workspace/access-destination';
 
@@ -35,6 +35,36 @@ export function ProtectedWorkspaceRoute() {
         isSessionReady ? {} : 'skip',
     );
     const [admissionPending, setAdmissionPending] = useState(false);
+    const { openInvitationDrawer, isOpen } = useInvitationAccess();
+
+    useEffect(() => {
+        if (
+            isSessionReady &&
+            visitor !== undefined &&
+            visitor?.status !== 'active' &&
+            !admissionPending &&
+            !isOpen
+        ) {
+            openInvitationDrawer({
+                onSuccess: ({ role }) => {
+                    setAdmissionPending(true);
+                    void navigate({
+                        to: getWorkspaceDestination(role),
+                    });
+                },
+                onCancel: () => {
+                    void navigate({ to: '/workspace/start' });
+                },
+            });
+        }
+    }, [
+        isSessionReady,
+        visitor,
+        admissionPending,
+        isOpen,
+        openInvitationDrawer,
+        navigate,
+    ]);
 
     if (sessionError) {
         return (
@@ -64,20 +94,5 @@ export function ProtectedWorkspaceRoute() {
         return <Outlet />;
     }
 
-    return (
-        <InvitationAccessDrawer
-            open
-            onOpenChange={(open) => {
-                if (!open) {
-                    void navigate({ to: '/workspace/start' });
-                }
-            }}
-            onAdmitted={({ role }) => {
-                setAdmissionPending(true);
-                void navigate({
-                    to: getWorkspaceDestination(role),
-                });
-            }}
-        />
-    );
+    return <ProtectedRouteLoading />;
 }

@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/nested-menu';
 import { Separator } from '@/components/ui/separator';
 import { AnalyzedCompanyList } from '@/components/workbench-shell/analyzed-company-list';
-import { InvitationAccessDrawer } from '@/components/workspace/invitation-access-drawer';
+import { useInvitationAccess } from '@/components/workspace/invitation-access-context';
 import { getWorkspaceDestination } from '@/lib/workspace/access-destination';
 
 export interface WorkbenchShellProps {
@@ -43,8 +43,8 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
     const visitor = useQuery(api.visitors.current);
     const navigate = useNavigate();
     const { signOut } = useAuthActions();
+    const { openInvitationDrawer } = useInvitationAccess();
     const [isSigningOut, setIsSigningOut] = useState(false);
-    const [invitationOpen, setInvitationOpen] = useState(false);
 
     const logout = async () => {
         if (isSigningOut) {
@@ -171,7 +171,17 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                                 size="sm"
                                 variant="secondary"
                                 className="border border-primary"
-                                onClick={() => setInvitationOpen(true)}
+                                onClick={() =>
+                                    openInvitationDrawer({
+                                        onSuccess: ({ role }) => {
+                                            void navigate({
+                                                to: getWorkspaceDestination(
+                                                    role,
+                                                ),
+                                            });
+                                        },
+                                    })
+                                }
                             >
                                 <Icon iconNode={Login02Icon} />
                                 Workspace
@@ -186,18 +196,6 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                     {children}
                 </main>
             </BackgroundImageTexture>
-
-            {invitationOpen ? (
-                <InvitationAccessDrawer
-                    open
-                    onOpenChange={setInvitationOpen}
-                    onAdmitted={({ role }) => {
-                        void navigate({
-                            to: getWorkspaceDestination(role),
-                        });
-                    }}
-                />
-            ) : null}
         </div>
     );
 }

@@ -38,7 +38,6 @@ function DirectionAwareTabs({
         defaultTabId ?? tabs[0]?.id ?? 0
     )
     const [direction, setDirection] = useState(0)
-    const [isAnimating, setIsAnimating] = useState(false)
     const [ref, bounds] = useMeasure()
 
     const activeTabIndex = useMemo(

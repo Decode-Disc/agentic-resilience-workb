@@ -24,6 +24,7 @@ vi.mock(import('@tanstack/react-router'), async (importOriginal) => {
 });
 vi.mock('@/hooks/use-anonymous-session', () => ({ useAnonymousSession }));
 
+import { InvitationAccessProvider } from '@/components/workspace/invitation-access-context';
 import { ProtectedWorkspaceRoute } from '@/components/workspace/protected-workspace-route';
 
 describe('ProtectedWorkspaceRoute', () => {
@@ -44,7 +45,11 @@ describe('ProtectedWorkspaceRoute', () => {
     test('withholds protected content and opens admission for an anonymous visitor', () => {
         useQuery.mockReturnValue(null);
 
-        render(<ProtectedWorkspaceRoute />);
+        render(
+            <InvitationAccessProvider>
+                <ProtectedWorkspaceRoute />
+            </InvitationAccessProvider>,
+        );
 
         expect(screen.queryByText('Protected route content')).toBeNull();
         expect(
@@ -55,7 +60,11 @@ describe('ProtectedWorkspaceRoute', () => {
     test('renders protected content for an active visitor', () => {
         useQuery.mockReturnValue({ role: 'analyst', status: 'active' });
 
-        render(<ProtectedWorkspaceRoute />);
+        render(
+            <InvitationAccessProvider>
+                <ProtectedWorkspaceRoute />
+            </InvitationAccessProvider>,
+        );
 
         expect(screen.getByText('Protected route content')).toBeTruthy();
         expect(
@@ -70,7 +79,11 @@ describe('ProtectedWorkspaceRoute', () => {
             role: 'analyst',
         });
 
-        render(<ProtectedWorkspaceRoute />);
+        render(
+            <InvitationAccessProvider>
+                <ProtectedWorkspaceRoute />
+            </InvitationAccessProvider>,
+        );
 
         fireEvent.change(screen.getByLabelText(/Access code/i), {
             target: { value: '4207' },

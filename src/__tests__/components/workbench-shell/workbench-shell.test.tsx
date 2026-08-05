@@ -65,6 +65,7 @@ vi.mock(import('@/components/workbench-shell/analyzed-company-list'), () => ({
 }));
 
 import { WorkbenchShell } from '@/components/workbench-shell/workbench-shell';
+import { InvitationAccessProvider } from '@/components/workspace/invitation-access-context';
 
 describe('WorkbenchShell', () => {
     beforeEach(() => {
@@ -81,9 +82,11 @@ describe('WorkbenchShell', () => {
 
     it('renders header with Home link and analyzed company list', () => {
         render(
-            <WorkbenchShell>
-                <div>Page content</div>
-            </WorkbenchShell>,
+            <InvitationAccessProvider>
+                <WorkbenchShell>
+                    <div>Page content</div>
+                </WorkbenchShell>
+            </InvitationAccessProvider>,
         );
 
         const homeLink = screen.getByRole('button', { name: /Go to Home/i });
@@ -101,9 +104,11 @@ describe('WorkbenchShell', () => {
 
     it('renders custom children when provided', () => {
         render(
-            <WorkbenchShell>
-                <div data-testid="custom-page-content">Custom View</div>
-            </WorkbenchShell>,
+            <InvitationAccessProvider>
+                <WorkbenchShell>
+                    <div data-testid="custom-page-content">Custom View</div>
+                </WorkbenchShell>
+            </InvitationAccessProvider>,
         );
 
         expect(screen.getByTestId('custom-page-content')).toBeTruthy();
@@ -111,9 +116,11 @@ describe('WorkbenchShell', () => {
 
     it('preserves company navigation space while admission loads', () => {
         render(
-            <WorkbenchShell>
-                <div>Page content</div>
-            </WorkbenchShell>,
+            <InvitationAccessProvider>
+                <WorkbenchShell>
+                    <div>Page content</div>
+                </WorkbenchShell>
+            </InvitationAccessProvider>,
         );
 
         expect(
@@ -125,9 +132,11 @@ describe('WorkbenchShell', () => {
         useQuery.mockReturnValue(null);
 
         render(
-            <WorkbenchShell>
-                <div>Page content</div>
-            </WorkbenchShell>,
+            <InvitationAccessProvider>
+                <WorkbenchShell>
+                    <div>Page content</div>
+                </WorkbenchShell>
+            </InvitationAccessProvider>,
         );
 
         expect(
@@ -148,9 +157,11 @@ describe('WorkbenchShell', () => {
         });
 
         render(
-            <WorkbenchShell>
-                <div>Page content</div>
-            </WorkbenchShell>,
+            <InvitationAccessProvider>
+                <WorkbenchShell>
+                    <div>Page content</div>
+                </WorkbenchShell>
+            </InvitationAccessProvider>,
         );
 
         fireEvent.click(screen.getByRole('button', { name: /Workspace/i }));
@@ -176,9 +187,11 @@ describe('WorkbenchShell', () => {
         });
 
         render(
-            <WorkbenchShell>
-                <div>Page content</div>
-            </WorkbenchShell>,
+            <InvitationAccessProvider>
+                <WorkbenchShell>
+                    <div>Page content</div>
+                </WorkbenchShell>
+            </InvitationAccessProvider>,
         );
 
         fireEvent.click(screen.getByRole('button', { name: /Workspace/i }));
@@ -203,9 +216,11 @@ describe('WorkbenchShell', () => {
         });
 
         render(
-            <WorkbenchShell>
-                <div>Page content</div>
-            </WorkbenchShell>,
+            <InvitationAccessProvider>
+                <WorkbenchShell>
+                    <div>Page content</div>
+                </WorkbenchShell>
+            </InvitationAccessProvider>,
         );
 
         expect(screen.queryByText('Research prototype')).toBeNull();
@@ -231,9 +246,11 @@ describe('WorkbenchShell', () => {
         });
 
         render(
-            <WorkbenchShell>
-                <div>Page content</div>
-            </WorkbenchShell>,
+            <InvitationAccessProvider>
+                <WorkbenchShell>
+                    <div>Page content</div>
+                </WorkbenchShell>
+            </InvitationAccessProvider>,
         );
 
         fireEvent.click(

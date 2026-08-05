@@ -5,6 +5,7 @@ import { createRouter as createTanStackRouter } from '@tanstack/react-router';
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query';
 import { ConvexReactClient } from 'convex/react';
 
+import { InvitationAccessProvider } from '@/components/workspace/invitation-access-context';
 import { clientEnv } from '@/config/env';
 
 import { routeTree } from './routeTree.gen';
@@ -33,7 +34,9 @@ export function getRouter() {
         scrollRestoration: true,
         Wrap: ({ children }) => (
             <ConvexAuthProvider client={convexClient}>
-                {children}
+                <InvitationAccessProvider>
+                    {children}
+                </InvitationAccessProvider>
             </ConvexAuthProvider>
         ),
     });
