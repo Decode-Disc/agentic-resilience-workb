@@ -7,6 +7,7 @@ import schema from '@convex/schema';
 import { makeFunctionReference } from 'convex/server';
 import { convexTest } from 'convex-test';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import rateLimiterTest from '../integrations/rate-limiter-test-register.js';
 
 const company = {
     legalName: 'CCC Intelligent Solutions Holdings Inc.',
@@ -194,6 +195,7 @@ test('searches for multiple matching companies without persisting a preflight', 
 
 test('persists a preflight for an anonymous session before admission', async () => {
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     const userId = await t.run(async (ctx) => {
         const userId = await ctx.db.insert('users', { isAnonymous: true });
         return userId;
@@ -220,6 +222,7 @@ test('persists a preflight for an anonymous session before admission', async () 
 
 test('rejects unauthenticated preflight persistence', async () => {
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
 
     await expect(
         t.mutation(persistPreflight, {
@@ -233,6 +236,7 @@ test('rejects unauthenticated preflight persistence', async () => {
 
 test('rejects an unauthenticated public preflight', async () => {
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
 
     await expect(
         t.action(preflightCompany, { cik: '1818201' }),
@@ -270,6 +274,7 @@ test('searches and preflights a selected company for an anonymous session before
         );
     });
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     const userId = await t.run((ctx) =>
         ctx.db.insert('users', { isAnonymous: true }),
     );

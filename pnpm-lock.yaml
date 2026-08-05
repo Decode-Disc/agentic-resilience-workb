@@ -17,6 +17,9 @@ importers:
       '@convex-dev/auth':
         specifier: 0.0.94
         version: 0.0.94(@auth/core@0.41.2)(convex@1.42.1(react@19.2.7))(react@19.2.7)
+      '@convex-dev/rate-limiter':
+        specifier: 0.3.2
+        version: 0.3.2(convex@1.42.1(react@19.2.7))(react@19.2.7)
       '@convex-dev/react-query':
         specifier: 0.1.0
         version: 0.1.0(@tanstack/react-query@5.101.2(react@19.2.7))(convex@1.42.1(react@19.2.7))
@@ -38,6 +41,9 @@ importers:
       '@hugeicons/react':
         specifier: 1.1.9
         version: 1.1.9(react@19.2.7)
+      '@paper-design/shaders':
+        specifier: 0.0.78
+        version: 0.0.78
       '@radix-ui/react-popover':
         specifier: 1.1.19
         version: 1.1.19(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -444,6 +450,15 @@ packages:
       react:
         optional: true
 
+  '@convex-dev/rate-limiter@0.3.2':
+    resolution: {integrity: sha512-+oBPsBfFbzdxiF/9XaaTQmVnvDlvEfg/c69/v8LxTbw4VLuiflIKlfnPQL8OS0azXQQ11hcPWHmU8ytFmHKDXA==}
+    peerDependencies:
+      convex: ^1.24.8
+      react: ^18.2.0 || ^19.0.0
+    peerDependenciesMeta:
+      react:
+        optional: true
+
   '@convex-dev/react-query@0.1.0':
     resolution: {integrity: sha512-ULmBZCtAQDUePdBhUv7hj1Yy4QiCelhi6uEIOtMpjW8db6W9CFKvQwLt9heLngccFyMFfAZdOfSrT+cP4AH0Jw==}
     peerDependencies:
@@ -795,6 +810,9 @@ packages:
 
   '@panva/hkdf@1.2.1':
     resolution: {integrity: sha512-6oclG6Y3PiDFcoyk8srjLfVKyMfVCKJ27JwNPViuXziFpmdz+MZnZN/aKY0JGXgYuO/VghU0jcOAZgWXZ1Dmrw==}
+
+  '@paper-design/shaders@0.0.78':
+    resolution: {integrity: sha512-xOxV7koSzzh47G34I7uE3MASzli28k6+V35dlVrjMu270SFs0t8zeb4F/XTUU0BOXoHqIjKiGu6DnqkxPlsTcw==}
 
   '@radix-ui/primitive@1.1.5':
     resolution: {integrity: sha512-d86WIWFYNtGA0H/d8exstrTRTp7eWJYlYJbtNofxr/3ljupZYn6EFDG/Qgu/0Kc8v7yMUxySagqJsL1+PdYjWg==}
@@ -3966,6 +3984,12 @@ snapshots:
     optionalDependencies:
       react: 19.2.7
 
+  '@convex-dev/rate-limiter@0.3.2(convex@1.42.1(react@19.2.7))(react@19.2.7)':
+    dependencies:
+      convex: 1.42.1(react@19.2.7)
+    optionalDependencies:
+      react: 19.2.7
+
   '@convex-dev/react-query@0.1.0(@tanstack/react-query@5.101.2(react@19.2.7))(convex@1.42.1(react@19.2.7))':
     dependencies:
       '@tanstack/react-query': 5.101.2(react@19.2.7)
@@ -4250,6 +4274,8 @@ snapshots:
   '@oxc-project/types@0.139.0': {}
 
   '@panva/hkdf@1.2.1': {}
+
+  '@paper-design/shaders@0.0.78': {}
 
   '@radix-ui/primitive@1.1.5': {}
 

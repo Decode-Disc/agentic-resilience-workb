@@ -3,6 +3,7 @@ import schema from '@convex/schema';
 import { makeFunctionReference } from 'convex/server';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import rateLimiterTest from '../integrations/rate-limiter-test-register.js';
 import workflowTest from '../workflows/workflow-test-register.js';
 
 const modules = import.meta.glob('/convex/**/*.ts');
@@ -144,6 +145,7 @@ async function createAdmittedPreflight(
 
 test('confirms a preflight and starts workflow version 2 once', async () => {
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
     const analyst = t.withIdentity({ subject: `${userId}|launch-session` });
@@ -206,6 +208,7 @@ test('confirms a preflight and starts workflow version 2 once', async () => {
 
 test('persists validated launch references as pending sources in corpus revision 1', async () => {
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
     const analyst = t.withIdentity({
@@ -261,6 +264,7 @@ test('persists validated launch references as pending sources in corpus revision
 
 test('skips manual source preparation when the launch key already owns a run', async () => {
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
     const analyst = t.withIdentity({
@@ -283,6 +287,7 @@ test('skips manual source preparation when the launch key already owns a run', a
 
 test('adopts a pre-admission preflight for the admitted session', async () => {
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     workflowTest.register(t);
     const { userId, visitorId, preflightId } = await t.run(async (ctx) => {
         const userId = await ctx.db.insert('users', { isAnonymous: true });
@@ -345,6 +350,7 @@ test('adopts a pre-admission preflight for the admitted session', async () => {
 
 test('allows exactly one running workflow per visitor', async () => {
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
     const secondPreflightId = await t.run(async (ctx) => {
@@ -434,6 +440,7 @@ test('revalidates the confirmed CIK before evidence checks', async () => {
     );
     globalThis.fetch = fetchImplementation;
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
     const analyst = t.withIdentity({ subject: `${userId}|revalidate-session` });
@@ -476,6 +483,7 @@ test('pauses when revalidation finds no public evidence', async () => {
         ),
     );
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
     const analyst = t.withIdentity({
@@ -528,6 +536,7 @@ test('requires a justified force-continuation decision', async () => {
         ),
     );
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
     const analyst = t.withIdentity({ subject: `${userId}|force-session` });

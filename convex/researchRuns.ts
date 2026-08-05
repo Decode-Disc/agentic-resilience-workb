@@ -2,13 +2,13 @@ import { getAuthUserId } from '@convex-dev/auth/server';
 import { v } from 'convex/values';
 
 import type { Doc } from './_generated/dataModel';
+import type { QueryCtx } from './_generated/server';
 import {
     internalMutation,
     internalQuery,
     mutation,
     query,
 } from './_generated/server';
-import type { QueryCtx } from './_generated/server';
 import { assertLifecycleTransition } from './domain/transitions';
 import {
     executionStatusValidator,

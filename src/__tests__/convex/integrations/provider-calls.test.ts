@@ -3,12 +3,13 @@ import type { Id } from '@convex/_generated/dataModel';
 import { makeFunctionReference } from 'convex/server';
 import { convexTest } from 'convex-test';
 import { expect, test } from 'vitest';
+import rateLimiterTest from './rate-limiter-test-register.js';
 
 const modules = import.meta.glob('/convex/**/*.ts');
 const reserveSecRateLimit = makeFunctionReference<
     'mutation',
-    { now: number },
-    { scheduledAt: number }
+    Record<string, never>,
+    { retryAfter?: number }
 >('providerCalls:reserveSecRateLimit');
 const recordAttempt = makeFunctionReference<
     'mutation',
@@ -29,18 +30,37 @@ const recordAttempt = makeFunctionReference<
     }
 >('providerCalls:recordAttempt');
 
-test('spaces aggregate SEC reservations by 125 milliseconds', async () => {
+test('reserves SEC call slots through the rate-limiter component', async () => {
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
 
     const reservations = await Promise.all([
-        t.mutation(reserveSecRateLimit, { now: 1_000 }),
-        t.mutation(reserveSecRateLimit, { now: 1_000 }),
-        t.mutation(reserveSecRateLimit, { now: 1_000 }),
+        t.mutation(reserveSecRateLimit, {}),
+        t.mutation(reserveSecRateLimit, {}),
+        t.mutation(reserveSecRateLimit, {}),
     ]);
 
-    expect(reservations.map(({ scheduledAt }) => scheduledAt).sort()).toEqual([
-        1_000, 1_125, 1_250,
-    ]);
+    // Token bucket with 8 tokens/sec — three calls should all succeed immediately
+    expect(
+        reservations.every(
+            (r) => typeof r.retryAfter === 'number' || r.retryAfter === undefined,
+        ),
+    ).toBe(true);
+    expect(reservations.filter((r) => (r.retryAfter ?? 0) > 0).length).toBe(0);
+});
+
+test('enforces SEC rate limit when bucket is exhausted', async () => {
+    const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
+
+    // Exhaust the 8-token bucket with 9 concurrent calls
+    const reservations = await Promise.all(
+        Array.from({ length: 9 }, () => t.mutation(reserveSecRateLimit, {})),
+    );
+
+    // At least one call should have retryAfter > 0 (rate-limited)
+    const rateLimited = reservations.filter((r) => (r.retryAfter ?? 0) > 0);
+    expect(rateLimited.length).toBeGreaterThanOrEqual(1);
 });
 
 test('completes one persisted provider attempt', async () => {

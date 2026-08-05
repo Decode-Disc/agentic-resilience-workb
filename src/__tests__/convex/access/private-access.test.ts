@@ -3,6 +3,7 @@ import schema from '@convex/schema';
 import { makeFunctionReference } from 'convex/server';
 import { convexTest } from 'convex-test';
 import { expect, test } from 'vitest';
+import rateLimiterTest from '../integrations/rate-limiter-test-register.js';
 
 const modules = import.meta.glob('/convex/**/*.ts');
 
@@ -80,6 +81,7 @@ async function buildInvitationSeed(): Promise<Array<SeedEntry>> {
 
 test('setup seeds exactly five invitation slots idempotently', async () => {
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     const invitationSeed = await buildInvitationSeed();
 
     await expect(
@@ -99,6 +101,7 @@ test('setup seeds exactly five invitation slots idempotently', async () => {
 
 test('the deployment bootstrap seeds configured invitations without exposing codes', async () => {
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     process.env.INVITATION_CODE_PEPPER = invitationPepper;
     process.env.INVITATION_SEED_CONFIG = JSON.stringify([
         { slotKey: 'admin', role: 'admin', code: '1000' },
@@ -140,6 +143,7 @@ test('the deployment bootstrap seeds configured invitations without exposing cod
 
 test('configured code rotation preserves the visitor and revokes its old session', async () => {
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     process.env.INVITATION_CODE_PEPPER = invitationPepper;
     process.env.INVITATION_SEED_CONFIG = JSON.stringify([
         { slotKey: 'admin', role: 'admin', code: '1000' },
@@ -196,6 +200,7 @@ test('configured code rotation preserves the visitor and revokes its old session
 
 test('an access code reconnects its visitor with a new anonymous session', async () => {
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     process.env.INVITATION_CODE_PEPPER = invitationPepper;
     const invitationSeed = await buildInvitationSeed();
     await t.mutation(seedInvitations, { invitations: invitationSeed });
@@ -259,6 +264,7 @@ test('an access code reconnects its visitor with a new anonymous session', async
 
 test('access codes reject values outside the four-digit contract', async () => {
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     process.env.INVITATION_CODE_PEPPER = invitationPepper;
     const userId = await t.run((ctx) =>
         ctx.db.insert('users', { isAnonymous: true }),
@@ -272,6 +278,7 @@ test('access codes reject values outside the four-digit contract', async () => {
 
 test('access codes lock one anonymous session after five failed attempts', async () => {
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     process.env.INVITATION_CODE_PEPPER = invitationPepper;
     await t.mutation(seedInvitations, {
         invitations: await buildInvitationSeed(),
@@ -294,6 +301,7 @@ test('access codes lock one anonymous session after five failed attempts', async
 
 test('an admitted visitor atomically reserves at most three analyses', async () => {
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     process.env.INVITATION_CODE_PEPPER = invitationPepper;
     const invitationSeed = await buildInvitationSeed();
     await t.mutation(seedInvitations, { invitations: invitationSeed });
@@ -325,6 +333,7 @@ test('an admitted visitor atomically reserves at most three analyses', async () 
 
 test('the invited admin restores an unused reservation with an audited reason', async () => {
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     process.env.INVITATION_CODE_PEPPER = invitationPepper;
     const invitationSeed = await buildInvitationSeed();
     await t.mutation(seedInvitations, { invitations: invitationSeed });
@@ -372,6 +381,7 @@ test('the invited admin restores an unused reservation with an audited reason', 
 
 test('admin code rotation preserves the visitor while replacing its session', async () => {
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     process.env.INVITATION_CODE_PEPPER = invitationPepper;
     process.env.INVITATION_ADMIN_RECOVERY_CODE = '9000';
     const invitationSeed = await buildInvitationSeed();

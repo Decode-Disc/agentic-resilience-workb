@@ -3,6 +3,7 @@ import schema from '@convex/schema';
 import { makeFunctionReference } from 'convex/server';
 import { convexTest } from 'convex-test';
 import { afterEach, expect, test, vi } from 'vitest';
+import rateLimiterTest from '../integrations/rate-limiter-test-register.js';
 import workflowTest from './workflow-test-register.js';
 
 const { exaSearch } = vi.hoisted(() => ({
@@ -113,6 +114,7 @@ test('ends Phase 4 at an immutable approved corpus', async () => {
         ),
     );
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     workflowTest.register(t);
     const fixture = await t.run(async (ctx) => {
         const userId = await ctx.db.insert('users', { isAnonymous: true });

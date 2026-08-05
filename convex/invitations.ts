@@ -1,15 +1,16 @@
-import { getAuthUserId } from '@convex-dev/auth/server';
-import { v } from 'convex/values';
-import { internal } from './_generated/api';
-import type { Id } from './_generated/dataModel';
+import { getAuthUserId } from "@convex-dev/auth/server";
+import { v } from "convex/values";
+import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import {
     action,
     internalAction,
     internalMutation,
     internalQuery,
-} from './_generated/server';
-import { digestInvitationCode } from './domain/invitationCodes';
-import { visitorRoleValidator } from './domain/validators';
+} from "./_generated/server";
+import { digestInvitationCode } from "./domain/invitationCodes";
+import { visitorRoleValidator } from "./domain/validators";
+import { rateLimiter } from "./rateLimiter";
 
 const seedEntryValidator = v.object({
     slotKey: v.string(),
@@ -19,13 +20,11 @@ const seedEntryValidator = v.object({
 
 type ConfiguredInvitation = {
     slotKey: string;
-    role: 'admin' | 'analyst';
+    role: "admin" | "analyst";
     code: string;
 };
 
 const invitationCodePattern = /^\d{4}$/;
-const invitationClaimWindowMs = 15 * 60 * 1_000;
-const invitationClaimLimits = [{ key: 'global', maximumAttempts: 25 }] as const;
 
 function parseConfiguredInvitations(
     value: string,
@@ -35,18 +34,18 @@ function parseConfiguredInvitations(
         !Array.isArray(parsed) ||
         !parsed.every(
             (entry): entry is ConfiguredInvitation =>
-                typeof entry === 'object' &&
+                typeof entry === "object" &&
                 entry !== null &&
-                'slotKey' in entry &&
-                typeof entry.slotKey === 'string' &&
-                'role' in entry &&
-                (entry.role === 'admin' || entry.role === 'analyst') &&
-                'code' in entry &&
-                typeof entry.code === 'string' &&
+                "slotKey" in entry &&
+                typeof entry.slotKey === "string" &&
+                "role" in entry &&
+                (entry.role === "admin" || entry.role === "analyst") &&
+                "code" in entry &&
+                typeof entry.code === "string" &&
                 invitationCodePattern.test(entry.code),
         )
     ) {
-        throw new Error('INVITATION_SEED_CONFIG is invalid');
+        throw new Error("INVITATION_SEED_CONFIG is invalid");
     }
     return parsed;
 }
@@ -56,14 +55,14 @@ export const seedForSetup = internalMutation({
     returns: v.object({ created: v.number(), total: v.number() }),
     handler: async (ctx, args) => {
         if (args.invitations.length !== 5) {
-            throw new Error('Invitation setup must contain exactly five slots');
+            throw new Error("Invitation setup must contain exactly five slots");
         }
         if (
-            args.invitations.filter((invitation) => invitation.role === 'admin')
+            args.invitations.filter((invitation) => invitation.role === "admin")
                 .length !== 1
         ) {
             throw new Error(
-                'Invitation setup must contain exactly one admin slot',
+                "Invitation setup must contain exactly one admin slot",
             );
         }
         const slotKeys = new Set(
@@ -73,16 +72,16 @@ export const seedForSetup = internalMutation({
             args.invitations.map((invitation) => invitation.codeDigest),
         );
         if (slotKeys.size !== 5 || digests.size !== 5) {
-            throw new Error('Invitation slots and code digests must be unique');
+            throw new Error("Invitation slots and code digests must be unique");
         }
 
         let created = 0;
         const now = Date.now();
         for (const invitation of args.invitations) {
             const existing = await ctx.db
-                .query('invitations')
-                .withIndex('by_slot_key', (query) =>
-                    query.eq('slotKey', invitation.slotKey),
+                .query("invitations")
+                .withIndex("by_slot_key", (query) =>
+                    query.eq("slotKey", invitation.slotKey),
                 )
                 .unique();
             if (existing) {
@@ -93,9 +92,9 @@ export const seedForSetup = internalMutation({
                 }
                 if (existing.codeDigest !== invitation.codeDigest) {
                     const digestOwner = await ctx.db
-                        .query('invitations')
-                        .withIndex('by_code_digest', (query) =>
-                            query.eq('codeDigest', invitation.codeDigest),
+                        .query("invitations")
+                        .withIndex("by_code_digest", (query) =>
+                            query.eq("codeDigest", invitation.codeDigest),
                         )
                         .unique();
                     if (digestOwner && digestOwner._id !== existing._id) {
@@ -107,17 +106,17 @@ export const seedForSetup = internalMutation({
                         const visitor = await ctx.db.get(
                             existing.claimedByVisitorId,
                         );
-                        if (visitor?.status === 'active') {
+                        if (visitor?.status === "active") {
                             await ctx.db.patch(visitor._id, {
-                                status: 'revoked',
+                                status: "revoked",
                                 revokedAt: now,
                             });
-                            await ctx.db.insert('auditEvents', {
-                                actor: { type: 'system' },
-                                action: 'invitation_revoked',
-                                targetType: 'visitor',
+                            await ctx.db.insert("auditEvents", {
+                                actor: { type: "system" },
+                                action: "invitation_revoked",
+                                targetType: "visitor",
                                 targetId: visitor._id,
-                                reason: 'Configured access code rotation',
+                                reason: "Configured access code rotation",
                                 occurredAt: now,
                             });
                         }
@@ -125,35 +124,35 @@ export const seedForSetup = internalMutation({
                     await ctx.db.patch(existing._id, {
                         codeDigest: invitation.codeDigest,
                     });
-                    await ctx.db.insert('auditEvents', {
-                        actor: { type: 'system' },
-                        action: 'invitation_code_rotated',
-                        targetType: 'invitation',
+                    await ctx.db.insert("auditEvents", {
+                        actor: { type: "system" },
+                        action: "invitation_code_rotated",
+                        targetType: "invitation",
                         targetId: existing._id,
-                        reason: 'Configured access code rotation',
+                        reason: "Configured access code rotation",
                         occurredAt: now,
                     });
                 }
                 continue;
             }
-            const invitationId = await ctx.db.insert('invitations', {
+            const invitationId = await ctx.db.insert("invitations", {
                 ...invitation,
-                status: 'available',
+                status: "available",
                 createdAt: now,
             });
-            await ctx.db.insert('auditEvents', {
-                actor: { type: 'system' },
-                action: 'invitation_seeded',
-                targetType: 'invitation',
+            await ctx.db.insert("auditEvents", {
+                actor: { type: "system" },
+                action: "invitation_seeded",
+                targetType: "invitation",
                 targetId: invitationId,
                 occurredAt: now,
             });
             created += 1;
         }
 
-        const total = (await ctx.db.query('invitations').collect()).length;
+        const total = (await ctx.db.query("invitations").collect()).length;
         if (total !== 5) {
-            throw new Error('Invitation setup must leave exactly five slots');
+            throw new Error("Invitation setup must leave exactly five slots");
         }
         return { created, total };
     },
@@ -161,7 +160,7 @@ export const seedForSetup = internalMutation({
 
 export const listForSetup = internalQuery({
     args: {},
-    handler: async (ctx) => ctx.db.query('invitations').collect(),
+    handler: async (ctx) => ctx.db.query("invitations").collect(),
 });
 
 export const bootstrapConfigured = action({
@@ -171,7 +170,7 @@ export const bootstrapConfigured = action({
         const pepper = process.env.INVITATION_CODE_PEPPER;
         const config = process.env.INVITATION_SEED_CONFIG;
         if (!pepper || !config) {
-            throw new Error('Invitation bootstrap is not configured');
+            throw new Error("Invitation bootstrap is not configured");
         }
         const configuredInvitations = parseConfiguredInvitations(config);
         const invitations = await Promise.all(
@@ -190,23 +189,23 @@ export const bootstrapConfigured = action({
 export const claim = action({
     args: { code: v.string() },
     returns: v.object({
-        visitorId: v.id('visitors'),
+        visitorId: v.id("visitors"),
         role: visitorRoleValidator,
     }),
     handler: async (
         ctx,
         args,
-    ): Promise<{ visitorId: Id<'visitors'>; role: 'admin' | 'analyst' }> => {
+    ): Promise<{ visitorId: Id<"visitors">; role: "admin" | "analyst" }> => {
         const authUserId = await getAuthUserId(ctx);
         if (!authUserId) {
-            throw new Error('Not authenticated');
+            throw new Error("Not authenticated");
         }
         if (!invitationCodePattern.test(args.code)) {
-            throw new Error('Access code must contain exactly four digits');
+            throw new Error("Access code must contain exactly four digits");
         }
         const pepper = process.env.INVITATION_CODE_PEPPER;
         if (!pepper) {
-            throw new Error('Access code verification is not configured');
+            throw new Error("Access code verification is not configured");
         }
         await ctx.runMutation(internal.invitations.consumeClaimAttempt, {
             authUserId,
@@ -220,69 +219,40 @@ export const claim = action({
 });
 
 export const consumeClaimAttempt = internalMutation({
-    args: { authUserId: v.id('users') },
+    args: { authUserId: v.id("users") },
     returns: v.null(),
     handler: async (ctx, args) => {
-        const now = Date.now();
-        const limits = [
-            ...invitationClaimLimits,
-            {
-                key: `auth:${args.authUserId}`,
-                maximumAttempts: 5,
-            },
-        ];
+        const globalStatus = await rateLimiter.limit(
+            ctx,
+            "invitationClaimGlobal",
+        );
+        if (!globalStatus.ok) {
+            throw new Error("Too many access code attempts. Try again later.");
+        }
 
-        for (const limit of limits) {
-            const existing = await ctx.db
-                .query('invitationClaimRateLimits')
-                .withIndex('by_key', (query) => query.eq('key', limit.key))
-                .unique();
-            const windowExpired =
-                !existing ||
-                now - existing.windowStartedAt >= invitationClaimWindowMs;
-
-            if (!existing) {
-                await ctx.db.insert('invitationClaimRateLimits', {
-                    key: limit.key,
-                    attempts: 1,
-                    windowStartedAt: now,
-                    updatedAt: now,
-                });
-                continue;
-            }
-            if (windowExpired) {
-                await ctx.db.patch(existing._id, {
-                    attempts: 1,
-                    windowStartedAt: now,
-                    updatedAt: now,
-                });
-                continue;
-            }
-            if (existing.attempts >= limit.maximumAttempts) {
-                throw new Error(
-                    'Too many access code attempts. Try again later.',
-                );
-            }
-            await ctx.db.patch(existing._id, {
-                attempts: existing.attempts + 1,
-                updatedAt: now,
-            });
+        const perUserStatus = await rateLimiter.limit(
+            ctx,
+            "invitationClaimPerUser",
+            { key: `auth:${args.authUserId}` },
+        );
+        if (!perUserStatus.ok) {
+            throw new Error("Too many access code attempts. Try again later.");
         }
         return null;
     },
 });
 
 export const claimDigest = internalMutation({
-    args: { authUserId: v.id('users'), codeDigest: v.string() },
+    args: { authUserId: v.id("users"), codeDigest: v.string() },
     returns: v.object({
-        visitorId: v.id('visitors'),
+        visitorId: v.id("visitors"),
         role: visitorRoleValidator,
     }),
     handler: async (ctx, args) => {
         const existingVisitor = await ctx.db
-            .query('visitors')
-            .withIndex('by_auth_user_id', (query) =>
-                query.eq('authUserId', args.authUserId),
+            .query("visitors")
+            .withIndex("by_auth_user_id", (query) =>
+                query.eq("authUserId", args.authUserId),
             )
             .unique();
         if (existingVisitor) {
@@ -291,7 +261,7 @@ export const claimDigest = internalMutation({
             );
             if (
                 existingInvitation?.codeDigest === args.codeDigest &&
-                existingVisitor.status === 'active'
+                existingVisitor.status === "active"
             ) {
                 return {
                     visitorId: existingVisitor._id,
@@ -299,38 +269,38 @@ export const claimDigest = internalMutation({
                 };
             }
             throw new Error(
-                'Authenticated user is already linked to a visitor',
+                "Authenticated user is already linked to a visitor",
             );
         }
 
         const invitation = await ctx.db
-            .query('invitations')
-            .withIndex('by_code_digest', (query) =>
-                query.eq('codeDigest', args.codeDigest),
+            .query("invitations")
+            .withIndex("by_code_digest", (query) =>
+                query.eq("codeDigest", args.codeDigest),
             )
             .unique();
         if (!invitation) {
-            throw new Error('Access code is not available');
+            throw new Error("Access code is not available");
         }
 
         const now = Date.now();
-        if (invitation.status === 'claimed') {
+        if (invitation.status === "claimed") {
             if (!invitation.claimedByVisitorId) {
-                throw new Error('Access code is not available');
+                throw new Error("Access code is not available");
             }
             const visitor = await ctx.db.get(invitation.claimedByVisitorId);
             if (!visitor) {
-                throw new Error('Access code is not available');
+                throw new Error("Access code is not available");
             }
             await ctx.db.patch(visitor._id, {
                 authUserId: args.authUserId,
-                status: 'active',
+                status: "active",
                 revokedAt: undefined,
             });
-            await ctx.db.insert('auditEvents', {
-                actor: { type: 'visitor', visitorId: visitor._id },
-                action: 'visitor_session_rebound',
-                targetType: 'visitor',
+            await ctx.db.insert("auditEvents", {
+                actor: { type: "visitor", visitorId: visitor._id },
+                action: "visitor_session_rebound",
+                targetType: "visitor",
                 targetId: visitor._id,
                 occurredAt: now,
             });
@@ -340,23 +310,23 @@ export const claimDigest = internalMutation({
             };
         }
 
-        const visitorId = await ctx.db.insert('visitors', {
+        const visitorId = await ctx.db.insert("visitors", {
             authUserId: args.authUserId,
             invitationId: invitation._id,
             role: invitation.role,
-            status: 'active',
+            status: "active",
             analysesReserved: 0,
             admittedAt: now,
         });
         await ctx.db.patch(invitation._id, {
-            status: 'claimed',
+            status: "claimed",
             claimedByVisitorId: visitorId,
             claimedAt: now,
         });
-        await ctx.db.insert('auditEvents', {
-            actor: { type: 'visitor', visitorId },
-            action: 'invitation_claimed',
-            targetType: 'invitation',
+        await ctx.db.insert("auditEvents", {
+            actor: { type: "visitor", visitorId },
+            action: "invitation_claimed",
+            targetType: "invitation",
             targetId: invitation._id,
             occurredAt: now,
         });
@@ -375,7 +345,7 @@ export const rotateAdminFromConfig = internalAction({
             !recoveryCode ||
             !invitationCodePattern.test(recoveryCode)
         ) {
-            throw new Error('Admin access code recovery is not configured');
+            throw new Error("Admin access code recovery is not configured");
         }
         const codeDigest = await digestInvitationCode(recoveryCode, pepper);
         await ctx.runMutation(internal.invitations.rotateAdminDigest, {
@@ -390,34 +360,34 @@ export const rotateAdminDigest = internalMutation({
     returns: v.null(),
     handler: async (ctx, args) => {
         const invitation = await ctx.db
-            .query('invitations')
-            .withIndex('by_slot_key', (query) => query.eq('slotKey', 'admin'))
+            .query("invitations")
+            .withIndex("by_slot_key", (query) => query.eq("slotKey", "admin"))
             .unique();
-        if (invitation?.role !== 'admin') {
-            throw new Error('Admin invitation slot not found');
+        if (invitation?.role !== "admin") {
+            throw new Error("Admin invitation slot not found");
         }
         const digestOwner = await ctx.db
-            .query('invitations')
-            .withIndex('by_code_digest', (query) =>
-                query.eq('codeDigest', args.codeDigest),
+            .query("invitations")
+            .withIndex("by_code_digest", (query) =>
+                query.eq("codeDigest", args.codeDigest),
             )
             .unique();
         if (digestOwner && digestOwner._id !== invitation._id) {
-            throw new Error('Recovery code is already assigned');
+            throw new Error("Recovery code is already assigned");
         }
 
         const now = Date.now();
         if (invitation.claimedByVisitorId) {
             await ctx.db.patch(invitation.claimedByVisitorId, {
-                status: 'revoked',
+                status: "revoked",
                 revokedAt: now,
             });
-            await ctx.db.insert('auditEvents', {
-                actor: { type: 'system' },
-                action: 'invitation_revoked',
-                targetType: 'visitor',
+            await ctx.db.insert("auditEvents", {
+                actor: { type: "system" },
+                action: "invitation_revoked",
+                targetType: "visitor",
                 targetId: invitation.claimedByVisitorId,
-                reason: 'Break-glass admin invitation rotation',
+                reason: "Break-glass admin invitation rotation",
                 occurredAt: now,
             });
         }
@@ -426,23 +396,23 @@ export const rotateAdminDigest = internalMutation({
             invitation.claimedByVisitorId
                 ? {
                       codeDigest: args.codeDigest,
-                      status: 'claimed',
+                      status: "claimed",
                       revokedAt: undefined,
                   }
                 : {
                       codeDigest: args.codeDigest,
-                      status: 'available',
+                      status: "available",
                       claimedByVisitorId: undefined,
                       claimedAt: undefined,
                       revokedAt: undefined,
                   },
         );
-        await ctx.db.insert('auditEvents', {
-            actor: { type: 'system' },
-            action: 'invitation_reissued',
-            targetType: 'invitation',
+        await ctx.db.insert("auditEvents", {
+            actor: { type: "system" },
+            action: "invitation_reissued",
+            targetType: "invitation",
             targetId: invitation._id,
-            reason: 'Break-glass admin invitation rotation',
+            reason: "Break-glass admin invitation rotation",
             occurredAt: now,
         });
         return null;

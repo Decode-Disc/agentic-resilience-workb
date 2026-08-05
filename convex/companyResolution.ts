@@ -288,13 +288,12 @@ function createPublicCompanyResolver(
         now: Date.now,
         userAgent,
         reserveRequest: async () => {
-            const { scheduledAt } = await ctx.runMutation(
+            const { retryAfter } = await ctx.runMutation(
                 internal.providerCalls.reserveSecRateLimit,
-                { now: Date.now() },
+                {},
             );
-            const waitMs = Math.max(0, scheduledAt - Date.now());
-            if (waitMs > 0) {
-                await new Promise((resolve) => setTimeout(resolve, waitMs));
+            if (retryAfter && retryAfter > 0) {
+                await new Promise((resolve) => setTimeout(resolve, retryAfter));
             }
         },
         recordAttempt: async (attempt) => {
@@ -698,13 +697,12 @@ export const revalidateRun = internalAction({
             now: Date.now,
             userAgent,
             reserveRequest: async () => {
-                const { scheduledAt } = await ctx.runMutation(
+                const { retryAfter } = await ctx.runMutation(
                     internal.providerCalls.reserveSecRateLimit,
-                    { now: Date.now() },
+                    {},
                 );
-                const waitMs = Math.max(0, scheduledAt - Date.now());
-                if (waitMs > 0) {
-                    await new Promise((resolve) => setTimeout(resolve, waitMs));
+                if (retryAfter && retryAfter > 0) {
+                    await new Promise((resolve) => setTimeout(resolve, retryAfter));
                 }
             },
             recordAttempt: async (attempt) => {
