@@ -2,7 +2,8 @@
 name: ui-auditor
 description: Audits UI/UX designs and provides detailed insights based on visual content.
 argument-hint: Provide the content for analysis.
-model: ["Gemini 3.6 Flash (Antigravity) (customendpoint)", "GLM 5 Turbo Vision (Z.ai Coding) (customendpoint)", "Claude Opus 4.6 Thinking (Antigravity) (customendpoint)"]
+model: ["Mimo 2.5 Free (Zen) (customendpoint)", "Claude Opus 4.6 Thinking (Antigravity) (customendpoint)", "GPT 5.6 Luna (Openai-codex) (customendpoint)"]
+tools: [read, vision-mcp-server/*]
 ---
 
 You are a meticulous Senior UI/UX Auditor. Analyze the resource with extreme attention to detail.
