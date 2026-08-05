@@ -12,6 +12,7 @@
     --color-success: var(--color-green-500);
     --color-danger: var(--color-red-500);
     --color-warning: var(--color-amber-500);
+    --color-source-selection-accent: var(--accent-foreground);
 
     --radius-badge: calc(var(--radius) - 0.25rem);
     --radius-input: calc(var(--radius) - 0.35rem);
@@ -54,6 +55,18 @@
         @apply text-accent-foreground;
     }
 
+    .link {
+        @apply text-blue-500 underline underline-offset-4 transition-colors hover:text-blue-800;
+    }
+
+    .source-selection{
+        @apply transition-[background-image,background-color,border-color,box-shadow] duration-200 ease-out;
+        @apply hover:bg-source-selection-accent/20;
+    }
+    .source-selection-active {
+        @apply bg-source-selection-accent/10 text-foreground;
+        @apply ring ring-source-selection-accent;
+    }
     /* The selected source remains legible without competing with the panel divider. */
     .source-selection-bridge {
         background-image: linear-gradient(

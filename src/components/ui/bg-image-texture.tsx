@@ -1,9 +1,4 @@
 import type React from 'react';
-import debutLight from '@/assets/images/textures/debut-light.png';
-import fabricOfSquares from '@/assets/images/textures/fabric-of-squares.png';
-import gridNoise from '@/assets/images/textures/grid-noise.png';
-import groovepaper from '@/assets/images/textures/groovepaper.png';
-import inflicted from '@/assets/images/textures/inflicted.png';
 import { cn } from '@/lib/utils';
 
 export type TextureVariant =
@@ -23,11 +18,11 @@ interface BackgroundImageTextureProps {
 }
 
 const textureMap: Record<Exclude<TextureVariant, 'none'>, string> = {
-    'fabric-of-squares': fabricOfSquares,
-    'grid-noise': gridNoise,
-    inflicted: inflicted,
-    'debut-light': debutLight,
-    groovepaper: groovepaper,
+    'fabric-of-squares': '/images/textures/fabric-of-squares.png',
+    'grid-noise': '/images/textures/grid-noise.png',
+    inflicted: '/images/textures/inflicted.png',
+    'debut-light': '/images/textures/debut-light.png',
+    groovepaper: '/images/textures/groovepaper.png',
 };
 
 export function BackgroundImageTexture({

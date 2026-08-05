@@ -1,6 +1,6 @@
+import imgDark from '@assets/logos/logo-bgdark.png';
+import imgLight from '@assets/logos/logo-bgwhite.png';
 import type { ImgHTMLAttributes, SVGProps } from 'react';
-import imgDark from '@/assets/images/logo-bgdark.png';
-import imgLight from '@/assets/images/logo-bgwhite.png';
 
 /** Original evidence-matrix mark crossed by a research orbit. */
 function LogoIconSVG({

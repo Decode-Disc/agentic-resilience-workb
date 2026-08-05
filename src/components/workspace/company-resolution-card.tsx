@@ -1,8 +1,7 @@
 import type { api } from '@convex/_generated/api';
-import { Building2Icon } from '@hugeicons/core-free-icons';
 import type { FunctionReturnType } from 'convex/server';
 
-import Icon from '@/components/icon';
+import { CompanyFaviconAvatar } from '@/components/company-favicon-avatar';
 
 type ResolvedCompany = FunctionReturnType<
     typeof api.companyResolution.preflight
@@ -18,7 +17,7 @@ export function CompanyResolutionCard({
         <article className="surface-panel rounded-xl p-4" aria-live="polite">
             <div className="flex min-w-0 gap-3">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
-                    <Icon iconNode={Building2Icon} />
+                    <CompanyFaviconAvatar company={company} size="sm" />
                 </span>
                 <div className="min-w-0">
                     <p className="text-base font-medium text-foreground">

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const { claimInvitation, navigate, useAction, useAnonymousSession, useQuery } =
@@ -61,5 +61,28 @@ describe('ProtectedWorkspaceRoute', () => {
         expect(
             screen.queryByRole('heading', { name: /Invitation required/i }),
         ).toBeNull();
+    });
+
+    test('sends an admitted analyst to the dossiers page', async () => {
+        useQuery.mockReturnValue(null);
+        claimInvitation.mockResolvedValue({
+            visitorId: 'visitor-analyst',
+            role: 'analyst',
+        });
+
+        render(<ProtectedWorkspaceRoute />);
+
+        fireEvent.change(screen.getByLabelText(/Access code/i), {
+            target: { value: '4207' },
+        });
+        fireEvent.submit(
+            screen.getByRole('form', { name: /Workspace access/i }),
+        );
+
+        await waitFor(() =>
+            expect(navigate).toHaveBeenCalledWith({
+                to: '/workspace/dossiers',
+            }),
+        );
     });
 });

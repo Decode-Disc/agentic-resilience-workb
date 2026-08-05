@@ -15,6 +15,7 @@ import { type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
 
 import Icon from '@/components/icon';
+import { BackgroundImageTexture } from "@/components/ui/bg-image-texture";
 import { Button } from '@/components/ui/button';
 import {
     NestedMenu,
@@ -180,9 +181,11 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                 </div>
             </header>
 
-            <main className="mx-auto w-full max-w-8xl px-4 py-4 sm:px-6">
-                {children}
-            </main>
+            <BackgroundImageTexture opacity={1} variant="fabric-of-squares">
+                <main className="mx-auto w-full min-h-screen max-w-8xl px-4 py-4 sm:px-6">
+                    {children}
+                </main>
+            </BackgroundImageTexture>
 
             {invitationOpen ? (
                 <InvitationAccessDrawer

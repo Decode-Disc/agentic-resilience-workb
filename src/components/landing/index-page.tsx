@@ -31,7 +31,6 @@ import {
     AccordionTrigger,
 } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
-import { BackgroundImageTexture } from '@/components/ui/bg-image-texture';
 import { Button } from '@/components/ui/button';
 import { GridCard } from '@/components/ui/grid-card';
 import { LiquidGlassCard } from '@/components/ui/liquid-glass';
@@ -349,9 +348,8 @@ function MatrixPreview() {
             shadowIntensity="md"
             borderRadius="var(--radius-2xl)"
         >
-            <Noise patternAlpha={12} className="absolute inset-0" />
+            <Noise patternAlpha={15} className="absolute inset-0" />
 
-            <BackgroundImageTexture opacity={1} variant="groovepaper">
                 <div className="p-5 sm:p-7">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
@@ -409,8 +407,7 @@ function MatrixPreview() {
                         extracted from analyst-approved sources and remains tied
                         to a locatable passage.
                     </p>
-                </div>
-            </BackgroundImageTexture>
+            </div>
         </LiquidGlassCard>
     );
 }

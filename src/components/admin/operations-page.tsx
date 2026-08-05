@@ -2,9 +2,10 @@
 
 import { api } from '@convex/_generated/api';
 import type { Id } from '@convex/_generated/dataModel';
+import { Shield01Icon } from '@hugeicons/core-free-icons';
 import { useMutation, useQuery } from 'convex/react';
 import { useState } from 'react';
-
+import Icon from '@/components/icon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -71,7 +72,11 @@ export function OperationsPage() {
         <div className="mx-auto max-w-6xl py-8">
             <header className="flex flex-col gap-4 border-b border-border/60 pb-6 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                    <p className="text-micro text-brand-purple">
+                    <p className="text-micro">
+                        <Icon
+                            iconNode={Shield01Icon}
+                            className="mr-1 inline h-4 w-4"
+                        />
                         Restricted administration
                     </p>
                     <h1 className="mt-2 text-3xl font-medium">

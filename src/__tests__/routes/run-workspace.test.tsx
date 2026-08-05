@@ -227,7 +227,8 @@ describe('production run workspace', () => {
         ).toBe('page');
     });
 
-    it('shows source counts, detail, and the pending exclusion consequence', () => {
+    it('keeps corpus approval visible beside secondary source actions', () => {
+        const onApprove = vi.fn();
         render(
             <SourceReview
                 runId={'run-1' as never}
@@ -247,29 +248,88 @@ describe('production run workspace', () => {
                             publishedAt: undefined,
                             reason: undefined,
                         },
+                        {
+                            sourceId: 'source-2' as never,
+                            canonicalUrl: 'https://example.com/accepted',
+                            title: 'Accepted report',
+                            origin: 'sec',
+                            category: 'regulatory_filing',
+                            decision: 'accepted',
+                            publishedAt: undefined,
+                            reason: undefined,
+                        },
+                        {
+                            sourceId: 'source-3' as never,
+                            canonicalUrl: 'https://example.com/rejected',
+                            title: 'Rejected report',
+                            origin: 'exa',
+                            category: 'counter_evidence',
+                            decision: 'rejected',
+                            publishedAt: undefined,
+                            reason: undefined,
+                        },
                     ],
                 }}
                 onDecide={vi.fn()}
-                onApprove={vi.fn()}
+                onApprove={onApprove}
+                onAddManualUrl={vi.fn()}
             />,
         );
 
-        expect(screen.getByText(/1 accepted/i)).toBeTruthy();
-        expect(screen.getByText(/1 rejected/i)).toBeTruthy();
-        expect(screen.getByText(/1 pending/i)).toBeTruthy();
-        fireEvent.click(
+        const allSources = screen.getByRole('tab', { name: /All.*3/i });
+        expect(allSources.getAttribute('aria-selected')).toBe('true');
+        expect(
+            screen.getByRole('tab', { name: /Accepted.*1/i }),
+        ).toBeTruthy();
+        expect(
+            screen.getByRole('tab', { name: /Pending review.*1/i }),
+        ).toBeTruthy();
+        expect(
+            screen.getByRole('tab', { name: /Rejected.*1/i }),
+        ).toBeTruthy();
+        expect(
+            screen.queryByRole('button', { name: 'Corpus approval' }),
+        ).toBeNull();
+        const approveButton = screen.getByRole('button', {
+            name: 'Approve source set',
+        });
+        expect(approveButton).toBeTruthy();
+        expect(
+            screen.getByText(/1 pending source will be excluded/i),
+        ).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Add source' })).toBeTruthy();
+
+        const decisionTabs = screen.getByRole('tablist', {
+            name: 'Filter candidate sources by decision',
+        });
+        expect(decisionTabs.className).toContain('flex-nowrap');
+        expect(decisionTabs.className).toContain('w-max');
+        expect(decisionTabs.className).toContain('min-w-full');
+        expect(decisionTabs.style.display).not.toBe('block');
+
+        const toolbarActions = document.querySelector(
+            '[data-slot="toolbar-action-list"]',
+        );
+        expect(toolbarActions).not.toBeNull();
+        expect(toolbarActions?.className).toContain('flex-nowrap');
+        expect(toolbarActions?.className).toContain('w-max');
+        expect(toolbarActions?.className).toContain('min-w-full');
+        expect((toolbarActions as HTMLElement).style.display).not.toBe('block');
+
+        fireEvent.click(screen.getByRole('tab', { name: /Accepted.*1/i }));
+        expect(
             screen.getByRole('button', {
+                name: /Open Accepted report for review/i,
+            }),
+        ).toBeTruthy();
+        expect(
+            screen.queryByRole('button', {
                 name: /Open Independent report for review/i,
             }),
-        );
-        expect(
-            screen.getAllByText('https://example.com/report').length,
-        ).toBeGreaterThan(0);
-        expect(
-            screen.getByText(/Sources left undecided won’t be used/i),
-        ).toBeTruthy();
-        expect(screen.getAllByText(/Independent web source/i).length).toBe(2);
-        expect(screen.queryByText(/^exa$/i)).toBeNull();
+        ).toBeNull();
+
+        fireEvent.click(approveButton);
+        expect(onApprove).toHaveBeenCalledOnce();
     });
 
     it('separates desktop source review with resizable panels', () => {

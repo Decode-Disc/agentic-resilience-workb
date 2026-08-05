@@ -1,0 +1,245 @@
+'use client';
+
+import { api } from '@convex/_generated/api';
+import type { Id } from '@convex/_generated/dataModel';
+import { useNavigate } from '@tanstack/react-router';
+import { useAction, useMutation, useQuery } from 'convex/react';
+import { useEffect, useRef, useState } from 'react';
+
+import {
+    Empty,
+    EmptyDescription,
+    EmptyHeader,
+    EmptyTitle,
+} from '@/components/ui/empty';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EvidenceSufficiencyReview } from '@/components/workspace/evidence-sufficiency-review';
+import { RunProgress } from '@/components/workspace/run-progress';
+import { SourceReview } from '@/components/workspace/source-review';
+import {
+    WorkspaceNavigationRail,
+    type WorkspaceSection,
+} from '@/components/workspace/workspace-navigation-rail';
+
+function decisionKey(prefix: string) {
+    return `${prefix}:${crypto.randomUUID()}`;
+}
+
+/** Owner-scoped production workspace backed only by reactive Convex state. */
+export function RunRouteComponent({
+    runId,
+    section,
+}: {
+    runId: Id<'researchRuns'>;
+    section: WorkspaceSection;
+}) {
+    const navigate = useNavigate();
+    const run = useQuery(api.researchRuns.getMine, { runId });
+    const events = useQuery(api.researchRuns.listMyEvents, { runId });
+    const review = useQuery(
+        api.sources.listForReview,
+        run?.activeCorpusRevisionId
+            ? {
+                runId,
+                corpusRevisionId: run.activeCorpusRevisionId,
+            }
+            : 'skip',
+    );
+    const decide = useMutation(api.sources.decide);
+    const approve = useMutation(api.sources.approveCorpusRevision);
+    const decideSufficiency = useMutation(api.evidenceSufficiency.decide);
+    const addManualUrl = useAction(api.sourceActions.addManualUrl);
+    const [error, setError] = useState<string | null>(null);
+    const routedToSourceReview = useRef(false);
+
+    useEffect(() => {
+        if (run?.lifecycleState !== 'awaiting_source_review') {
+            routedToSourceReview.current = false;
+            return;
+        }
+        if (section === 'progress' && !routedToSourceReview.current) {
+            routedToSourceReview.current = true;
+            void navigate({
+                to: '/workspace/$runId',
+                params: { runId },
+                search: { section: 'sources' },
+                replace: true,
+            });
+        }
+    }, [navigate, run?.lifecycleState, runId, section]);
+
+    if (run === undefined || events === undefined) {
+        return (
+            <div
+                role="status"
+                className="grid gap-4 md:grid-cols-[minmax(11rem,14rem)_minmax(0,1fr)] xl:grid-cols-[minmax(4.25rem,14rem)_minmax(0,1fr)]"
+                aria-label="Loading research workspace"
+                aria-busy="true"
+            >
+                <Skeleton className="h-112" />
+                <div className="space-y-3">
+                    <Skeleton className="h-24" />
+                    <Skeleton className="h-52" />
+                </div>
+            </div>
+        );
+    }
+
+    if (!run.company) {
+        return (
+            <Empty>
+                <EmptyHeader>
+                    <EmptyTitle>Company context unavailable</EmptyTitle>
+                    <EmptyDescription>
+                        This dossier has no verified company. Return to company
+                        selection to continue.
+                    </EmptyDescription>
+                </EmptyHeader>
+            </Empty>
+        );
+    }
+
+    const corpusRevisionId = run.activeCorpusRevisionId;
+    const exaNotConfigured = run.providerFailures.some(
+        ({ service, errorCode }) =>
+            service === 'exa' && errorCode === 'exa_not_configured',
+    );
+    const sourceMode =
+        section === 'sources' &&
+        ['awaiting_source_review', 'corpus_approved'].includes(
+            run.lifecycleState,
+        ) &&
+        corpusRevisionId !== undefined &&
+        review !== undefined;
+
+    async function handleAddManualUrl(url: string) {
+        if (!corpusRevisionId) {
+            throw new Error(
+                'The source set is not ready yet. Refresh and try again.',
+            );
+        }
+        await addManualUrl({ runId, corpusRevisionId, url });
+    }
+
+    return (
+        <div className="py-4">
+            <header className="mb-5">
+                <p className="text-micro text-brand-purple">
+                    {run.company.ticker} · {run.company.exchange}
+                </p>
+                <h1 className="mt-2 text-2xl font-medium">
+                    {run.company.legalName}
+                </h1>
+            </header>
+            <div className="grid items-start gap-4 md:grid-cols-[auto_minmax(0,1fr)]">
+                <div className="md:sticky md:top-20">
+                    <WorkspaceNavigationRail
+                        runId={runId}
+                        section={section}
+                        lifecycleState={run.lifecycleState}
+                    />
+                </div>
+                <main className="min-w-0">
+                    {error ? (
+                        <p
+                            role="alert"
+                            className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+                        >
+                            {error}
+                        </p>
+                    ) : null}
+                    {exaNotConfigured &&
+                        run.lifecycleState === 'awaiting_source_review' ? (
+                        <p
+                            role="status"
+                            className="mb-4 rounded-lg border border-review/30 bg-review/10 p-3 text-sm text-muted-foreground"
+                        >
+                            Independent web discovery is unavailable. Filing
+                            sources remain available for review.
+                        </p>
+                    ) : null}
+                    {section === 'progress' ? (
+                        <>
+                            {run.lifecycleState ===
+                                'awaiting_evidence_sufficiency_review' ? (
+                                <EvidenceSufficiencyReview
+                                    onAddManualUrl={handleAddManualUrl}
+                                    onDecide={async (decision) => {
+                                        await decideSufficiency({
+                                            runId,
+                                            decision,
+                                        });
+                                    }}
+                                />
+                            ) : null}
+                            <RunProgress run={run} events={events} />
+                        </>
+                    ) : sourceMode ? (
+                        <SourceReview
+                            runId={runId}
+                            corpusRevisionId={corpusRevisionId}
+                            review={review}
+                            onDecide={async (sourceId, nextDecision) => {
+                                setError(null);
+                                try {
+                                    await decide({
+                                        runId,
+                                        corpusRevisionId: corpusRevisionId,
+                                        sourceId,
+                                        decision: nextDecision,
+                                        decisionKey:
+                                            decisionKey('source-decision'),
+                                    });
+                                } catch {
+                                    setError(
+                                        "We couldn't save that source decision. Try again.",
+                                    );
+                                }
+                            }}
+                            onApprove={async () => {
+                                setError(null);
+                                try {
+                                    await approve({
+                                        runId,
+                                        corpusRevisionId: corpusRevisionId,
+                                        decisionKey:
+                                            decisionKey('corpus-approval'),
+                                    });
+                                } catch {
+                                    setError(
+                                        "We couldn't approve this source set. Try again.",
+                                    );
+                                }
+                            }}
+                            onAddManualUrl={handleAddManualUrl}
+                        />
+                    ) : section === 'sources' ? (
+                        <div
+                            className="surface-panel rounded-xl p-6"
+                            aria-busy={review === undefined}
+                        >
+                            <h2 className="text-lg font-medium">
+                                Source discovery
+                            </h2>
+                            <p className="mt-2 text-sm text-muted-foreground">
+                                {run.lifecycleState === 'discovering_sources'
+                                    ? 'We’re gathering public sources for your review.'
+                                    : 'Sources will appear here when discovery is ready.'}
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="surface-panel rounded-xl p-6">
+                            <h2 className="text-lg font-medium capitalize">
+                                {section}
+                            </h2>
+                            <p className="mt-2 text-sm text-muted-foreground">
+                                This section opens after you review and approve
+                                the preceding evidence.
+                            </p>
+                        </div>
+                    )}
+                </main>
+            </div>
+        </div>
+    );
+}

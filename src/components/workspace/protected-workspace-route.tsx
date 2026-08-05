@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InvitationAccessDrawer } from '@/components/workspace/invitation-access-drawer';
 import { useAnonymousSession } from '@/hooks/use-anonymous-session';
+import { getWorkspaceDestination } from '@/lib/workspace/access-destination';
 
 function ProtectedRouteLoading() {
     return (
@@ -71,8 +72,11 @@ export function ProtectedWorkspaceRoute() {
                     void navigate({ to: '/workspace/start' });
                 }
             }}
-            onAdmitted={() => {
+            onAdmitted={({ role }) => {
                 setAdmissionPending(true);
+                void navigate({
+                    to: getWorkspaceDestination(role),
+                });
             }}
         />
     );

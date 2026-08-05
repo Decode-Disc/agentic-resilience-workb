@@ -31,7 +31,12 @@
         "forceConsistentCasingInFileNames": true,
         "paths": {
             "@/*": ["./src/*"],
-            "@convex/*": ["./convex/*"]
+            "@convex/*": [
+                "./convex/*"
+            ],
+            "@assets/*": [
+                "./src/assets/*"
+            ]
         }
     }
 }

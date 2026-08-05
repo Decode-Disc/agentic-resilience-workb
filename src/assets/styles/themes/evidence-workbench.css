@@ -184,6 +184,7 @@
     --color-counter-evidence: var(--counter-evidence);
     --color-review: var(--review);
     --color-approved: var(--approved);
+    --color-brand-green: var(--brand-green);
     --color-brand-purple: var(--brand-purple);
 
     --shadow-soft: var(--surface-shadow-soft);

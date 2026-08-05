@@ -214,3 +214,67 @@ test('routes the analyst to the active source-review checkpoint', async () => {
         ),
     ).toBeNull();
 });
+
+test('keeps the approved source set visible for inspection', () => {
+    useQuery.mockImplementation(() => {
+        const index = (useQuery.mock.calls.length - 1) % 3;
+        return [
+            {
+                runId: 'run-1',
+                company: {
+                    legalName: 'Example Corp',
+                    ticker: 'EXM',
+                    exchange: 'NASDAQ',
+                    cik: '123',
+                },
+                lifecycleState: 'corpus_approved',
+                executionStatus: 'idle',
+                activeCorpusRevisionId: 'revision-1',
+                providerFailures: [],
+                updatedAt: 2,
+            },
+            [],
+            {
+                revision: 1,
+                status: 'approved',
+                counts: { accepted: 1, rejected: 0, pending: 0 },
+                sources: [
+                    {
+                        sourceId: 'source-1',
+                        canonicalUrl: 'https://example.com/report',
+                        title: 'Approved report',
+                        origin: 'exa',
+                        category: 'independent_analysis',
+                        decision: 'accepted',
+                        publishedAt: undefined,
+                        reason: undefined,
+                    },
+                ],
+            },
+        ][index];
+    });
+
+    render(<RunRouteComponent runId={'run-1' as never} section="sources" />);
+
+    expect(screen.getAllByText('Source set approved').length).toBeGreaterThan(
+        0,
+    );
+    expect(
+        screen.getByRole('button', {
+            name: /Open Approved report for review/i,
+        }),
+    ).toBeTruthy();
+    expect(
+        screen
+            .getByRole('button', {
+                name: /Accepted Approved report as accepted/i,
+            })
+            .hasAttribute('disabled'),
+    ).toBe(true);
+    expect(
+        screen.queryByRole('button', { name: /Add source/i }),
+    ).toBeNull();
+    expect(
+        screen.queryByText(/Sources will appear here when discovery is ready/i),
+    ).toBeNull();
+});
