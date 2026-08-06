@@ -15,6 +15,7 @@ import {
     sourceCategoryLabel,
     sourceOriginLabel,
 } from "@/lib/presentation/research-copy";
+import { cn } from "@/lib/utils";
 
 type SourceContext = FunctionReturnType<
     typeof api.sources.listForReviewPage
@@ -28,7 +29,13 @@ type SourceContext = FunctionReturnType<
  * the reference's warm lime tint is translated to brand-green so the
  * prototype's purple/green-only discipline holds.
  */
-export function SourceContextPanel({ source }: { source: SourceContext }) {
+export function SourceContextPanel({
+    source,
+    className,
+}: {
+    source: SourceContext;
+    className?: string;
+}) {
     const tabs: Tab[] = useMemo(
         () => [
             {
@@ -68,7 +75,11 @@ export function SourceContextPanel({ source }: { source: SourceContext }) {
     );
 
     return (
-        <article className="surface-panel flex h-full min-h-0 flex-col overflow-hidden rounded-xl">
+        <article
+            className={cn(
+                "surface-panel flex h-full min-h-0 flex-col overflow-hidden rounded-(--radius-source-card)",
+                className,
+            )}>
             <header
                 data-slot="source-record-header"
                 className="border-b border-border/60 bg-[linear-gradient(to_bottom,color-mix(in_oklab,var(--brand-green)_14%,transparent),transparent)] p-5">

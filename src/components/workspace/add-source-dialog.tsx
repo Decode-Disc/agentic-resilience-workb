@@ -27,13 +27,13 @@ import {
     InputGroupInput,
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
-import { sourceAddErrorMessage } from "@/lib/presentation/research-copy";
 import {
     Tooltip,
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { sourceAddErrorMessage } from "@/lib/presentation/research-copy";
 
 /**
  * Pure helper for validating public HTTPS source URLs.
@@ -200,32 +200,28 @@ export function AddSourceDialog({
                                         </button>
                                     </InputGroupAddon>
                                 ) : null}
-                                <InputGroupAddon
-                                    align="inline-end"
-                                    className="pr-0">
-                                    <Button
-                                        type="submit"
-                                        variant="secondary"
-                                        className="mx-0 rounded-4xl"
-                                        disabled={
-                                            isSubmitting ||
-                                            urlInput.trim() === ""
-                                        }>
-                                        {isSubmitting ? (
-                                            <Icon
-                                                iconNode={Loading02Icon}
-                                                className={
-                                                    isSubmitting
-                                                        ? "animate-spin"
-                                                        : ""
-                                                }
-                                            />
-                                        ) : (
-                                            <span>Add</span>
-                                        )}
-                                    </Button>
-                                </InputGroupAddon>
                             </InputGroup>
+                            <Button
+                                type="submit"
+                                variant="secondary"
+                                className="mx-0 rounded-4xl"
+                                disabled={
+                                    isSubmitting ||
+                                    urlInput.trim() === ""
+                                }>
+                                {isSubmitting ? (
+                                    <Icon
+                                        iconNode={Loading02Icon}
+                                        className={
+                                            isSubmitting
+                                                ? "animate-spin"
+                                                : ""
+                                        }
+                                    />
+                                ) : (
+                                    <span>Add</span>
+                                )}
+                            </Button>
                         </div>
                         {error ? (
                             <p

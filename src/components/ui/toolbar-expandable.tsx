@@ -44,7 +44,6 @@ const DynamicToolbarExpandable = memo<DynamicToolbarExpandableProps>(
     function DynamicToolbarExpandable({
         steps,
         badgeText,
-
         className,
         expanded: controlledExpanded,
         onExpandedChange,
@@ -159,7 +158,7 @@ const DynamicToolbarExpandable = memo<DynamicToolbarExpandableProps>(
                                             "flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-xs font-medium text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                                             isActive
                                                 ? "bg-accent text-accent-foreground"
-                                                : "hover:bg-muted hover:text-foreground",
+                                                : "bg-muted/50 hover:bg-muted hover:text-foreground",
                                         )}>
                                         <Icon iconNode={step.icon} size={16} />
                                         <span>{step.title}</span>

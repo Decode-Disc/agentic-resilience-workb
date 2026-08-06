@@ -65,8 +65,8 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                 ...(visitor?.role === "admin"
                     ? [
                           {
-                            key: "operations",
-                            label: "Operations",
+                              key: "operations",
+                              label: "Operations",
                               icon: OperationsMenuIcon,
                               onSelect: () => {
                                   void navigate({
@@ -186,7 +186,7 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                 </div>
             </header>
 
-            <BackgroundImageTexture opacity={0.7} variant="fabric-of-squares">
+            <BackgroundImageTexture opacity={0.9} variant="fabric-of-squares">
                 <main className="mx-auto w-full min-h-screen max-w-8xl px-4 py-4 sm:px-6">
                     {children}
                 </main>

@@ -13,6 +13,7 @@ import { FaviconAvatar } from "@/components/favicon-avatar";
 import Icon from "@/components/icon";
 import { InfiniteCollectionViewport } from "@/components/infinite-collection-viewport";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import DiscreteTabs, {
     type DiscreteTabItem,
 } from "@/components/ui/discrete-tabs";
@@ -29,7 +30,6 @@ import {
     EmptyHeader,
     EmptyTitle,
 } from "@/components/ui/empty";
-import { LiquidGlassCard } from "@/components/ui/liquid-glass";
 import {
     ResizableHandle,
     ResizablePanel,
@@ -60,7 +60,7 @@ type SourceReviewSummary = FunctionReturnType<
 >;
 export type SourceReviewSource = FunctionReturnType<
     typeof api.sources.listForReviewPage
-    >["page"][number];
+>["page"][number];
 type SourceDecision = FunctionArgs<typeof api.sources.decide>["decision"];
 export type SourceFilter = "all" | SourceDecision;
 type SourceReviewModel = Omit<SourceReviewSummary, "total" | "candidateLimit"> &
@@ -86,8 +86,8 @@ export function SourceReview({
     isLoadingInitial = false,
     onLoadMore = () => undefined,
 }: {
-        runId: Id<"researchRuns">;
-        corpusRevisionId: Id<"corpusRevisions">;
+    runId: Id<"researchRuns">;
+    corpusRevisionId: Id<"corpusRevisions">;
     review: SourceReviewModel;
     onDecide: (
         sourceId: Id<"sources">,
@@ -97,9 +97,9 @@ export function SourceReview({
     onAddManualUrl?: (url: string) => void | Promise<void>;
     filter?: SourceFilter;
     onFilterChange?: (filter: SourceFilter) => void;
-        selectedId?: Id<"sources"> | null;
+    selectedId?: Id<"sources"> | null;
     selectedSource?: SourceReviewSource | null;
-        onSelectedIdChange?: (sourceId: Id<"sources"> | null) => void;
+    onSelectedIdChange?: (sourceId: Id<"sources"> | null) => void;
     hasMore?: boolean;
     isLoadingMore?: boolean;
     isLoadingInitial?: boolean;
@@ -135,7 +135,7 @@ export function SourceReview({
         selectedSource !== undefined
             ? selectedSource
             : (review.sources.find(({ sourceId }) => sourceId === selectedId) ??
-                null);
+              null);
 
     const selectSource = useCallback(
         (sourceId: Id<"sources"> | null) => {
@@ -246,12 +246,12 @@ export function SourceReview({
                         "source-master-list": 36,
                         "source-context": 64,
                     }}
-                        className="min-h-168">
+                    className="min-h-168">
                     <ResizablePanel
                         id="source-master-list"
                         data-panel="source-master-list"
                         minSize="18rem"
-                            maxSize="50%">
+                        maxSize="50%">
                         <SourceMasterList
                             review={reviewWithCollection}
                             filter={filter}
@@ -270,7 +270,7 @@ export function SourceReview({
                     <ResizablePanel
                         id="source-context"
                         data-panel="source-context"
-                            minSize="26rem">
+                        minSize="26rem">
                         <div className="h-full min-w-0">
                             {selected ? (
                                 <SourceContextPanel source={selected} />
@@ -380,8 +380,8 @@ function SourceReviewToolbar({
                         {isApproved
                             ? "Source set approved"
                             : canApprove
-                                ? "Ready for corpus approval"
-                                : "Accept a source to continue"}
+                              ? "Ready for corpus approval"
+                              : "Accept a source to continue"}
                     </p>
                     <p className="text-xs leading-relaxed text-muted-foreground">
                         {isApproved
@@ -389,8 +389,8 @@ function SourceReviewToolbar({
                             : review.counts.pending > 0
                               ? pendingCopy
                               : canApprove
-                                    ? "All candidate sources have been reviewed."
-                                    : "The evidence corpus must contain at least one accepted source."}
+                                ? "All candidate sources have been reviewed."
+                                : "The evidence corpus must contain at least one accepted source."}
                     </p>
                 </div>
                 {isApproved ? (
@@ -404,14 +404,16 @@ function SourceReviewToolbar({
                         size="lg"
                         className="w-full sm:w-auto"
                         onClick={() => void onApprove()}
-                            disabled={!canApprove}>
+                        disabled={!canApprove}>
                         <Icon iconNode={CheckmarkCircle02Icon} />
                         Approve source set
                     </Button>
                 )}
             </motion.div>
 
-            {steps.length > 0 ? <ToolbarExpandable steps={steps} /> : null}
+            {steps.length > 0 ? (
+                <ToolbarExpandable steps={steps} className="bg-muted" />
+            ) : null}
         </div>
     );
 }
@@ -432,12 +434,12 @@ function SourceMasterList({
     review: SourceReviewModel & { total: number; candidateLimit: number };
     filter: SourceFilter;
     onFilterChange: (filter: SourceFilter) => void;
-        selectedId: Id<"sources"> | null;
+    selectedId: Id<"sources"> | null;
     onDecide: (
         sourceId: Id<"sources">,
         decision: SourceDecision,
     ) => void | Promise<void>;
-        onSelect: (sourceId: Id<"sources">) => void;
+    onSelect: (sourceId: Id<"sources">) => void;
     hasMore: boolean;
     isLoadingMore: boolean;
     isLoadingInitial: boolean;
@@ -457,20 +459,15 @@ function SourceMasterList({
             id: definition.decision,
             title: definition.label,
             icon: definition.icon,
+            iconClassName: getSourceDecisionIconClassName(definition.decision),
             count: review.counts[definition.decision],
         })),
     ];
 
     return (
-        <LiquidGlassCard
-            data-slot="source-master-list"
-            className={cn("min-h-0 overflow-hidden bg-card p-3", className)}
-            glowIntensity="none"
-            shadowIntensity="none"
-            whileHover={undefined}
-            whileTap={undefined}>
-            <header className="space-y-3 px-1 pb-4">
-                <div className="flex items-center justify-between gap-3">
+        <Card className={cn("py-4 rounded-(--radius-source-card)", className)}>
+            <CardHeader className="space-y-3 px-4">
+                <div className="flex items-center justify-between gap-3 mb-0">
                     <p className="text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
                         Candidate sources
                     </p>
@@ -487,175 +484,193 @@ function SourceMasterList({
                     ariaLabel="Filter candidate sources by decision"
                     className="gap-2"
                 />
-            </header>
-            <InfiniteCollectionViewport
-                hasMore={hasMore}
-                isLoadingMore={isLoadingMore}
-                itemCount={review.sources.length}
-                onLoadMore={onLoadMore}
-                ariaLabel="Candidate source collection"
-                loadMoreLabel="Load more sources"
-                className="h-[min(42rem,70vh)]"
-                viewportClassName="pr-2"
-                loadingFallback={<SourceContinuationSkeleton />}
-                endContent={
-                    review.sources.length > 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                            {review.sources.length} of {filterTotal} loaded
-                        </p>
-                    ) : null
-                }>
-                {isLoadingInitial ? (
-                    <SourceListSkeleton />
-                ) : review.sources.length === 0 ? (
-                    <Empty className="min-h-64 border-none">
-                        <EmptyHeader>
-                            <EmptyTitle>
-                                    No {filter === "all" ? "" : `${filter} `}
-                                sources
-                            </EmptyTitle>
-                            <EmptyDescription>
-                                No sources currently match this review filter.
-                            </EmptyDescription>
-                        </EmptyHeader>
-                    </Empty>
-                ) : (
-                    <ul className="space-y-5">
-                        {review.sources.map((source, index) => {
-                            const isActive = selectedId === source.sourceId;
-                            const previous = review.sources[index - 1];
-                            const startsDecisionGroup =
-                                filter === "all" &&
-                                previous?.decision !== source.decision;
-                            return (
-                                <motion.li
-                                    layout={
-                                        shouldReduceMotion ? false : "position"
-                                    }
-                                    transition={{
-                                        duration: shouldReduceMotion ? 0 : 0.2,
-                                        ease: [0.32, 0.72, 0, 1],
-                                    }}
-                                    key={source.sourceId}
-                                    className="flex flex-col items-center group/source-row">
-                                    {startsDecisionGroup ? (
-                                        <p className="mb-2 w-full text-micro text-muted-foreground">
-                                            {sourceDecisionDefinitions.find(
-                                                ({ decision }) =>
-                                                    decision ===
-                                                    source.decision,
-                                            )?.label ?? source.decision}
-                                        </p>
-                                    ) : null}
-                                    <span className="w-full max-w-[calc(100%-2rem)] truncate rounded-t-sm border border-border bg-secondary/50 px-2 py-1 text-start text-[10px] font-medium">
-                                        {source.canonicalUrl}
-                                    </span>
-                                    <div
-                                        className={cn(
-                                            "source-selection relative flex min-h-28 w-full flex-col justify-between border p-3",
-                                            isActive &&
-                                            "source-selection-active",
-                                        )}>
-                                        <button
-                                            type="button"
-                                            aria-pressed={isActive}
-                                            data-slot="source-row"
-                                            data-active={
-                                                isActive ? "true" : undefined
+            </CardHeader>
+            <CardContent className="min-h-0 overflow-hidden px-4">
+                <div data-slot="source-master-list">
+                    <InfiniteCollectionViewport
+                        hasMore={hasMore}
+                        isLoadingMore={isLoadingMore}
+                        itemCount={review.sources.length}
+                        onLoadMore={onLoadMore}
+                        ariaLabel="Candidate source collection"
+                        loadMoreLabel="Load more sources"
+                        className="h-[min(42rem,80vh)]"
+                        viewportClassName="pr-3 pl-1"
+                        loadingFallback={<SourceContinuationSkeleton />}
+                        endContent={
+                            review.sources.length > 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                    {review.sources.length} of {filterTotal}{" "}
+                                    loaded
+                                </p>
+                            ) : null
+                        }>
+                        {isLoadingInitial ? (
+                            <SourceListSkeleton />
+                        ) : review.sources.length === 0 ? (
+                            <Empty className="min-h-64 border-none">
+                                <EmptyHeader>
+                                    <EmptyTitle>
+                                        No{" "}
+                                        {filter === "all" ? "" : `${filter} `}
+                                        sources
+                                    </EmptyTitle>
+                                    <EmptyDescription>
+                                        No sources currently match this review
+                                        filter.
+                                    </EmptyDescription>
+                                </EmptyHeader>
+                            </Empty>
+                        ) : (
+                            <ul className="space-y-5">
+                                {review.sources.map((source, index) => {
+                                    const isActive =
+                                        selectedId === source.sourceId;
+                                    const previous = review.sources[index - 1];
+                                    const startsDecisionGroup =
+                                        filter === "all" &&
+                                        previous?.decision !== source.decision;
+                                    return (
+                                        <motion.li
+                                            layout={
+                                                shouldReduceMotion
+                                                    ? false
+                                                    : "position"
                                             }
-                                            aria-label={`Open ${source.title} for review`}
-                                            className="flex w-full items-start gap-3 text-left text-wrap"
-                                            onClick={() =>
-                                                onSelect(source.sourceId)
-                                            }>
-                                            <FaviconAvatar
-                                                canonicalUrl={
-                                                    source.canonicalUrl
-                                                }
-                                                size="default"
-                                            />
-                                            <span className="min-w-0 flex-1">
-                                                <span className="block truncate text-sm font-semibold">
-                                                    {source.title}
-                                                </span>
-                                                <span className="mt-1 block truncate font-mono text-[11px] text-muted-foreground">
-                                                    {sourceOriginLabel(
-                                                        source.origin,
-                                                    )}
-                                                    {" · "}
-                                                    {sourceCategoryLabel(
-                                                        source.category,
-                                                    )}
-                                                </span>
+                                            transition={{
+                                                duration: shouldReduceMotion
+                                                    ? 0
+                                                    : 0.2,
+                                                ease: [0.32, 0.72, 0, 1],
+                                            }}
+                                            key={source.sourceId}
+                                            className="flex flex-col items-center group/source-row">
+                                            {startsDecisionGroup ? (
+                                                <p className="mb-2 w-full text-micro text-muted-foreground">
+                                                    {sourceDecisionDefinitions.find(
+                                                        ({ decision }) =>
+                                                            decision ===
+                                                            source.decision,
+                                                    )?.label ?? source.decision}
+                                                </p>
+                                            ) : null}
+                                            <span className="w-full max-w-[calc(100%-2rem)] truncate rounded-t-sm border border-border bg-secondary/50 px-2 py-1 text-start text-[10px] font-medium">
+                                                {source.canonicalUrl}
                                             </span>
-                                        </button>
-                                        <div className="mt-3 flex flex-wrap gap-1 px-1">
-                                            {sourceDecisionDefinitions.map(
-                                                (definition) => {
-                                                    const isSelected =
-                                                        source.decision ===
-                                                        definition.decision;
-                                                    const buttonLabel =
-                                                        getSourceDecisionButtonLabel(
-                                                            definition.decision,
-                                                            isSelected,
-                                                        );
-                                                    return (
-                                                        <Button
-                                                            key={
-                                                                definition.decision
-                                                            }
-                                                            type="button"
-                                                            size="xs"
-                                                            variant="outline"
-                                                            disabled={
-                                                                review.status ===
-                                                                "approved"
-                                                            }
-                                                            aria-pressed={
-                                                                isSelected
-                                                            }
-                                                            aria-label={`${buttonLabel} ${source.title} as ${definition.decision}`}
-                                                            data-status={
-                                                                isSelected
-                                                                    ? definition.status
-                                                                    : undefined
-                                                            }
-                                                            className={
-                                                                isSelected
-                                                                    ? getSourceDecisionActiveButtonClassName(
-                                                                          definition.decision,
-                                                                      )
-                                                                    : undefined
-                                                            }
-                                                            onClick={() =>
-                                                                void onDecide(
-                                                                    source.sourceId,
+                                            <div
+                                                className={cn(
+                                                    "source-selection relative flex min-h-28 w-full flex-col justify-between border p-3",
+                                                    isActive &&
+                                                        "source-selection-active",
+                                                )}>
+                                                <button
+                                                    type="button"
+                                                    aria-pressed={isActive}
+                                                    data-slot="source-row"
+                                                    data-active={
+                                                        isActive
+                                                            ? "true"
+                                                            : undefined
+                                                    }
+                                                    aria-label={`Open ${source.title} for review`}
+                                                    className="flex w-full items-start gap-3 text-left text-wrap"
+                                                    onClick={() =>
+                                                        onSelect(
+                                                            source.sourceId,
+                                                        )
+                                                    }>
+                                                    <FaviconAvatar
+                                                        canonicalUrl={
+                                                            source.canonicalUrl
+                                                        }
+                                                        size="default"
+                                                    />
+                                                    <span className="min-w-0 flex-1">
+                                                        <span className="block truncate text-sm font-semibold">
+                                                            {source.title}
+                                                        </span>
+                                                        <span className="mt-1 block truncate font-mono text-[11px] text-muted-foreground">
+                                                            {sourceOriginLabel(
+                                                                source.origin,
+                                                            )}
+                                                            {" · "}
+                                                            {sourceCategoryLabel(
+                                                                source.category,
+                                                            )}
+                                                        </span>
+                                                    </span>
+                                                </button>
+                                                <div className="mt-3 flex flex-wrap gap-1 px-1">
+                                                    {sourceDecisionDefinitions.map(
+                                                        (definition) => {
+                                                            const isSelected =
+                                                                source.decision ===
+                                                                definition.decision;
+                                                            const buttonLabel =
+                                                                getSourceDecisionButtonLabel(
                                                                     definition.decision,
-                                                                )
-                                                            }>
-                                                            <Icon
-                                                                iconNode={
-                                                                    definition.icon
-                                                                }
-                                                                className={getSourceDecisionIconClassName(
-                                                                    definition.decision,
-                                                                )}
-                                                            />
-                                                            {buttonLabel}
-                                                        </Button>
-                                                    );
-                                                },
-                                            )}
-                                        </div>
-                                    </div>
-                                </motion.li>
-                            );
-                        })}
-                    </ul>
-                )}
-            </InfiniteCollectionViewport>
-        </LiquidGlassCard>
+                                                                    isSelected,
+                                                                );
+                                                            return (
+                                                                <Button
+                                                                    key={
+                                                                        definition.decision
+                                                                    }
+                                                                    type="button"
+                                                                    size="xs"
+                                                                    variant="outline"
+                                                                    disabled={
+                                                                        review.status ===
+                                                                        "approved"
+                                                                    }
+                                                                    aria-pressed={
+                                                                        isSelected
+                                                                    }
+                                                                    aria-label={`${buttonLabel} ${source.title} as ${definition.decision}`}
+                                                                    data-status={
+                                                                        isSelected
+                                                                            ? definition.status
+                                                                            : undefined
+                                                                    }
+                                                                    className={
+                                                                        isSelected
+                                                                            ? getSourceDecisionActiveButtonClassName(
+                                                                                  definition.decision,
+                                                                              )
+                                                                            : undefined
+                                                                    }
+                                                                    onClick={() =>
+                                                                        void onDecide(
+                                                                            source.sourceId,
+                                                                            definition.decision,
+                                                                        )
+                                                                    }>
+                                                                    <Icon
+                                                                        iconNode={
+                                                                            definition.icon
+                                                                        }
+                                                                        className={getSourceDecisionIconClassName(
+                                                                            definition.decision,
+                                                                        )}
+                                                                    />
+                                                                    {
+                                                                        buttonLabel
+                                                                    }
+                                                                </Button>
+                                                            );
+                                                        },
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </motion.li>
+                                    );
+                                })}
+                            </ul>
+                        )}
+                    </InfiniteCollectionViewport>
+                </div>
+            </CardContent>
+        </Card>
     );
 }
 
