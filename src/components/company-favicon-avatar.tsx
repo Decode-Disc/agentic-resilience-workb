@@ -1,7 +1,7 @@
-import { Building2Icon } from '@hugeicons/core-free-icons';
+import { Building2Icon } from "@hugeicons/core-free-icons";
 
-import { FaviconAvatar } from '@/components/favicon-avatar';
-import type { AvatarSize } from '@/types/ui';
+import { FaviconAvatar } from "@/components/favicon-avatar";
+import type { AvatarSize } from "@/types/ui";
 
 /**
  * Minimal company shape needed to render a favicon. Accepts the projected
@@ -32,13 +32,13 @@ export type CompanyFaviconSubject = {
  */
 export function CompanyFaviconAvatar({
     company,
-    size = 'sm',
+    size = "sm",
 }: {
     company: CompanyFaviconSubject;
     size?: AvatarSize;
 }) {
     const canonicalUrl =
-        company.websiteUrl ?? company.investorRelationsUrl ?? '';
+        company.websiteUrl ?? company.investorRelationsUrl ?? "";
     return (
         <FaviconAvatar
             canonicalUrl={canonicalUrl}

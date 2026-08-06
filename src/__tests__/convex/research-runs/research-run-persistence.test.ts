@@ -1,164 +1,186 @@
-import schema from '@convex/schema';
-import { makeFunctionReference } from 'convex/server';
-import { convexTest } from 'convex-test';
-import { expect, test } from 'vitest';
+import schema from "@convex/schema";
+import { makeFunctionReference } from "convex/server";
+import { convexTest } from "convex-test";
+import { expect, test } from "vitest";
 
-const modules = import.meta.glob('/convex/**/*.ts');
+const modules = import.meta.glob("/convex/**/*.ts");
 
 const createDraft = makeFunctionReference<
-    'mutation',
+    "mutation",
     Record<string, never>,
     string
->('researchRuns:createDraft');
+>("researchRuns:createDraft");
 const transition = makeFunctionReference<
-    'mutation',
+    "mutation",
     {
         runId: string;
+        expectedExecutionGeneration: number;
         lifecycleState:
-            | 'checking_public_evidence'
-            | 'discovering_sources'
-            | 'awaiting_source_review';
-        executionStatus: 'running' | 'paused';
-        stepKey: 'check_public_evidence' | 'discover_sources' | 'source_review';
+            | "checking_public_evidence"
+            | "discovering_sources"
+            | "awaiting_source_review";
+        executionStatus: "running" | "paused";
+        stepKey: "check_public_evidence" | "discover_sources" | "source_review";
     },
     null
->('researchRuns:transition');
-const getRun = makeFunctionReference<'query', { runId: string }, unknown>(
-    'researchRuns:get',
+>("researchRuns:transition");
+const getRun = makeFunctionReference<"query", { runId: string }, unknown>(
+    "researchRuns:get",
 );
 const listRunEvents = makeFunctionReference<
-    'query',
+    "query",
     { runId: string },
     Array<unknown>
->('researchRuns:listEvents');
+>("researchRuns:listEvents");
 const listSteps = makeFunctionReference<
-    'query',
+    "query",
     { runId: string },
     Array<unknown>
->('researchRuns:listSteps');
+>("researchRuns:listSteps");
 const appendAuditEvent = makeFunctionReference<
-    'mutation',
+    "mutation",
     {
-        action: 'invitation_seeded' | 'quota_restored';
+        action: "invitation_seeded" | "quota_restored";
         targetType: string;
         targetId: string;
         reason?: string;
     },
     string
->('audit:appendSystemEvent');
+>("audit:appendSystemEvent");
 const listAuditEvents = makeFunctionReference<
-    'query',
+    "query",
     { targetType: string; targetId: string },
     Array<unknown>
->('audit:listByTarget');
+>("audit:listByTarget");
 
-test('a draft research run begins with the public-evidence check', async () => {
+test("a draft research run begins with the public-evidence check", async () => {
     const t = convexTest(schema, modules);
     const runId = await t.mutation(createDraft, {});
 
     await t.mutation(transition, {
         runId,
-        lifecycleState: 'checking_public_evidence',
-        executionStatus: 'running',
-        stepKey: 'check_public_evidence',
+        expectedExecutionGeneration: 0,
+        lifecycleState: "checking_public_evidence",
+        executionStatus: "running",
+        stepKey: "check_public_evidence",
     });
 
     await expect(t.query(getRun, { runId })).resolves.toMatchObject({
-        lifecycleState: 'checking_public_evidence',
-        executionStatus: 'running',
+        lifecycleState: "checking_public_evidence",
+        executionStatus: "running",
     });
     await expect(t.query(listRunEvents, { runId })).resolves.toMatchObject([
-        { sequence: 1, type: 'run_created', lifecycleState: 'draft' },
+        { sequence: 1, type: "run_created", lifecycleState: "draft" },
         {
             sequence: 2,
-            type: 'run_transitioned',
-            lifecycleState: 'checking_public_evidence',
-            executionStatus: 'running',
+            type: "run_transitioned",
+            lifecycleState: "checking_public_evidence",
+            executionStatus: "running",
         },
     ]);
 });
 
-test('a research run can pause at the source-review checkpoint', async () => {
+test("a research run can pause at the source-review checkpoint", async () => {
     const t = convexTest(schema, modules);
     const runId = await t.mutation(createDraft, {});
     await t.mutation(transition, {
         runId,
-        lifecycleState: 'checking_public_evidence',
-        executionStatus: 'running',
-        stepKey: 'check_public_evidence',
+        expectedExecutionGeneration: 0,
+        lifecycleState: "checking_public_evidence",
+        executionStatus: "running",
+        stepKey: "check_public_evidence",
     });
     await t.mutation(transition, {
         runId,
-        lifecycleState: 'discovering_sources',
-        executionStatus: 'running',
-        stepKey: 'discover_sources',
+        expectedExecutionGeneration: 0,
+        lifecycleState: "discovering_sources",
+        executionStatus: "running",
+        stepKey: "discover_sources",
     });
 
     await t.mutation(transition, {
         runId,
-        lifecycleState: 'awaiting_source_review',
-        executionStatus: 'paused',
-        stepKey: 'source_review',
+        expectedExecutionGeneration: 0,
+        lifecycleState: "awaiting_source_review",
+        executionStatus: "paused",
+        stepKey: "source_review",
     });
 
     await expect(t.query(getRun, { runId })).resolves.toMatchObject({
-        lifecycleState: 'awaiting_source_review',
-        executionStatus: 'paused',
-        pauseReason: 'source_review',
+        lifecycleState: "awaiting_source_review",
+        executionStatus: "paused",
+        pauseReason: "source_review",
     });
     await expect(t.query(listSteps, { runId })).resolves.toEqual(
         expect.arrayContaining([
             expect.objectContaining({
-                key: 'discover_sources',
-                state: 'completed',
+                key: "discover_sources",
+                state: "completed",
             }),
             expect.objectContaining({
-                key: 'source_review',
-                state: 'needs_review',
+                key: "source_review",
+                state: "needs_review",
             }),
         ]),
     );
 });
 
-test('an invalid lifecycle transition is rejected without appending progress', async () => {
+test("an invalid lifecycle transition is rejected without appending progress", async () => {
     const t = convexTest(schema, modules);
     const runId = await t.mutation(createDraft, {});
 
     await expect(
         t.mutation(transition, {
             runId,
-            lifecycleState: 'awaiting_source_review',
-            executionStatus: 'paused',
-            stepKey: 'source_review',
+            expectedExecutionGeneration: 0,
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            stepKey: "source_review",
         }),
-    ).rejects.toThrow('Invalid research run transition');
+    ).rejects.toThrow("Invalid research run transition");
     await expect(t.query(listRunEvents, { runId })).resolves.toHaveLength(1);
 });
 
-test('audit history preserves every administrative event', async () => {
+test("a stale execution generation is rejected without appending progress", async () => {
+    const t = convexTest(schema, modules);
+    const runId = await t.mutation(createDraft, {});
+
+    await expect(
+        t.mutation(transition, {
+            runId,
+            expectedExecutionGeneration: 1,
+            lifecycleState: "checking_public_evidence",
+            executionStatus: "running",
+            stepKey: "check_public_evidence",
+        }),
+    ).rejects.toThrow("Stale research execution generation");
+    await expect(t.query(listRunEvents, { runId })).resolves.toHaveLength(1);
+});
+
+test("audit history preserves every administrative event", async () => {
     const t = convexTest(schema, modules);
 
     await t.mutation(appendAuditEvent, {
-        action: 'invitation_seeded',
-        targetType: 'invitation_set',
-        targetId: 'prototype',
+        action: "invitation_seeded",
+        targetType: "invitation_set",
+        targetId: "prototype",
     });
     await t.mutation(appendAuditEvent, {
-        action: 'quota_restored',
-        targetType: 'research_run',
-        targetId: 'run-1',
-        reason: 'Provider outage before paid work started',
+        action: "quota_restored",
+        targetType: "research_run",
+        targetId: "run-1",
+        reason: "Provider outage before paid work started",
     });
 
     await expect(
         t.query(listAuditEvents, {
-            targetType: 'research_run',
-            targetId: 'run-1',
+            targetType: "research_run",
+            targetId: "run-1",
         }),
     ).resolves.toMatchObject([
         {
-            action: 'quota_restored',
-            reason: 'Provider outage before paid work started',
+            action: "quota_restored",
+            reason: "Provider outage before paid work started",
         },
     ]);
 });

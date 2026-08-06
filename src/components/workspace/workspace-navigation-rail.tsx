@@ -1,5 +1,5 @@
-import type { api } from '@convex/_generated/api';
-import type { Id } from '@convex/_generated/dataModel';
+import type { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import {
     ChartEvaluationIcon,
     CheckListIcon,
@@ -10,107 +10,107 @@ import {
     Note01Icon,
     PanelLeftCloseIcon,
     PanelLeftOpenIcon,
-} from '@hugeicons/core-free-icons';
-import { Link } from '@tanstack/react-router';
-import type { FunctionReturnType } from 'convex/server';
-import { motion, useReducedMotion } from 'motion/react';
-import { useEffect, useState } from 'react';
+} from "@hugeicons/core-free-icons";
+import { Link } from "@tanstack/react-router";
+import type { FunctionReturnType } from "convex/server";
+import { motion, useReducedMotion } from "motion/react";
+import { useEffect, useState } from "react";
 
-import Icon from '@/components/icon';
-import { Button } from '@/components/ui/button';
-import { LiquidGlassCard } from '@/components/ui/liquid-glass';
+import Icon from "@/components/icon";
+import { Button } from "@/components/ui/button";
+import { LiquidGlassCard } from "@/components/ui/liquid-glass";
 import {
     Tooltip,
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { cn } from '@/lib/utils';
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
-const COLLAPSED_STORAGE_KEY = 'evidence-workbench.nav-rail.collapsed.v1';
-const RAIL_COLLAPSED_WIDTH = '4.25rem';
-const RAIL_EXPANDED_WIDTH = '14rem';
+const COLLAPSED_STORAGE_KEY = "evidence-workbench.nav-rail.collapsed.v1";
+const RAIL_COLLAPSED_WIDTH = "4.25rem";
+const RAIL_EXPANDED_WIDTH = "14rem";
 
 export type WorkspaceSection =
-    | 'progress'
-    | 'sources'
-    | 'evidence'
-    | 'assessment'
-    | 'map'
-    | 'brief';
+    | "progress"
+    | "sources"
+    | "evidence"
+    | "assessment"
+    | "map"
+    | "brief";
 
 type LifecycleState = NonNullable<
     FunctionReturnType<typeof api.researchRuns.getMine>
->['lifecycleState'];
+>["lifecycleState"];
 
 const sections = [
-    { key: 'progress', label: 'Progress', icon: Flowchart01Icon },
-    { key: 'sources', label: 'Sources', icon: FileSearchIcon },
-    { key: 'evidence', label: 'Evidence', icon: CheckListIcon },
-    { key: 'assessment', label: 'Assessment', icon: ChartEvaluationIcon },
-    { key: 'map', label: 'Map', icon: MapsIcon },
-    { key: 'brief', label: 'Brief', icon: Note01Icon },
+    { key: "progress", label: "Progress", icon: Flowchart01Icon },
+    { key: "sources", label: "Sources", icon: FileSearchIcon },
+    { key: "evidence", label: "Evidence", icon: CheckListIcon },
+    { key: "assessment", label: "Assessment", icon: ChartEvaluationIcon },
+    { key: "map", label: "Map", icon: MapsIcon },
+    { key: "brief", label: "Brief", icon: Note01Icon },
 ] as const;
 
 const lifecycleOrder: ReadonlyArray<LifecycleState> = [
-    'draft',
-    'checking_public_evidence',
-    'awaiting_evidence_sufficiency_review',
-    'discovering_sources',
-    'awaiting_source_review',
-    'corpus_approved',
-    'extracting_evidence',
-    'assessing_dimensions',
-    'awaiting_assessment_review',
-    'completed',
+    "draft",
+    "checking_public_evidence",
+    "awaiting_evidence_sufficiency_review",
+    "discovering_sources",
+    "awaiting_source_review",
+    "corpus_approved",
+    "extracting_evidence",
+    "assessing_dimensions",
+    "awaiting_assessment_review",
+    "completed",
 ];
 
 function isUnlocked(section: WorkspaceSection, lifecycle: LifecycleState) {
-    if (section === 'progress' || section === 'sources') {
+    if (section === "progress" || section === "sources") {
         return true;
     }
     const index = lifecycleOrder.indexOf(lifecycle);
-    if (section === 'evidence') {
-        return index >= lifecycleOrder.indexOf('extracting_evidence');
+    if (section === "evidence") {
+        return index >= lifecycleOrder.indexOf("extracting_evidence");
     }
-    if (section === 'assessment') {
-        return index >= lifecycleOrder.indexOf('assessing_dimensions');
+    if (section === "assessment") {
+        return index >= lifecycleOrder.indexOf("assessing_dimensions");
     }
-    if (section === 'map' || section === 'brief') {
-        return index >= lifecycleOrder.indexOf('completed');
+    if (section === "map" || section === "brief") {
+        return index >= lifecycleOrder.indexOf("completed");
     }
     return false;
 }
 
 function prerequisite(section: WorkspaceSection) {
-    if (section === 'evidence') {
-        return 'Review and approve the source set first.';
+    if (section === "evidence") {
+        return "Review and approve the source set first.";
     }
-    if (section === 'assessment') {
-        return 'Review and approve the evidence first.';
+    if (section === "assessment") {
+        return "Review and approve the evidence first.";
     }
-    return 'Review the dimension assessment first.';
+    return "Review the dimension assessment first.";
 }
 
 function readStoredCollapsed(): boolean {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
         return false;
     }
     try {
-        return window.localStorage.getItem(COLLAPSED_STORAGE_KEY) === 'true';
+        return window.localStorage.getItem(COLLAPSED_STORAGE_KEY) === "true";
     } catch {
         return false;
     }
 }
 
 function persistCollapsed(collapsed: boolean) {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
         return;
     }
     try {
         window.localStorage.setItem(
             COLLAPSED_STORAGE_KEY,
-            collapsed ? 'true' : 'false',
+            collapsed ? "true" : "false",
         );
     } catch {
         // Ignore storage failures (private mode, quota): the choice stays
@@ -124,7 +124,7 @@ export function WorkspaceNavigationRail({
     section,
     lifecycleState,
 }: {
-    runId: Id<'researchRuns'>;
+    runId: Id<"researchRuns">;
     section: WorkspaceSection;
     lifecycleState: LifecycleState;
 }) {
@@ -144,7 +144,7 @@ export function WorkspaceNavigationRail({
         });
     };
 
-    const toggleLabel = collapsed ? 'Expand navigation' : 'Collapse navigation';
+    const toggleLabel = collapsed ? "Expand navigation" : "Collapse navigation";
     const ToggleIcon = collapsed ? PanelLeftOpenIcon : PanelLeftCloseIcon;
 
     return (
@@ -162,10 +162,10 @@ export function WorkspaceNavigationRail({
                     reduceMotion || !mounted
                         ? undefined
                         : {
-                            width: collapsed
-                                ? RAIL_COLLAPSED_WIDTH
-                                : RAIL_EXPANDED_WIDTH,
-                        }
+                              width: collapsed
+                                  ? RAIL_COLLAPSED_WIDTH
+                                  : RAIL_EXPANDED_WIDTH,
+                          }
                 }
                 style={{
                     width: mounted
@@ -173,16 +173,14 @@ export function WorkspaceNavigationRail({
                             ? RAIL_COLLAPSED_WIDTH
                             : RAIL_EXPANDED_WIDTH
                         : undefined,
-                }}
-            >
+                }}>
                 <div
                     className={cn(
-                        'flex items-center gap-1 rounded-t-xl px-2',
+                        "flex items-center gap-1 rounded-t-xl px-2",
                         collapsed
-                            ? 'justify-center pt-1'
-                            : 'justify-between py-2',
-                    )}
-                >
+                            ? "justify-center pt-1"
+                            : "justify-between py-2",
+                    )}>
                     {collapsed ? null : (
                         <span className="flex items-center gap-1.5 px-1 text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
                             <Icon
@@ -199,8 +197,7 @@ export function WorkspaceNavigationRail({
                         aria-label={toggleLabel}
                         aria-expanded={!collapsed}
                         onClick={toggleCollapsed}
-                        title={toggleLabel}
-                    >
+                        title={toggleLabel}>
                         <Icon iconNode={ToggleIcon} />
                     </Button>
                 </div>
@@ -241,7 +238,7 @@ export function WorkspaceNavigationRail({
 
                 {collapsed ? null : (
                     <div className="mt-3 border-t border-border/40 pt-3">
-                        {lifecycleState === 'corpus_approved' ? (
+                        {lifecycleState === "corpus_approved" ? (
                             <div className="rounded-lg border border-approved/30 bg-approved/10 p-3">
                                 <p className="text-xs font-medium text-approved">
                                     Source set approved
@@ -259,11 +256,11 @@ export function WorkspaceNavigationRail({
     );
 }
 
-type NavigationIcon = NonNullable<(typeof sections)[number]['icon']>;
+type NavigationIcon = NonNullable<(typeof sections)[number]["icon"]>;
 
 type NavigationItemLinkProps = {
-    to: '/workspace/$runId';
-    params: { runId: Id<'researchRuns'> };
+    to: "/workspace/$runId";
+    params: { runId: Id<"researchRuns"> };
     search: { section: WorkspaceSection };
     label: string;
     active: boolean;
@@ -286,35 +283,34 @@ function NavigationItemLink({
             to={to}
             params={params}
             search={search}
-            aria-current={active ? 'page' : undefined}
+            aria-current={active ? "page" : undefined}
             title={collapsed ? label : undefined}
             className={cn(
-                'group/nav-item relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-[background-color,color] duration-200',
-                collapsed && 'justify-center',
+                "group/nav-item relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-[background-color,color] duration-200",
+                collapsed && "justify-center",
                 active
-                    ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-            )}
-        >
+                    ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}>
             <Icon
                 iconNode={icon}
                 className={cn(
-                    'shrink-0',
+                    "shrink-0",
                     active
-                        ? 'text-sidebar-accent-foreground'
-                        : 'text-muted-foreground group-hover/nav-item:text-foreground',
+                        ? "text-sidebar-accent-foreground"
+                        : "text-muted-foreground group-hover/nav-item:text-foreground",
                 )}
             />
             {collapsed ? null : <span className="truncate">{label}</span>}
             {active ? (
                 <motion.span
                     aria-hidden="true"
-                    layoutId={reduceMotion ? undefined : 'nav-active-rail'}
+                    layoutId={reduceMotion ? undefined : "nav-active-rail"}
                     className="absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-full bg-brand-purple"
                     transition={
                         reduceMotion
                             ? { duration: 0 }
-                            : { type: 'spring', stiffness: 380, damping: 30 }
+                            : { type: "spring", stiffness: 380, damping: 30 }
                     }
                 />
             ) : null}
@@ -348,16 +344,14 @@ function LockedSection({
         <div
             title={collapsed ? label : undefined}
             className={cn(
-                'rounded-lg px-2.5 py-2 text-muted-foreground/70',
-                collapsed && 'flex flex-col items-center gap-1',
-            )}
-        >
+                "rounded-lg px-2.5 py-2 text-muted-foreground/70",
+                collapsed && "flex flex-col items-center gap-1",
+            )}>
             <span
                 className={cn(
-                    'flex items-center gap-2.5 text-sm',
-                    collapsed && 'justify-center',
-                )}
-            >
+                    "flex items-center gap-2.5 text-sm",
+                    collapsed && "justify-center",
+                )}>
                 <Icon iconNode={icon} />
                 {collapsed ? (
                     <span className="sr-only">{label}</span>

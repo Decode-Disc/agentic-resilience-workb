@@ -1,24 +1,24 @@
-import { api } from '@convex/_generated/api';
+import { api } from "@convex/_generated/api";
 import {
     Add01Icon,
     ChevronDownIcon,
     Folder02Icon,
     Tick02Icon,
-} from '@hugeicons/core-free-icons';
-import { Link, useNavigate } from '@tanstack/react-router';
-import { useAction, useQuery } from 'convex/react';
-import React, { Component, type ReactNode, useEffect, useRef } from 'react';
-import { CompanyFaviconAvatar } from '@/components/company-favicon-avatar';
-import Icon from '@/components/icon';
-import { Button, buttonVariants } from '@/components/ui/button';
+} from "@hugeicons/core-free-icons";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useAction, useQuery } from "convex/react";
+import React, { Component, type ReactNode, useEffect, useRef } from "react";
+import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
+import Icon from "@/components/icon";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
     NestedMenu,
     type NestedMenuSectionProps,
-} from '@/components/ui/nested-menu';
-import { Separator } from '@/components/ui/separator';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useResponsive } from '@/hooks/use-responsive';
-import { cn } from '@/lib/utils';
+} from "@/components/ui/nested-menu";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useResponsive } from "@/hooks/use-responsive";
+import { cn } from "@/lib/utils";
 
 export interface AnalyzedCompanyListProps {
     activeRunId?: string;
@@ -45,8 +45,7 @@ function DossiersButton({ className }: { className?: string }) {
             size="sm"
             aria-label="Go to dossiers"
             title="Go to dossiers"
-            className={cn('gap-2 text-xs font-medium', className)}
-        >
+            className={cn("gap-2 text-xs font-medium", className)}>
             <Icon
                 iconNode={Folder02Icon}
                 data-icon="inline-start"
@@ -65,7 +64,7 @@ function AnalyzedCompanyListContent({
 }: AnalyzedCompanyListProps) {
     const { isMobile } = useResponsive();
     const navigate = useNavigate();
-    const runs = useQuery(api.researchRuns.listMine, enabled ? {} : 'skip');
+    const runs = useQuery(api.researchRuns.listMine, enabled ? {} : "skip");
     const ensureRunCompanyWebsite = useAction(
         api.companyResolution.ensureRunCompanyWebsite,
     );
@@ -103,10 +102,9 @@ function AnalyzedCompanyListContent({
         return (
             <div
                 role="status"
-                className={cn('flex items-center gap-2', className)}
+                className={cn("flex items-center gap-2", className)}
                 aria-label="Loading research dossiers"
-                aria-busy="true"
-            >
+                aria-busy="true">
                 {[...Array(3)].map((_) => (
                     <React.Fragment key={crypto.randomUUID()}>
                         <Skeleton className="h-8 w-44 rounded-sm" />
@@ -126,7 +124,7 @@ function AnalyzedCompanyListContent({
 
     if (availableRuns.length === 0) {
         return (
-            <div className={cn('flex items-center gap-2', className)}>
+            <div className={cn("flex items-center gap-2", className)}>
                 <span className="text-xs text-muted-foreground">
                     No research dossiers yet
                 </span>
@@ -141,7 +139,7 @@ function AnalyzedCompanyListContent({
         );
         const menuSections: NestedMenuSectionProps[] = [
             {
-                title: 'Research dossiers',
+                title: "Research dossiers",
                 items: [
                     ...availableRuns.flatMap((run) =>
                         run.company
@@ -160,7 +158,7 @@ function AnalyzedCompanyListContent({
                                                     <Icon
                                                         iconNode={Tick02Icon}
                                                         className={cn(
-                                                            'size-4 shrink-0 text-brand-purple',
+                                                            "size-4 shrink-0 text-brand-purple",
                                                             iconClassName,
                                                         )}
                                                     />
@@ -179,10 +177,10 @@ function AnalyzedCompanyListContent({
                                                     ) : null,
                                       onSelect: () => {
                                           void navigate({
-                                              to: '/workspace/$runId',
+                                              to: "/workspace/$runId",
                                               params: { runId: run.runId },
                                               search: {
-                                                  section: 'progress',
+                                                  section: "progress",
                                               },
                                           });
                                       },
@@ -191,21 +189,21 @@ function AnalyzedCompanyListContent({
                             : [],
                     ),
                     {
-                        key: 'start-new-analysis',
-                        label: 'Start a company dossier',
+                        key: "start-new-analysis",
+                        label: "Start a company dossier",
                         className: buttonVariants({
-                            variant: 'secondary',
-                            size: 'sm',
-                            className: 'my-1 w-full',
+                            variant: "secondary",
+                            size: "sm",
+                            className: "my-1 w-full",
                         }),
                         icon: ({ className: iconClassName }) => (
                             <Icon
                                 iconNode={Add01Icon}
-                                className={cn('size-4', iconClassName)}
+                                className={cn("size-4", iconClassName)}
                             />
                         ),
                         onSelect: () => {
-                            void navigate({ to: '/workspace/start' });
+                            void navigate({ to: "/workspace/start" });
                         },
                     },
                 ],
@@ -213,7 +211,7 @@ function AnalyzedCompanyListContent({
         ];
 
         return (
-            <div className={cn('flex items-center gap-2 py-0.5', className)}>
+            <div className={cn("flex items-center gap-2 py-0.5", className)}>
                 <NestedMenu
                     sections={menuSections}
                     side="bottom"
@@ -222,8 +220,7 @@ function AnalyzedCompanyListContent({
                         <Button
                             variant="outline"
                             size="sm"
-                            className="gap-2 text-xs font-medium"
-                        >
+                            className="gap-2 text-xs font-medium">
                             {activeRun?.company ? (
                                 <>
                                     <span
@@ -251,39 +248,36 @@ function AnalyzedCompanyListContent({
     return (
         <nav
             className={cn(
-                'flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5',
+                "flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5",
                 className,
             )}
-            aria-label="Analyzed companies"
-        >
+            aria-label="Analyzed companies">
             <div className="flex shrink-0 items-center gap-2">
                 <DossiersButton />
                 {availableRuns.map((run, index) =>
                     run.company ? (
                         <div
                             key={run.runId}
-                            className="flex items-center gap-0.5"
-                        >
+                            className="flex items-center gap-0.5">
                             <Link
                                 to="/workspace/$runId"
                                 params={{ runId: run.runId }}
-                                search={{ section: 'progress' }}
+                                search={{ section: "progress" }}
                                 aria-current={
                                     activeRunId === run.runId
-                                        ? 'page'
+                                        ? "page"
                                         : undefined
                                 }
                                 className={buttonVariants({
-                                    variant: 'outline',
-                                    size: 'sm',
+                                    variant: "outline",
+                                    size: "sm",
                                     className: cn(
-                                        'h-8 gap-1 px-0 text-xs font-medium rounded-none!',
+                                        "h-8 gap-1 px-0 text-xs font-medium rounded-none!",
                                         activeRunId === run.runId
-                                            ? 'bg-accent! border-accent-foreground/50!'
-                                            : 'border! border-muted-foreground/50!',
+                                            ? "bg-accent! border-accent-foreground/50!"
+                                            : "border! border-muted-foreground/50!",
                                     ),
-                                })}
-                            >
+                                })}>
                                 {activeRunId === run.runId ? (
                                     <Icon
                                         iconNode={Tick02Icon}
@@ -328,17 +322,15 @@ class AnalyzedCompanyListErrorBoundary extends Component<
             <div
                 role="alert"
                 className={cn(
-                    'flex items-center gap-2 py-0.5 text-xs text-muted-foreground',
+                    "flex items-center gap-2 py-0.5 text-xs text-muted-foreground",
                     this.props.className,
-                )}
-            >
+                )}>
                 <span>Research dossiers are temporarily unavailable</span>
                 <Button
                     type="button"
                     variant="ghost"
                     size="xs"
-                    onClick={() => this.setState({ hasError: false })}
-                >
+                    onClick={() => this.setState({ hasError: false })}>
                     Retry
                 </Button>
             </div>

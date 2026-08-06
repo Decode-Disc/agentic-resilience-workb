@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useAuthActions, useConvexAuth } from '@convex-dev/auth/react';
-import { useEffect, useRef, useState } from 'react';
+import { useAuthActions, useConvexAuth } from "@convex-dev/auth/react";
+import { useEffect, useRef, useState } from "react";
 
 function sessionErrorMessage() {
     return "We couldn't prepare the research workspace. Try again.";
@@ -24,7 +24,7 @@ export function useAnonymousSession() {
         setIsSigningIn(true);
         setSessionError(null);
 
-        void signIn('anonymous')
+        void signIn("anonymous")
             .catch(() => {
                 attemptedSignIn.current = false;
                 setSessionError(sessionErrorMessage());

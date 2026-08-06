@@ -2,15 +2,22 @@ import type { Id } from "@convex/_generated/dataModel";
 import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import rateLimiterTest from "./rate-limiter-test-register.js";
 
 const modules = import.meta.glob("/convex/**/*.ts");
+
+afterEach(() => vi.useRealTimers());
 const reserveSecRateLimit = makeFunctionReference<
     "mutation",
     Record<string, never>,
     { retryAfter?: number }
 >("providerCalls:reserveSecRateLimit");
+const reserveExaWebsiteRateLimit = makeFunctionReference<
+    "mutation",
+    { authUserId: Id<"users"> },
+    null
+>("providerCalls:reserveExaWebsiteRateLimit");
 const recordAttempt = makeFunctionReference<
     "mutation",
     {
@@ -189,4 +196,52 @@ test("refuses a new provider lease after execution cancellation", async () => {
             attempt: 2,
         }),
     ).rejects.toThrow("no longer active");
+});
+
+test("reclaims an expired provider lease without creating a duplicate", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-06T00:00:00.000Z"));
+    const t = convexTest(schema, modules);
+    const input = {
+        service: "sec" as const,
+        operation: "resolve_company",
+        operationKey: "lease:resolve:CCCS",
+        attempt: 1,
+        status: "started" as const,
+    };
+
+    const first = await t.mutation(recordAttempt, input);
+    vi.setSystemTime(new Date("2026-08-06T00:00:15.001Z"));
+    const reclaimed = await t.mutation(recordAttempt, input);
+
+    expect(reclaimed).toEqual({
+        providerCallId: first.providerCallId,
+        shouldExecute: true,
+        status: "started",
+    });
+    await expect(
+        t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).resolves.toEqual([
+        expect.objectContaining({
+            _id: first.providerCallId,
+            leaseExpiresAt: Date.parse("2026-08-06T00:00:30.001Z"),
+        }),
+    ]);
+});
+
+test("limits Exa website enrichment to twelve calls per session window", async () => {
+    const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
+    const authUserId = await t.run((ctx) =>
+        ctx.db.insert("users", { isAnonymous: true }),
+    );
+
+    for (let index = 0; index < 12; index += 1) {
+        await expect(
+            t.mutation(reserveExaWebsiteRateLimit, { authUserId }),
+        ).resolves.toBeNull();
+    }
+    await expect(
+        t.mutation(reserveExaWebsiteRateLimit, { authUserId }),
+    ).rejects.toThrow("rate limit reached");
 });

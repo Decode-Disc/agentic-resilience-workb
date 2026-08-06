@@ -36,10 +36,11 @@ Outcome: the minimum typed, persisted model needed to express real product state
 
 ## Phase 2 — Private Access and Quotas
 
-Outcome: only invited visitors can reserve analyses within the prototype limits.
+Outcome: only visitors with a configured access code can reserve analyses
+within the prototype limits.
 
-- [x] Seed exactly five invitations through an idempotent setup path.
-- [x] Implement server-side visitor admission and authorization.
+- [x] Seed exactly five stable access slots through an idempotent setup path.
+- [x] Implement server-side visitor admission, session rebinding, and authorization.
 - [x] Reserve at most three analyses per admitted visitor atomically.
 - [x] Verify concurrency, persistence across sessions, and audited quota restoration.
 
@@ -56,20 +57,20 @@ Outcome: a deterministic research run can progress, pause, resume, fail, retry, 
 
 Outcome: an analyst can start a real company investigation and approve a proposed source corpus.
 
-- [ ] Preflight-resolve, confirm, reserve, and authoritatively revalidate a supported US-listed technology company.
-- [ ] Pause on insufficient public evidence with HTTPS URL addition, explicit completion, or justified force-continuation paths.
-- [ ] Build and persist a company-specific research plan with one of the approved source-coverage presets.
-- [ ] Discover and rank proposed SEC and web sources with visible, persisted progress.
-- [ ] Approve a versioned corpus containing accepted sources while preserving rejected and pending candidates.
-- [ ] End the Phase 4 execution honestly at the persisted `corpus_approved` handoff.
-- [ ] Enforce one running workflow per visitor and prevent extraction before explicit corpus-revision approval.
+- [x] Preflight-resolve, confirm, reserve, and authoritatively revalidate a supported US-listed technology company.
+- [x] Pause on insufficient public evidence with HTTPS URL addition, explicit completion, or justified force-continuation paths.
+- [x] Build and persist a company-specific research plan with one of the approved source-coverage presets.
+- [x] Discover and rank proposed SEC and web sources with visible, persisted progress.
+- [x] Approve a versioned corpus containing accepted sources while preserving rejected and pending candidates.
+- [x] End the Phase 4 execution honestly at the persisted `corpus_approved` handoff.
+- [x] Enforce one running workflow per visitor and prevent extraction before explicit corpus-revision approval.
 
 ### Demonstration Checkpoint A — Honest Live Run
 
-- [ ] Start a genuinely new company run.
-- [ ] Show confirmed company resolution, source discovery, and persisted progress.
-- [ ] Stop at the explicit corpus-approval checkpoint.
-- [ ] Confirm that no cached or precomputed work is presented as live.
+- [x] Start a genuinely new company run.
+- [x] Show confirmed company resolution, source discovery, and persisted progress.
+- [x] Stop at the explicit corpus-approval checkpoint.
+- [x] Confirm that no cached or precomputed work is presented as live.
 
 ## Phase 5 — Evidence Matrix and Provenance
 

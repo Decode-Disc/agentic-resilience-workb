@@ -1,9 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { expect, test, vi } from 'vitest';
+import { fireEvent, render, screen } from "@testing-library/react";
+import { expect, test, vi } from "vitest";
 
-import { PaginationControls } from '@/components/pagination-controls';
+import { PaginationControls } from "@/components/pagination-controls";
 
-test('changes explicit pages with accessible buttons', () => {
+test("changes explicit pages with accessible buttons", () => {
     const onPageChange = vi.fn();
     render(
         <PaginationControls
@@ -15,18 +15,18 @@ test('changes explicit pages with accessible buttons', () => {
     );
 
     expect(
-        screen.getByRole('navigation', {
-            name: 'Company search result pages',
+        screen.getByRole("navigation", {
+            name: "Company search result pages",
         }),
     ).toBeTruthy();
     expect(
-        screen.getByRole('button', { name: 'Page 2' }).getAttribute(
-            'aria-current',
-        ),
-    ).toBe('page');
+        screen
+            .getByRole("button", { name: "Page 2" })
+            .getAttribute("aria-current"),
+    ).toBe("page");
 
-    fireEvent.click(screen.getByRole('button', { name: 'Page 3' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Go to next page' }));
+    fireEvent.click(screen.getByRole("button", { name: "Page 3" }));
+    fireEvent.click(screen.getByRole("button", { name: "Go to next page" }));
 
     expect(onPageChange).toHaveBeenNthCalledWith(1, 3);
     expect(onPageChange).toHaveBeenNthCalledWith(2, 3);

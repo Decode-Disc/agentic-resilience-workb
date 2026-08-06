@@ -83,8 +83,8 @@ export type DiscreteTabItem = {
     id: string;
     title: string;
     icon:
-    | React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
-    | PlatformIcon;
+        | React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
+        | PlatformIcon;
     count?: number;
     href?: string;
     prefetch?: boolean;
@@ -259,8 +259,7 @@ export default function DiscreteTabs({
                         onKeyDown={
                             hasNavigationDestination
                                 ? undefined
-                                : (event) =>
-                                      handleLocalTabKeyDown(event, index)
+                                : (event) => handleLocalTabKeyDown(event, index)
                         }
                     />
                 ))}
@@ -319,36 +318,36 @@ const DiscreteTabButton = ({
         <>
             {typeof document !== "undefined"
                 ? createPortal(
-                    <AnimatePresence>
-                        {isTooltipVisible && (
-                            <motion.span
-                                initial={{
-                                    opacity: 0,
-                                    y: 2,
-                                    filter: "blur(2px)",
-                                }}
-                                animate={{
-                                    opacity: 1,
-                                    y: 0,
-                                    filter: "blur(0px)",
-                                }}
-                                exit={{
-                                    opacity: 0,
-                                    y: 2,
-                                    filter: "blur(2px)",
-                                }}
-                                transition={{ duration: 0.15 }}
-                                className="pointer-events-none fixed z-1000 -translate-x-1/2 -translate-y-full rounded-md border border-border/60 bg-popover px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-popover-foreground shadow-sm"
-                                style={{
-                                    left: tooltipPosition.x,
-                                    top: tooltipPosition.y,
-                                }}>
-                                {accessibleLabel}
-                            </motion.span>
-                        )}
-                    </AnimatePresence>,
-                    document.body,
-                )
+                      <AnimatePresence>
+                          {isTooltipVisible && (
+                              <motion.span
+                                  initial={{
+                                      opacity: 0,
+                                      y: 2,
+                                      filter: "blur(2px)",
+                                  }}
+                                  animate={{
+                                      opacity: 1,
+                                      y: 0,
+                                      filter: "blur(0px)",
+                                  }}
+                                  exit={{
+                                      opacity: 0,
+                                      y: 2,
+                                      filter: "blur(2px)",
+                                  }}
+                                  transition={{ duration: 0.15 }}
+                                  className="pointer-events-none fixed z-1000 -translate-x-1/2 -translate-y-full rounded-md border border-border/60 bg-popover px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-popover-foreground shadow-sm"
+                                  style={{
+                                      left: tooltipPosition.x,
+                                      top: tooltipPosition.y,
+                                  }}>
+                                  {accessibleLabel}
+                              </motion.span>
+                          )}
+                      </AnimatePresence>,
+                      document.body,
+                  )
                 : null}
 
             <motion.div

@@ -1,11 +1,11 @@
-import type { api } from '@convex/_generated/api';
-import type { FunctionReturnType } from 'convex/server';
+import type { api } from "@convex/_generated/api";
+import type { FunctionReturnType } from "convex/server";
 
-import { CompanyFaviconAvatar } from '@/components/company-favicon-avatar';
+import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
 
 type ResolvedCompany = FunctionReturnType<
     typeof api.companyResolution.preflight
->['company'];
+>["company"];
 
 /** Shows the public company record the analyst is about to confirm. */
 export function CompanyResolutionCard({

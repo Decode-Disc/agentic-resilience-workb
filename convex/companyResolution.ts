@@ -54,6 +54,38 @@ type PersistPreflight<PreflightId extends string> = (input: {
 
 const PREFLIGHT_TTL_MS = 15 * 60 * 1_000;
 const RESOLVER_VERSION = "sec-company-v2";
+const WEBSITE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
+const WEBSITE_RESOLVER_VERSION = "exa-company-website-v1";
+const WEBSITE_TIMEOUT_MS = 5_000;
+
+class WebsiteResolutionTimeoutError extends Error {
+    constructor() {
+        super("Exa website resolution exceeded its application timeout");
+        this.name = "WebsiteResolutionTimeoutError";
+    }
+}
+
+export async function withWebsiteTimeout<T>(
+    work: Promise<T>,
+    timeoutMs = WEBSITE_TIMEOUT_MS,
+): Promise<T> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+        return await Promise.race([
+            work,
+            new Promise<never>((_resolve, reject) => {
+                timeout = setTimeout(
+                    () => reject(new WebsiteResolutionTimeoutError()),
+                    timeoutMs,
+                );
+            }),
+        ]);
+    } finally {
+        if (timeout !== undefined) {
+            clearTimeout(timeout);
+        }
+    }
+}
 
 /**
  * Searches the SEC company index without persisting a selection or reserving
@@ -242,15 +274,32 @@ export const persistPreflight = internalMutation({
             .query("companies")
             .withIndex("by_cik", (query) => query.eq("cik", args.company.cik))
             .unique();
+        const websiteUrl =
+            args.company.websiteUrl ?? existingCompany?.websiteUrl;
+        const websiteUrlSource =
+            args.company.websiteUrlSource ?? existingCompany?.websiteUrlSource;
+        const websiteResolvedAt =
+            existingCompany && websiteUrl === existingCompany.websiteUrl
+                ? existingCompany.websiteResolvedAt
+                : websiteUrl
+                  ? now
+                  : undefined;
+        const persistedCompany: SecCompanyMatch = {
+            ...args.company,
+            websiteUrl,
+            websiteUrlSource,
+        };
         const companyId = existingCompany
             ? existingCompany._id
             : await ctx.db.insert("companies", {
-                  ...args.company,
+                  ...persistedCompany,
+                  websiteResolvedAt: websiteUrl ? now : undefined,
                   canonicalizedAt: now,
               });
         if (existingCompany) {
             await ctx.db.patch(existingCompany._id, {
-                ...args.company,
+                ...persistedCompany,
+                websiteResolvedAt,
                 canonicalizedAt: now,
             });
         }
@@ -261,7 +310,7 @@ export const persistPreflight = internalMutation({
                 visitor?.status === "active" ? visitor._id : undefined,
             query: args.query,
             companyId,
-            companySnapshot: args.company,
+            companySnapshot: persistedCompany,
             resolverVersion: args.resolverVersion,
             status: "resolved",
             expiresAt: args.expiresAt,
@@ -269,7 +318,7 @@ export const persistPreflight = internalMutation({
         });
         return {
             preflightId,
-            company: args.company,
+            company: persistedCompany,
             expiresAt: args.expiresAt,
         };
     },
@@ -340,8 +389,11 @@ export const search = action({
             ) {
                 const candidate = results[i];
                 if (candidate && !candidate.websiteUrl) {
-                    const resolution =
-                        await resolveWebsiteForCompany(candidate);
+                    const resolution = await resolveWebsiteForCompany(
+                        ctx,
+                        authUserId,
+                        candidate,
+                    );
                     if (resolution) {
                         results[i] = {
                             ...candidate,
@@ -382,7 +434,8 @@ export const preflight = action({
                     internal.companyResolution.persistPreflight,
                     input,
                 ),
-            resolveWebsite: (company) => resolveWebsiteForCompany(company),
+            resolveWebsite: (company) =>
+                resolveWebsiteForCompany(ctx, authUserId, company),
         });
     },
 });
@@ -437,7 +490,8 @@ export const ensureRunCompanyWebsite = action({
             { runId: args.runId, authUserId },
         );
         return backfillRunCompanyWebsiteWithResolver(runCompany, {
-            resolveWebsite: resolveWebsiteForCompany,
+            resolveWebsite: (company) =>
+                resolveWebsiteForCompany(ctx, authUserId, company),
             persist: async (input): Promise<void> => {
                 await ctx.runMutation(persistRunCompanyWebsiteRef, input);
             },
@@ -546,35 +600,248 @@ export const persistRunCompanyWebsite = internalMutation({
     },
 });
 
-/**
- * Builds the website-resolution closure for a single company using Exa's
- * semantic company search as the primary source. SEC IR classification and
- * HEAD-probe are layered by `resolveWebsiteUrl`. Exa is optional: when no key
- * is configured the resolver returns null gracefully, and the company
- * snapshot keeps its (likely empty) `websiteUrl` from `parseSubmission`.
- */
+const cachedWebsiteValidator = v.union(
+    v.object({
+        websiteUrl: v.string(),
+        websiteUrlSource: v.union(
+            v.literal("sec_ir"),
+            v.literal("exa"),
+            v.literal("probe"),
+        ),
+        websiteResolvedAt: v.optional(v.number()),
+    }),
+    v.null(),
+);
+
+export const getWebsiteCacheByCik = internalQuery({
+    args: { cik: v.string() },
+    returns: cachedWebsiteValidator,
+    handler: async (ctx, args) => {
+        const company = await ctx.db
+            .query("companies")
+            .withIndex("by_cik", (query) => query.eq("cik", args.cik))
+            .unique();
+        if (!company?.websiteUrl || !company.websiteUrlSource) {
+            return null;
+        }
+        return {
+            websiteUrl: company.websiteUrl,
+            websiteUrlSource: company.websiteUrlSource,
+            websiteResolvedAt: company.websiteResolvedAt,
+        };
+    },
+});
+
+export const persistWebsiteResolution = internalMutation({
+    args: {
+        company: secCompanyMatchValidator,
+        websiteUrl: v.string(),
+        websiteUrlSource: v.union(
+            v.literal("sec_ir"),
+            v.literal("exa"),
+            v.literal("probe"),
+        ),
+        providerCallId: v.id("providerCalls"),
+        status: v.union(v.literal("succeeded"), v.literal("partial")),
+        latencyMs: v.number(),
+        accepted: v.number(),
+        rejected: v.number(),
+        searchTime: v.optional(v.number()),
+        reportedCost: v.optional(v.number()),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const now = Date.now();
+        const providerCall = await ctx.db.get(args.providerCallId);
+        if (
+            providerCall?.service !== "exa" ||
+            providerCall.operation !== "resolve_company_website" ||
+            providerCall.status !== "started" ||
+            (providerCall.leaseExpiresAt !== undefined &&
+                providerCall.leaseExpiresAt <= now)
+        ) {
+            throw new Error("Website provider lease is no longer active");
+        }
+        const existing = await ctx.db
+            .query("companies")
+            .withIndex("by_cik", (query) => query.eq("cik", args.company.cik))
+            .unique();
+        if (existing) {
+            await ctx.db.patch(existing._id, {
+                ...args.company,
+                websiteUrl: args.websiteUrl,
+                websiteUrlSource: args.websiteUrlSource,
+                websiteResolvedAt: now,
+                canonicalizedAt: now,
+            });
+        } else {
+            await ctx.db.insert("companies", {
+                ...args.company,
+                websiteUrl: args.websiteUrl,
+                websiteUrlSource: args.websiteUrlSource,
+                websiteResolvedAt: now,
+                canonicalizedAt: now,
+            });
+        }
+        await ctx.db.patch(providerCall._id, {
+            status: args.status,
+            latencyMs: args.latencyMs,
+            usage: {
+                accepted: args.accepted,
+                rejected: args.rejected,
+                searchTime: args.searchTime,
+            },
+            reportedCost: args.reportedCost,
+            completedAt: now,
+        });
+        return null;
+    },
+});
+
+/** Resolves cached or bounded Exa website metadata without blocking SEC. */
 async function resolveWebsiteForCompany(
+    ctx: ActionCtx,
+    authUserId: Id<"users">,
     company: SecCompanyMatch,
 ): Promise<{ url: string; source: "sec_ir" | "exa" | "probe" } | null> {
+    const cache = await ctx.runQuery(
+        internal.companyResolution.getWebsiteCacheByCik,
+        { cik: company.cik },
+    );
+    const cachedResolution = cache
+        ? {
+              url: cache.websiteUrl,
+              source: cache.websiteUrlSource,
+          }
+        : null;
+    if (
+        cache?.websiteResolvedAt !== undefined &&
+        cache.websiteResolvedAt > Date.now() - WEBSITE_CACHE_TTL_MS
+    ) {
+        return cachedResolution;
+    }
+    const secWebsite = classifyIrAsWebsite(company.investorRelationsUrl);
+    if (secWebsite) {
+        return { url: secWebsite, source: "sec_ir" };
+    }
     const exaKey = process.env.EXA_API_KEY?.trim();
     if (!exaKey) {
-        return null;
+        return cachedResolution;
     }
-    const client = new Exa(exaKey);
-    const adapter = createExaWebsiteAdapter({
-        search: (query, options) => client.search(query, options),
-    });
-    return resolveWebsiteUrl(
-        {
-            legalName: company.legalName,
-            ticker: company.ticker,
-            investorRelationsUrl: company.investorRelationsUrl,
-        },
-        {
-            exaSearch: (query) => adapter.search(query),
-            classifyIr: classifyIrAsWebsite,
-        },
-    );
+    try {
+        await ctx.runMutation(
+            internal.providerCalls.reserveExaWebsiteRateLimit,
+            { authUserId },
+        );
+    } catch {
+        return cachedResolution;
+    }
+    const operationKey = `company:${company.cik}:resolver:${WEBSITE_RESOLVER_VERSION}:window:${Math.floor(Date.now() / WEBSITE_CACHE_TTL_MS)}`;
+    let lease: {
+        providerCallId: Id<"providerCalls">;
+        shouldExecute: boolean;
+        status: "started" | "succeeded" | "partial" | "failed";
+    };
+    try {
+        lease = await ctx.runMutation(internal.providerCalls.recordAttempt, {
+            service: "exa",
+            operation: "resolve_company_website",
+            operationKey,
+            status: "started",
+            attempt: 1,
+        });
+    } catch {
+        return cachedResolution;
+    }
+    if (!lease.shouldExecute) {
+        const replayedCache = await ctx.runQuery(
+            internal.companyResolution.getWebsiteCacheByCik,
+            { cik: company.cik },
+        );
+        return replayedCache
+            ? {
+                  url: replayedCache.websiteUrl,
+                  source: replayedCache.websiteUrlSource,
+              }
+            : cachedResolution;
+    }
+
+    const startedAt = Date.now();
+    try {
+        const client = new Exa(exaKey);
+        const adapter = createExaWebsiteAdapter({
+            search: (query, options) => client.search(query, options),
+        });
+        const batch = await withWebsiteTimeout(
+            adapter.search(`${company.legalName} official website`),
+        );
+        const resolution = await resolveWebsiteUrl(
+            {
+                legalName: company.legalName,
+                ticker: company.ticker,
+                investorRelationsUrl: undefined,
+            },
+            {
+                exaSearch: async () => batch.candidates,
+                classifyIr: () => undefined,
+            },
+        );
+        if (!resolution) {
+            await ctx.runMutation(internal.providerCalls.recordAttempt, {
+                service: "exa",
+                operation: "resolve_company_website",
+                operationKey,
+                status: "failed",
+                attempt: 1,
+                latencyMs: Date.now() - startedAt,
+                usage: {
+                    accepted: batch.candidates.length,
+                    rejected: batch.rejected,
+                    searchTime: batch.searchTime,
+                },
+                reportedCost: batch.costDollars,
+                errorCode:
+                    batch.candidates.length === 0 && batch.rejected > 0
+                        ? "invalid_provider_response"
+                        : "website_not_resolved",
+            });
+            return cachedResolution;
+        }
+        await ctx.runMutation(
+            internal.companyResolution.persistWebsiteResolution,
+            {
+                company,
+                websiteUrl: resolution.url,
+                websiteUrlSource: resolution.source,
+                providerCallId: lease.providerCallId,
+                status: batch.rejected > 0 ? "partial" : "succeeded",
+                latencyMs: Date.now() - startedAt,
+                accepted: batch.candidates.length,
+                rejected: batch.rejected,
+                searchTime: batch.searchTime,
+                reportedCost: batch.costDollars,
+            },
+        );
+        return resolution;
+    } catch (error) {
+        try {
+            await ctx.runMutation(internal.providerCalls.recordAttempt, {
+                service: "exa",
+                operation: "resolve_company_website",
+                operationKey,
+                status: "failed",
+                attempt: 1,
+                latencyMs: Date.now() - startedAt,
+                errorCode:
+                    error instanceof Error
+                        ? error.name
+                        : "UnknownProviderError",
+            });
+        } catch {
+            // A terminal provider record from another replay wins.
+        }
+        return cachedResolution;
+    }
 }
 
 export const getRunCompany = internalQuery({
@@ -629,11 +896,27 @@ export const verifyRevalidation = internalMutation({
         }
         const company = await ctx.db.get(run.companyId);
         const snapshot = run.companySnapshot ?? company;
-        const matches =
-            snapshot?.cik === args.resolved.cik &&
-            snapshot.ticker === args.resolved.ticker &&
-            snapshot.exchange === args.resolved.exchange;
-        if (matches) {
+        if (snapshot?.cik === args.resolved.cik && company) {
+            const now = Date.now();
+            const companyMetadata = {
+                ...args.resolved,
+                websiteUrl:
+                    args.resolved.websiteUrl ??
+                    snapshot.websiteUrl ??
+                    company.websiteUrl,
+                websiteUrlSource:
+                    args.resolved.websiteUrlSource ??
+                    snapshot.websiteUrlSource ??
+                    company.websiteUrlSource,
+            };
+            await ctx.db.patch(company._id, {
+                ...companyMetadata,
+                canonicalizedAt: now,
+            });
+            await ctx.db.patch(run._id, {
+                companySnapshot: companyMetadata,
+                updatedAt: now,
+            });
             return true;
         }
         const now = Date.now();

@@ -1,73 +1,70 @@
-import type { api } from '@convex/_generated/api';
-import type { Id } from '@convex/_generated/dataModel';
+import type { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import {
     CheckListIcon,
     CheckmarkCircle02Icon,
     Plus,
-} from '@hugeicons/core-free-icons';
-import type { FunctionArgs, FunctionReturnType } from 'convex/server';
-import { motion, useReducedMotion } from 'motion/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+} from "@hugeicons/core-free-icons";
+import type { FunctionArgs, FunctionReturnType } from "convex/server";
+import { motion, useReducedMotion } from "motion/react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { FaviconAvatar } from '@/components/favicon-avatar';
-import Icon from '@/components/icon';
-import { InfiniteCollectionViewport } from '@/components/infinite-collection-viewport';
-import { Button } from '@/components/ui/button';
+import { FaviconAvatar } from "@/components/favicon-avatar";
+import Icon from "@/components/icon";
+import { InfiniteCollectionViewport } from "@/components/infinite-collection-viewport";
+import { Button } from "@/components/ui/button";
 import DiscreteTabs, {
     type DiscreteTabItem,
-} from '@/components/ui/discrete-tabs';
+} from "@/components/ui/discrete-tabs";
 import {
     Drawer,
     DrawerContent,
     DrawerDescription,
     DrawerHeader,
     DrawerTitle,
-} from '@/components/ui/drawer';
+} from "@/components/ui/drawer";
 import {
     Empty,
     EmptyDescription,
     EmptyHeader,
     EmptyTitle,
-} from '@/components/ui/empty';
-import { LiquidGlassCard } from '@/components/ui/liquid-glass';
+} from "@/components/ui/empty";
+import { LiquidGlassCard } from "@/components/ui/liquid-glass";
 import {
     ResizableHandle,
     ResizablePanel,
     ResizablePanelGroup,
-} from '@/components/ui/resizable';
-import { Skeleton } from '@/components/ui/skeleton';
+} from "@/components/ui/resizable";
+import { Skeleton } from "@/components/ui/skeleton";
 import ToolbarExpandable, {
     type DynamicStep,
-} from '@/components/ui/toolbar-expandable';
-import { AddSourceDialog } from '@/components/workspace/add-source-dialog';
-import { SourceContextPanel } from '@/components/workspace/source-context-panel';
+} from "@/components/ui/toolbar-expandable";
+import { AddSourceDialog } from "@/components/workspace/add-source-dialog";
+import { SourceContextPanel } from "@/components/workspace/source-context-panel";
 import {
     compareSourceReviewDecisions,
     getSourceDecisionActiveButtonClassName,
     getSourceDecisionButtonLabel,
     getSourceDecisionIconClassName,
     sourceDecisionDefinitions,
-} from '@/components/workspace/source-decision';
-import { useResponsive } from '@/hooks/use-responsive';
+} from "@/components/workspace/source-decision";
+import { useResponsive } from "@/hooks/use-responsive";
 import {
     sourceCategoryLabel,
     sourceOriginLabel,
-} from '@/lib/presentation/research-copy';
-import { cn } from '@/lib/utils';
+} from "@/lib/presentation/research-copy";
+import { cn } from "@/lib/utils";
 
 type SourceReviewSummary = FunctionReturnType<
     typeof api.sources.getReviewSummary
 >;
 export type SourceReviewSource = FunctionReturnType<
     typeof api.sources.listForReviewPage
->['page'][number];
-type SourceDecision = FunctionArgs<typeof api.sources.decide>['decision'];
-export type SourceFilter = 'all' | SourceDecision;
-type SourceReviewModel = Omit<
-    SourceReviewSummary,
-    'total' | 'candidateLimit'
-> &
-    Partial<Pick<SourceReviewSummary, 'total' | 'candidateLimit'>> & {
+    >["page"][number];
+type SourceDecision = FunctionArgs<typeof api.sources.decide>["decision"];
+export type SourceFilter = "all" | SourceDecision;
+type SourceReviewModel = Omit<SourceReviewSummary, "total" | "candidateLimit"> &
+    Partial<Pick<SourceReviewSummary, "total" | "candidateLimit">> & {
         sources: Array<SourceReviewSource>;
     };
 
@@ -89,20 +86,20 @@ export function SourceReview({
     isLoadingInitial = false,
     onLoadMore = () => undefined,
 }: {
-    runId: Id<'researchRuns'>;
-    corpusRevisionId: Id<'corpusRevisions'>;
+        runId: Id<"researchRuns">;
+        corpusRevisionId: Id<"corpusRevisions">;
     review: SourceReviewModel;
     onDecide: (
-        sourceId: Id<'sources'>,
+        sourceId: Id<"sources">,
         decision: SourceDecision,
     ) => void | Promise<void>;
     onApprove: () => void | Promise<void>;
     onAddManualUrl?: (url: string) => void | Promise<void>;
     filter?: SourceFilter;
     onFilterChange?: (filter: SourceFilter) => void;
-    selectedId?: Id<'sources'> | null;
+        selectedId?: Id<"sources"> | null;
     selectedSource?: SourceReviewSource | null;
-    onSelectedIdChange?: (sourceId: Id<'sources'> | null) => void;
+        onSelectedIdChange?: (sourceId: Id<"sources"> | null) => void;
     hasMore?: boolean;
     isLoadingMore?: boolean;
     isLoadingInitial?: boolean;
@@ -110,48 +107,38 @@ export function SourceReview({
 }) {
     const total =
         review.total ??
-        review.counts.accepted +
-            review.counts.rejected +
-            review.counts.pending;
+        review.counts.accepted + review.counts.rejected + review.counts.pending;
     const candidateLimit =
         review.candidateLimit ?? DEFAULT_SOURCE_CANDIDATE_LIMIT;
-    const [internalFilter, setInternalFilter] =
-        useState<SourceFilter>('all');
+    const [internalFilter, setInternalFilter] = useState<SourceFilter>("all");
     const filter = controlledFilter ?? internalFilter;
     const [internalSelectedId, setInternalSelectedId] =
-        useState<Id<'sources'> | null>(review.sources[0]?.sourceId ?? null);
+        useState<Id<"sources"> | null>(review.sources[0]?.sourceId ?? null);
     const selectedId = controlledSelectedId ?? internalSelectedId;
     const [drawerOpen, setDrawerOpen] = useState(false);
     const { isTabletOrBelow } = useResponsive();
     const serverFiltered = controlledFilter !== undefined;
-    const visibleSources = useMemo(
-        () => {
-            if (serverFiltered) {
-                return review.sources;
-            }
-            if (filter !== 'all') {
-                return review.sources.filter(
-                    (source) => source.decision === filter,
-                );
-            }
-            return [...review.sources].sort((left, right) =>
-                compareSourceReviewDecisions(
-                    left.decision,
-                    right.decision,
-                ),
+    const visibleSources = useMemo(() => {
+        if (serverFiltered) {
+            return review.sources;
+        }
+        if (filter !== "all") {
+            return review.sources.filter(
+                (source) => source.decision === filter,
             );
-        },
-        [filter, review.sources, serverFiltered],
-    );
+        }
+        return [...review.sources].sort((left, right) =>
+            compareSourceReviewDecisions(left.decision, right.decision),
+        );
+    }, [filter, review.sources, serverFiltered]);
     const selected =
         selectedSource !== undefined
             ? selectedSource
-            : (review.sources.find(
-                  ({ sourceId }) => sourceId === selectedId,
-              ) ?? null);
+            : (review.sources.find(({ sourceId }) => sourceId === selectedId) ??
+                null);
 
     const selectSource = useCallback(
-        (sourceId: Id<'sources'> | null) => {
+        (sourceId: Id<"sources"> | null) => {
             if (controlledSelectedId === undefined) {
                 setInternalSelectedId(sourceId);
             }
@@ -165,7 +152,7 @@ export function SourceReview({
         if (selectedSource !== undefined) {
             if (
                 selectedSource === null ||
-                (filter !== 'all' && selectedSource.decision !== filter)
+                (filter !== "all" && selectedSource.decision !== filter)
             ) {
                 selectSource(firstVisibleId);
             }
@@ -188,7 +175,7 @@ export function SourceReview({
 
     if (total === 0 && !isLoadingInitial) {
         const canAddSource =
-            onAddManualUrl !== undefined && review.status === 'draft';
+            onAddManualUrl !== undefined && review.status === "draft";
         return (
             <section className="space-y-5">
                 <Empty>
@@ -256,17 +243,15 @@ export function SourceReview({
                     data-group="source-review"
                     orientation="horizontal"
                     defaultLayout={{
-                        'source-master-list': 36,
-                        'source-context': 64,
+                        "source-master-list": 36,
+                        "source-context": 64,
                     }}
-                    className="min-h-168"
-                >
+                        className="min-h-168">
                     <ResizablePanel
                         id="source-master-list"
                         data-panel="source-master-list"
                         minSize="18rem"
-                        maxSize="50%"
-                    >
+                            maxSize="50%">
                         <SourceMasterList
                             review={reviewWithCollection}
                             filter={filter}
@@ -285,8 +270,7 @@ export function SourceReview({
                     <ResizablePanel
                         id="source-context"
                         data-panel="source-context"
-                        minSize="26rem"
-                    >
+                            minSize="26rem">
                         <div className="h-full min-w-0">
                             {selected ? (
                                 <SourceContextPanel source={selected} />
@@ -304,8 +288,7 @@ export function SourceReview({
                 <Drawer
                     open={drawerOpen}
                     onOpenChange={setDrawerOpen}
-                    showSwipeHandle
-                >
+                    showSwipeHandle>
                     <DrawerContent>
                         <DrawerHeader>
                             <DrawerTitle>Source detail</DrawerTitle>
@@ -336,21 +319,21 @@ function SourceReviewToolbar({
     onAddManualUrl?: (url: string) => void | Promise<void>;
 }) {
     const shouldReduceMotion = useReducedMotion();
-    const isApproved = review.status === 'approved';
+    const isApproved = review.status === "approved";
     const canApprove = review.counts.accepted > 0 && !isApproved;
     const canAddSource =
         onAddManualUrl !== undefined &&
-        review.status === 'draft' &&
+        review.status === "draft" &&
         review.total < review.candidateLimit;
-    const pendingCopy = `${review.counts.pending} pending source${review.counts.pending === 1 ? '' : 's'} will be excluded from the approved corpus.`;
+    const pendingCopy = `${review.counts.pending} pending source${review.counts.pending === 1 ? "" : "s"} will be excluded from the approved corpus.`;
     const steps: DynamicStep[] = [];
 
     if (canAddSource) {
         steps.push({
-            id: 'add-source',
-            title: 'Add source',
+            id: "add-source",
+            title: "Add source",
             description:
-                'Missing a key source? Add a public HTTPS link for analyst review.',
+                "Missing a key source? Add a public HTTPS link for analyst review.",
             icon: Plus,
             content: (
                 <AddSourceDialog
@@ -369,14 +352,12 @@ function SourceReviewToolbar({
     return (
         <div className="mb-4 space-y-2">
             <motion.div
-                key={canApprove ? 'ready' : isApproved ? 'approved' : 'waiting'}
+                key={canApprove ? "ready" : isApproved ? "approved" : "waiting"}
                 data-slot="source-approval-action"
                 data-state={
-                    isApproved ? 'approved' : canApprove ? 'ready' : 'waiting'
+                    isApproved ? "approved" : canApprove ? "ready" : "waiting"
                 }
-                initial={
-                    shouldReduceMotion ? false : { opacity: 0, y: -6 }
-                }
+                initial={shouldReduceMotion ? false : { opacity: 0, y: -6 }}
                 animate={
                     shouldReduceMotion
                         ? undefined
@@ -385,39 +366,31 @@ function SourceReviewToolbar({
                                 opacity: 1,
                                 y: 0,
                                 boxShadow: [
-                                    '0 0 0 0 color-mix(in oklch, var(--approved) 0%, transparent)',
-                                    '0 0 0 4px color-mix(in oklch, var(--approved) 18%, transparent)',
-                                    '0 0 0 0 color-mix(in oklch, var(--approved) 0%, transparent)',
+                                    "0 0 0 0 color-mix(in oklch, var(--approved) 0%, transparent)",
+                                    "0 0 0 4px color-mix(in oklch, var(--approved) 18%, transparent)",
+                                    "0 0 0 0 color-mix(in oklch, var(--approved) 0%, transparent)",
                                 ],
                             }
                           : { opacity: 1, y: 0 }
                 }
                 transition={{ duration: 0.45, ease: [0.32, 0.72, 0, 1] }}
-                className="surface-panel flex flex-col gap-3 rounded-lg border border-border/60 p-3 sm:flex-row sm:items-center sm:justify-between"
-            >
+                className="surface-panel flex flex-col gap-3 rounded-lg border border-border/60 p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0 space-y-0.5">
                     <p className="text-sm font-medium text-foreground">
                         {isApproved
-                            ? 'Source set approved'
+                            ? "Source set approved"
                             : canApprove
-                              ? 'Ready for corpus approval'
-                              : 'Accept a source to continue'}
+                                ? "Ready for corpus approval"
+                                : "Accept a source to continue"}
                     </p>
                     <p className="text-xs leading-relaxed text-muted-foreground">
                         {isApproved
-                            ? `${review.counts.accepted} accepted source${review.counts.accepted === 1 ? '' : 's'} will be used for evidence extraction.`
+                            ? `${review.counts.accepted} accepted source${review.counts.accepted === 1 ? "" : "s"} will be used for evidence extraction.`
                             : review.counts.pending > 0
                               ? pendingCopy
                               : canApprove
-                                ? 'All candidate sources have been reviewed.'
-                                : 'The evidence corpus must contain at least one accepted source.'}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        {review.total} of {review.candidateLimit} candidate
-                        sources in this dossier
-                        {review.total >= review.candidateLimit
-                            ? ' — review scope reached.'
-                            : '.'}
+                                    ? "All candidate sources have been reviewed."
+                                    : "The evidence corpus must contain at least one accepted source."}
                     </p>
                 </div>
                 {isApproved ? (
@@ -431,8 +404,7 @@ function SourceReviewToolbar({
                         size="lg"
                         className="w-full sm:w-auto"
                         onClick={() => void onApprove()}
-                        disabled={!canApprove}
-                    >
+                            disabled={!canApprove}>
                         <Icon iconNode={CheckmarkCircle02Icon} />
                         Approve source set
                     </Button>
@@ -460,12 +432,12 @@ function SourceMasterList({
     review: SourceReviewModel & { total: number; candidateLimit: number };
     filter: SourceFilter;
     onFilterChange: (filter: SourceFilter) => void;
-    selectedId: Id<'sources'> | null;
+        selectedId: Id<"sources"> | null;
     onDecide: (
-        sourceId: Id<'sources'>,
+        sourceId: Id<"sources">,
         decision: SourceDecision,
     ) => void | Promise<void>;
-    onSelect: (sourceId: Id<'sources'>) => void;
+        onSelect: (sourceId: Id<"sources">) => void;
     hasMore: boolean;
     isLoadingMore: boolean;
     isLoadingInitial: boolean;
@@ -473,12 +445,11 @@ function SourceMasterList({
     className?: string;
 }) {
     const shouldReduceMotion = useReducedMotion();
-    const filterTotal =
-        filter === 'all' ? review.total : review.counts[filter];
+    const filterTotal = filter === "all" ? review.total : review.counts[filter];
     const tabs: DiscreteTabItem[] = [
         {
-            id: 'all',
-            title: 'All',
+            id: "all",
+            title: "All",
             icon: CheckListIcon,
             count: review.total,
         },
@@ -493,15 +464,11 @@ function SourceMasterList({
     return (
         <LiquidGlassCard
             data-slot="source-master-list"
-            className={cn(
-                'min-h-0 overflow-hidden bg-card p-3',
-                className,
-            )}
+            className={cn("min-h-0 overflow-hidden bg-card p-3", className)}
             glowIntensity="none"
             shadowIntensity="none"
             whileHover={undefined}
-            whileTap={undefined}
-        >
+            whileTap={undefined}>
             <header className="space-y-3 px-1 pb-4">
                 <div className="flex items-center justify-between gap-3">
                     <p className="text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
@@ -537,15 +504,14 @@ function SourceMasterList({
                             {review.sources.length} of {filterTotal} loaded
                         </p>
                     ) : null
-                }
-            >
+                }>
                 {isLoadingInitial ? (
                     <SourceListSkeleton />
                 ) : review.sources.length === 0 ? (
                     <Empty className="min-h-64 border-none">
                         <EmptyHeader>
                             <EmptyTitle>
-                                No {filter === 'all' ? '' : `${filter} `}
+                                    No {filter === "all" ? "" : `${filter} `}
                                 sources
                             </EmptyTitle>
                             <EmptyDescription>
@@ -559,20 +525,19 @@ function SourceMasterList({
                             const isActive = selectedId === source.sourceId;
                             const previous = review.sources[index - 1];
                             const startsDecisionGroup =
-                                filter === 'all' &&
+                                filter === "all" &&
                                 previous?.decision !== source.decision;
                             return (
                                 <motion.li
                                     layout={
-                                        shouldReduceMotion ? false : 'position'
+                                        shouldReduceMotion ? false : "position"
                                     }
                                     transition={{
                                         duration: shouldReduceMotion ? 0 : 0.2,
                                         ease: [0.32, 0.72, 0, 1],
                                     }}
                                     key={source.sourceId}
-                                    className="flex flex-col items-center group/source-row"
-                                >
+                                    className="flex flex-col items-center group/source-row">
                                     {startsDecisionGroup ? (
                                         <p className="mb-2 w-full text-micro text-muted-foreground">
                                             {sourceDecisionDefinitions.find(
@@ -587,24 +552,22 @@ function SourceMasterList({
                                     </span>
                                     <div
                                         className={cn(
-                                            'source-selection relative flex min-h-28 w-full flex-col justify-between border p-3',
+                                            "source-selection relative flex min-h-28 w-full flex-col justify-between border p-3",
                                             isActive &&
-                                                'source-selection-active',
-                                        )}
-                                    >
+                                            "source-selection-active",
+                                        )}>
                                         <button
                                             type="button"
                                             aria-pressed={isActive}
                                             data-slot="source-row"
                                             data-active={
-                                                isActive ? 'true' : undefined
+                                                isActive ? "true" : undefined
                                             }
                                             aria-label={`Open ${source.title} for review`}
                                             className="flex w-full items-start gap-3 text-left text-wrap"
                                             onClick={() =>
                                                 onSelect(source.sourceId)
-                                            }
-                                        >
+                                            }>
                                             <FaviconAvatar
                                                 canonicalUrl={
                                                     source.canonicalUrl
@@ -619,7 +582,7 @@ function SourceMasterList({
                                                     {sourceOriginLabel(
                                                         source.origin,
                                                     )}
-                                                    {' · '}
+                                                    {" · "}
                                                     {sourceCategoryLabel(
                                                         source.category,
                                                     )}
@@ -647,7 +610,7 @@ function SourceMasterList({
                                                             variant="outline"
                                                             disabled={
                                                                 review.status ===
-                                                                'approved'
+                                                                "approved"
                                                             }
                                                             aria-pressed={
                                                                 isSelected
@@ -670,8 +633,7 @@ function SourceMasterList({
                                                                     source.sourceId,
                                                                     definition.decision,
                                                                 )
-                                                            }
-                                                        >
+                                                            }>
                                                             <Icon
                                                                 iconNode={
                                                                     definition.icon
@@ -712,9 +674,8 @@ function SourceListSkeleton() {
             role="status"
             aria-label="Loading candidate sources"
             aria-busy="true"
-            className="space-y-5"
-        >
-            {['first', 'second', 'third'].map((key) => (
+            className="space-y-5">
+            {["first", "second", "third"].map((key) => (
                 <div key={key} className="space-y-1 px-1">
                     <Skeleton className="h-5 w-3/4" />
                     <Skeleton className="h-28 w-full rounded-xl" />

@@ -6,9 +6,9 @@ import {
     CutoutCardPin,
     cutoutCardSurfaceClassName,
     CutoutCorner,
-} from '@/components/ui/cutout-card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
+} from "@/components/ui/cutout-card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 /**
  * Preserves the complete dossier-card silhouette while its data loads.
@@ -19,10 +19,9 @@ export function ResearchDossierCardSkeleton() {
             aria-hidden="true"
             className={cn(
                 cutoutCardSurfaceClassName,
-                'pointer-events-none h-full w-full max-w-md cursor-default',
+                "pointer-events-none h-full w-full max-w-md cursor-default",
             )}
-            data-slot="research-dossier-card-skeleton"
-        >
+            data-slot="research-dossier-card-skeleton">
             <CutoutCardMedia className="h-72">
                 <Skeleton className="h-full w-full rounded-none" />
 

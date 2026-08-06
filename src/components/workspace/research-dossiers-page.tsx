@@ -1,13 +1,13 @@
-'use client';
+"use client";
 
-import { api } from '@convex/_generated/api';
-import { Add01Icon, Folder02Icon } from '@hugeicons/core-free-icons';
-import { Link } from '@tanstack/react-router';
-import { useQuery } from 'convex/react';
-import { Component, type ReactNode } from 'react';
+import { api } from "@convex/_generated/api";
+import { Add01Icon, Folder02Icon } from "@hugeicons/core-free-icons";
+import { Link } from "@tanstack/react-router";
+import { useQuery } from "convex/react";
+import { Component, type ReactNode } from "react";
 
-import Icon from '@/components/icon';
-import { Button } from '@/components/ui/button';
+import Icon from "@/components/icon";
+import { Button } from "@/components/ui/button";
 import {
     Empty,
     EmptyContent,
@@ -15,18 +15,17 @@ import {
     EmptyHeader,
     EmptyMedia,
     EmptyTitle,
-} from '@/components/ui/empty';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ResearchDossierCard } from '@/components/workspace/research-dossier-card';
-import { ResearchDossierCardSkeleton } from '@/components/workspace/research-dossier-card-skeleton';
+} from "@/components/ui/empty";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ResearchDossierCard } from "@/components/workspace/research-dossier-card";
+import { ResearchDossierCardSkeleton } from "@/components/workspace/research-dossier-card-skeleton";
 
 function DossiersLoading() {
     return (
         <div
             aria-label="Loading research dossiers"
             className="space-y-8"
-            role="status"
-        >
+            role="status">
             <div className="space-y-3">
                 <Skeleton className="h-4 w-28" />
                 <Skeleton className="h-10 w-48" />
@@ -56,8 +55,7 @@ function DossiersEmpty() {
             <EmptyContent>
                 <Button
                     render={<Link to="/workspace/start" />}
-                    nativeButton={false}
-                >
+                    nativeButton={false}>
                     <Icon iconNode={Add01Icon} />
                     Start a dossier
                 </Button>
@@ -82,8 +80,7 @@ function DossiersContent() {
                     </p>
                     <h1
                         id="dossiers-heading"
-                        className="text-display text-3xl sm:text-4xl"
-                    >
+                        className="text-display text-3xl sm:text-4xl">
                         Dossiers
                     </h1>
                     <p className="max-w-xl text-sm text-muted-foreground sm:text-base">
@@ -94,8 +91,7 @@ function DossiersContent() {
                     <Button
                         render={<Link to="/workspace/start" />}
                         nativeButton={false}
-                        variant="outline"
-                    >
+                        variant="outline">
                         <Icon iconNode={Add01Icon} />
                         New dossier
                     </Button>
@@ -140,8 +136,7 @@ class DossiersErrorBoundary extends Component<
             return (
                 <div
                     role="alert"
-                    className="surface-panel mx-auto max-w-xl rounded-xl p-6"
-                >
+                    className="surface-panel mx-auto max-w-xl rounded-xl p-6">
                     <h1 className="text-lg font-medium">
                         Research dossiers unavailable
                     </h1>

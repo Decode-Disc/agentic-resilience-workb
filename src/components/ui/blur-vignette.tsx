@@ -1,7 +1,7 @@
-'use client';
-import type React from 'react';
-import { createContext, useContext } from 'react';
-import { cn } from '@/lib/utils';
+"use client";
+import type React from "react";
+import { createContext, useContext } from "react";
+import { cn } from "@/lib/utils";
 
 interface BlurVignetteContextProps {
     radius?: string;
@@ -11,10 +11,10 @@ interface BlurVignetteContextProps {
 }
 
 const BlurVignetteContext = createContext<BlurVignetteContextProps>({
-    radius: '24px',
-    inset: '20px',
-    transitionLength: '44px',
-    blur: '6px',
+    radius: "24px",
+    inset: "20px",
+    transitionLength: "44px",
+    blur: "6px",
 });
 
 export const useBlurVignetteContext = () => useContext(BlurVignetteContext);
@@ -31,19 +31,17 @@ interface BlurVignetteProps {
 export const BlurVignette: React.FC<BlurVignetteProps> = ({
     className,
     children,
-    radius = '24px',
-    inset = '20px',
-    transitionLength = '44px',
-    blur = '6px',
+    radius = "24px",
+    inset = "20px",
+    transitionLength = "44px",
+    blur = "6px",
 }) => {
     return (
         <BlurVignetteContext.Provider
-            value={{ radius, inset, transitionLength, blur }}
-        >
+            value={{ radius, inset, transitionLength, blur }}>
             <div
-                className={cn('relative overflow-hidden', className)}
-                style={{ borderRadius: radius }}
-            >
+                className={cn("relative overflow-hidden", className)}
+                style={{ borderRadius: radius }}>
                 {children}
             </div>
         </BlurVignetteContext.Provider>
@@ -62,21 +60,20 @@ export const BlurVignetteArticle: React.FC<BlurVignetteArticleProps> = ({
 
     return (
         <div
-            className={cn('absolute inset-0 z-1', className)}
+            className={cn("absolute inset-0 z-1", className)}
             style={
                 {
-                    '--radius': radius,
-                    '--inset': inset,
-                    '--transition-length': transitionLength,
-                    '--blur': blur,
-                    filter: 'blur(var(--blur))',
+                    "--radius": radius,
+                    "--inset": inset,
+                    "--transition-length": transitionLength,
+                    "--blur": blur,
+                    filter: "blur(var(--blur))",
                     maskImage:
-                        'radial-gradient(ellipse at center, transparent 0 30%, black 66%, transparent 100%)',
+                        "radial-gradient(ellipse at center, transparent 0 30%, black 66%, transparent 100%)",
                     WebkitMaskImage:
-                        'radial-gradient(ellipse at center, transparent 0 30%, black 66%, transparent 100%)',
+                        "radial-gradient(ellipse at center, transparent 0 30%, black 66%, transparent 100%)",
                 } as React.CSSProperties
-            }
-        >
+            }>
             {children}
         </div>
     );

@@ -1,28 +1,28 @@
-import { getAuthUserId } from '@convex-dev/auth/server';
+import { getAuthUserId } from "@convex-dev/auth/server";
 import {
     paginationOptsValidator,
     paginationResultValidator,
-} from 'convex/server';
-import { v } from 'convex/values';
+} from "convex/server";
+import { v } from "convex/values";
 
-import type { MutationCtx, QueryCtx } from './_generated/server';
-import { mutation, query } from './_generated/server';
-import { upsertSourceReviewItem } from './domain/sourceReviewProjection';
-import { sourceCandidateLimit } from './resourceLimits';
+import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
+import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
+import { sourceCandidateLimit } from "./resourceLimits";
 
 async function requireAdmin(ctx: QueryCtx | MutationCtx) {
     const authUserId = await getAuthUserId(ctx);
     if (!authUserId) {
-        throw new Error('Not authenticated');
+        throw new Error("Not authenticated");
     }
     const visitor = await ctx.db
-        .query('visitors')
-        .withIndex('by_auth_user_id', (builder) =>
-            builder.eq('authUserId', authUserId),
+        .query("visitors")
+        .withIndex("by_auth_user_id", (builder) =>
+            builder.eq("authUserId", authUserId),
         )
         .unique();
-    if (visitor?.status !== 'active' || visitor.role !== 'admin') {
-        throw new Error('Unauthorized');
+    if (visitor?.status !== "active" || visitor.role !== "admin") {
+        throw new Error("Unauthorized");
     }
     return visitor;
 }
@@ -33,14 +33,14 @@ export const get = query({
         await requireAdmin(ctx);
         const [runs, checkpoints, providerCalls, visitors, paidWork] =
             await Promise.all([
-                ctx.db.query('researchRuns').collect(),
-                ctx.db.query('checkpointDecisions').collect(),
-                ctx.db.query('providerCalls').collect(),
-                ctx.db.query('visitors').collect(),
+                ctx.db.query("researchRuns").collect(),
+                ctx.db.query("checkpointDecisions").collect(),
+                ctx.db.query("providerCalls").collect(),
+                ctx.db.query("visitors").collect(),
                 ctx.db
-                    .query('paidWorkControls')
-                    .withIndex('by_key', (builder) =>
-                        builder.eq('key', 'global'),
+                    .query("paidWorkControls")
+                    .withIndex("by_key", (builder) =>
+                        builder.eq("key", "global"),
                     )
                     .unique(),
             ]);
@@ -52,7 +52,7 @@ export const get = query({
             },
             runs: runs
                 .filter(({ executionStatus }) =>
-                    ['running', 'paused', 'failed'].includes(executionStatus),
+                    ["running", "paused", "failed"].includes(executionStatus),
                 )
                 .sort((left, right) => right.updatedAt - left.updatedAt)
                 .map((run) => ({
@@ -92,9 +92,9 @@ export const get = query({
             restorableRuns: runs
                 .filter(
                     (run) =>
-                        run.lifecycleState === 'draft' &&
-                        run.executionStatus === 'idle' &&
-                        run.reservationStatus === 'consumed' &&
+                        run.lifecycleState === "draft" &&
+                        run.executionStatus === "idle" &&
+                        run.reservationStatus === "consumed" &&
                         run.ownerVisitorId !== undefined,
                 )
                 .sort((left, right) => right.createdAt - left.createdAt)
@@ -115,12 +115,12 @@ export const setPaidWorkEnabled = mutation({
         const reason = args.reason.trim();
         if (reason.length < 12 || reason.length > 500) {
             throw new Error(
-                'Paid work changes require a reason of 12 to 500 characters',
+                "Paid work changes require a reason of 12 to 500 characters",
             );
         }
         const existing = await ctx.db
-            .query('paidWorkControls')
-            .withIndex('by_key', (builder) => builder.eq('key', 'global'))
+            .query("paidWorkControls")
+            .withIndex("by_key", (builder) => builder.eq("key", "global"))
             .unique();
         const now = Date.now();
         if (existing) {
@@ -131,19 +131,19 @@ export const setPaidWorkEnabled = mutation({
                 updatedAt: now,
             });
         } else {
-            await ctx.db.insert('paidWorkControls', {
-                key: 'global',
+            await ctx.db.insert("paidWorkControls", {
+                key: "global",
                 enabled: args.enabled,
                 updatedByVisitorId: admin._id,
                 reason,
                 updatedAt: now,
             });
         }
-        await ctx.db.insert('auditEvents', {
-            actor: { type: 'visitor', visitorId: admin._id },
-            action: 'paid_work_toggled',
-            targetType: 'paid_work_control',
-            targetId: 'global',
+        await ctx.db.insert("auditEvents", {
+            actor: { type: "visitor", visitorId: admin._id },
+            action: "paid_work_toggled",
+            targetType: "paid_work_control",
+            targetId: "global",
             reason,
             occurredAt: now,
         });
@@ -152,7 +152,7 @@ export const setPaidWorkEnabled = mutation({
 });
 
 const sourceReviewBackfillResultValidator = v.object({
-    revisionId: v.id('corpusRevisions'),
+    revisionId: v.id("corpusRevisions"),
     sourceTotal: v.number(),
     projectionTotal: v.number(),
 });
@@ -166,20 +166,20 @@ export const backfillSourceReviewProjection = mutation({
             args.paginationOpts.numItems < 1 ||
             args.paginationOpts.numItems > 10
         ) {
-            throw new Error('Backfill page size must be between 1 and 10');
+            throw new Error("Backfill page size must be between 1 and 10");
         }
         const revisions = await ctx.db
-            .query('corpusRevisions')
-            .order('asc')
+            .query("corpusRevisions")
+            .order("asc")
             .paginate(args.paginationOpts);
         const limit = sourceCandidateLimit();
         const page = [];
 
         for (const revision of revisions.page) {
             const sources = await ctx.db
-                .query('sources')
-                .withIndex('by_run_and_url', (builder) =>
-                    builder.eq('runId', revision.runId),
+                .query("sources")
+                .withIndex("by_run_and_url", (builder) =>
+                    builder.eq("runId", revision.runId),
                 )
                 .take(limit + 1);
             if (sources.length > limit) {
@@ -189,15 +189,15 @@ export const backfillSourceReviewProjection = mutation({
             }
             for (const source of sources) {
                 const latestDecision = await ctx.db
-                    .query('sourceDecisions')
+                    .query("sourceDecisions")
                     .withIndex(
-                        'by_revision_source_and_occurred_at',
+                        "by_revision_source_and_occurred_at",
                         (builder) =>
                             builder
-                                .eq('corpusRevisionId', revision._id)
-                                .eq('sourceId', source._id),
+                                .eq("corpusRevisionId", revision._id)
+                                .eq("sourceId", source._id),
                     )
-                    .order('desc')
+                    .order("desc")
                     .first();
                 if (!latestDecision) {
                     throw new Error(
@@ -216,9 +216,9 @@ export const backfillSourceReviewProjection = mutation({
                 });
             }
             const projection = await ctx.db
-                .query('sourceReviewItems')
-                .withIndex('by_revision_and_queue', (builder) =>
-                    builder.eq('corpusRevisionId', revision._id),
+                .query("sourceReviewItems")
+                .withIndex("by_revision_and_queue", (builder) =>
+                    builder.eq("corpusRevisionId", revision._id),
                 )
                 .take(limit + 1);
             if (projection.length !== sources.length) {

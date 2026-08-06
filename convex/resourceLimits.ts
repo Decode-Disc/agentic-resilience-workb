@@ -1,4 +1,4 @@
-import { env } from './_generated/server';
+import { env } from "./_generated/server";
 
 const DEFAULT_COMPANY_SEARCH_RESULT_LIMIT = 40;
 const DEFAULT_SOURCE_CANDIDATE_LIMIT = 48;
@@ -30,7 +30,7 @@ export function companySearchResultLimit(): number {
     return configuredPositiveInteger(
         env.COMPANY_SEARCH_RESULT_LIMIT,
         DEFAULT_COMPANY_SEARCH_RESULT_LIMIT,
-        'Company search result limit',
+        "Company search result limit",
     );
 }
 
@@ -38,6 +38,6 @@ export function sourceCandidateLimit(): number {
     return configuredPositiveInteger(
         env.SOURCE_CANDIDATE_LIMIT,
         DEFAULT_SOURCE_CANDIDATE_LIMIT,
-        'Source candidate limit',
+        "Source candidate limit",
     );
 }

@@ -11,8 +11,25 @@ const serviceValidator = v.union(
 const providerCallStatusValidator = v.union(
     v.literal("started"),
     v.literal("succeeded"),
+    v.literal("partial"),
     v.literal("failed"),
 );
+
+const PROVIDER_LEASE_MS = {
+    sec: 15_000,
+    exa: 15_000,
+    url_metadata: 15_000,
+} as const;
+
+function providerLeaseDurationMs(
+    service: "sec" | "exa" | "url_metadata",
+    operation: string,
+): number {
+    if (service === "exa" && operation === "resolve_company_website") {
+        return 10_000;
+    }
+    return PROVIDER_LEASE_MS[service];
+}
 
 export const reserveSecRateLimit = internalMutation({
     args: {},
@@ -20,6 +37,23 @@ export const reserveSecRateLimit = internalMutation({
     handler: async (ctx, _args) => {
         const { retryAfter } = await rateLimiter.limit(ctx, "secRequests");
         return { retryAfter };
+    },
+});
+
+export const reserveExaWebsiteRateLimit = internalMutation({
+    args: { authUserId: v.id("users") },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const globalStatus = await rateLimiter.limit(ctx, "exaWebsiteGlobal");
+        const sessionStatus = await rateLimiter.limit(
+            ctx,
+            "exaWebsitePerUser",
+            { key: `auth:${args.authUserId}` },
+        );
+        if (!globalStatus.ok || !sessionStatus.ok) {
+            throw new Error("Exa website enrichment rate limit reached");
+        }
+        return null;
     },
 });
 
@@ -71,6 +105,24 @@ export const recordAttempt = internalMutation({
         const now = Date.now();
         if (args.status === "started") {
             if (existing) {
+                if (
+                    existing.status === "started" &&
+                    existing.leaseExpiresAt !== undefined &&
+                    existing.leaseExpiresAt <= now
+                ) {
+                    const leaseExpiresAt =
+                        now +
+                        providerLeaseDurationMs(args.service, args.operation);
+                    await ctx.db.patch(existing._id, {
+                        leaseExpiresAt,
+                        createdAt: now,
+                    });
+                    return {
+                        providerCallId: existing._id,
+                        shouldExecute: true,
+                        status: "started" as const,
+                    };
+                }
                 return {
                     providerCallId: existing._id,
                     shouldExecute: false,
@@ -107,6 +159,8 @@ export const recordAttempt = internalMutation({
                 operationKey: args.operationKey,
                 status: "started",
                 attempt: args.attempt,
+                leaseExpiresAt:
+                    now + providerLeaseDurationMs(args.service, args.operation),
                 createdAt: now,
             });
             return {

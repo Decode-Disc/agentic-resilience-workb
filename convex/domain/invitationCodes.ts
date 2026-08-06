@@ -2,14 +2,14 @@ const encoder = new TextEncoder();
 
 export async function digestInvitationCode(code: string, pepper: string) {
     const key = await crypto.subtle.importKey(
-        'raw',
+        "raw",
         encoder.encode(pepper),
-        { name: 'HMAC', hash: 'SHA-256' },
+        { name: "HMAC", hash: "SHA-256" },
         false,
-        ['sign'],
+        ["sign"],
     );
-    const digest = await crypto.subtle.sign('HMAC', key, encoder.encode(code));
+    const digest = await crypto.subtle.sign("HMAC", key, encoder.encode(code));
     return Array.from(new Uint8Array(digest), (byte) =>
-        byte.toString(16).padStart(2, '0'),
-    ).join('');
+        byte.toString(16).padStart(2, "0"),
+    ).join("");
 }

@@ -6,7 +6,6 @@
 
 @custom-variant dark (&:is(.dark *));
 
-
 @theme inline {
     --color-info: var(--color-sky-500);
     --color-success: var(--color-green-500);
@@ -39,9 +38,9 @@
     }
 
     button,
-    input[type='button'],
-    input[type='submit'],
-    a[data-slot='dropdown-menu-item'] {
+    input[type="button"],
+    input[type="submit"],
+    a[data-slot="dropdown-menu-item"] {
         @apply cursor-pointer!;
     }
 
@@ -59,7 +58,7 @@
         @apply text-blue-500 underline underline-offset-4 transition-colors hover:text-blue-800;
     }
 
-    .source-selection{
+    .source-selection {
         @apply transition-[background-image,background-color,border-color,box-shadow] duration-200 ease-out;
         @apply hover:bg-source-selection-accent/20;
     }

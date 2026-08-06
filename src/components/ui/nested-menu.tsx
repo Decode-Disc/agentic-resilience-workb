@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import * as PopoverPrimitive from '@radix-ui/react-popover';
-import * as React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { cn } from '@/lib/utils';
+import * as PopoverPrimitive from "@radix-ui/react-popover";
+import * as React from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 
 // ============================================================================
 // Types
@@ -23,7 +23,7 @@ export interface NestedMenuItem {
     /** Submenu items (if hasSubmenu is true) */
     submenuItems?: NestedMenuItem[];
     /** Color variant */
-    variant?: 'default' | 'danger';
+    variant?: "default" | "danger";
     /** Additional className for custom styling */
     className?: string;
     /** Icon color (CSS color value) */
@@ -119,7 +119,7 @@ export function NestedMenuTooltip({
     onOpenChange,
     itemRef,
     menuItems,
-    iconClassName = 'h-4 w-4',
+    iconClassName = "h-4 w-4",
     className,
     onMouseEnter,
     onMouseLeave,
@@ -132,12 +132,12 @@ export function NestedMenuTooltip({
         <PopoverPrimitive.Root open={isOpen} onOpenChange={onOpenChange}>
             <PopoverPrimitive.Anchor
                 style={{
-                    position: 'fixed',
+                    position: "fixed",
                     left: rect.right,
                     top: rect.top,
                     width: 1,
                     height: 1,
-                    pointerEvents: 'none',
+                    pointerEvents: "none",
                 }}
             />
             <PopoverPrimitive.Portal>
@@ -146,15 +146,14 @@ export function NestedMenuTooltip({
                     align="start"
                     sideOffset={10}
                     className={cn(
-                        'z-50 min-w-[180px] overflow-hidden rounded-lg bg-popover p-1 text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95',
-                        'data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
+                        "z-50 min-w-[180px] overflow-hidden rounded-lg bg-popover p-1 text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95",
+                        "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
                         className,
                     )}
                     onMouseEnter={onMouseEnter}
                     onMouseLeave={onMouseLeave}
                     onOpenAutoFocus={(e) => e.preventDefault()}
-                    onCloseAutoFocus={(e) => e.preventDefault()}
-                >
+                    onCloseAutoFocus={(e) => e.preventDefault()}>
                     {menuItems.map((item) => {
                         const Icon = item.icon;
                         return (
@@ -162,25 +161,23 @@ export function NestedMenuTooltip({
                                 type="button"
                                 key={item.key}
                                 className={cn(
-                                    'flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm outline-none transition-colors',
-                                    'hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground',
-                                    item.variant === 'danger' &&
-                                        'text-destructive hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10',
+                                    "flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm outline-none transition-colors",
+                                    "hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+                                    item.variant === "danger" &&
+                                        "text-destructive hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10",
                                     item.className,
                                 )}
                                 onClick={() => {
                                     item.onSelect?.();
                                     onOpenChange(false);
-                                }}
-                            >
+                                }}>
                                 {Icon && (
                                     <span
                                         style={
                                             item.iconColor
                                                 ? { color: item.iconColor }
                                                 : undefined
-                                        }
-                                    >
+                                        }>
                                         <Icon className={cn(iconClassName)} />
                                     </span>
                                 )}
@@ -217,7 +214,7 @@ export interface NestedMenuItemComponentProps {
 
 export function NestedMenuItemComponent({
     item,
-    iconClassName = 'h-6 w-6',
+    iconClassName = "h-6 w-6",
     showSubmenuArrow = true,
     arrowIcon: ArrowIcon,
     onMouseEnter,
@@ -229,22 +226,20 @@ export function NestedMenuItemComponent({
         <button
             type="button"
             className={cn(
-                'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm outline-none transition-colors',
-                'hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground',
-                item.variant === 'danger' &&
-                    'text-destructive hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10',
+                "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm outline-none transition-colors",
+                "hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+                item.variant === "danger" &&
+                    "text-destructive hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10",
                 item.className,
             )}
             onClick={() => !item.hasSubmenu && item.onSelect?.()}
             onMouseEnter={onMouseEnter}
-            onMouseLeave={onMouseLeave}
-        >
+            onMouseLeave={onMouseLeave}>
             {Icon && (
                 <span
                     style={
                         item.iconColor ? { color: item.iconColor } : undefined
-                    }
-                >
+                    }>
                     <Icon className={cn(iconClassName)} />
                 </span>
             )}
@@ -279,7 +274,7 @@ export function NestedMenuSection({
     title,
     items,
     showDivider = false,
-    iconClassName = 'h-4 w-4',
+    iconClassName = "h-4 w-4",
     arrowIcon,
     onSubmenuHover,
     onSubmenuLeave,
@@ -328,9 +323,9 @@ export interface NestedMenuProps {
     /** Arrow icon for submenu items */
     arrowIcon?: React.ComponentType<{ className?: string }>;
     /** Menu placement */
-    side?: 'top' | 'right' | 'bottom' | 'left';
+    side?: "top" | "right" | "bottom" | "left";
     /** Alignment relative to trigger */
-    align?: 'start' | 'center' | 'end';
+    align?: "start" | "center" | "end";
     /** Offset from trigger */
     sideOffset?: number;
     /** Container className */
@@ -344,10 +339,10 @@ export interface NestedMenuProps {
 export function NestedMenu({
     sections,
     trigger,
-    iconClassName = 'h-4 w-4',
+    iconClassName = "h-4 w-4",
     arrowIcon,
-    side = 'right',
-    align = 'start',
+    side = "right",
+    align = "start",
     sideOffset = 8,
     className,
     open: controlledOpen,
@@ -430,8 +425,8 @@ export function NestedMenu({
                         align={align}
                         sideOffset={sideOffset}
                         className={cn(
-                            'z-50 min-w-[200px] overflow-hidden rounded-xl px-2 py-1 bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95',
-                            'data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
+                            "z-50 min-w-[200px] overflow-hidden rounded-xl px-2 py-1 bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95",
+                            "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
                             className,
                         )}
                         onOpenAutoFocus={(e) => e.preventDefault()}
@@ -441,13 +436,12 @@ export function NestedMenu({
                             const target = e.target as HTMLElement;
                             if (
                                 target?.closest(
-                                    '[data-radix-popper-content-wrapper]',
+                                    "[data-radix-popper-content-wrapper]",
                                 )
                             ) {
                                 e.preventDefault();
                             }
-                        }}
-                    >
+                        }}>
                         {sections.map((section, index) => (
                             <NestedMenuSection
                                 key={section.title || `section-${index}`}

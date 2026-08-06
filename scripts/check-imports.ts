@@ -1,15 +1,15 @@
-import { type Dirent, existsSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { type Dirent, existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = fileURLToPath(new URL('../', import.meta.url));
+const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const IGNORE = new Set([
-    'node_modules',
-    '_generated',
-    '.git',
-    '.agents',
-    'dist',
-    'build',
+    "node_modules",
+    "_generated",
+    ".git",
+    ".agents",
+    "dist",
+    "build",
 ]);
 
 /**
@@ -44,7 +44,7 @@ const INVALID_GLOB_PREFIX = /import\.meta\.glob\(\s*['"]([^'"/.][^'"]*)/;
 const EXTRA_ROUTE_EXPORT = /^export\s+(?!const\s+Route\b|type\s|interface\s)/;
 
 /** Only files whose relative path starts with this are checked. */
-const ROUTES_DIR = 'src/routes/';
+const ROUTES_DIR = "src/routes/";
 
 /**
  * Matches a TypeScript static `import ... from '...'` or `export ... from '...'`
@@ -85,7 +85,7 @@ function* walk(dir: string): Generator<string> {
             yield* walk(full);
         } else if (
             entry.isFile() &&
-            (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))
+            (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx"))
         ) {
             yield full;
         }
@@ -101,8 +101,8 @@ for (const file of walk(ROOT)) {
     const rel = relative(ROOT, file);
     const dir = dirname(file);
     const isRouteFile = rel.startsWith(ROUTES_DIR);
-    const text = readFileSync(file, 'utf8');
-    const lines = text.split('\n');
+    const text = readFileSync(file, "utf8");
+    const lines = text.split("\n");
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];

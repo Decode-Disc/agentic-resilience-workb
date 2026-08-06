@@ -1,20 +1,20 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
-import type { PrototypeVariant } from '@/components/workspace-prototype/prototype-data';
-import { WorkspacePrototype } from '@/components/workspace-prototype/workspace-prototype';
+import type { PrototypeVariant } from "@/components/workspace-prototype/prototype-data";
+import { WorkspacePrototype } from "@/components/workspace-prototype/workspace-prototype";
 
-const prototypeVariants = new Set<PrototypeVariant>(['a', 'b', 'c']);
+const prototypeVariants = new Set<PrototypeVariant>(["a", "b", "c"]);
 
 function isPrototypeVariant(value: unknown): value is PrototypeVariant {
     return (
-        typeof value === 'string' &&
+        typeof value === "string" &&
         prototypeVariants.has(value as PrototypeVariant)
     );
 }
 
-export const Route = createFileRoute('/prototype/workspace')({
+export const Route = createFileRoute("/prototype/workspace")({
     validateSearch: (search: Record<string, unknown>) => ({
-        variant: isPrototypeVariant(search.variant) ? search.variant : 'a',
+        variant: isPrototypeVariant(search.variant) ? search.variant : "a",
     }),
     component: WorkspacePrototypeRoute,
 });

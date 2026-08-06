@@ -1,14 +1,14 @@
 import type {
     SecCompanyMatch,
     SecCompanyResolver,
-} from '@convex/companyResolution';
-import { companySearchResultLimit } from '@convex/resourceLimits';
-import Fuse from 'fuse.js';
+} from "@convex/companyResolution";
+import { companySearchResultLimit } from "@convex/resourceLimits";
+import Fuse from "fuse.js";
 
 type ProviderAttempt = {
-    operation: 'resolve_company' | 'revalidate_company';
+    operation: "resolve_company" | "revalidate_company";
     operationKey: string;
-    status: 'started' | 'succeeded' | 'failed';
+    status: "started" | "succeeded" | "failed";
     attempt: number;
     latencyMs?: number;
     errorCode?: string;
@@ -23,15 +23,24 @@ type SecCompanyResolverDependencies = {
         attempt: ProviderAttempt,
     ) => Promise<{ shouldExecute: boolean }>;
     operationScope?: string;
+    timeoutMs?: number;
 };
 
 const MAX_SEC_ATTEMPTS = 2;
+const SEC_TIMEOUT_MS = 10_000;
 const MAX_FUZZY_COMPANY_SCORE = 0.45;
 
 class SecRetryableError extends Error {
     constructor(message: string) {
         super(message);
-        this.name = 'SecRetryableError';
+        this.name = "SecRetryableError";
+    }
+}
+
+class SecTimeoutError extends SecRetryableError {
+    constructor() {
+        super("SEC request exceeded its application timeout");
+        this.name = "SecTimeoutError";
     }
 }
 
@@ -58,7 +67,7 @@ export type SecCompanyEvidenceResolver = SecCompanyResolver & {
 };
 
 function normalizeCik(value: string | number): string {
-    return String(value).replace(/^0+/, '') || '0';
+    return String(value).replace(/^0+/, "") || "0";
 }
 
 function normalizeExchange(value: string): string {
@@ -67,12 +76,12 @@ function normalizeExchange(value: string): string {
 
 function normalizeSearchText(value: string): string {
     return value
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
         .toLowerCase()
-        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/[^a-z0-9]+/g, " ")
         .trim()
-        .replace(/\s+/g, ' ');
+        .replace(/\s+/g, " ");
 }
 
 function deterministicSearchScore(
@@ -112,12 +121,12 @@ function extractCikSearch(query: string): string | null {
     try {
         const url = new URL(trimmedQuery);
         if (
-            url.protocol !== 'https:' ||
-            !(url.hostname === 'sec.gov' || url.hostname.endsWith('.sec.gov'))
+            url.protocol !== "https:" ||
+            !(url.hostname === "sec.gov" || url.hostname.endsWith(".sec.gov"))
         ) {
             return null;
         }
-        const cikParameter = url.searchParams.get('CIK');
+        const cikParameter = url.searchParams.get("CIK");
         const pathCik =
             /\/data\/0*(\d+)(?:\/|$)/i.exec(url.pathname)?.[1] ??
             /CIK0*(\d+)/i.exec(url.pathname)?.[1];
@@ -130,22 +139,22 @@ function extractCikSearch(query: string): string | null {
 
 function parseCompanyIndex(value: unknown): ReadonlyArray<CompanyIndexEntry> {
     if (
-        typeof value !== 'object' ||
+        typeof value !== "object" ||
         value === null ||
-        !('fields' in value) ||
+        !("fields" in value) ||
         !Array.isArray(value.fields) ||
-        !('data' in value) ||
+        !("data" in value) ||
         !Array.isArray(value.data)
     ) {
-        throw new Error('SEC company index response is invalid');
+        throw new Error("SEC company index response is invalid");
     }
     const fields = value.fields;
-    const cikIndex = fields.indexOf('cik');
-    const nameIndex = fields.indexOf('name');
-    const tickerIndex = fields.indexOf('ticker');
-    const exchangeIndex = fields.indexOf('exchange');
+    const cikIndex = fields.indexOf("cik");
+    const nameIndex = fields.indexOf("name");
+    const tickerIndex = fields.indexOf("ticker");
+    const exchangeIndex = fields.indexOf("exchange");
     if ([cikIndex, nameIndex, tickerIndex, exchangeIndex].includes(-1)) {
-        throw new Error('SEC company index fields are incomplete');
+        throw new Error("SEC company index fields are incomplete");
     }
 
     return value.data.flatMap((row): ReadonlyArray<CompanyIndexEntry> => {
@@ -157,10 +166,10 @@ function parseCompanyIndex(value: unknown): ReadonlyArray<CompanyIndexEntry> {
         const ticker = row[tickerIndex];
         const exchange = row[exchangeIndex];
         if (
-            (typeof cik !== 'string' && typeof cik !== 'number') ||
-            typeof legalName !== 'string' ||
-            typeof ticker !== 'string' ||
-            typeof exchange !== 'string'
+            (typeof cik !== "string" && typeof cik !== "number") ||
+            typeof legalName !== "string" ||
+            typeof ticker !== "string" ||
+            typeof exchange !== "string"
         ) {
             return [];
         }
@@ -175,8 +184,8 @@ function parseCompanyIndex(value: unknown): ReadonlyArray<CompanyIndexEntry> {
     });
 }
 
-const IR_SUBDOMAIN_PREFIXES = ['investor.', 'investors.', 'ir.'];
-const IR_VENDOR_HOSTS = new Set(['q4ir.com', 'q4inc.com', 'nasdaqomx.com']);
+const IR_SUBDOMAIN_PREFIXES = ["investor.", "investors.", "ir."];
+const IR_VENDOR_HOSTS = new Set(["q4ir.com", "q4inc.com", "nasdaqomx.com"]);
 
 /**
  * Decides whether a SEC `investorWebsite` URL can double as the company's
@@ -201,15 +210,15 @@ export function classifyIrAsWebsite(
     } catch {
         return undefined;
     }
-    if (url.protocol !== 'https:') {
+    if (url.protocol !== "https:") {
         return undefined;
     }
     const hostname = url.hostname.toLowerCase();
     if (IR_SUBDOMAIN_PREFIXES.some((prefix) => hostname.startsWith(prefix))) {
         return undefined;
     }
-    const bosslessHost = hostname.replace(/^www\./, '');
-    const baseDomain = bosslessHost.split('.').slice(-2).join('.');
+    const bosslessHost = hostname.replace(/^www\./, "");
+    const baseDomain = bosslessHost.split(".").slice(-2).join(".");
     if (IR_VENDOR_HOSTS.has(baseDomain) || IR_VENDOR_HOSTS.has(bosslessHost)) {
         return undefined;
     }
@@ -218,24 +227,24 @@ export function classifyIrAsWebsite(
 
 function parseSubmission(value: unknown): SecCompanyMatch {
     if (
-        typeof value !== 'object' ||
+        typeof value !== "object" ||
         value === null ||
-        !('cik' in value) ||
-        (typeof value.cik !== 'string' && typeof value.cik !== 'number') ||
-        !('name' in value) ||
-        typeof value.name !== 'string' ||
-        !('tickers' in value) ||
+        !("cik" in value) ||
+        (typeof value.cik !== "string" && typeof value.cik !== "number") ||
+        !("name" in value) ||
+        typeof value.name !== "string" ||
+        !("tickers" in value) ||
         !Array.isArray(value.tickers) ||
-        typeof value.tickers[0] !== 'string' ||
-        !('exchanges' in value) ||
+        typeof value.tickers[0] !== "string" ||
+        !("exchanges" in value) ||
         !Array.isArray(value.exchanges) ||
-        typeof value.exchanges[0] !== 'string'
+        typeof value.exchanges[0] !== "string"
     ) {
-        throw new Error('SEC company submission response is invalid');
+        throw new Error("SEC company submission response is invalid");
     }
     const investorRelationsUrl =
-        'investorWebsite' in value &&
-        typeof value.investorWebsite === 'string' &&
+        "investorWebsite" in value &&
+        typeof value.investorWebsite === "string" &&
         value.investorWebsite.length > 0
             ? value.investorWebsite
             : undefined;
@@ -251,58 +260,58 @@ function parseSubmission(value: unknown): SecCompanyMatch {
         exchange: normalizeExchange(value.exchanges[0]),
         investorRelationsUrl,
         websiteUrl,
-        websiteUrlSource: websiteUrl ? 'sec_ir' : undefined,
+        websiteUrlSource: websiteUrl ? "sec_ir" : undefined,
     };
 }
 
 function parseEvidenceSnapshot(value: unknown): SecEvidenceSnapshot {
     const company = parseSubmission(value);
     const recent =
-        typeof value === 'object' &&
+        typeof value === "object" &&
         value !== null &&
-        'filings' in value &&
-        typeof value.filings === 'object' &&
+        "filings" in value &&
+        typeof value.filings === "object" &&
         value.filings !== null &&
-        'recent' in value.filings &&
-        typeof value.filings.recent === 'object' &&
+        "recent" in value.filings &&
+        typeof value.filings.recent === "object" &&
         value.filings.recent !== null
             ? value.filings.recent
             : undefined;
     const accessionNumbers =
         recent &&
-        'accessionNumber' in recent &&
+        "accessionNumber" in recent &&
         Array.isArray(recent.accessionNumber)
             ? recent.accessionNumber
             : [];
     const forms =
-        recent && 'form' in recent && Array.isArray(recent.form)
+        recent && "form" in recent && Array.isArray(recent.form)
             ? recent.form
             : [];
     const filingDates =
-        recent && 'filingDate' in recent && Array.isArray(recent.filingDate)
+        recent && "filingDate" in recent && Array.isArray(recent.filingDate)
             ? recent.filingDate
             : [];
     const primaryDocuments =
         recent &&
-        'primaryDocument' in recent &&
+        "primaryDocument" in recent &&
         Array.isArray(recent.primaryDocument)
             ? recent.primaryDocument
             : [];
     const filings = accessionNumbers.flatMap((entry, index) =>
-        typeof entry === 'string' && entry.length > 0
+        typeof entry === "string" && entry.length > 0
             ? [
                   {
                       accessionNumber: entry,
                       form:
-                          typeof forms[index] === 'string'
+                          typeof forms[index] === "string"
                               ? forms[index]
                               : undefined,
                       filingDate:
-                          typeof filingDates[index] === 'string'
+                          typeof filingDates[index] === "string"
                               ? filingDates[index]
                               : undefined,
                       primaryDocument:
-                          typeof primaryDocuments[index] === 'string'
+                          typeof primaryDocuments[index] === "string"
                               ? primaryDocuments[index]
                               : undefined,
                   },
@@ -325,29 +334,45 @@ export function createSecCompanyResolver(
 ): SecCompanyEvidenceResolver {
     const resultLimit = companySearchResultLimit();
     async function requestJson(
-        operation: ProviderAttempt['operation'],
+        operation: ProviderAttempt["operation"],
         url: string,
     ): Promise<unknown> {
-        const operationKey = `${dependencies.operationScope ?? 'sec'}:${operation}:${url}`;
+        const operationKey = `${dependencies.operationScope ?? "sec"}:${operation}:${url}`;
         for (let attempt = 1; attempt <= MAX_SEC_ATTEMPTS; attempt += 1) {
             await dependencies.reserveRequest();
             const startedAt = dependencies.now();
             const lease = await dependencies.recordAttempt({
                 operation,
                 operationKey,
-                status: 'started',
+                status: "started",
                 attempt,
             });
             if (!lease.shouldExecute) {
-                throw new Error('SEC provider attempt was already recorded');
+                throw new Error("SEC provider attempt was already recorded");
             }
             try {
-                const response = await dependencies.fetch(url, {
-                    headers: {
-                        Accept: 'application/json',
-                        'User-Agent': dependencies.userAgent,
-                    },
-                });
+                const controller = new AbortController();
+                const timeout = setTimeout(
+                    () => controller.abort(),
+                    dependencies.timeoutMs ?? SEC_TIMEOUT_MS,
+                );
+                let response: Response;
+                try {
+                    response = await dependencies.fetch(url, {
+                        headers: {
+                            Accept: "application/json",
+                            "User-Agent": dependencies.userAgent,
+                        },
+                        signal: controller.signal,
+                    });
+                } catch (error) {
+                    if (controller.signal.aborted) {
+                        throw new SecTimeoutError();
+                    }
+                    throw error;
+                } finally {
+                    clearTimeout(timeout);
+                }
                 if (!response.ok) {
                     if (response.status === 429 || response.status >= 500) {
                         throw new SecRetryableError(
@@ -362,7 +387,7 @@ export function createSecCompanyResolver(
                 await dependencies.recordAttempt({
                     operation,
                     operationKey,
-                    status: 'succeeded',
+                    status: "succeeded",
                     attempt,
                     latencyMs: Math.max(0, dependencies.now() - startedAt),
                 });
@@ -371,13 +396,13 @@ export function createSecCompanyResolver(
                 await dependencies.recordAttempt({
                     operation,
                     operationKey,
-                    status: 'failed',
+                    status: "failed",
                     attempt,
                     latencyMs: Math.max(0, dependencies.now() - startedAt),
                     errorCode:
                         error instanceof Error
                             ? error.name
-                            : 'UnknownProviderError',
+                            : "UnknownProviderError",
                 });
                 const retryable =
                     error instanceof TypeError ||
@@ -387,13 +412,13 @@ export function createSecCompanyResolver(
                 }
             }
         }
-        throw new Error('SEC request exhausted its retry budget');
+        throw new Error("SEC request exhausted its retry budget");
     }
 
     async function inspectEvidence(cik: string): Promise<SecEvidenceSnapshot> {
-        const paddedCik = normalizeCik(cik).padStart(10, '0');
+        const paddedCik = normalizeCik(cik).padStart(10, "0");
         const value = await requestJson(
-            'revalidate_company',
+            "revalidate_company",
             `https://data.sec.gov/submissions/CIK${paddedCik}.json`,
         );
         return parseEvidenceSnapshot(value);
@@ -406,8 +431,8 @@ export function createSecCompanyResolver(
     return {
         async search(query) {
             const value = await requestJson(
-                'resolve_company',
-                'https://www.sec.gov/files/company_tickers_exchange.json',
+                "resolve_company",
+                "https://www.sec.gov/files/company_tickers_exchange.json",
             );
             const normalizedQuery = normalizeSearchText(query);
             const searchedCik = extractCikSearch(query);
@@ -440,14 +465,14 @@ export function createSecCompanyResolver(
             }
 
             const fuzzyMatches = new Fuse(companies, {
-                keys: ['legalName'],
+                keys: ["legalName"],
                 includeScore: true,
                 threshold: 0.3,
                 ignoreLocation: true,
                 ignoreDiacritics: true,
                 minMatchCharLength: 2,
                 useTokenSearch: true,
-                tokenMatch: 'all',
+                tokenMatch: "all",
             })
                 .search(normalizedQuery, {
                     limit: resultLimit,

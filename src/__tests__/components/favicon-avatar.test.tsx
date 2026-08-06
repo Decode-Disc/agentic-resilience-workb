@@ -1,49 +1,49 @@
-import { Building2Icon } from '@hugeicons/core-free-icons';
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { Building2Icon } from "@hugeicons/core-free-icons";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 
-import { FaviconAvatar, parseFaviconUrl } from '@/components/favicon-avatar';
+import { FaviconAvatar, parseFaviconUrl } from "@/components/favicon-avatar";
 
-describe('parseFaviconUrl', () => {
-    it('builds a 64px google favicon request from the host', () => {
-        const parsed = parseFaviconUrl('https://example.com/report.pdf');
+describe("parseFaviconUrl", () => {
+    it("builds a 64px google favicon request from the host", () => {
+        const parsed = parseFaviconUrl("https://example.com/report.pdf");
 
         expect(parsed).not.toBeNull();
-        expect(parsed?.hostname).toBe('example.com');
+        expect(parsed?.hostname).toBe("example.com");
         expect(parsed?.isHttps).toBe(true);
         expect(parsed?.faviconUrl).toContain(
-            'https://www.google.com/s2/favicons',
+            "https://www.google.com/s2/favicons",
         );
-        expect(parsed?.faviconUrl).toContain('domain=example.com');
-        expect(parsed?.faviconUrl).toContain('sz=64');
+        expect(parsed?.faviconUrl).toContain("domain=example.com");
+        expect(parsed?.faviconUrl).toContain("sz=64");
     });
 
-    it('centers on the host and never leaks the path', () => {
+    it("centers on the host and never leaks the path", () => {
         const parsed = parseFaviconUrl(
-            'https://reports.example.org/path/to/document.pdf',
+            "https://reports.example.org/path/to/document.pdf",
         );
 
-        expect(parsed?.hostname).toBe('reports.example.org');
-        expect(parsed?.faviconUrl).not.toContain('/path/to/document.pdf');
+        expect(parsed?.hostname).toBe("reports.example.org");
+        expect(parsed?.faviconUrl).not.toContain("/path/to/document.pdf");
     });
 
-    it('flags non-https urls as ineligible for a favicon request', () => {
-        expect(parseFaviconUrl('ftp://example.com/file')?.isHttps).toBe(false);
+    it("flags non-https urls as ineligible for a favicon request", () => {
+        expect(parseFaviconUrl("ftp://example.com/file")?.isHttps).toBe(false);
     });
 
-    it('returns null when the url cannot be parsed', () => {
-        expect(parseFaviconUrl('not a real url')).toBeNull();
+    it("returns null when the url cannot be parsed", () => {
+        expect(parseFaviconUrl("not a real url")).toBeNull();
     });
 });
 
-describe('FaviconAvatar', () => {
-    it('exposes a clear accessible name on the host favicon avatar', () => {
+describe("FaviconAvatar", () => {
+    it("exposes a clear accessible name on the host favicon avatar", () => {
         render(<FaviconAvatar canonicalUrl="https://example.com/report" />);
 
         expect(screen.getByLabelText(/Favicon for example\.com/i)).toBeTruthy();
     });
 
-    it('falls back to a link icon when the url is not https', () => {
+    it("falls back to a link icon when the url is not https", () => {
         render(<FaviconAvatar canonicalUrl="ftp://example.com/file" />);
 
         expect(
@@ -51,13 +51,13 @@ describe('FaviconAvatar', () => {
         ).toBeTruthy();
     });
 
-    it('fails over to a generic source label when the url cannot be parsed', () => {
+    it("fails over to a generic source label when the url cannot be parsed", () => {
         render(<FaviconAvatar canonicalUrl="not a real url" />);
 
         expect(screen.getByLabelText(/Source link/i)).toBeTruthy();
     });
 
-    it('centers the accessible label on the entity name when provided', () => {
+    it("centers the accessible label on the entity name when provided", () => {
         render(
             <FaviconAvatar
                 canonicalUrl="https://example.com/report"
@@ -70,7 +70,7 @@ describe('FaviconAvatar', () => {
         ).toBeTruthy();
     });
 
-    it('renders a custom fallback icon and label when the url is unparseable', () => {
+    it("renders a custom fallback icon and label when the url is unparseable", () => {
         render(
             <FaviconAvatar
                 canonicalUrl=""

@@ -1,30 +1,29 @@
-import { api } from '@convex/_generated/api';
-import { useAuthActions } from '@convex-dev/auth/react';
+import { api } from "@convex/_generated/api";
+import { useAuthActions } from "@convex-dev/auth/react";
 import {
     ChevronDownIcon,
-    Folder02Icon,
     Home01Icon,
     Login02Icon,
     Logout01Icon,
     Settings02Icon,
     UserCircleIcon,
-} from '@hugeicons/core-free-icons';
-import { Link, useNavigate } from '@tanstack/react-router';
-import { useQuery } from 'convex/react';
-import { type ReactNode, useState } from 'react';
-import { toast } from 'sonner';
+} from "@hugeicons/core-free-icons";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "convex/react";
+import { type ReactNode, useState } from "react";
+import { toast } from "sonner";
 
-import Icon from '@/components/icon';
+import Icon from "@/components/icon";
 import { BackgroundImageTexture } from "@/components/ui/bg-image-texture";
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/button";
 import {
     NestedMenu,
     type NestedMenuSectionProps,
-} from '@/components/ui/nested-menu';
-import { Separator } from '@/components/ui/separator';
-import { AnalyzedCompanyList } from '@/components/workbench-shell/analyzed-company-list';
-import { useInvitationAccess } from '@/components/workspace/invitation-access-context';
-import { getWorkspaceDestination } from '@/lib/workspace/access-destination';
+} from "@/components/ui/nested-menu";
+import { Separator } from "@/components/ui/separator";
+import { AnalyzedCompanyList } from "@/components/workbench-shell/analyzed-company-list";
+import { useInvitationAccess } from "@/components/workspace/invitation-access-context";
+import { getWorkspaceDestination } from "@/lib/workspace/access-destination";
 
 export interface WorkbenchShellProps {
     children: ReactNode;
@@ -53,9 +52,9 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
         setIsSigningOut(true);
         try {
             await signOut();
-            await navigate({ to: '/workspace/start' });
+            await navigate({ to: "/workspace/start" });
         } catch {
-            toast.error('Could not log out. Try again.');
+            toast.error("Could not log out. Try again.");
             setIsSigningOut(false);
         }
     };
@@ -63,25 +62,25 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
     const sessionMenuSections: NestedMenuSectionProps[] = [
         {
             items: [
-                ...(visitor?.role === 'admin'
+                ...(visitor?.role === "admin"
                     ? [
                           {
-                              key: 'operations',
-                              label: 'Operations',
+                            key: "operations",
+                            label: "Operations",
                               icon: OperationsMenuIcon,
                               onSelect: () => {
                                   void navigate({
-                                      to: '/workspace/admin',
+                                      to: "/workspace/admin",
                                   });
                               },
                           },
                       ]
                     : []),
                 {
-                    key: 'logout',
-                    label: isSigningOut ? 'Signing out…' : 'Logout',
+                    key: "logout",
+                    label: isSigningOut ? "Signing out…" : "Logout",
                     icon: LogoutMenuIcon,
-                    variant: 'danger',
+                    variant: "danger",
                     onSelect: () => {
                         void logout();
                     },
@@ -102,8 +101,7 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                             variant="secondary"
                             size="sm"
                             aria-label="Go to Home"
-                            title="Go to Home"
-                        >
+                            title="Go to Home">
                             <Icon
                                 iconNode={Home01Icon}
                                 data-icon="inline-start"
@@ -121,9 +119,8 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                             size="sm"
                             aria-label="Start a company dossier"
                             title="Start a company dossier"
-                            className="rounded-sm"
-                        >
-                            <span className="start-double-slash">{'//'}</span>
+                            className="rounded-sm">
+                            <span className="start-double-slash">{"//"}</span>
                             <span className="start-label">start</span>
                         </Button>
 
@@ -141,7 +138,7 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-                        {visitor?.status === 'active' ? (
+                        {visitor?.status === "active" ? (
                             <NestedMenu
                                 sections={sessionMenuSections}
                                 side="bottom"
@@ -152,8 +149,7 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                                         variant="secondary"
                                         className="border border-primary"
                                         size="sm"
-                                        aria-label="Workspace menu"
-                                    >
+                                        aria-label="Workspace menu">
                                         <Icon iconNode={UserCircleIcon} />
                                         <span className="hidden sm:inline">
                                             Account
@@ -181,8 +177,7 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                                             });
                                         },
                                     })
-                                }
-                            >
+                                }>
                                 <Icon iconNode={Login02Icon} />
                                 Workspace
                             </Button>
@@ -191,7 +186,7 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                 </div>
             </header>
 
-            <BackgroundImageTexture opacity={1} variant="fabric-of-squares">
+            <BackgroundImageTexture opacity={0.7} variant="fabric-of-squares">
                 <main className="mx-auto w-full min-h-screen max-w-8xl px-4 py-4 sm:px-6">
                     {children}
                 </main>

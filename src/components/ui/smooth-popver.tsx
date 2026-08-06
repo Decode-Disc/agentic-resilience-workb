@@ -1,14 +1,14 @@
-'use client';
+"use client";
 
-import { Cancel01Icon } from '@hugeicons/core-free-icons';
-import * as PopoverPrimitive from '@radix-ui/react-popover';
-import { AnimatePresence, MotionConfig, motion } from 'motion/react';
-import * as React from 'react';
-import Icon from '@/components/icon';
-import { cn } from '@/lib/utils';
+import { Cancel01Icon } from "@hugeicons/core-free-icons";
+import * as PopoverPrimitive from "@radix-ui/react-popover";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
+import * as React from "react";
+import Icon from "@/components/icon";
+import { cn } from "@/lib/utils";
 
 const TRANSITION = {
-    type: 'spring' as const,
+    type: "spring" as const,
     bounce: 0.05,
     duration: 0.3,
 };
@@ -34,7 +34,7 @@ function useCultPopoverContext(): CultPopoverContextValue {
 
     if (!context) {
         throw new Error(
-            'Cult popover components must be used within <Popover>.',
+            "Cult popover components must be used within <Popover>.",
         );
     }
 
@@ -58,7 +58,7 @@ function Popover({
 }: PopoverProps) {
     const uniqueId = React.useId();
     const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen);
-    const [note, setNote] = React.useState('');
+    const [note, setNote] = React.useState("");
     const isControlled = controlledOpen !== undefined;
     const isOpen = isControlled ? controlledOpen : uncontrolledOpen;
 
@@ -69,7 +69,7 @@ function Popover({
             }
 
             if (!nextOpen) {
-                setNote('');
+                setNote("");
             }
 
             onOpenChange?.(nextOpen);
@@ -94,8 +94,7 @@ function Popover({
             data-slot="popover"
             open={isOpen}
             onOpenChange={handleOpenChange}
-            {...props}
-        >
+            {...props}>
             {children}
         </PopoverPrimitive.Root>
     );
@@ -129,8 +128,7 @@ function PopoverTrigger({
             <PopoverPrimitive.Trigger
                 data-slot="popover-trigger"
                 asChild
-                {...props}
-            >
+                {...props}>
                 {children}
             </PopoverPrimitive.Trigger>
         );
@@ -140,20 +138,17 @@ function PopoverTrigger({
         <PopoverPrimitive.Trigger
             data-slot="popover-trigger"
             asChild
-            {...props}
-        >
+            {...props}>
             <motion.button
                 layoutId={`cult-popover-${uniqueId}`}
                 className={cn(
-                    'flex h-9 items-center border border-zinc-950/10 bg-white px-3 text-zinc-950 dark:border-zinc-50/10 dark:bg-zinc-700 dark:text-zinc-50',
+                    "flex h-9 items-center border border-zinc-950/10 bg-white px-3 text-zinc-950 dark:border-zinc-50/10 dark:bg-zinc-700 dark:text-zinc-50",
                     className,
                 )}
-                style={{ borderRadius: 8 }}
-            >
+                style={{ borderRadius: 8 }}>
                 <motion.span
                     layoutId={`cult-popover-label-${uniqueId}`}
-                    className="text-sm"
-                >
+                    className="text-sm">
                     {children}
                 </motion.span>
             </motion.button>
@@ -168,10 +163,10 @@ function PopoverTrigger({
  */
 function PopoverContent({
     className,
-    align = 'center',
+    align = "center",
     sideOffset = 4,
     children,
-    zIndexClass = 'z-75',
+    zIndexClass = "z-75",
     ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content> & {
     /** Tailwind z-index class applied to the popover panel. Defaults to `"z-75"`. */
@@ -189,19 +184,17 @@ function PopoverContent({
                         sideOffset={sideOffset}
                         data-slot="popover-content"
                         className={cn(
-                            'w-72 origin-(--radix-popover-content-transform-origin) overflow-hidden rounded-xl border border-zinc-950/10 bg-white shadow-xl outline-hidden dark:border-zinc-50/10 dark:bg-zinc-700',
+                            "w-72 origin-(--radix-popover-content-transform-origin) overflow-hidden rounded-xl border border-zinc-950/10 bg-white shadow-xl outline-hidden dark:border-zinc-50/10 dark:bg-zinc-700",
                             zIndexClass,
                             className,
                         )}
-                        {...props}
-                    >
+                        {...props}>
                         <motion.div
                             layoutId={`cult-popover-${uniqueId}`}
                             initial={{ opacity: 0, scale: 0.96, y: 8 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.96, y: 8 }}
-                            className="h-full w-full"
-                        >
+                            className="h-full w-full">
                             {children}
                         </motion.div>
                     </PopoverPrimitive.Content>
@@ -217,15 +210,15 @@ function PopoverAnchor({
     return <PopoverPrimitive.Anchor data-slot="popover-anchor" {...props} />;
 }
 
-function PopoverHeader({ className, ...props }: React.ComponentProps<'div'>) {
-    return <div className={cn('px-4 py-2', className)} {...props} />;
+function PopoverHeader({ className, ...props }: React.ComponentProps<"div">) {
+    return <div className={cn("px-4 py-2", className)} {...props} />;
 }
 
-function PopoverTitle({ className, ...props }: React.ComponentProps<'h2'>) {
+function PopoverTitle({ className, ...props }: React.ComponentProps<"h2">) {
     return (
         <h2
             className={cn(
-                'font-semibold text-zinc-900 dark:text-zinc-100',
+                "font-semibold text-zinc-900 dark:text-zinc-100",
                 className,
             )}
             {...props}
@@ -236,11 +229,11 @@ function PopoverTitle({ className, ...props }: React.ComponentProps<'h2'>) {
 function PopoverDescription({
     className,
     ...props
-}: React.ComponentProps<'p'>) {
+}: React.ComponentProps<"p">) {
     return (
         <p
             className={cn(
-                'text-sm text-zinc-500 dark:text-zinc-400',
+                "text-sm text-zinc-500 dark:text-zinc-400",
                 className,
             )}
             {...props}
@@ -267,9 +260,8 @@ function PopoverForm({ children, onSubmit, className }: PopoverFormProps) {
 
     return (
         <form
-            className={cn('flex h-full flex-col', className)}
-            onSubmit={handleSubmit}
-        >
+            className={cn("flex h-full flex-col", className)}
+            onSubmit={handleSubmit}>
             {children}
         </form>
     );
@@ -289,10 +281,9 @@ function PopoverLabel({ children, className }: PopoverLabelProps) {
             aria-hidden="true"
             style={{ opacity: note ? 0 : 1 }}
             className={cn(
-                'absolute left-4 top-3 select-none text-sm text-zinc-500 dark:text-zinc-400',
+                "absolute left-4 top-3 select-none text-sm text-zinc-500 dark:text-zinc-400",
                 className,
-            )}
-        >
+            )}>
             {children}
         </motion.span>
     );
@@ -301,13 +292,13 @@ function PopoverLabel({ children, className }: PopoverLabelProps) {
 function PopoverTextarea({
     className,
     ...props
-}: React.ComponentProps<'textarea'>) {
+}: React.ComponentProps<"textarea">) {
     const { note, setNote } = useCultPopoverContext();
 
     return (
         <textarea
             className={cn(
-                'h-full w-full resize-none rounded-md bg-transparent px-4 py-3 text-sm outline-none',
+                "h-full w-full resize-none rounded-md bg-transparent px-4 py-3 text-sm outline-none",
                 className,
             )}
             value={note}
@@ -317,10 +308,10 @@ function PopoverTextarea({
     );
 }
 
-function PopoverFooter({ className, ...props }: React.ComponentProps<'div'>) {
+function PopoverFooter({ className, ...props }: React.ComponentProps<"div">) {
     return (
         <div
-            className={cn('flex justify-between px-4 py-3', className)}
+            className={cn("flex justify-between px-4 py-3", className)}
             {...props}
         />
     );
@@ -330,13 +321,13 @@ function PopoverCloseButton({
     className,
     onClick,
     ...props
-}: React.ComponentProps<'button'>) {
+}: React.ComponentProps<"button">) {
     const { closePopover } = useCultPopoverContext();
 
     return (
         <button
             type="button"
-            className={cn('flex items-center', className)}
+            className={cn("flex items-center", className)}
             onClick={(event) => {
                 onClick?.(event);
 
@@ -345,8 +336,7 @@ function PopoverCloseButton({
                 }
             }}
             aria-label="Close popover"
-            {...props}
-        >
+            {...props}>
             <Icon
                 iconNode={Cancel01Icon}
                 size={16}
@@ -359,35 +349,34 @@ function PopoverCloseButton({
 function PopoverSubmitButton({
     className,
     ...props
-}: React.ComponentProps<'button'>) {
+}: React.ComponentProps<"button">) {
     return (
         <button
             className={cn(
-                'relative ml-1 flex h-8 shrink-0 scale-100 select-none appearance-none items-center justify-center rounded-lg border border-zinc-950/10 bg-transparent px-2 text-sm text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 focus-visible:ring-2 active:scale-[0.98] dark:border-zinc-50/10 dark:text-zinc-50 dark:hover:bg-zinc-800',
+                "relative ml-1 flex h-8 shrink-0 scale-100 select-none appearance-none items-center justify-center rounded-lg border border-zinc-950/10 bg-transparent px-2 text-sm text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 focus-visible:ring-2 active:scale-[0.98] dark:border-zinc-50/10 dark:text-zinc-50 dark:hover:bg-zinc-800",
                 className,
             )}
             type="submit"
             aria-label="Submit note"
-            {...props}
-        >
-            {props.children ?? 'Submit'}
+            {...props}>
+            {props.children ?? "Submit"}
         </button>
     );
 }
 
-function PopoverBody({ className, ...props }: React.ComponentProps<'div'>) {
-    return <div className={cn('p-4', className)} {...props} />;
+function PopoverBody({ className, ...props }: React.ComponentProps<"div">) {
+    return <div className={cn("p-4", className)} {...props} />;
 }
 
 function PopoverButton({
     className,
     ...props
-}: React.ComponentProps<'button'>) {
+}: React.ComponentProps<"button">) {
     return (
         <button
             type="button"
             className={cn(
-                'flex w-full items-center gap-2 rounded-md px-4 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700',
+                "flex w-full items-center gap-2 rounded-md px-4 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700",
                 className,
             )}
             {...props}

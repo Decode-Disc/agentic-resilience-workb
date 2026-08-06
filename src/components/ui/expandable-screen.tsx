@@ -1,5 +1,5 @@
-import { Cancel02Icon } from '@hugeicons/core-free-icons';
-import { AnimatePresence, motion } from 'motion/react';
+import { Cancel02Icon } from "@hugeicons/core-free-icons";
+import { AnimatePresence, motion } from "motion/react";
 import {
     createContext,
     type ReactNode,
@@ -9,10 +9,10 @@ import {
     useMemo,
     useRef,
     useState,
-} from 'react';
-import Icon from '@/components/icon';
-import { uiLayerClasses } from '@/lib/ui-layers';
-import type { PlatformIcon } from '@/types/ui';
+} from "react";
+import Icon from "@/components/icon";
+import { uiLayerClasses } from "@/lib/ui-layers";
+import type { PlatformIcon } from "@/types/ui";
 
 // Context
 interface ExpandableScreenContextValue {
@@ -34,7 +34,7 @@ function useExpandableScreen() {
     const context = useContext(ExpandableScreenContext);
     if (!context) {
         throw new Error(
-            'useExpandableScreen must be used within an ExpandableScreen',
+            "useExpandableScreen must be used within an ExpandableScreen",
         );
     }
     return context;
@@ -56,9 +56,9 @@ export function ExpandableScreen({
     children,
     defaultExpanded = false,
     onExpandChange,
-    layoutId = 'expandable-card',
-    triggerRadius = '100px',
-    contentRadius = '24px',
+    layoutId = "expandable-card",
+    triggerRadius = "100px",
+    contentRadius = "24px",
     animationDuration = 0.3,
     lockScroll = true,
 }: ExpandableScreenProps) {
@@ -116,10 +116,10 @@ export function ExpandableScreen({
             return;
         }
 
-        document.body.style.overflow = isExpanded ? 'hidden' : 'unset';
+        document.body.style.overflow = isExpanded ? "hidden" : "unset";
 
         return () => {
-            document.body.style.overflow = 'unset';
+            document.body.style.overflow = "unset";
         };
     }, [isExpanded, lockScroll]);
 
@@ -163,7 +163,7 @@ interface ExpandableScreenTriggerProps {
 
 export function ExpandableScreenTrigger({
     children,
-    className = '',
+    className = "",
 }: ExpandableScreenTriggerProps) {
     const { isExpanded, expand, layoutId, triggerRadius } =
         useExpandableScreen();
@@ -189,8 +189,7 @@ export function ExpandableScreenTrigger({
                         exit={{ opacity: 0, scale: 0.8 }}
                         layout={false}
                         onClick={expand}
-                        className="relative cursor-pointer"
-                    >
+                        className="relative cursor-pointer">
                         {children}
                     </motion.div>
                 </motion.div>
@@ -210,9 +209,9 @@ interface ExpandableScreenContentProps {
 
 export function ExpandableScreenContent({
     children,
-    className = '',
+    className = "",
     showCloseButton = true,
-    closeButtonClassName = '',
+    closeButtonClassName = "",
     closeButtonIcon = Cancel02Icon,
 }: ExpandableScreenContentProps) {
     const { isExpanded, collapse, layoutId, contentRadius, animationDuration } =
@@ -222,8 +221,7 @@ export function ExpandableScreenContent({
         <AnimatePresence initial={false}>
             {isExpanded && (
                 <div
-                    className={`fixed inset-0 ${uiLayerClasses.expandableScreen} flex items-center justify-center p-3 sm:p-2`}
-                >
+                    className={`fixed inset-0 ${uiLayerClasses.expandableScreen} flex items-center justify-center p-3 sm:p-2`}>
                     {/* Backdrop overlay */}
                     <motion.div
                         className="absolute inset-0 bg-black/30"
@@ -236,7 +234,7 @@ export function ExpandableScreenContent({
                     <motion.div
                         layoutId={layoutId}
                         transition={{
-                            type: 'spring',
+                            type: "spring",
                             stiffness: 260,
                             damping: 28,
                         }}
@@ -244,15 +242,13 @@ export function ExpandableScreenContent({
                             borderRadius: contentRadius,
                         }}
                         layout
-                        className={`relative flex h-full w-full overflow-y-auto transform-gpu will-change-transform ${className}`}
-                    >
+                        className={`relative flex h-full w-full overflow-y-auto transform-gpu will-change-transform ${className}`}>
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             transition={{ duration: animationDuration * 0.45 }}
-                            className="relative z-20 w-full"
-                        >
+                            className="relative z-20 w-full">
                             {children}
                         </motion.div>
 
@@ -261,10 +257,9 @@ export function ExpandableScreenContent({
                                 onClick={collapse}
                                 className={`absolute right-6 top-6 z-30 flex h-10 w-10 items-center justify-center transition-colors rounded-full ${
                                     closeButtonClassName ||
-                                    'text-foreground bg-transparent hover:bg-foreground/10'
+                                    "text-foreground bg-transparent hover:bg-foreground/10"
                                 }`}
-                                aria-label="Close"
-                            >
+                                aria-label="Close">
                                 <Icon
                                     iconNode={closeButtonIcon}
                                     className="h-5 w-5"
@@ -288,7 +283,7 @@ interface ExpandableScreenBackgroundProps {
 export function ExpandableScreenBackground({
     trigger,
     content,
-    className = '',
+    className = "",
 }: ExpandableScreenBackgroundProps) {
     const { isExpanded, animationDuration } = useExpandableScreen();
 
@@ -301,8 +296,7 @@ export function ExpandableScreenBackground({
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    transition={{ duration: animationDuration * 0.45 }}
-                >
+                    transition={{ duration: animationDuration * 0.45 }}>
                     {content}
                 </motion.div>
             ) : (
@@ -316,8 +310,7 @@ export function ExpandableScreenBackground({
                         transition={{
                             duration: animationDuration * 0.45,
                             ease: [0.16, 1, 0.3, 1],
-                        }}
-                    >
+                        }}>
                         {trigger}
                     </motion.div>
                 )

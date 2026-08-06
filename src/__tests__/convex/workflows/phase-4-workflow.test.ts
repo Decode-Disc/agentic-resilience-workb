@@ -212,6 +212,7 @@ test("ends Phase 4 at an immutable approved corpus", async () => {
     await expect(t.query(getRun, { runId })).resolves.toMatchObject({
         lifecycleState: "corpus_approved",
         executionStatus: "idle",
+        executionGeneration: 2,
         activeCorpusRevisionId: corpusRevisionId,
     });
     expect(

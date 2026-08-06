@@ -4,13 +4,13 @@ import {
     screen,
     waitFor,
     within,
-} from '@testing-library/react';
-import type { ComponentProps } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+} from "@testing-library/react";
+import type { ComponentProps } from "react";
+import { describe, expect, it, vi } from "vitest";
 
-vi.mock('@tanstack/react-router', async (importOriginal) => {
+vi.mock("@tanstack/react-router", async (importOriginal) => {
     const router =
-        await importOriginal<typeof import('@tanstack/react-router')>();
+        await importOriginal<typeof import("@tanstack/react-router")>();
 
     return {
         ...router,
@@ -18,106 +18,114 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
             to,
             search: _search,
             ...props
-        }: ComponentProps<'a'> & {
+        }: ComponentProps<"a"> & {
             to: string;
             search?: Record<string, string>;
         }) => <a href={to} {...props} />,
     };
 });
 
-import { IndexPage } from '@/components/landing/index-page';
+import { IndexPage } from "@/components/landing/index-page";
 
-describe('IndexPage', () => {
-    it('centers the evidence matrix without product marketing', () => {
+describe("IndexPage", () => {
+    it("centers the evidence matrix without product marketing", () => {
         render(<IndexPage />);
 
         expect(
-            screen.getByRole('heading', {
-                name: 'Evidence before conclusions.',
+            screen.getByRole("heading", {
+                name: "Evidence before conclusions.",
             }),
         ).toBeTruthy();
         expect(
-            screen.getByRole('heading', { name: 'Evidence matrix' }),
+            screen.getByRole("heading", { name: "Evidence matrix" }),
         ).toBeTruthy();
-        expect(screen.getByText('Counter-evidence')).toBeTruthy();
+        expect(screen.getByText("Counter-evidence")).toBeTruthy();
         expect(
-            screen.getByLabelText('Agentic Resilience Evidence Workbench'),
+            screen.getByLabelText("Agentic Resilience Evidence Workbench"),
         ).toBeTruthy();
         expect(
             screen
-                .getByRole('link', { name: 'Open workbench' })
-                .getAttribute('href'),
-        ).toContain('/workspace/start');
+                .getByRole("link", { name: "Open workbench" })
+                .getAttribute("href"),
+        ).toContain("/workspace/start");
+        expect(
+            screen
+                .getByRole("link", { name: "Start the research" })
+                .getAttribute("href"),
+        ).toContain("/workspace/start");
+        expect(
+            screen.queryByRole("button", { name: "Start the research" }),
+        ).toBeNull();
         expect(screen.queryByText(/analysis complete/i)).toBeNull();
         expect(
             screen.queryByText(/pricing|get started|free trial/i),
         ).toBeNull();
     });
 
-    it('reveals project context from the fixed navigation menu', async () => {
+    it("reveals project context from the fixed navigation menu", async () => {
         render(<IndexPage />);
 
-        const navigation = screen.getByRole('navigation', {
-            name: 'Project context',
+        const navigation = screen.getByRole("navigation", {
+            name: "Project context",
         });
-        const projectTrigger = screen.getByRole('button', { name: 'Project' });
+        const projectTrigger = screen.getByRole("button", { name: "Project" });
 
         expect(navigation.contains(projectTrigger)).toBe(true);
         expect(
-            screen.queryByRole('heading', { name: 'What this is' }),
+            screen.queryByRole("heading", { name: "What this is" }),
         ).toBeNull();
 
         fireEvent.click(projectTrigger);
 
         expect(
-            await screen.findByRole('heading', { name: 'What this is' }),
+            await screen.findByRole("heading", { name: "What this is" }),
         ).toBeTruthy();
         expect(
             screen.getByText(/private, evidence-first research prototype/i),
         ).toBeTruthy();
 
-        fireEvent.keyDown(projectTrigger, { key: 'Escape' });
+        fireEvent.keyDown(projectTrigger, { key: "Escape" });
         await waitFor(() => {
             expect(
-                screen.queryByRole('heading', { name: 'What this is' }),
+                screen.queryByRole("heading", { name: "What this is" }),
             ).toBeNull();
         });
         expect(document.activeElement).toBe(projectTrigger);
     });
 
     it.each([
-        ['Project', 'What this is'],
-        ['Purpose', 'Why it exists'],
-        ['Workflow', 'How it works'],
-        ['Principles', 'What remains non-negotiable'],
-    ])('opens the %s panel', async (label, title) => {
+        ["Project", "What this is"],
+        ["Purpose", "Why it exists"],
+        ["Workflow", "How it works"],
+        ["Principles", "What remains non-negotiable"],
+    ])("opens the %s panel", async (label, title) => {
         render(<IndexPage />);
 
-        fireEvent.click(screen.getByRole('button', { name: label }));
+        fireEvent.click(screen.getByRole("button", { name: label }));
 
         expect(
-            await screen.findByRole('heading', { name: title }),
+            await screen.findByRole("heading", { name: title }),
         ).toBeTruthy();
     });
 
-    it('repeats the project context and CTA in the mobile sheet', async () => {
+    it("repeats the project context and CTA in the mobile sheet", async () => {
         render(<IndexPage />);
 
         fireEvent.click(
-            screen.getByRole('button', { name: 'Open project menu' }),
+            screen.getByRole("button", { name: "Open project menu" }),
         );
 
-        const dialog = await screen.findByRole('dialog', {
-            name: 'Project context',
+        const dialog = await screen.findByRole("dialog", {
+            name: "Project context",
         });
         const mobileMenu = within(dialog);
-        for (const label of ['Project', 'Purpose', 'Workflow', 'Principles']) {
+        for (const label of ["Project", "Purpose", "Workflow", "Principles"]) {
             expect(
-                mobileMenu.getByRole('button', { name: label }),
+                mobileMenu.getByRole("button", { name: label }),
             ).toBeTruthy();
         }
         expect(
-            mobileMenu.getByRole('link', { name: 'Open workbench' }),
+            mobileMenu.getByRole("link", { name: "Open workbench" }),
         ).toBeTruthy();
     });
 });

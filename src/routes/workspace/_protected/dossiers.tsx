@@ -1,7 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
-import { ResearchDossiersPage } from '@/components/workspace/research-dossiers-page';
+import { ResearchDossiersPage } from "@/components/workspace/research-dossiers-page";
 
-export const Route = createFileRoute('/workspace/_protected/dossiers')({
+export const Route = createFileRoute("/workspace/_protected/dossiers")({
     component: ResearchDossiersPage,
 });

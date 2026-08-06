@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ComponentProps } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ComponentProps } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { claimInvitation, navigate, signIn, signOut, useAction, useQuery } =
     vi.hoisted(() => ({
@@ -12,9 +12,9 @@ const { claimInvitation, navigate, signIn, signOut, useAction, useQuery } =
         useQuery: vi.fn(),
     }));
 
-vi.mock('@tanstack/react-router', async (importOriginal) => {
+vi.mock("@tanstack/react-router", async (importOriginal) => {
     const router =
-        await importOriginal<typeof import('@tanstack/react-router')>();
+        await importOriginal<typeof import("@tanstack/react-router")>();
 
     return {
         ...router,
@@ -24,7 +24,7 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
             search: _search,
             children,
             ...props
-        }: ComponentProps<'a'> & {
+        }: ComponentProps<"a"> & {
             to: string;
             search?: Record<string, string>;
         }) => (
@@ -35,7 +35,7 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
     };
 });
 
-vi.mock(import('@convex-dev/auth/react'), async (importOriginal) => {
+vi.mock(import("@convex-dev/auth/react"), async (importOriginal) => {
     const auth = await importOriginal();
     return {
         ...auth,
@@ -43,12 +43,12 @@ vi.mock(import('@convex-dev/auth/react'), async (importOriginal) => {
     };
 });
 
-vi.mock(import('convex/react'), () => ({
+vi.mock(import("convex/react"), () => ({
     useAction,
     useQuery,
 }));
 
-vi.mock(import('@/components/workbench-shell/analyzed-company-list'), () => ({
+vi.mock(import("@/components/workbench-shell/analyzed-company-list"), () => ({
     AnalyzedCompanyList: ({
         isAdmissionLoading,
     }: {
@@ -57,17 +57,17 @@ vi.mock(import('@/components/workbench-shell/analyzed-company-list'), () => ({
         <nav
             aria-label={
                 isAdmissionLoading
-                    ? 'Loading research dossiers'
-                    : 'Analyzed companies'
+                    ? "Loading research dossiers"
+                    : "Analyzed companies"
             }
         />
     ),
 }));
 
-import { WorkbenchShell } from '@/components/workbench-shell/workbench-shell';
-import { InvitationAccessProvider } from '@/components/workspace/invitation-access-context';
+import { WorkbenchShell } from "@/components/workbench-shell/workbench-shell";
+import { InvitationAccessProvider } from "@/components/workspace/invitation-access-context";
 
-describe('WorkbenchShell', () => {
+describe("WorkbenchShell", () => {
     beforeEach(() => {
         claimInvitation.mockReset();
         navigate.mockReset();
@@ -80,7 +80,7 @@ describe('WorkbenchShell', () => {
         useQuery.mockReturnValue(undefined);
     });
 
-    it('renders header with Home link and analyzed company list', () => {
+    it("renders header with Home link and analyzed company list", () => {
         render(
             <InvitationAccessProvider>
                 <WorkbenchShell>
@@ -89,20 +89,20 @@ describe('WorkbenchShell', () => {
             </InvitationAccessProvider>,
         );
 
-        const homeLink = screen.getByRole('button', { name: /Go to Home/i });
-        const dossiersLink = screen.getByRole('button', {
+        const homeLink = screen.getByRole("button", { name: /Go to Home/i });
+        const dossiersLink = screen.getByRole("button", {
             name: /Start a company dossier/i,
         });
         expect(homeLink).toBeTruthy();
-        expect(homeLink.getAttribute('href')).toBe('/');
-        expect(dossiersLink.getAttribute('href')).toBe('/workspace/start');
+        expect(homeLink.getAttribute("href")).toBe("/");
+        expect(dossiersLink.getAttribute("href")).toBe("/workspace/start");
         expect(
             homeLink.compareDocumentPosition(dossiersLink) &
                 Node.DOCUMENT_POSITION_FOLLOWING,
         ).toBeTruthy();
     });
 
-    it('renders custom children when provided', () => {
+    it("renders custom children when provided", () => {
         render(
             <InvitationAccessProvider>
                 <WorkbenchShell>
@@ -111,10 +111,10 @@ describe('WorkbenchShell', () => {
             </InvitationAccessProvider>,
         );
 
-        expect(screen.getByTestId('custom-page-content')).toBeTruthy();
+        expect(screen.getByTestId("custom-page-content")).toBeTruthy();
     });
 
-    it('preserves company navigation space while admission loads', () => {
+    it("preserves company navigation space while admission loads", () => {
         render(
             <InvitationAccessProvider>
                 <WorkbenchShell>
@@ -128,7 +128,7 @@ describe('WorkbenchShell', () => {
         ).toBeTruthy();
     });
 
-    it('opens workspace access from the public workspace button', async () => {
+    it("opens workspace access from the public workspace button", async () => {
         useQuery.mockReturnValue(null);
 
         render(
@@ -140,20 +140,20 @@ describe('WorkbenchShell', () => {
         );
 
         expect(
-            screen.queryByRole('button', { name: /Workspace menu/i }),
+            screen.queryByRole("button", { name: /Workspace menu/i }),
         ).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: /Workspace/i }));
+        fireEvent.click(screen.getByRole("button", { name: /Workspace/i }));
 
         expect(
-            await screen.findByRole('heading', { name: /Protected access/i }),
+            await screen.findByRole("heading", { name: /Protected access/i }),
         ).toBeTruthy();
     });
 
-    it('sends an analyst to their dossiers after workspace access', async () => {
+    it("sends an analyst to their dossiers after workspace access", async () => {
         useQuery.mockReturnValue(null);
         claimInvitation.mockResolvedValue({
-            visitorId: 'visitor-analyst',
-            role: 'analyst',
+            visitorId: "visitor-analyst",
+            role: "analyst",
         });
 
         render(
@@ -164,26 +164,26 @@ describe('WorkbenchShell', () => {
             </InvitationAccessProvider>,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: /Workspace/i }));
+        fireEvent.click(screen.getByRole("button", { name: /Workspace/i }));
         fireEvent.change(await screen.findByLabelText(/Access code/i), {
-            target: { value: '4207' },
+            target: { value: "4207" },
         });
         fireEvent.submit(
-            screen.getByRole('form', { name: /Workspace access/i }),
+            screen.getByRole("form", { name: /Workspace access/i }),
         );
 
         await waitFor(() =>
             expect(navigate).toHaveBeenCalledWith({
-                to: '/workspace/dossiers',
+                to: "/workspace/dossiers",
             }),
         );
     });
 
-    it('sends an admin to operations after workspace access', async () => {
+    it("sends an admin to operations after workspace access", async () => {
         useQuery.mockReturnValue(null);
         claimInvitation.mockResolvedValue({
-            visitorId: 'visitor-admin',
-            role: 'admin',
+            visitorId: "visitor-admin",
+            role: "admin",
         });
 
         render(
@@ -194,25 +194,25 @@ describe('WorkbenchShell', () => {
             </InvitationAccessProvider>,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: /Workspace/i }));
+        fireEvent.click(screen.getByRole("button", { name: /Workspace/i }));
         fireEvent.change(await screen.findByLabelText(/Access code/i), {
-            target: { value: '4207' },
+            target: { value: "4207" },
         });
         fireEvent.submit(
-            screen.getByRole('form', { name: /Workspace access/i }),
+            screen.getByRole("form", { name: /Workspace access/i }),
         );
 
         await waitFor(() =>
             expect(navigate).toHaveBeenCalledWith({
-                to: '/workspace/admin',
+                to: "/workspace/admin",
             }),
         );
     });
 
-    it('lets an admitted analyst sign out without exposing admin operations', async () => {
+    it("lets an admitted analyst sign out without exposing admin operations", async () => {
         useQuery.mockReturnValue({
-            role: 'analyst',
-            status: 'active',
+            role: "analyst",
+            status: "active",
         });
 
         render(
@@ -223,26 +223,26 @@ describe('WorkbenchShell', () => {
             </InvitationAccessProvider>,
         );
 
-        expect(screen.queryByText('Research prototype')).toBeNull();
-        expect(screen.getByText('Account')).toBeTruthy();
+        expect(screen.queryByText("Research prototype")).toBeNull();
+        expect(screen.getByText("Account")).toBeTruthy();
         expect(
-            screen.queryByRole('button', { name: /^Workspace access$/i }),
+            screen.queryByRole("button", { name: /^Workspace access$/i }),
         ).toBeNull();
         fireEvent.click(
-            screen.getByRole('button', { name: /Workspace menu/i }),
+            screen.getByRole("button", { name: /Workspace menu/i }),
         );
-        expect(screen.queryByText('Operations')).toBeNull();
+        expect(screen.queryByText("Operations")).toBeNull();
 
-        fireEvent.click(await screen.findByText('Logout'));
+        fireEvent.click(await screen.findByText("Logout"));
 
         await waitFor(() => expect(signOut).toHaveBeenCalledOnce());
-        expect(navigate).toHaveBeenCalledWith({ to: '/workspace/start' });
+        expect(navigate).toHaveBeenCalledWith({ to: "/workspace/start" });
     });
 
-    it('keeps Operations in the session menu for an admitted admin', async () => {
+    it("keeps Operations in the session menu for an admitted admin", async () => {
         useQuery.mockReturnValue({
-            role: 'admin',
-            status: 'active',
+            role: "admin",
+            status: "active",
         });
 
         render(
@@ -254,12 +254,12 @@ describe('WorkbenchShell', () => {
         );
 
         fireEvent.click(
-            screen.getByRole('button', { name: /Workspace menu/i }),
+            screen.getByRole("button", { name: /Workspace menu/i }),
         );
         fireEvent.click(
-            await screen.findByRole('button', { name: 'Operations' }),
+            await screen.findByRole("button", { name: "Operations" }),
         );
 
-        expect(navigate).toHaveBeenCalledWith({ to: '/workspace/admin' });
+        expect(navigate).toHaveBeenCalledWith({ to: "/workspace/admin" });
     });
 });

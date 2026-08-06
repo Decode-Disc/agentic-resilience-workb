@@ -1,6 +1,6 @@
-'use node';
+"use node";
 
-import { isIP } from 'node:net';
+import { isIP } from "node:net";
 
 export type PublicSourceUrl = {
     canonicalUrl: string;
@@ -10,7 +10,7 @@ export type PublicSourceUrl = {
 export class PublicSourceUrlError extends Error {
     constructor(message: string) {
         super(message);
-        this.name = 'PublicSourceUrlError';
+        this.name = "PublicSourceUrlError";
     }
 }
 
@@ -18,7 +18,7 @@ function parseIpv4(address: string): ReadonlyArray<number> | undefined {
     if (isIP(address) !== 4) {
         return undefined;
     }
-    const octets = address.split('.').map(Number);
+    const octets = address.split(".").map(Number);
     return octets.length === 4 ? octets : undefined;
 }
 
@@ -55,24 +55,24 @@ function isPublicIpv6(address: string): boolean {
         return false;
     }
     if (
-        normalized === '::' ||
-        normalized === '::1' ||
-        normalized.startsWith('fc') ||
-        normalized.startsWith('fd') ||
-        normalized.startsWith('fe8') ||
-        normalized.startsWith('fe9') ||
-        normalized.startsWith('fea') ||
-        normalized.startsWith('feb') ||
-        normalized.startsWith('ff') ||
-        normalized.startsWith('2001:db8:')
+        normalized === "::" ||
+        normalized === "::1" ||
+        normalized.startsWith("fc") ||
+        normalized.startsWith("fd") ||
+        normalized.startsWith("fe8") ||
+        normalized.startsWith("fe9") ||
+        normalized.startsWith("fea") ||
+        normalized.startsWith("feb") ||
+        normalized.startsWith("ff") ||
+        normalized.startsWith("2001:db8:")
     ) {
         return false;
     }
-    if (normalized.startsWith('::ffff:')) {
-        return isPublicIpv4(normalized.slice('::ffff:'.length));
+    if (normalized.startsWith("::ffff:")) {
+        return isPublicIpv4(normalized.slice("::ffff:".length));
     }
 
-    const firstHextet = Number.parseInt(normalized.split(':')[0] ?? '', 16);
+    const firstHextet = Number.parseInt(normalized.split(":")[0] ?? "", 16);
     return firstHextet >= 0x2000 && firstHextet <= 0x3fff;
 }
 
@@ -100,26 +100,26 @@ export async function validatePublicSourceUrl(
     try {
         url = new URL(rawUrl);
     } catch {
-        throw new PublicSourceUrlError('Invalid source URL');
+        throw new PublicSourceUrlError("Invalid source URL");
     }
 
-    if (url.protocol !== 'https:') {
-        throw new PublicSourceUrlError('Source URL must use HTTPS');
+    if (url.protocol !== "https:") {
+        throw new PublicSourceUrlError("Source URL must use HTTPS");
     }
     if (url.username || url.password) {
-        throw new PublicSourceUrlError('Source URL cannot contain credentials');
+        throw new PublicSourceUrlError("Source URL cannot contain credentials");
     }
-    if (url.port && url.port !== '443') {
-        throw new PublicSourceUrlError('Source URL cannot use a custom port');
+    if (url.port && url.port !== "443") {
+        throw new PublicSourceUrlError("Source URL cannot use a custom port");
     }
 
     const hostname = url.hostname
-        .replace(/^\[/, '')
-        .replace(/\]$/, '')
+        .replace(/^\[/, "")
+        .replace(/\]$/, "")
         .toLowerCase();
-    if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
+    if (hostname === "localhost" || hostname.endsWith(".localhost")) {
         throw new PublicSourceUrlError(
-            'Source URL must resolve to a public network',
+            "Source URL must resolve to a public network",
         );
     }
 
@@ -131,13 +131,13 @@ export async function validatePublicSourceUrl(
         addresses.some((address) => !isPublicAddress(address))
     ) {
         throw new PublicSourceUrlError(
-            'Source URL must resolve to a public network',
+            "Source URL must resolve to a public network",
         );
     }
 
     url.hostname = hostname;
-    url.port = '';
-    url.hash = '';
+    url.port = "";
+    url.hash = "";
     return {
         canonicalUrl: url.toString(),
         hostname,

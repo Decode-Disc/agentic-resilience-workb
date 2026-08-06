@@ -1,14 +1,14 @@
-import { getAuthUserId } from '@convex-dev/auth/server';
-import { v } from 'convex/values';
+import { getAuthUserId } from "@convex-dev/auth/server";
+import { v } from "convex/values";
 
-import { internal } from './_generated/api';
-import type { Id } from './_generated/dataModel';
-import { action, internalMutation, internalQuery } from './_generated/server';
-import { coveragePresetValidator } from './domain/validators';
-import { assertSourceCandidateRequestFits } from './domain/sourceCandidateCapacity';
-import { upsertSourceReviewItem } from './domain/sourceReviewProjection';
-import { sourceCandidateLimit } from './resourceLimits';
-import { workflow } from './workflow';
+import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import { action, internalMutation, internalQuery } from "./_generated/server";
+import { coveragePresetValidator } from "./domain/validators";
+import { assertSourceCandidateRequestFits } from "./domain/sourceCandidateCapacity";
+import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
+import { sourceCandidateLimit } from "./resourceLimits";
+import { workflow } from "./workflow";
 
 const MAX_ANALYSES_PER_VISITOR = 3;
 const preparedManualSourceValidator = v.object({
@@ -19,57 +19,57 @@ const preparedManualSourceValidator = v.object({
 
 export const authorizeLaunchPreparation = internalQuery({
     args: {
-        preflightId: v.id('companyPreflights'),
+        preflightId: v.id("companyPreflights"),
         idempotencyKey: v.string(),
     },
     returns: v.object({ shouldPrepareManualSources: v.boolean() }),
     handler: async (ctx, args) => {
         const authUserId = await getAuthUserId(ctx);
         if (!authUserId) {
-            throw new Error('Not authenticated');
+            throw new Error("Not authenticated");
         }
         const visitor = await ctx.db
-            .query('visitors')
-            .withIndex('by_auth_user_id', (query) =>
-                query.eq('authUserId', authUserId),
+            .query("visitors")
+            .withIndex("by_auth_user_id", (query) =>
+                query.eq("authUserId", authUserId),
             )
             .unique();
-        if (visitor?.status !== 'active') {
-            throw new Error('Unauthorized');
+        if (visitor?.status !== "active") {
+            throw new Error("Unauthorized");
         }
         const idempotencyKey = args.idempotencyKey.trim();
         if (idempotencyKey.length === 0 || idempotencyKey.length > 128) {
-            throw new Error('Invalid idempotency key');
+            throw new Error("Invalid idempotency key");
         }
         const existing = await ctx.db
-            .query('researchRuns')
-            .withIndex('by_owner_and_reservation_key', (query) =>
+            .query("researchRuns")
+            .withIndex("by_owner_and_reservation_key", (query) =>
                 query
-                    .eq('ownerVisitorId', visitor._id)
-                    .eq('reservationKey', idempotencyKey),
+                    .eq("ownerVisitorId", visitor._id)
+                    .eq("reservationKey", idempotencyKey),
             )
             .unique();
         if (existing) {
             if (existing.companyPreflightId !== args.preflightId) {
                 throw new Error(
-                    'Idempotency key belongs to another company preflight',
+                    "Idempotency key belongs to another company preflight",
                 );
             }
             return { shouldPrepareManualSources: false };
         }
         const running = await ctx.db
-            .query('researchRuns')
-            .withIndex('by_owner_and_execution_status', (query) =>
+            .query("researchRuns")
+            .withIndex("by_owner_and_execution_status", (query) =>
                 query
-                    .eq('ownerVisitorId', visitor._id)
-                    .eq('executionStatus', 'running'),
+                    .eq("ownerVisitorId", visitor._id)
+                    .eq("executionStatus", "running"),
             )
             .first();
         if (running) {
-            throw new Error('A research workflow is already running');
+            throw new Error("A research workflow is already running");
         }
         if (visitor.analysesReserved >= MAX_ANALYSES_PER_VISITOR) {
-            throw new Error('Analysis limit reached');
+            throw new Error("Analysis limit reached");
         }
         const preflight = await ctx.db.get(args.preflightId);
         const belongsToSession =
@@ -79,15 +79,15 @@ export const authorizeLaunchPreparation = internalQuery({
         if (
             !preflight ||
             !belongsToSession ||
-            preflight.status !== 'resolved'
+            preflight.status !== "resolved"
         ) {
-            throw new Error('Company preflight is not available');
+            throw new Error("Company preflight is not available");
         }
         if (preflight.expiresAt <= Date.now()) {
-            throw new Error('Company preflight has expired');
+            throw new Error("Company preflight has expired");
         }
         if (!(await ctx.db.get(preflight.companyId))) {
-            throw new Error('Resolved company was not found');
+            throw new Error("Resolved company was not found");
         }
         return { shouldPrepareManualSources: true };
     },
@@ -95,38 +95,38 @@ export const authorizeLaunchPreparation = internalQuery({
 
 export const confirmAndStartReserved = internalMutation({
     args: {
-        preflightId: v.id('companyPreflights'),
+        preflightId: v.id("companyPreflights"),
         idempotencyKey: v.string(),
         coveragePreset: coveragePresetValidator,
         researchAngle: v.optional(v.string()),
         manualSources: v.optional(v.array(preparedManualSourceValidator)),
     },
     returns: v.object({
-        runId: v.id('researchRuns'),
+        runId: v.id("researchRuns"),
         remainingAnalyses: v.number(),
     }),
     handler: async (ctx, args) => {
         const authUserId = await getAuthUserId(ctx);
         if (!authUserId) {
-            throw new Error('Not authenticated');
+            throw new Error("Not authenticated");
         }
         const visitor = await ctx.db
-            .query('visitors')
-            .withIndex('by_auth_user_id', (query) =>
-                query.eq('authUserId', authUserId),
+            .query("visitors")
+            .withIndex("by_auth_user_id", (query) =>
+                query.eq("authUserId", authUserId),
             )
             .unique();
-        if (visitor?.status !== 'active') {
-            throw new Error('Unauthorized');
+        if (visitor?.status !== "active") {
+            throw new Error("Unauthorized");
         }
 
         const idempotencyKey = args.idempotencyKey.trim();
         if (idempotencyKey.length === 0 || idempotencyKey.length > 128) {
-            throw new Error('Invalid idempotency key');
+            throw new Error("Invalid idempotency key");
         }
         const researchAngle = args.researchAngle?.trim();
         if (researchAngle && researchAngle.length > 500) {
-            throw new Error('Research angle cannot exceed 500 characters');
+            throw new Error("Research angle cannot exceed 500 characters");
         }
         assertSourceCandidateRequestFits(
             args.manualSources?.length ?? 0,
@@ -134,17 +134,17 @@ export const confirmAndStartReserved = internalMutation({
         );
 
         const existing = await ctx.db
-            .query('researchRuns')
-            .withIndex('by_owner_and_reservation_key', (query) =>
+            .query("researchRuns")
+            .withIndex("by_owner_and_reservation_key", (query) =>
                 query
-                    .eq('ownerVisitorId', visitor._id)
-                    .eq('reservationKey', idempotencyKey),
+                    .eq("ownerVisitorId", visitor._id)
+                    .eq("reservationKey", idempotencyKey),
             )
             .unique();
         if (existing) {
             if (existing.companyPreflightId !== args.preflightId) {
                 throw new Error(
-                    'Idempotency key belongs to another company preflight',
+                    "Idempotency key belongs to another company preflight",
                 );
             }
             return {
@@ -155,18 +155,18 @@ export const confirmAndStartReserved = internalMutation({
         }
 
         const running = await ctx.db
-            .query('researchRuns')
-            .withIndex('by_owner_and_execution_status', (query) =>
+            .query("researchRuns")
+            .withIndex("by_owner_and_execution_status", (query) =>
                 query
-                    .eq('ownerVisitorId', visitor._id)
-                    .eq('executionStatus', 'running'),
+                    .eq("ownerVisitorId", visitor._id)
+                    .eq("executionStatus", "running"),
             )
             .first();
         if (running) {
-            throw new Error('A research workflow is already running');
+            throw new Error("A research workflow is already running");
         }
         if (visitor.analysesReserved >= MAX_ANALYSES_PER_VISITOR) {
-            throw new Error('Analysis limit reached');
+            throw new Error("Analysis limit reached");
         }
 
         const preflight = await ctx.db.get(args.preflightId);
@@ -178,16 +178,16 @@ export const confirmAndStartReserved = internalMutation({
         if (
             !preflight ||
             !preflightBelongsToSession ||
-            preflight.status !== 'resolved'
+            preflight.status !== "resolved"
         ) {
-            throw new Error('Company preflight is not available');
+            throw new Error("Company preflight is not available");
         }
         if (preflight.expiresAt <= now) {
-            throw new Error('Company preflight has expired');
+            throw new Error("Company preflight has expired");
         }
         const company = await ctx.db.get(preflight.companyId);
         if (!company) {
-            throw new Error('Resolved company was not found');
+            throw new Error("Resolved company was not found");
         }
         const companySnapshot = preflight.companySnapshot ?? {
             cik: company.cik,
@@ -199,17 +199,17 @@ export const confirmAndStartReserved = internalMutation({
             websiteUrlSource: company.websiteUrlSource,
         };
 
-        const runId = await ctx.db.insert('researchRuns', {
+        const runId = await ctx.db.insert("researchRuns", {
             ownerVisitorId: visitor._id,
             reservationKey: idempotencyKey,
-            reservationStatus: 'consumed',
+            reservationStatus: "consumed",
             companyId: company._id,
             companySnapshot,
             companyPreflightId: preflight._id,
             coveragePreset: args.coveragePreset,
             researchAngle: researchAngle || undefined,
-            lifecycleState: 'draft',
-            executionStatus: 'running',
+            lifecycleState: "draft",
+            executionStatus: "running",
             executionGeneration: 1,
             nextEventSequence: 2,
             workflowVersion: 2,
@@ -217,28 +217,28 @@ export const confirmAndStartReserved = internalMutation({
             createdAt: now,
             updatedAt: now,
         });
-        const corpusRevisionId = await ctx.db.insert('corpusRevisions', {
+        const corpusRevisionId = await ctx.db.insert("corpusRevisions", {
             runId,
             revision: 1,
-            status: 'draft',
+            status: "draft",
             createdAt: now,
         });
         for (const manualSource of args.manualSources ?? []) {
-            const sourceId = await ctx.db.insert('sources', {
+            const sourceId = await ctx.db.insert("sources", {
                 runId,
                 canonicalUrl: manualSource.canonicalUrl,
                 title: manualSource.title,
-                origin: 'analyst_url',
-                category: 'analyst_supplied',
+                origin: "analyst_url",
+                category: "analyst_supplied",
                 providerReference: manualSource.providerReference,
                 createdAt: now,
             });
-            const decisionId = await ctx.db.insert('sourceDecisions', {
+            const decisionId = await ctx.db.insert("sourceDecisions", {
                 runId,
                 corpusRevisionId,
                 sourceId,
                 decisionKey: `manual:${sourceId}`,
-                decision: 'pending',
+                decision: "pending",
                 reviewerVisitorId: visitor._id,
                 occurredAt: now,
             });
@@ -246,15 +246,15 @@ export const confirmAndStartReserved = internalMutation({
                 runId,
                 corpusRevisionId,
                 sourceId,
-                decision: 'pending',
+                decision: "pending",
                 sourceCreatedAt: now,
                 latestDecisionId: decisionId,
                 decisionOccurredAt: now,
             });
-            await ctx.db.insert('auditEvents', {
-                actor: { type: 'visitor', visitorId: visitor._id },
-                action: 'manual_source_added',
-                targetType: 'source',
+            await ctx.db.insert("auditEvents", {
+                actor: { type: "visitor", visitorId: visitor._id },
+                action: "manual_source_added",
+                targetType: "source",
                 targetId: sourceId,
                 occurredAt: now,
             });
@@ -262,7 +262,7 @@ export const confirmAndStartReserved = internalMutation({
         const workflowId = await workflow.start(
             ctx,
             internal.researchWorkflow.run,
-            { runId },
+            { runId, executionGeneration: 1 },
             {
                 onComplete: internal.researchWorkflow.onComplete,
                 context: { runId },
@@ -274,38 +274,38 @@ export const confirmAndStartReserved = internalMutation({
         });
         await ctx.db.patch(preflight._id, {
             ownerVisitorId: visitor._id,
-            status: 'consumed',
+            status: "consumed",
         });
         await ctx.db.patch(visitor._id, {
             analysesReserved: visitor.analysesReserved + 1,
         });
-        await ctx.db.insert('runEvents', {
+        await ctx.db.insert("runEvents", {
             runId,
             sequence: 1,
-            type: 'run_created',
-            lifecycleState: 'draft',
-            executionStatus: 'running',
+            type: "run_created",
+            lifecycleState: "draft",
+            executionStatus: "running",
             occurredAt: now,
         });
-        await ctx.db.insert('runEvents', {
+        await ctx.db.insert("runEvents", {
             runId,
             sequence: 2,
-            type: 'company_confirmed',
-            lifecycleState: 'draft',
-            executionStatus: 'running',
+            type: "company_confirmed",
+            lifecycleState: "draft",
+            executionStatus: "running",
             occurredAt: now,
         });
-        await ctx.db.insert('auditEvents', {
-            actor: { type: 'visitor', visitorId: visitor._id },
-            action: 'analysis_reserved',
-            targetType: 'research_run',
+        await ctx.db.insert("auditEvents", {
+            actor: { type: "visitor", visitorId: visitor._id },
+            action: "analysis_reserved",
+            targetType: "research_run",
             targetId: runId,
             occurredAt: now,
         });
-        await ctx.db.insert('auditEvents', {
-            actor: { type: 'visitor', visitorId: visitor._id },
-            action: 'company_confirmed',
-            targetType: 'research_run',
+        await ctx.db.insert("auditEvents", {
+            actor: { type: "visitor", visitorId: visitor._id },
+            action: "company_confirmed",
+            targetType: "research_run",
             targetId: runId,
             occurredAt: now,
         });
@@ -319,21 +319,21 @@ export const confirmAndStartReserved = internalMutation({
 
 export const confirmAndStart = action({
     args: {
-        preflightId: v.id('companyPreflights'),
+        preflightId: v.id("companyPreflights"),
         idempotencyKey: v.string(),
         coveragePreset: coveragePresetValidator,
         researchAngle: v.optional(v.string()),
         manualSourceUrls: v.optional(v.array(v.string())),
     },
     returns: v.object({
-        runId: v.id('researchRuns'),
+        runId: v.id("researchRuns"),
         remainingAnalyses: v.number(),
     }),
     handler: async (
         ctx,
         args,
     ): Promise<{
-        runId: Id<'researchRuns'>;
+        runId: Id<"researchRuns">;
         remainingAnalyses: number;
     }> => {
         assertSourceCandidateRequestFits(

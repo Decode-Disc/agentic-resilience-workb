@@ -9,12 +9,14 @@ export type ExaSearchClient = {
     search(
         query: string,
         options: {
-            type: 'auto';
+            type: "auto";
             numResults: number;
             contents: false;
         },
     ): Promise<{
         results: ReadonlyArray<ExaSearchResult>;
+        searchTime?: number;
+        costDollars?: { total: number };
     }>;
 };
 
@@ -23,6 +25,13 @@ export type DiscoveredSourceCandidate = {
     title: string;
     publishedAt?: number;
     providerReference: string;
+};
+
+export type ExaCandidateBatch<Candidate> = {
+    candidates: ReadonlyArray<Candidate>;
+    rejected: number;
+    searchTime?: number;
+    costDollars?: number;
 };
 
 /**
@@ -35,8 +44,8 @@ export type ExaCompanySearchClient = {
     search(
         query: string,
         options: {
-            type: 'auto';
-            category: 'company';
+            type: "auto";
+            category: "company";
             numResults: number;
             contents: false;
         },
@@ -50,6 +59,8 @@ export type ExaCompanySearchClient = {
                 properties?: { name?: string | null };
             }>;
         }>;
+        searchTime?: number;
+        costDollars?: { total: number };
     }>;
 };
 
@@ -61,7 +72,7 @@ export type ExaCompanySearchClient = {
  */
 export function createExaWebsiteAdapter(client: ExaCompanySearchClient): {
     search(query: string): Promise<
-        ReadonlyArray<{
+        ExaCandidateBatch<{
             url: string;
             entityName: string;
         }>
@@ -70,35 +81,45 @@ export function createExaWebsiteAdapter(client: ExaCompanySearchClient): {
     return {
         async search(query) {
             const response = await client.search(query, {
-                type: 'auto',
-                category: 'company',
+                type: "auto",
+                category: "company",
                 numResults: 5,
                 contents: false,
             });
-            return response.results.map((result) => {
-                const url = new URL(result.url);
-                if (
-                    url.protocol !== 'https:' ||
-                    url.username ||
-                    url.password ||
-                    (url.port && url.port !== '443')
-                ) {
-                    throw new Error(
-                        'Exa returned a URL outside the public HTTPS contract',
-                    );
+            const candidates: Array<{ url: string; entityName: string }> = [];
+            let rejected = 0;
+            for (const result of response.results) {
+                try {
+                    const url = new URL(result.url);
+                    if (
+                        url.protocol !== "https:" ||
+                        url.username ||
+                        url.password ||
+                        (url.port && url.port !== "443")
+                    ) {
+                        throw new Error("Invalid public HTTPS result");
+                    }
+                    url.port = "";
+                    url.hash = "";
+                    const entityName =
+                        result.entities?.find((e) => e.type === "company")
+                            ?.properties?.name ??
+                        result.title?.trim() ??
+                        url.hostname;
+                    candidates.push({
+                        url: url.toString(),
+                        entityName: entityName ?? url.hostname,
+                    });
+                } catch {
+                    rejected += 1;
                 }
-                url.port = '';
-                url.hash = '';
-                const entityName =
-                    result.entities?.find((e) => e.type === 'company')
-                        ?.properties?.name ??
-                    result.title?.trim() ??
-                    url.hostname;
-                return {
-                    url: url.toString(),
-                    entityName: entityName ?? url.hostname,
-                };
-            });
+            }
+            return {
+                candidates,
+                rejected,
+                searchTime: response.searchTime,
+                costDollars: response.costDollars?.total,
+            };
         },
     };
 }
@@ -107,41 +128,51 @@ export function createExaDiscoveryAdapter(client: ExaSearchClient): {
     search(
         query: string,
         limit: number,
-    ): Promise<ReadonlyArray<DiscoveredSourceCandidate>>;
+    ): Promise<ExaCandidateBatch<DiscoveredSourceCandidate>>;
 } {
     return {
         async search(query, limit) {
             const response = await client.search(query, {
-                type: 'auto',
+                type: "auto",
                 numResults: Math.max(1, Math.min(10, Math.floor(limit))),
                 contents: false,
             });
-            return response.results.map((result) => {
-                const url = new URL(result.url);
-                if (
-                    url.protocol !== 'https:' ||
-                    url.username ||
-                    url.password ||
-                    (url.port && url.port !== '443')
-                ) {
-                    throw new Error(
-                        'Exa returned a URL outside the public HTTPS contract',
-                    );
+            const candidates: Array<DiscoveredSourceCandidate> = [];
+            let rejected = 0;
+            for (const result of response.results) {
+                try {
+                    const url = new URL(result.url);
+                    if (
+                        url.protocol !== "https:" ||
+                        url.username ||
+                        url.password ||
+                        (url.port && url.port !== "443")
+                    ) {
+                        throw new Error("Invalid public HTTPS result");
+                    }
+                    url.port = "";
+                    url.hash = "";
+                    const publishedAt = result.publishedDate
+                        ? Date.parse(result.publishedDate)
+                        : Number.NaN;
+                    candidates.push({
+                        canonicalUrl: url.toString(),
+                        title: result.title?.trim() || url.hostname,
+                        publishedAt: Number.isFinite(publishedAt)
+                            ? publishedAt
+                            : undefined,
+                        providerReference: result.id,
+                    });
+                } catch {
+                    rejected += 1;
                 }
-                url.port = '';
-                url.hash = '';
-                const publishedAt = result.publishedDate
-                    ? Date.parse(result.publishedDate)
-                    : Number.NaN;
-                return {
-                    canonicalUrl: url.toString(),
-                    title: result.title?.trim() || url.hostname,
-                    publishedAt: Number.isFinite(publishedAt)
-                        ? publishedAt
-                        : undefined,
-                    providerReference: result.id,
-                };
-            });
+            }
+            return {
+                candidates,
+                rejected,
+                searchTime: response.searchTime,
+                costDollars: response.costDollars?.total,
+            };
         },
     };
 }

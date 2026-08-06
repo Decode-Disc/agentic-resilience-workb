@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import type * as React from 'react';
-import { useEffect, useRef, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import type * as React from "react";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export interface LiquidMetalButtonProps
     extends React.ComponentProps<typeof Button> {
@@ -13,8 +13,8 @@ export interface LiquidMetalButtonProps
 export function LiquidMetalButton({
     children,
     className,
-    variant = 'default',
-    size = 'default',
+    variant = "default",
+    size = "default",
     label,
     onClick,
     onMouseEnter,
@@ -37,17 +37,17 @@ export function LiquidMetalButton({
 
     const setRefs = (node: HTMLButtonElement | null) => {
         buttonRef.current = node;
-        if (typeof ref === 'function') {
+        if (typeof ref === "function") {
             ref(node);
-        } else if (ref && typeof ref === 'object') {
+        } else if (ref && typeof ref === "object") {
             (ref as React.RefObject<HTMLButtonElement | null>).current = node;
         }
     };
 
     useEffect(() => {
-        const styleId = 'shader-canvas-style-exploded';
+        const styleId = "shader-canvas-style-exploded";
         if (!document.getElementById(styleId)) {
-            const style = document.createElement('style');
+            const style = document.createElement("style");
             style.id = styleId;
             style.textContent = `
         .shader-container-exploded canvas {
@@ -76,7 +76,7 @@ export function LiquidMetalButton({
         const loadShader = async () => {
             try {
                 const { liquidMetalFragmentShader, ShaderMount } = await import(
-                    '@paper-design/shaders'
+                    "@paper-design/shaders"
                 );
 
                 if (shaderRef.current) {
@@ -106,7 +106,7 @@ export function LiquidMetalButton({
                 }
             } catch (error) {
                 console.error(
-                    '[LiquidMetalButton] Failed to load shader:',
+                    "[LiquidMetalButton] Failed to load shader:",
                     error,
                 );
             }
@@ -123,7 +123,7 @@ export function LiquidMetalButton({
     }, []);
 
     type MouseEventParam = Parameters<
-        NonNullable<React.ComponentProps<typeof Button>['onClick']>
+        NonNullable<React.ComponentProps<typeof Button>["onClick"]>
     >[0];
 
     const handleMouseEnter = (e: MouseEventParam) => {
@@ -180,7 +180,7 @@ export function LiquidMetalButton({
         if (children) {
             return children;
         }
-        return label ?? 'Get Started';
+        return label ?? "Get Started";
     };
 
     return (
@@ -189,10 +189,10 @@ export function LiquidMetalButton({
             variant={variant}
             size={size}
             className={cn(
-                'group/liquid-metal relative overflow-hidden transition-all duration-300',
-                variant === 'default' &&
-                'border border-white/20 bg-neutral-950 text-white shadow-md hover:border-white/40 dark:border-white/20 dark:bg-neutral-950 dark:text-white',
-                isPressed && 'scale-[0.98]',
+                "group/liquid-metal relative overflow-hidden transition-all duration-300",
+                variant === "default" &&
+                    "border border-white/20 bg-neutral-950 text-white shadow-md hover:border-white/40 dark:border-white/20 dark:bg-neutral-950 dark:text-white",
+                isPressed && "scale-[0.98]",
                 className,
             )}
             onMouseEnter={handleMouseEnter}
@@ -200,8 +200,7 @@ export function LiquidMetalButton({
             onMouseDown={handleMouseDown}
             onMouseUp={handleMouseUp}
             onClick={handleClick}
-            {...props}
-        >
+            {...props}>
             {/* Shader canvas background */}
             <div
                 ref={shaderRef}

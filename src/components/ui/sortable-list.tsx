@@ -1,18 +1,18 @@
-'use client';
+"use client";
 
-import { Trash } from 'lucide-react';
+import { Trash } from "lucide-react";
 import {
     AnimatePresence,
     LayoutGroup,
     motion,
     Reorder,
     useDragControls,
-} from 'motion/react';
-import type { Dispatch, PointerEvent, ReactNode, SetStateAction } from 'react';
-import { useState } from 'react';
-import useMeasure from 'react-use-measure';
-import { Checkbox } from '@/components/ui/checkbox';
-import { cn } from '@/lib/utils';
+} from "motion/react";
+import type { Dispatch, PointerEvent, ReactNode, SetStateAction } from "react";
+import { useState } from "react";
+import useMeasure from "react-use-measure";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 
 export type Item = {
     text: string;
@@ -58,16 +58,16 @@ function SortableListItem({
     };
 
     return (
-        <motion.div className={cn('', className)} key={item.id}>
+        <motion.div className={cn("", className)} key={item.id}>
             <div className="flex w-full items-center">
                 <Reorder.Item
                     value={item}
                     className={cn(
-                        'relative z-auto grow',
-                        'h-full rounded-xl bg-primary dark:bg-primary-foreground',
-                        'shadow-[0px_1px_0px_0px_hsla(0,0%,100%,.03)_inset,0px_0px_0px_1px_hsla(0,0%,100%,.03)_inset,0px_0px_0px_1px_rgba(0,0,0,.1),0px_2px_2px_0px_rgba(0,0,0,.1),0px_4px_4px_0px_rgba(0,0,0,.1),0px_8px_8px_0px_rgba(0,0,0,.1)]',
-                        item.checked ? 'cursor-not-allowed' : 'cursor-grab',
-                        item.checked && !isDragging ? 'w-7/10' : 'w-full',
+                        "relative z-auto grow",
+                        "h-full rounded-xl bg-primary dark:bg-primary-foreground",
+                        "shadow-[0px_1px_0px_0px_hsla(0,0%,100%,.03)_inset,0px_0px_0px_1px_hsla(0,0%,100%,.03)_inset,0px_0px_0px_1px_rgba(0,0,0,.1),0px_2px_2px_0px_rgba(0,0,0,.1),0px_4px_4px_0px_rgba(0,0,0,.1),0px_8px_8px_0px_rgba(0,0,0,.1)]",
+                        item.checked ? "cursor-not-allowed" : "cursor-grab",
+                        item.checked && !isDragging ? "w-7/10" : "w-full",
                     )}
                     key={item.id}
                     initial={{ opacity: 0 }}
@@ -75,7 +75,7 @@ function SortableListItem({
                         opacity: 1,
                         height: bounds.height > 0 ? bounds.height : undefined,
                         transition: {
-                            type: 'spring',
+                            type: "spring",
                             bounce: 0,
                             duration: 0.4,
                         },
@@ -84,7 +84,7 @@ function SortableListItem({
                         opacity: 0,
                         transition: {
                             duration: 0.05,
-                            type: 'spring',
+                            type: "spring",
                             bounce: 0.1,
                         },
                     }}
@@ -99,42 +99,38 @@ function SortableListItem({
                                   zIndex: 9999,
                                   marginTop: 10,
                                   marginBottom: 10,
-                                  position: 'relative',
-                                  overflow: 'hidden',
+                                  position: "relative",
+                                  overflow: "hidden",
                               }
                             : {
-                                  position: 'relative',
-                                  overflow: 'hidden',
+                                  position: "relative",
+                                  overflow: "hidden",
                               }
                     }
-                    whileDrag={{ zIndex: 9999 }}
-                >
+                    whileDrag={{ zIndex: 9999 }}>
                     <div
                         ref={ref}
-                        className={cn(isExpanded ? '' : '', 'z-20 ')}
-                    >
+                        className={cn(isExpanded ? "" : "", "z-20 ")}>
                         <motion.div
                             layout="position"
-                            className="flex items-center justify-center "
-                        >
+                            className="flex items-center justify-center ">
                             <AnimatePresence>
                                 {!isExpanded ? (
                                     <motion.div
                                         initial={{
                                             opacity: 0,
-                                            filter: 'blur(4px)',
+                                            filter: "blur(4px)",
                                         }}
                                         animate={{
                                             opacity: 1,
-                                            filter: 'blur(0px)',
+                                            filter: "blur(0px)",
                                         }}
                                         exit={{
                                             opacity: 0,
-                                            filter: 'blur(4px)',
+                                            filter: "blur(4px)",
                                         }}
                                         transition={{ duration: 0.001 }}
-                                        className="flex  items-center space-x-2 "
-                                    >
+                                        className="flex  items-center space-x-2 ">
                                         {/* List Remove Actions */}
                                         <div className="pl-3 pt-1">
                                             <Checkbox
@@ -158,28 +154,26 @@ function SortableListItem({
                                             className=" px-1 min-w-[150px]"
                                             initial={{
                                                 opacity: 0,
-                                                filter: 'blur(4px)',
+                                                filter: "blur(4px)",
                                             }}
                                             animate={{
                                                 opacity: 1,
-                                                filter: 'blur(0px)',
+                                                filter: "blur(0px)",
                                             }}
                                             transition={{
                                                 bounce: 0.2,
                                                 delay: item.checked ? 0.2 : 0,
-                                                type: 'spring',
-                                            }}
-                                        >
+                                                type: "spring",
+                                            }}>
                                             <h4
                                                 className={cn(
-                                                    'tracking-tighter text-base md:text-lg ',
+                                                    "tracking-tighter text-base md:text-lg ",
                                                     item.checked
-                                                        ? 'text-red-400'
-                                                        : 'text-white/70',
-                                                )}
-                                            >
+                                                        ? "text-red-400"
+                                                        : "text-white/70",
+                                                )}>
                                                 {item.checked
-                                                    ? 'Delete'
+                                                    ? "Delete"
                                                     : ` ${item.text}`}
                                             </h4>
                                         </motion.div>
@@ -193,7 +187,7 @@ function SortableListItem({
                     </div>
                     <div
                         onPointerDown={handleDragStart}
-                        style={{ touchAction: 'none' }}
+                        style={{ touchAction: "none" }}
                     />
                 </Reorder.Item>
                 {/* List Delete Action Animation */}
@@ -208,7 +202,7 @@ function SortableListItem({
                                 transition: {
                                     delay: 0.17,
                                     duration: 0.17,
-                                    type: 'spring',
+                                    type: "spring",
                                     bounce: 0.6,
                                 },
                                 zIndex: 5,
@@ -219,7 +213,7 @@ function SortableListItem({
                                 transition: {
                                     delay: 0,
                                     duration: 0.0,
-                                    type: 'spring',
+                                    type: "spring",
                                     bounce: 0,
                                 },
                             }}
@@ -231,31 +225,29 @@ function SortableListItem({
                     {item.checked ? (
                         <motion.div
                             layout
-                            initial={{ opacity: 0, x: -5, filter: 'blur(4px)' }}
+                            initial={{ opacity: 0, x: -5, filter: "blur(4px)" }}
                             animate={{
                                 opacity: 1,
                                 x: 0,
-                                filter: 'blur(0px)',
+                                filter: "blur(0px)",
                                 transition: {
                                     delay: 0.3,
                                     duration: 0.15,
-                                    type: 'spring',
+                                    type: "spring",
                                     bounce: 0.9,
                                 },
                             }}
                             exit={{
                                 opacity: 0,
-                                filter: 'blur(4px)',
+                                filter: "blur(4px)",
                                 x: -10,
                                 transition: { delay: 0, duration: 0.12 },
                             }}
-                            className="inset-0 z-0 border-spacing-1  rounded-r-xl rounded-l-sm border-r-2   border-r-red-300/60 bg-[#161716]/80 shadow-[0_1px_0_0_rgba(255,255,255,0.03)_inset,0_0_0_1px_rgba(255,255,255,0.03)_inset,0_0_0_1px_rgba(0,0,0,0.1),0_2px_2px_0_rgba(0,0,0,0.1),0_4px_4px_0_rgba(0,0,0,0.1),0_8px_8px_0_rgba(0,0,0,0.1)] dark:bg-[#161716]/50"
-                        >
+                            className="inset-0 z-0 border-spacing-1  rounded-r-xl rounded-l-sm border-r-2   border-r-red-300/60 bg-[#161716]/80 shadow-[0_1px_0_0_rgba(255,255,255,0.03)_inset,0_0_0_1px_rgba(255,255,255,0.03)_inset,0_0_0_1px_rgba(0,0,0,0.1),0_2px_2px_0_rgba(0,0,0,0.1),0_4px_4px_0_rgba(0,0,0,0.1),0_8px_8px_0_rgba(0,0,0,0.1)] dark:bg-[#161716]/50">
                             <button
                                 type="button"
                                 className="inline-flex h-10 items-center justify-center whitespace-nowrap rounded-md px-3 text-sm font-medium  transition-colors duration-150   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
-                                onClick={() => onRemoveItem(item.id)}
-                            >
+                                onClick={() => onRemoveItem(item.id)}>
                                 <Trash className="h-4 w-4 text-red-400 transition-colors duration-150 fill-red-400/60 " />
                             </button>
                         </motion.div>
@@ -266,7 +258,7 @@ function SortableListItem({
     );
 }
 
-SortableListItem.displayName = 'SortableListItem';
+SortableListItem.displayName = "SortableListItem";
 
 interface SortableListProps {
     items: Item[];
@@ -293,8 +285,7 @@ function SortableList({
                     axis="y"
                     values={items}
                     onReorder={setItems}
-                    className="flex flex-col"
-                >
+                    className="flex flex-col">
                     <AnimatePresence>
                         {items?.map((item, index) =>
                             renderItem(
@@ -315,7 +306,7 @@ function SortableList({
     return null;
 }
 
-SortableList.displayName = 'SortableList';
+SortableList.displayName = "SortableList";
 
 export { SortableList, SortableListItem };
 export default SortableList;

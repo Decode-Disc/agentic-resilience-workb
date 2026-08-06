@@ -1,7 +1,7 @@
-import { randomBytes, randomInt } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
+import { randomBytes, randomInt } from "node:crypto";
+import { writeFileSync } from "node:fs";
 
-type InvitationRole = 'admin' | 'analyst';
+type InvitationRole = "admin" | "analyst";
 
 interface InvitationSlot {
     slotKey: string;
@@ -19,16 +19,16 @@ interface InvitationSeedDocument {
 }
 
 const slots: InvitationSlot[] = [
-    { slotKey: 'admin', role: 'admin' },
-    { slotKey: 'analyst-1', role: 'analyst' },
-    { slotKey: 'analyst-2', role: 'analyst' },
-    { slotKey: 'analyst-3', role: 'analyst' },
-    { slotKey: 'analyst-4', role: 'analyst' },
+    { slotKey: "admin", role: "admin" },
+    { slotKey: "analyst-1", role: "analyst" },
+    { slotKey: "analyst-2", role: "analyst" },
+    { slotKey: "analyst-3", role: "analyst" },
+    { slotKey: "analyst-4", role: "analyst" },
 ];
 
 const codes = new Set<string>();
 while (codes.size < slots.length) {
-    codes.add(randomInt(0, 10_000).toString().padStart(4, '0'));
+    codes.add(randomInt(0, 10_000).toString().padStart(4, "0"));
 }
 
 const generatedCodes = Array.from(codes);
@@ -43,25 +43,25 @@ const invitations: GeneratedInvitation[] = slots.map((slot, index) => {
 });
 
 const document: InvitationSeedDocument = {
-    invitationCodePepper: randomBytes(32).toString('base64url'),
+    invitationCodePepper: randomBytes(32).toString("base64url"),
     invitationSeedConfig: JSON.stringify(invitations),
     invitations,
 };
 
 const serializedDocument = `${JSON.stringify(document, null, 2)}\n`;
 const outputArgument = process.argv.find((argument) =>
-    argument.startsWith('--output='),
+    argument.startsWith("--output="),
 );
-const outputPath = outputArgument?.slice('--output='.length);
+const outputPath = outputArgument?.slice("--output=".length);
 
 if (outputArgument && !outputPath) {
-    throw new Error('--output requires a file path');
+    throw new Error("--output requires a file path");
 }
 
 if (outputPath) {
     writeFileSync(outputPath, serializedDocument, {
-        encoding: 'utf8',
-        flag: 'wx',
+        encoding: "utf8",
+        flag: "wx",
         mode: 0o600,
     });
     process.stdout.write(`Invitation material written to ${outputPath}\n`);

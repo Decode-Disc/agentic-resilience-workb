@@ -1,18 +1,18 @@
-'use client';
+"use client";
 
-import type * as React from 'react';
+import type * as React from "react";
 import {
     PolarAngleAxis,
     PolarGrid,
     Radar,
     RadarChart as RechartsRadarChart,
-} from 'recharts';
+} from "recharts";
 import {
     Card,
     CardContent,
     CardFooter,
     CardHeader,
-} from '@/components/ui/card';
+} from "@/components/ui/card";
 import {
     type ChartConfig,
     ChartContainer,
@@ -20,9 +20,9 @@ import {
     ChartLegendContent,
     ChartTooltip,
     ChartTooltipContent,
-} from '@/components/ui/chart';
+} from "@/components/ui/chart";
 
-const CHART_COLORS = ['#00bbff', '#34d399', '#60a5fa', '#f472b6', '#fb923c'];
+const CHART_COLORS = ["#00bbff", "#34d399", "#60a5fa", "#f472b6", "#fb923c"];
 
 function toKeys(v: string | string[]): string[] {
     return Array.isArray(v) ? v : [v];
@@ -48,8 +48,7 @@ function ChartCard({
     return (
         <Card
             className="max-w-3xl"
-            style={width ? { width } : { width: '100%' }}
-        >
+            style={width ? { width } : { width: "100%" }}>
             {(title || description) && (
                 <CardHeader className="pb-0">
                     {title && (
@@ -99,8 +98,7 @@ export function RadarChart(props: RadarChartProps) {
             title={props.title}
             description={props.description}
             footer={props.footer}
-            dataPoints={props.data.length}
-        >
+            dataPoints={props.data.length}>
             <ChartContainer config={chartConfig} className="h-55 w-full">
                 <RechartsRadarChart data={props.data}>
                     <PolarGrid stroke="#3f3f46" />
@@ -111,16 +109,15 @@ export function RadarChart(props: RadarChartProps) {
                                 string,
                                 string | number
                             >;
-                            const yNum = typeof y === 'number' ? y : 0;
-                            const vals = keys.map((k) => d[k]).join(' / ');
+                            const yNum = typeof y === "number" ? y : 0;
+                            const vals = keys.map((k) => d[k]).join(" / ");
                             return (
                                 <text
                                     x={x}
                                     y={yNum + (index === 0 ? -10 : 0)}
                                     textAnchor={textAnchor}
                                     fontSize={12}
-                                    {...tickProps}
-                                >
+                                    {...tickProps}>
                                     <tspan fill="#e4e4e7" fontWeight={500}>
                                         {vals}
                                     </tspan>
@@ -128,8 +125,7 @@ export function RadarChart(props: RadarChartProps) {
                                         x={x}
                                         dy="1.1em"
                                         fontSize={11}
-                                        fill="#71717a"
-                                    >
+                                        fill="#71717a">
                                         {String(d[props.angleKey])}
                                     </tspan>
                                 </text>

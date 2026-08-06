@@ -2,32 +2,32 @@ import {
     createRootRouteWithContext,
     HeadContent,
     Scripts,
-} from '@tanstack/react-router';
-import type { ReactNode } from 'react';
-import favicon from '@/favicon.svg?url';
-import type { AppRouterContext } from '@/integrations/convex/router-context';
-import appCss from '@/styles.css?url';
+} from "@tanstack/react-router";
+import type { ReactNode } from "react";
+import favicon from "@/favicon.svg?url";
+import type { AppRouterContext } from "@/integrations/convex/router-context";
+import appCss from "@/styles.css?url";
 
 export const Route = createRootRouteWithContext<AppRouterContext>()({
     head: () => ({
         meta: [
-            { charSet: 'utf-8' },
+            { charSet: "utf-8" },
             {
-                name: 'viewport',
-                content: 'width=device-width, initial-scale=1',
+                name: "viewport",
+                content: "width=device-width, initial-scale=1",
             },
             {
-                title: 'Agentic Resilience Evidence Workbench',
+                title: "Agentic Resilience Evidence Workbench",
             },
             {
-                name: 'description',
+                name: "description",
                 content:
-                    'An evidence-first research workbench for assessing architectural resilience in the agentic economy.',
+                    "An evidence-first research workbench for assessing architectural resilience in the agentic economy.",
             },
         ],
         links: [
-            { rel: 'stylesheet', href: appCss },
-            { rel: 'icon', href: favicon },
+            { rel: "stylesheet", href: appCss },
+            { rel: "icon", href: favicon },
         ],
     }),
     notFoundComponent: () => (

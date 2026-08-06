@@ -1,15 +1,15 @@
-import { ArrowLeft01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons';
-import { useEffect } from 'react';
+import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
+import { useEffect } from "react";
 
-import Icon from '@/components/icon';
-import { Button } from '@/components/ui/button';
+import Icon from "@/components/icon";
+import { Button } from "@/components/ui/button";
 
 import {
     type PrototypeVariant,
     prototypeVariantLabels,
-} from './prototype-data';
+} from "./prototype-data";
 
-const variants = ['a', 'b', 'c'] as const satisfies readonly PrototypeVariant[];
+const variants = ["a", "b", "c"] as const satisfies readonly PrototypeVariant[];
 
 function isInteractiveTarget(target: EventTarget | null) {
     return (
@@ -30,8 +30,8 @@ export function PrototypeSwitcher({
 }) {
     const currentIndex = variants.indexOf(current);
     const previous =
-        variants[(currentIndex - 1 + variants.length) % variants.length] ?? 'a';
-    const next = variants[(currentIndex + 1) % variants.length] ?? 'a';
+        variants[(currentIndex - 1 + variants.length) % variants.length] ?? "a";
+    const next = variants[(currentIndex + 1) % variants.length] ?? "a";
 
     useEffect(() => {
         function handleKeyDown(event: KeyboardEvent) {
@@ -39,19 +39,19 @@ export function PrototypeSwitcher({
                 return;
             }
 
-            if (event.key === 'ArrowLeft') {
+            if (event.key === "ArrowLeft") {
                 event.preventDefault();
                 onSelect(previous);
             }
 
-            if (event.key === 'ArrowRight') {
+            if (event.key === "ArrowRight") {
                 event.preventDefault();
                 onSelect(next);
             }
         }
 
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
     }, [next, onSelect, previous]);
 
     return (
@@ -62,13 +62,12 @@ export function PrototypeSwitcher({
                     size="icon-sm"
                     className="text-background hover:bg-background/15 hover:text-background"
                     aria-label={`Show ${prototypeVariantLabels[previous]}`}
-                    onClick={() => onSelect(previous)}
-                >
+                    onClick={() => onSelect(previous)}>
                     <Icon iconNode={ArrowLeft01Icon} size={16} />
                 </Button>
                 <div className="min-w-40 px-2 text-center">
                     <p className="text-xs font-medium">
-                        {current.toUpperCase()} —{' '}
+                        {current.toUpperCase()} —{" "}
                         {prototypeVariantLabels[current]}
                     </p>
                     <p className="text-[10px] text-background/60">
@@ -80,8 +79,7 @@ export function PrototypeSwitcher({
                     size="icon-sm"
                     className="text-background hover:bg-background/15 hover:text-background"
                     aria-label={`Show ${prototypeVariantLabels[next]}`}
-                    onClick={() => onSelect(next)}
-                >
+                    onClick={() => onSelect(next)}>
                     <Icon iconNode={ArrowRight01Icon} size={16} />
                 </Button>
             </div>

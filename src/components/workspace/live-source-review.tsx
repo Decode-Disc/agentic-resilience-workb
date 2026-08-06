@@ -1,30 +1,25 @@
-'use client';
+"use client";
 
-import { api } from '@convex/_generated/api';
-import type { Id } from '@convex/_generated/dataModel';
-import { usePaginatedQuery, useQuery } from 'convex/react';
-import {
-    Component,
-    type ErrorInfo,
-    type ReactNode,
-    useState,
-} from 'react';
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { usePaginatedQuery, useQuery } from "convex/react";
+import { Component, type ErrorInfo, type ReactNode, useState } from "react";
 
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
     type SourceFilter,
     SourceReview,
-} from '@/components/workspace/source-review';
+} from "@/components/workspace/source-review";
 
 const SOURCE_REVIEW_PAGE_SIZE = 12;
 
 type LiveSourceReviewProps = {
-    runId: Id<'researchRuns'>;
-    corpusRevisionId: Id<'corpusRevisions'>;
-    onDecide: Parameters<typeof SourceReview>[0]['onDecide'];
-    onApprove: Parameters<typeof SourceReview>[0]['onApprove'];
-    onAddManualUrl?: Parameters<typeof SourceReview>[0]['onAddManualUrl'];
+    runId: Id<"researchRuns">;
+    corpusRevisionId: Id<"corpusRevisions">;
+    onDecide: Parameters<typeof SourceReview>[0]["onDecide"];
+    onApprove: Parameters<typeof SourceReview>[0]["onApprove"];
+    onAddManualUrl?: Parameters<typeof SourceReview>[0]["onAddManualUrl"];
 };
 
 export function LiveSourceReview(props: LiveSourceReviewProps) {
@@ -32,8 +27,7 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
     return (
         <SourceReviewQueryBoundary
             key={retryKey}
-            onRetry={() => setRetryKey((current) => current + 1)}
-        >
+            onRetry={() => setRetryKey((current) => current + 1)}>
             <SourceReviewData {...props} />
         </SourceReviewQueryBoundary>
     );
@@ -46,8 +40,8 @@ function SourceReviewData({
     onApprove,
     onAddManualUrl,
 }: LiveSourceReviewProps) {
-    const [filter, setFilter] = useState<SourceFilter>('all');
-    const [selectedId, setSelectedId] = useState<Id<'sources'> | null>(null);
+    const [filter, setFilter] = useState<SourceFilter>("all");
+    const [selectedId, setSelectedId] = useState<Id<"sources"> | null>(null);
     const summary = useQuery(api.sources.getReviewSummary, {
         runId,
         corpusRevisionId,
@@ -59,9 +53,7 @@ function SourceReviewData({
     );
     const selectedSource = useQuery(
         api.sources.getReviewSource,
-        selectedId
-            ? { runId, corpusRevisionId, sourceId: selectedId }
-            : 'skip',
+        selectedId ? { runId, corpusRevisionId, sourceId: selectedId } : "skip",
     );
 
     if (summary === undefined) {
@@ -76,16 +68,16 @@ function SourceReviewData({
             filter={filter}
             onFilterChange={(nextFilter) => {
                 setFilter(nextFilter);
-                if (nextFilter !== 'all') {
+                if (nextFilter !== "all") {
                     setSelectedId(null);
                 }
             }}
             selectedId={selectedId}
             selectedSource={selectedId ? selectedSource : null}
             onSelectedIdChange={setSelectedId}
-            hasMore={status === 'CanLoadMore'}
-            isLoadingMore={status === 'LoadingMore'}
-            isLoadingInitial={status === 'LoadingFirstPage'}
+            hasMore={status === "CanLoadMore"}
+            isLoadingMore={status === "LoadingMore"}
+            isLoadingInitial={status === "LoadingFirstPage"}
             onLoadMore={() => loadMore(SOURCE_REVIEW_PAGE_SIZE)}
             onDecide={onDecide}
             onApprove={onApprove}
@@ -100,20 +92,38 @@ function LiveSourceReviewSkeleton() {
             role="status"
             aria-label="Loading source review"
             aria-busy="true"
-            className="space-y-4"
-        >
-            <Skeleton className="h-24 w-full rounded-xl" />
+            className="space-y-4">
+            <section
+                aria-label="Loading source filters"
+                className="surface-panel flex h-24 items-center gap-2 rounded-xl px-4">
+                {["all", "pending", "accepted", "rejected"].map((key) => (
+                    <Skeleton key={key} className="h-8 w-20 rounded-full" />
+                ))}
+            </section>
             <div className="grid min-h-168 gap-4 md:grid-cols-[minmax(18rem,36%)_minmax(26rem,1fr)]">
-                <div className="surface-panel space-y-4 rounded-xl p-4">
+                <section
+                    aria-label="Loading source list"
+                    className="surface-panel space-y-4 rounded-xl p-4">
                     <Skeleton className="h-8 w-full" />
-                    {['first', 'second', 'third'].map((key) => (
+                    {["first", "second", "third"].map((key) => (
                         <Skeleton
                             key={key}
                             className="h-28 w-full rounded-xl"
                         />
                     ))}
-                </div>
-                <Skeleton className="h-full min-h-168 rounded-xl" />
+                </section>
+                <section
+                    aria-label="Loading source detail"
+                    className="surface-panel min-h-168 space-y-5 rounded-xl p-6">
+                    <Skeleton className="h-5 w-28" />
+                    <Skeleton className="h-9 w-3/4" />
+                    <Skeleton className="h-4 w-1/2" />
+                    <Skeleton className="h-28 w-full rounded-xl" />
+                    <div className="grid grid-cols-2 gap-3">
+                        <Skeleton className="h-10 w-full rounded-lg" />
+                        <Skeleton className="h-10 w-full rounded-lg" />
+                    </div>
+                </section>
             </div>
         </div>
     );
@@ -140,8 +150,7 @@ class SourceReviewQueryBoundary extends Component<
         return (
             <div
                 role="alert"
-                className="surface-panel rounded-xl border border-destructive/30 p-5"
-            >
+                className="surface-panel rounded-xl border border-destructive/30 p-5">
                 <h2 className="text-base font-medium">
                     Source review could not be loaded
                 </h2>
@@ -153,8 +162,7 @@ class SourceReviewQueryBoundary extends Component<
                     type="button"
                     variant="secondary"
                     className="mt-4"
-                    onClick={this.props.onRetry}
-                >
+                    onClick={this.props.onRetry}>
                     Try again
                 </Button>
             </div>

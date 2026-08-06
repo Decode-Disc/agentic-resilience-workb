@@ -1,24 +1,24 @@
 import {
     ArrowRight01Icon,
     CheckmarkCircle02Icon,
-} from '@hugeicons/core-free-icons';
-import { HugeiconsIcon } from '@hugeicons/react';
-import { useState } from 'react';
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { useState } from "react";
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 import {
     type PrototypeClaim,
     prototypeClaims,
     prototypeDimensions,
-} from './prototype-data';
-import { DossierHeading, PrototypeNotice } from './prototype-primitives';
+} from "./prototype-data";
+import { DossierHeading, PrototypeNotice } from "./prototype-primitives";
 
 export function VariantMasterDetail() {
     const [selectedClaimId, setSelectedClaimId] = useState<
-        PrototypeClaim['id']
+        PrototypeClaim["id"]
     >(prototypeClaims[1].id);
     const selectedClaim =
         prototypeClaims.find((claim) => claim.id === selectedClaimId) ??
@@ -53,8 +53,7 @@ export function VariantMasterDetail() {
             <main className="mx-auto grid max-w-[100rem] lg:min-h-[calc(100svh-11rem)] lg:grid-cols-[22rem_minmax(0,1fr)_18rem]">
                 <section
                     className="border-b px-4 py-6 lg:border-r lg:border-b-0"
-                    aria-labelledby="claim-list"
-                >
+                    aria-labelledby="claim-list">
                     <div className="mb-4 flex items-center justify-between gap-3">
                         <h2 id="claim-list" className="text-sm font-medium">
                             Claims requiring attention
@@ -71,11 +70,12 @@ export function VariantMasterDetail() {
                                     type="button"
                                     className={
                                         selected
-                                            ? 'rounded-xl bg-muted p-3 text-left ring-1 ring-foreground/10'
-                                            : 'rounded-xl p-3 text-left hover:bg-muted/60'
+                                            ? "rounded-xl bg-muted p-3 text-left ring-1 ring-foreground/10"
+                                            : "rounded-xl p-3 text-left hover:bg-muted/60"
                                     }
-                                    onClick={() => setSelectedClaimId(claim.id)}
-                                >
+                                    onClick={() =>
+                                        setSelectedClaimId(claim.id)
+                                    }>
                                     <div className="mb-2 flex items-center justify-between gap-2">
                                         <Badge variant="outline">
                                             {claim.classification}
@@ -112,8 +112,7 @@ export function VariantMasterDetail() {
                         <section aria-labelledby="passage-heading">
                             <p
                                 id="passage-heading"
-                                className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase"
-                            >
+                                className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
                                 Supporting passage
                             </p>
                             <blockquote className="mt-3 border-l-2 pl-5 text-base leading-8">
@@ -123,7 +122,7 @@ export function VariantMasterDetail() {
                                 claim through repair resolution.”
                             </blockquote>
                             <p className="mt-3 text-xs text-muted-foreground">
-                                {selectedClaim.evidence} ·{' '}
+                                {selectedClaim.evidence} ·{" "}
                                 {selectedClaim.locator}
                             </p>
                         </section>
@@ -133,8 +132,7 @@ export function VariantMasterDetail() {
                         <section aria-labelledby="counter-heading">
                             <p
                                 id="counter-heading"
-                                className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase"
-                            >
+                                className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
                                 Counter-evidence and limits
                             </p>
                             <p className="mt-3 text-sm leading-7">
@@ -168,7 +166,7 @@ export function VariantMasterDetail() {
                                     {dimension.name}
                                 </p>
                                 <p className="mt-1 text-xs text-muted-foreground">
-                                    {dimension.position} ·{' '}
+                                    {dimension.position} ·{" "}
                                     {dimension.confidence} confidence
                                 </p>
                             </div>

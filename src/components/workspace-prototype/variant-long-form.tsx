@@ -2,25 +2,25 @@ import {
     BookOpenTextIcon,
     FileSearchIcon,
     MapsIcon,
-} from '@hugeicons/core-free-icons';
-import { HugeiconsIcon } from '@hugeicons/react';
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 
 import {
     prototypeClaims,
     prototypeDimensions,
     prototypeSources,
-} from './prototype-data';
+} from "./prototype-data";
 import {
     ClaimSurface,
     DossierHeading,
     EvidenceKey,
     PrototypeNotice,
-} from './prototype-primitives';
+} from "./prototype-primitives";
 
 export function VariantLongForm() {
     return (
@@ -31,8 +31,7 @@ export function VariantLongForm() {
                     <DossierHeading />
                     <nav
                         className="mt-8 flex gap-5 overflow-x-auto border-b pb-3 text-sm"
-                        aria-label="Dossier sections"
-                    >
+                        aria-label="Dossier sections">
                         <a href="#progress" className="font-medium">
                             Progress
                         </a>
@@ -56,8 +55,7 @@ export function VariantLongForm() {
                 <section
                     id="progress"
                     className="scroll-mt-6 py-10"
-                    aria-labelledby="progress-title"
-                >
+                    aria-labelledby="progress-title">
                     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
                         <div>
                             <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
@@ -65,8 +63,7 @@ export function VariantLongForm() {
                             </p>
                             <h2
                                 id="progress-title"
-                                className="mt-2 text-2xl font-medium"
-                            >
+                                className="mt-2 text-2xl font-medium">
                                 Evidence extracted, analyst decisions pending
                             </h2>
                             <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">
@@ -94,8 +91,7 @@ export function VariantLongForm() {
                 <section
                     id="sources"
                     className="scroll-mt-6 py-12"
-                    aria-labelledby="sources-title"
-                >
+                    aria-labelledby="sources-title">
                     <div className="mb-6 flex items-center gap-3">
                         <HugeiconsIcon icon={FileSearchIcon} />
                         <h2 id="sources-title" className="text-2xl font-medium">
@@ -106,8 +102,7 @@ export function VariantLongForm() {
                         {prototypeSources.map((source) => (
                             <div
                                 key={source.name}
-                                className="grid gap-2 py-4 sm:grid-cols-[minmax(0,1fr)_10rem_7rem] sm:items-center"
-                            >
+                                className="grid gap-2 py-4 sm:grid-cols-[minmax(0,1fr)_10rem_7rem] sm:items-center">
                                 <p className="text-sm font-medium">
                                     {source.name}
                                 </p>
@@ -116,11 +111,10 @@ export function VariantLongForm() {
                                 </p>
                                 <Badge
                                     variant={
-                                        source.decision === 'Rejected'
-                                            ? 'outline'
-                                            : 'secondary'
-                                    }
-                                >
+                                        source.decision === "Rejected"
+                                            ? "outline"
+                                            : "secondary"
+                                    }>
                                     {source.decision}
                                 </Badge>
                             </div>
@@ -133,15 +127,13 @@ export function VariantLongForm() {
                 <section
                     id="evidence"
                     className="scroll-mt-6 py-12"
-                    aria-labelledby="evidence-title"
-                >
+                    aria-labelledby="evidence-title">
                     <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
                         Primary artifact
                     </p>
                     <h2
                         id="evidence-title"
-                        className="mt-2 text-3xl font-medium"
-                    >
+                        className="mt-2 text-3xl font-medium">
                         Evidence matrix
                     </h2>
                     <div className="mt-5">
@@ -159,8 +151,7 @@ export function VariantLongForm() {
                 <section
                     id="assessment"
                     className="scroll-mt-6 py-12"
-                    aria-labelledby="assessment-title"
-                >
+                    aria-labelledby="assessment-title">
                     <h2 id="assessment-title" className="text-3xl font-medium">
                         Architectural assessment
                     </h2>
@@ -168,8 +159,7 @@ export function VariantLongForm() {
                         {prototypeDimensions.map((dimension) => (
                             <div
                                 key={dimension.name}
-                                className="grid gap-3 py-5 md:grid-cols-[minmax(0,1fr)_12rem_8rem_9rem]"
-                            >
+                                className="grid gap-3 py-5 md:grid-cols-[minmax(0,1fr)_12rem_8rem_9rem]">
                                 <p className="font-medium">{dimension.name}</p>
                                 <p className="text-sm">{dimension.position}</p>
                                 <p className="text-sm text-muted-foreground">
@@ -188,8 +178,7 @@ export function VariantLongForm() {
                 <section
                     id="outputs"
                     className="scroll-mt-6 py-12"
-                    aria-labelledby="outputs-title"
-                >
+                    aria-labelledby="outputs-title">
                     <h2 id="outputs-title" className="text-3xl font-medium">
                         Derived outputs
                     </h2>
@@ -222,8 +211,7 @@ export function VariantLongForm() {
                                 <Button
                                     variant="outline"
                                     className="mt-5"
-                                    disabled
-                                >
+                                    disabled>
                                     Generate brief
                                 </Button>
                             </CardContent>

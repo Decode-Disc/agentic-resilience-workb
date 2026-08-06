@@ -333,6 +333,7 @@ Neither CLIProxyAPI production readiness nor precise dossier economics is a prer
   Start surface and non-billable company preflight before workspace access.
   Require an active admitted `Visitor` before quota reservation, workflow
   creation, dossier access, or administrative operations.
+- As defined by ADR-015, preflight may use bounded Exa search only to resolve visual company website metadata. This may consume provider credits but never reserves visitor analysis quota, changes SEC CIK identity, or blocks a valid SEC preflight. Consult the CIK cache first, retain stale cache entries on refresh failure, and fall back to SEC investor-relations metadata and then the existing company icon.
 - Maintain at most five stable visitors in total.
 - Allow each admitted visitor to reserve at most three analyses in total.
 - Enforce both limits atomically in server-side Convex mutations and persist them across sessions.
@@ -553,5 +554,6 @@ Never present cached, seeded, or precomputed output as live. Label showcase and 
 - ADR-013: four-digit access-code format and rate limits; its original
   single-use property is superseded by ADR-014.
 - ADR-014: reusable access codes for stable visitor sessions.
+- ADR-015: bounded Exa company website enrichment before admission.
 
 Read the corresponding record in `docs/decisions/` before revisiting any of these decisions.

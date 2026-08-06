@@ -1,7 +1,7 @@
-import { defineEvent, WorkflowManager } from '@convex-dev/workflow';
-import { v } from 'convex/values';
+import { defineEvent, WorkflowManager } from "@convex-dev/workflow";
+import { v } from "convex/values";
 
-import { components } from './_generated/api';
+import { components } from "./_generated/api";
 
 export const workflow = new WorkflowManager(components.workflow, {
     workpoolOptions: {
@@ -15,41 +15,45 @@ export const workflow = new WorkflowManager(components.workflow, {
 });
 
 const checkpointDecisionValidator = v.object({
-    decisionId: v.id('checkpointDecisions'),
+    decisionId: v.id("checkpointDecisions"),
 });
 
 export const sourceReviewApproved = defineEvent({
-    name: 'sourceReviewApproved',
+    name: "sourceReviewApproved",
     validator: checkpointDecisionValidator,
 });
 
 export const corpusRevisionApproved = defineEvent({
-    name: 'corpusRevisionApproved',
+    name: "corpusRevisionApproved",
     validator: v.object({
-        decisionId: v.id('checkpointDecisions'),
-        corpusRevisionId: v.id('corpusRevisions'),
+        decisionId: v.id("checkpointDecisions"),
+        corpusRevisionId: v.id("corpusRevisions"),
+        executionGeneration: v.number(),
     }),
 });
 
 export const assessmentReviewApproved = defineEvent({
-    name: 'assessmentReviewApproved',
+    name: "assessmentReviewApproved",
     validator: checkpointDecisionValidator,
 });
 
 export const evidenceSufficiencyDecided = defineEvent({
-    name: 'evidenceSufficiencyDecided',
+    name: "evidenceSufficiencyDecided",
     validator: v.union(
         v.object({
-            kind: v.literal('recheck'),
-            decisionId: v.id('checkpointDecisions'),
+            kind: v.literal("recheck"),
+            decisionId: v.id("checkpointDecisions"),
+            executionGeneration: v.number(),
         }),
         v.object({
-            kind: v.literal('force_continue'),
-            decisionId: v.id('checkpointDecisions'),
+            kind: v.literal("force_continue"),
+            decisionId: v.id("checkpointDecisions"),
+            executionGeneration: v.number(),
         }),
         v.object({
-            kind: v.literal('complete_insufficient'),
-            decisionId: v.id('checkpointDecisions'),
+            kind: v.literal("complete_insufficient"),
+            decisionId: v.id("checkpointDecisions"),
+            executionGeneration: v.number(),
         }),
     ),
 });

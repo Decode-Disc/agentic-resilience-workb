@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import {
     Cancel01Icon,
@@ -6,11 +6,11 @@ import {
     File01Icon,
     LinkSquare01Icon,
     Loading02Icon,
-} from '@hugeicons/core-free-icons';
-import { type ReactElement, useState } from 'react';
+} from "@hugeicons/core-free-icons";
+import { type ReactElement, useState } from "react";
 
-import Icon from '@/components/icon';
-import { Button } from '@/components/ui/button';
+import Icon from "@/components/icon";
+import { Button } from "@/components/ui/button";
 import {
     Dialog,
     DialogContent,
@@ -19,21 +19,21 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
-} from '@/components/ui/dialog';
-import { FileDropzone } from '@/components/ui/file-dropzone';
+} from "@/components/ui/dialog";
+import { FileDropzone } from "@/components/ui/file-dropzone";
 import {
     InputGroup,
     InputGroupAddon,
     InputGroupInput,
-} from '@/components/ui/input-group';
-import { Label } from '@/components/ui/label';
-import { sourceAddErrorMessage } from '@/lib/presentation/research-copy';
+} from "@/components/ui/input-group";
+import { Label } from "@/components/ui/label";
+import { sourceAddErrorMessage } from "@/lib/presentation/research-copy";
 import {
     Tooltip,
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
-} from '@/components/ui/tooltip';
+} from "@/components/ui/tooltip";
 
 /**
  * Pure helper for validating public HTTPS source URLs.
@@ -49,9 +49,9 @@ export function validatePublicSourceUrl(url: string): boolean {
         return false;
     }
     return (
-        parsed.protocol === 'https:' &&
-        parsed.username === '' &&
-        parsed.password === ''
+        parsed.protocol === "https:" &&
+        parsed.username === "" &&
+        parsed.password === ""
     );
 }
 
@@ -91,7 +91,7 @@ export function AddSourceDialog({
     const [internalOpen, setInternalOpen] = useState(false);
     const open = isControlled ? openProp : internalOpen;
 
-    const [urlInput, setUrlInput] = useState('');
+    const [urlInput, setUrlInput] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [confirmation, setConfirmation] = useState<string | null>(null);
@@ -102,7 +102,7 @@ export function AddSourceDialog({
         }
         onOpenChangeProp?.(nextOpen);
         if (!nextOpen) {
-            setUrlInput('');
+            setUrlInput("");
             setError(null);
             setConfirmation(null);
         }
@@ -112,7 +112,7 @@ export function AddSourceDialog({
         const candidate = urlInput.trim();
         if (!validatePublicSourceUrl(candidate)) {
             setError(
-                'Enter a valid public source link beginning with https://.',
+                "Enter a valid public source link beginning with https://.",
             );
             return;
         }
@@ -124,17 +124,17 @@ export function AddSourceDialog({
         try {
             if (onAdd) {
                 await onAdd(candidate);
-                setUrlInput('');
-                setConfirmation('Source added for your review.');
+                setUrlInput("");
+                setConfirmation("Source added for your review.");
             } else if (urls && onUrlsChange) {
                 if (urls.includes(candidate)) {
-                    setError('This reference has already been added.');
+                    setError("This reference has already been added.");
                     setIsSubmitting(false);
                     return;
                 }
                 onUrlsChange([...urls, candidate]);
-                setUrlInput('');
-                setConfirmation('Source added for your review.');
+                setUrlInput("");
+                setConfirmation("Source added for your review.");
             }
         } catch (caught) {
             setError(sourceAddErrorMessage(caught));
@@ -160,13 +160,11 @@ export function AddSourceDialog({
                     onSubmit={(event) => {
                         event.preventDefault();
                         void handleAddSource();
-                    }}
-                >
+                    }}>
                     <div className="space-y-2">
                         <Label
                             htmlFor="add-source-public-url"
-                            className="flex items-center gap-1.5 font-medium"
-                        >
+                            className="flex items-center gap-1.5 font-medium">
                             <Icon
                                 iconNode={LinkSquare01Icon}
                                 size={14}
@@ -189,13 +187,12 @@ export function AddSourceDialog({
                                     aria-invalid={error ? true : undefined}
                                     autoComplete="url"
                                 />
-                                {urlInput.trim() !== '' ? (
+                                {urlInput.trim() !== "" ? (
                                     <InputGroupAddon align="inline-end">
                                         <button
                                             type="button"
                                             aria-label="Clear input"
-                                            onClick={() => setUrlInput('')}
-                                        >
+                                            onClick={() => setUrlInput("")}>
                                             <Icon
                                                 iconNode={Cancel01Icon}
                                                 className="text-muted-foreground hover:text-foreground size-4"
@@ -203,19 +200,29 @@ export function AddSourceDialog({
                                         </button>
                                     </InputGroupAddon>
                                 ) : null}
-                                <InputGroupAddon align="inline-end" className="pr-0">
+                                <InputGroupAddon
+                                    align="inline-end"
+                                    className="pr-0">
                                     <Button
                                         type="submit"
                                         variant="secondary"
                                         className="mx-0 rounded-4xl"
                                         disabled={
-                                            isSubmitting || urlInput.trim() === ''
-                                        }
-                                    >
-                                        {isSubmitting ?
-                                            (<Icon iconNode={Loading02Icon} className={isSubmitting ? 'animate-spin' : ''} />) :
-                                            (<span>Add</span>)
-                                        }
+                                            isSubmitting ||
+                                            urlInput.trim() === ""
+                                        }>
+                                        {isSubmitting ? (
+                                            <Icon
+                                                iconNode={Loading02Icon}
+                                                className={
+                                                    isSubmitting
+                                                        ? "animate-spin"
+                                                        : ""
+                                                }
+                                            />
+                                        ) : (
+                                            <span>Add</span>
+                                        )}
                                     </Button>
                                 </InputGroupAddon>
                             </InputGroup>
@@ -223,8 +230,7 @@ export function AddSourceDialog({
                         {error ? (
                             <p
                                 role="alert"
-                                className="text-xs text-destructive"
-                            >
+                                className="text-xs text-destructive">
                                 {error}
                             </p>
                         ) : null}
@@ -243,13 +249,11 @@ export function AddSourceDialog({
                             </Label>
                             <ul
                                 aria-label="Added public references"
-                                className="max-h-44 space-y-2 overflow-y-auto"
-                            >
+                                className="max-h-44 space-y-2 overflow-y-auto">
                                 {urls.map((referenceUrl) => (
                                     <li
                                         key={referenceUrl}
-                                        className="surface-panel flex items-center gap-2 rounded-lg px-3 py-2"
-                                    >
+                                        className="surface-panel flex items-center gap-2 rounded-lg px-3 py-2">
                                         <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground">
                                             {referenceUrl}
                                         </span>
@@ -267,8 +271,7 @@ export function AddSourceDialog({
                                                                 referenceUrl,
                                                         ),
                                                     )
-                                                }
-                                            >
+                                                }>
                                                 <Icon
                                                     iconNode={Delete02Icon}
                                                     size={14}
@@ -285,7 +288,9 @@ export function AddSourceDialog({
 
                 {/* Document Ingestion (Prototype) section */}
                 <div className="space-y-2">
-                    <Label aria-disabled className="flex items-center gap-1.5 font-medium text-muted-foreground">
+                    <Label
+                        aria-disabled
+                        className="flex items-center gap-1.5 font-medium text-muted-foreground">
                         <Icon
                             iconNode={File01Icon}
                             size={14}
@@ -303,10 +308,10 @@ export function AddSourceDialog({
                                             disabled={true}
                                             onFilesDropped={() => undefined}
                                             acceptedFileTypes={[
-                                                'PDF',
-                                                'SEC',
-                                                'HTML',
-                                                'TXT',
+                                                "PDF",
+                                                "SEC",
+                                                "HTML",
+                                                "TXT",
                                             ]}
                                         />
                                     </div>
@@ -315,8 +320,7 @@ export function AddSourceDialog({
                             <TooltipContent
                                 side="top"
                                 align="center"
-                                className="max-w-xs text-center"
-                            >
+                                className="max-w-xs text-center">
                                 File upload is not supported in this prototype.
                                 Add only public source links.
                             </TooltipContent>
@@ -326,7 +330,10 @@ export function AddSourceDialog({
             </div>
 
             <DialogFooter>
-                <Button type="button" size="lg" onClick={() => handleOpenChange(false)}>
+                <Button
+                    type="button"
+                    size="lg"
+                    onClick={() => handleOpenChange(false)}>
                     Done
                 </Button>
             </DialogFooter>

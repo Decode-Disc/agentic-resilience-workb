@@ -1,7 +1,7 @@
-import { act, renderHook } from '@testing-library/react';
-import { expect, test, vi } from 'vitest';
+import { act, renderHook } from "@testing-library/react";
+import { expect, test, vi } from "vitest";
 
-import { useInfiniteCollectionTrigger } from '@/hooks/use-infinite-collection-trigger';
+import { useInfiniteCollectionTrigger } from "@/hooks/use-infinite-collection-trigger";
 
 const nearEndViewport = {
     scrollLeft: 0,
@@ -16,7 +16,7 @@ const nearEndViewport = {
     canScrollDown: true,
 };
 
-test('loads once near the end and rearms after more items arrive', () => {
+test("loads once near the end and rearms after more items arrive", () => {
     const onLoadMore = vi.fn();
     const { result, rerender } = renderHook(
         ({ itemCount }) =>

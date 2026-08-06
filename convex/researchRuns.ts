@@ -1,125 +1,35 @@
-import { getAuthUserId } from '@convex-dev/auth/server';
-import { v } from 'convex/values';
+import { getAuthUserId } from "@convex-dev/auth/server";
+import { v } from "convex/values";
 
-import type { Doc } from './_generated/dataModel';
-import type { QueryCtx } from './_generated/server';
-import {
-    internalMutation,
-    internalQuery,
-    mutation,
-    query,
-} from './_generated/server';
-import { assertLifecycleTransition } from './domain/transitions';
+import type { Doc } from "./_generated/dataModel";
+import type { QueryCtx } from "./_generated/server";
+import { internalMutation, internalQuery, query } from "./_generated/server";
+import { assertLifecycleTransition } from "./domain/transitions";
 import {
     executionStatusValidator,
     researchRunLifecycleValidator,
     workflowStepKeyValidator,
-} from './domain/validators';
-
-const MAX_ANALYSES_PER_VISITOR = 3;
-
-export const reserve = mutation({
-    args: { idempotencyKey: v.string() },
-    returns: v.object({
-        runId: v.id('researchRuns'),
-        remainingAnalyses: v.number(),
-    }),
-    handler: async (ctx, args) => {
-        const idempotencyKey = args.idempotencyKey.trim();
-        if (idempotencyKey.length === 0 || idempotencyKey.length > 128) {
-            throw new Error('Invalid idempotency key');
-        }
-        const authUserId = await getAuthUserId(ctx);
-        if (!authUserId) {
-            throw new Error('Not authenticated');
-        }
-        const visitor = await ctx.db
-            .query('visitors')
-            .withIndex('by_auth_user_id', (query) =>
-                query.eq('authUserId', authUserId),
-            )
-            .unique();
-        if (visitor?.status !== 'active') {
-            throw new Error('Unauthorized');
-        }
-
-        const existing = await ctx.db
-            .query('researchRuns')
-            .withIndex('by_owner_and_reservation_key', (query) =>
-                query
-                    .eq('ownerVisitorId', visitor._id)
-                    .eq('reservationKey', idempotencyKey),
-            )
-            .unique();
-        if (existing) {
-            return {
-                runId: existing._id,
-                remainingAnalyses:
-                    MAX_ANALYSES_PER_VISITOR - visitor.analysesReserved,
-            };
-        }
-        if (visitor.analysesReserved >= MAX_ANALYSES_PER_VISITOR) {
-            throw new Error('Analysis limit reached');
-        }
-
-        const now = Date.now();
-        const runId = await ctx.db.insert('researchRuns', {
-            ownerVisitorId: visitor._id,
-            reservationKey: idempotencyKey,
-            reservationStatus: 'consumed',
-            retryCount: 0,
-            executionGeneration: 0,
-            lifecycleState: 'draft',
-            executionStatus: 'idle',
-            nextEventSequence: 1,
-            createdAt: now,
-            updatedAt: now,
-        });
-        await ctx.db.patch(visitor._id, {
-            analysesReserved: visitor.analysesReserved + 1,
-        });
-        await ctx.db.insert('runEvents', {
-            runId,
-            sequence: 1,
-            type: 'run_created',
-            lifecycleState: 'draft',
-            executionStatus: 'idle',
-            occurredAt: now,
-        });
-        await ctx.db.insert('auditEvents', {
-            actor: { type: 'visitor', visitorId: visitor._id },
-            action: 'analysis_reserved',
-            targetType: 'research_run',
-            targetId: runId,
-            occurredAt: now,
-        });
-        return {
-            runId,
-            remainingAnalyses:
-                MAX_ANALYSES_PER_VISITOR - (visitor.analysesReserved + 1),
-        };
-    },
-});
+} from "./domain/validators";
 
 export const createDraft = internalMutation({
     args: {},
-    returns: v.id('researchRuns'),
+    returns: v.id("researchRuns"),
     handler: async (ctx) => {
         const now = Date.now();
-        const runId = await ctx.db.insert('researchRuns', {
+        const runId = await ctx.db.insert("researchRuns", {
             executionGeneration: 0,
-            lifecycleState: 'draft',
-            executionStatus: 'idle',
+            lifecycleState: "draft",
+            executionStatus: "idle",
             nextEventSequence: 1,
             createdAt: now,
             updatedAt: now,
         });
-        await ctx.db.insert('runEvents', {
+        await ctx.db.insert("runEvents", {
             runId,
             sequence: 1,
-            type: 'run_created',
-            lifecycleState: 'draft',
-            executionStatus: 'idle',
+            type: "run_created",
+            lifecycleState: "draft",
+            executionStatus: "idle",
             occurredAt: now,
         });
         return runId;
@@ -128,7 +38,8 @@ export const createDraft = internalMutation({
 
 export const transition = internalMutation({
     args: {
-        runId: v.id('researchRuns'),
+        runId: v.id("researchRuns"),
+        expectedExecutionGeneration: v.number(),
         lifecycleState: researchRunLifecycleValidator,
         executionStatus: executionStatusValidator,
         stepKey: workflowStepKeyValidator,
@@ -137,13 +48,16 @@ export const transition = internalMutation({
     handler: async (ctx, args) => {
         const run = await ctx.db.get(args.runId);
         if (!run) {
-            throw new Error('Research run not found');
+            throw new Error("Research run not found");
+        }
+        if (run.executionGeneration !== args.expectedExecutionGeneration) {
+            throw new Error("Stale research execution generation");
         }
         if (
-            run.executionStatus === 'cancelled' ||
-            run.executionStatus === 'failed'
+            run.executionStatus === "cancelled" ||
+            run.executionStatus === "failed"
         ) {
-            throw new Error('Research run execution is terminal');
+            throw new Error("Research run execution is terminal");
         }
         assertLifecycleTransition(
             run.lifecycleState,
@@ -153,12 +67,12 @@ export const transition = internalMutation({
 
         const now = Date.now();
         const pauseReason =
-            args.lifecycleState === 'awaiting_evidence_sufficiency_review'
-                ? ('evidence_sufficiency_review' as const)
-                : args.lifecycleState === 'awaiting_source_review'
-                  ? ('source_review' as const)
-                  : args.lifecycleState === 'awaiting_assessment_review'
-                    ? ('assessment_review' as const)
+            args.lifecycleState === "awaiting_evidence_sufficiency_review"
+                ? ("evidence_sufficiency_review" as const)
+                : args.lifecycleState === "awaiting_source_review"
+                  ? ("source_review" as const)
+                  : args.lifecycleState === "awaiting_assessment_review"
+                    ? ("assessment_review" as const)
                     : undefined;
         await ctx.db.patch(args.runId, {
             lifecycleState: args.lifecycleState,
@@ -168,43 +82,43 @@ export const transition = internalMutation({
             updatedAt: now,
         });
         const previousSteps = await ctx.db
-            .query('workflowSteps')
-            .withIndex('by_run_and_key', (query) =>
-                query.eq('runId', args.runId),
+            .query("workflowSteps")
+            .withIndex("by_run_and_key", (query) =>
+                query.eq("runId", args.runId),
             )
             .collect();
         for (const step of previousSteps) {
-            if (step.state === 'running') {
+            if (step.state === "running") {
                 await ctx.db.patch(step._id, {
-                    state: 'completed',
+                    state: "completed",
                     completedAt: now,
                     updatedAt: now,
                 });
             }
         }
-        await ctx.db.insert('workflowSteps', {
+        await ctx.db.insert("workflowSteps", {
             runId: args.runId,
             key: args.stepKey,
             state:
-                args.executionStatus === 'paused'
-                    ? 'needs_review'
-                    : args.executionStatus === 'completed' ||
-                        args.executionStatus === 'idle'
-                      ? 'completed'
-                      : 'running',
+                args.executionStatus === "paused"
+                    ? "needs_review"
+                    : args.executionStatus === "completed" ||
+                        args.executionStatus === "idle"
+                      ? "completed"
+                      : "running",
             attempt: 1,
             startedAt: now,
             completedAt:
-                args.executionStatus === 'completed' ||
-                args.executionStatus === 'idle'
+                args.executionStatus === "completed" ||
+                args.executionStatus === "idle"
                     ? now
                     : undefined,
             updatedAt: now,
         });
-        await ctx.db.insert('runEvents', {
+        await ctx.db.insert("runEvents", {
             runId: args.runId,
             sequence: run.nextEventSequence + 1,
-            type: 'run_transitioned',
+            type: "run_transitioned",
             lifecycleState: args.lifecycleState,
             executionStatus: args.executionStatus,
             stepKey: args.stepKey,
@@ -215,56 +129,56 @@ export const transition = internalMutation({
 });
 
 export const get = internalQuery({
-    args: { runId: v.id('researchRuns') },
+    args: { runId: v.id("researchRuns") },
     handler: async (ctx, args) => ctx.db.get(args.runId),
 });
 
 export const listEvents = internalQuery({
-    args: { runId: v.id('researchRuns') },
+    args: { runId: v.id("researchRuns") },
     handler: async (ctx, args) =>
         ctx.db
-            .query('runEvents')
-            .withIndex('by_run_and_sequence', (query) =>
-                query.eq('runId', args.runId),
+            .query("runEvents")
+            .withIndex("by_run_and_sequence", (query) =>
+                query.eq("runId", args.runId),
             )
             .collect(),
 });
 
 export const listSteps = internalQuery({
-    args: { runId: v.id('researchRuns') },
+    args: { runId: v.id("researchRuns") },
     handler: async (ctx, args) =>
         ctx.db
-            .query('workflowSteps')
-            .withIndex('by_run_and_key', (builder) =>
-                builder.eq('runId', args.runId),
+            .query("workflowSteps")
+            .withIndex("by_run_and_key", (builder) =>
+                builder.eq("runId", args.runId),
             )
             .collect(),
 });
 
 export const listMyEvents = query({
-    args: { runId: v.id('researchRuns') },
+    args: { runId: v.id("researchRuns") },
     handler: async (ctx, args) => {
         const authUserId = await getAuthUserId(ctx);
         if (!authUserId) {
-            throw new Error('Not authenticated');
+            throw new Error("Not authenticated");
         }
         const visitor = await ctx.db
-            .query('visitors')
-            .withIndex('by_auth_user_id', (builder) =>
-                builder.eq('authUserId', authUserId),
+            .query("visitors")
+            .withIndex("by_auth_user_id", (builder) =>
+                builder.eq("authUserId", authUserId),
             )
             .unique();
         const run = await ctx.db.get(args.runId);
         if (
-            visitor?.status !== 'active' ||
+            visitor?.status !== "active" ||
             run?.ownerVisitorId !== visitor._id
         ) {
-            throw new Error('Unauthorized');
+            throw new Error("Unauthorized");
         }
         return ctx.db
-            .query('runEvents')
-            .withIndex('by_run_and_sequence', (builder) =>
-                builder.eq('runId', run._id),
+            .query("runEvents")
+            .withIndex("by_run_and_sequence", (builder) =>
+                builder.eq("runId", run._id),
             )
             .collect();
     },
@@ -273,25 +187,25 @@ export const listMyEvents = query({
 async function getActiveVisitor(ctx: QueryCtx) {
     const authUserId = await getAuthUserId(ctx);
     if (!authUserId) {
-        throw new Error('Not authenticated');
+        throw new Error("Not authenticated");
     }
     const visitor = await ctx.db
-        .query('visitors')
-        .withIndex('by_auth_user_id', (builder) =>
-            builder.eq('authUserId', authUserId),
+        .query("visitors")
+        .withIndex("by_auth_user_id", (builder) =>
+            builder.eq("authUserId", authUserId),
         )
         .unique();
-    if (visitor?.status !== 'active') {
-        throw new Error('Unauthorized');
+    if (visitor?.status !== "active") {
+        throw new Error("Unauthorized");
     }
     return visitor;
 }
 
-async function projectRun(ctx: QueryCtx, run: Doc<'researchRuns'>) {
+async function projectRun(ctx: QueryCtx, run: Doc<"researchRuns">) {
     const company = run.companyId ? await ctx.db.get(run.companyId) : null;
     const companySnapshot = run.companySnapshot ?? company;
-    const providerFailures = (await ctx.db.query('providerCalls').collect())
-        .filter((call) => call.runId === run._id && call.status === 'failed')
+    const providerFailures = (await ctx.db.query("providerCalls").collect())
+        .filter((call) => call.runId === run._id && call.status === "failed")
         .sort((left, right) => right.createdAt - left.createdAt)
         .slice(0, 5)
         .map((call) => ({
@@ -312,6 +226,9 @@ async function projectRun(ctx: QueryCtx, run: Doc<'researchRuns'>) {
                       companySnapshot.investorRelationsUrl ??
                       company?.investorRelationsUrl,
                   websiteUrl: companySnapshot.websiteUrl ?? company?.websiteUrl,
+                  websiteUrlSource:
+                      companySnapshot.websiteUrlSource ??
+                      company?.websiteUrlSource,
               }
             : null,
         lifecycleState: run.lifecycleState,
@@ -327,12 +244,12 @@ async function projectRun(ctx: QueryCtx, run: Doc<'researchRuns'>) {
 }
 
 export const getMine = query({
-    args: { runId: v.id('researchRuns') },
+    args: { runId: v.id("researchRuns") },
     handler: async (ctx, args) => {
         const visitor = await getActiveVisitor(ctx);
         const run = await ctx.db.get(args.runId);
         if (run?.ownerVisitorId !== visitor._id) {
-            throw new Error('Unauthorized');
+            throw new Error("Unauthorized");
         }
         return projectRun(ctx, run);
     },
@@ -343,9 +260,9 @@ export const listMine = query({
     handler: async (ctx) => {
         const visitor = await getActiveVisitor(ctx);
         const runs = await ctx.db
-            .query('researchRuns')
-            .withIndex('by_owner_and_execution_status', (builder) =>
-                builder.eq('ownerVisitorId', visitor._id),
+            .query("researchRuns")
+            .withIndex("by_owner_and_execution_status", (builder) =>
+                builder.eq("ownerVisitorId", visitor._id),
             )
             .collect();
         return Promise.all(

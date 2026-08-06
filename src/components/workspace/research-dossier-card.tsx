@@ -1,14 +1,14 @@
-'use client';
+"use client";
 
-import type { api } from '@convex/_generated/api';
-import { ArrowRight01Icon } from '@hugeicons/core-free-icons';
-import { Link } from '@tanstack/react-router';
-import type { FunctionReturnType } from 'convex/server';
-import { motion } from 'motion/react';
-import { type FocusEvent, useState } from 'react';
+import type { api } from "@convex/_generated/api";
+import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
+import { Link } from "@tanstack/react-router";
+import type { FunctionReturnType } from "convex/server";
+import { motion } from "motion/react";
+import { type FocusEvent, useState } from "react";
 
-import Icon from '@/components/icon';
-import { Button } from '@/components/ui/button';
+import Icon from "@/components/icon";
+import { Button } from "@/components/ui/button";
 import {
     CutoutCard,
     CutoutCardAction,
@@ -22,20 +22,20 @@ import {
     cutoutCardSurfaceClassName,
     CutoutCorner,
     useCutoutContentStaggerVariants,
-} from '@/components/ui/cutout-card';
+} from "@/components/ui/cutout-card";
 import {
     executionLabel,
     lifecycleLabel,
-} from '@/lib/presentation/research-copy';
+} from "@/lib/presentation/research-copy";
 
 type ResearchDossier = FunctionReturnType<
     typeof api.researchRuns.listMine
 >[number];
 
-const updatedAtFormatter = new Intl.DateTimeFormat('en', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
+const updatedAtFormatter = new Intl.DateTimeFormat("en", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
 });
 
 function leavesCard(event: FocusEvent<HTMLDivElement>): boolean {
@@ -49,16 +49,16 @@ export function ResearchDossierCard({ dossier }: { dossier: ResearchDossier }) {
     const stagger = useCutoutContentStaggerVariants();
     const [pointerHovered, setPointerHovered] = useState(false);
     const [focusWithin, setFocusWithin] = useState(false);
-    const companyName = dossier.company?.legalName ?? 'Research dossier';
+    const companyName = dossier.company?.legalName ?? "Research dossier";
     const marketIdentity = dossier.company
         ? `${dossier.company.ticker} · ${dossier.company.exchange}`
-        : 'Company confirmation pending';
+        : "Company confirmation pending";
     const description =
         dossier.researchAngle ?? `Research prepared for ${companyName}.`;
     const route = {
-        to: '/workspace/$runId' as const,
+        to: "/workspace/$runId" as const,
         params: { runId: dossier.runId },
-        search: { section: 'progress' as const },
+        search: { section: "progress" as const },
     };
 
     return (
@@ -71,13 +71,11 @@ export function ResearchDossierCard({ dossier }: { dossier: ResearchDossier }) {
                 if (leavesCard(event)) {
                     setFocusWithin(false);
                 }
-            }}
-        >
+            }}>
             <Link
                 {...route}
                 aria-label={`Open ${companyName} dossier`}
-                className="block outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-            >
+                className="block outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
                 <CutoutCardMedia className="h-72">
                     <CutoutCardImage
                         alt={`${companyName} research dossier cover`}
@@ -110,18 +108,15 @@ export function ResearchDossierCard({ dossier }: { dossier: ResearchDossier }) {
                         animate="show"
                         className="contents"
                         initial="hidden"
-                        variants={stagger.container}
-                    >
+                        variants={stagger.container}>
                         <motion.h2
                             className="mb-2 text-balance font-semibold text-card-foreground text-xl leading-snug"
-                            variants={stagger.item}
-                        >
+                            variants={stagger.item}>
                             {companyName}
                         </motion.h2>
                         <motion.p
                             className="mb-4 line-clamp-3 text-pretty text-muted-foreground text-sm leading-relaxed"
-                            variants={stagger.item}
-                        >
+                            variants={stagger.item}>
                             {description}
                         </motion.p>
                         <motion.div variants={stagger.item}>
@@ -151,8 +146,7 @@ export function ResearchDossierCard({ dossier }: { dossier: ResearchDossier }) {
                     render={<Link {...route} />}
                     nativeButton={false}
                     size="sm"
-                    className="rounded-full shadow-md"
-                >
+                    className="rounded-full shadow-md">
                     Open dossier
                     <Icon iconNode={ArrowRight01Icon} />
                 </Button>

@@ -1,19 +1,19 @@
-import { format } from 'date-fns';
-import { enUS } from 'date-fns/locale';
-import { CalendarIcon, X } from 'lucide-react';
-import { useMemo } from 'react';
+import { format } from "date-fns";
+import { enUS } from "date-fns/locale";
+import { CalendarIcon, X } from "lucide-react";
+import { useMemo } from "react";
 
-import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
-import { Input } from '@/components/ui/input';
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Input } from "@/components/ui/input";
 import {
     Popover,
     PopoverContent,
     PopoverTrigger,
-} from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
-export type DatePickerGranularity = 'date' | 'datetime';
+export type DatePickerGranularity = "date" | "datetime";
 
 export type DatePickerFieldProps = {
     id?: string;
@@ -36,8 +36,8 @@ export default function DatePickerField({
     id,
     value,
     onChange,
-    granularity = 'date',
-    placeholder = 'Choisir une date',
+    granularity = "date",
+    placeholder = "Choisir une date",
     disabled = false,
     allowClear = true,
     className,
@@ -47,20 +47,20 @@ export default function DatePickerField({
             return undefined;
         }
 
-        return granularity === 'datetime'
+        return granularity === "datetime"
             ? parseLocalDateTime(value)
             : parseLocalDate(value);
     }, [granularity, value]);
 
     const timeValue = useMemo(() => {
-        if (granularity !== 'datetime') {
-            return '';
+        if (granularity !== "datetime") {
+            return "";
         }
 
         const parsed = parseLocalDateTime(value);
 
         if (!parsed) {
-            return '';
+            return "";
         }
 
         return `${pad2(parsed.getHours())}:${pad2(parsed.getMinutes())}`;
@@ -68,12 +68,12 @@ export default function DatePickerField({
 
     const displayValue = useMemo(() => {
         if (!selectedDate) {
-            return '';
+            return "";
         }
 
-        return granularity === 'datetime'
-            ? format(selectedDate, 'PPP p', { locale: enUS })
-            : format(selectedDate, 'PPP', { locale: enUS });
+        return granularity === "datetime"
+            ? format(selectedDate, "PPP p", { locale: enUS })
+            : format(selectedDate, "PPP", { locale: enUS });
     }, [granularity, selectedDate]);
 
     const handleSelectDate = (date: Date | undefined) => {
@@ -81,7 +81,7 @@ export default function DatePickerField({
             return;
         }
 
-        if (granularity === 'date') {
+        if (granularity === "date") {
             onChange(formatLocalDate(date));
             return;
         }
@@ -104,12 +104,12 @@ export default function DatePickerField({
     };
 
     const handleTimeChange = (nextTime: string) => {
-        if (granularity !== 'datetime') {
+        if (granularity !== "datetime") {
             return;
         }
 
         const datePart = selectedDate ?? new Date();
-        const [hoursRaw, minutesRaw] = nextTime.split(':');
+        const [hoursRaw, minutesRaw] = nextTime.split(":");
         const hours = Number(hoursRaw);
         const minutes = Number(minutesRaw);
 
@@ -131,7 +131,7 @@ export default function DatePickerField({
     };
 
     const handleClear = () => {
-        onChange('');
+        onChange("");
     };
 
     return (
@@ -144,17 +144,15 @@ export default function DatePickerField({
                         type="button"
                         disabled={disabled}
                         className={cn(
-                            'w-full justify-start text-left font-normal',
-                            !value && 'text-muted-foreground',
+                            "w-full justify-start text-left font-normal",
+                            !value && "text-muted-foreground",
                             className,
                         )}
-                        data-slot="date-trigger"
-                    >
+                        data-slot="date-trigger">
                         <CalendarIcon className="mr-2 size-4" />
                         {displayValue || placeholder}
                     </Button>
-                }
-            ></PopoverTrigger>
+                }></PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
                 <div className="p-3">
                     <Calendar
@@ -166,7 +164,7 @@ export default function DatePickerField({
                         autoFocus
                     />
 
-                    {granularity === 'datetime' ? (
+                    {granularity === "datetime" ? (
                         <div className="mt-3 flex items-center gap-2">
                             <Input
                                 type="time"
@@ -183,8 +181,7 @@ export default function DatePickerField({
                                     size="icon"
                                     onClick={handleClear}
                                     disabled={disabled || !value}
-                                    aria-label="Effacer la date"
-                                >
+                                    aria-label="Effacer la date">
                                     <X className="size-4" />
                                 </Button>
                             ) : null}
@@ -197,8 +194,7 @@ export default function DatePickerField({
                                 size="sm"
                                 onClick={handleClear}
                                 disabled={disabled || !value}
-                                aria-label="Effacer la date"
-                            >
+                                aria-label="Effacer la date">
                                 Effacer
                             </Button>
                         </div>
@@ -210,7 +206,7 @@ export default function DatePickerField({
 }
 
 function pad2(value: number): string {
-    return String(value).padStart(2, '0');
+    return String(value).padStart(2, "0");
 }
 
 function parseLocalDate(value: string): Date | undefined {

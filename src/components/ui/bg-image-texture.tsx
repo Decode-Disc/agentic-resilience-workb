@@ -1,13 +1,13 @@
-import type React from 'react';
-import { cn } from '@/lib/utils';
+import type React from "react";
+import { cn } from "@/lib/utils";
 
 export type TextureVariant =
-    | 'fabric-of-squares'
-    | 'grid-noise'
-    | 'inflicted'
-    | 'debut-light'
-    | 'groovepaper'
-    | 'none';
+    | "fabric-of-squares"
+    | "grid-noise"
+    | "inflicted"
+    | "debut-light"
+    | "groovepaper"
+    | "none";
 
 interface BackgroundImageTextureProps {
     variant?: TextureVariant;
@@ -17,25 +17,25 @@ interface BackgroundImageTextureProps {
     childrenClassName?: string;
 }
 
-const textureMap: Record<Exclude<TextureVariant, 'none'>, string> = {
-    'fabric-of-squares': '/images/textures/fabric-of-squares.png',
-    'grid-noise': '/images/textures/grid-noise.png',
-    inflicted: '/images/textures/inflicted.png',
-    'debut-light': '/images/textures/debut-light.png',
-    groovepaper: '/images/textures/groovepaper.png',
+const textureMap: Record<Exclude<TextureVariant, "none">, string> = {
+    "fabric-of-squares": "/images/textures/fabric-of-squares.png",
+    "grid-noise": "/images/textures/grid-noise.png",
+    inflicted: "/images/textures/inflicted.png",
+    "debut-light": "/images/textures/debut-light.png",
+    groovepaper: "/images/textures/groovepaper.png",
 };
 
 export function BackgroundImageTexture({
-    variant = 'fabric-of-squares',
+    variant = "fabric-of-squares",
     opacity = 0.5,
     className,
     children,
     childrenClassName,
 }: BackgroundImageTextureProps) {
-    const textureUrl = variant !== 'none' ? textureMap[variant] : null;
+    const textureUrl = variant !== "none" ? textureMap[variant] : null;
 
     return (
-        <div className={cn('relative', className)}>
+        <div className={cn("relative", className)}>
             {textureUrl && (
                 <div
                     aria-hidden="true"
@@ -43,13 +43,13 @@ export function BackgroundImageTexture({
                     className="pointer-events-none absolute inset-0"
                     style={{
                         backgroundImage: `url(${textureUrl})`,
-                        backgroundRepeat: 'repeat',
+                        backgroundRepeat: "repeat",
                         opacity,
                     }}
                 />
             )}
             {children && (
-                <div className={cn('relative', childrenClassName)}>
+                <div className={cn("relative", childrenClassName)}>
                     {children}
                 </div>
             )}

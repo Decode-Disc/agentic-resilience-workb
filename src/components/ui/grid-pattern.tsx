@@ -1,6 +1,6 @@
-import { useId } from 'react';
+import { useId } from "react";
 
-import { cn } from '@/lib/utils';
+import { cn } from "@/lib/utils";
 
 interface GridPatternProps extends React.SVGProps<SVGSVGElement> {
     width?: number;
@@ -18,7 +18,7 @@ export function GridPattern({
     height = 40,
     x = -1,
     y = -1,
-    strokeDasharray = '0',
+    strokeDasharray = "0",
     squares,
     className,
     ...props
@@ -29,11 +29,10 @@ export function GridPattern({
         <svg
             aria-hidden="true"
             className={cn(
-                'pointer-events-none absolute inset-0 h-full w-full fill-border/30 stroke-border/60',
+                "pointer-events-none absolute inset-0 h-full w-full fill-border/30 stroke-border/60",
                 className,
             )}
-            {...props}
-        >
+            {...props}>
             <defs>
                 <pattern
                     id={id}
@@ -41,8 +40,7 @@ export function GridPattern({
                     height={height}
                     patternUnits="userSpaceOnUse"
                     x={x}
-                    y={y}
-                >
+                    y={y}>
                     <path
                         d={`M.5 ${height}V.5H${width}`}
                         fill="none"

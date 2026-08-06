@@ -5,9 +5,9 @@ export type EvidenceAvailabilityInput = {
 };
 
 export type EvidenceAvailabilityEvaluation = EvidenceAvailabilityInput & {
-    policyVersion: 'public-evidence-v1';
-    outcome: 'sufficient' | 'insufficient';
-    reasons: ReadonlyArray<'no_public_evidence_candidates'>;
+    policyVersion: "public-evidence-v1";
+    outcome: "sufficient" | "insufficient";
+    reasons: ReadonlyArray<"no_public_evidence_candidates">;
 };
 
 /**
@@ -30,9 +30,9 @@ export function evaluatePublicEvidenceAvailability(
         normalized.investorRelationsPresent ||
         normalized.manualCandidateCount > 0;
     return {
-        policyVersion: 'public-evidence-v1',
+        policyVersion: "public-evidence-v1",
         ...normalized,
-        outcome: sufficient ? 'sufficient' : 'insufficient',
-        reasons: sufficient ? [] : ['no_public_evidence_candidates'],
+        outcome: sufficient ? "sufficient" : "insufficient",
+        reasons: sufficient ? [] : ["no_public_evidence_candidates"],
     };
 }

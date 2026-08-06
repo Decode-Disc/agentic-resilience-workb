@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { MoreHorizontalCircle01Icon } from '@hugeicons/core-free-icons';
-import { motion } from 'motion/react';
+import { MoreHorizontalCircle01Icon } from "@hugeicons/core-free-icons";
+import { motion } from "motion/react";
 import {
     type CSSProperties,
     isValidElement,
@@ -9,12 +9,12 @@ import {
     useEffect,
     useRef,
     useState,
-} from 'react';
-import { createPortal } from 'react-dom';
-import Icon from '@/components/icon';
-import { uiLayerClasses } from '@/lib/ui-layers';
-import { cn } from '@/lib/utils';
-import type { PlatformIcon } from '@/types/ui';
+} from "react";
+import { createPortal } from "react-dom";
+import Icon from "@/components/icon";
+import { uiLayerClasses } from "@/lib/ui-layers";
+import { cn } from "@/lib/utils";
+import type { PlatformIcon } from "@/types/ui";
 
 type RenderState = {
     isActive: boolean;
@@ -25,17 +25,17 @@ type RenderState = {
 export type SmoothDropdownItem =
     | {
           id: string;
-          type?: 'item';
+          type?: "item";
           label: string;
           icon?: PlatformIcon | ReactNode;
-          variant?: 'default' | 'destructive';
+          variant?: "default" | "destructive";
           closeOnSelect?: boolean;
           onSelect?: () => void;
           renderLabel?: (state: RenderState) => ReactNode;
       }
     | {
           id: string;
-          type: 'divider';
+          type: "divider";
       };
 
 export interface SmoothDropdownProps {
@@ -43,8 +43,8 @@ export interface SmoothDropdownProps {
     trigger?: ReactNode;
     header?: ReactNode;
     footer?: ReactNode;
-    openPosition?: 'bottom' | 'top';
-    openFrom?: 'left' | 'right';
+    openPosition?: "bottom" | "top";
+    openFrom?: "left" | "right";
     portalContainer?: Element | DocumentFragment | null;
     className?: string;
     menuClassName?: string;
@@ -76,12 +76,12 @@ export function SmoothDropdwon({
     trigger,
     header,
     footer,
-    openPosition = 'bottom',
-    openFrom = 'left',
+    openPosition = "bottom",
+    openFrom = "left",
     portalContainer = null,
     className,
     menuClassName,
-    itemsAriaLabel = 'Dropdown options',
+    itemsAriaLabel = "Dropdown options",
     closedWidth = 40,
     openWidth = 220,
     closedHeight = 40,
@@ -130,7 +130,7 @@ export function SmoothDropdwon({
 
         updateHeight();
 
-        if (typeof ResizeObserver === 'undefined') {
+        if (typeof ResizeObserver === "undefined") {
             return;
         }
 
@@ -152,7 +152,7 @@ export function SmoothDropdwon({
             // Ignorer les clics dans les portals Radix ouverts (Popover, Dialog…)
             // qui sont attachés sur <body> et donc hors du containerRef.
             const insideRadixPortal = (event.target as Element)?.closest(
-                '[data-radix-popper-content-wrapper]',
+                "[data-radix-popper-content-wrapper]",
             );
 
             if (
@@ -166,14 +166,14 @@ export function SmoothDropdwon({
         };
 
         if (isOpen) {
-            document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener("mousedown", handleClickOutside);
         }
         return () =>
-            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener("mousedown", handleClickOutside);
     }, [isOpen, isControlled]);
 
     const openHeight = Math.max(closedHeight, Math.ceil(contentHeight));
-    const opensToLeft = openFrom === 'right';
+    const opensToLeft = openFrom === "right";
     const isPortalled = portalContainer !== null;
 
     useEffect(() => {
@@ -189,7 +189,7 @@ export function SmoothDropdwon({
             }
 
             setPortalStyle({
-                ...(openPosition === 'top'
+                ...(openPosition === "top"
                     ? { bottom: Math.max(0, window.innerHeight - rect.bottom) }
                     : { top: Math.max(0, rect.top) }),
                 ...(opensToLeft
@@ -200,12 +200,12 @@ export function SmoothDropdwon({
 
         updatePortalPosition();
 
-        window.addEventListener('resize', updatePortalPosition);
-        window.addEventListener('scroll', updatePortalPosition, true);
+        window.addEventListener("resize", updatePortalPosition);
+        window.addEventListener("scroll", updatePortalPosition, true);
 
         return () => {
-            window.removeEventListener('resize', updatePortalPosition);
-            window.removeEventListener('scroll', updatePortalPosition, true);
+            window.removeEventListener("resize", updatePortalPosition);
+            window.removeEventListener("scroll", updatePortalPosition, true);
         };
     }, [isOpen, isPortalled, openPosition, opensToLeft]);
 
@@ -237,18 +237,18 @@ export function SmoothDropdwon({
     };
 
     const menuOriginClass =
-        openPosition === 'top'
+        openPosition === "top"
             ? opensToLeft
-                ? 'origin-bottom-right'
-                : 'origin-bottom-left'
+                ? "origin-bottom-right"
+                : "origin-bottom-left"
             : opensToLeft
-              ? 'origin-top-right'
-              : 'origin-top-left';
+              ? "origin-top-right"
+              : "origin-top-left";
 
     const menuPositionClass = cn(
-        'absolute cursor-pointer overflow-hidden border border-border bg-popover shadow-lg',
-        opensToLeft ? 'right-0' : 'left-0',
-        openPosition === 'top' ? 'bottom-0' : 'top-0',
+        "absolute cursor-pointer overflow-hidden border border-border bg-popover shadow-lg",
+        opensToLeft ? "right-0" : "left-0",
+        openPosition === "top" ? "bottom-0" : "top-0",
         menuOriginClass,
     );
 
@@ -263,10 +263,9 @@ export function SmoothDropdwon({
                 transition={{ duration: 0.15 }}
                 className="absolute inset-0 flex items-center justify-center"
                 style={{
-                    pointerEvents: isOpen ? 'none' : 'auto',
-                    willChange: 'transform',
-                }}
-            >
+                    pointerEvents: isOpen ? "none" : "auto",
+                    willChange: "transform",
+                }}>
                 {trigger ?? (
                     <Icon
                         iconNode={MoreHorizontalCircle01Icon}
@@ -286,21 +285,19 @@ export function SmoothDropdwon({
                         duration: isOpen ? 0.08 : 0.3,
                         delay: isOpen ? 0.08 : 0.2,
                     }}
-                    className={cn('p-2', menuClassName)}
+                    className={cn("p-2", menuClassName)}
                     style={{
-                        pointerEvents: isOpen ? 'auto' : 'none',
-                        willChange: 'transform',
-                    }}
-                >
+                        pointerEvents: isOpen ? "auto" : "none",
+                        willChange: "transform",
+                    }}>
                     {header ? <div className="mb-2">{header}</div> : null}
 
                     <div
                         role="listbox"
                         aria-label={itemsAriaLabel}
-                        className="m-0 flex list-none flex-col gap-0.5 p-0"
-                    >
+                        className="m-0 flex list-none flex-col gap-0.5 p-0">
                         {items.map((item, index) => {
-                            if (item.type === 'divider') {
+                            if (item.type === "divider") {
                                 return (
                                     <motion.hr
                                         key={item.id}
@@ -318,7 +315,7 @@ export function SmoothDropdwon({
 
                             const isActive = activeItem === item.id;
                             const isDestructive =
-                                item.variant === 'destructive';
+                                item.variant === "destructive";
                             const showIndicator = hoveredItem
                                 ? hoveredItem === item.id
                                 : isActive;
@@ -363,8 +360,8 @@ export function SmoothDropdwon({
                                     }}
                                     onKeyDown={(event) => {
                                         if (
-                                            event.key === 'Enter' ||
-                                            event.key === ' '
+                                            event.key === "Enter" ||
+                                            event.key === " "
                                         ) {
                                             event.preventDefault();
                                             event.stopPropagation();
@@ -374,27 +371,26 @@ export function SmoothDropdwon({
                                     onMouseEnter={() => setHoveredItem(item.id)}
                                     onMouseLeave={() => setHoveredItem(null)}
                                     className={cn(
-                                        'relative m-0 flex cursor-pointer items-center gap-3 rounded-lg py-2 pl-3 text-sm transition-colors duration-200 ease-out',
+                                        "relative m-0 flex cursor-pointer items-center gap-3 rounded-lg py-2 pl-3 text-sm transition-colors duration-200 ease-out",
                                         isDestructive && showIndicator
-                                            ? 'text-destructive'
+                                            ? "text-destructive"
                                             : isActive
-                                              ? 'text-foreground'
+                                              ? "text-foreground"
                                               : isDestructive
-                                                ? 'text-foreground/80 hover:text-destructive'
-                                                : 'text-foreground/80 hover:text-foreground',
-                                    )}
-                                >
+                                                ? "text-foreground/80 hover:text-destructive"
+                                                : "text-foreground/80 hover:text-foreground",
+                                    )}>
                                     {showIndicator && (
                                         <motion.div
                                             layoutId="activeIndicator"
                                             className={cn(
-                                                'absolute inset-0 rounded',
+                                                "absolute inset-0 rounded",
                                                 isDestructive
-                                                    ? 'bg-destructive/10'
-                                                    : 'bg-accent/40',
+                                                    ? "bg-destructive/10"
+                                                    : "bg-accent/40",
                                             )}
                                             transition={{
-                                                type: 'spring',
+                                                type: "spring",
                                                 damping: 30,
                                                 stiffness: 520,
                                                 mass: 0.8,
@@ -405,13 +401,13 @@ export function SmoothDropdwon({
                                         <motion.div
                                             layoutId="leftBar"
                                             className={cn(
-                                                'absolute top-0 bottom-0 left-0 my-auto h-5 w-0.75 rounded-full',
+                                                "absolute top-0 bottom-0 left-0 my-auto h-5 w-0.75 rounded-full",
                                                 isDestructive
-                                                    ? 'bg-destructive'
-                                                    : 'bg-foreground',
+                                                    ? "bg-destructive"
+                                                    : "bg-foreground",
                                             )}
                                             transition={{
-                                                type: 'spring',
+                                                type: "spring",
                                                 damping: 30,
                                                 stiffness: 520,
                                                 mass: 0.8,
@@ -451,28 +447,27 @@ export function SmoothDropdwon({
             data-testid="smooth-dropdown-menu"
             data-open-from={openFrom}
             data-open-position={openPosition}
-            data-portalled={isPortalled && isOpen ? 'true' : 'false'}
+            data-portalled={isPortalled && isOpen ? "true" : "false"}
             animate={{
                 width: isOpen ? effectiveOpenWidth : closedWidth,
                 height: isOpen ? openHeight : closedHeight,
                 borderRadius: isOpen ? 14 : 12,
             }}
             transition={{
-                type: 'spring' as const,
+                type: "spring" as const,
                 damping: 34,
                 stiffness: 380,
                 mass: 0.8,
             }}
             className={cn(
                 isPortalled && isOpen
-                    ? 'fixed cursor-pointer overflow-hidden border border-border bg-popover shadow-lg'
+                    ? "fixed cursor-pointer overflow-hidden border border-border bg-popover shadow-lg"
                     : menuPositionClass,
                 isPortalled && isOpen && uiLayerClasses.modal,
                 isPortalled && isOpen && menuOriginClass,
             )}
             style={isPortalled && isOpen ? portalStyle : undefined}
-            onClick={() => !isOpen && requestOpenChange(true)}
-        >
+            onClick={() => !isOpen && requestOpenChange(true)}>
             {menuContent}
         </motion.div>
     );
@@ -481,18 +476,16 @@ export function SmoothDropdwon({
         <div
             ref={containerRef}
             data-testid="smooth-dropdown-container"
-            data-open={isOpen ? 'true' : undefined}
-            className={cn('relative not-prose', className)}
-            style={{ width: closedWidth, height: closedHeight, ...style }}
-        >
+            data-open={isOpen ? "true" : undefined}
+            className={cn("relative not-prose", className)}
+            style={{ width: closedWidth, height: closedHeight, ...style }}>
             {isPortalled ? (
                 <>
                     <button
                         type="button"
                         aria-label="Open dropdown"
                         className="absolute inset-0 cursor-pointer overflow-hidden rounded-md border border-border bg-popover shadow-lg"
-                        onClick={() => requestOpenChange(true)}
-                    >
+                        onClick={() => requestOpenChange(true)}>
                         <div className="absolute inset-0 flex items-center justify-center">
                             {trigger ?? (
                                 <Icon

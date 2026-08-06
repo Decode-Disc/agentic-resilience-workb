@@ -1,14 +1,14 @@
-import { ConvexAuthProvider } from '@convex-dev/auth/react';
-import { ConvexQueryClient } from '@convex-dev/react-query';
-import { QueryClient } from '@tanstack/react-query';
-import { createRouter as createTanStackRouter } from '@tanstack/react-router';
-import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query';
-import { ConvexReactClient } from 'convex/react';
+import { ConvexAuthProvider } from "@convex-dev/auth/react";
+import { ConvexQueryClient } from "@convex-dev/react-query";
+import { QueryClient } from "@tanstack/react-query";
+import { createRouter as createTanStackRouter } from "@tanstack/react-router";
+import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
+import { ConvexReactClient } from "convex/react";
 
-import { InvitationAccessProvider } from '@/components/workspace/invitation-access-context';
-import { clientEnv } from '@/config/env';
+import { InvitationAccessProvider } from "@/components/workspace/invitation-access-context";
+import { clientEnv } from "@/config/env";
 
-import { routeTree } from './routeTree.gen';
+import { routeTree } from "./routeTree.gen";
 
 export function getRouter() {
     const convexClient = new ConvexReactClient(clientEnv.VITE_CONVEX_URL, {
@@ -29,14 +29,12 @@ export function getRouter() {
     const router = createTanStackRouter({
         routeTree,
         context: { convexClient, convexQueryClient, queryClient },
-        defaultPreload: 'intent',
+        defaultPreload: "intent",
         defaultPreloadStaleTime: 0,
         scrollRestoration: true,
         Wrap: ({ children }) => (
             <ConvexAuthProvider client={convexClient}>
-                <InvitationAccessProvider>
-                    {children}
-                </InvitationAccessProvider>
+                <InvitationAccessProvider>{children}</InvitationAccessProvider>
             </ConvexAuthProvider>
         ),
     });
@@ -46,7 +44,7 @@ export function getRouter() {
     return router;
 }
 
-declare module '@tanstack/react-router' {
+declare module "@tanstack/react-router" {
     interface Register {
         router: ReturnType<typeof getRouter>;
     }

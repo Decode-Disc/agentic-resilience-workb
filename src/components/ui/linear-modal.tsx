@@ -1,13 +1,13 @@
-'use client';
+"use client";
 
-import { XIcon } from 'lucide-react';
+import { XIcon } from "lucide-react";
 import {
     AnimatePresence,
     MotionConfig,
     motion,
     type Transition,
     type Variant,
-} from 'motion/react';
+} from "motion/react";
 import React, {
     useCallback,
     useContext,
@@ -16,9 +16,9 @@ import React, {
     useMemo,
     useRef,
     useState,
-} from 'react';
-import { createPortal } from 'react-dom';
-import { cn } from '@/lib/utils';
+} from "react";
+import { createPortal } from "react-dom";
+import { cn } from "@/lib/utils";
 
 interface DialogContextType {
     isOpen: boolean;
@@ -32,7 +32,7 @@ const DialogContext = React.createContext<DialogContextType | null>(null);
 function useDialog() {
     const context = useContext(DialogContext);
     if (!context) {
-        throw new Error('useDialog must be used within a DialogProvider');
+        throw new Error("useDialog must be used within a DialogProvider");
     }
     return context;
 }
@@ -55,8 +55,7 @@ function DialogProvider({ children, transition }: DialogProviderProps) {
     return (
         <DialogContext.Provider
             //@ts-expect-error
-            value={contextValue}
-        >
+            value={contextValue}>
             <MotionConfig transition={transition}>{children}</MotionConfig>
         </DialogContext.Provider>
     );
@@ -96,7 +95,7 @@ function DialogTrigger({
 
     const handleKeyDown = useCallback(
         (event: React.KeyboardEvent) => {
-            if (event.key === 'Enter' || event.key === ' ') {
+            if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
                 setIsOpen(!isOpen);
             }
@@ -108,15 +107,14 @@ function DialogTrigger({
         <motion.div
             ref={triggerRef}
             layoutId={`dialog-${uniqueId}`}
-            className={cn('relative cursor-pointer', className)}
+            className={cn("relative cursor-pointer", className)}
             onClick={handleClick}
             onKeyDown={handleKeyDown}
             style={style}
             role="button"
             aria-haspopup="dialog"
             aria-expanded={isOpen}
-            aria-controls={`dialog-content-${uniqueId}`}
-        >
+            aria-controls={`dialog-content-${uniqueId}`}>
             {children}
         </motion.div>
     );
@@ -138,10 +136,10 @@ function DialogContent({ children, className, style }: DialogContent) {
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
+            if (event.key === "Escape") {
                 setIsOpen(false);
             }
-            if (event.key === 'Tab') {
+            if (event.key === "Tab") {
                 if (!firstFocusableElement || !lastFocusableElement) return;
 
                 if (event.shiftKey) {
@@ -158,16 +156,16 @@ function DialogContent({ children, className, style }: DialogContent) {
             }
         };
 
-        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener("keydown", handleKeyDown);
 
         return () => {
-            document.removeEventListener('keydown', handleKeyDown);
+            document.removeEventListener("keydown", handleKeyDown);
         };
     }, [setIsOpen, firstFocusableElement, lastFocusableElement]);
 
     useEffect(() => {
         if (isOpen) {
-            document.body.style.overflow = 'hidden';
+            document.body.style.overflow = "hidden";
 
             const focusableElements = containerRef.current?.querySelectorAll(
                 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
@@ -189,7 +187,7 @@ function DialogContent({ children, className, style }: DialogContent) {
                 containerRef.current.scrollTop = 0;
             }
         } else {
-            document.body.style.overflow = '';
+            document.body.style.overflow = "";
             triggerRef.current?.focus();
         }
     }, [isOpen, triggerRef]);
@@ -198,10 +196,10 @@ function DialogContent({ children, className, style }: DialogContent) {
         <motion.div
             ref={containerRef}
             layoutId={`dialog-${uniqueId}`}
-            className={cn('overflow-hidden', className)}
+            className={cn("overflow-hidden", className)}
             style={{
                 ...style,
-                willChange: 'transform, opacity', // GPU acceleration
+                willChange: "transform, opacity", // GPU acceleration
             }}
             role="dialog"
             aria-modal="true"
@@ -211,12 +209,11 @@ function DialogContent({ children, className, style }: DialogContent) {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
             transition={{
-                type: 'spring',
+                type: "spring",
                 damping: 25,
                 stiffness: 300,
                 mass: 0.8,
-            }}
-        >
+            }}>
             {children}
         </motion.div>
     );
@@ -237,28 +234,28 @@ function DialogContainer({
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
-        const drawerWrapper = document.querySelectorAll('[drawer-wrapper]');
+        const drawerWrapper = document.querySelectorAll("[drawer-wrapper]");
 
         if (isOpen) {
-            document.body.classList.add('overflow-hidden');
+            document.body.classList.add("overflow-hidden");
             for (const wrapper of drawerWrapper) {
-                wrapper?.classList.add('open');
+                wrapper?.classList.add("open");
             }
         } else {
-            document.body.classList.remove('overflow-hidden');
+            document.body.classList.remove("overflow-hidden");
             for (const wrapper of drawerWrapper) {
-                wrapper?.classList.remove('open');
+                wrapper?.classList.remove("open");
             }
         }
         const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
+            if (event.key === "Escape") {
                 setIsOpen(false);
             }
         };
 
-        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener("keydown", handleKeyDown);
         return () => {
-            document.removeEventListener('keydown', handleKeyDown);
+            document.removeEventListener("keydown", handleKeyDown);
         };
     }, [isOpen, setIsOpen]);
 
@@ -279,7 +276,7 @@ function DialogContainer({
                         key={`backdrop-${uniqueId}`}
                         data-lenis-prevent
                         className={cn(
-                            'fixed inset-0 h-full z-50 w-full backdrop-blur-xl dark:bg-[radial-gradient(125%_125%_at_50%_10%,#050505_40%,#243aff_100%)] bg-[radial-gradient(125%_125%_at_50%_10%,#ffffff_40%,#243aff_100%)]',
+                            "fixed inset-0 h-full z-50 w-full backdrop-blur-xl dark:bg-[radial-gradient(125%_125%_at_50%_10%,#050505_40%,#243aff_100%)] bg-[radial-gradient(125%_125%_at_50%_10%,#ffffff_40%,#243aff_100%)]",
                             overlayClassName,
                         )}
                         initial={{ opacity: 0 }}
@@ -289,14 +286,13 @@ function DialogContainer({
                             duration: 0.2,
                             ease: [0.4, 0.0, 0.4, 1],
                         }}
-                        onClick={() => setIsOpen(false)}
-                    ></motion.div>
+                        onClick={() => setIsOpen(false)}></motion.div>
                     <motion.div
                         className={cn(
                             `fixed inset-0 z-50 w-fit mx-auto`,
                             className,
                         )}
-                        style={{ willChange: 'transform' }} // GPU acceleration for transforms
+                        style={{ willChange: "transform" }} // GPU acceleration for transforms
                     >
                         {children}
                     </motion.div>
@@ -320,8 +316,7 @@ function DialogTitle({ children, className, style }: DialogTitleProps) {
             layoutId={`dialog-title-container-${uniqueId}`}
             className={className}
             style={style}
-            layout
-        >
+            layout>
             {children}
         </motion.h1>
     );
@@ -340,8 +335,7 @@ function DialogSubtitle({ children, className, style }: DialogSubtitleProps) {
         <motion.div
             layoutId={`dialog-subtitle-container-${uniqueId}`}
             className={className}
-            style={style}
-        >
+            style={style}>
             {children}
         </motion.div>
     );
@@ -379,8 +373,7 @@ function DialogDescription({
             initial="initial"
             animate="animate"
             exit="exit"
-            id={`dialog-description-${uniqueId}`}
-        >
+            id={`dialog-description-${uniqueId}`}>
             {children}
         </motion.div>
     );
@@ -430,12 +423,11 @@ function DialogClose({ children, className, variants }: DialogCloseProps) {
             type="button"
             aria-label="Close dialog"
             key={`dialog-close-${uniqueId}`}
-            className={cn('absolute right-6 top-6 text-white', className)}
+            className={cn("absolute right-6 top-6 text-white", className)}
             initial="initial"
             animate="animate"
             exit="exit"
-            variants={variants}
-        >
+            variants={variants}>
             {children || <XIcon size={24} />}
         </motion.button>
     );

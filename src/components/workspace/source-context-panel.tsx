@@ -1,24 +1,24 @@
-import type { api } from '@convex/_generated/api';
-import { LinkSquare01Icon } from '@hugeicons/core-free-icons';
-import type { FunctionReturnType } from 'convex/server';
-import { useMemo } from 'react';
+import type { api } from "@convex/_generated/api";
+import { LinkSquare01Icon } from "@hugeicons/core-free-icons";
+import type { FunctionReturnType } from "convex/server";
+import { useMemo } from "react";
 
-import Icon from '@/components/icon';
-import { Badge } from '@/components/ui/badge';
+import Icon from "@/components/icon";
+import { Badge } from "@/components/ui/badge";
 import {
     DirectionAwareTabs,
     type Tab,
-} from '@/components/ui/direction-aware-tabs';
-import { SourceBrowserView } from '@/components/workspace/source-browser-view';
-import { SourceDecisionStatus } from '@/components/workspace/source-decision';
+} from "@/components/ui/direction-aware-tabs";
+import { SourceBrowserView } from "@/components/workspace/source-browser-view";
+import { SourceDecisionStatus } from "@/components/workspace/source-decision";
 import {
     sourceCategoryLabel,
     sourceOriginLabel,
-} from '@/lib/presentation/research-copy';
+} from "@/lib/presentation/research-copy";
 
 type SourceContext = FunctionReturnType<
     typeof api.sources.listForReviewPage
->['page'][number];
+>["page"][number];
 
 /**
  * Selected source detail panel: an embedded best-effort preview by default,
@@ -32,8 +32,8 @@ export function SourceContextPanel({ source }: { source: SourceContext }) {
     const tabs: Tab[] = useMemo(
         () => [
             {
-                id: 'preview',
-                label: 'Preview',
+                id: "preview",
+                label: "Preview",
                 content: (
                     <div className="h-full min-h-0 w-full overflow-hidden rounded-xl border border-border/60">
                         <SourceBrowserView source={source} />
@@ -41,16 +41,15 @@ export function SourceContextPanel({ source }: { source: SourceContext }) {
                 ),
             },
             {
-                id: 'details',
-                label: 'Source details',
+                id: "details",
+                label: "Source details",
                 content: (
                     <div className="h-full min-h-0 w-full overflow-auto rounded-xl border border-border/60 p-5">
                         <a
                             href={source.canonicalUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="flex items-center gap-2 break-all font-mono text-xs link underline-offset-4"
-                        >
+                            className="flex items-center gap-2 break-all font-mono text-xs link underline-offset-4">
                             <Icon
                                 iconNode={LinkSquare01Icon}
                                 className="mt-0.5 shrink-0"
@@ -72,8 +71,7 @@ export function SourceContextPanel({ source }: { source: SourceContext }) {
         <article className="surface-panel flex h-full min-h-0 flex-col overflow-hidden rounded-xl">
             <header
                 data-slot="source-record-header"
-                className="border-b border-border/60 bg-[linear-gradient(to_bottom,color-mix(in_oklab,var(--brand-green)_14%,transparent),transparent)] p-5"
-            >
+                className="border-b border-border/60 bg-[linear-gradient(to_bottom,color-mix(in_oklab,var(--brand-green)_14%,transparent),transparent)] p-5">
                 <div className="flex flex-wrap items-baseline gap-1">
                     <p className="text-micro text-source-selection-accent">
                         Selected source:

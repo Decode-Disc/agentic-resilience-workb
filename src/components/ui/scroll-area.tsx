@@ -1,7 +1,7 @@
-import { ScrollArea as ScrollAreaPrimitive } from '@base-ui/react/scroll-area';
-import * as React from 'react';
+import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area";
+import * as React from "react";
 
-import { cn } from '@/lib/utils';
+import { cn } from "@/lib/utils";
 
 export type ScrollAreaViewportState = {
     scrollLeft: number;
@@ -23,7 +23,7 @@ function assignRef<T>(ref: React.Ref<T> | undefined, value: T): void {
         return;
     }
 
-    if (typeof ref === 'function') {
+    if (typeof ref === "function") {
         ref(value);
         return;
     }
@@ -37,10 +37,9 @@ type ScrollAreaProps = ScrollAreaPrimitive.Root.Props & {
     onViewportScroll?: (viewportState: ScrollAreaViewportState) => void;
     viewportProps?: Omit<
         ScrollAreaPrimitive.Viewport.Props,
-        'className' | 'children' | 'ref'
+        "className" | "children" | "ref"
     >;
 };
-
 
 function ScrollArea({
     className,
@@ -59,8 +58,14 @@ function ScrollArea({
         }
 
         const viewport = internalViewportRef.current;
-        const maxScrollLeft = Math.max(viewport.scrollWidth - viewport.clientWidth, 0);
-        const maxScrollTop = Math.max(viewport.scrollHeight - viewport.clientHeight, 0);
+        const maxScrollLeft = Math.max(
+            viewport.scrollWidth - viewport.clientWidth,
+            0,
+        );
+        const maxScrollTop = Math.max(
+            viewport.scrollHeight - viewport.clientHeight,
+            0,
+        );
 
         onViewportScroll({
             scrollLeft: viewport.scrollLeft,
@@ -70,9 +75,11 @@ function ScrollArea({
             clientWidth: viewport.clientWidth,
             clientHeight: viewport.clientHeight,
             canScrollLeft: viewport.scrollLeft > SCROLL_EDGE_TOLERANCE,
-            canScrollRight: viewport.scrollLeft < maxScrollLeft - SCROLL_EDGE_TOLERANCE,
+            canScrollRight:
+                viewport.scrollLeft < maxScrollLeft - SCROLL_EDGE_TOLERANCE,
             canScrollUp: viewport.scrollTop > SCROLL_EDGE_TOLERANCE,
-            canScrollDown: viewport.scrollTop < maxScrollTop - SCROLL_EDGE_TOLERANCE,
+            canScrollDown:
+                viewport.scrollTop < maxScrollTop - SCROLL_EDGE_TOLERANCE,
         });
     }, [onViewportScroll]);
 
@@ -92,15 +99,17 @@ function ScrollArea({
         const viewport = internalViewportRef.current;
         const contentElement = viewport.firstElementChild;
         const resizeObserver =
-            typeof ResizeObserver !== 'undefined'
+            typeof ResizeObserver !== "undefined"
                 ? new ResizeObserver(() => {
-                    emitViewportState();
-                })
+                      emitViewportState();
+                  })
                 : null;
 
         emitViewportState();
-        viewport.addEventListener('scroll', emitViewportState, { passive: true });
-        window.addEventListener('resize', emitViewportState, { passive: true });
+        viewport.addEventListener("scroll", emitViewportState, {
+            passive: true,
+        });
+        window.addEventListener("resize", emitViewportState, { passive: true });
         resizeObserver?.observe(viewport);
 
         if (contentElement instanceof HTMLElement) {
@@ -108,8 +117,8 @@ function ScrollArea({
         }
 
         return () => {
-            viewport.removeEventListener('scroll', emitViewportState);
-            window.removeEventListener('resize', emitViewportState);
+            viewport.removeEventListener("scroll", emitViewportState);
+            window.removeEventListener("resize", emitViewportState);
             resizeObserver?.disconnect();
         };
     }, [emitViewportState, onViewportScroll]);
@@ -122,21 +131,22 @@ function ScrollArea({
     React.useLayoutEffect(() => {
         const viewport = internalViewportRef.current;
         if (!viewport) return;
-        viewport.style.display = 'block';
+        viewport.style.display = "block";
     });
 
     return (
         <ScrollAreaPrimitive.Root
             data-slot="scroll-area"
-            className={cn('relative', className)}
-            {...props}
-        >
+            className={cn("relative", className)}
+            {...props}>
             <ScrollAreaPrimitive.Viewport
                 data-slot="scroll-area-viewport"
                 ref={handleViewportRef}
-                className={cn('size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1', viewportClassName)}
-                {...viewportProps}
-            >
+                className={cn(
+                    "size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1",
+                    viewportClassName,
+                )}
+                {...viewportProps}>
                 {children}
             </ScrollAreaPrimitive.Viewport>
             <ScrollBar />
@@ -147,7 +157,7 @@ function ScrollArea({
 
 function ScrollBar({
     className,
-    orientation = 'vertical',
+    orientation = "vertical",
     ...props
 }: ScrollAreaPrimitive.Scrollbar.Props) {
     return (
@@ -156,11 +166,10 @@ function ScrollBar({
             data-orientation={orientation}
             orientation={orientation}
             className={cn(
-                'flex touch-none p-px transition-colors select-none data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent',
+                "flex touch-none p-px transition-colors select-none data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent",
                 className,
             )}
-            {...props}
-        >
+            {...props}>
             <ScrollAreaPrimitive.Thumb
                 data-slot="scroll-area-thumb"
                 className="relative flex-1 rounded-full bg-border"

@@ -1,14 +1,14 @@
-'use client';
+"use client";
 
-import { api } from '@convex/_generated/api';
-import { ArrowRight01Icon, Cancel01Icon } from '@hugeicons/core-free-icons';
-import { useAction } from 'convex/react';
-import type { FunctionReturnType } from 'convex/server';
-import { REGEXP_ONLY_DIGITS } from 'input-otp';
-import { type FormEvent, useState } from 'react';
+import { api } from "@convex/_generated/api";
+import { ArrowRight01Icon, Cancel01Icon } from "@hugeicons/core-free-icons";
+import { useAction } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
+import { REGEXP_ONLY_DIGITS } from "input-otp";
+import { type FormEvent, useState } from "react";
 
-import Icon from '@/components/icon';
-import { Button } from '@/components/ui/button';
+import Icon from "@/components/icon";
+import { Button } from "@/components/ui/button";
 import {
     Drawer,
     DrawerClose,
@@ -17,14 +17,14 @@ import {
     DrawerFooter,
     DrawerHeader,
     DrawerTitle,
-} from '@/components/ui/drawer';
+} from "@/components/ui/drawer";
 import {
     InputOTP,
     InputOTPGroup,
     InputOTPSlot,
-} from '@/components/ui/input-otp';
-import { Label } from '@/components/ui/label';
-import { accessCodeErrorMessage } from '@/lib/presentation/research-copy';
+} from "@/components/ui/input-otp";
+import { Label } from "@/components/ui/label";
+import { accessCodeErrorMessage } from "@/lib/presentation/research-copy";
 
 type Admission = FunctionReturnType<typeof api.invitations.claim>;
 const invitationOtpSlots = [0, 1, 2, 3] as const;
@@ -42,7 +42,7 @@ export function InvitationAccessDrawer({
     onAdmitted,
 }: InvitationAccessDrawerProps) {
     const claimInvitation = useAction(api.invitations.claim);
-    const [code, setCode] = useState('');
+    const [code, setCode] = useState("");
     const [error, setError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -50,7 +50,7 @@ export function InvitationAccessDrawer({
         event.preventDefault();
         const normalizedCode = code.trim();
         if (!/^\d{4}$/.test(normalizedCode)) {
-            setError('Enter the four-digit access code.');
+            setError("Enter the four-digit access code.");
             return;
         }
 
@@ -59,7 +59,7 @@ export function InvitationAccessDrawer({
         try {
             const admission = await claimInvitation({ code: normalizedCode });
             await onAdmitted(admission);
-            setCode('');
+            setCode("");
             onOpenChange(false);
         } catch (caughtError) {
             setError(accessCodeErrorMessage(caughtError));
@@ -73,8 +73,7 @@ export function InvitationAccessDrawer({
             open={open}
             onOpenChange={onOpenChange}
             swipeDirection="up"
-            showSwipeHandle
-        >
+            showSwipeHandle>
             <DrawerContent className="mx-auto w-full max-w-3xl">
                 <DrawerHeader className="mx-auto w-full max-w-xl px-5 pt-6 text-left">
                     <DrawerTitle className="text-micro">
@@ -89,8 +88,7 @@ export function InvitationAccessDrawer({
                 <form
                     aria-label="Workspace access"
                     className="mx-auto w-full max-w-xl space-y-4 px-5 pt-5"
-                    onSubmit={submit}
-                >
+                    onSubmit={submit}>
                     <div className="flex flex-col gap-1 items-center">
                         <Label htmlFor="invitation-code" className="text-sm">
                             Access code
@@ -108,10 +106,9 @@ export function InvitationAccessDrawer({
                             autoComplete="one-time-code"
                             aria-invalid={Boolean(error)}
                             aria-describedby={
-                                error ? 'invitation-code-error' : undefined
+                                error ? "invitation-code-error" : undefined
                             }
-                            containerClassName="justify-start"
-                        >
+                            containerClassName="justify-start">
                             <InputOTPGroup>
                                 {invitationOtpSlots.map((slot) => (
                                     <InputOTPSlot
@@ -126,8 +123,7 @@ export function InvitationAccessDrawer({
                             <p
                                 id="invitation-code-error"
                                 role="alert"
-                                className="text-xs text-destructive"
-                            >
+                                className="text-xs text-destructive">
                                 {error}
                             </p>
                         ) : (
@@ -146,13 +142,12 @@ export function InvitationAccessDrawer({
                                     variant="ghost"
                                     disabled={isSubmitting}
                                 />
-                            }
-                        >
+                            }>
                             <Icon iconNode={Cancel01Icon} />
                             Cancel
                         </DrawerClose>
                         <Button type="submit" size="lg" disabled={isSubmitting}>
-                            {isSubmitting ? 'Verifying…' : 'Continue'}
+                            {isSubmitting ? "Verifying…" : "Continue"}
                             <Icon
                                 iconNode={ArrowRight01Icon}
                                 data-icon="inline-end"

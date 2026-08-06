@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export interface UsePaginationOptions<Item> {
     items: ReadonlyArray<Item>;
@@ -19,7 +19,7 @@ export function usePagination<Item>({
     resetKey,
 }: UsePaginationOptions<Item>): UsePaginationResult<Item> {
     if (!Number.isInteger(pageSize) || pageSize < 1) {
-        throw new Error('Pagination pageSize must be a positive integer');
+        throw new Error("Pagination pageSize must be a positive integer");
     }
 
     const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
@@ -43,7 +43,9 @@ export function usePagination<Item>({
             if (!Number.isFinite(nextPage)) {
                 return;
             }
-            setPageState(Math.min(Math.max(Math.trunc(nextPage), 1), pageCount));
+            setPageState(
+                Math.min(Math.max(Math.trunc(nextPage), 1), pageCount),
+            );
         },
         [pageCount],
     );

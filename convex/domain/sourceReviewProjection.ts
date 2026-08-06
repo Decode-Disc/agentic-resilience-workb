@@ -1,15 +1,15 @@
-import type { Id } from '@convex/_generated/dataModel';
-import type { MutationCtx } from '@convex/_generated/server';
+import type { Id } from "@convex/_generated/dataModel";
+import type { MutationCtx } from "@convex/_generated/server";
 
-export type SourceReviewDecision = 'accepted' | 'rejected' | 'pending';
+export type SourceReviewDecision = "accepted" | "rejected" | "pending";
 
 export function sourceReviewDecisionRank(
     decision: SourceReviewDecision,
 ): number {
-    if (decision === 'pending') {
+    if (decision === "pending") {
         return 0;
     }
-    if (decision === 'accepted') {
+    if (decision === "accepted") {
         return 1;
     }
     return 2;
@@ -18,22 +18,22 @@ export function sourceReviewDecisionRank(
 export async function upsertSourceReviewItem(
     ctx: MutationCtx,
     value: {
-        runId: Id<'researchRuns'>;
-        corpusRevisionId: Id<'corpusRevisions'>;
-        sourceId: Id<'sources'>;
+        runId: Id<"researchRuns">;
+        corpusRevisionId: Id<"corpusRevisions">;
+        sourceId: Id<"sources">;
         decision: SourceReviewDecision;
         sourceCreatedAt: number;
-        latestDecisionId: Id<'sourceDecisions'>;
+        latestDecisionId: Id<"sourceDecisions">;
         decisionOccurredAt: number;
         reason?: string;
     },
 ): Promise<void> {
     const existing = await ctx.db
-        .query('sourceReviewItems')
-        .withIndex('by_revision_and_source', (query) =>
+        .query("sourceReviewItems")
+        .withIndex("by_revision_and_source", (query) =>
             query
-                .eq('corpusRevisionId', value.corpusRevisionId)
-                .eq('sourceId', value.sourceId),
+                .eq("corpusRevisionId", value.corpusRevisionId)
+                .eq("sourceId", value.sourceId),
         )
         .unique();
     const projection = {
@@ -45,5 +45,5 @@ export async function upsertSourceReviewItem(
         await ctx.db.patch(existing._id, projection);
         return;
     }
-    await ctx.db.insert('sourceReviewItems', projection);
+    await ctx.db.insert("sourceReviewItems", projection);
 }

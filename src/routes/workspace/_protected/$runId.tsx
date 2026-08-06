@@ -1,27 +1,27 @@
-import type { Id } from '@convex/_generated/dataModel';
+import type { Id } from "@convex/_generated/dataModel";
 import {
     createFileRoute,
     type ErrorComponentProps,
-} from '@tanstack/react-router';
+} from "@tanstack/react-router";
 
-import { Button } from '@/components/ui/button';
-import { RunRouteComponent } from '@/components/workspace/run-route-component';
-import type { WorkspaceSection } from '@/components/workspace/workspace-navigation-rail';
+import { Button } from "@/components/ui/button";
+import { RunRouteComponent } from "@/components/workspace/run-route-component";
+import type { WorkspaceSection } from "@/components/workspace/workspace-navigation-rail";
 
 const sections: ReadonlyArray<WorkspaceSection> = [
-    'progress',
-    'sources',
-    'evidence',
-    'assessment',
-    'map',
-    'brief',
+    "progress",
+    "sources",
+    "evidence",
+    "assessment",
+    "map",
+    "brief",
 ];
 
-export const Route = createFileRoute('/workspace/_protected/$runId')({
+export const Route = createFileRoute("/workspace/_protected/$runId")({
     validateSearch: (search: Record<string, unknown>) => ({
         section: sections.includes(search.section as WorkspaceSection)
             ? (search.section as WorkspaceSection)
-            : ('progress' as const),
+            : ("progress" as const),
     }),
     component: RunRoute,
     errorComponent: RunError,
@@ -32,7 +32,7 @@ function RunRoute() {
     const { section } = Route.useSearch();
     return (
         <RunRouteComponent
-            runId={runId as Id<'researchRuns'>}
+            runId={runId as Id<"researchRuns">}
             section={section}
         />
     );
@@ -42,8 +42,7 @@ function RunError({ reset }: ErrorComponentProps) {
     return (
         <div
             role="alert"
-            className="surface-panel bg-destructive/8 rounded-xl p-6"
-        >
+            className="surface-panel bg-destructive/8 rounded-xl p-6">
             <h1 className="text-lg font-medium text-destructive">
                 Research workspace unavailable
             </h1>

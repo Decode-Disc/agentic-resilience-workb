@@ -1,13 +1,13 @@
-'use client';
+"use client";
 
-import { api } from '@convex/_generated/api';
-import type { Id } from '@convex/_generated/dataModel';
-import { Shield01Icon } from '@hugeicons/core-free-icons';
-import { useMutation, useQuery } from 'convex/react';
-import { useState } from 'react';
-import Icon from '@/components/icon';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { Shield01Icon } from "@hugeicons/core-free-icons";
+import { useMutation, useQuery } from "convex/react";
+import { useState } from "react";
+import Icon from "@/components/icon";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
     Dialog,
     DialogContent,
@@ -15,29 +15,37 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Textarea } from '@/components/ui/textarea';
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import {
+    executionLabel,
+    lifecycleLabel,
+    providerErrorLabel,
+    providerOperationLabel,
+    providerServiceLabel,
+    providerStatusLabel,
+} from "@/lib/presentation/research-copy";
 
 /** Minimal, read-mostly operational view for the single invited admin. */
 export function OperationsPage() {
     const visitor = useQuery(api.visitors.current);
     const operations = useQuery(
         api.adminOperations.get,
-        visitor?.role === 'admin' ? {} : 'skip',
+        visitor?.role === "admin" ? {} : "skip",
     );
     const setPaidWorkEnabled = useMutation(
         api.adminOperations.setPaidWorkEnabled,
     );
     const restoreQuota = useMutation(api.admin.restoreQuota);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [reason, setReason] = useState('');
+    const [reason, setReason] = useState("");
     const [pending, setPending] = useState(false);
-    const [restoreRunId, setRestoreRunId] = useState<Id<'researchRuns'> | null>(
+    const [restoreRunId, setRestoreRunId] = useState<Id<"researchRuns"> | null>(
         null,
     );
-    const [restoreReason, setRestoreReason] = useState('');
+    const [restoreReason, setRestoreReason] = useState("");
     const [restorePending, setRestorePending] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -48,7 +56,7 @@ export function OperationsPage() {
             </div>
         );
     }
-    if (visitor?.role !== 'admin') {
+    if (visitor?.role !== "admin") {
         return (
             <div className="surface-panel rounded-xl p-8 text-center">
                 <h1 className="text-xl font-medium">Admin access required</h1>
@@ -91,28 +99,26 @@ export function OperationsPage() {
                     <Badge
                         variant={
                             operations.paidWork.enabled
-                                ? 'secondary'
-                                : 'destructive'
-                        }
-                    >
-                        Paid work{' '}
-                        {operations.paidWork.enabled ? 'enabled' : 'disabled'}
+                                ? "secondary"
+                                : "destructive"
+                        }>
+                        Paid work{" "}
+                        {operations.paidWork.enabled ? "enabled" : "disabled"}
                     </Badge>
                     <Button
                         variant={
                             operations.paidWork.enabled
-                                ? 'destructive'
-                                : 'default'
+                                ? "destructive"
+                                : "default"
                         }
                         onClick={() => {
-                            setReason('');
+                            setReason("");
                             setError(null);
                             setDialogOpen(true);
-                        }}
-                    >
+                        }}>
                         {operations.paidWork.enabled
-                            ? 'Disable paid work'
-                            : 'Enable paid work'}
+                            ? "Disable paid work"
+                            : "Enable paid work"}
                     </Button>
                 </div>
             </header>
@@ -130,13 +136,18 @@ export function OperationsPage() {
                         {operations.runs.map((run) => (
                             <li
                                 key={run.runId}
-                                className="flex items-center justify-between gap-3 border-b border-border/50 py-2 text-sm last:border-0"
-                            >
-                                <span className="font-mono text-xs">
-                                    {run.lifecycleState}
+                                className="flex items-center justify-between gap-3 border-b border-border/50 py-2 text-sm last:border-0">
+                                <span>
+                                    <span className="font-medium">
+                                        {lifecycleLabel(run.lifecycleState)}
+                                    </span>
+                                    <span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">
+                                        Diagnostic: {run.lifecycleState} ·{" "}
+                                        {run.executionStatus}
+                                    </span>
                                 </span>
                                 <Badge variant="outline">
-                                    {run.executionStatus}
+                                    {executionLabel(run.executionStatus)}
                                 </Badge>
                             </li>
                         ))}
@@ -151,8 +162,7 @@ export function OperationsPage() {
                                 {operations.restorableRuns.map((run) => (
                                     <li
                                         key={run.runId}
-                                        className="flex items-center justify-between gap-2"
-                                    >
+                                        className="flex items-center justify-between gap-2">
                                         <span className="truncate font-mono text-xs">
                                             {run.runId}
                                         </span>
@@ -160,11 +170,10 @@ export function OperationsPage() {
                                             size="xs"
                                             variant="outline"
                                             onClick={() => {
-                                                setRestoreReason('');
+                                                setRestoreReason("");
                                                 setError(null);
                                                 setRestoreRunId(run.runId);
-                                            }}
-                                        >
+                                            }}>
                                             Restore quota
                                         </Button>
                                     </li>
@@ -181,8 +190,7 @@ export function OperationsPage() {
                         {operations.reservations.map((reservation) => (
                             <li
                                 key={reservation.visitorId}
-                                className="flex justify-between text-sm"
-                            >
+                                className="flex justify-between text-sm">
                                 <span>{reservation.role}</span>
                                 <span className="font-mono">
                                     {reservation.remaining} remaining
@@ -200,19 +208,31 @@ export function OperationsPage() {
                             No provider attempts recorded.
                         </p>
                     ) : (
-                        <ul className="mt-3 space-y-2 font-mono text-xs">
+                        <ul className="mt-3 space-y-3 text-xs">
                             {operations.providerCalls.map((call) => (
                                 <li
                                     key={`${call.service}-${call.operation}-${call.createdAt}`}
-                                >
-                                    {call.service} · {call.operation} ·{' '}
-                                    {call.status}
-                                    {call.reportedCost !== undefined
-                                        ? ` · ${call.reportedCost}`
-                                        : ''}
-                                    {call.errorCode
-                                        ? ` · ${call.errorCode}`
-                                        : ''}
+                                    className="rounded-lg border border-border/50 p-3">
+                                    <p className="font-medium">
+                                        {providerServiceLabel(call.service)} ·{" "}
+                                        {providerOperationLabel(call.operation)}{" "}
+                                        · {providerStatusLabel(call.status)}
+                                    </p>
+                                    {call.errorCode ? (
+                                        <p className="mt-1 text-muted-foreground">
+                                            {providerErrorLabel(call.errorCode)}
+                                        </p>
+                                    ) : null}
+                                    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                                        Diagnostic: {call.service} ·{" "}
+                                        {call.operation} · {call.status}
+                                        {call.errorCode
+                                            ? ` · ${call.errorCode}`
+                                            : ""}
+                                        {call.reportedCost !== undefined
+                                            ? ` · cost ${call.reportedCost}`
+                                            : ""}
+                                    </p>
                                 </li>
                             ))}
                         </ul>
@@ -224,7 +244,7 @@ export function OperationsPage() {
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>
-                            {nextEnabled ? 'Enable' : 'Disable'} paid work
+                            {nextEnabled ? "Enable" : "Disable"} paid work
                         </DialogTitle>
                         <DialogDescription>
                             Existing human checkpoints remain reviewable. This
@@ -244,12 +264,11 @@ export function OperationsPage() {
                     <DialogFooter>
                         <Button
                             variant="outline"
-                            onClick={() => setDialogOpen(false)}
-                        >
+                            onClick={() => setDialogOpen(false)}>
                             Cancel
                         </Button>
                         <Button
-                            variant={nextEnabled ? 'default' : 'destructive'}
+                            variant={nextEnabled ? "default" : "destructive"}
                             disabled={pending || reason.trim().length < 12}
                             onClick={async () => {
                                 setPending(true);
@@ -264,16 +283,15 @@ export function OperationsPage() {
                                     setError(
                                         caught instanceof Error
                                             ? caught.message
-                                            : 'Paid-work control update failed.',
+                                            : "Paid-work control update failed.",
                                     );
                                 } finally {
                                     setPending(false);
                                 }
-                            }}
-                        >
+                            }}>
                             {pending
-                                ? 'Saving…'
-                                : `Confirm ${nextEnabled ? 'enable' : 'disable'}`}
+                                ? "Saving…"
+                                : `Confirm ${nextEnabled ? "enable" : "disable"}`}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -284,8 +302,7 @@ export function OperationsPage() {
                     if (!open) {
                         setRestoreRunId(null);
                     }
-                }}
-            >
+                }}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Restore unused reservation</DialogTitle>
@@ -309,8 +326,7 @@ export function OperationsPage() {
                     <DialogFooter>
                         <Button
                             variant="outline"
-                            onClick={() => setRestoreRunId(null)}
-                        >
+                            onClick={() => setRestoreRunId(null)}>
                             Cancel
                         </Button>
                         <Button
@@ -334,16 +350,15 @@ export function OperationsPage() {
                                     setError(
                                         caught instanceof Error
                                             ? caught.message
-                                            : 'Quota restoration failed.',
+                                            : "Quota restoration failed.",
                                     );
                                 } finally {
                                     setRestorePending(false);
                                 }
-                            }}
-                        >
+                            }}>
                             {restorePending
-                                ? 'Restoring…'
-                                : 'Confirm restoration'}
+                                ? "Restoring…"
+                                : "Confirm restoration"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

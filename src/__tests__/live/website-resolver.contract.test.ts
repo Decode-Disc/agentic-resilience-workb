@@ -1,73 +1,65 @@
-import { createExaWebsiteAdapter } from '@convex/integrations/exa';
-import { classifyIrAsWebsite } from '@convex/integrations/sec';
-import { resolveWebsiteUrl } from '@convex/integrations/websiteResolver';
-import Exa from 'exa-js';
-import { expect, test } from 'vitest';
+import { createExaWebsiteAdapter } from "@convex/integrations/exa";
+import { classifyIrAsWebsite } from "@convex/integrations/sec";
+import { resolveWebsiteUrl } from "@convex/integrations/websiteResolver";
+import Exa from "exa-js";
+import { expect, test } from "vitest";
 
-/**
- * Live integration check that the website resolver picks the right marketing
- * homepage via Exa's company category. Gated behind RUN_LIVE_PROVIDER_TESTS=1
- * (mirrors the convention in exa.contract.test.ts). CI does not run this.
- */
-test('website resolver picks the marketing homepage for known companies', async () => {
-    if (process.env.RUN_LIVE_PROVIDER_TESTS !== '1') {
-        expect(process.env.RUN_LIVE_PROVIDER_TESTS).not.toBe('1');
+test("website resolver performs one bounded metadata-only Exa lookup", async () => {
+    if (process.env.RUN_LIVE_PROVIDER_TESTS !== "1") {
+        expect(process.env.RUN_LIVE_PROVIDER_TESTS).not.toBe("1");
         return;
     }
     const apiKey = process.env.EXA_API_KEY?.trim();
     if (!apiKey) {
-        throw new Error('EXA_API_KEY is required for live provider tests');
+        throw new Error("EXA_API_KEY is required for live provider tests");
     }
     const client = new Exa(apiKey);
+    let requests = 0;
+    let reportedCost: unknown;
+    let providerSearchTime: number | undefined;
     const adapter = createExaWebsiteAdapter({
-        search: (query, options) => client.search(query, options),
+        search: async (query, options) => {
+            requests += 1;
+            const response = await client.search(query, options);
+            reportedCost = response.costDollars;
+            providerSearchTime = response.searchTime;
+            return response;
+        },
     });
 
-    // expectedHostname may be a literal host (servicenow.com) or a regex
-    // fragment (apple.) to accept Apple's country-specific Exa results.
-    const cases: Array<{
-        legalName: string;
-        ticker: string;
-        investorRelationsUrl?: string;
-        expectedHostname: string;
-    }> = [
+    const startedAt = Date.now();
+    const result = await resolveWebsiteUrl(
         {
-            legalName: 'ServiceNow, Inc.',
-            ticker: 'NOW',
-            investorRelationsUrl: 'https://investor.servicenow.com',
-            expectedHostname: 'servicenow.com',
+            legalName: "ServiceNow, Inc.",
+            ticker: "NOW",
+            investorRelationsUrl: "https://investor.servicenow.com",
         },
         {
-            legalName: 'Apple Inc.',
-            ticker: 'AAPL',
-            // Exa regionalizes Apple to country-specific entities; accept any
-            // apple.* domain as a valid resolution of the Apple brand.
-            expectedHostname: 'apple.',
-        },
-        {
-            legalName: 'Microsoft Corporation',
-            ticker: 'MSFT',
-            expectedHostname: 'microsoft.com',
-        },
-    ];
-
-    for (const c of cases) {
-        const result = await resolveWebsiteUrl(c, {
-            exaSearch: (query) => adapter.search(query),
+            exaSearch: async (query) =>
+                (await adapter.search(query)).candidates,
             classifyIr: classifyIrAsWebsite,
-        });
-        expect(result, `no website resolved for ${c.legalName}`).not.toBeNull();
-        const hostname = new URL(result?.url ?? '').hostname
-            .toLowerCase()
-            .replace(/^www\./, '');
-        const matches = c.expectedHostname.endsWith('.')
-            ? hostname.startsWith(c.expectedHostname)
-            : hostname === c.expectedHostname ||
-              hostname.endsWith(`.${c.expectedHostname}`);
-        expect(
-            matches,
-            `${c.legalName}: expected ${c.expectedHostname} but got ${hostname} (url ${result?.url ?? '<unknown>'})`,
-        ).toBe(true);
-        expect(result?.source).toBe('exa');
-    }
+        },
+    );
+    const latencyMs = Date.now() - startedAt;
+
+    expect(requests).toBe(1);
+    expect(result, "no website resolved for ServiceNow, Inc.").not.toBeNull();
+    const hostname = new URL(result?.url ?? "").hostname
+        .toLowerCase()
+        .replace(/^www\./, "");
+    expect(
+        hostname === "servicenow.com" || hostname.endsWith(".servicenow.com"),
+    ).toBe(true);
+    expect(result?.source).toBe("exa");
+    console.info(
+        "LIVE_PROVIDER_EVIDENCE",
+        JSON.stringify({
+            provider: "exa_website",
+            requests,
+            latencyMs,
+            providerSearchTime,
+            resolvedHostname: hostname,
+            cost: reportedCost ?? "not_reported",
+        }),
+    );
 });

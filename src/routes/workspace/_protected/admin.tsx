@@ -1,7 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
-import { OperationsPage } from '@/components/admin/operations-page';
+import { OperationsPage } from "@/components/admin/operations-page";
 
-export const Route = createFileRoute('/workspace/_protected/admin')({
+export const Route = createFileRoute("/workspace/_protected/admin")({
     component: OperationsPage,
 });

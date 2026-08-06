@@ -1,21 +1,20 @@
-'use client';
+"use client";
 
-import { api } from '@convex/_generated/api';
-import { Outlet, useNavigate } from '@tanstack/react-router';
-import { useQuery } from 'convex/react';
-import { useEffect, useState } from 'react';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useInvitationAccess } from '@/components/workspace/invitation-access-context';
-import { useAnonymousSession } from '@/hooks/use-anonymous-session';
-import { getWorkspaceDestination } from '@/lib/workspace/access-destination';
+import { api } from "@convex/_generated/api";
+import { Outlet, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "convex/react";
+import { useEffect, useState } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useInvitationAccess } from "@/components/workspace/invitation-access-context";
+import { useAnonymousSession } from "@/hooks/use-anonymous-session";
+import { getWorkspaceDestination } from "@/lib/workspace/access-destination";
 
 function ProtectedRouteLoading() {
     return (
         <div
             role="status"
             aria-label="Preparing private workspace"
-            className="surface-panel mx-auto mt-12 w-full max-w-xl space-y-3 rounded-xl p-6"
-        >
+            className="surface-panel mx-auto mt-12 w-full max-w-xl space-y-3 rounded-xl p-6">
             <Skeleton className="h-4 w-40" />
             <Skeleton className="h-7 w-72 max-w-full" />
             <Skeleton className="h-4 w-full" />
@@ -32,7 +31,7 @@ export function ProtectedWorkspaceRoute() {
     const { isSessionReady, sessionError } = useAnonymousSession();
     const visitor = useQuery(
         api.visitors.current,
-        isSessionReady ? {} : 'skip',
+        isSessionReady ? {} : "skip",
     );
     const [admissionPending, setAdmissionPending] = useState(false);
     const { openInvitationDrawer, isOpen } = useInvitationAccess();
@@ -41,7 +40,7 @@ export function ProtectedWorkspaceRoute() {
         if (
             isSessionReady &&
             visitor !== undefined &&
-            visitor?.status !== 'active' &&
+            visitor?.status !== "active" &&
             !admissionPending &&
             !isOpen
         ) {
@@ -53,7 +52,7 @@ export function ProtectedWorkspaceRoute() {
                     });
                 },
                 onCancel: () => {
-                    void navigate({ to: '/workspace/start' });
+                    void navigate({ to: "/workspace/start" });
                 },
             });
         }
@@ -70,8 +69,7 @@ export function ProtectedWorkspaceRoute() {
         return (
             <div
                 role="alert"
-                className="surface-panel mx-auto mt-12 w-full max-w-xl rounded-xl p-6"
-            >
+                className="surface-panel mx-auto mt-12 w-full max-w-xl rounded-xl p-6">
                 <h1 className="text-lg font-medium">
                     Workspace access unavailable
                 </h1>
@@ -85,12 +83,12 @@ export function ProtectedWorkspaceRoute() {
     if (
         !isSessionReady ||
         visitor === undefined ||
-        (admissionPending && visitor?.status !== 'active')
+        (admissionPending && visitor?.status !== "active")
     ) {
         return <ProtectedRouteLoading />;
     }
 
-    if (visitor?.status === 'active') {
+    if (visitor?.status === "active") {
         return <Outlet />;
     }
 

@@ -1,4 +1,5 @@
 import { digestInvitationCode } from "@convex/domain/invitationCodes";
+import type { Id } from "@convex/_generated/dataModel";
 import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
@@ -38,11 +39,15 @@ const currentVisitor = makeFunctionReference<
     Record<string, never>,
     unknown
 >("visitors:current");
-const reserveAnalysis = makeFunctionReference<
-    "mutation",
-    { idempotencyKey: string },
-    { runId: string; remainingAnalyses: number }
->("researchRuns:reserve");
+const confirmAndStart = makeFunctionReference<
+    "action",
+    {
+        preflightId: Id<"companyPreflights">;
+        idempotencyKey: string;
+        coveragePreset: "balanced";
+    },
+    { runId: Id<"researchRuns">; remainingAnalyses: number }
+>("researchLaunch:confirmAndStart");
 const restoreQuota = makeFunctionReference<
     "mutation",
     { runId: string; reason: string },
@@ -77,6 +82,36 @@ async function buildInvitationSeed(): Promise<Array<SeedEntry>> {
             codeDigest: await digestInvitationCode(code, invitationPepper),
         })),
     );
+}
+
+async function createUnusedReservationFixture(
+    t: ReturnType<typeof convexTest>,
+    visitorId: Id<"visitors">,
+    reservationKey: string,
+): Promise<Id<"researchRuns">> {
+    return t.run(async (ctx) => {
+        const visitor = await ctx.db.get(visitorId);
+        if (!visitor) {
+            throw new Error("Visitor fixture not found");
+        }
+        const now = Date.now();
+        const runId = await ctx.db.insert("researchRuns", {
+            ownerVisitorId: visitorId,
+            reservationKey,
+            reservationStatus: "consumed",
+            retryCount: 0,
+            executionGeneration: 0,
+            lifecycleState: "draft",
+            executionStatus: "idle",
+            nextEventSequence: 1,
+            createdAt: now,
+            updatedAt: now,
+        });
+        await ctx.db.patch(visitorId, {
+            analysesReserved: visitor.analysesReserved + 1,
+        });
+        return runId;
+    });
 }
 
 test("setup seeds exactly five invitation slots idempotently", async () => {
@@ -160,9 +195,11 @@ test("configured code rotation preserves the visitor and revokes its old session
     const firstAdmission = await oldUser.action(claimInvitation, {
         code: "2000",
     });
-    await oldUser.mutation(reserveAnalysis, {
-        idempotencyKey: "run-before-configured-rotation",
-    });
+    await createUnusedReservationFixture(
+        t,
+        firstAdmission.visitorId as Id<"visitors">,
+        "run-before-configured-rotation",
+    );
 
     process.env.INVITATION_SEED_CONFIG = JSON.stringify([
         { slotKey: "admin", role: "admin", code: "1111" },
@@ -299,7 +336,7 @@ test("access codes lock one anonymous session after five failed attempts", async
     ).rejects.toThrow("Too many access code attempts");
 });
 
-test("an admitted visitor atomically reserves at most three analyses", async () => {
+test("an expired preflight cannot consume quota or create a run", async () => {
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
     process.env.INVITATION_CODE_PEPPER = invitationPepper;
@@ -309,26 +346,41 @@ test("an admitted visitor atomically reserves at most three analyses", async () 
         ctx.db.insert("users", { isAnonymous: true }),
     );
     const visitor = t.withIdentity({ subject: `${userId}|session` });
-    await visitor.action(claimInvitation, { code: invitationCodes[2] ?? "" });
-
-    const reservations = await Promise.all(
-        ["run-a", "run-b", "run-c"].map((idempotencyKey) =>
-            visitor.mutation(reserveAnalysis, { idempotencyKey }),
-        ),
-    );
-
-    expect(
-        reservations.map((reservation) => reservation.remainingAnalyses).sort(),
-    ).toEqual([0, 1, 2]);
-    await expect(
-        visitor.mutation(reserveAnalysis, { idempotencyKey: "run-a" }),
-    ).resolves.toEqual({
-        runId: reservations[0]?.runId,
-        remainingAnalyses: 0,
+    const admission = await visitor.action(claimInvitation, {
+        code: invitationCodes[2] ?? "",
     });
+    const preflightId = await t.run(async (ctx) => {
+        const companyId = await ctx.db.insert("companies", {
+            cik: "1818201",
+            legalName: "CCC Intelligent Solutions Holdings Inc.",
+            ticker: "CCCS",
+            exchange: "NASDAQ",
+            canonicalizedAt: 1,
+        });
+        return ctx.db.insert("companyPreflights", {
+            ownerVisitorId: admission.visitorId as Id<"visitors">,
+            query: "CCCS",
+            companyId,
+            resolverVersion: "sec-company-v1",
+            status: "resolved",
+            expiresAt: 1,
+            createdAt: 1,
+        });
+    });
+
     await expect(
-        visitor.mutation(reserveAnalysis, { idempotencyKey: "run-d" }),
-    ).rejects.toThrow("Analysis limit reached");
+        visitor.action(confirmAndStart, {
+            preflightId,
+            idempotencyKey: "expired-preflight",
+            coveragePreset: "balanced",
+        }),
+    ).rejects.toThrow("Company preflight has expired");
+    await expect(
+        t.run((ctx) => ctx.db.query("researchRuns").collect()),
+    ).resolves.toHaveLength(0);
+    await expect(visitor.query(currentVisitor, {})).resolves.toMatchObject({
+        analysesReserved: 0,
+    });
 });
 
 test("the invited admin restores an unused reservation with an audited reason", async () => {
@@ -348,21 +400,25 @@ test("the invited admin restores an unused reservation with an audited reason", 
         subject: `${analystUserId}|analyst-session`,
     });
     await admin.action(claimInvitation, { code: invitationCodes[0] ?? "" });
-    await analyst.action(claimInvitation, { code: invitationCodes[3] ?? "" });
-    const reserved = await analyst.mutation(reserveAnalysis, {
-        idempotencyKey: "restorable-run",
+    const analystAdmission = await analyst.action(claimInvitation, {
+        code: invitationCodes[3] ?? "",
     });
+    const runId = await createUnusedReservationFixture(
+        t,
+        analystAdmission.visitorId as Id<"visitors">,
+        "restorable-run",
+    );
 
     await expect(
         admin.mutation(restoreQuota, {
-            runId: reserved.runId,
+            runId,
             reason: "The run was abandoned before workflow launch",
         }),
     ).resolves.toEqual({ restored: true });
     await expect(
         t.query(listAuditEvents, {
             targetType: "research_run",
-            targetId: reserved.runId,
+            targetId: runId,
         }),
     ).resolves.toEqual(
         expect.arrayContaining([
@@ -372,11 +428,9 @@ test("the invited admin restores an unused reservation with an audited reason", 
             }),
         ]),
     );
-    await expect(
-        analyst.mutation(reserveAnalysis, {
-            idempotencyKey: "replacement-run",
-        }),
-    ).resolves.toMatchObject({ remainingAnalyses: 2 });
+    await expect(analyst.query(currentVisitor, {})).resolves.toMatchObject({
+        analysesReserved: 0,
+    });
 });
 
 test("admin code rotation preserves the visitor while replacing its session", async () => {
@@ -401,9 +455,11 @@ test("admin code rotation preserves the visitor while replacing its session", as
     const firstAdmission = await oldAdmin.action(claimInvitation, {
         code: invitationCodes[0] ?? "",
     });
-    await oldAdmin.mutation(reserveAnalysis, {
-        idempotencyKey: "admin-run-before-rotation",
-    });
+    await createUnusedReservationFixture(
+        t,
+        firstAdmission.visitorId as Id<"visitors">,
+        "admin-run-before-rotation",
+    );
 
     await t.action(rotateAdminInvitation, {});
 

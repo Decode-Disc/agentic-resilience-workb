@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from "react";
 
-import type { ScrollAreaViewportState } from '@/components/ui/scroll-area';
+import type { ScrollAreaViewportState } from "@/components/ui/scroll-area";
 
 export interface UseInfiniteCollectionTriggerOptions {
     hasMore: boolean;
@@ -31,7 +31,9 @@ export function useInfiniteCollectionTrigger({
     const onViewportScroll = useCallback(
         (viewport: ScrollAreaViewportState) => {
             const remaining =
-                viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop;
+                viewport.scrollHeight -
+                viewport.clientHeight -
+                viewport.scrollTop;
             if (
                 !hasMore ||
                 isLoading ||

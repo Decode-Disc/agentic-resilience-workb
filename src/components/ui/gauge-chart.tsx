@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import {
     Label,
@@ -6,10 +6,10 @@ import {
     PolarRadiusAxis,
     RadialBar,
     RadialBarChart,
-} from 'recharts';
-import { type ChartConfig, ChartContainer } from '@/components/ui/chart';
+} from "recharts";
+import { type ChartConfig, ChartContainer } from "@/components/ui/chart";
 
-const CHART_COLORS = ['#00bbff', '#34d399', '#60a5fa', '#f472b6', '#fb923c'];
+const CHART_COLORS = ["#00bbff", "#34d399", "#60a5fa", "#f472b6", "#fb923c"];
 
 export type GaugeChartProps = {
     value: number;
@@ -18,7 +18,7 @@ export type GaugeChartProps = {
     max?: number;
     unit?: string;
     thresholds?: { warning: number; danger: number };
-    variant?: 'gauge' | 'text' | 'stacked';
+    variant?: "gauge" | "text" | "stacked";
     secondValue?: number;
     secondLabel?: string;
 };
@@ -33,15 +33,15 @@ export function GaugeChart(props: GaugeChartProps) {
     const warning = props.thresholds?.warning ?? 60;
     const danger = props.thresholds?.danger ?? 80;
     const color =
-        pct >= danger ? '#f87171' : pct >= warning ? '#fbbf24' : '#34d399';
+        pct >= danger ? "#f87171" : pct >= warning ? "#fbbf24" : "#34d399";
 
-    const variant = props.variant ?? 'gauge';
+    const variant = props.variant ?? "gauge";
 
-    if (variant === 'text') {
+    if (variant === "text") {
         const textChartConfig: ChartConfig = {
-            value: { label: props.title ?? 'Value', color },
+            value: { label: props.title ?? "Value", color },
         };
-        const textData = [{ name: 'value', value: pct, fill: color }];
+        const textData = [{ name: "value", value: pct, fill: color }];
         return (
             <div className="rounded-2xl bg-card text-card-foreground border p-4 text-center">
                 <ChartContainer config={textChartConfig} className="mx-auto">
@@ -51,8 +51,7 @@ export function GaugeChart(props: GaugeChartProps) {
                         endAngle={250}
                         outerRadius={90}
                         innerRadius={70}
-                        className="mx-auto h-[160px] w-[160px]"
-                    >
+                        className="mx-auto h-[160px] w-[160px]">
                         <PolarGrid
                             gridType="circle"
                             radialLines={false}
@@ -68,31 +67,28 @@ export function GaugeChart(props: GaugeChartProps) {
                         <PolarRadiusAxis
                             tick={false}
                             tickLine={false}
-                            axisLine={false}
-                        >
+                            axisLine={false}>
                             <Label
                                 content={({ viewBox }) => {
                                     if (
                                         viewBox &&
-                                        'cx' in viewBox &&
-                                        'cy' in viewBox
+                                        "cx" in viewBox &&
+                                        "cy" in viewBox
                                     ) {
                                         return (
                                             <text
                                                 x={viewBox.cx}
                                                 y={viewBox.cy}
                                                 textAnchor="middle"
-                                                dominantBaseline="middle"
-                                            >
+                                                dominantBaseline="middle">
                                                 <tspan
                                                     x={viewBox.cx}
                                                     y={viewBox.cy}
                                                     fontSize={28}
                                                     fontWeight="bold"
-                                                    fill={color}
-                                                >
+                                                    fill={color}>
                                                     {props.value}
-                                                    {props.unit ?? ''}
+                                                    {props.unit ?? ""}
                                                 </tspan>
                                                 {props.title && (
                                                     <tspan
@@ -102,8 +98,7 @@ export function GaugeChart(props: GaugeChartProps) {
                                                             22
                                                         }
                                                         fontSize={12}
-                                                        fill="#71717a"
-                                                    >
+                                                        fill="#71717a">
                                                         {props.title}
                                                     </tspan>
                                                 )}
@@ -119,15 +114,15 @@ export function GaugeChart(props: GaugeChartProps) {
         );
     }
 
-    if (variant === 'stacked') {
+    if (variant === "stacked") {
         const total = props.value + (props.secondValue ?? 0);
         const stackData = [
             { primary: props.value, secondary: props.secondValue ?? 0 },
         ];
         const stackChartConfig: ChartConfig = {
-            primary: { label: props.title ?? 'Primary', color },
+            primary: { label: props.title ?? "Primary", color },
             secondary: {
-                label: props.secondLabel ?? 'Secondary',
+                label: props.secondLabel ?? "Secondary",
                 color: CHART_COLORS[1],
             },
         };
@@ -139,8 +134,7 @@ export function GaugeChart(props: GaugeChartProps) {
                         endAngle={180}
                         innerRadius={80}
                         outerRadius={110}
-                        className="mx-auto h-[140px] w-[200px]"
-                    >
+                        className="mx-auto h-[140px] w-[200px]">
                         <RadialBar
                             dataKey="secondary"
                             fill={CHART_COLORS[1]}
@@ -158,37 +152,33 @@ export function GaugeChart(props: GaugeChartProps) {
                         <PolarRadiusAxis
                             tick={false}
                             tickLine={false}
-                            axisLine={false}
-                        >
+                            axisLine={false}>
                             <Label
                                 content={({ viewBox }) => {
                                     if (
                                         viewBox &&
-                                        'cx' in viewBox &&
-                                        'cy' in viewBox
+                                        "cx" in viewBox &&
+                                        "cy" in viewBox
                                     ) {
                                         return (
                                             <text
                                                 x={viewBox.cx}
                                                 y={viewBox.cy}
-                                                textAnchor="middle"
-                                            >
+                                                textAnchor="middle">
                                                 <tspan
                                                     x={viewBox.cx}
                                                     y={(viewBox.cy ?? 0) - 12}
                                                     fontSize={22}
                                                     fontWeight="bold"
-                                                    className="fill-foreground"
-                                                >
+                                                    className="fill-foreground">
                                                     {total.toLocaleString()}
                                                 </tspan>
                                                 <tspan
                                                     x={viewBox.cx}
                                                     y={(viewBox.cy ?? 0) + 8}
                                                     fontSize={12}
-                                                    fill="#71717a"
-                                                >
-                                                    {props.title ?? 'Total'}
+                                                    fill="#71717a">
+                                                    {props.title ?? "Total"}
                                                 </tspan>
                                             </text>
                                         );
@@ -209,26 +199,23 @@ export function GaugeChart(props: GaugeChartProps) {
     const innerR = 55;
 
     const gaugeConfig: ChartConfig = {
-        value: { label: props.title ?? 'Value', color },
+        value: { label: props.title ?? "Value", color },
     };
-    const gaugeData = [{ name: 'value', value: 1, fill: color }];
+    const gaugeData = [{ name: "value", value: 1, fill: color }];
 
     return (
         <div
             className="rounded-2xl bg-card text-card-foreground border p-4 text-center"
-            style={{ width: 200 }}
-        >
+            style={{ width: 200 }}>
             <ChartContainer
                 config={gaugeConfig}
-                className="mx-auto h-[160px] w-[160px]"
-            >
+                className="mx-auto h-[160px] w-[160px]">
                 <RadialBarChart
                     data={gaugeData}
                     startAngle={0}
                     endAngle={valueAngle}
                     outerRadius={outerR}
-                    innerRadius={innerR}
-                >
+                    innerRadius={innerR}>
                     <PolarGrid
                         gridType="circle"
                         radialLines={false}
@@ -240,39 +227,35 @@ export function GaugeChart(props: GaugeChartProps) {
                     <PolarRadiusAxis
                         tick={false}
                         tickLine={false}
-                        axisLine={false}
-                    >
+                        axisLine={false}>
                         <Label
                             content={({ viewBox }) => {
                                 if (
                                     viewBox &&
-                                    'cx' in viewBox &&
-                                    'cy' in viewBox
+                                    "cx" in viewBox &&
+                                    "cy" in viewBox
                                 ) {
                                     return (
                                         <text
                                             x={viewBox.cx}
                                             y={viewBox.cy}
                                             textAnchor="middle"
-                                            dominantBaseline="middle"
-                                        >
+                                            dominantBaseline="middle">
                                             <tspan
                                                 x={viewBox.cx}
                                                 y={viewBox.cy}
                                                 fontSize={28}
                                                 fontWeight="bold"
-                                                fill={color}
-                                            >
+                                                fill={color}>
                                                 {props.value}
-                                                {props.unit ?? ''}
+                                                {props.unit ?? ""}
                                             </tspan>
                                             {props.title && (
                                                 <tspan
                                                     x={viewBox.cx}
                                                     y={(viewBox.cy ?? 0) + 22}
                                                     fontSize={12}
-                                                    fill="#71717a"
-                                                >
+                                                    fill="#71717a">
                                                     {props.title}
                                                 </tspan>
                                             )}

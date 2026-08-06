@@ -1,10 +1,10 @@
-import imgDark from '@assets/logos/logo-bgdark.png';
-import imgLight from '@assets/logos/logo-bgwhite.png';
-import type { ImgHTMLAttributes, SVGProps } from 'react';
+import imgDark from "@assets/logos/logo-bgdark.png";
+import imgLight from "@assets/logos/logo-bgwhite.png";
+import type { ImgHTMLAttributes, SVGProps } from "react";
 
 /** Original evidence-matrix mark crossed by a research orbit. */
 function LogoIconSVG({
-    'aria-label': ariaLabel,
+    "aria-label": ariaLabel,
     ...props
 }: SVGProps<SVGSVGElement>) {
     return (
@@ -15,8 +15,7 @@ function LogoIconSVG({
             height="447"
             aria-hidden={ariaLabel ? undefined : true}
             aria-label={ariaLabel}
-            {...props}
-        >
+            {...props}>
             <path
                 d="M0 0 C147.51 0 295.02 0 447 0 C447 147.51 447 295.02 447 447 C299.49 447 151.98 447 0 447 C0 299.49 0 151.98 0 0 Z "
                 fill="#FEFEFE"
@@ -52,7 +51,7 @@ function LogoIconSVG({
 }
 
 function LogoIconIMG({
-    alt = 'Agentic Resilience Evidence Workbench',
+    alt = "Agentic Resilience Evidence Workbench",
     dark = false,
     ...props
 }: ImgHTMLAttributes<HTMLImageElement> & { dark?: boolean }) {
@@ -64,8 +63,7 @@ function AppLogo() {
         <span
             role="img"
             aria-label="Agentic Resilience Evidence Workbench"
-            className="grid size-8 place-items-center rounded-full bg-primary text-primary-foreground"
-        >
+            className="grid size-8 place-items-center rounded-full bg-primary text-primary-foreground">
             <LogoIconIMG className="size-8 rounded-full" dark />
         </span>
     );

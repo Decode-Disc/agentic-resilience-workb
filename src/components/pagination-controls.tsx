@@ -1,19 +1,16 @@
-import {
-    ArrowLeft01Icon,
-    ArrowRight01Icon,
-} from '@hugeicons/core-free-icons';
+import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
 
-import Icon from '@/components/icon';
+import Icon from "@/components/icon";
 import {
     Pagination,
     PaginationButton,
     PaginationContent,
     PaginationEllipsis,
     PaginationItem,
-} from '@/components/ui/pagination';
-import { cn } from '@/lib/utils';
+} from "@/components/ui/pagination";
+import { cn } from "@/lib/utils";
 
-type PaginationEntry = number | 'ellipsis-start' | 'ellipsis-end';
+type PaginationEntry = number | "ellipsis-start" | "ellipsis-end";
 
 export interface PaginationControlsProps {
     page: number;
@@ -39,13 +36,13 @@ function paginationEntries(
     const end = Math.min(pageCount - 1, page + siblingCount);
 
     if (start > 2) {
-        entries.push('ellipsis-start');
+        entries.push("ellipsis-start");
     }
     for (let candidate = start; candidate <= end; candidate += 1) {
         entries.push(candidate);
     }
     if (end < pageCount - 1) {
-        entries.push('ellipsis-end');
+        entries.push("ellipsis-end");
     }
     entries.push(pageCount);
     return entries;
@@ -56,7 +53,7 @@ export function PaginationControls({
     pageCount,
     onPageChange,
     disabled = false,
-    ariaLabel = 'Pagination',
+    ariaLabel = "Pagination",
     className,
     siblingCount = 1,
 }: PaginationControlsProps) {
@@ -78,20 +75,18 @@ export function PaginationControls({
                     <PaginationButton
                         aria-label="Go to previous page"
                         disabled={disabled || currentPage === 1}
-                        onClick={() => onPageChange(currentPage - 1)}
-                    >
+                        onClick={() => onPageChange(currentPage - 1)}>
                         <Icon iconNode={ArrowLeft01Icon} strokeWidth={2} />
                     </PaginationButton>
                 </PaginationItem>
                 {entries.map((entry) =>
-                    typeof entry === 'number' ? (
+                    typeof entry === "number" ? (
                         <PaginationItem key={entry}>
                             <PaginationButton
                                 isActive={entry === currentPage}
                                 aria-label={`Page ${entry}`}
                                 disabled={disabled}
-                                onClick={() => onPageChange(entry)}
-                            >
+                                onClick={() => onPageChange(entry)}>
                                 {entry}
                             </PaginationButton>
                         </PaginationItem>
@@ -105,8 +100,7 @@ export function PaginationControls({
                     <PaginationButton
                         aria-label="Go to next page"
                         disabled={disabled || currentPage === pageCount}
-                        onClick={() => onPageChange(currentPage + 1)}
-                    >
+                        onClick={() => onPageChange(currentPage + 1)}>
                         <Icon iconNode={ArrowRight01Icon} strokeWidth={2} />
                     </PaginationButton>
                 </PaginationItem>

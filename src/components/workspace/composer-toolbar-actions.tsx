@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { MoreVerticalSquare01Icon } from '@hugeicons/core-free-icons';
+import { MoreVerticalSquare01Icon } from "@hugeicons/core-free-icons";
 
-import Icon from '@/components/icon';
-import { Button } from '@/components/ui/button';
+import Icon from "@/components/icon";
+import { Button } from "@/components/ui/button";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -12,13 +12,13 @@ import {
     DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+} from "@/components/ui/dropdown-menu";
 import {
     Tooltip,
     TooltipContent,
     TooltipTrigger,
-} from '@/components/ui/tooltip';
-import type { PlatformIcon } from '@/types/ui';
+} from "@/components/ui/tooltip";
+import type { PlatformIcon } from "@/types/ui";
 
 export interface ToolbarIconButtonProps {
     label: string;
@@ -54,14 +54,12 @@ export function ToolbarIconButton({
                         disabled={disabled}
                         className="relative overflow-visible rounded-full"
                     />
-                }
-            >
+                }>
                 <Icon iconNode={icon} size={16} />
                 {visibleCount ? (
                     <span
                         aria-hidden="true"
-                        className="pointer-events-none absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 font-mono text-[9px] leading-none font-semibold text-primary-foreground"
-                    >
+                        className="pointer-events-none absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 font-mono text-[9px] leading-none font-semibold text-primary-foreground">
                         {visibleCount}
                     </span>
                 ) : null}
@@ -89,15 +87,13 @@ export function MoreOptionsButton() {
                         aria-haspopup="menu"
                         className="rounded-full"
                     />
-                }
-            >
+                }>
                 <Icon iconNode={MoreVerticalSquare01Icon} size={16} />
             </DropdownMenuTrigger>
             <DropdownMenuContent
                 align="start"
                 sideOffset={6}
-                className="min-w-52"
-            >
+                className="min-w-52">
                 <DropdownMenuGroup>
                     <DropdownMenuLabel>More options</DropdownMenuLabel>
                     <DropdownMenuSeparator />

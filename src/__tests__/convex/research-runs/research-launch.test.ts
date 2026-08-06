@@ -72,6 +72,7 @@ const transition = makeFunctionReference<
     "mutation",
     {
         runId: Id<"researchRuns">;
+        expectedExecutionGeneration: number;
         lifecycleState:
             | "checking_public_evidence"
             | "awaiting_evidence_sufficiency_review";
@@ -418,12 +419,14 @@ test("allows exactly one running workflow per visitor", async () => {
     }
     await t.mutation(transition, {
         runId: runningRunId,
+        expectedExecutionGeneration: 1,
         lifecycleState: "checking_public_evidence",
         executionStatus: "running",
         stepKey: "check_public_evidence",
     });
     await t.mutation(transition, {
         runId: runningRunId,
+        expectedExecutionGeneration: 1,
         lifecycleState: "awaiting_evidence_sufficiency_review",
         executionStatus: "paused",
         stepKey: "evidence_sufficiency_review",
@@ -482,6 +485,71 @@ test("revalidates the confirmed CIK before evidence checks", async () => {
     });
 });
 
+test("accepts mutable SEC metadata for the same confirmed CIK", async () => {
+    process.env.SEC_USER_AGENT = "Evidence Workbench test@example.com";
+    globalThis.fetch = vi.fn(async () =>
+        Promise.resolve(
+            new Response(
+                JSON.stringify({
+                    cik: "0001818201",
+                    name: "CCC Intelligent Solutions Inc.",
+                    tickers: ["CCCX"],
+                    exchanges: ["NYSE"],
+                    filings: { recent: { accessionNumber: ["0001"] } },
+                }),
+                { status: 200 },
+            ),
+        ),
+    );
+    const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
+    workflowTest.register(t);
+    const { userId, preflightId } = await createAdmittedPreflight(t);
+    await t.run(async (ctx) => {
+        const preflight = await ctx.db.get(preflightId);
+        if (!preflight) {
+            throw new Error("Test preflight not found");
+        }
+        await ctx.db.patch(preflight.companyId, {
+            websiteUrl: "https://www.cccis.com/",
+            websiteUrlSource: "exa",
+        });
+        await ctx.db.patch(preflightId, {
+            companySnapshot: {
+                cik: "1818201",
+                legalName: "CCC Intelligent Solutions Holdings Inc.",
+                ticker: "CCCS",
+                exchange: "NASDAQ",
+                websiteUrl: "https://www.cccis.com/",
+                websiteUrlSource: "exa",
+            },
+        });
+    });
+    const analyst = t.withIdentity({
+        subject: `${userId}|mutable-metadata-session`,
+    });
+
+    const { runId } = await analyst.action(confirmAndStart, {
+        preflightId,
+        idempotencyKey: "revalidate-mutable-metadata",
+        coveragePreset: "balanced",
+    });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    await expect(analyst.query(getMine, { runId })).resolves.toMatchObject({
+        lifecycleState: "awaiting_source_review",
+        executionStatus: "paused",
+        company: {
+            cik: "1818201",
+            legalName: "CCC Intelligent Solutions Inc.",
+            ticker: "CCCX",
+            exchange: "NYSE",
+            websiteUrl: "https://www.cccis.com/",
+            websiteUrlSource: "exa",
+        },
+    });
+});
+
 test("pauses when revalidation finds no public evidence", async () => {
     process.env.SEC_USER_AGENT = "Evidence Workbench test@example.com";
     globalThis.fetch = vi.fn(async () =>
@@ -532,6 +600,7 @@ test("pauses when revalidation finds no public evidence", async () => {
     await expect(t.query(getRun, { runId })).resolves.toMatchObject({
         lifecycleState: "completed",
         executionStatus: "completed",
+        executionGeneration: 1,
     });
 });
 
@@ -587,5 +656,6 @@ test("requires a justified force-continuation decision", async () => {
     await expect(t.query(getRun, { runId })).resolves.toMatchObject({
         lifecycleState: "awaiting_source_review",
         executionStatus: "paused",
+        executionGeneration: 2,
     });
 });

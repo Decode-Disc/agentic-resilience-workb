@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted
+Superseded in part by ADR-014. Anonymous Convex Auth and the five stable access
+slots remain; the one-time invitation semantics do not.
 
 ## Date
 
@@ -16,7 +17,12 @@ The candidature prototype needs persistent private access for exactly five visit
 
 Use Convex Auth with its anonymous provider for session management. Create exactly five stable invitation slots through server configuration: one administrator and four analysts.
 
-Each invitation code is a high-entropy, single-use secret. Persist only an HMAC-SHA-256 digest using a server-only pepper. Claiming a code atomically links the authenticated Convex Auth user to one `Visitor` and marks the invitation claimed. A later session for the same Auth user resolves the same visitor; another user cannot reuse the code.
+Each invitation code is a single-use secret. ADR-013 replaces the original
+high-entropy format with a rate-limited four-digit OTP. Persist only an
+HMAC-SHA-256 digest using a server-only pepper. Claiming a code atomically links
+the authenticated Convex Auth user to one `Visitor` and marks the invitation
+claimed. A later session for the same Auth user resolves the same visitor;
+another user cannot reuse the code.
 
 The administrator may restore an unused analysis reservation only with a persisted reason. A lost administrator session is recovered through an internal, environment-configured rotation operation that revokes the previous visitor before reissuing the same invitation slot.
 

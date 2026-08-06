@@ -1,69 +1,69 @@
-'use client';
+"use client";
 
-import type { HTMLMotionProps, SVGMotionProps, Variants } from 'motion/react';
-import { motion } from 'motion/react';
-import type React from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { cn } from '@/lib/utils';
+import type { HTMLMotionProps, SVGMotionProps, Variants } from "motion/react";
+import { motion } from "motion/react";
+import type React from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 
-type Direction = 'up' | 'down' | 'left' | 'right';
+type Direction = "up" | "down" | "left" | "right";
 
 const DIRECTION_VARIANTS: Record<Direction, Variants> = {
     up: {
-        hidden: { filter: 'blur(10px)', opacity: 0, y: -100 },
+        hidden: { filter: "blur(10px)", opacity: 0, y: -100 },
         visible: {
-            filter: 'blur(0px)',
+            filter: "blur(0px)",
             opacity: 1,
             y: 0,
             transition: {
                 duration: 0.5,
-                ease: 'easeOut',
+                ease: "easeOut",
             },
         },
     },
     down: {
-        hidden: { filter: 'blur(10px)', opacity: 0, y: 100 },
+        hidden: { filter: "blur(10px)", opacity: 0, y: 100 },
         visible: {
-            filter: 'blur(0px)',
+            filter: "blur(0px)",
             opacity: 1,
             y: 0,
             transition: {
                 duration: 0.5,
-                ease: 'easeOut',
+                ease: "easeOut",
             },
         },
     },
     left: {
-        hidden: { filter: 'blur(10px)', opacity: 0, x: -100 },
+        hidden: { filter: "blur(10px)", opacity: 0, x: -100 },
         visible: {
-            filter: 'blur(0px)',
+            filter: "blur(0px)",
             opacity: 1,
             x: 0,
             transition: {
                 duration: 0.5,
-                ease: 'easeOut',
+                ease: "easeOut",
             },
         },
     },
     right: {
-        hidden: { filter: 'blur(10px)', opacity: 0, x: 100 },
+        hidden: { filter: "blur(10px)", opacity: 0, x: 100 },
         visible: {
-            filter: 'blur(0px)',
+            filter: "blur(0px)",
             opacity: 1,
             x: 0,
             transition: {
                 duration: 0.5,
-                ease: 'easeOut',
+                ease: "easeOut",
             },
         },
     },
 };
 
-const defaultViewport = { amount: 0.3, margin: '0px 0px -200px 0px' };
-type MotionComponentProps = HTMLMotionProps<'div'> &
+const defaultViewport = { amount: 0.3, margin: "0px 0px -200px 0px" };
+type MotionComponentProps = HTMLMotionProps<"div"> &
     SVGMotionProps<SVGSVGElement>;
 
-interface ScrollElementProps extends Omit<MotionComponentProps, 'children'> {
+interface ScrollElementProps extends Omit<MotionComponentProps, "children"> {
     children: React.ReactNode;
     className?: string;
     variants?: Variants;
@@ -88,7 +88,7 @@ function ScrollElement({
     variants,
     viewport = defaultViewport,
     delay = 0,
-    direction = 'down',
+    direction = "down",
     inViewFallbackMs,
     viewportRootRef,
     visibilityTriggerDelayMs = 40,
@@ -158,7 +158,7 @@ function ScrollElement({
 
     useEffect(() => {
         if (
-            typeof inViewFallbackMs !== 'number' ||
+            typeof inViewFallbackMs !== "number" ||
             inViewFallbackMs <= 0 ||
             hasEnteredViewport
         ) {
@@ -203,11 +203,10 @@ function ScrollElement({
         <motion.div
             ref={elementRef}
             initial="hidden"
-            animate={shouldBeVisible ? 'visible' : 'hidden'}
+            animate={shouldBeVisible ? "visible" : "hidden"}
             variants={modifiedVariants}
             className={cn(className)}
-            {...rest}
-        >
+            {...rest}>
             {children}
         </motion.div>
     );

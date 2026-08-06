@@ -1,20 +1,20 @@
-import { createSecCompanyResolver } from '@convex/integrations/sec';
-import { describe, expect, test, vi } from 'vitest';
+import { createSecCompanyResolver } from "@convex/integrations/sec";
+import { describe, expect, test, vi } from "vitest";
 
-describe('createSecCompanyResolver', () => {
-    test('returns at most the configured 40 ranked company candidates', async () => {
+describe("createSecCompanyResolver", () => {
+    test("returns at most the configured 40 ranked company candidates", async () => {
         const companies = Array.from({ length: 52 }, (_, index) => [
             2_000_000 + index,
-            `Ranked Company ${String(index + 1).padStart(2, '0')}`,
+            `Ranked Company ${String(index + 1).padStart(2, "0")}`,
             `R${index + 1}`,
-            'Nasdaq',
+            "Nasdaq",
         ]);
         const resolver = createSecCompanyResolver({
             fetch: vi.fn(async () =>
                 Promise.resolve(
                     new Response(
                         JSON.stringify({
-                            fields: ['cik', 'name', 'ticker', 'exchange'],
+                            fields: ["cik", "name", "ticker", "exchange"],
                             data: companies,
                         }),
                         { status: 200 },
@@ -22,40 +22,40 @@ describe('createSecCompanyResolver', () => {
                 ),
             ),
             now: () => 1_000,
-            userAgent: 'Evidence Workbench test@example.com',
+            userAgent: "Evidence Workbench test@example.com",
             reserveRequest: vi.fn(async () => undefined),
             recordAttempt: vi.fn(async (attempt: { status: string }) => ({
-                shouldExecute: attempt.status === 'started',
+                shouldExecute: attempt.status === "started",
             })),
         });
 
-        const results = await resolver.search('ranked company');
+        const results = await resolver.search("ranked company");
 
         expect(results).toHaveLength(40);
-        expect(results.at(0)?.legalName).toBe('Ranked Company 01');
-        expect(results.at(-1)?.legalName).toBe('Ranked Company 40');
+        expect(results.at(0)?.legalName).toBe("Ranked Company 01");
+        expect(results.at(-1)?.legalName).toBe("Ranked Company 40");
     });
 
-    test('returns ranked company candidates for a partial name without revalidating each result', async () => {
+    test("returns ranked company candidates for a partial name without revalidating each result", async () => {
         const fetchImplementation = vi.fn(
             async (input: string | URL | Request) => {
                 const url = String(input);
-                if (url.endsWith('/files/company_tickers_exchange.json')) {
+                if (url.endsWith("/files/company_tickers_exchange.json")) {
                     return new Response(
                         JSON.stringify({
-                            fields: ['cik', 'name', 'ticker', 'exchange'],
+                            fields: ["cik", "name", "ticker", "exchange"],
                             data: [
                                 [
                                     1818201,
-                                    'CCC Intelligent Solutions Holdings Inc.',
-                                    'CCCS',
-                                    'Nasdaq',
+                                    "CCC Intelligent Solutions Holdings Inc.",
+                                    "CCCS",
+                                    "Nasdaq",
                                 ],
                                 [
                                     1000001,
-                                    'Intelligent Systems Corporation',
-                                    'INS',
-                                    'NYSE',
+                                    "Intelligent Systems Corporation",
+                                    "INS",
+                                    "NYSE",
                                 ],
                             ],
                         }),
@@ -67,31 +67,31 @@ describe('createSecCompanyResolver', () => {
         );
         const reserveRequest = vi.fn(async () => undefined);
         const recordAttempt = vi.fn(async (attempt: { status: string }) => ({
-            shouldExecute: attempt.status === 'started',
+            shouldExecute: attempt.status === "started",
         }));
         const resolver = createSecCompanyResolver({
             fetch: fetchImplementation,
             now: () => 1_000,
-            userAgent: 'Evidence Workbench test@example.com',
+            userAgent: "Evidence Workbench test@example.com",
             reserveRequest,
             recordAttempt,
         });
 
-        await expect(resolver.search('intelligent')).resolves.toEqual([
+        await expect(resolver.search("intelligent")).resolves.toEqual([
             {
-                cik: '1000001',
-                legalName: 'Intelligent Systems Corporation',
-                ticker: 'INS',
-                exchange: 'NYSE',
+                cik: "1000001",
+                legalName: "Intelligent Systems Corporation",
+                ticker: "INS",
+                exchange: "NYSE",
                 investorRelationsUrl: undefined,
                 websiteUrl: undefined,
                 websiteUrlSource: undefined,
             },
             {
-                cik: '1818201',
-                legalName: 'CCC Intelligent Solutions Holdings Inc.',
-                ticker: 'CCCS',
-                exchange: 'NASDAQ',
+                cik: "1818201",
+                legalName: "CCC Intelligent Solutions Holdings Inc.",
+                ticker: "CCCS",
+                exchange: "NASDAQ",
                 investorRelationsUrl: undefined,
                 websiteUrl: undefined,
                 websiteUrlSource: undefined,
@@ -101,29 +101,29 @@ describe('createSecCompanyResolver', () => {
         expect(fetchImplementation).toHaveBeenCalledTimes(1);
         expect(recordAttempt).toHaveBeenCalledWith(
             expect.objectContaining({
-                operation: 'resolve_company',
-                status: 'succeeded',
+                operation: "resolve_company",
+                status: "succeeded",
             }),
         );
     });
 
     test.each([
-        'service now',
-        'servce now',
-    ])('finds a concatenated company name from %s', async (query) => {
+        "service now",
+        "servce now",
+    ])("finds a concatenated company name from %s", async (query) => {
         const resolver = createSecCompanyResolver({
             fetch: vi.fn(async () =>
                 Promise.resolve(
                     new Response(
                         JSON.stringify({
-                            fields: ['cik', 'name', 'ticker', 'exchange'],
+                            fields: ["cik", "name", "ticker", "exchange"],
                             data: [
-                                [1373715, 'ServiceNow, Inc.', 'NOW', 'NYSE'],
+                                [1373715, "ServiceNow, Inc.", "NOW", "NYSE"],
                                 [
                                     1713683,
-                                    'ServiceTitan, Inc.',
-                                    'TTAN',
-                                    'Nasdaq',
+                                    "ServiceTitan, Inc.",
+                                    "TTAN",
+                                    "Nasdaq",
                                 ],
                             ],
                         }),
@@ -132,19 +132,19 @@ describe('createSecCompanyResolver', () => {
                 ),
             ),
             now: () => 1_000,
-            userAgent: 'Evidence Workbench test@example.com',
+            userAgent: "Evidence Workbench test@example.com",
             reserveRequest: vi.fn(async () => undefined),
             recordAttempt: vi.fn(async (attempt: { status: string }) => ({
-                shouldExecute: attempt.status === 'started',
+                shouldExecute: attempt.status === "started",
             })),
         });
 
         await expect(resolver.search(query)).resolves.toEqual([
             {
-                cik: '1373715',
-                legalName: 'ServiceNow, Inc.',
-                ticker: 'NOW',
-                exchange: 'NYSE',
+                cik: "1373715",
+                legalName: "ServiceNow, Inc.",
+                ticker: "NOW",
+                exchange: "NYSE",
                 investorRelationsUrl: undefined,
                 websiteUrl: undefined,
                 websiteUrlSource: undefined,
@@ -152,22 +152,22 @@ describe('createSecCompanyResolver', () => {
         ]);
     });
 
-    test('does not add fuzzy noise to deterministic name matches', async () => {
+    test("does not add fuzzy noise to deterministic name matches", async () => {
         const resolver = createSecCompanyResolver({
             fetch: vi.fn(async () =>
                 Promise.resolve(
                     new Response(
                         JSON.stringify({
-                            fields: ['cik', 'name', 'ticker', 'exchange'],
+                            fields: ["cik", "name", "ticker", "exchange"],
                             data: [
-                                [1373715, 'ServiceNow, Inc.', 'NOW', 'NYSE'],
+                                [1373715, "ServiceNow, Inc.", "NOW", "NYSE"],
                                 [
                                     1713683,
-                                    'ServiceTitan, Inc.',
-                                    'TTAN',
-                                    'Nasdaq',
+                                    "ServiceTitan, Inc.",
+                                    "TTAN",
+                                    "Nasdaq",
                                 ],
-                                [1631574, 'FirstService Corp', 'FSV', 'Nasdaq'],
+                                [1631574, "FirstService Corp", "FSV", "Nasdaq"],
                             ],
                         }),
                         { status: 200 },
@@ -175,39 +175,39 @@ describe('createSecCompanyResolver', () => {
                 ),
             ),
             now: () => 1_000,
-            userAgent: 'Evidence Workbench test@example.com',
+            userAgent: "Evidence Workbench test@example.com",
             reserveRequest: vi.fn(async () => undefined),
             recordAttempt: vi.fn(async (attempt: { status: string }) => ({
-                shouldExecute: attempt.status === 'started',
+                shouldExecute: attempt.status === "started",
             })),
         });
 
-        await expect(resolver.search('servicenow')).resolves.toEqual([
+        await expect(resolver.search("servicenow")).resolves.toEqual([
             expect.objectContaining({
-                legalName: 'ServiceNow, Inc.',
-                ticker: 'NOW',
+                legalName: "ServiceNow, Inc.",
+                ticker: "NOW",
             }),
         ]);
     });
 
     test.each([
-        'CCCS',
-        '0001818201',
-        'https://www.sec.gov/edgar/browse/?CIK=0001818201',
-        'https://www.sec.gov/Archives/edgar/data/1818201/0001/index.html',
-    ])('finds the indexed company from %s', async (query) => {
+        "CCCS",
+        "0001818201",
+        "https://www.sec.gov/edgar/browse/?CIK=0001818201",
+        "https://www.sec.gov/Archives/edgar/data/1818201/0001/index.html",
+    ])("finds the indexed company from %s", async (query) => {
         const resolver = createSecCompanyResolver({
             fetch: vi.fn(async () =>
                 Promise.resolve(
                     new Response(
                         JSON.stringify({
-                            fields: ['cik', 'name', 'ticker', 'exchange'],
+                            fields: ["cik", "name", "ticker", "exchange"],
                             data: [
                                 [
                                     1818201,
-                                    'CCC Intelligent Solutions Holdings Inc.',
-                                    'CCCS',
-                                    'Nasdaq',
+                                    "CCC Intelligent Solutions Holdings Inc.",
+                                    "CCCS",
+                                    "Nasdaq",
                                 ],
                             ],
                         }),
@@ -216,35 +216,35 @@ describe('createSecCompanyResolver', () => {
                 ),
             ),
             now: () => 1_000,
-            userAgent: 'Evidence Workbench test@example.com',
+            userAgent: "Evidence Workbench test@example.com",
             reserveRequest: vi.fn(async () => undefined),
             recordAttempt: vi.fn(async (attempt: { status: string }) => ({
-                shouldExecute: attempt.status === 'started',
+                shouldExecute: attempt.status === "started",
             })),
         });
 
         await expect(resolver.search(query)).resolves.toEqual([
             expect.objectContaining({
-                cik: '1818201',
-                legalName: 'CCC Intelligent Solutions Holdings Inc.',
-                ticker: 'CCCS',
+                cik: "1818201",
+                legalName: "CCC Intelligent Solutions Holdings Inc.",
+                ticker: "CCCS",
             }),
         ]);
     });
 
-    test('reports filing metadata without leaking SEC response types', async () => {
+    test("reports filing metadata without leaking SEC response types", async () => {
         const resolver = createSecCompanyResolver({
             fetch: vi.fn(async () =>
                 Promise.resolve(
                     new Response(
                         JSON.stringify({
-                            cik: '0001818201',
-                            name: 'CCC Intelligent Solutions Holdings Inc.',
-                            tickers: ['CCCS'],
-                            exchanges: ['Nasdaq'],
+                            cik: "0001818201",
+                            name: "CCC Intelligent Solutions Holdings Inc.",
+                            tickers: ["CCCS"],
+                            exchanges: ["Nasdaq"],
                             filings: {
                                 recent: {
-                                    accessionNumber: ['0001', '0002'],
+                                    accessionNumber: ["0001", "0002"],
                                 },
                             },
                         }),
@@ -253,19 +253,19 @@ describe('createSecCompanyResolver', () => {
                 ),
             ),
             now: () => 1_000,
-            userAgent: 'Evidence Workbench test@example.com',
+            userAgent: "Evidence Workbench test@example.com",
             reserveRequest: vi.fn(async () => undefined),
             recordAttempt: vi.fn(async (attempt: { status: string }) => ({
-                shouldExecute: attempt.status === 'started',
+                shouldExecute: attempt.status === "started",
             })),
         });
 
-        await expect(resolver.inspectEvidence('1818201')).resolves.toEqual({
+        await expect(resolver.inspectEvidence("1818201")).resolves.toEqual({
             company: {
-                cik: '1818201',
-                legalName: 'CCC Intelligent Solutions Holdings Inc.',
-                ticker: 'CCCS',
-                exchange: 'NASDAQ',
+                cik: "1818201",
+                legalName: "CCC Intelligent Solutions Holdings Inc.",
+                ticker: "CCCS",
+                exchange: "NASDAQ",
                 investorRelationsUrl: undefined,
                 websiteUrl: undefined,
                 websiteUrlSource: undefined,
@@ -273,13 +273,13 @@ describe('createSecCompanyResolver', () => {
             filingCount: 2,
             filings: [
                 {
-                    accessionNumber: '0001',
+                    accessionNumber: "0001",
                     form: undefined,
                     filingDate: undefined,
                     primaryDocument: undefined,
                 },
                 {
-                    accessionNumber: '0002',
+                    accessionNumber: "0002",
                     form: undefined,
                     filingDate: undefined,
                     primaryDocument: undefined,
@@ -288,68 +288,133 @@ describe('createSecCompanyResolver', () => {
         });
     });
 
-    test('does not repeat an already-recorded external attempt', async () => {
+    test("does not repeat an already-recorded external attempt", async () => {
         const fetchImplementation = vi.fn();
         const resolver = createSecCompanyResolver({
             fetch: fetchImplementation,
             now: () => 1_000,
-            userAgent: 'Evidence Workbench test@example.com',
+            userAgent: "Evidence Workbench test@example.com",
             reserveRequest: vi.fn(async () => undefined),
             recordAttempt: vi.fn(async () => ({ shouldExecute: false })),
-            operationScope: 'run:one:generation:1',
+            operationScope: "run:one:generation:1",
         });
 
-        await expect(resolver.inspectEvidence('1818201')).rejects.toThrow(
-            'already recorded',
+        await expect(resolver.inspectEvidence("1818201")).rejects.toThrow(
+            "already recorded",
         );
         expect(fetchImplementation).not.toHaveBeenCalled();
     });
 
-    test('records bounded transport retry attempts', async () => {
+    test("records bounded transport retry attempts", async () => {
         const fetchImplementation = vi
             .fn()
-            .mockRejectedValueOnce(new TypeError('temporary network failure'))
+            .mockRejectedValueOnce(new TypeError("temporary network failure"))
             .mockResolvedValueOnce(
                 new Response(
                     JSON.stringify({
-                        cik: '0001818201',
-                        name: 'CCC Intelligent Solutions Holdings Inc.',
-                        tickers: ['CCCS'],
-                        exchanges: ['Nasdaq'],
-                        filings: { recent: { accessionNumber: ['0001'] } },
+                        cik: "0001818201",
+                        name: "CCC Intelligent Solutions Holdings Inc.",
+                        tickers: ["CCCS"],
+                        exchanges: ["Nasdaq"],
+                        filings: { recent: { accessionNumber: ["0001"] } },
                     }),
                     { status: 200 },
                 ),
             );
         const recordAttempt = vi.fn(async (attempt: { status: string }) => ({
-            shouldExecute: attempt.status === 'started',
+            shouldExecute: attempt.status === "started",
         }));
         const resolver = createSecCompanyResolver({
             fetch: fetchImplementation,
             now: () => 1_000,
-            userAgent: 'Evidence Workbench test@example.com',
+            userAgent: "Evidence Workbench test@example.com",
             reserveRequest: vi.fn(async () => undefined),
             recordAttempt,
-            operationScope: 'run:one:generation:1',
+            operationScope: "run:one:generation:1",
         });
 
         await expect(
-            resolver.inspectEvidence('1818201'),
+            resolver.inspectEvidence("1818201"),
         ).resolves.toMatchObject({
-            company: { ticker: 'CCCS' },
+            company: { ticker: "CCCS" },
         });
         expect(fetchImplementation).toHaveBeenCalledTimes(2);
         expect(recordAttempt).toHaveBeenCalledWith(
-            expect.objectContaining({ status: 'started', attempt: 1 }),
+            expect.objectContaining({ status: "started", attempt: 1 }),
         );
         expect(recordAttempt).toHaveBeenCalledWith(
-            expect.objectContaining({ status: 'failed', attempt: 1 }),
+            expect.objectContaining({ status: "failed", attempt: 1 }),
         );
         expect(recordAttempt).toHaveBeenCalledWith(
-            expect.objectContaining({ status: 'started', attempt: 2 }),
+            expect.objectContaining({ status: "started", attempt: 2 }),
         );
         expect(recordAttempt).toHaveBeenCalledWith(
-            expect.objectContaining({ status: 'succeeded', attempt: 2 }),
+            expect.objectContaining({ status: "succeeded", attempt: 2 }),
+        );
+    });
+
+    test("bounds SEC requests with an abort signal", async () => {
+        const fetchImplementation = vi.fn(
+            async (_input: string | URL | Request, init?: RequestInit) => {
+                expect(init?.signal).toBeInstanceOf(AbortSignal);
+                return new Response(
+                    JSON.stringify({
+                        cik: "0001818201",
+                        name: "CCC Intelligent Solutions Holdings Inc.",
+                        tickers: ["CCCS"],
+                        exchanges: ["Nasdaq"],
+                        filings: { recent: { accessionNumber: [] } },
+                    }),
+                    { status: 200 },
+                );
+            },
+        );
+        const resolver = createSecCompanyResolver({
+            fetch: fetchImplementation,
+            now: () => 1_000,
+            userAgent: "Evidence Workbench test@example.com",
+            reserveRequest: vi.fn(async () => undefined),
+            recordAttempt: vi.fn(async (attempt: { status: string }) => ({
+                shouldExecute: attempt.status === "started",
+            })),
+        });
+
+        await expect(
+            resolver.inspectEvidence("1818201"),
+        ).resolves.toMatchObject({ company: { cik: "1818201" } });
+    });
+
+    test("aborts timed-out SEC requests within the bounded retry budget", async () => {
+        const fetchImplementation = vi.fn(
+            (_input: string | URL | Request, init?: RequestInit) =>
+                new Promise<Response>((_resolve, reject) => {
+                    init?.signal?.addEventListener("abort", () =>
+                        reject(new DOMException("Aborted", "AbortError")),
+                    );
+                }),
+        );
+        const recordAttempt = vi.fn(async (attempt: { status: string }) => ({
+            shouldExecute: attempt.status === "started",
+        }));
+        const resolver = createSecCompanyResolver({
+            fetch: fetchImplementation,
+            now: Date.now,
+            userAgent: "Evidence Workbench test@example.com",
+            reserveRequest: vi.fn(async () => undefined),
+            recordAttempt,
+            timeoutMs: 5,
+        });
+
+        await expect(resolver.inspectEvidence("1818201")).rejects.toThrow(
+            "application timeout",
+        );
+        expect(fetchImplementation).toHaveBeenCalledTimes(2);
+        expect(recordAttempt).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+                status: "failed",
+                attempt: 2,
+                errorCode: "SecTimeoutError",
+            }),
         );
     });
 });

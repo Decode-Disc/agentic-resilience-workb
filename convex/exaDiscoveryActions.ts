@@ -1,26 +1,56 @@
-'use node';
+"use node";
 
-import Exa from 'exa-js';
-import { lookup } from 'node:dns/promises';
-import { v } from 'convex/values';
+import Exa from "exa-js";
+import { lookup } from "node:dns/promises";
+import { v } from "convex/values";
 
-import { internal } from './_generated/api';
-import { internalAction } from './_generated/server';
+import { internal } from "./_generated/api";
+import { internalAction } from "./_generated/server";
 import {
     PublicSourceUrlError,
     validatePublicSourceUrl,
-} from './domain/publicSourceUrl';
-import { createExaDiscoveryAdapter } from './integrations/exa';
+} from "./domain/publicSourceUrl";
+import { createExaDiscoveryAdapter } from "./integrations/exa";
 
 const MAX_EXA_ATTEMPTS = 2;
+const EXA_DISCOVERY_TIMEOUT_MS = 10_000;
+
+class ExaLogicalTimeoutError extends Error {
+    constructor() {
+        super("Exa search exceeded its application timeout");
+        this.name = "ExaLogicalTimeoutError";
+    }
+}
+
+async function withLogicalTimeout<T>(
+    work: Promise<T>,
+    timeoutMs: number,
+): Promise<T> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+        return await Promise.race([
+            work,
+            new Promise<never>((_resolve, reject) => {
+                timeout = setTimeout(
+                    () => reject(new ExaLogicalTimeoutError()),
+                    timeoutMs,
+                );
+            }),
+        ]);
+    } finally {
+        if (timeout !== undefined) {
+            clearTimeout(timeout);
+        }
+    }
+}
 
 export async function validateExaCandidates<
     Candidate extends { canonicalUrl: string },
 >(
     candidates: ReadonlyArray<Candidate>,
     resolveAddresses: (hostname: string) => Promise<ReadonlyArray<string>>,
-): Promise<Array<Candidate>> {
-    return Promise.all(
+): Promise<{ candidates: Array<Candidate>; rejected: number }> {
+    const results = await Promise.allSettled(
         candidates.map(async (candidate) => {
             const validated = await validatePublicSourceUrl(
                 candidate.canonicalUrl,
@@ -32,24 +62,27 @@ export async function validateExaCandidates<
             };
         }),
     );
+    return {
+        candidates: results.flatMap((result) =>
+            result.status === "fulfilled" ? [result.value] : [],
+        ),
+        rejected: results.filter(({ status }) => status === "rejected").length,
+    };
 }
 
 export const discoverForRun = internalAction({
-    args: { runId: v.id('researchRuns') },
+    args: { runId: v.id("researchRuns") },
     returns: v.object({ total: v.number() }),
     handler: async (ctx, args): Promise<{ total: number }> => {
         const exaKey = process.env.EXA_API_KEY?.trim();
         if (!exaKey) {
-            throw new Error('Exa source discovery is not configured');
+            throw new Error("Exa source discovery is not configured");
         }
         const context = await ctx.runQuery(
             internal.researchPlanning.getDiscoveryContext,
             args,
         );
-        const exaClient = new Exa(exaKey);
-        const exa = createExaDiscoveryAdapter({
-            search: (query, options) => exaClient.search(query, options),
-        });
+        let exa: ReturnType<typeof createExaDiscoveryAdapter> | undefined;
         for (const [index, planQuery] of context.queries.entries()) {
             const capacity = await ctx.runQuery(
                 internal.sourceDiscovery.getCandidateCapacity,
@@ -71,50 +104,62 @@ export const discoverForRun = internalAction({
                         corpusRevisionId: context.corpusRevisionId,
                         executionGeneration: context.executionGeneration,
                         workflowVersion: 2,
-                        stepKey: 'discover_sources',
-                        service: 'exa',
-                        operation: 'search',
+                        stepKey: "discover_sources",
+                        service: "exa",
+                        operation: "search",
                         operationKey,
-                        status: 'started',
+                        status: "started",
                         attempt,
                     },
                 );
                 if (!lease.shouldExecute) {
-                    if (lease.status === 'succeeded') {
+                    if (
+                        lease.status === "succeeded" ||
+                        lease.status === "partial"
+                    ) {
                         break;
                     }
-                    if (lease.status === 'started') {
+                    if (lease.status === "started") {
                         throw new Error(
-                            'Exa provider attempt is already in progress',
+                            "Exa provider attempt is already in progress",
                         );
                     }
                     continue;
                 }
                 try {
-                    const results = await exa.search(
-                        planQuery.query,
-                        Math.min(4, capacity.remaining),
+                    if (!exa) {
+                        const exaClient = new Exa(exaKey);
+                        exa = createExaDiscoveryAdapter({
+                            search: (query, options) =>
+                                exaClient.search(query, options),
+                        });
+                    }
+                    const batch = await withLogicalTimeout(
+                        exa.search(
+                            planQuery.query,
+                            Math.min(4, capacity.remaining),
+                        ),
+                        EXA_DISCOVERY_TIMEOUT_MS,
                     );
                     const capacityBeforeInspection = await ctx.runQuery(
                         internal.sourceDiscovery.getCandidateCapacity,
                         {
                             runId: args.runId,
-                            executionGeneration:
-                                context.executionGeneration,
+                            executionGeneration: context.executionGeneration,
                         },
                     );
-                    const candidates =
+                    const validated =
                         capacityBeforeInspection.remaining === 0
-                            ? []
+                            ? { candidates: [], rejected: 0 }
                             : await validateExaCandidates(
-                                  results
+                                  batch.candidates
                                       .slice(
                                           0,
                                           capacityBeforeInspection.remaining,
                                       )
                                       .map((candidate) => ({
                                           ...candidate,
-                                          origin: 'exa' as const,
+                                          origin: "exa" as const,
                                           category: planQuery.category,
                                       })),
                                   async (hostname) =>
@@ -125,6 +170,34 @@ export const discoverForRun = internalAction({
                                           })
                                       ).map(({ address }) => address),
                               );
+                    const rejected = batch.rejected + validated.rejected;
+                    if (validated.candidates.length === 0 && rejected > 0) {
+                        await ctx.runMutation(
+                            internal.providerCalls.recordAttempt,
+                            {
+                                runId: args.runId,
+                                corpusRevisionId: context.corpusRevisionId,
+                                executionGeneration:
+                                    context.executionGeneration,
+                                workflowVersion: 2,
+                                stepKey: "discover_sources",
+                                service: "exa",
+                                operation: "search",
+                                operationKey,
+                                status: "failed",
+                                attempt,
+                                latencyMs: Date.now() - startedAt,
+                                usage: {
+                                    accepted: 0,
+                                    rejected,
+                                    searchTime: batch.searchTime,
+                                },
+                                reportedCost: batch.costDollars,
+                                errorCode: "invalid_provider_response",
+                            },
+                        );
+                        break;
+                    }
                     await ctx.runMutation(
                         internal.sourceDiscovery.persistCandidates,
                         {
@@ -132,23 +205,16 @@ export const discoverForRun = internalAction({
                             corpusRevisionId: context.corpusRevisionId,
                             executionGeneration: context.executionGeneration,
                             operationKey,
-                            candidates,
-                        },
-                    );
-                    await ctx.runMutation(
-                        internal.providerCalls.recordAttempt,
-                        {
-                            runId: args.runId,
-                            corpusRevisionId: context.corpusRevisionId,
-                            executionGeneration: context.executionGeneration,
-                            workflowVersion: 2,
-                            stepKey: 'discover_sources',
-                            service: 'exa',
-                            operation: 'search',
-                            operationKey,
-                            status: 'succeeded',
-                            attempt,
-                            latencyMs: Date.now() - startedAt,
+                            candidates: validated.candidates,
+                            providerCompletion: {
+                                providerCallId: lease.providerCallId,
+                                status: rejected > 0 ? "partial" : "succeeded",
+                                latencyMs: Date.now() - startedAt,
+                                accepted: validated.candidates.length,
+                                rejected,
+                                searchTime: batch.searchTime,
+                                reportedCost: batch.costDollars,
+                            },
                         },
                     );
                     break;
@@ -167,23 +233,23 @@ export const discoverForRun = internalAction({
                             corpusRevisionId: context.corpusRevisionId,
                             executionGeneration: context.executionGeneration,
                             workflowVersion: 2,
-                            stepKey: 'discover_sources',
-                            service: 'exa',
-                            operation: 'search',
+                            stepKey: "discover_sources",
+                            service: "exa",
+                            operation: "search",
                             operationKey,
-                            status: 'failed',
+                            status: "failed",
                             attempt,
                             latencyMs: Date.now() - startedAt,
                             errorCode: executionIsActive
                                 ? error instanceof Error
                                     ? error.name
-                                    : 'UnknownProviderError'
-                                : 'stale_execution',
+                                    : "UnknownProviderError"
+                                : "stale_execution",
                         },
                     );
                     if (!executionIsActive) {
                         throw new Error(
-                            'Research execution is no longer active',
+                            "Research execution is no longer active",
                         );
                     }
                     if (error instanceof PublicSourceUrlError) {

@@ -4,36 +4,36 @@ import {
     CheckmarkCircle02Icon,
     FileSearchIcon,
     MapsIcon,
-} from '@hugeicons/core-free-icons';
+} from "@hugeicons/core-free-icons";
 
-import Icon from '@/components/icon';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { LiquidGlassCard } from '@/components/ui/liquid-glass';
+import Icon from "@/components/icon";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { LiquidGlassCard } from "@/components/ui/liquid-glass";
 import {
     ResizableHandle,
     ResizablePanel,
     ResizablePanelGroup,
-} from '@/components/ui/resizable';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { WorkbenchShell } from '@/components/workbench-shell/workbench-shell';
-import { useResponsive } from '@/hooks/use-responsive';
-import { prototypeClaims, prototypeDimensions } from './prototype-data';
+} from "@/components/ui/resizable";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { WorkbenchShell } from "@/components/workbench-shell/workbench-shell";
+import { useResponsive } from "@/hooks/use-responsive";
+import { prototypeClaims, prototypeDimensions } from "./prototype-data";
 import {
     ClaimSurface,
     DossierHeadingDisclosure,
     EvidenceKey,
     PrototypeNotice,
-} from './prototype-primitives';
+} from "./prototype-primitives";
 
 const sections = [
-    { name: 'Progress', icon: CheckmarkCircle02Icon, state: 'Complete' },
-    { name: 'Sources', icon: FileSearchIcon, state: '12 accepted' },
-    { name: 'Evidence', icon: ChartAnalysisIcon, state: 'Active' },
-    { name: 'Assessment', icon: ChartAnalysisIcon, state: '4 / 10' },
-    { name: 'Map', icon: MapsIcon, state: 'Derived' },
-    { name: 'Brief', icon: BookOpenTextIcon, state: 'Locked' },
+    { name: "Progress", icon: CheckmarkCircle02Icon, state: "Complete" },
+    { name: "Sources", icon: FileSearchIcon, state: "12 accepted" },
+    { name: "Evidence", icon: ChartAnalysisIcon, state: "Active" },
+    { name: "Assessment", icon: ChartAnalysisIcon, state: "4 / 10" },
+    { name: "Map", icon: MapsIcon, state: "Derived" },
+    { name: "Brief", icon: BookOpenTextIcon, state: "Locked" },
 ] as const;
 
 export function VariantNavigationRail() {
@@ -50,8 +50,7 @@ export function VariantNavigationRail() {
                             glowIntensity="xs"
                             shadowIntensity="sm"
                             whileHover={undefined}
-                            whileTap={undefined}
-                        >
+                            whileTap={undefined}>
                             <ScrollArea className="h-full">
                                 <div className="p-4">
                                     <p className="mb-5 text-sm font-medium">
@@ -64,12 +63,11 @@ export function VariantNavigationRail() {
                                                     <Button
                                                         variant={
                                                             section.name ===
-                                                            'Evidence'
-                                                                ? 'secondary'
-                                                                : 'ghost'
+                                                            "Evidence"
+                                                                ? "secondary"
+                                                                : "ghost"
                                                         }
-                                                        className="w-full justify-start"
-                                                    >
+                                                        className="w-full justify-start">
                                                         <Icon
                                                             iconNode={
                                                                 section.icon
@@ -106,22 +104,19 @@ export function VariantNavigationRail() {
                     <main className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-background">
                         <DossierHeadingDisclosure />
                         <ResizablePanelGroup
-                            orientation={isMobile ? 'vertical' : 'horizontal'}
+                            orientation={isMobile ? "vertical" : "horizontal"}
                             defaultLayout={{
                                 evidence: isMobile ? 66 : 72,
                                 context: isMobile ? 34 : 20,
                             }}
-                            className="min-h-0 flex-1"
-                        >
+                            className="min-h-0 flex-1">
                             <ResizablePanel
                                 id="evidence"
-                                minSize={isMobile ? '26rem' : '52%'}
-                            >
+                                minSize={isMobile ? "26rem" : "52%"}>
                                 <ScrollArea className="h-full">
                                     <section
                                         className="min-w-0 px-5 py-8 sm:px-8"
-                                        aria-labelledby="variant-a-title"
-                                    >
+                                        aria-labelledby="variant-a-title">
                                         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
                                             <div>
                                                 <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
@@ -129,8 +124,7 @@ export function VariantNavigationRail() {
                                                 </p>
                                                 <h2
                                                     id="variant-a-title"
-                                                    className="mt-2 text-2xl font-medium"
-                                                >
+                                                    className="mt-2 text-2xl font-medium">
                                                     Evidence matrix
                                                 </h2>
                                             </div>
@@ -155,9 +149,8 @@ export function VariantNavigationRail() {
 
                             <ResizablePanel
                                 id="context"
-                                minSize={isMobile ? '18rem' : '16rem'}
-                                maxSize={isMobile ? '50%' : '42%'}
-                            >
+                                minSize={isMobile ? "18rem" : "16rem"}
+                                maxSize={isMobile ? "50%" : "42%"}>
                                 <ScrollArea className="h-full">
                                     <aside className="bg-muted/30 px-5 py-8">
                                         <h2 className="text-sm font-medium">
@@ -168,8 +161,7 @@ export function VariantNavigationRail() {
                                                 (dimension) => (
                                                     <div
                                                         key={dimension.name}
-                                                        className="flex flex-col gap-2"
-                                                    >
+                                                        className="flex flex-col gap-2">
                                                         <p className="text-sm font-medium">
                                                             {dimension.name}
                                                         </p>
@@ -187,7 +179,7 @@ export function VariantNavigationRail() {
                                                         </div>
                                                         <p className="text-xs text-muted-foreground">
                                                             Three-year direction
-                                                            ·{' '}
+                                                            ·{" "}
                                                             {
                                                                 dimension.direction
                                                             }

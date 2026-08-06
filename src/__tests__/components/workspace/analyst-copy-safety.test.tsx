@@ -1,16 +1,16 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, test, vi } from 'vitest';
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, test, vi } from "vitest";
 
-import { AddSourceDialog } from '@/components/workspace/add-source-dialog';
-import { EvidenceSufficiencyReview } from '@/components/workspace/evidence-sufficiency-review';
+import { AddSourceDialog } from "@/components/workspace/add-source-dialog";
+import { EvidenceSufficiencyReview } from "@/components/workspace/evidence-sufficiency-review";
 
-describe('analyst-facing errors', () => {
-    test('hides source backend details', async () => {
+describe("analyst-facing errors", () => {
+    test("hides source backend details", async () => {
         const onAdd = vi
             .fn()
             .mockRejectedValue(
                 new Error(
-                    '[CONVEX A(sourceActions:addManualUrl)] Source metadata retry limit reached',
+                    "[CONVEX A(sourceActions:addManualUrl)] Source metadata retry limit reached",
                 ),
             );
 
@@ -23,9 +23,9 @@ describe('analyst-facing errors', () => {
         );
 
         fireEvent.change(screen.getByLabelText(/Public source link/i), {
-            target: { value: 'https://example.com/report' },
+            target: { value: "https://example.com/report" },
         });
-        fireEvent.click(screen.getByRole('button', { name: /^Add$/i }));
+        fireEvent.click(screen.getByRole("button", { name: /^Add$/i }));
 
         expect(
             await screen.findByText(
@@ -35,12 +35,12 @@ describe('analyst-facing errors', () => {
         expect(screen.queryByText(/CONVEX|retry limit/i)).toBeNull();
     });
 
-    test('hides decision backend details', async () => {
+    test("hides decision backend details", async () => {
         const onDecide = vi
             .fn()
             .mockRejectedValue(
                 new Error(
-                    '[CONVEX M(evidenceSufficiency:decide)] Invalid decision key',
+                    "[CONVEX M(evidenceSufficiency:decide)] Invalid decision key",
                 ),
             );
 
@@ -53,11 +53,11 @@ describe('analyst-facing errors', () => {
 
         fireEvent.change(screen.getByLabelText(/Reason for this decision/i), {
             target: {
-                value: 'Public evidence remains too limited to proceed safely.',
+                value: "Public evidence remains too limited to proceed safely.",
             },
         });
         fireEvent.click(
-            screen.getByRole('button', {
+            screen.getByRole("button", {
                 name: /Continue with limited evidence/i,
             }),
         );

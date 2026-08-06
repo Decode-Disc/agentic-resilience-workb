@@ -1,5 +1,13 @@
 import { cleanup } from "@testing-library/react";
-import { afterEach } from "vitest";
+import { afterEach, vi } from "vitest";
+
+vi.mock("@paper-design/shaders", () => ({
+    liquidMetalFragmentShader: "",
+    ShaderMount: class ShaderMountMock {
+        destroy() {}
+        setSpeed() {}
+    },
+}));
 
 class ResizeObserverMock {
     observe() {}
@@ -26,6 +34,13 @@ if (!globalThis.ResizeObserver) {
 
 if (!globalThis.IntersectionObserver) {
     globalThis.IntersectionObserver = IntersectionObserverMock;
+}
+
+if (typeof HTMLCanvasElement !== "undefined") {
+    Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+        configurable: true,
+        value: vi.fn(() => null),
+    });
 }
 
 if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {

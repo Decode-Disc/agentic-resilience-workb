@@ -2,29 +2,29 @@ import {
     AlertCircleIcon,
     ArrowDown01Icon,
     CheckmarkCircle02Icon,
-} from '@hugeicons/core-free-icons';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { useId, useState } from 'react';
+} from "@hugeicons/core-free-icons";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useId, useState } from "react";
 
-import Icon from '@/components/icon';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import Icon from "@/components/icon";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-} from '@/components/ui/card';
-import { cn } from '@/lib/utils';
+} from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
-import type { PrototypeClaim } from './prototype-data';
+import type { PrototypeClaim } from "./prototype-data";
 
-const claimStatusStyles: Record<PrototypeClaim['status'], string> = {
-    Approved: 'border-approved/25 bg-approved/10 text-approved',
-    'Needs review': 'border-review/25 bg-review/10 text-review',
+const claimStatusStyles: Record<PrototypeClaim["status"], string> = {
+    Approved: "border-approved/25 bg-approved/10 text-approved",
+    "Needs review": "border-review/25 bg-review/10 text-review",
     Unresolved:
-        'border-evidence-unknown/30 bg-evidence-unknown/10 text-evidence-unknown',
+        "border-evidence-unknown/30 bg-evidence-unknown/10 text-evidence-unknown",
 };
 
 export function PrototypeNotice() {
@@ -54,10 +54,9 @@ export function DossierHeading({ compact = false }: { compact?: boolean }) {
                 <h1
                     className={
                         compact
-                            ? 'text-2xl font-medium tracking-[-0.025em]'
-                            : 'text-3xl font-medium tracking-[-0.03em] sm:text-4xl'
-                    }
-                >
+                            ? "text-2xl font-medium tracking-[-0.025em]"
+                            : "text-3xl font-medium tracking-[-0.03em] sm:text-4xl"
+                    }>
                     CCC Intelligent Solutions
                 </h1>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
@@ -83,8 +82,7 @@ export function DossierHeadingDisclosure() {
                 layout: reduceMotion
                     ? { duration: 0 }
                     : { duration: 0.36, ease: [0.32, 0.72, 0, 1] },
-            }}
-        >
+            }}>
             <h1 className="m-0" aria-label="CCC Intelligent Solutions">
                 <Button
                     variant="ghost"
@@ -93,11 +91,10 @@ export function DossierHeadingDisclosure() {
                     aria-controls={detailsId}
                     aria-label={
                         isOpen
-                            ? 'Collapse dossier details'
-                            : 'Expand dossier details'
+                            ? "Collapse dossier details"
+                            : "Expand dossier details"
                     }
-                    onClick={() => setIsOpen((value) => !value)}
-                >
+                    onClick={() => setIsOpen((value) => !value)}>
                     <span className="flex min-w-0 items-center gap-3">
                         <span className="text-micro shrink-0 text-brand-purple">
                             CCCS
@@ -109,16 +106,15 @@ export function DossierHeadingDisclosure() {
                             variant="outline"
                             color="amber"
                             showDot
-                            className="hidden sm:inline-flex"
-                        >
+                            className="hidden sm:inline-flex">
                             Claim review
                         </Badge>
                     </span>
                     <Icon
                         iconNode={ArrowDown01Icon}
                         className={cn(
-                            'shrink-0 transition-transform duration-300',
-                            isOpen && 'rotate-180',
+                            "shrink-0 transition-transform duration-300",
+                            isOpen && "rotate-180",
                         )}
                     />
                 </Button>
@@ -145,8 +141,7 @@ export function DossierHeadingDisclosure() {
                                       ease: [0.32, 0.72, 0, 1],
                                   }
                         }
-                        className="border-t border-border/60 px-5 pt-4 pb-5 sm:px-8"
-                    >
+                        className="border-t border-border/60 px-5 pt-4 pb-5 sm:px-8">
                         <div className="flex flex-wrap items-center gap-2">
                             <Badge variant="outline">NASDAQ</Badge>
                             <Badge variant="secondary">Corpus revision 2</Badge>
@@ -190,20 +185,19 @@ export function ClaimSurface({
                 <div
                     data-claim-status={claim.status}
                     className={cn(
-                        'flex gap-2 rounded-lg border p-3 text-sm leading-6',
+                        "flex gap-2 rounded-lg border p-3 text-sm leading-6",
                         claimStatusStyles[claim.status],
-                    )}
-                >
+                    )}>
                     <Icon
                         iconNode={
-                            claim.status === 'Approved'
+                            claim.status === "Approved"
                                 ? CheckmarkCircle02Icon
                                 : AlertCircleIcon
                         }
                         className="mt-1 shrink-0"
                     />
                     <p>
-                        <span className="font-medium">{claim.status}.</span>{' '}
+                        <span className="font-medium">{claim.status}.</span>{" "}
                         <span className="text-foreground/70">
                             {claim.counterEvidence}
                         </span>
@@ -216,8 +210,7 @@ export function ClaimSurface({
     if (!onSelect) {
         return (
             <Card
-                className={selected ? 'ring-2 ring-foreground/20' : undefined}
-            >
+                className={selected ? "ring-2 ring-foreground/20" : undefined}>
                 {content}
             </Card>
         );
@@ -226,8 +219,7 @@ export function ClaimSurface({
     return (
         <button type="button" className="w-full text-left" onClick={onSelect}>
             <Card
-                className={selected ? 'ring-2 ring-foreground/20' : undefined}
-            >
+                className={selected ? "ring-2 ring-foreground/20" : undefined}>
                 {content}
             </Card>
         </button>
@@ -238,15 +230,15 @@ export function EvidenceKey() {
     return (
         <div className="grid gap-3 text-xs text-muted-foreground sm:grid-cols-3">
             <p>
-                <span className="font-medium text-foreground">Position</span>{' '}
+                <span className="font-medium text-foreground">Position</span>{" "}
                 describes the evidence-backed conclusion.
             </p>
             <p>
-                <span className="font-medium text-foreground">Confidence</span>{' '}
+                <span className="font-medium text-foreground">Confidence</span>{" "}
                 comes from source quality and coverage.
             </p>
             <p>
-                <span className="font-medium text-foreground">Direction</span>{' '}
+                <span className="font-medium text-foreground">Direction</span>{" "}
                 is a separate three-year judgment.
             </p>
         </div>

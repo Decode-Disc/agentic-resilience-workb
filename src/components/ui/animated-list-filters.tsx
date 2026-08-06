@@ -51,8 +51,7 @@ function AnimatedOptionItem<TValue extends string>({
             onClick={() => {
                 onSelect(option.value);
             }}
-            className="flex w-full cursor-pointer items-center justify-between rounded-2xl px-3 py-2 text-foreground hover:bg-accent"
-        >
+            className="flex w-full cursor-pointer items-center justify-between rounded-2xl px-3 py-2 text-foreground hover:bg-accent">
             <div className="flex items-center gap-x-3">
                 <span className="text-muted-foreground">
                     {option.renderIcon(20)}
@@ -65,8 +64,7 @@ function AnimatedOptionItem<TValue extends string>({
                     isSelected
                         ? "border-primary bg-primary text-primary-foreground"
                         : "bg-background",
-                )}
-            >
+                )}>
                 {isSelected ? (
                     <div className="absolute inset-0 flex items-center justify-center">
                         <Icon iconNode={Tick01Icon} size={14} />
@@ -99,11 +97,9 @@ export default function AnimatedListFilter<TValue extends string>({
             className={cn(
                 "relative flex items-center fill-muted-foreground/70",
                 className,
-            )}
-        >
+            )}>
             <MotionConfig
-                transition={{ type: "spring", duration: 0.85, bounce: 0.35 }}
-            >
+                transition={{ type: "spring", duration: 0.85, bounce: 0.35 }}>
                 <button
                     type="button"
                     onClick={() => {
@@ -111,8 +107,7 @@ export default function AnimatedListFilter<TValue extends string>({
                     }}
                     className="relative left-2.5 flex h-10 w-10 items-center justify-center"
                     aria-label={label}
-                    title={label}
-                >
+                    title={label}>
                     <Icon
                         iconNode={FilterIcon}
                         className="relative z-10 text-foreground"
@@ -134,8 +129,7 @@ export default function AnimatedListFilter<TValue extends string>({
                     onClick={() => {
                         setIsOpened((open) => !open);
                     }}
-                    aria-label={`${label}: ${selectedOption?.label ?? ""}`}
-                >
+                    aria-label={`${label}: ${selectedOption?.label ?? ""}`}>
                     <span>{selectedOption?.renderIcon(16)}</span>
                     <span className="truncate capitalize">
                         {selectedOption?.label}
@@ -145,8 +139,7 @@ export default function AnimatedListFilter<TValue extends string>({
                 {isOpened ? (
                     <motion.section
                         layoutId={`wrapper-${layoutId}`}
-                        className="absolute top-12 z-20 w-64 overflow-hidden rounded-2xl border border-border bg-card px-1 py-1 shadow-lg"
-                    >
+                        className="absolute top-12 z-20 w-64 overflow-hidden rounded-2xl border border-border bg-card px-1 py-1 shadow-lg">
                         <div className="mb-1 flex items-center justify-between px-2 py-1.5 text-xs text-muted-foreground">
                             <span>{label}</span>
                             <button
@@ -154,8 +147,7 @@ export default function AnimatedListFilter<TValue extends string>({
                                 className="rounded px-1.5 py-0.5 hover:bg-accent"
                                 onClick={() => {
                                     setIsOpened(false);
-                                }}
-                            >
+                                }}>
                                 Confirmer
                             </button>
                         </div>

@@ -4,22 +4,22 @@ import {
     MarketAnalysisIcon,
     SourceCodeIcon,
     UserGroupIcon,
-} from '@hugeicons/core-free-icons';
-import { createFileRoute } from '@tanstack/react-router';
+} from "@hugeicons/core-free-icons";
+import { createFileRoute } from "@tanstack/react-router";
 
-import Icon from '@/components/icon';
+import Icon from "@/components/icon";
 import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-} from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
-import { ResearchComposer } from '@/components/workspace/research-composer';
-import type { PlatformIcon } from '@/types/ui';
+} from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { ResearchComposer } from "@/components/workspace/research-composer";
+import type { PlatformIcon } from "@/types/ui";
 
-export const Route = createFileRoute('/workspace/start')({
+export const Route = createFileRoute("/workspace/start")({
     component: StartAnalysisRoute,
 });
 
@@ -32,38 +32,38 @@ interface EvidenceLayer {
 
 const EVIDENCE_LAYERS: readonly EvidenceLayer[] = [
     {
-        id: 'sec-filings',
-        title: 'SEC filings',
+        id: "sec-filings",
+        title: "SEC filings",
         description:
-            'Resolve 10-K, 10-Q and 8-K filings as the primary factual backbone.',
+            "Resolve 10-K, 10-Q and 8-K filings as the primary factual backbone.",
         icon: DocumentValidationIcon,
     },
     {
-        id: 'investor-context',
-        title: 'Investor context',
+        id: "investor-context",
+        title: "Investor context",
         description:
-            'Bring in earnings transcripts, guidance and investor day framing.',
+            "Bring in earnings transcripts, guidance and investor day framing.",
         icon: MarketAnalysisIcon,
     },
     {
-        id: 'source-discovery',
-        title: 'Source discovery',
+        id: "source-discovery",
+        title: "Source discovery",
         description:
-            'Suggest relevant public sources for your review before they inform the dossier.',
+            "Suggest relevant public sources for your review before they inform the dossier.",
         icon: SourceCodeIcon,
     },
     {
-        id: 'evidence-extraction',
-        title: 'Evidence extraction',
+        id: "evidence-extraction",
+        title: "Evidence extraction",
         description:
-            'Extract traceable claims from approved sources with precise references.',
+            "Extract traceable claims from approved sources with precise references.",
         icon: AiBrain02Icon,
     },
     {
-        id: 'reference-checks',
-        title: 'Reference checks',
+        id: "reference-checks",
+        title: "Reference checks",
         description:
-            'Surface counter-evidence and open questions from additional sources.',
+            "Surface counter-evidence and open questions from additional sources.",
         icon: UserGroupIcon,
     },
 ] as const;
@@ -76,9 +76,8 @@ function StartAnalysisRoute() {
                     <div className="flex items-baseline rounded-sm bg-muted px-2 py-0.5">
                         <span
                             aria-hidden="true"
-                            className="text-[32px] start-double-slash"
-                        >
-                            {'//'}
+                            className="text-[32px] start-double-slash">
+                            {"//"}
                         </span>
                         <h1 className="text-2xl font-medium tracking-tight text-foreground/70">
                             Start a research dossier

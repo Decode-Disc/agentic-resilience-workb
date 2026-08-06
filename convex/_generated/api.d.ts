@@ -14,6 +14,7 @@ import type * as audit from "../audit.js";
 import type * as auth from "../auth.js";
 import type * as companyResolution from "../companyResolution.js";
 import type * as domain_evidenceAvailabilityPolicy from "../domain/evidenceAvailabilityPolicy.js";
+import type * as domain_executionClaim from "../domain/executionClaim.js";
 import type * as domain_invitationCodes from "../domain/invitationCodes.js";
 import type * as domain_publicSourceUrl from "../domain/publicSourceUrl.js";
 import type * as domain_researchPlan from "../domain/researchPlan.js";
@@ -56,6 +57,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   companyResolution: typeof companyResolution;
   "domain/evidenceAvailabilityPolicy": typeof domain_evidenceAvailabilityPolicy;
+  "domain/executionClaim": typeof domain_executionClaim;
   "domain/invitationCodes": typeof domain_invitationCodes;
   "domain/publicSourceUrl": typeof domain_publicSourceUrl;
   "domain/researchPlan": typeof domain_researchPlan;

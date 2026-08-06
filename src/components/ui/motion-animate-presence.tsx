@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 import {
     AnimatePresence,
@@ -8,11 +8,11 @@ import {
     type TargetAndTransition,
     type Transition,
     useInView,
-} from "motion/react"
-import type React from "react"
-import { useRef } from "react"
+} from "motion/react";
+import type React from "react";
+import { useRef } from "react";
 
-export type AnimatePresenceMode = "sync" | "wait" | "popLayout"
+export type AnimatePresenceMode = "sync" | "wait" | "popLayout";
 
 export type AnimationPreset =
     | "scale"
@@ -25,22 +25,25 @@ export type AnimationPreset =
     | "zoom"
     | "blur"
     | "flip-x"
-    | "flip-y"
+    | "flip-y";
 
 export interface PresetDefinition {
-    initial: TargetAndTransition
-    animate: TargetAndTransition
-    exit: TargetAndTransition
-    transition?: Transition
+    initial: TargetAndTransition;
+    animate: TargetAndTransition;
+    exit: TargetAndTransition;
+    transition?: Transition;
 }
 
-type UseInViewOptions = NonNullable<Parameters<typeof useInView>[1]>
+type UseInViewOptions = NonNullable<Parameters<typeof useInView>[1]>;
 
-const defaultEase: Easing = [0.26, 0.02, 0.23, 0.94]
-const waitEaseIn: Easing = [0.02, 0.35, 0.25, 0.99]
-const waitEaseOut: Easing = [0.46, 0.04, 0.97, 0.44]
+const defaultEase: Easing = [0.26, 0.02, 0.23, 0.94];
+const waitEaseIn: Easing = [0.02, 0.35, 0.25, 0.99];
+const waitEaseOut: Easing = [0.46, 0.04, 0.97, 0.44];
 
-export const MOTION_PRESETS: Record<AnimationPreset | (string & {}), PresetDefinition> = {
+export const MOTION_PRESETS: Record<
+    AnimationPreset | (string & {}),
+    PresetDefinition
+> = {
     scale: {
         initial: { opacity: 0, scale: 0.6 },
         animate: { opacity: 1, scale: 1 },
@@ -107,30 +110,30 @@ export const MOTION_PRESETS: Record<AnimationPreset | (string & {}), PresetDefin
         exit: { opacity: 0, rotateY: -90 },
         transition: { duration: 0.4, ease: defaultEase },
     },
-}
+};
 
 export function registerMotionPreset(
     name: string,
-    definition: PresetDefinition
+    definition: PresetDefinition,
 ): void {
-    MOTION_PRESETS[name] = definition
+    MOTION_PRESETS[name] = definition;
 }
 
 export interface MotionAnimatePresenceProps
     extends Omit<HTMLMotionProps<"div">, "children" | "mode"> {
-    children?: React.ReactNode
-    mode?: AnimatePresenceMode
-    preset?: AnimationPreset | (string & {})
-    presetMap?: Record<string, PresetDefinition>
-    infinite?: boolean
-    show?: boolean
-    duration?: number
-    delay?: number
-    contentKey?: React.Key
-    viewportMargin?: UseInViewOptions["margin"]
-    viewportAmount?: UseInViewOptions["amount"]
-    wrapperClassName?: string
-    wrapperStyle?: React.CSSProperties
+    children?: React.ReactNode;
+    mode?: AnimatePresenceMode;
+    preset?: AnimationPreset | (string & {});
+    presetMap?: Record<string, PresetDefinition>;
+    infinite?: boolean;
+    show?: boolean;
+    duration?: number;
+    delay?: number;
+    contentKey?: React.Key;
+    viewportMargin?: UseInViewOptions["margin"];
+    viewportAmount?: UseInViewOptions["amount"];
+    wrapperClassName?: string;
+    wrapperStyle?: React.CSSProperties;
 }
 
 export function MotionAnimatePresence({
@@ -155,41 +158,46 @@ export function MotionAnimatePresence({
     style,
     ...restProps
 }: MotionAnimatePresenceProps) {
-    const containerRef = useRef<HTMLDivElement>(null)
+    const containerRef = useRef<HTMLDivElement>(null);
     const isInView = useInView(containerRef, {
         once: !infinite,
         margin: viewportMargin,
         amount: viewportAmount,
         initial: true,
-    })
+    });
 
-    const selectedPreset = presetMap[preset] || MOTION_PRESETS.scale
+    const selectedPreset = presetMap[preset] || MOTION_PRESETS.scale;
 
-    const initial = customInitial ?? selectedPreset.initial
-    const animateConfig = customAnimate ?? selectedPreset.animate
-    const exit = customExit ?? selectedPreset.exit
+    const initial = customInitial ?? selectedPreset.initial;
+    const animateConfig = customAnimate ?? selectedPreset.animate;
+    const exit = customExit ?? selectedPreset.exit;
 
     let transition: Transition = {
         ...selectedPreset.transition,
         ...customTransition,
-    }
+    };
 
     if (duration !== undefined) {
-        transition.duration = duration
+        transition.duration = duration;
     }
 
     if (delay !== undefined) {
-        transition.delay = delay
+        transition.delay = delay;
     }
 
-    if (mode === "wait" && transition && !customTransition && Array.isArray(transition.ease)) {
+    if (
+        mode === "wait" &&
+        transition &&
+        !customTransition &&
+        Array.isArray(transition.ease)
+    ) {
         transition = {
             ...transition,
             ease: waitEaseIn,
-        }
+        };
     }
 
-    const isVisible = show && (!infinite || isInView)
+    const isVisible = show && (!infinite || isInView);
 
     const exitConfig =
         mode === "wait" &&
@@ -205,28 +213,33 @@ export function MotionAnimatePresence({
                       ease: waitEaseOut,
                   },
               }
-            : exit
+            : exit;
 
     return (
-        <div ref={containerRef} className={wrapperClassName} style={wrapperStyle}>
+        <div
+            ref={containerRef}
+            className={wrapperClassName}
+            style={wrapperStyle}>
             <AnimatePresence mode={mode}>
                 {isVisible && (
                     <motion.div
-                        key={contentKey ?? (infinite ? `inf-${isInView}` : "presence-content")}
+                        key={
+                            contentKey ??
+                            (infinite ? `inf-${isInView}` : "presence-content")
+                        }
                         initial={initial}
                         animate={animateConfig}
                         exit={exitConfig}
                         transition={transition}
                         className={className}
                         style={style}
-                        {...restProps}
-                    >
+                        {...restProps}>
                         {children}
                     </motion.div>
                 )}
             </AnimatePresence>
         </div>
-    )
+    );
 }
 
-export default MotionAnimatePresence
+export default MotionAnimatePresence;

@@ -1,12 +1,18 @@
-import type { api } from '@convex/_generated/api';
-import type { FunctionReturnType } from 'convex/server';
+import type { api } from "@convex/_generated/api";
+import type { FunctionReturnType } from "convex/server";
 
-import { Badge } from '@/components/ui/badge';
+import { Badge } from "@/components/ui/badge";
+import {
+    Empty,
+    EmptyDescription,
+    EmptyHeader,
+    EmptyTitle,
+} from "@/components/ui/empty";
 import {
     eventLabel,
     executionLabel,
     lifecycleLabel,
-} from '@/lib/presentation/research-copy';
+} from "@/lib/presentation/research-copy";
 
 type RunProjection = FunctionReturnType<typeof api.researchRuns.getMine>;
 type RunEvents = FunctionReturnType<typeof api.researchRuns.listMyEvents>;
@@ -31,7 +37,7 @@ export function RunProgress({
                         {executionLabel(run.executionStatus)}
                     </Badge>
                 </div>
-                {run.lifecycleState === 'corpus_approved' ? (
+                {run.lifecycleState === "corpus_approved" ? (
                     <p className="mt-4 text-sm text-muted-foreground">
                         Source set approved. Evidence review will begin from
                         these sources.
@@ -41,8 +47,7 @@ export function RunProgress({
             {run.providerFailures.length > 0 ? (
                 <div
                     className="rounded-xl border border-destructive/30 bg-destructive/5 p-4"
-                    role="alert"
-                >
+                    role="alert">
                     <h3 className="text-sm font-medium">
                         Some sources could not be retrieved
                     </h3>
@@ -53,21 +58,32 @@ export function RunProgress({
                     </p>
                 </div>
             ) : null}
-            <ol className="space-y-2">
-                {events.map((event) => (
-                    <li
-                        key={event._id}
-                        className="border-l border-border/70 py-1 pl-4 text-sm"
-                    >
-                        <span className="font-medium">
-                            {lifecycleLabel(event.lifecycleState)}
-                        </span>
-                        <span className="ml-2 text-xs text-muted-foreground">
-                            {eventLabel(event.type)}
-                        </span>
-                    </li>
-                ))}
-            </ol>
+            {events.length === 0 ? (
+                <Empty className="surface-panel min-h-40 rounded-xl p-6">
+                    <EmptyHeader>
+                        <EmptyTitle>No progress events yet</EmptyTitle>
+                        <EmptyDescription>
+                            Updates will appear here after the research run
+                            starts.
+                        </EmptyDescription>
+                    </EmptyHeader>
+                </Empty>
+            ) : (
+                <ol className="space-y-2">
+                    {events.map((event) => (
+                        <li
+                            key={event._id}
+                            className="border-l border-border/70 py-1 pl-4 text-sm">
+                            <span className="font-medium">
+                                {lifecycleLabel(event.lifecycleState)}
+                            </span>
+                            <span className="ml-2 text-xs text-muted-foreground">
+                                {eventLabel(event.type)}
+                            </span>
+                        </li>
+                    ))}
+                </ol>
+            )}
         </section>
     );
 }

@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import {
     Cancel01Icon,
@@ -6,12 +6,12 @@ import {
     File01Icon,
     FileUploadIcon,
     Upload01Icon,
-} from '@hugeicons/core-free-icons';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { type ReactNode, useCallback, useId, useState } from 'react';
+} from "@hugeicons/core-free-icons";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { type ReactNode, useCallback, useId, useState } from "react";
 
-import Icon from '@/components/icon';
-import { cn } from '@/lib/utils';
+import Icon from "@/components/icon";
+import { cn } from "@/lib/utils";
 
 /**
  * A file awaiting ingestion, captured locally only.
@@ -66,7 +66,7 @@ export function FileDropzone({
     disabled = false,
     className,
     children,
-    acceptedFileTypes = ['*'],
+    acceptedFileTypes = ["*"],
     initialFiles = [],
 }: FileDropzoneProps) {
     const [isDragging, setIsDragging] = useState(false);
@@ -94,7 +94,7 @@ export function FileDropzone({
             const incoming = Array.from(fileList);
 
             if (!multiple && incoming.length > 1) {
-                setError('Only one file allowed');
+                setError("Only one file allowed");
                 return;
             }
 
@@ -114,7 +114,7 @@ export function FileDropzone({
                 acceptedFiles.push({
                     id: generateId(),
                     file,
-                    preview: file.type.startsWith('image/')
+                    preview: file.type.startsWith("image/")
                         ? URL.createObjectURL(file)
                         : undefined,
                 });
@@ -171,12 +171,12 @@ export function FileDropzone({
         [processFiles],
     );
 
-    const acceptedTypesLabel = acceptedFileTypes.includes('*')
-        ? 'All file types'
-        : acceptedFileTypes.join(', ');
+    const acceptedTypesLabel = acceptedFileTypes.includes("*")
+        ? "All file types"
+        : acceptedFileTypes.join(", ");
 
     return (
-        <div className={cn('space-y-3', className)}>
+        <div className={cn("space-y-3", className)}>
             {/* Dropzone surface */}
             {/* biome-ignore lint/a11y/noStaticElementInteractions: keyboard access is provided by the labelled file input below */}
             <div
@@ -184,18 +184,16 @@ export function FileDropzone({
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 className={cn(
-                    'relative flex flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed transition-all duration-200',
+                    "relative flex flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed transition-all duration-200",
                     isDragging
-                        ? 'border-primary bg-primary/5 shadow-floating'
-                        : 'border-border bg-muted/30 hover:border-border/70',
-                    disabled && 'cursor-not-allowed opacity-50',
-                    !isDragging && 'p-8',
-                )}
-            >
+                        ? "border-primary bg-primary/5 shadow-floating"
+                        : "border-border bg-muted/30 hover:border-border/70",
+                    disabled && "cursor-not-allowed opacity-50",
+                    !isDragging && "p-8",
+                )}>
                 <label
                     htmlFor={inputId}
-                    className="absolute inset-0 z-10 cursor-pointer"
-                >
+                    className="absolute inset-0 z-10 cursor-pointer">
                     <span className="sr-only">Browse files</span>
                 </label>
                 <input
@@ -229,8 +227,7 @@ export function FileDropzone({
                                         ? { opacity: 0 }
                                         : { opacity: 0, scale: 0.95 }
                                 }
-                                transition={{ duration: 0.2 }}
-                            >
+                                transition={{ duration: 0.2 }}>
                                 <motion.div
                                     className="mb-5 flex size-20 items-center justify-center rounded-full bg-primary/10 text-primary"
                                     animate={
@@ -247,10 +244,9 @@ export function FileDropzone({
                                             : {
                                                   repeat: Number.POSITIVE_INFINITY,
                                                   duration: 2,
-                                                  ease: 'easeInOut',
+                                                  ease: "easeInOut",
                                               }
-                                    }
-                                >
+                                    }>
                                     <Icon
                                         iconNode={Upload01Icon}
                                         size={36}
@@ -286,8 +282,7 @@ export function FileDropzone({
                                 className="flex flex-col items-center justify-center"
                                 initial={reducedMotion ? false : { opacity: 0 }}
                                 animate={{ opacity: 1 }}
-                                transition={{ duration: 0.2 }}
-                            >
+                                transition={{ duration: 0.2 }}>
                                 <Icon
                                     iconNode={CloudUploadIcon}
                                     size={40}
@@ -314,8 +309,7 @@ export function FileDropzone({
             {error ? (
                 <p
                     role="alert"
-                    className="text-sm text-destructive dark:text-destructive/90"
-                >
+                    className="text-sm text-destructive dark:text-destructive/90">
                     {error}
                 </p>
             ) : null}
@@ -325,8 +319,7 @@ export function FileDropzone({
                     {files.map((file) => (
                         <li
                             key={file.id}
-                            className="group relative flex items-center gap-2 rounded-lg bg-muted/60 p-2 pr-8"
-                        >
+                            className="group relative flex items-center gap-2 rounded-lg bg-muted/60 p-2 pr-8">
                             {file.preview ? (
                                 <img
                                     src={file.preview}
@@ -354,8 +347,7 @@ export function FileDropzone({
                                 type="button"
                                 onClick={() => removeFile(file.id)}
                                 aria-label={`Remove ${file.file.name}`}
-                                className="absolute top-1 right-1 rounded-full p-1 text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
-                            >
+                                className="absolute top-1 right-1 rounded-full p-1 text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground">
                                 <Icon iconNode={Cancel01Icon} size={12} />
                             </button>
                         </li>

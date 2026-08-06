@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { api } from '@convex/_generated/api';
+import { api } from "@convex/_generated/api";
 import {
     ArrowLeft01Icon,
     ArrowRight01Icon,
@@ -9,45 +9,45 @@ import {
     ChevronDownIcon,
     Plus,
     Search01Icon,
-} from '@hugeicons/core-free-icons';
-import { useNavigate } from '@tanstack/react-router';
-import { useAction, useQuery } from 'convex/react';
-import type { FunctionReturnType } from 'convex/server';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { useRef, useState } from 'react';
-import { CompanyFaviconAvatar } from '@/components/company-favicon-avatar';
-import Icon from '@/components/icon';
-import { PaginationControls } from '@/components/pagination-controls';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+} from "@hugeicons/core-free-icons";
+import { useNavigate } from "@tanstack/react-router";
+import { useAction, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useRef, useState } from "react";
+import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
+import Icon from "@/components/icon";
+import { PaginationControls } from "@/components/pagination-controls";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
     InputGroup,
     InputGroupAddon,
     InputGroupInput,
-} from '@/components/ui/input-group';
-import { Skeleton } from '@/components/ui/skeleton';
-import { SmoothDropdwon } from '@/components/ui/smooth-dropdown';
+} from "@/components/ui/input-group";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SmoothDropdwon } from "@/components/ui/smooth-dropdown";
 import {
     Tooltip,
     TooltipContent,
     TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { AddSourceDialog } from '@/components/workspace/add-source-dialog';
-import { CompanyResolutionCard } from '@/components/workspace/company-resolution-card';
+} from "@/components/ui/tooltip";
+import { AddSourceDialog } from "@/components/workspace/add-source-dialog";
+import { CompanyResolutionCard } from "@/components/workspace/company-resolution-card";
 import {
     MoreOptionsButton,
     ToolbarIconButton,
-} from '@/components/workspace/composer-toolbar-actions';
+} from "@/components/workspace/composer-toolbar-actions";
 import {
     type CoveragePreset,
     CoveragePresetPicker,
-} from '@/components/workspace/coverage-preset-picker';
-import { useInvitationAccess } from '@/components/workspace/invitation-access-context';
-import { useAnonymousSession } from '@/hooks/use-anonymous-session';
-import { usePagination } from '@/hooks/use-pagination';
-import { useResponsive } from '@/hooks/use-responsive';
-import { companyLookupErrorMessage } from '@/lib/presentation/research-copy';
-import { cn } from '@/lib/utils';
+} from "@/components/workspace/coverage-preset-picker";
+import { useInvitationAccess } from "@/components/workspace/invitation-access-context";
+import { useAnonymousSession } from "@/hooks/use-anonymous-session";
+import { usePagination } from "@/hooks/use-pagination";
+import { useResponsive } from "@/hooks/use-responsive";
+import { companyLookupErrorMessage } from "@/lib/presentation/research-copy";
+import { cn } from "@/lib/utils";
 
 type PreflightResult = FunctionReturnType<
     typeof api.companyResolution.preflight
@@ -57,7 +57,7 @@ type CompanyCandidate = FunctionReturnType<
 >[number];
 
 const viewEnterTransition = {
-    type: 'spring' as const,
+    type: "spring" as const,
     stiffness: 360,
     damping: 30,
     mass: 0.8,
@@ -81,7 +81,7 @@ export interface ResearchComposerProps {
  */
 export function ResearchComposer({
     className,
-    placeholderText = 'How can I help? Describe the resilience question to investigate.',
+    placeholderText = "How can I help? Describe the resilience question to investigate.",
 }: ResearchComposerProps) {
     const navigate = useNavigate();
     const searchCompanies = useAction(api.companyResolution.search);
@@ -91,12 +91,12 @@ export function ResearchComposer({
     const { isSessionReady, sessionError } = useAnonymousSession();
     const visitor = useQuery(
         api.visitors.current,
-        isSessionReady ? {} : 'skip',
+        isSessionReady ? {} : "skip",
     );
-    const [researchAngle, setResearchAngle] = useState('');
-    const [companyQuery, setCompanyQuery] = useState('');
+    const [researchAngle, setResearchAngle] = useState("");
+    const [companyQuery, setCompanyQuery] = useState("");
     const [coveragePreset, setCoveragePreset] =
-        useState<CoveragePreset>('balanced');
+        useState<CoveragePreset>("balanced");
     const [resolution, setResolution] = useState<PreflightResult | null>(null);
     const [companyCandidates, setCompanyCandidates] = useState<
         Array<CompanyCandidate>
@@ -114,7 +114,7 @@ export function ResearchComposer({
     });
     const { isMobile } = useResponsive();
     const [hasSearched, setHasSearched] = useState(false);
-    const [view, setView] = useState<'compose' | 'confirm'>('compose');
+    const [view, setView] = useState<"compose" | "confirm">("compose");
     const [pickerOpen, setPickerOpen] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
     const [selectingCik, setSelectingCik] = useState<string | null>(null);
@@ -129,7 +129,7 @@ export function ResearchComposer({
     const searchForCompanies = async () => {
         if (!isSessionReady) {
             setLookupError(
-                sessionError ?? 'Preparing your research workspace…',
+                sessionError ?? "Preparing your research workspace…",
             );
             setPickerOpen(true);
             return;
@@ -137,7 +137,7 @@ export function ResearchComposer({
 
         const query = companyQuery.trim();
         if (!query) {
-            setLookupError('Enter a company name, ticker, CIK, or SEC URL.');
+            setLookupError("Enter a company name, ticker, CIK, or SEC URL.");
             setPickerOpen(true);
             return;
         }
@@ -183,11 +183,11 @@ export function ResearchComposer({
 
     const clearResolution = () => {
         setResolution(null);
-        setCompanyQuery('');
+        setCompanyQuery("");
         setCompanyCandidates([]);
         setCompanySearchRevision((revision) => revision + 1);
         setHasSearched(false);
-        setView('compose');
+        setView("compose");
         setLookupError(null);
         setLaunchError(null);
         launchKey.current = null;
@@ -215,9 +215,9 @@ export function ResearchComposer({
                     manualSourceUrls.length > 0 ? manualSourceUrls : undefined,
             });
             await navigate({
-                to: '/workspace/$runId',
+                to: "/workspace/$runId",
                 params: { runId: result.runId },
-                search: { section: 'progress' },
+                search: { section: "progress" },
             });
         } catch {
             setLaunchError(
@@ -235,7 +235,7 @@ export function ResearchComposer({
             return;
         }
 
-        if (visitor?.status !== 'active') {
+        if (visitor?.status !== "active") {
             openInvitationDrawer({
                 onSuccess: () => {
                     void startResearch();
@@ -250,11 +250,10 @@ export function ResearchComposer({
     return (
         <>
             <section
-                className={cn('w-full overflow-visible', className)}
-                aria-label="Research launch"
-            >
+                className={cn("w-full overflow-visible", className)}
+                aria-label="Research launch">
                 <AnimatePresence initial={false} mode="wait">
-                    {view === 'compose' ? (
+                    {view === "compose" ? (
                         <motion.div
                             key="compose"
                             className="rounded-lg border border-accent/60 bg-card shadow-lg"
@@ -281,8 +280,7 @@ export function ResearchComposer({
                                     ? { duration: 0 }
                                     : viewEnterTransition
                             }
-                            style={{ transformOrigin: '50% 45%' }}
-                        >
+                            style={{ transformOrigin: "50% 45%" }}>
                             <div className="relative">
                                 {resolution ? (
                                     <CompanyContextBadge
@@ -292,8 +290,7 @@ export function ResearchComposer({
                                 ) : null}
                                 <label
                                     htmlFor="research-angle"
-                                    className="sr-only"
-                                >
+                                    className="sr-only">
                                     Research request — optional research angle
                                 </label>
                                 <textarea
@@ -305,8 +302,8 @@ export function ResearchComposer({
                                     placeholder={placeholderText}
                                     rows={3}
                                     className={cn(
-                                        'block w-full resize-none rounded-t-lg bg-transparent px-5 pt-5 pb-3 text-[15px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground',
-                                        resolution && 'pt-14',
+                                        "block w-full resize-none rounded-t-lg bg-transparent px-5 pt-5 pb-3 text-[15px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground",
+                                        resolution && "pt-14",
                                     )}
                                 />
                             </div>
@@ -341,7 +338,7 @@ export function ResearchComposer({
                                         closedHeight={36}
                                         itemsAriaLabel="Company search results"
                                         className={
-                                            pickerOpen ? 'z-10' : undefined
+                                            pickerOpen ? "z-10" : undefined
                                         }
                                         trigger={
                                             <CompanyPickerTrigger
@@ -349,7 +346,7 @@ export function ResearchComposer({
                                                     resolution
                                                         ? resolution.company
                                                               .legalName
-                                                        : 'Company to investigate'
+                                                        : "Company to investigate"
                                                 }
                                                 ticker={
                                                     resolution?.company.ticker
@@ -392,9 +389,7 @@ export function ResearchComposer({
                                             companyCandidates.length > 0 ? (
                                                 <CompanyPaginationFooter
                                                     page={companyPage}
-                                                    pageCount={
-                                                        companyPageCount
-                                                    }
+                                                    pageCount={companyPageCount}
                                                     resultCount={
                                                         companyCandidates.length
                                                     }
@@ -421,15 +416,14 @@ export function ResearchComposer({
                                 <Button
                                     type="button"
                                     aria-label={
-                                        resolution ? 'Continue' : 'Send request'
+                                        resolution ? "Continue" : "Send request"
                                     }
                                     onClick={() =>
                                         resolution
-                                            ? setView('confirm')
+                                            ? setView("confirm")
                                             : setPickerOpen(true)
                                     }
-                                    className="size-10 rounded-full"
-                                >
+                                    className="size-10 rounded-full">
                                     <Icon
                                         iconNode={ArrowRight01Icon}
                                         size={18}
@@ -464,8 +458,7 @@ export function ResearchComposer({
                                     ? { duration: 0 }
                                     : viewEnterTransition
                             }
-                            style={{ transformOrigin: '50% 45%' }}
-                        >
+                            style={{ transformOrigin: "50% 45%" }}>
                             <CompanyResolutionCard
                                 company={resolution.company}
                             />
@@ -476,8 +469,7 @@ export function ResearchComposer({
                             {launchError ? (
                                 <p
                                     role="alert"
-                                    className="text-sm text-destructive"
-                                >
+                                    className="text-sm text-destructive">
                                     {launchError}
                                 </p>
                             ) : null}
@@ -485,9 +477,8 @@ export function ResearchComposer({
                                 <Button
                                     type="button"
                                     variant="ghost"
-                                    onClick={() => setView('compose')}
-                                    disabled={isLaunching}
-                                >
+                                    onClick={() => setView("compose")}
+                                    disabled={isLaunching}>
                                     <Icon iconNode={ArrowLeft01Icon} />
                                     Back
                                 </Button>
@@ -496,11 +487,10 @@ export function ResearchComposer({
                                     aria-label="Confirm and start"
                                     onClick={launch}
                                     disabled={isLaunching}
-                                    className="rounded-full px-4"
-                                >
+                                    className="rounded-full px-4">
                                     {isLaunching
-                                        ? 'Starting…'
-                                        : 'Confirm and start'}
+                                        ? "Starting…"
+                                        : "Confirm and start"}
                                     <Icon
                                         iconNode={ArrowRight01Icon}
                                         size={18}
@@ -538,13 +528,11 @@ function CompanyPaginationFooter({
     const resultLabel =
         resultCount === COMPANY_SEARCH_RESULT_LIMIT
             ? `Top ${COMPANY_SEARCH_RESULT_LIMIT} matches`
-            : `${resultCount} ${resultCount === 1 ? 'match' : 'matches'}`;
+            : `${resultCount} ${resultCount === 1 ? "match" : "matches"}`;
 
     return (
         <div className="space-y-2 border-t border-border/60 pt-2">
-            <p className="px-1 text-xs text-muted-foreground">
-                {resultLabel}
-            </p>
+            <p className="px-1 text-xs text-muted-foreground">{resultLabel}</p>
             <PaginationControls
                 page={page}
                 pageCount={pageCount}
@@ -587,8 +575,7 @@ function CompanyLookup({
             onSubmit={(event) => {
                 event.preventDefault();
                 onSearch();
-            }}
-        >
+            }}>
             <InputGroup>
                 <InputGroupAddon>
                     <Icon
@@ -614,22 +601,20 @@ function CompanyLookup({
                     variant="secondary"
                     size="sm"
                     disabled={isSearching || !sessionReady}
-                    className="flex-1"
-                >
+                    className="flex-1">
                     <Icon iconNode={Search01Icon} />
                     {isSearching
-                        ? 'Searching…'
+                        ? "Searching…"
                         : sessionReady
-                          ? 'Search'
-                          : 'Preparing workspace…'}
+                          ? "Search"
+                          : "Preparing workspace…"}
                 </Button>
                 <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     onClick={onClear}
-                    disabled={!hasResolution && companyQuery.length === 0}
-                >
+                    disabled={!hasResolution && companyQuery.length === 0}>
                     <Icon iconNode={Cancel01Icon} />
                     Clear
                 </Button>
@@ -639,8 +624,7 @@ function CompanyLookup({
                     role="status"
                     aria-label="Searching companies"
                     aria-busy="true"
-                    className="space-y-2 rounded-lg border border-border/60 p-3"
-                >
+                    className="space-y-2 rounded-lg border border-border/60 p-3">
                     <Skeleton className="h-4 w-3/4" />
                     <Skeleton className="h-3 w-1/2" />
                 </div>
@@ -675,7 +659,7 @@ function CompanyCandidateLabel({
                                 {company.legalName}
                             </span>
                             <span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">
-                                {company.ticker} · {company.exchange} · CIK{' '}
+                                {company.ticker} · {company.exchange} · CIK{" "}
                                 {company.cik}
                             </span>
                         </span>
@@ -708,10 +692,9 @@ function CompanyPickerTrigger({
             type="button"
             variant="ghost"
             className={cn(
-                'inline-flex h-9 w-full items-center gap-2 text-sm transition-colors',
-                highlighted && 'ring-2 ring-primary text-accent-foreground',
-            )}
-        >
+                "inline-flex h-9 w-full items-center gap-2 text-sm transition-colors",
+                highlighted && "ring-2 ring-primary text-accent-foreground",
+            )}>
             <Icon
                 iconNode={Building2Icon}
                 size={16}
@@ -734,7 +717,7 @@ function CompanyContextBadge({
     company,
     onRemove,
 }: {
-    company: PreflightResult['company'];
+    company: PreflightResult["company"];
     onRemove: () => void;
 }) {
     return (
@@ -743,8 +726,7 @@ function CompanyContextBadge({
                 variant="outline"
                 color="sky"
                 showDot
-                className="rounded-none pointer-events-auto inline-flex max-w-full items-center gap-1.5 px-1 text-xs shadow-sm backdrop-blur-sm"
-            >
+                className="rounded-none pointer-events-auto inline-flex max-w-full items-center gap-1.5 px-1 text-xs shadow-sm backdrop-blur-sm">
                 <span className="text-micro">Selected company:</span>
                 <span className="max-w-60 truncate font-medium">
                     {company.legalName}
@@ -756,8 +738,7 @@ function CompanyContextBadge({
                     type="button"
                     aria-label="Remove selected company"
                     onClick={onRemove}
-                    className="ml-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
-                >
+                    className="ml-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground">
                     <Icon iconNode={Cancel01Icon} size={12} />
                 </button>
             </Badge>

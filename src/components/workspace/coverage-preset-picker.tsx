@@ -1,11 +1,11 @@
-import type { api } from '@convex/_generated/api';
-import type { FunctionArgs } from 'convex/server';
+import type { api } from "@convex/_generated/api";
+import type { FunctionArgs } from "convex/server";
 
-import { cn } from '@/lib/utils';
+import { cn } from "@/lib/utils";
 
 export type CoveragePreset = FunctionArgs<
     typeof api.researchLaunch.confirmAndStart
->['coveragePreset'];
+>["coveragePreset"];
 
 const options: ReadonlyArray<{
     value: CoveragePreset;
@@ -13,19 +13,19 @@ const options: ReadonlyArray<{
     description: string;
 }> = [
     {
-        value: 'balanced',
-        label: 'Balanced',
-        description: 'A measured mix of first-party and independent sources.',
+        value: "balanced",
+        label: "Balanced",
+        description: "A measured mix of first-party and independent sources.",
     },
     {
-        value: 'first_party_depth',
-        label: 'First-party depth',
-        description: 'Prioritize filings and issuer material.',
+        value: "first_party_depth",
+        label: "First-party depth",
+        description: "Prioritize filings and issuer material.",
     },
     {
-        value: 'independent_scrutiny',
-        label: 'Independent scrutiny',
-        description: 'Prioritize external challenge and counter-evidence.',
+        value: "independent_scrutiny",
+        label: "Independent scrutiny",
+        description: "Prioritize external challenge and counter-evidence.",
     },
 ];
 
@@ -45,12 +45,11 @@ export function CoveragePresetPicker({
                     <label
                         key={option.value}
                         className={cn(
-                            'cursor-pointer rounded-xl border border-border/60 p-3 transition-[border-color,background-color] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]',
+                            "cursor-pointer rounded-xl border border-border/60 p-3 transition-[border-color,background-color] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]",
                             value === option.value
-                                ? 'border-ring bg-accent'
-                                : 'bg-card hover:bg-muted/60',
-                        )}
-                    >
+                                ? "border-ring bg-accent"
+                                : "bg-card hover:bg-muted/60",
+                        )}>
                         <span className="flex items-center gap-2">
                             <input
                                 type="radio"

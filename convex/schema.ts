@@ -51,6 +51,7 @@ export default defineSchema({
         websiteUrlSource: v.optional(
             v.union(v.literal("sec_ir"), v.literal("exa"), v.literal("probe")),
         ),
+        websiteResolvedAt: v.optional(v.number()),
         canonicalizedAt: v.number(),
     }).index("by_cik", ["cik"]),
     companyPreflights: defineTable({
@@ -222,6 +223,7 @@ export default defineSchema({
         status: v.union(
             v.literal("started"),
             v.literal("succeeded"),
+            v.literal("partial"),
             v.literal("failed"),
         ),
         attempt: v.number(),
@@ -229,6 +231,7 @@ export default defineSchema({
         usage: v.optional(v.any()),
         reportedCost: v.optional(v.number()),
         errorCode: v.optional(v.string()),
+        leaseExpiresAt: v.optional(v.number()),
         createdAt: v.number(),
         completedAt: v.optional(v.number()),
     }).index("by_operation_key", ["operationKey"]),

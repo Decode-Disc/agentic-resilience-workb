@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import type { api } from '@convex/_generated/api';
-import type { FunctionReturnType } from 'convex/server';
+import type { api } from "@convex/_generated/api";
+import type { FunctionReturnType } from "convex/server";
 import {
     createContext,
     type ReactNode,
@@ -9,9 +9,9 @@ import {
     useContext,
     useMemo,
     useState,
-} from 'react';
+} from "react";
 
-import { InvitationAccessDrawer } from '@/components/workspace/invitation-access-drawer';
+import { InvitationAccessDrawer } from "@/components/workspace/invitation-access-drawer";
 
 type Admission = FunctionReturnType<typeof api.invitations.claim>;
 
@@ -35,9 +35,7 @@ export function InvitationAccessProvider({
     children: ReactNode;
 }) {
     const [isOpen, setIsOpen] = useState(false);
-    const [callbacks, setCallbacks] = useState<OpenInvitationDrawerOptions>(
-        {},
-    );
+    const [callbacks, setCallbacks] = useState<OpenInvitationDrawerOptions>({});
 
     const closeInvitationDrawer = useCallback(() => {
         setIsOpen(false);
@@ -90,7 +88,7 @@ export function useInvitationAccess(): InvitationAccessContextValue {
     const context = useContext(InvitationAccessContext);
     if (!context) {
         throw new Error(
-            'useInvitationAccess must be used within an InvitationAccessProvider',
+            "useInvitationAccess must be used within an InvitationAccessProvider",
         );
     }
     return context;

@@ -17,7 +17,7 @@
  *      icon fallback.
  */
 
-export type WebsiteSource = 'sec_ir' | 'exa' | 'probe';
+export type WebsiteSource = "sec_ir" | "exa" | "probe";
 
 export type WebsiteResolution = {
     url: string;
@@ -42,40 +42,40 @@ export type ClassifyIrUrl = (
 ) => string | undefined;
 
 const AGGREGATOR_DOMAINS = new Set([
-    'wikipedia.org',
-    'wikimedia.org',
-    'crunchbase.com',
-    'linkedin.com',
-    'bloomberg.com',
-    'reuters.com',
-    'forbes.com',
-    'glassdoor.com',
-    'indeed.com',
-    'yahoo.com',
-    'marketwatch.com',
-    'stockanalysis.com',
-    'macrotrends.net',
-    'businessinsider.com',
-    'wsj.com',
-    'sec.gov',
-    'nyse.com',
-    'nasdaq.com',
+    "wikipedia.org",
+    "wikimedia.org",
+    "crunchbase.com",
+    "linkedin.com",
+    "bloomberg.com",
+    "reuters.com",
+    "forbes.com",
+    "glassdoor.com",
+    "indeed.com",
+    "yahoo.com",
+    "marketwatch.com",
+    "stockanalysis.com",
+    "macrotrends.net",
+    "businessinsider.com",
+    "wsj.com",
+    "sec.gov",
+    "nyse.com",
+    "nasdaq.com",
 ]);
 
 function parseHostname(url: string): string | null {
     try {
-        return new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+        return new URL(url).hostname.toLowerCase().replace(/^www\./, "");
     } catch {
         return null;
     }
 }
 
 function bosslessDomain(hostname: string): string {
-    const parts = hostname.split('.');
+    const parts = hostname.split(".");
     if (parts.length <= 2) {
         return hostname;
     }
-    return parts.slice(-2).join('.');
+    return parts.slice(-2).join(".");
 }
 
 function isAggregator(hostname: string | null): boolean {
@@ -89,7 +89,7 @@ function isAggregator(hostname: string | null): boolean {
 function pathDepth(url: string): number {
     try {
         const u = new URL(url);
-        const segments = u.pathname.split('/').filter(Boolean);
+        const segments = u.pathname.split("/").filter(Boolean);
         return segments.length;
     } catch {
         return Number.POSITIVE_INFINITY;
@@ -100,8 +100,8 @@ function normalizeForMatch(value: string): Set<string> {
     return new Set(
         value
             .toLowerCase()
-            .replace(/[.,&!"?()[\]']/g, ' ')
-            .replace(/inc|corp|corporation|holdings|limited|ltd|co\b/g, ' ')
+            .replace(/[.,&!"?()[\]']/g, " ")
+            .replace(/inc|corp|corporation|holdings|limited|ltd|co\b/g, " ")
             .split(/\s+/)
             .filter((token) => token.length > 1),
     );
@@ -180,13 +180,13 @@ export function pickBestExaCompanyResult(
  */
 function canonicalizeWebsiteUrl(url: string): string {
     const parsed = new URL(url);
-    parsed.hash = '';
-    parsed.port = '';
+    parsed.hash = "";
+    parsed.port = "";
     // Prefer the bare host as the canonical website: favicons resolve from
     // the hostname regardless of path, and a root URL is the most stable
     // bookmark. Deep paths like /early-careers pass through unchanged.
     if (pathDepth(parsed.toString()) <= 1) {
-        parsed.pathname = '/';
+        parsed.pathname = "/";
     }
     return parsed.toString();
 }
@@ -212,7 +212,7 @@ export async function resolveWebsiteUrl(
 ): Promise<WebsiteResolution | null> {
     const secWebsite = deps.classifyIr(company.investorRelationsUrl);
     if (secWebsite) {
-        return { url: secWebsite, source: 'sec_ir' };
+        return { url: secWebsite, source: "sec_ir" };
     }
 
     const query = `${company.legalName} official website`;
@@ -226,5 +226,5 @@ export async function resolveWebsiteUrl(
     if (!best) {
         return null;
     }
-    return { url: canonicalizeWebsiteUrl(best.url), source: 'exa' };
+    return { url: canonicalizeWebsiteUrl(best.url), source: "exa" };
 }

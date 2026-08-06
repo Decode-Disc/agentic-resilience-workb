@@ -12,8 +12,8 @@ interface NoiseProps {
 
 const Noise: React.FC<NoiseProps> = ({
     patternSize = 250, // (reserved for future scaling)
-    patternScaleX = 1,  // (reserved)
-    patternScaleY = 1,  // (reserved)
+    patternScaleX = 1, // (reserved)
+    patternScaleY = 1, // (reserved)
     patternRefreshInterval = 2,
     patternAlpha = 15,
 }) => {
@@ -66,7 +66,13 @@ const Noise: React.FC<NoiseProps> = ({
             window.removeEventListener("resize", resize);
             window.cancelAnimationFrame(animationId);
         };
-    }, [patternSize, patternScaleX, patternScaleY, patternRefreshInterval, patternAlpha]);
+    }, [
+        patternSize,
+        patternScaleX,
+        patternScaleY,
+        patternRefreshInterval,
+        patternAlpha,
+    ]);
 
     return (
         <canvas

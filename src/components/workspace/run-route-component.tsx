@@ -1,25 +1,25 @@
-'use client';
+"use client";
 
-import { api } from '@convex/_generated/api';
-import type { Id } from '@convex/_generated/dataModel';
-import { useNavigate } from '@tanstack/react-router';
-import { useAction, useMutation, useQuery } from 'convex/react';
-import { useEffect, useRef, useState } from 'react';
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { useNavigate } from "@tanstack/react-router";
+import { useAction, useMutation, useQuery } from "convex/react";
+import { useEffect, useRef, useState } from "react";
 
 import {
     Empty,
     EmptyDescription,
     EmptyHeader,
     EmptyTitle,
-} from '@/components/ui/empty';
-import { Skeleton } from '@/components/ui/skeleton';
-import { EvidenceSufficiencyReview } from '@/components/workspace/evidence-sufficiency-review';
-import { LiveSourceReview } from '@/components/workspace/live-source-review';
-import { RunProgress } from '@/components/workspace/run-progress';
+} from "@/components/ui/empty";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EvidenceSufficiencyReview } from "@/components/workspace/evidence-sufficiency-review";
+import { LiveSourceReview } from "@/components/workspace/live-source-review";
+import { RunProgress } from "@/components/workspace/run-progress";
 import {
     WorkspaceNavigationRail,
     type WorkspaceSection,
-} from '@/components/workspace/workspace-navigation-rail';
+} from "@/components/workspace/workspace-navigation-rail";
 
 function decisionKey(prefix: string) {
     return `${prefix}:${crypto.randomUUID()}`;
@@ -30,7 +30,7 @@ export function RunRouteComponent({
     runId,
     section,
 }: {
-    runId: Id<'researchRuns'>;
+    runId: Id<"researchRuns">;
     section: WorkspaceSection;
 }) {
     const navigate = useNavigate();
@@ -44,16 +44,16 @@ export function RunRouteComponent({
     const routedToSourceReview = useRef(false);
 
     useEffect(() => {
-        if (run?.lifecycleState !== 'awaiting_source_review') {
+        if (run?.lifecycleState !== "awaiting_source_review") {
             routedToSourceReview.current = false;
             return;
         }
-        if (section === 'progress' && !routedToSourceReview.current) {
+        if (section === "progress" && !routedToSourceReview.current) {
             routedToSourceReview.current = true;
             void navigate({
-                to: '/workspace/$runId',
+                to: "/workspace/$runId",
                 params: { runId },
-                search: { section: 'sources' },
+                search: { section: "sources" },
                 replace: true,
             });
         }
@@ -65,8 +65,7 @@ export function RunRouteComponent({
                 role="status"
                 className="grid gap-4 md:grid-cols-[minmax(11rem,14rem)_minmax(0,1fr)] xl:grid-cols-[minmax(4.25rem,14rem)_minmax(0,1fr)]"
                 aria-label="Loading research workspace"
-                aria-busy="true"
-            >
+                aria-busy="true">
                 <Skeleton className="h-112" />
                 <div className="space-y-3">
                     <Skeleton className="h-24" />
@@ -93,11 +92,11 @@ export function RunRouteComponent({
     const corpusRevisionId = run.activeCorpusRevisionId;
     const exaNotConfigured = run.providerFailures.some(
         ({ service, errorCode }) =>
-            service === 'exa' && errorCode === 'exa_not_configured',
+            service === "exa" && errorCode === "exa_not_configured",
     );
     const sourceMode =
-        section === 'sources' &&
-        ['awaiting_source_review', 'corpus_approved'].includes(
+        section === "sources" &&
+        ["awaiting_source_review", "corpus_approved"].includes(
             run.lifecycleState,
         ) &&
         corpusRevisionId !== undefined;
@@ -105,7 +104,7 @@ export function RunRouteComponent({
     async function handleAddManualUrl(url: string) {
         if (!corpusRevisionId) {
             throw new Error(
-                'The source set is not ready yet. Refresh and try again.',
+                "The source set is not ready yet. Refresh and try again.",
             );
         }
         await addManualUrl({ runId, corpusRevisionId, url });
@@ -133,25 +132,23 @@ export function RunRouteComponent({
                     {error ? (
                         <p
                             role="alert"
-                            className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
-                        >
+                            className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
                             {error}
                         </p>
                     ) : null}
                     {exaNotConfigured &&
-                        run.lifecycleState === 'awaiting_source_review' ? (
+                    run.lifecycleState === "awaiting_source_review" ? (
                         <p
                             role="status"
-                            className="mb-4 rounded-lg border border-review/30 bg-review/10 p-3 text-sm text-muted-foreground"
-                        >
+                            className="mb-4 rounded-lg border border-review/30 bg-review/10 p-3 text-sm text-muted-foreground">
                             Independent web discovery is unavailable. Filing
                             sources remain available for review.
                         </p>
                     ) : null}
-                    {section === 'progress' ? (
+                    {section === "progress" ? (
                         <>
                             {run.lifecycleState ===
-                                'awaiting_evidence_sufficiency_review' ? (
+                            "awaiting_evidence_sufficiency_review" ? (
                                 <EvidenceSufficiencyReview
                                     onAddManualUrl={handleAddManualUrl}
                                     onDecide={async (decision) => {
@@ -177,7 +174,7 @@ export function RunRouteComponent({
                                         sourceId,
                                         decision: nextDecision,
                                         decisionKey:
-                                            decisionKey('source-decision'),
+                                            decisionKey("source-decision"),
                                     });
                                 } catch {
                                     setError(
@@ -192,7 +189,7 @@ export function RunRouteComponent({
                                         runId,
                                         corpusRevisionId: corpusRevisionId,
                                         decisionKey:
-                                            decisionKey('corpus-approval'),
+                                            decisionKey("corpus-approval"),
                                     });
                                 } catch {
                                     setError(
@@ -202,17 +199,15 @@ export function RunRouteComponent({
                             }}
                             onAddManualUrl={handleAddManualUrl}
                         />
-                    ) : section === 'sources' ? (
-                        <div
-                            className="surface-panel rounded-xl p-6"
-                        >
+                    ) : section === "sources" ? (
+                        <div className="surface-panel rounded-xl p-6">
                             <h2 className="text-lg font-medium">
                                 Source discovery
                             </h2>
                             <p className="mt-2 text-sm text-muted-foreground">
-                                {run.lifecycleState === 'discovering_sources'
-                                    ? 'We’re gathering public sources for your review.'
-                                    : 'Sources will appear here when discovery is ready.'}
+                                {run.lifecycleState === "discovering_sources"
+                                    ? "We’re gathering public sources for your review."
+                                    : "Sources will appear here when discovery is ready."}
                             </p>
                         </div>
                     ) : (

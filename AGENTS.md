@@ -38,6 +38,8 @@ Do not rewrite product requirements as part of implementation. Material changes 
 - Work autonomously within the documented scope. Inspect the repository before asking questions that local files or code can answer.
 - Verify claims against available context, code, runtime behavior, or primary documentation. Mark unresolved uncertainty explicitly; never convert it into an invisible implementation decision.
 - Be critical. Compare proposed work with the product invariants and explain concrete trade-offs rather than agreeing for convenience.
+- Do not hard-wrap prose in Markdown or instruction files. Keep each paragraph and list item on one physical line unless the file explicitly requires another format.
+- Do not reflow existing prose outside the requested scope.
 - Prefer the smallest coherent implementation that proves the product thesis.
 - Do not build speculative abstractions, theatrical agent swarms, or features outside the MVP.
 - Keep the application, source code, schemas, fixtures, tests, UI copy, and documentation in English, even if the user communicates in French.

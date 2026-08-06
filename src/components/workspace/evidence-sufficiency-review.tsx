@@ -1,19 +1,19 @@
-'use client';
+"use client";
 
-import type { api } from '@convex/_generated/api';
-import { Plus } from '@hugeicons/core-free-icons';
-import type { FunctionArgs } from 'convex/server';
-import { useState } from 'react';
+import type { api } from "@convex/_generated/api";
+import { Plus } from "@hugeicons/core-free-icons";
+import type { FunctionArgs } from "convex/server";
+import { useState } from "react";
 
-import Icon from '@/components/icon';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { AddSourceDialog } from '@/components/workspace/add-source-dialog';
+import Icon from "@/components/icon";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { AddSourceDialog } from "@/components/workspace/add-source-dialog";
 
 type SufficiencyDecision = FunctionArgs<
     typeof api.evidenceSufficiency.decide
->['decision'];
+>["decision"];
 
 /** Durable human checkpoint for a run with insufficient public evidence. */
 export function EvidenceSufficiencyReview({
@@ -23,9 +23,9 @@ export function EvidenceSufficiencyReview({
     onAddManualUrl: (url: string) => void | Promise<void>;
     onDecide: (decision: SufficiencyDecision) => void | Promise<void>;
 }) {
-    const [reason, setReason] = useState('');
+    const [reason, setReason] = useState("");
     const [pendingDecision, setPendingDecision] = useState<
-        SufficiencyDecision['kind'] | null
+        SufficiencyDecision["kind"] | null
     >(null);
     const [error, setError] = useState<string | null>(null);
     const validReason = reason.trim().length >= 12;
@@ -45,8 +45,7 @@ export function EvidenceSufficiencyReview({
     return (
         <section
             className="surface-floating mb-5 rounded-xl p-5"
-            aria-label="Evidence sufficiency review"
-        >
+            aria-label="Evidence sufficiency review">
             <p className="text-micro text-brand-purple">
                 Your review is required
             </p>
@@ -76,14 +75,13 @@ export function EvidenceSufficiencyReview({
                     disabled={pendingDecision !== null}
                     onClick={() =>
                         void submit({
-                            kind: 'recheck',
+                            kind: "recheck",
                             decisionKey: crypto.randomUUID(),
                         })
-                    }
-                >
-                    {pendingDecision === 'recheck'
-                        ? 'Rechecking…'
-                        : 'Recheck evidence'}
+                    }>
+                    {pendingDecision === "recheck"
+                        ? "Rechecking…"
+                        : "Recheck evidence"}
                 </Button>
             </div>
             <div className="mt-5 space-y-2 border-t border-border/60 pt-5">
@@ -107,30 +105,28 @@ export function EvidenceSufficiencyReview({
                         disabled={!validReason || pendingDecision !== null}
                         onClick={() =>
                             void submit({
-                                kind: 'complete_insufficient',
+                                kind: "complete_insufficient",
                                 decisionKey: crypto.randomUUID(),
                                 reason: reason.trim(),
                             })
-                        }
-                    >
-                        {pendingDecision === 'complete_insufficient'
-                            ? 'Completing…'
-                            : 'Finish with limited evidence'}
+                        }>
+                        {pendingDecision === "complete_insufficient"
+                            ? "Completing…"
+                            : "Finish with limited evidence"}
                     </Button>
                     <Button
                         type="button"
                         disabled={!validReason || pendingDecision !== null}
                         onClick={() =>
                             void submit({
-                                kind: 'force_continue',
+                                kind: "force_continue",
                                 decisionKey: crypto.randomUUID(),
                                 reason: reason.trim(),
                             })
-                        }
-                    >
-                        {pendingDecision === 'force_continue'
-                            ? 'Continuing…'
-                            : 'Continue with limited evidence'}
+                        }>
+                        {pendingDecision === "force_continue"
+                            ? "Continuing…"
+                            : "Continue with limited evidence"}
                     </Button>
                 </div>
             </div>

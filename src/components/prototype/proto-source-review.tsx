@@ -1,74 +1,74 @@
-import type { api } from '@convex/_generated/api';
-import type { Id } from '@convex/_generated/dataModel';
-import { type ComponentProps, useState } from 'react';
+import type { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { type ComponentProps, useState } from "react";
 
-import { SourceReview } from '@/components/workspace/source-review';
-import type { FunctionArgs } from 'convex/server';
+import { SourceReview } from "@/components/workspace/source-review";
+import type { FunctionArgs } from "convex/server";
 
-type Projection = ComponentProps<typeof SourceReview>['review'];
-type Decision = FunctionArgs<typeof api.sources.decide>['decision'];
+type Projection = ComponentProps<typeof SourceReview>["review"];
+type Decision = FunctionArgs<typeof api.sources.decide>["decision"];
 
 const FIXTURE_REVIEW: Projection = {
     revision: 1,
-    status: 'draft',
+    status: "draft",
     counts: { accepted: 2, rejected: 1, pending: 2 },
     total: 5,
     candidateLimit: 48,
     sources: [
         {
-            sourceId: 'src-1' as Id<'sources'>,
+            sourceId: "src-1" as Id<"sources">,
             canonicalUrl:
-                'https://www.sec.gov/Archives/edgar/data/1373715/000162828024032498/snow-20240131.htm',
-            title: 'Annual report on Form 10-K',
-            origin: 'sec',
-            category: 'regulatory_filing',
-            decision: 'accepted',
+                "https://www.sec.gov/Archives/edgar/data/1373715/000162828024032498/snow-20240131.htm",
+            title: "Annual report on Form 10-K",
+            origin: "sec",
+            category: "regulatory_filing",
+            decision: "accepted",
             publishedAt: 1706745600000,
             reason: undefined,
         },
         {
-            sourceId: 'src-2' as Id<'sources'>,
+            sourceId: "src-2" as Id<"sources">,
             canonicalUrl:
-                'https://investors.servicenow.com/news-releases/news-details/default.aspx',
-            title: 'Q4 earnings release and investor commentary',
-            origin: 'sec',
-            category: 'regulatory_filing',
-            decision: 'accepted',
+                "https://investors.servicenow.com/news-releases/news-details/default.aspx",
+            title: "Q4 earnings release and investor commentary",
+            origin: "sec",
+            category: "regulatory_filing",
+            decision: "accepted",
             publishedAt: 1706745600000,
             reason: undefined,
         },
         {
-            sourceId: 'src-3' as Id<'sources'>,
+            sourceId: "src-3" as Id<"sources">,
             canonicalUrl:
-                'https://seekingalpha.com/article/4651234-servicenow-platform-resilience',
-            title: 'Platform resilience and AI distribution thesis',
-            origin: 'exa',
-            category: 'independent_analysis',
-            decision: 'pending',
+                "https://seekingalpha.com/article/4651234-servicenow-platform-resilience",
+            title: "Platform resilience and AI distribution thesis",
+            origin: "exa",
+            category: "independent_analysis",
+            decision: "pending",
             publishedAt: 1709164800000,
             reason: undefined,
         },
         {
-            sourceId: 'src-4' as Id<'sources'>,
+            sourceId: "src-4" as Id<"sources">,
             canonicalUrl:
-                'https://www.zdnet.com/article/servicenow-meets-the-agentic-era',
-            title: 'ServiceNow meets the agentic era',
-            origin: 'exa',
-            category: 'press_coverage',
-            decision: 'pending',
+                "https://www.zdnet.com/article/servicenow-meets-the-agentic-era",
+            title: "ServiceNow meets the agentic era",
+            origin: "exa",
+            category: "press_coverage",
+            decision: "pending",
             publishedAt: 1709164800000,
             reason: undefined,
         },
         {
-            sourceId: 'src-5' as Id<'sources'>,
+            sourceId: "src-5" as Id<"sources">,
             canonicalUrl:
-                'https://substack.example.com/discontinuity/p/weakening-now',
-            title: 'Is the workflow moat weakening?',
-            origin: 'exa',
-            category: 'counter_evidence',
-            decision: 'rejected',
+                "https://substack.example.com/discontinuity/p/weakening-now",
+            title: "Is the workflow moat weakening?",
+            origin: "exa",
+            category: "counter_evidence",
+            decision: "rejected",
             publishedAt: 1709164800000,
-            reason: 'Author discloses short position',
+            reason: "Author discloses short position",
         },
     ],
 };
@@ -77,7 +77,7 @@ const FIXTURE_REVIEW: Projection = {
 export function ProtoSourceReview() {
     const [review, setReview] = useState(FIXTURE_REVIEW);
 
-    const onDecide: ComponentProps<typeof SourceReview>['onDecide'] = (
+    const onDecide: ComponentProps<typeof SourceReview>["onDecide"] = (
         sourceId,
         decision: Decision,
     ) => {
@@ -90,12 +90,12 @@ export function ProtoSourceReview() {
                 sources: nextSources,
                 counts: {
                     accepted: nextSources.filter(
-                        (s) => s.decision === 'accepted',
+                        (s) => s.decision === "accepted",
                     ).length,
                     rejected: nextSources.filter(
-                        (s) => s.decision === 'rejected',
+                        (s) => s.decision === "rejected",
                     ).length,
-                    pending: nextSources.filter((s) => s.decision === 'pending')
+                    pending: nextSources.filter((s) => s.decision === "pending")
                         .length,
                 },
             };
@@ -114,8 +114,8 @@ export function ProtoSourceReview() {
                 reference.
             </p>
             <SourceReview
-                runId={'proto-run' as Id<'researchRuns'>}
-                corpusRevisionId={'proto-rev' as Id<'corpusRevisions'>}
+                runId={"proto-run" as Id<"researchRuns">}
+                corpusRevisionId={"proto-rev" as Id<"corpusRevisions">}
                 review={review}
                 onDecide={onDecide}
                 onApprove={() => undefined}
@@ -123,13 +123,4 @@ export function ProtoSourceReview() {
             />
         </div>
     );
-}
-import { createFileRoute } from '@tanstack/react-router';
-
-export const Route = createFileRoute('/prototype/source-review-component')({
-    component: RouteComponent,
-});
-
-function RouteComponent() {
-    return <div>Hello "/prototype/source-review-component"!</div>;
 }

@@ -1,12 +1,12 @@
-import { LinkSquare01Icon } from '@hugeicons/core-free-icons';
-import { useState } from 'react';
+import { LinkSquare01Icon } from "@hugeicons/core-free-icons";
+import { useState } from "react";
 
-import Icon from '@/components/icon';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import type { AvatarSize, PlatformIcon } from '@/types/ui';
+import Icon from "@/components/icon";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import type { AvatarSize, PlatformIcon } from "@/types/ui";
 
-const FAVICON_ENDPOINT = 'https://www.google.com/s2/favicons';
-const FAVICON_SIZE = '64';
+const FAVICON_ENDPOINT = "https://www.google.com/s2/favicons";
+const FAVICON_SIZE = "64";
 
 type ParsedUrl = {
     hostname: string;
@@ -47,7 +47,7 @@ export function parseFaviconUrl(canonicalUrl: string): ParsedUrl | null {
         domain: hostname,
         sz: FAVICON_SIZE,
     }).toString()}`;
-    return { hostname, faviconUrl, isHttps: url.protocol === 'https:' };
+    return { hostname, faviconUrl, isHttps: url.protocol === "https:" };
 }
 
 function a11yLabel(primary: string | undefined, hostname: string): string {
@@ -67,7 +67,7 @@ function a11yLabel(primary: string | undefined, hostname: string): string {
  */
 export function FaviconAvatar({
     canonicalUrl,
-    size = 'default',
+    size = "default",
     entityName,
     fallbackIcon = LinkSquare01Icon,
 }: {
@@ -83,8 +83,8 @@ export function FaviconAvatar({
     // so when the identity changes we un-fail. Deriving the reset key from the
     // input rather than via useEffect avoids a flash of the fallback on every
     // parent re-render and keeps the component pure wrt its inputs.
-    const faviconKey = parsed?.faviconUrl ?? '';
-    const showFallback = !parsed?.isHttps || failed || faviconKey === '';
+    const faviconKey = parsed?.faviconUrl ?? "";
+    const showFallback = !parsed?.isHttps || failed || faviconKey === "";
 
     if (showFallback) {
         const label = parsed
@@ -93,7 +93,7 @@ export function FaviconAvatar({
                 : `Link icon for ${parsed.hostname}`
             : entityName
               ? entityName
-              : 'Source link';
+              : "Source link";
         return (
             <Avatar size={size} aria-label={label}>
                 <AvatarFallback>

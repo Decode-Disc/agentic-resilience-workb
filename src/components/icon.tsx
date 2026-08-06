@@ -1,8 +1,8 @@
-import { HugeiconsIcon } from '@hugeicons/react';
-import type { LucideProps } from 'lucide-react';
-import type { ComponentType, CSSProperties } from 'react';
-import { cn } from '@/lib/utils';
-import type { PlatformIcon } from '@/types/ui';
+import { HugeiconsIcon } from "@hugeicons/react";
+import type { LucideProps } from "lucide-react";
+import type { ComponentType, CSSProperties } from "react";
+import { cn } from "@/lib/utils";
+import type { PlatformIcon } from "@/types/ui";
 
 interface IconProps {
     iconNode: PlatformIcon;
@@ -16,7 +16,7 @@ interface IconProps {
 
 export default function Icon({
     iconNode,
-    className = 'size-4',
+    className = "size-4",
     size,
     strokeWidth,
     color,
@@ -27,10 +27,9 @@ export default function Icon({
         return covered ? (
             <span
                 className={cn(
-                    'flex items-center justify-center rounded-full bg-primary-foreground/10 p-2 transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-1',
+                    "flex items-center justify-center rounded-full bg-primary-foreground/10 p-2 transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-1",
                     coverClassName,
-                )}
-            >
+                )}>
                 {children}
             </span>
         ) : (
@@ -41,8 +40,8 @@ export default function Icon({
     const iconStyle: CSSProperties | undefined =
         size !== undefined
             ? {
-                  width: typeof size === 'number' ? `${size}px` : size,
-                  height: typeof size === 'number' ? `${size}px` : size,
+                  width: typeof size === "number" ? `${size}px` : size,
+                  height: typeof size === "number" ? `${size}px` : size,
               }
             : undefined;
 

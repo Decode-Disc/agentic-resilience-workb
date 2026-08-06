@@ -1,11 +1,11 @@
-import { v } from 'convex/values';
+import { v } from "convex/values";
 
-import { internal } from './_generated/api';
-import { internalAction } from './_generated/server';
+import { internal } from "./_generated/api";
+import { internalAction } from "./_generated/server";
 
 export const discoverForRun = internalAction({
     args: {
-        runId: v.id('researchRuns'),
+        runId: v.id("researchRuns"),
         cik: v.string(),
         filings: v.array(
             v.object({
@@ -23,7 +23,7 @@ export const discoverForRun = internalAction({
             { runId: args.runId },
         );
         const environment =
-            typeof process === 'undefined' ? undefined : process.env;
+            typeof process === "undefined" ? undefined : process.env;
         const initialCapacity = await ctx.runQuery(
             internal.sourceDiscovery.getCandidateCapacity,
             {
@@ -34,15 +34,15 @@ export const discoverForRun = internalAction({
         const candidates = args.filings
             .slice(0, Math.min(8, initialCapacity.remaining))
             .map((filing) => {
-                const accession = filing.accessionNumber.replaceAll('-', '');
+                const accession = filing.accessionNumber.replaceAll("-", "");
                 const baseUrl = `https://www.sec.gov/Archives/edgar/data/${args.cik}/${accession}/`;
                 return {
                     canonicalUrl: filing.primaryDocument
                         ? `${baseUrl}${filing.primaryDocument}`
                         : baseUrl,
-                    title: `${filing.form ?? 'SEC filing'} · ${filing.filingDate ?? filing.accessionNumber}`,
-                    origin: 'sec' as const,
-                    category: 'regulatory',
+                    title: `${filing.form ?? "SEC filing"} · ${filing.filingDate ?? filing.accessionNumber}`,
+                    origin: "sec" as const,
+                    category: "regulatory",
                     publishedAt: filing.filingDate
                         ? Date.parse(filing.filingDate)
                         : undefined,
@@ -72,10 +72,10 @@ export const discoverForRun = internalAction({
             {
                 runId: args.runId,
                 executionGeneration: context.executionGeneration,
-                service: 'exa',
-                operation: 'search',
+                service: "exa",
+                operation: "search",
                 operationKey: `run:${args.runId}:generation:${context.executionGeneration}:exa:configuration`,
-                errorCode: 'exa_not_configured',
+                errorCode: "exa_not_configured",
             },
         );
         return { total: result.total };

@@ -49,14 +49,33 @@ Company preflight and confirmation
 
 ### 1. Company resolution
 
-The analyst enters a company name, ticker, or SEC URL and may add an optional
-research angle. The angle prioritizes discovery and presentation; it cannot
-change the ten dimensions, evidence rules, or deliverables.
+The analyst searches by partial company name, ticker, CIK, or SEC URL and may
+add an optional research angle. The angle prioritizes discovery and
+presentation; it cannot change the ten dimensions, evidence rules, or
+deliverables.
 
-The system performs a non-billable preflight resolution and displays the legal
-entity, ticker, exchange, investor-relations presence, and SEC identity for
-confirmation. After confirmation, it atomically reserves the analysis and
-authoritatively revalidates the canonical company identity before paid research.
+The system returns a bounded list of matching public companies and requires the
+analyst to select one explicitly. It then performs a non-billable preflight
+revalidation of the selected CIK while keeping the populated composer available
+so the analyst can finish the research direction and references. Only an
+explicit Continue action replaces the composer with an in-place confirmation
+surface showing the legal entity, ticker, exchange, and SEC identity. Neither
+surface adds numbered steps or explanatory headings when the controls and
+company record already communicate the action.
+
+Non-billable means that preflight reserves no visitor analysis and creates no
+research run. It may use bounded Exa credits to resolve commercial website
+metadata for favicons. That enrichment is cached by CIK, remains visual only,
+never changes SEC identity, and never blocks a valid SEC preflight. The display
+falls back to the SEC investor-relations website and then the existing company
+icon.
+
+This Start search and preflight are available before workspace access under a
+browser-bound anonymous Auth session. On confirmation, an unadmitted visitor
+enters a reusable four-digit access code in a top drawer; the system then
+links the corresponding stable visitor, atomically
+reserves the analysis and authoritatively revalidates the canonical company
+identity before paid research.
 
 The system then estimates whether enough public material is available. If the
 evidence base appears insufficient, the workflow pauses instead of failing. The
@@ -130,7 +149,7 @@ dimension decisions.
 
 The main screens are:
 
-1. Invitation access
+1. Workspace access
 2. Research workspace
 3. New assessment
 4. Research progress
@@ -409,10 +428,23 @@ separate `ProviderCall`.
 
 ## Access and Prototype Guards
 
-The prototype is private and invitation-only.
+The research workbench is private and access-code protected. The Start surface and
+non-billable company preflight are publicly accessible under a browser-bound
+anonymous Auth session; they do not create a dossier or consume quota.
 
-- Exactly five invitation records are created.
-- One invitation belongs to the administrator and four to analysts. Convex Auth anonymous sessions are admitted through high-entropy, single-use invitation codes whose plaintext is never persisted.
+- Exactly five stable access-slot records are created.
+- One access code belongs to the administrator and four to analysts. Convex
+  Auth anonymous sessions are linked to stable visitors through reusable
+  four-digit codes whose plaintext is never persisted. The server limits
+  attempts to five per anonymous Auth identity and 25 deployment-wide in a
+  15-minute window.
+- Workspace access is requested in a top drawer when an unadmitted visitor
+  confirms a resolved company or directly visits a protected workspace route.
+- Reusing a code from a new anonymous session preserves the visitor, role,
+  dossiers, quotas, and audit history while invalidating the previous session's
+  protected access.
+- Dossier routes and administration remain withheld until the server resolves
+  an active admitted visitor.
 - Each admitted visitor may reserve at most three analyses in total.
 - Limits are enforced in server-side Convex mutations and persist across sessions.
 - Analysis reservations are atomic.
@@ -504,7 +536,7 @@ The application exposes a concise Methodology & Limitations page with measured r
 
 Included:
 
-- invitation access and persistent quotas;
+- access-code admission and persistent quotas;
 - US-listed technology company resolution;
 - automated source discovery and research planning;
 - manual public HTTPS URL addition;
@@ -589,3 +621,7 @@ The MVP is complete when an invited analyst can:
 - [ADR-009: Use typed AI tasks and deterministic policy adjudication](../decisions/009-use-typed-ai-tasks-and-deterministic-policy-adjudication.md)
 - [ADR-010: Keep provider routing, retries, and fallback application-controlled](../decisions/010-keep-provider-routing-retries-and-fallback-application-controlled.md)
 - [ADR-011: Restrict manual source intake to public HTTPS URLs](../decisions/011-restrict-manual-source-intake-to-public-https-urls.md)
+- [ADR-012: Expose company preflight before invitation admission](../decisions/012-expose-company-preflight-before-invitation-admission.md)
+- [ADR-013: Use rate-limited four-digit invitation OTPs](../decisions/013-use-rate-limited-four-digit-invitation-otps.md)
+- [ADR-014: Use reusable access codes for stable visitors](../decisions/014-use-reusable-access-codes-for-stable-visitors.md)
+- [ADR-015: Use bounded Exa company website enrichment before admission](../decisions/015-use-bounded-exa-company-website-enrichment-before-admission.md)
