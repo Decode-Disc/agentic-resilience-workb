@@ -81,6 +81,7 @@ function DirectionAwareTabs({
     return (
         <div className={cn("flex flex-col items-center w-full", containerClassName)}>
             <div
+                role="tablist"
                 className={cn(
                     "flex items-center space-x-1 border border-border/60 rounded-full cursor-pointer bg-muted/30 p-1 shadow-xs",
                     className,
@@ -93,6 +94,9 @@ function DirectionAwareTabs({
                         <button
                             key={tab.id}
                             type="button"
+                            role="tab"
+                            aria-selected={isActive}
+                            data-slot="tabs-trigger"
                             onClick={() => handleTabClick(tab.id)}
                             className={cn(
                                 "relative rounded-full px-3.5 py-1.5 text-xs sm:text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring flex gap-2 items-center",
@@ -133,17 +137,16 @@ function DirectionAwareTabs({
                         <AnimatePresence
                             custom={direction}
                             mode="popLayout"
-                            onExitComplete={() => setIsAnimating(false)}
                         >
                             <motion.div
                                 key={activeTab}
+                                role="tabpanel"
+                                data-slot="tabs-content"
                                 variants={variants}
                                 initial="initial"
                                 animate="active"
                                 exit="exit"
                                 custom={direction}
-                                onAnimationStart={() => setIsAnimating(true)}
-                                onAnimationComplete={() => setIsAnimating(false)}
                                 className="w-full"
                             >
                                 {content}

@@ -12,6 +12,8 @@ import type { Id } from './_generated/dataModel';
 import type { ActionCtx } from './_generated/server';
 import { action, internalAction } from './_generated/server';
 import { validatePublicSourceUrl } from './domain/publicSourceUrl';
+import { assertSourceCandidateRequestFits } from './domain/sourceCandidateCapacity';
+import { sourceCandidateLimit } from './resourceLimits';
 
 const MAX_REDIRECTS = 5;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -134,6 +136,7 @@ export async function prepareLaunchManualSources(
     },
     inspect: (url: string) => Promise<{ canonicalUrl: string; title: string }>,
 ): Promise<Array<PreparedLaunchManualSource>> {
+    assertSourceCandidateRequestFits(args.urls.length, sourceCandidateLimit());
     const prepared = new Map<string, PreparedLaunchManualSource>();
     for (const rawUrl of args.urls) {
         const url = rawUrl.trim();

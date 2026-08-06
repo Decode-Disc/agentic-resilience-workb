@@ -51,6 +51,16 @@ export const discoverForRun = internalAction({
             search: (query, options) => exaClient.search(query, options),
         });
         for (const [index, planQuery] of context.queries.entries()) {
+            const capacity = await ctx.runQuery(
+                internal.sourceDiscovery.getCandidateCapacity,
+                {
+                    runId: args.runId,
+                    executionGeneration: context.executionGeneration,
+                },
+            );
+            if (capacity.remaining === 0) {
+                return { total: capacity.total };
+            }
             const operationKey = `run:${args.runId}:workflow:2:generation:${context.executionGeneration}:corpus:${context.corpusRevisionId}:step:discover_sources:exa:${index}`;
             for (let attempt = 1; attempt <= MAX_EXA_ATTEMPTS; attempt += 1) {
                 const startedAt = Date.now();
@@ -81,21 +91,40 @@ export const discoverForRun = internalAction({
                     continue;
                 }
                 try {
-                    const results = await exa.search(planQuery.query, 4);
-                    const candidates = await validateExaCandidates(
-                        results.map((candidate) => ({
-                            ...candidate,
-                            origin: 'exa' as const,
-                            category: planQuery.category,
-                        })),
-                        async (hostname) =>
-                            (
-                                await lookup(hostname, {
-                                    all: true,
-                                    verbatim: true,
-                                })
-                            ).map(({ address }) => address),
+                    const results = await exa.search(
+                        planQuery.query,
+                        Math.min(4, capacity.remaining),
                     );
+                    const capacityBeforeInspection = await ctx.runQuery(
+                        internal.sourceDiscovery.getCandidateCapacity,
+                        {
+                            runId: args.runId,
+                            executionGeneration:
+                                context.executionGeneration,
+                        },
+                    );
+                    const candidates =
+                        capacityBeforeInspection.remaining === 0
+                            ? []
+                            : await validateExaCandidates(
+                                  results
+                                      .slice(
+                                          0,
+                                          capacityBeforeInspection.remaining,
+                                      )
+                                      .map((candidate) => ({
+                                          ...candidate,
+                                          origin: 'exa' as const,
+                                          category: planQuery.category,
+                                      })),
+                                  async (hostname) =>
+                                      (
+                                          await lookup(hostname, {
+                                              all: true,
+                                              verbatim: true,
+                                          })
+                                      ).map(({ address }) => address),
+                              );
                     await ctx.runMutation(
                         internal.sourceDiscovery.persistCandidates,
                         {

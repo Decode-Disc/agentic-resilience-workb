@@ -6,7 +6,6 @@ import {
     File01Icon,
     LinkSquare01Icon,
     Loading02Icon,
-    Plus,
 } from '@hugeicons/core-free-icons';
 import { type ReactElement, useState } from 'react';
 
@@ -28,6 +27,7 @@ import {
     InputGroupInput,
 } from '@/components/ui/input-group';
 import { Label } from '@/components/ui/label';
+import { sourceAddErrorMessage } from '@/lib/presentation/research-copy';
 import {
     Tooltip,
     TooltipContent,
@@ -136,8 +136,8 @@ export function AddSourceDialog({
                 setUrlInput('');
                 setConfirmation('Source added for your review.');
             }
-        } catch {
-            setError("We couldn't add that source. Try again.");
+        } catch (caught) {
+            setError(sourceAddErrorMessage(caught));
         } finally {
             setIsSubmitting(false);
         }

@@ -17,6 +17,8 @@ import type * as domain_evidenceAvailabilityPolicy from "../domain/evidenceAvail
 import type * as domain_invitationCodes from "../domain/invitationCodes.js";
 import type * as domain_publicSourceUrl from "../domain/publicSourceUrl.js";
 import type * as domain_researchPlan from "../domain/researchPlan.js";
+import type * as domain_sourceCandidateCapacity from "../domain/sourceCandidateCapacity.js";
+import type * as domain_sourceReviewProjection from "../domain/sourceReviewProjection.js";
 import type * as domain_transitions from "../domain/transitions.js";
 import type * as domain_validators from "../domain/validators.js";
 import type * as evidenceSufficiency from "../evidenceSufficiency.js";
@@ -32,6 +34,7 @@ import type * as researchLaunch from "../researchLaunch.js";
 import type * as researchPlanning from "../researchPlanning.js";
 import type * as researchRuns from "../researchRuns.js";
 import type * as researchWorkflow from "../researchWorkflow.js";
+import type * as resourceLimits from "../resourceLimits.js";
 import type * as sourceActions from "../sourceActions.js";
 import type * as sourceDiscovery from "../sourceDiscovery.js";
 import type * as sourceDiscoveryActions from "../sourceDiscoveryActions.js";
@@ -56,6 +59,8 @@ declare const fullApi: ApiFromModules<{
   "domain/invitationCodes": typeof domain_invitationCodes;
   "domain/publicSourceUrl": typeof domain_publicSourceUrl;
   "domain/researchPlan": typeof domain_researchPlan;
+  "domain/sourceCandidateCapacity": typeof domain_sourceCandidateCapacity;
+  "domain/sourceReviewProjection": typeof domain_sourceReviewProjection;
   "domain/transitions": typeof domain_transitions;
   "domain/validators": typeof domain_validators;
   evidenceSufficiency: typeof evidenceSufficiency;
@@ -71,6 +76,7 @@ declare const fullApi: ApiFromModules<{
   researchPlanning: typeof researchPlanning;
   researchRuns: typeof researchRuns;
   researchWorkflow: typeof researchWorkflow;
+  resourceLimits: typeof resourceLimits;
   sourceActions: typeof sourceActions;
   sourceDiscovery: typeof sourceDiscovery;
   sourceDiscoveryActions: typeof sourceDiscoveryActions;

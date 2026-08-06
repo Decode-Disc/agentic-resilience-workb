@@ -9,8 +9,9 @@ type ExecutionStatus = RunProjection['executionStatus'];
 type RunEvent = FunctionReturnType<
     typeof api.researchRuns.listMyEvents
 >[number];
-type SourceReview = FunctionReturnType<typeof api.sources.listForReview>;
-type Source = SourceReview['sources'][number];
+type Source = FunctionReturnType<
+    typeof api.sources.listForReviewPage
+>['page'][number];
 
 function errorText(error: unknown): string {
     return error instanceof Error ? error.message : '';
@@ -36,6 +37,14 @@ export function companyLookupErrorMessage(error: unknown): string {
         return "We couldn't find an exact public company match. Try its current name or ticker.";
     }
     return "We couldn't verify that company. Try again.";
+}
+
+/** Translates source intake failures without exposing backend configuration. */
+export function sourceAddErrorMessage(error: unknown): string {
+    if (errorText(error).includes('source candidate limit')) {
+        return 'This dossier has reached its source review limit. Review the existing candidates before continuing.';
+    }
+    return "We couldn't add that source. Try again.";
 }
 
 const lifecycleLabels = {

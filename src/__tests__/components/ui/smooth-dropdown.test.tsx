@@ -27,3 +27,17 @@ test('allows a keyboard user to select a dropdown option', () => {
 
     expect(onSelect).toHaveBeenCalledTimes(1);
 });
+
+test('renders collection controls outside the option list', () => {
+    render(
+        <SmoothDropdwon
+            defaultOpen
+            items={[{ id: 'company-1', label: 'First company' }]}
+            footer={<button type="button">Next results</button>}
+        />,
+    );
+
+    const listbox = screen.getByRole('listbox');
+    const footerButton = screen.getByRole('button', { name: 'Next results' });
+    expect(listbox.contains(footerButton)).toBe(false);
+});

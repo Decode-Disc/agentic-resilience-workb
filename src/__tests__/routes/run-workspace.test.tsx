@@ -239,22 +239,22 @@ describe('production run workspace', () => {
                     counts: { accepted: 1, rejected: 1, pending: 1 },
                     sources: [
                         {
-                            sourceId: 'source-1' as never,
-                            canonicalUrl: 'https://example.com/report',
-                            title: 'Independent report',
-                            origin: 'exa',
-                            category: 'independent_analysis',
-                            decision: 'pending',
-                            publishedAt: undefined,
-                            reason: undefined,
-                        },
-                        {
                             sourceId: 'source-2' as never,
                             canonicalUrl: 'https://example.com/accepted',
                             title: 'Accepted report',
                             origin: 'sec',
                             category: 'regulatory_filing',
                             decision: 'accepted',
+                            publishedAt: undefined,
+                            reason: undefined,
+                        },
+                        {
+                            sourceId: 'source-1' as never,
+                            canonicalUrl: 'https://example.com/report',
+                            title: 'Independent report',
+                            origin: 'exa',
+                            category: 'independent_analysis',
+                            decision: 'pending',
                             publishedAt: undefined,
                             reason: undefined,
                         },
@@ -299,6 +299,21 @@ describe('production run workspace', () => {
         ).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Add source' })).toBeTruthy();
 
+        const groupLabels = within(
+            screen.getByRole('region', {
+                name: 'Candidate source collection',
+            }),
+        )
+            .getAllByText(/^(Pending review|Accepted|Rejected)$/i, {
+                selector: 'p',
+            })
+            .map((label) => label.textContent);
+        expect(groupLabels).toEqual([
+            'Pending review',
+            'Accepted',
+            'Rejected',
+        ]);
+
         const decisionTabs = screen.getByRole('tablist', {
             name: 'Filter candidate sources by decision',
         });
@@ -330,6 +345,47 @@ describe('production run workspace', () => {
 
         fireEvent.click(approveButton);
         expect(onApprove).toHaveBeenCalledOnce();
+    });
+
+    it('reports loaded source progress and offers manual continuation', () => {
+        const onLoadMore = vi.fn();
+        render(
+            <SourceReview
+                runId={'run-1' as never}
+                corpusRevisionId={'revision-1' as never}
+                review={{
+                    revision: 1,
+                    status: 'draft',
+                    counts: { accepted: 0, rejected: 0, pending: 13 },
+                    total: 13,
+                    candidateLimit: 48,
+                    sources: [
+                        {
+                            sourceId: 'source-1' as never,
+                            canonicalUrl: 'https://example.com/report',
+                            title: 'Independent report',
+                            origin: 'exa',
+                            category: 'independent_analysis',
+                            decision: 'pending',
+                            publishedAt: undefined,
+                            reason: undefined,
+                        },
+                    ],
+                }}
+                hasMore
+                isLoadingMore={false}
+                onLoadMore={onLoadMore}
+                onDecide={vi.fn()}
+                onApprove={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByText(/1 of 13 loaded/i)).toBeTruthy();
+        onLoadMore.mockClear();
+        fireEvent.click(
+            screen.getByRole('button', { name: /Load more sources/i }),
+        );
+        expect(onLoadMore).toHaveBeenCalledOnce();
     });
 
     it('separates desktop source review with resizable panels', () => {

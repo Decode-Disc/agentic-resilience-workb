@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Icon from "@/components/icon";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -136,6 +136,7 @@ export default function DiscreteTabs({
         }
         return defaultValue ?? tabs[activeIndex]?.id ?? "";
     });
+    const localTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
     /**
      * Synchronise la sélection depuis l'URL au montage quand persistKey est utilisé.
@@ -209,6 +210,31 @@ export default function DiscreteTabs({
         ? activeButton
         : (tabs[activeIndex]?.id ?? tabs[0]?.id ?? "");
     const hasNavigationDestination = tabs.some((tab) => tab.href !== undefined);
+    const handleLocalTabKeyDown = (
+        event: React.KeyboardEvent<HTMLButtonElement>,
+        currentIndex: number,
+    ) => {
+        let nextIndex: number | null = null;
+        if (event.key === "ArrowRight") {
+            nextIndex = (currentIndex + 1) % tabs.length;
+        } else if (event.key === "ArrowLeft") {
+            nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+        } else if (event.key === "Home") {
+            nextIndex = 0;
+        } else if (event.key === "End") {
+            nextIndex = tabs.length - 1;
+        }
+        if (nextIndex === null) {
+            return;
+        }
+        event.preventDefault();
+        const nextTab = tabs[nextIndex];
+        if (!nextTab) {
+            return;
+        }
+        setActiveButton(nextTab.id);
+        localTabRefs.current[nextIndex]?.focus();
+    };
 
     return (
         <ScrollArea
@@ -221,12 +247,21 @@ export default function DiscreteTabs({
                 )}
                 role={hasNavigationDestination ? "navigation" : "tablist"}
                 aria-label={ariaLabel}>
-                {tabs.map((tab) => (
+                {tabs.map((tab, index) => (
                     <DiscreteTabButton
                         key={tab.id}
                         tab={tab}
                         isActive={resolvedActiveButton === tab.id}
                         setActiveButton={setActiveButton}
+                        buttonRef={(node) => {
+                            localTabRefs.current[index] = node;
+                        }}
+                        onKeyDown={
+                            hasNavigationDestination
+                                ? undefined
+                                : (event) =>
+                                      handleLocalTabKeyDown(event, index)
+                        }
                     />
                 ))}
             </nav>
@@ -242,6 +277,8 @@ type DiscreteTabButtonProps = {
     tab: DiscreteTabItem;
     isActive: boolean;
     setActiveButton: (nextValue: string) => void;
+    buttonRef: (node: HTMLButtonElement | null) => void;
+    onKeyDown?: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
 };
 
 /**
@@ -255,6 +292,8 @@ const DiscreteTabButton = ({
     tab,
     isActive,
     setActiveButton,
+    buttonRef,
+    onKeyDown,
 }: DiscreteTabButtonProps) => {
     const [isLoaded, setIsLoaded] = useState(false);
     const [isTooltipVisible, setIsTooltipVisible] = useState(false);
@@ -383,6 +422,7 @@ const DiscreteTabButton = ({
 
     return (
         <motion.button
+            ref={buttonRef}
             type="button"
             layoutId={`button-id-${tab.title}`}
             transition={{
@@ -398,6 +438,7 @@ const DiscreteTabButton = ({
                 setActiveButton(tab.id);
                 setIsLoaded(true);
             }}
+            onKeyDown={onKeyDown}
             onMouseEnter={showTooltip}
             onMouseLeave={() => setIsTooltipVisible(false)}
             onFocus={showTooltip}

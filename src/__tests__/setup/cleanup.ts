@@ -44,6 +44,19 @@ if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
     });
 }
 
-afterEach(() => {
+if (
+    typeof HTMLElement !== "undefined" &&
+    typeof HTMLElement.prototype.getAnimations !== "function"
+) {
+    Object.defineProperty(HTMLElement.prototype, "getAnimations", {
+        configurable: true,
+        value: () => [],
+    });
+}
+
+afterEach(async () => {
     cleanup();
+    // input-otp schedules 0/10/50 ms synchronization callbacks without a
+    // cleanup handle. Keep jsdom alive until those callbacks have drained.
+    await new Promise((resolve) => setTimeout(resolve, 60));
 });

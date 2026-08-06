@@ -1,7 +1,17 @@
 import type { Id } from '@convex/_generated/dataModel';
 import type { ActionCtx } from '@convex/_generated/server';
 import { prepareLaunchManualSources } from '@convex/sourceActions';
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
+
+const originalSourceCandidateLimit = process.env.SOURCE_CANDIDATE_LIMIT;
+
+afterEach(() => {
+    if (originalSourceCandidateLimit === undefined) {
+        delete process.env.SOURCE_CANDIDATE_LIMIT;
+    } else {
+        process.env.SOURCE_CANDIDATE_LIMIT = originalSourceCandidateLimit;
+    }
+});
 
 test('inspects launch references and returns canonical source metadata', async () => {
     const runMutation = vi
@@ -99,4 +109,29 @@ test('deduplicates references that resolve to the same canonical URL', async () 
             inspect,
         ),
     ).resolves.toHaveLength(1);
+});
+
+test('rejects oversized launch references before inspecting any URL', async () => {
+    process.env.SOURCE_CANDIDATE_LIMIT = '2';
+    const inspect = vi.fn();
+
+    await expect(
+        prepareLaunchManualSources(
+            {
+                runMutation: vi.fn(),
+                runQuery: vi.fn(),
+            } as unknown as Pick<ActionCtx, 'runMutation' | 'runQuery'>,
+            {
+                ownerAuthUserId: 'user-1' as Id<'users'>,
+                idempotencyKey: 'launch-over-capacity',
+                urls: [
+                    'https://example.com/one',
+                    'https://example.com/two',
+                    'https://example.com/three',
+                ],
+            },
+            inspect,
+        ),
+    ).rejects.toThrow('source candidate limit');
+    expect(inspect).not.toHaveBeenCalled();
 });

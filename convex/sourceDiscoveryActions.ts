@@ -24,22 +24,31 @@ export const discoverForRun = internalAction({
         );
         const environment =
             typeof process === 'undefined' ? undefined : process.env;
-        const candidates = args.filings.slice(0, 8).map((filing) => {
-            const accession = filing.accessionNumber.replaceAll('-', '');
-            const baseUrl = `https://www.sec.gov/Archives/edgar/data/${args.cik}/${accession}/`;
-            return {
-                canonicalUrl: filing.primaryDocument
-                    ? `${baseUrl}${filing.primaryDocument}`
-                    : baseUrl,
-                title: `${filing.form ?? 'SEC filing'} · ${filing.filingDate ?? filing.accessionNumber}`,
-                origin: 'sec' as const,
-                category: 'regulatory',
-                publishedAt: filing.filingDate
-                    ? Date.parse(filing.filingDate)
-                    : undefined,
-                providerReference: filing.accessionNumber,
-            };
-        });
+        const initialCapacity = await ctx.runQuery(
+            internal.sourceDiscovery.getCandidateCapacity,
+            {
+                runId: args.runId,
+                executionGeneration: context.executionGeneration,
+            },
+        );
+        const candidates = args.filings
+            .slice(0, Math.min(8, initialCapacity.remaining))
+            .map((filing) => {
+                const accession = filing.accessionNumber.replaceAll('-', '');
+                const baseUrl = `https://www.sec.gov/Archives/edgar/data/${args.cik}/${accession}/`;
+                return {
+                    canonicalUrl: filing.primaryDocument
+                        ? `${baseUrl}${filing.primaryDocument}`
+                        : baseUrl,
+                    title: `${filing.form ?? 'SEC filing'} · ${filing.filingDate ?? filing.accessionNumber}`,
+                    origin: 'sec' as const,
+                    category: 'regulatory',
+                    publishedAt: filing.filingDate
+                        ? Date.parse(filing.filingDate)
+                        : undefined,
+                    providerReference: filing.accessionNumber,
+                };
+            });
         const result = await ctx.runMutation(
             internal.sourceDiscovery.persistCandidates,
             {
@@ -50,6 +59,9 @@ export const discoverForRun = internalAction({
                 candidates,
             },
         );
+        if (result.total >= initialCapacity.limit) {
+            return { total: result.total };
+        }
         if (environment?.EXA_API_KEY?.trim()) {
             return ctx.runAction(internal.exaDiscoveryActions.discoverForRun, {
                 runId: args.runId,

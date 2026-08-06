@@ -1,6 +1,8 @@
 import { v } from 'convex/values';
 
 import { internalMutation, internalQuery } from './_generated/server';
+import { readSourceCandidateCapacity } from './domain/sourceCandidateCapacity';
+import { upsertSourceReviewItem } from './domain/sourceReviewProjection';
 
 const candidateValidator = v.object({
     canonicalUrl: v.string(),
@@ -35,10 +37,14 @@ export const persistCandidates = internalMutation({
             throw new Error('Research execution is no longer active');
         }
 
+        const capacity = await readSourceCandidateCapacity(ctx.db, run._id);
         let inserted = 0;
         const seen = new Set<string>();
         const now = Date.now();
         for (const candidate of args.candidates) {
+            if (inserted >= capacity.remaining) {
+                break;
+            }
             if (seen.has(candidate.canonicalUrl)) {
                 continue;
             }
@@ -59,7 +65,7 @@ export const persistCandidates = internalMutation({
                 ...candidate,
                 createdAt: now,
             });
-            await ctx.db.insert('sourceDecisions', {
+            const decisionId = await ctx.db.insert('sourceDecisions', {
                 runId: run._id,
                 corpusRevisionId: revision._id,
                 sourceId,
@@ -67,16 +73,18 @@ export const persistCandidates = internalMutation({
                 decision: 'pending',
                 occurredAt: now,
             });
+            await upsertSourceReviewItem(ctx, {
+                runId: run._id,
+                corpusRevisionId: revision._id,
+                sourceId,
+                decision: 'pending',
+                sourceCreatedAt: now,
+                latestDecisionId: decisionId,
+                decisionOccurredAt: now,
+            });
             inserted += 1;
         }
-        const total = (
-            await ctx.db
-                .query('sources')
-                .withIndex('by_run_and_url', (query) =>
-                    query.eq('runId', run._id),
-                )
-                .collect()
-        ).length;
+        const total = capacity.total + inserted;
         await ctx.db.patch(run._id, {
             nextEventSequence: run.nextEventSequence + 1,
             updatedAt: now,
@@ -112,11 +120,32 @@ export const countCandidates = internalQuery({
         ) {
             throw new Error('Research execution is no longer active');
         }
-        const sources = await ctx.db
-            .query('sources')
-            .withIndex('by_run_and_url', (query) => query.eq('runId', run._id))
-            .collect();
-        return { total: sources.length };
+        const capacity = await readSourceCandidateCapacity(ctx.db, run._id);
+        return { total: capacity.total };
+    },
+});
+
+export const getCandidateCapacity = internalQuery({
+    args: {
+        runId: v.id('researchRuns'),
+        executionGeneration: v.number(),
+    },
+    returns: v.object({
+        limit: v.number(),
+        total: v.number(),
+        remaining: v.number(),
+    }),
+    handler: async (ctx, args) => {
+        const run = await ctx.db.get(args.runId);
+        if (
+            !run ||
+            run.executionGeneration !== args.executionGeneration ||
+            run.executionStatus !== 'running' ||
+            run.lifecycleState !== 'discovering_sources'
+        ) {
+            throw new Error('Research execution is no longer active');
+        }
+        return readSourceCandidateCapacity(ctx.db, run._id);
     },
 });
 

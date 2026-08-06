@@ -2,6 +2,40 @@ import { createSecCompanyResolver } from '@convex/integrations/sec';
 import { describe, expect, test, vi } from 'vitest';
 
 describe('createSecCompanyResolver', () => {
+    test('returns at most the configured 40 ranked company candidates', async () => {
+        const companies = Array.from({ length: 52 }, (_, index) => [
+            2_000_000 + index,
+            `Ranked Company ${String(index + 1).padStart(2, '0')}`,
+            `R${index + 1}`,
+            'Nasdaq',
+        ]);
+        const resolver = createSecCompanyResolver({
+            fetch: vi.fn(async () =>
+                Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            fields: ['cik', 'name', 'ticker', 'exchange'],
+                            data: companies,
+                        }),
+                        { status: 200 },
+                    ),
+                ),
+            ),
+            now: () => 1_000,
+            userAgent: 'Evidence Workbench test@example.com',
+            reserveRequest: vi.fn(async () => undefined),
+            recordAttempt: vi.fn(async (attempt: { status: string }) => ({
+                shouldExecute: attempt.status === 'started',
+            })),
+        });
+
+        const results = await resolver.search('ranked company');
+
+        expect(results).toHaveLength(40);
+        expect(results.at(0)?.legalName).toBe('Ranked Company 01');
+        expect(results.at(-1)?.legalName).toBe('Ranked Company 40');
+    });
+
     test('returns ranked company candidates for a partial name without revalidating each result', async () => {
         const fetchImplementation = vi.fn(
             async (input: string | URL | Request) => {

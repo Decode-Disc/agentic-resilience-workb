@@ -1,8 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { getFunctionName } from 'convex/server';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 const {
     useQuery,
+    usePaginatedQuery,
     useMutation,
     useAction,
     decideSource,
@@ -12,6 +14,7 @@ const {
     navigate,
 } = vi.hoisted(() => ({
     useQuery: vi.fn(),
+    usePaginatedQuery: vi.fn(),
     useMutation: vi.fn(),
     useAction: vi.fn(),
     decideSource: vi.fn(),
@@ -21,7 +24,12 @@ const {
     navigate: vi.fn(),
 }));
 
-vi.mock('convex/react', () => ({ useQuery, useMutation, useAction }));
+vi.mock('convex/react', () => ({
+    useQuery,
+    usePaginatedQuery,
+    useMutation,
+    useAction,
+}));
 vi.mock('@tanstack/react-router', () => ({
     useNavigate: () => navigate,
     Link: ({ children, ...props }: React.ComponentProps<'a'>) => (
@@ -33,6 +41,7 @@ import { RunRouteComponent } from '@/components/workspace/run-route-component';
 
 beforeEach(() => {
     useQuery.mockReset();
+    usePaginatedQuery.mockReset();
     useMutation.mockReset();
     useAction.mockReset();
     decideSource.mockReset();
@@ -45,6 +54,11 @@ beforeEach(() => {
         return [decideSource, approveCorpus, decideSufficiency][index];
     });
     useAction.mockReturnValue(addManualUrl);
+    usePaginatedQuery.mockReturnValue({
+        results: [],
+        status: 'Exhausted',
+        loadMore: vi.fn(),
+    });
 });
 
 test('wires the evidence sufficiency checkpoint', async () => {
@@ -81,7 +95,7 @@ test('wires the evidence sufficiency checkpoint', async () => {
     fireEvent.change(screen.getByLabelText(/Public source link/i), {
         target: { value: 'https://example.com/report' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /^Add source$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Add$/i }));
     await waitFor(() =>
         expect(addManualUrl).toHaveBeenCalledWith({
             runId: 'run-1',
@@ -216,10 +230,26 @@ test('routes the analyst to the active source-review checkpoint', async () => {
 });
 
 test('keeps the approved source set visible for inspection', () => {
-    useQuery.mockImplementation(() => {
-        const index = (useQuery.mock.calls.length - 1) % 3;
-        return [
+    usePaginatedQuery.mockReturnValue({
+        results: [
             {
+                sourceId: 'source-1',
+                canonicalUrl: 'https://example.com/report',
+                title: 'Approved report',
+                origin: 'exa',
+                category: 'independent_analysis',
+                decision: 'accepted',
+                publishedAt: undefined,
+                reason: undefined,
+            },
+        ],
+        status: 'Exhausted',
+        loadMore: vi.fn(),
+    });
+    useQuery.mockImplementation((reference) => {
+        const functionName = getFunctionName(reference);
+        if (functionName === 'researchRuns:getMine') {
+            return {
                 runId: 'run-1',
                 company: {
                     legalName: 'Example Corp',
@@ -232,26 +262,33 @@ test('keeps the approved source set visible for inspection', () => {
                 activeCorpusRevisionId: 'revision-1',
                 providerFailures: [],
                 updatedAt: 2,
-            },
-            [],
-            {
+            };
+        }
+        if (functionName === 'researchRuns:listMyEvents') {
+            return [];
+        }
+        if (functionName === 'sources:getReviewSummary') {
+            return {
                 revision: 1,
                 status: 'approved',
                 counts: { accepted: 1, rejected: 0, pending: 0 },
-                sources: [
-                    {
-                        sourceId: 'source-1',
-                        canonicalUrl: 'https://example.com/report',
-                        title: 'Approved report',
-                        origin: 'exa',
-                        category: 'independent_analysis',
-                        decision: 'accepted',
-                        publishedAt: undefined,
-                        reason: undefined,
-                    },
-                ],
-            },
-        ][index];
+                total: 1,
+                candidateLimit: 48,
+            };
+        }
+        if (functionName === 'sources:getReviewSource') {
+            return {
+                sourceId: 'source-1',
+                canonicalUrl: 'https://example.com/report',
+                title: 'Approved report',
+                origin: 'exa',
+                category: 'independent_analysis',
+                decision: 'accepted',
+                publishedAt: undefined,
+                reason: undefined,
+            };
+        }
+        return undefined;
     });
 
     render(<RunRouteComponent runId={'run-1' as never} section="sources" />);

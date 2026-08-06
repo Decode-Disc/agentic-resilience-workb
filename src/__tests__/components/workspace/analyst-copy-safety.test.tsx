@@ -25,7 +25,7 @@ describe('analyst-facing errors', () => {
         fireEvent.change(screen.getByLabelText(/Public source link/i), {
             target: { value: 'https://example.com/report' },
         });
-        fireEvent.click(screen.getByRole('button', { name: /Add source/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^Add$/i }));
 
         expect(
             await screen.findByText(

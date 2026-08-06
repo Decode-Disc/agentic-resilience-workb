@@ -5,6 +5,9 @@ import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { action, internalMutation, internalQuery } from './_generated/server';
 import { coveragePresetValidator } from './domain/validators';
+import { assertSourceCandidateRequestFits } from './domain/sourceCandidateCapacity';
+import { upsertSourceReviewItem } from './domain/sourceReviewProjection';
+import { sourceCandidateLimit } from './resourceLimits';
 import { workflow } from './workflow';
 
 const MAX_ANALYSES_PER_VISITOR = 3;
@@ -125,6 +128,10 @@ export const confirmAndStartReserved = internalMutation({
         if (researchAngle && researchAngle.length > 500) {
             throw new Error('Research angle cannot exceed 500 characters');
         }
+        assertSourceCandidateRequestFits(
+            args.manualSources?.length ?? 0,
+            sourceCandidateLimit(),
+        );
 
         const existing = await ctx.db
             .query('researchRuns')
@@ -226,7 +233,7 @@ export const confirmAndStartReserved = internalMutation({
                 providerReference: manualSource.providerReference,
                 createdAt: now,
             });
-            await ctx.db.insert('sourceDecisions', {
+            const decisionId = await ctx.db.insert('sourceDecisions', {
                 runId,
                 corpusRevisionId,
                 sourceId,
@@ -234,6 +241,15 @@ export const confirmAndStartReserved = internalMutation({
                 decision: 'pending',
                 reviewerVisitorId: visitor._id,
                 occurredAt: now,
+            });
+            await upsertSourceReviewItem(ctx, {
+                runId,
+                corpusRevisionId,
+                sourceId,
+                decision: 'pending',
+                sourceCreatedAt: now,
+                latestDecisionId: decisionId,
+                decisionOccurredAt: now,
             });
             await ctx.db.insert('auditEvents', {
                 actor: { type: 'visitor', visitorId: visitor._id },
@@ -320,6 +336,10 @@ export const confirmAndStart = action({
         runId: Id<'researchRuns'>;
         remainingAnalyses: number;
     }> => {
+        assertSourceCandidateRequestFits(
+            args.manualSourceUrls?.length ?? 0,
+            sourceCandidateLimit(),
+        );
         let manualSources:
             | Array<{
                   canonicalUrl: string;

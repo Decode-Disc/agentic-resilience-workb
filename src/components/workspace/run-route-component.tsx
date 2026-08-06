@@ -14,8 +14,8 @@ import {
 } from '@/components/ui/empty';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EvidenceSufficiencyReview } from '@/components/workspace/evidence-sufficiency-review';
+import { LiveSourceReview } from '@/components/workspace/live-source-review';
 import { RunProgress } from '@/components/workspace/run-progress';
-import { SourceReview } from '@/components/workspace/source-review';
 import {
     WorkspaceNavigationRail,
     type WorkspaceSection,
@@ -36,15 +36,6 @@ export function RunRouteComponent({
     const navigate = useNavigate();
     const run = useQuery(api.researchRuns.getMine, { runId });
     const events = useQuery(api.researchRuns.listMyEvents, { runId });
-    const review = useQuery(
-        api.sources.listForReview,
-        run?.activeCorpusRevisionId
-            ? {
-                runId,
-                corpusRevisionId: run.activeCorpusRevisionId,
-            }
-            : 'skip',
-    );
     const decide = useMutation(api.sources.decide);
     const approve = useMutation(api.sources.approveCorpusRevision);
     const decideSufficiency = useMutation(api.evidenceSufficiency.decide);
@@ -109,8 +100,7 @@ export function RunRouteComponent({
         ['awaiting_source_review', 'corpus_approved'].includes(
             run.lifecycleState,
         ) &&
-        corpusRevisionId !== undefined &&
-        review !== undefined;
+        corpusRevisionId !== undefined;
 
     async function handleAddManualUrl(url: string) {
         if (!corpusRevisionId) {
@@ -175,10 +165,9 @@ export function RunRouteComponent({
                             <RunProgress run={run} events={events} />
                         </>
                     ) : sourceMode ? (
-                        <SourceReview
+                        <LiveSourceReview
                             runId={runId}
                             corpusRevisionId={corpusRevisionId}
-                            review={review}
                             onDecide={async (sourceId, nextDecision) => {
                                 setError(null);
                                 try {
@@ -216,7 +205,6 @@ export function RunRouteComponent({
                     ) : section === 'sources' ? (
                         <div
                             className="surface-panel rounded-xl p-6"
-                            aria-busy={review === undefined}
                         >
                             <h2 className="text-lg font-medium">
                                 Source discovery

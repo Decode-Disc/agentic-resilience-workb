@@ -172,7 +172,40 @@ export default defineSchema({
         occurredAt: v.number(),
     })
         .index("by_revision_and_source", ["corpusRevisionId", "sourceId"])
+        .index("by_revision_source_and_occurred_at", [
+            "corpusRevisionId",
+            "sourceId",
+            "occurredAt",
+        ])
         .index("by_run_and_decision_key", ["runId", "decisionKey"]),
+    sourceReviewItems: defineTable({
+        runId: v.id("researchRuns"),
+        corpusRevisionId: v.id("corpusRevisions"),
+        sourceId: v.id("sources"),
+        decision: v.union(
+            v.literal("accepted"),
+            v.literal("rejected"),
+            v.literal("pending"),
+        ),
+        decisionRank: v.number(),
+        sourceCreatedAt: v.number(),
+        latestDecisionId: v.id("sourceDecisions"),
+        decisionOccurredAt: v.number(),
+        reason: v.optional(v.string()),
+    })
+        .index("by_revision_and_source", ["corpusRevisionId", "sourceId"])
+        .index("by_revision_and_queue", [
+            "corpusRevisionId",
+            "decisionRank",
+            "sourceCreatedAt",
+            "sourceId",
+        ])
+        .index("by_revision_decision_and_order", [
+            "corpusRevisionId",
+            "decision",
+            "sourceCreatedAt",
+            "sourceId",
+        ]),
     providerCalls: defineTable({
         runId: v.optional(v.id("researchRuns")),
         corpusRevisionId: v.optional(v.id("corpusRevisions")),

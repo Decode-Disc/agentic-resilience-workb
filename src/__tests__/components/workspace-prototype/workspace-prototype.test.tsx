@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@tanstack/react-router', async (importOriginal) => {
@@ -26,6 +26,7 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
 });
 
 vi.mock('convex/react', () => ({
+    useAction: () => vi.fn(),
     useQuery: vi.fn().mockReturnValue(undefined),
 }));
 
@@ -42,6 +43,13 @@ vi.mock('@convex-dev/auth/react', async (importOriginal) => {
 });
 
 import { WorkspacePrototype } from '@/components/workspace-prototype/workspace-prototype';
+import { InvitationAccessProvider } from '@/components/workspace/invitation-access-context';
+
+function renderWithInvitationAccess(component: ReactNode) {
+    return render(
+        <InvitationAccessProvider>{component}</InvitationAccessProvider>,
+    );
+}
 
 class ResizeObserverMock {
     observe() {}
@@ -52,19 +60,16 @@ class ResizeObserverMock {
 describe('WorkspacePrototype', () => {
     beforeAll(() => {
         vi.stubGlobal('ResizeObserver', ResizeObserverMock);
-        Object.defineProperty(HTMLElement.prototype, 'getAnimations', {
-            configurable: true,
-            value: () => [],
-        });
     });
 
     afterAll(() => {
         vi.unstubAllGlobals();
-        Reflect.deleteProperty(HTMLElement.prototype, 'getAnimations');
     });
 
     it('uses the global evidence workbench design system', () => {
-        render(<WorkspacePrototype variant="a" onVariantChange={vi.fn()} />);
+        renderWithInvitationAccess(
+            <WorkspacePrototype variant="a" onVariantChange={vi.fn()} />,
+        );
 
         expect(
             screen
@@ -74,7 +79,9 @@ describe('WorkspacePrototype', () => {
     });
 
     it('places the research rail on a liquid-glass surface', () => {
-        render(<WorkspacePrototype variant="a" onVariantChange={vi.fn()} />);
+        renderWithInvitationAccess(
+            <WorkspacePrototype variant="a" onVariantChange={vi.fn()} />,
+        );
 
         expect(
             screen
@@ -84,7 +91,9 @@ describe('WorkspacePrototype', () => {
     });
 
     it('scrolls each workspace column independently', () => {
-        render(<WorkspacePrototype variant="a" onVariantChange={vi.fn()} />);
+        renderWithInvitationAccess(
+            <WorkspacePrototype variant="a" onVariantChange={vi.fn()} />,
+        );
 
         const researchNavigation = screen.getByRole('navigation', {
             name: 'Research dossier',
@@ -106,7 +115,9 @@ describe('WorkspacePrototype', () => {
     });
 
     it('expands and collapses the compact dossier heading', async () => {
-        render(<WorkspacePrototype variant="a" onVariantChange={vi.fn()} />);
+        renderWithInvitationAccess(
+            <WorkspacePrototype variant="a" onVariantChange={vi.fn()} />,
+        );
 
         const trigger = screen.getByRole('button', {
             name: 'Expand dossier details',
@@ -144,7 +155,7 @@ describe('WorkspacePrototype', () => {
 
     it('resizes the evidence and dimension panels', () => {
         const onVariantChange = vi.fn();
-        const { container } = render(
+        const { container } = renderWithInvitationAccess(
             <WorkspacePrototype
                 variant="a"
                 onVariantChange={onVariantChange}

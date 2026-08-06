@@ -2,17 +2,49 @@ import type { Id } from '@convex/_generated/dataModel';
 import schema from '@convex/schema';
 import { makeFunctionReference } from 'convex/server';
 import { convexTest } from 'convex-test';
-import { expect, test } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
 
 const modules = import.meta.glob('/convex/**/*.ts');
-const listForReview = makeFunctionReference<
+const originalSourceCandidateLimit = process.env.SOURCE_CANDIDATE_LIMIT;
+
+afterEach(() => {
+    if (originalSourceCandidateLimit === undefined) {
+        delete process.env.SOURCE_CANDIDATE_LIMIT;
+    } else {
+        process.env.SOURCE_CANDIDATE_LIMIT = originalSourceCandidateLimit;
+    }
+});
+const getReviewSummary = makeFunctionReference<
     'query',
     {
         runId: Id<'researchRuns'>;
         corpusRevisionId: Id<'corpusRevisions'>;
     },
-    unknown
->('sources:listForReview');
+    {
+        revision: number;
+        status: 'draft' | 'approved';
+        counts: { accepted: number; rejected: number; pending: number };
+        total: number;
+        candidateLimit: number;
+    }
+>('sources:getReviewSummary');
+const listForReviewPage = makeFunctionReference<
+    'query',
+    {
+        runId: Id<'researchRuns'>;
+        corpusRevisionId: Id<'corpusRevisions'>;
+        filter: 'all' | 'accepted' | 'rejected' | 'pending';
+        paginationOpts: { numItems: number; cursor: string | null };
+    },
+    {
+        page: Array<{
+            sourceId: Id<'sources'>;
+            decision: 'accepted' | 'rejected' | 'pending';
+        }>;
+        isDone: boolean;
+        continueCursor: string;
+    }
+>('sources:listForReviewPage');
 const decideSource = makeFunctionReference<
     'mutation',
     {
@@ -43,6 +75,19 @@ const approveCorpus = makeFunctionReference<
     },
     { accepted: boolean }
 >('sources:approveCorpusRevision');
+const backfillSourceReviewProjection = makeFunctionReference<
+    'mutation',
+    { paginationOpts: { numItems: number; cursor: string | null } },
+    {
+        page: Array<{
+            revisionId: Id<'corpusRevisions'>;
+            sourceTotal: number;
+            projectionTotal: number;
+        }>;
+        isDone: boolean;
+        continueCursor: string;
+    }
+>('adminOperations:backfillSourceReviewProjection');
 
 async function createSourceReviewFixture(t: ReturnType<typeof convexTest>) {
     return t.run(async (ctx) => {
@@ -106,13 +151,23 @@ async function createSourceReviewFixture(t: ReturnType<typeof convexTest>) {
             category: 'independent_analysis',
             createdAt: 1,
         });
-        await ctx.db.insert('sourceDecisions', {
+        const decisionId = await ctx.db.insert('sourceDecisions', {
             runId,
             corpusRevisionId,
             sourceId,
             decisionKey: 'initial-pending',
             decision: 'pending',
             occurredAt: 1,
+        });
+        await ctx.db.insert('sourceReviewItems', {
+            runId,
+            corpusRevisionId,
+            sourceId,
+            decision: 'pending',
+            decisionRank: 0,
+            sourceCreatedAt: 1,
+            latestDecisionId: decisionId,
+            decisionOccurredAt: 1,
         });
         return {
             userId,
@@ -135,7 +190,7 @@ test('owner appends source decisions while other visitors are rejected', async (
     });
 
     await expect(
-        other.query(listForReview, {
+        other.query(getReviewSummary, {
             runId: fixture.runId,
             corpusRevisionId: fixture.corpusRevisionId,
         }),
@@ -150,18 +205,30 @@ test('owner appends source decisions while other visitors are rejected', async (
         }),
     ).resolves.toEqual({ accepted: true });
     await expect(
-        owner.query(listForReview, {
+        owner.query(getReviewSummary, {
             runId: fixture.runId,
             corpusRevisionId: fixture.corpusRevisionId,
         }),
     ).resolves.toMatchObject({
         counts: { accepted: 1, rejected: 0, pending: 0 },
-        sources: [
+        total: 1,
+        candidateLimit: 48,
+    });
+    await expect(
+        owner.query(listForReviewPage, {
+            runId: fixture.runId,
+            corpusRevisionId: fixture.corpusRevisionId,
+            filter: 'accepted',
+            paginationOpts: { numItems: 12, cursor: null },
+        }),
+    ).resolves.toMatchObject({
+        page: [
             {
                 sourceId: fixture.sourceId,
                 decision: 'accepted',
             },
         ],
+        isDone: true,
     });
 });
 
@@ -179,6 +246,98 @@ test('rejects manual URL intake before network access for a non-owner', async ()
             url: 'https://127.0.0.1/private',
         }),
     ).rejects.toThrow('Unauthorized');
+});
+
+test('paginates the all view by pending, accepted, then rejected groups', async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createSourceReviewFixture(t);
+    const { acceptedSourceId, rejectedSourceId } = await t.run(async (ctx) => {
+        const addProjectedSource = async (
+            decision: 'accepted' | 'rejected',
+            suffix: string,
+        ) => {
+            const sourceId = await ctx.db.insert('sources', {
+                runId: fixture.runId,
+                canonicalUrl: `https://example.com/${suffix}`,
+                title: `${decision} source`,
+                origin: 'exa',
+                category: 'independent_analysis',
+                createdAt: 0,
+            });
+            const decisionId = await ctx.db.insert('sourceDecisions', {
+                runId: fixture.runId,
+                corpusRevisionId: fixture.corpusRevisionId,
+                sourceId,
+                decisionKey: `${decision}-${suffix}`,
+                decision,
+                occurredAt: 1,
+            });
+            await ctx.db.insert('sourceReviewItems', {
+                runId: fixture.runId,
+                corpusRevisionId: fixture.corpusRevisionId,
+                sourceId,
+                decision,
+                decisionRank: decision === 'accepted' ? 1 : 2,
+                sourceCreatedAt: 0,
+                latestDecisionId: decisionId,
+                decisionOccurredAt: 1,
+            });
+            return sourceId;
+        };
+        return {
+            acceptedSourceId: await addProjectedSource(
+                'accepted',
+                'accepted',
+            ),
+            rejectedSourceId: await addProjectedSource(
+                'rejected',
+                'rejected',
+            ),
+        };
+    });
+    const owner = t.withIdentity({
+        subject: `${fixture.userId}|source-owner`,
+    });
+
+    const first = await owner.query(listForReviewPage, {
+        runId: fixture.runId,
+        corpusRevisionId: fixture.corpusRevisionId,
+        filter: 'all',
+        paginationOpts: { numItems: 1, cursor: null },
+    });
+    const second = await owner.query(listForReviewPage, {
+        runId: fixture.runId,
+        corpusRevisionId: fixture.corpusRevisionId,
+        filter: 'all',
+        paginationOpts: { numItems: 1, cursor: first.continueCursor },
+    });
+    const third = await owner.query(listForReviewPage, {
+        runId: fixture.runId,
+        corpusRevisionId: fixture.corpusRevisionId,
+        filter: 'all',
+        paginationOpts: { numItems: 1, cursor: second.continueCursor },
+    });
+
+    expect(first.page[0]?.sourceId).toBe(fixture.sourceId);
+    expect(second.page[0]?.sourceId).toBe(acceptedSourceId);
+    expect(third.page[0]?.sourceId).toBe(rejectedSourceId);
+});
+
+test('rejects a manual URL before inspection when the dossier is at capacity', async () => {
+    process.env.SOURCE_CANDIDATE_LIMIT = '1';
+    const t = convexTest(schema, modules);
+    const fixture = await createSourceReviewFixture(t);
+    const owner = t.withIdentity({
+        subject: `${fixture.userId}|source-owner`,
+    });
+
+    await expect(
+        owner.action(addManualUrl, {
+            runId: fixture.runId,
+            corpusRevisionId: fixture.corpusRevisionId,
+            url: 'https://example.com/never-inspected',
+        }),
+    ).rejects.toThrow('source candidate limit');
 });
 
 test('does not resume source review while another owner run is running', async () => {
@@ -221,4 +380,69 @@ test('does not resume source review while another owner run is running', async (
     await expect(
         t.run((ctx) => ctx.db.get(fixture.corpusRevisionId)),
     ).resolves.toMatchObject({ status: 'draft' });
+});
+
+test('backfills the derived source review projection idempotently', async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createSourceReviewFixture(t);
+    const adminUserId = await t.run(async (ctx) => {
+        const existing = await ctx.db
+            .query('sourceReviewItems')
+            .withIndex('by_revision_and_source', (query) =>
+                query
+                    .eq('corpusRevisionId', fixture.corpusRevisionId)
+                    .eq('sourceId', fixture.sourceId),
+            )
+            .unique();
+        if (!existing) {
+            throw new Error('Fixture projection missing');
+        }
+        await ctx.db.delete(existing._id);
+        const adminUserId = await ctx.db.insert('users', {
+            isAnonymous: true,
+        });
+        const invitationId = await ctx.db.insert('invitations', {
+            slotKey: 'source-backfill-admin',
+            role: 'admin',
+            codeDigest: 'source-backfill-admin-digest',
+            status: 'claimed',
+            createdAt: 1,
+        });
+        await ctx.db.insert('visitors', {
+            authUserId: adminUserId,
+            invitationId,
+            role: 'admin',
+            status: 'active',
+            analysesReserved: 0,
+            admittedAt: 1,
+        });
+        return adminUserId;
+    });
+    const admin = t.withIdentity({
+        subject: `${adminUserId}|source-backfill`,
+    });
+    const args = { paginationOpts: { numItems: 10, cursor: null } };
+
+    await expect(
+        admin.mutation(backfillSourceReviewProjection, args),
+    ).resolves.toMatchObject({
+        page: [
+            {
+                revisionId: fixture.corpusRevisionId,
+                sourceTotal: 1,
+                projectionTotal: 1,
+            },
+        ],
+    });
+    await expect(
+        admin.mutation(backfillSourceReviewProjection, args),
+    ).resolves.toMatchObject({
+        page: [
+            {
+                revisionId: fixture.corpusRevisionId,
+                sourceTotal: 1,
+                projectionTotal: 1,
+            },
+        ],
+    });
 });

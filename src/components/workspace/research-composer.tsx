@@ -17,6 +17,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useRef, useState } from 'react';
 import { CompanyFaviconAvatar } from '@/components/company-favicon-avatar';
 import Icon from '@/components/icon';
+import { PaginationControls } from '@/components/pagination-controls';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -43,6 +44,7 @@ import {
 } from '@/components/workspace/coverage-preset-picker';
 import { useInvitationAccess } from '@/components/workspace/invitation-access-context';
 import { useAnonymousSession } from '@/hooks/use-anonymous-session';
+import { usePagination } from '@/hooks/use-pagination';
 import { useResponsive } from '@/hooks/use-responsive';
 import { companyLookupErrorMessage } from '@/lib/presentation/research-copy';
 import { cn } from '@/lib/utils';
@@ -64,6 +66,9 @@ const viewExitTransition = {
     duration: 0.14,
     ease: [0.32, 0.72, 0, 1] as const,
 };
+
+const COMPANY_SEARCH_PAGE_SIZE = 5;
+const COMPANY_SEARCH_RESULT_LIMIT = 40;
 
 export interface ResearchComposerProps {
     className?: string;
@@ -96,6 +101,17 @@ export function ResearchComposer({
     const [companyCandidates, setCompanyCandidates] = useState<
         Array<CompanyCandidate>
     >([]);
+    const [companySearchRevision, setCompanySearchRevision] = useState(0);
+    const {
+        page: companyPage,
+        pageCount: companyPageCount,
+        pageItems: visibleCompanyCandidates,
+        setPage: setCompanyPage,
+    } = usePagination({
+        items: companyCandidates,
+        pageSize: COMPANY_SEARCH_PAGE_SIZE,
+        resetKey: `${companyQuery}:${companySearchRevision}`,
+    });
     const { isMobile } = useResponsive();
     const [hasSearched, setHasSearched] = useState(false);
     const [view, setView] = useState<'compose' | 'confirm'>('compose');
@@ -130,6 +146,7 @@ export function ResearchComposer({
         setLaunchError(null);
         setIsSearching(true);
         setHasSearched(false);
+        setCompanySearchRevision((revision) => revision + 1);
 
         try {
             const results = await searchCompanies({ query });
@@ -168,6 +185,7 @@ export function ResearchComposer({
         setResolution(null);
         setCompanyQuery('');
         setCompanyCandidates([]);
+        setCompanySearchRevision((revision) => revision + 1);
         setHasSearched(false);
         setView('compose');
         setLookupError(null);
@@ -296,7 +314,7 @@ export function ResearchComposer({
                             <div className="flex items-center justify-between gap-3 border-t border-border/20 px-3 py-3">
                                 <div className="flex items-center gap-2 rounded-sm bg-secondary/30 p-1">
                                     <SmoothDropdwon
-                                        items={companyCandidates.map(
+                                        items={visibleCompanyCandidates.map(
                                             (candidate) => ({
                                                 id: `${candidate.cik}-${candidate.ticker}`,
                                                 label: `${candidate.legalName} ${candidate.ticker} ${candidate.exchange} CIK ${candidate.cik}`,
@@ -369,6 +387,26 @@ export function ResearchComposer({
                                                 }
                                                 sessionReady={isSessionReady}
                                             />
+                                        }
+                                        footer={
+                                            companyCandidates.length > 0 ? (
+                                                <CompanyPaginationFooter
+                                                    page={companyPage}
+                                                    pageCount={
+                                                        companyPageCount
+                                                    }
+                                                    resultCount={
+                                                        companyCandidates.length
+                                                    }
+                                                    disabled={
+                                                        isSearching ||
+                                                        selectingCik !== null
+                                                    }
+                                                    onPageChange={
+                                                        setCompanyPage
+                                                    }
+                                                />
+                                            ) : null
                                         }
                                     />
                                     <ToolbarIconButton
@@ -481,6 +519,41 @@ export function ResearchComposer({
                 onUrlsChange={setManualSourceUrls}
             />
         </>
+    );
+}
+
+function CompanyPaginationFooter({
+    page,
+    pageCount,
+    resultCount,
+    disabled,
+    onPageChange,
+}: {
+    page: number;
+    pageCount: number;
+    resultCount: number;
+    disabled: boolean;
+    onPageChange: (page: number) => void;
+}) {
+    const resultLabel =
+        resultCount === COMPANY_SEARCH_RESULT_LIMIT
+            ? `Top ${COMPANY_SEARCH_RESULT_LIMIT} matches`
+            : `${resultCount} ${resultCount === 1 ? 'match' : 'matches'}`;
+
+    return (
+        <div className="space-y-2 border-t border-border/60 pt-2">
+            <p className="px-1 text-xs text-muted-foreground">
+                {resultLabel}
+            </p>
+            <PaginationControls
+                page={page}
+                pageCount={pageCount}
+                onPageChange={onPageChange}
+                disabled={disabled}
+                ariaLabel="Company search result pages"
+                className="justify-start"
+            />
+        </div>
     );
 }
 

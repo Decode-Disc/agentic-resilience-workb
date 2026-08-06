@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { getFunctionName } from 'convex/server';
-import type { ComponentType } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
@@ -37,6 +37,7 @@ vi.mock('@/hooks/use-anonymous-session', () => ({
 }));
 
 import { ResearchComposer } from '@/components/workspace/research-composer';
+import { InvitationAccessProvider } from '@/components/workspace/invitation-access-context';
 import { Route } from '@/routes/workspace/start';
 
 const resolvedCompany = {
@@ -50,6 +51,12 @@ const resolvedCompany = {
     expiresAt: Date.now() + 60_000,
 };
 const companyCandidates = [resolvedCompany.company];
+
+function renderWithInvitationAccess(component: ReactNode) {
+    return render(
+        <InvitationAccessProvider>{component}</InvitationAccessProvider>,
+    );
+}
 
 async function searchAndSelectCompany(query = 'CCC') {
     fireEvent.change(
@@ -96,7 +103,7 @@ describe('ResearchComposer', () => {
     });
 
     it('selects the company picker layer only while it is open', () => {
-        render(<ResearchComposer />);
+        renderWithInvitationAccess(<ResearchComposer />);
 
         const picker = screen.getByTestId('smooth-dropdown-container');
         expect(picker.classList.contains('z-10')).toBe(false);
@@ -113,7 +120,7 @@ describe('ResearchComposer', () => {
     it('keeps the composer open until the user continues after selection', async () => {
         searchCompanies.mockResolvedValue(companyCandidates);
         preflight.mockResolvedValue(resolvedCompany);
-        render(<ResearchComposer />);
+        renderWithInvitationAccess(<ResearchComposer />);
 
         fireEvent.change(
             screen.getByRole('textbox', { name: /^Company search$/i }),
@@ -160,10 +167,38 @@ describe('ResearchComposer', () => {
         expect(confirmAndStart).not.toHaveBeenCalled();
     });
 
+    it('pages ranked company results without repeating the search action', async () => {
+        const rankedCandidates = Array.from({ length: 17 }, (_, index) => ({
+            legalName: `Ranked Company ${index + 1}`,
+            ticker: `R${index + 1}`,
+            exchange: 'NASDAQ',
+            cik: String(2_000_000 + index),
+        }));
+        searchCompanies.mockResolvedValue(rankedCandidates);
+        renderWithInvitationAccess(<ResearchComposer />);
+
+        fireEvent.change(
+            screen.getByRole('textbox', { name: /^Company search$/i }),
+            { target: { value: 'ranked' } },
+        );
+        fireEvent.click(screen.getByRole('button', { name: /^Search$/i }));
+
+        expect(await screen.findAllByRole('option')).toHaveLength(5);
+        fireEvent.click(screen.getByRole('button', { name: 'Page 2' }));
+
+        expect(
+            await screen.findByRole('option', {
+                name: /Ranked Company 6.*R6.*NASDAQ/i,
+            }),
+        ).toBeTruthy();
+        expect(screen.getAllByRole('option')).toHaveLength(5);
+        expect(searchCompanies).toHaveBeenCalledTimes(1);
+    });
+
     it('returns to the composer with the selected company shown as name and ticker once', async () => {
         searchCompanies.mockResolvedValue(companyCandidates);
         preflight.mockResolvedValue(resolvedCompany);
-        render(<ResearchComposer />);
+        renderWithInvitationAccess(<ResearchComposer />);
 
         await searchAndSelectCompany();
         fireEvent.click(screen.getByRole('button', { name: /^Back$/i }));
@@ -193,7 +228,7 @@ describe('ResearchComposer', () => {
             runId: 'run-42',
             remainingAnalyses: 2,
         });
-        render(<ResearchComposer />);
+        renderWithInvitationAccess(<ResearchComposer />);
 
         await searchAndSelectCompany('CCCS');
 
@@ -228,7 +263,7 @@ describe('ResearchComposer', () => {
             runId: 'run-43',
             remainingAnalyses: 1,
         });
-        render(<ResearchComposer />);
+        renderWithInvitationAccess(<ResearchComposer />);
 
         fireEvent.change(screen.getByLabelText(/Research angle/i), {
             target: { value: 'Test workflow control claims.' },
@@ -258,7 +293,7 @@ describe('ResearchComposer', () => {
             runId: 'run-with-references',
             remainingAnalyses: 1,
         });
-        render(<ResearchComposer />);
+        renderWithInvitationAccess(<ResearchComposer />);
 
         fireEvent.click(
             screen.getByRole('button', { name: /Attach references/i }),
@@ -272,7 +307,7 @@ describe('ResearchComposer', () => {
         fireEvent.change(screen.getByLabelText(/Public source link/i), {
             target: { value: 'http://example.com/private-report' },
         });
-        fireEvent.click(screen.getByRole('button', { name: /Add source/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^Add$/i }));
         expect((await screen.findByRole('alert')).textContent).toMatch(
             /beginning with https:\/\//i,
         );
@@ -280,7 +315,7 @@ describe('ResearchComposer', () => {
         fireEvent.change(screen.getByLabelText(/Public source link/i), {
             target: { value: 'https://example.com/public-report' },
         });
-        fireEvent.click(screen.getByRole('button', { name: /Add source/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^Add$/i }));
         expect(
             screen.getByText('https://example.com/public-report'),
         ).toBeTruthy();
@@ -288,7 +323,7 @@ describe('ResearchComposer', () => {
         fireEvent.change(screen.getByLabelText(/Public source link/i), {
             target: { value: 'https://example.com/investor-update' },
         });
-        fireEvent.click(screen.getByRole('button', { name: /Add source/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^Add$/i }));
         expect(
             screen.getByText('https://example.com/investor-update'),
         ).toBeTruthy();
@@ -328,7 +363,7 @@ describe('ResearchComposer', () => {
             runId: 'run-44',
             remainingAnalyses: 2,
         });
-        render(<ResearchComposer />);
+        renderWithInvitationAccess(<ResearchComposer />);
 
         await searchAndSelectCompany('CCCS');
         fireEvent.click(
@@ -368,7 +403,7 @@ describe('ResearchComposer', () => {
                 '[CONVEX A(companyResolution:search)] Server Error Uncaught Error: SEC request failed at searchCompaniesWithResolver Called by client',
             ),
         );
-        render(<ResearchComposer />);
+        renderWithInvitationAccess(<ResearchComposer />);
 
         fireEvent.change(
             screen.getByRole('textbox', { name: /^Company search$/i }),
@@ -394,7 +429,7 @@ describe('ResearchComposer', () => {
 describe('StartAnalysisRoute', () => {
     it('preserves the established dossier composition around live launch', () => {
         const Component = Route.options.component as ComponentType;
-        render(<Component />);
+        renderWithInvitationAccess(<Component />);
 
         expect(
             screen.getByRole('heading', { name: /Start a research dossier/i }),

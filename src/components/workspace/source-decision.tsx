@@ -82,6 +82,19 @@ export const sourceDecisionDefinitions = [
     sourceDecisionDefinitionsByDecision.pending,
 ] as const;
 
+const sourceReviewQueueRank: Record<SourceDecision, number> = {
+    pending: 0,
+    accepted: 1,
+    rejected: 2,
+};
+
+export function compareSourceReviewDecisions(
+    left: SourceDecision,
+    right: SourceDecision,
+): number {
+    return sourceReviewQueueRank[left] - sourceReviewQueueRank[right];
+}
+
 export function getSourceDecisionDefinition(
     decision: SourceDecision,
 ): SourceDecisionDefinition {

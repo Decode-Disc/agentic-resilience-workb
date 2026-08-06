@@ -29,6 +29,30 @@ describe('validatePublicSourceUrl', () => {
 });
 
 describe('AddSourceDialog', () => {
+    test('explains when the dossier source review scope is full', async () => {
+        render(
+            <AddSourceDialog
+                open={true}
+                onOpenChange={vi.fn()}
+                onAdd={vi.fn(async () => {
+                    throw new Error(
+                        'This research dossier has reached its source candidate limit',
+                    );
+                })}
+            />,
+        );
+
+        fireEvent.change(screen.getByLabelText(/Public source link/i), {
+            target: { value: 'https://example.com/report' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /^Add$/i }));
+
+        expect(
+            await screen.findByText(/reached its source review limit/i),
+        ).toBeTruthy();
+        expect(screen.queryByText(/candidate limit/i)).toBeNull();
+    });
+
     test('renders trigger and opens dialog when trigger is clicked', async () => {
         render(
             <AddSourceDialog
@@ -71,7 +95,7 @@ describe('AddSourceDialog', () => {
         // Tooltip message explaining prototype limitation
         expect(
             await screen.findByText(
-                /File upload is not supported in this prototype\. Only public source links \(HTTPS\) are supported\./i,
+                /File upload is not supported in this prototype\. Add only public source links\./i,
             ),
         ).toBeTruthy();
     });
@@ -92,7 +116,7 @@ describe('AddSourceDialog', () => {
             target: { value: 'https://investors.company.com/q4-report' },
         });
 
-        const submitBtn = screen.getByRole('button', { name: /^Add source$/i });
+        const submitBtn = screen.getByRole('button', { name: /^Add$/i });
         fireEvent.click(submitBtn);
 
         await waitFor(() => {
@@ -128,7 +152,7 @@ describe('AddSourceDialog', () => {
             target: { value: 'https://company.example/report' },
         });
 
-        fireEvent.click(screen.getByRole('button', { name: /^Add source$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^Add$/i }));
 
         expect(
             await screen.findByText(

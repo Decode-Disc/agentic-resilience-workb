@@ -129,77 +129,27 @@ Keep domain rules out of UI components. Keep provider-specific types and model n
 
 ### Implementation Planning and Scope Fidelity
 
-- Use the project `implementation-plan` skill whenever creating, revising, or
-  reviewing a multi-step implementation plan. That skill extends the principal
-  `writing-plans` skill with this repository's product, UI-preservation,
-  provider-safety, and verification contracts. If the principal skill is not
-  available, report the missing dependency instead of silently inventing a
-  substitute process.
-- Planning and implementation are separate authorizations. A request to
-  diagnose, brainstorm, review, or revise a plan does not authorize production
-  code, dependency, schema, environment, deployment, or data changes.
-- Before planning changes to an existing feature, reconstruct the current
-  behavior from the working tree, routes, tests, browser state, and relevant
-  history. Classify each affected surface or contract as `preserve`, `modify`,
-  `replace`, or `remove`, and provide evidence for every item not marked
-  `preserve`.
-- Words such as `connect`, `integrate`, `refactor`, `reuse`, or `make real` do
-  not authorize a redesign, structural rewrite, deletion of an affordance, or
-  replacement of an established interaction. Material product or visual
-  changes require an explicit user decision before they enter a plan.
-- Treat user-provided components, screenshots, prototypes, code examples, and
-  named visual references as acceptance evidence. Preserve their defining
-  structure, states, and interactions unless the user explicitly approves a
-  deviation.
-- Do not turn an implementation assumption into a test or documented product
-  requirement. If a requirement is ambiguous, surface the decision before
-  encoding it. When implementation evidence invalidates a plan, stop and revise
-  the plan and authoritative documentation before continuing.
-- Keep examples resilient to external drift. Persist and test stable identity
-  keys such as SEC CIK; treat ticker, company name, provider availability,
-  model identifiers, pricing, and returned metadata as mutable unless a
-  deterministic fixture owns the value.
+- Use the project `implementation-plan` skill whenever creating, revising, or reviewing a multi-step implementation plan. That skill extends the principal `writing-plans` skill with this repository's product, UI-preservation, provider-safety, and verification contracts.
+- Planning and implementation are separate authorizations. A request to diagnose, brainstorm, review, or revise a plan does not authorize production code, dependency, schema, environment, deployment, or data changes.
+- Before planning changes to an existing feature, reconstruct the current behavior from the working tree, routes, tests, browser state, and history. Classify each affected surface or contract as `preserve`, `modify`, `replace`, or `remove`, and provide evidence for every item not marked `preserve`.
+- Words such as `connect`, `integrate`, `refactor`, `reuse`, or `make real` do not authorize a redesign, structural rewrite, deletion of an affordance, or replacement of an established interaction. Material product or visual changes require an explicit user decision before they enter a plan.
+- Do not turn an implementation assumption into a test or documented product requirement. If a requirement is ambiguous, surface the decision before encoding it. When implementation evidence invalidates a plan, stop and revise the plan and authoritative documentation before continuing.
+- Keep examples resilient to external drift. Persist and test stable identity keys such as SEC CIK; treat ticker, company name, provider availability, model identifiers, pricing, and returned metadata as mutable unless a deterministic fixture owns the value.
 
 ### Existing-Surface Preservation
 
-- Existing user-authored UI is the baseline, not disposable scaffolding. Add
-  the required behavior behind or within it. Do not replace a page, shell,
-  navigation pattern, composer, card composition, or motion language merely
-  because a simpler implementation is available.
-- Preserve established layout hierarchy, responsive behavior, visual
-  primitives, interaction states, keyboard behavior, motion, and loading
-  silhouettes. For changed user-facing surfaces, capture a pre-change browser
-  baseline and verify the same surface after the change at desktop and mobile
-  sizes.
-- Do not remove a useful affordance because one possible transport is outside
-  the MVP. Separate the supported intent from the unsupported mechanism. For
-  example, public HTTPS references remain valid even though local file upload
-  is excluded.
-- Shared UI primitives remain neutral and configurable. A stacking, sizing,
-  copy, motion, or styling requirement belonging to one consumer must be
-  applied by that consumer unless the behavior is a documented shared
-  contract. Never introduce a global primitive default solely to repair one
-  screen.
-- A skeleton must preserve the geometry and semantic regions of the loaded
-  component. Rendering a generic rectangle for a distinctive card, matrix, or
-  review surface is not an acceptable loading state.
+- Existing user-authored UI is the baseline, not disposable scaffolding. Add the required behavior behind or within it. Do not replace a page, shell, navigation pattern, composer, card composition, or motion language merely because a simpler implementation is available.
+- Preserve established layout hierarchy, responsive behavior, visual primitives, interaction states, keyboard behavior, motion, and loading silhouettes. For changed user-facing surfaces, capture a pre-change browser baseline and verify the same surface after the change at desktop and mobile sizes.
+- Do not remove a useful affordance because one possible transport is outside the MVP. Separate the supported intent from the unsupported mechanism. For example, public HTTPS references remain valid even though local file upload is excluded.
+- Shared UI primitives remain neutral and configurable. A stacking, sizing, copy, motion, or styling requirement belonging to one consumer must be applied by that consumer unless the behavior is a documented shared contract. Never introduce a global primitive default solely to repair one screen.
+- A skeleton must preserve the geometry and semantic regions of the loaded component. Rendering a generic rectangle for a distinctive card, matrix, or review surface is not an acceptable loading state.
 
 ### Provider and Durable-Workflow Planning
 
-- Every planned external-I/O boundary must specify authorization before I/O,
-  validation, resource limits, timeout, bounded retry, idempotency key,
-  provider-call telemetry, cancellation behavior, and the typed outcome for
-  missing configuration or partial failure.
-- For URL retrieval, require authorization before DNS resolution, validation of
-  every redirect, and connection to the public address that was validated so a
-  later DNS resolution cannot redirect the request into a private network.
-- For retryable or durable work, bind each attempt to the active run, workflow
-  version, execution generation, corpus revision, step, and attempt. Check the
-  active generation before the external call and again before persistence;
-  late or cancelled results cannot advance state or trigger another paid call.
-- Any resume that can make work `running` must claim the visitor's execution
-  slot atomically. Provider absence or disabled paid work is an explicit typed
-  blocked or reviewable state, never a silent empty success.
+- Every planned external-I/O boundary must specify authorization before I/O, validation, resource limits, timeout, bounded retry, idempotency key, provider-call telemetry, cancellation behavior, and the typed outcome for missing configuration or partial failure.
+- For URL retrieval, require authorization before DNS resolution, validation of every redirect, and connection to the public address that was validated so a later DNS resolution cannot redirect the request into a private network.
+- For retryable or durable work, bind each attempt to the active run, workflow version, execution generation, corpus revision, step, and attempt. Check the active generation before the external call and again before persistence; late or cancelled results cannot advance state or trigger another paid call.
+- Any resume that can make work `running` must claim the visitor's execution slot atomically. Provider absence or disabled paid work is an explicit typed blocked or reviewable state, never a silent empty success.
 
 Protect every exposed server operation with the authorization, validation, idempotency, resource, and security controls appropriate to that operation. Never rely on disabled UI controls for enforcement.
 

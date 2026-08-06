@@ -1,8 +1,14 @@
 import { getAuthUserId } from '@convex-dev/auth/server';
+import {
+    paginationOptsValidator,
+    paginationResultValidator,
+} from 'convex/server';
 import { v } from 'convex/values';
 
-import { mutation, query } from './_generated/server';
 import type { MutationCtx, QueryCtx } from './_generated/server';
+import { mutation, query } from './_generated/server';
+import { upsertSourceReviewItem } from './domain/sourceReviewProjection';
+import { sourceCandidateLimit } from './resourceLimits';
 
 async function requireAdmin(ctx: QueryCtx | MutationCtx) {
     const authUserId = await getAuthUserId(ctx);
@@ -142,5 +148,90 @@ export const setPaidWorkEnabled = mutation({
             occurredAt: now,
         });
         return { enabled: args.enabled };
+    },
+});
+
+const sourceReviewBackfillResultValidator = v.object({
+    revisionId: v.id('corpusRevisions'),
+    sourceTotal: v.number(),
+    projectionTotal: v.number(),
+});
+
+export const backfillSourceReviewProjection = mutation({
+    args: { paginationOpts: paginationOptsValidator },
+    returns: paginationResultValidator(sourceReviewBackfillResultValidator),
+    handler: async (ctx, args) => {
+        await requireAdmin(ctx);
+        if (
+            args.paginationOpts.numItems < 1 ||
+            args.paginationOpts.numItems > 10
+        ) {
+            throw new Error('Backfill page size must be between 1 and 10');
+        }
+        const revisions = await ctx.db
+            .query('corpusRevisions')
+            .order('asc')
+            .paginate(args.paginationOpts);
+        const limit = sourceCandidateLimit();
+        const page = [];
+
+        for (const revision of revisions.page) {
+            const sources = await ctx.db
+                .query('sources')
+                .withIndex('by_run_and_url', (builder) =>
+                    builder.eq('runId', revision.runId),
+                )
+                .take(limit + 1);
+            if (sources.length > limit) {
+                throw new Error(
+                    `Corpus revision ${revision._id} exceeds the source candidate limit`,
+                );
+            }
+            for (const source of sources) {
+                const latestDecision = await ctx.db
+                    .query('sourceDecisions')
+                    .withIndex(
+                        'by_revision_source_and_occurred_at',
+                        (builder) =>
+                            builder
+                                .eq('corpusRevisionId', revision._id)
+                                .eq('sourceId', source._id),
+                    )
+                    .order('desc')
+                    .first();
+                if (!latestDecision) {
+                    throw new Error(
+                        `Corpus revision ${revision._id} has a source without a decision`,
+                    );
+                }
+                await upsertSourceReviewItem(ctx, {
+                    runId: revision.runId,
+                    corpusRevisionId: revision._id,
+                    sourceId: source._id,
+                    decision: latestDecision.decision,
+                    sourceCreatedAt: source.createdAt,
+                    latestDecisionId: latestDecision._id,
+                    decisionOccurredAt: latestDecision.occurredAt,
+                    reason: latestDecision.reason,
+                });
+            }
+            const projection = await ctx.db
+                .query('sourceReviewItems')
+                .withIndex('by_revision_and_queue', (builder) =>
+                    builder.eq('corpusRevisionId', revision._id),
+                )
+                .take(limit + 1);
+            if (projection.length !== sources.length) {
+                throw new Error(
+                    `Corpus revision ${revision._id} projection total does not match its sources`,
+                );
+            }
+            page.push({
+                revisionId: revision._id,
+                sourceTotal: sources.length,
+                projectionTotal: projection.length,
+            });
+        }
+        return { ...revisions, page };
     },
 });

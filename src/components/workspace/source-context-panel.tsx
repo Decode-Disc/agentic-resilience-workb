@@ -17,8 +17,8 @@ import {
 } from '@/lib/presentation/research-copy';
 
 type SourceContext = FunctionReturnType<
-    typeof api.sources.listForReview
->['sources'][number];
+    typeof api.sources.listForReviewPage
+>['page'][number];
 
 /**
  * Selected source detail panel: an embedded best-effort preview by default,

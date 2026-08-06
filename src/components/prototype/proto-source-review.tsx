@@ -1,18 +1,19 @@
 import type { api } from '@convex/_generated/api';
 import type { Id } from '@convex/_generated/dataModel';
-import { useState } from 'react';
+import { type ComponentProps, useState } from 'react';
 
-import type { SourceReview as SourceReviewComponent } from '@/components/workspace/source-review';
 import { SourceReview } from '@/components/workspace/source-review';
-import type { FunctionArgs, FunctionReturnType } from 'convex/server';
+import type { FunctionArgs } from 'convex/server';
 
-type Projection = FunctionReturnType<typeof api.sources.listForReview>;
+type Projection = ComponentProps<typeof SourceReview>['review'];
 type Decision = FunctionArgs<typeof api.sources.decide>['decision'];
 
 const FIXTURE_REVIEW: Projection = {
     revision: 1,
     status: 'draft',
     counts: { accepted: 2, rejected: 1, pending: 2 },
+    total: 5,
+    candidateLimit: 48,
     sources: [
         {
             sourceId: 'src-1' as Id<'sources'>,
@@ -76,9 +77,10 @@ const FIXTURE_REVIEW: Projection = {
 export function ProtoSourceReview() {
     const [review, setReview] = useState(FIXTURE_REVIEW);
 
-    const onDecide: React.ComponentProps<
-        typeof SourceReviewComponent
-    >['onDecide'] = (sourceId, decision: Decision) => {
+    const onDecide: ComponentProps<typeof SourceReview>['onDecide'] = (
+        sourceId,
+        decision: Decision,
+    ) => {
         setReview((current) => {
             const nextSources = current.sources.map((s) =>
                 s.sourceId === sourceId ? { ...s, decision } : s,

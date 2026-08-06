@@ -185,6 +185,14 @@ remain `pending`, but it is excluded from all downstream work. Accepting a
 pending source or an external counter-evidence lead later creates a new corpus
 revision and another durable checkpoint.
 
+`SourceDecision` remains the append-only authority for analyst choices.
+`sourceReviewItems` is a mutable, derived read model for one source and corpus
+revision: insertions and decisions update it in the same transaction, while an
+idempotent admin backfill reconstructs it from source and decision history.
+Review summaries use bounded indexed reads, collection pages use native Convex
+cursor pagination, and approval checks the first indexed accepted projection.
+The projection must never replace, rewrite, or relax the decision history.
+
 Analysts may add public HTTPS URLs only. Treat them as proposed sources and
 apply server-side URL canonicalization, DNS and redirect validation, SSRF
 protection, bounded timeout/content type/size/decompression, and the normal
@@ -333,6 +341,13 @@ Neither CLIProxyAPI production readiness nor precise dossier economics is a prer
 - Consume a launch reservation once. Retries and resumes consume no additional analysis; abandoned or voluntarily deleted analyses remain counted.
 - Require an append-only audited reason for administrative quota restoration.
 - Bound workflow retries and research breadth through configuration, including source, document-page, and provider-call limits where appropriate.
+- Set `COMPANY_SEARCH_RESULT_LIMIT` to the maximum ranked SEC candidate set
+  returned by one search (40 for the prototype), then paginate that immutable
+  result locally in the composer. Set `SOURCE_CANDIDATE_LIMIT` to the explicit
+  per-dossier candidate scope (48 for the prototype). Enforce source capacity
+  before external URL inspection or discovery, again inside persistence, and
+  stop later provider calls when no capacity remains. Never truncate an
+  existing dossier during migration.
 - Use provider-side spending controls when available and provide an emergency server-side switch that prevents new paid work.
 - Record provider-reported usage, latency, and cost when available.
 - Provide an admin-only operational projection for running workflows,

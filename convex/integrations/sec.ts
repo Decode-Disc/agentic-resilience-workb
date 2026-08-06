@@ -2,6 +2,7 @@ import type {
     SecCompanyMatch,
     SecCompanyResolver,
 } from '@convex/companyResolution';
+import { companySearchResultLimit } from '@convex/resourceLimits';
 import Fuse from 'fuse.js';
 
 type ProviderAttempt = {
@@ -25,7 +26,6 @@ type SecCompanyResolverDependencies = {
 };
 
 const MAX_SEC_ATTEMPTS = 2;
-const MAX_COMPANY_SEARCH_RESULTS = 8;
 const MAX_FUZZY_COMPANY_SCORE = 0.45;
 
 class SecRetryableError extends Error {
@@ -323,6 +323,7 @@ function parseEvidenceSnapshot(value: unknown): SecEvidenceSnapshot {
 export function createSecCompanyResolver(
     dependencies: SecCompanyResolverDependencies,
 ): SecCompanyEvidenceResolver {
+    const resultLimit = companySearchResultLimit();
     async function requestJson(
         operation: ProviderAttempt['operation'],
         url: string,
@@ -429,7 +430,7 @@ export function createSecCompanyResolver(
                 );
             if (deterministicMatches.length > 0) {
                 return deterministicMatches
-                    .slice(0, MAX_COMPANY_SEARCH_RESULTS)
+                    .slice(0, resultLimit)
                     .map(({ company }) => ({
                         ...company,
                         investorRelationsUrl: undefined,
@@ -449,7 +450,7 @@ export function createSecCompanyResolver(
                 tokenMatch: 'all',
             })
                 .search(normalizedQuery, {
-                    limit: MAX_COMPANY_SEARCH_RESULTS,
+                    limit: resultLimit,
                 })
                 .filter(
                     ({ score }) =>

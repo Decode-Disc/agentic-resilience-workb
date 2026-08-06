@@ -42,6 +42,7 @@ export interface SmoothDropdownProps {
     items: SmoothDropdownItem[];
     trigger?: ReactNode;
     header?: ReactNode;
+    footer?: ReactNode;
     openPosition?: 'bottom' | 'top';
     openFrom?: 'left' | 'right';
     portalContainer?: Element | DocumentFragment | null;
@@ -74,6 +75,7 @@ export function SmoothDropdwon({
     items,
     trigger,
     header,
+    footer,
     openPosition = 'bottom',
     openFrom = 'left',
     portalContainer = null,
@@ -141,7 +143,7 @@ export function SmoothDropdwon({
         return () => {
             observer.disconnect();
         };
-    }, [header, isOpen, items.length]);
+    }, [footer, header, isOpen, items.length]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -435,6 +437,7 @@ export function SmoothDropdwon({
                             );
                         })}
                     </div>
+                    {footer ? <div className="mt-2">{footer}</div> : null}
                 </motion.div>
             </div>
         </>

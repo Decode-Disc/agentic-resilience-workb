@@ -243,7 +243,16 @@ test("persists validated launch references as pending sources in corpus revision
                 ),
             )
             .collect();
-        return { sources, decisions };
+        const reviewItems = await ctx.db
+            .query("sourceReviewItems")
+            .withIndex("by_revision_and_queue", (query) =>
+                query.eq(
+                    "corpusRevisionId",
+                    run?.activeCorpusRevisionId as Id<"corpusRevisions">,
+                ),
+            )
+            .collect();
+        return { sources, decisions, reviewItems };
     });
 
     expect(persisted.sources).toEqual([
@@ -258,6 +267,13 @@ test("persists validated launch references as pending sources in corpus revision
         expect.objectContaining({
             runId,
             decision: "pending",
+        }),
+    ]);
+    expect(persisted.reviewItems).toEqual([
+        expect.objectContaining({
+            runId,
+            decision: "pending",
+            decisionRank: 0,
         }),
     ]);
 });
