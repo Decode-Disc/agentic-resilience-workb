@@ -39,7 +39,7 @@ export function RunRouteComponent({
     const decide = useMutation(api.sources.decide);
     const approve = useMutation(api.sources.approveCorpusRevision);
     const decideSufficiency = useMutation(api.evidenceSufficiency.decide);
-    const addManualUrl = useAction(api.sourceActions.addManualUrl);
+    const submitManualUrl = useAction(api.sourceActions.submitManualUrl);
     const [error, setError] = useState<string | null>(null);
     const routedToSourceReview = useRef(false);
 
@@ -107,7 +107,15 @@ export function RunRouteComponent({
                 "The source set is not ready yet. Refresh and try again.",
             );
         }
-        await addManualUrl({ runId, corpusRevisionId, url });
+        await submitManualUrl({
+            requestKey: crypto.randomUUID(),
+            url,
+            target: {
+                kind: "run",
+                runId,
+                corpusRevisionId,
+            },
+        });
     }
 
     return (

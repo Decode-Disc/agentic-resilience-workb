@@ -17,6 +17,24 @@ function errorText(error: unknown): string {
     return error instanceof Error ? error.message : "";
 }
 
+function manualSourceErrorCode(error: unknown): string | null {
+    if (typeof error !== "object" || error === null || !("data" in error)) {
+        return null;
+    }
+    const data = error.data;
+    if (
+        typeof data !== "object" ||
+        data === null ||
+        !("area" in data) ||
+        data.area !== "manual_source_intake" ||
+        !("code" in data) ||
+        typeof data.code !== "string"
+    ) {
+        return null;
+    }
+    return data.code;
+}
+
 /**
  * Converts access-code failures into the limited information a visitor needs.
  */
@@ -41,6 +59,60 @@ export function companyLookupErrorMessage(error: unknown): string {
 
 /** Translates source intake failures without exposing backend configuration. */
 export function sourceAddErrorMessage(error: unknown): string {
+    const code = manualSourceErrorCode(error);
+    if (code === "duplicate_source") {
+        return "This source is already in this dossier.";
+    }
+    if (code === "candidate_limit") {
+        return "This dossier has reached its source review limit. Review the existing candidates before continuing.";
+    }
+    if (code === "intake_rate_limited") {
+        return "Too many sources were added at once. Wait a moment before trying again.";
+    }
+    if (code === "preparation_expired") {
+        return "This reference expired. Add this source again before starting the dossier.";
+    }
+    if (code === "dossier_not_accepting_sources") {
+        return "This dossier isn't accepting new sources at this stage.";
+    }
+    if (code === "stale_execution") {
+        return "The dossier changed while this source was being added. Refresh and try again.";
+    }
+    if (code === "not_authenticated" || code === "not_authorized") {
+        return "Your access to this dossier could not be verified. Refresh and try again.";
+    }
+    if (
+        code === "invalid_url" ||
+        code === "https_required" ||
+        code === "credentials_not_allowed" ||
+        code === "custom_port_not_allowed" ||
+        code === "non_public_destination"
+    ) {
+        return "Enter a valid public source link beginning with https://.";
+    }
+    if (code === "not_found" || code === "dns_failed") {
+        return "We couldn't find that public source. Check the link and try again.";
+    }
+    if (code === "access_blocked") {
+        return "That source does not allow public access. Try another public link.";
+    }
+    if (code === "unsupported_content_type") {
+        return "That link is not a supported public page or PDF.";
+    }
+    if (code === "response_too_large") {
+        return "That source is too large to inspect in this prototype.";
+    }
+    if (code === "redirect_limit") {
+        return "That link redirects too many times. Use the final public source link.";
+    }
+    if (
+        code === "request_timeout" ||
+        code === "connection_failed" ||
+        code === "upstream_rate_limited" ||
+        code === "upstream_unavailable"
+    ) {
+        return "That source is temporarily unavailable. Try again.";
+    }
     if (errorText(error).includes("source candidate limit")) {
         return "This dossier has reached its source review limit. Review the existing candidates before continuing.";
     }

@@ -25,6 +25,11 @@ export function RunProgress({
     run: RunProjection;
     events: RunEvents;
 }) {
+    const canAddManualSource = [
+        "awaiting_evidence_sufficiency_review",
+        "awaiting_source_review",
+    ].includes(run.lifecycleState);
+
     return (
         <section className="space-y-5" aria-label="Research progress">
             <div className="surface-panel rounded-xl p-5">
@@ -52,9 +57,11 @@ export function RunProgress({
                         Some sources could not be retrieved
                     </h3>
                     <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                        Independent web discovery is unavailable. Filing sources
-                        remain available, and you can add a public source
-                        manually.
+                        {canAddManualSource
+                            ? "Independent web discovery is unavailable. Filing sources remain available, and you can add a public source manually."
+                            : run.lifecycleState === "corpus_approved"
+                                ? "Independent web discovery was unavailable. Filing sources remain available in this approved source set."
+                                : "Independent web discovery is unavailable. Filing sources remain available for the source review checkpoint."}
                     </p>
                 </div>
             ) : null}

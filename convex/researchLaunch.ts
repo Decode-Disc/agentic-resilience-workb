@@ -1,105 +1,26 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { action, internalMutation, internalQuery } from "./_generated/server";
-import { coveragePresetValidator } from "./domain/validators";
+import { action, internalMutation } from "./_generated/server";
+import { manualSourceIntakeError } from "./domain/manualSourceIntake";
 import { assertSourceCandidateRequestFits } from "./domain/sourceCandidateCapacity";
-import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
+import { coveragePresetValidator } from "./domain/validators";
 import { sourceCandidateLimit } from "./resourceLimits";
+import { insertPendingManualSource } from "./sources";
 import { workflow } from "./workflow";
 
 const MAX_ANALYSES_PER_VISITOR = 3;
-const preparedManualSourceValidator = v.object({
-    canonicalUrl: v.string(),
-    title: v.string(),
-    providerReference: v.string(),
-});
-
-export const authorizeLaunchPreparation = internalQuery({
-    args: {
-        preflightId: v.id("companyPreflights"),
-        idempotencyKey: v.string(),
-    },
-    returns: v.object({ shouldPrepareManualSources: v.boolean() }),
-    handler: async (ctx, args) => {
-        const authUserId = await getAuthUserId(ctx);
-        if (!authUserId) {
-            throw new Error("Not authenticated");
-        }
-        const visitor = await ctx.db
-            .query("visitors")
-            .withIndex("by_auth_user_id", (query) =>
-                query.eq("authUserId", authUserId),
-            )
-            .unique();
-        if (visitor?.status !== "active") {
-            throw new Error("Unauthorized");
-        }
-        const idempotencyKey = args.idempotencyKey.trim();
-        if (idempotencyKey.length === 0 || idempotencyKey.length > 128) {
-            throw new Error("Invalid idempotency key");
-        }
-        const existing = await ctx.db
-            .query("researchRuns")
-            .withIndex("by_owner_and_reservation_key", (query) =>
-                query
-                    .eq("ownerVisitorId", visitor._id)
-                    .eq("reservationKey", idempotencyKey),
-            )
-            .unique();
-        if (existing) {
-            if (existing.companyPreflightId !== args.preflightId) {
-                throw new Error(
-                    "Idempotency key belongs to another company preflight",
-                );
-            }
-            return { shouldPrepareManualSources: false };
-        }
-        const running = await ctx.db
-            .query("researchRuns")
-            .withIndex("by_owner_and_execution_status", (query) =>
-                query
-                    .eq("ownerVisitorId", visitor._id)
-                    .eq("executionStatus", "running"),
-            )
-            .first();
-        if (running) {
-            throw new Error("A research workflow is already running");
-        }
-        if (visitor.analysesReserved >= MAX_ANALYSES_PER_VISITOR) {
-            throw new Error("Analysis limit reached");
-        }
-        const preflight = await ctx.db.get(args.preflightId);
-        const belongsToSession =
-            preflight?.ownerAuthUserId !== undefined
-                ? preflight.ownerAuthUserId === authUserId
-                : preflight?.ownerVisitorId === visitor._id;
-        if (
-            !preflight ||
-            !belongsToSession ||
-            preflight.status !== "resolved"
-        ) {
-            throw new Error("Company preflight is not available");
-        }
-        if (preflight.expiresAt <= Date.now()) {
-            throw new Error("Company preflight has expired");
-        }
-        if (!(await ctx.db.get(preflight.companyId))) {
-            throw new Error("Resolved company was not found");
-        }
-        return { shouldPrepareManualSources: true };
-    },
-});
-
 export const confirmAndStartReserved = internalMutation({
     args: {
         preflightId: v.id("companyPreflights"),
         idempotencyKey: v.string(),
         coveragePreset: coveragePresetValidator,
         researchAngle: v.optional(v.string()),
-        manualSources: v.optional(v.array(preparedManualSourceValidator)),
+        manualSourcePreparationIds: v.optional(
+            v.array(v.id("manualSourcePreparations")),
+        ),
     },
     returns: v.object({
         runId: v.id("researchRuns"),
@@ -129,7 +50,7 @@ export const confirmAndStartReserved = internalMutation({
             throw new Error("Research angle cannot exceed 500 characters");
         }
         assertSourceCandidateRequestFits(
-            args.manualSources?.length ?? 0,
+            args.manualSourcePreparationIds?.length ?? 0,
             sourceCandidateLimit(),
         );
 
@@ -154,6 +75,40 @@ export const confirmAndStartReserved = internalMutation({
             };
         }
 
+        const now = Date.now();
+        const manualSources = new Map<
+            string,
+            {
+                preparationId: Id<"manualSourcePreparations">;
+                canonicalUrl: string;
+                title: string;
+                providerReference: string;
+            }
+        >();
+        for (const preparationId of args.manualSourcePreparationIds ?? []) {
+            const preparation = await ctx.db.get(preparationId);
+            if (!preparation || preparation.ownerAuthUserId !== authUserId) {
+                throw new ConvexError(
+                    manualSourceIntakeError("not_authorized", {
+                        preparationId,
+                    }).data,
+                );
+            }
+            if (preparation.consumedAt || preparation.expiresAt <= now) {
+                throw new ConvexError(
+                    manualSourceIntakeError("preparation_expired", {
+                        preparationId,
+                    }).data,
+                );
+            }
+            manualSources.set(preparation.canonicalUrl, {
+                preparationId,
+                canonicalUrl: preparation.canonicalUrl,
+                title: preparation.title,
+                providerReference: preparation.providerReference,
+            });
+        }
+
         const running = await ctx.db
             .query("researchRuns")
             .withIndex("by_owner_and_execution_status", (query) =>
@@ -170,7 +125,6 @@ export const confirmAndStartReserved = internalMutation({
         }
 
         const preflight = await ctx.db.get(args.preflightId);
-        const now = Date.now();
         const preflightBelongsToSession =
             preflight?.ownerAuthUserId !== undefined
                 ? preflight.ownerAuthUserId === authUserId
@@ -223,40 +177,18 @@ export const confirmAndStartReserved = internalMutation({
             status: "draft",
             createdAt: now,
         });
-        for (const manualSource of args.manualSources ?? []) {
-            const sourceId = await ctx.db.insert("sources", {
+        for (const manualSource of manualSources.values()) {
+            await insertPendingManualSource(ctx, {
                 runId,
+                corpusRevisionId,
+                reviewerVisitorId: visitor._id,
                 canonicalUrl: manualSource.canonicalUrl,
                 title: manualSource.title,
-                origin: "analyst_url",
-                category: "analyst_supplied",
                 providerReference: manualSource.providerReference,
-                createdAt: now,
+                now,
             });
-            const decisionId = await ctx.db.insert("sourceDecisions", {
-                runId,
-                corpusRevisionId,
-                sourceId,
-                decisionKey: `manual:${sourceId}`,
-                decision: "pending",
-                reviewerVisitorId: visitor._id,
-                occurredAt: now,
-            });
-            await upsertSourceReviewItem(ctx, {
-                runId,
-                corpusRevisionId,
-                sourceId,
-                decision: "pending",
-                sourceCreatedAt: now,
-                latestDecisionId: decisionId,
-                decisionOccurredAt: now,
-            });
-            await ctx.db.insert("auditEvents", {
-                actor: { type: "visitor", visitorId: visitor._id },
-                action: "manual_source_added",
-                targetType: "source",
-                targetId: sourceId,
-                occurredAt: now,
+            await ctx.db.patch(manualSource.preparationId, {
+                consumedAt: now,
             });
         }
         const workflowId = await workflow.start(
@@ -323,7 +255,9 @@ export const confirmAndStart = action({
         idempotencyKey: v.string(),
         coveragePreset: coveragePresetValidator,
         researchAngle: v.optional(v.string()),
-        manualSourceUrls: v.optional(v.array(v.string())),
+        manualSourcePreparationIds: v.optional(
+            v.array(v.id("manualSourcePreparations")),
+        ),
     },
     returns: v.object({
         runId: v.id("researchRuns"),
@@ -337,34 +271,9 @@ export const confirmAndStart = action({
         remainingAnalyses: number;
     }> => {
         assertSourceCandidateRequestFits(
-            args.manualSourceUrls?.length ?? 0,
+            args.manualSourcePreparationIds?.length ?? 0,
             sourceCandidateLimit(),
         );
-        let manualSources:
-            | Array<{
-                  canonicalUrl: string;
-                  title: string;
-                  providerReference: string;
-              }>
-            | undefined;
-        if (args.manualSourceUrls && args.manualSourceUrls.length > 0) {
-            const preparation = await ctx.runQuery(
-                internal.researchLaunch.authorizeLaunchPreparation,
-                {
-                    preflightId: args.preflightId,
-                    idempotencyKey: args.idempotencyKey,
-                },
-            );
-            if (preparation.shouldPrepareManualSources) {
-                manualSources = await ctx.runAction(
-                    internal.sourceActions.prepareLaunchUrls,
-                    {
-                        idempotencyKey: args.idempotencyKey,
-                        urls: args.manualSourceUrls,
-                    },
-                );
-            }
-        }
         return ctx.runMutation(
             internal.researchLaunch.confirmAndStartReserved,
             {
@@ -372,7 +281,7 @@ export const confirmAndStart = action({
                 idempotencyKey: args.idempotencyKey,
                 coveragePreset: args.coveragePreset,
                 researchAngle: args.researchAngle,
-                manualSources,
+                manualSourcePreparationIds: args.manualSourcePreparationIds,
             },
         );
     },

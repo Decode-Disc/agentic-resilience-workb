@@ -13,6 +13,16 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
         rate: 12,
         period: 15 * MINUTE,
     },
+    sourceMetadataGlobal: {
+        kind: "fixed window",
+        rate: 60,
+        period: 15 * MINUTE,
+    },
+    sourceMetadataPerUser: {
+        kind: "fixed window",
+        rate: 12,
+        period: 15 * MINUTE,
+    },
     invitationClaimGlobal: {
         kind: "fixed window",
         rate: 25,

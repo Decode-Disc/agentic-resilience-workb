@@ -1,6 +1,7 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import { internalMutation, internalQuery } from "./_generated/server";
+import { manualSourceIntakeError } from "./domain/manualSourceIntake";
 import { rateLimiter } from "./rateLimiter";
 
 const serviceValidator = v.union(
@@ -52,6 +53,28 @@ export const reserveExaWebsiteRateLimit = internalMutation({
         );
         if (!globalStatus.ok || !sessionStatus.ok) {
             throw new Error("Exa website enrichment rate limit reached");
+        }
+        return null;
+    },
+});
+
+export const reserveSourceMetadataRateLimit = internalMutation({
+    args: { authUserId: v.id("users") },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const globalStatus = await rateLimiter.limit(
+            ctx,
+            "sourceMetadataGlobal",
+        );
+        const sessionStatus = await rateLimiter.limit(
+            ctx,
+            "sourceMetadataPerUser",
+            { key: `auth:${args.authUserId}` },
+        );
+        if (!globalStatus.ok || !sessionStatus.ok) {
+            throw new ConvexError(
+                manualSourceIntakeError("intake_rate_limited").data,
+            );
         }
         return null;
     },

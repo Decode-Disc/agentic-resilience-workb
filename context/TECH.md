@@ -203,6 +203,17 @@ validate one DNS result and then permit an unrelated resolution for the actual
 connection. Local file and PDF upload is outside the MVP. Public PDFs reachable
 through an approved HTTPS URL remain supported after approval.
 
+All analyst URL entry uses one public Convex action. Before launch, the action
+returns a short-lived server-owned preparation receipt after URL validation and
+bounded metadata inspection; the receipt is not a source or corpus member.
+Launch accepts only preparation IDs and atomically consumes every valid receipt
+while creating pending candidates in revision one. Active dossiers call the
+same action and persist through the same pending-source helper. Missing,
+expired, foreign, or invalid preparations create no run and consume no analysis
+quota. Expected failures use stable structured application codes with an
+explicit retryability policy; analyst-facing copy never parses or renders raw
+backend errors.
+
 Preserve source retrieval and extraction failures as visible structured states. Failure of one source must not erase it or terminate unrelated retrieval work.
 
 Treat retrieved documents and model output as untrusted input. Generated structured output must pass schema validation before persistence as usable evidence. Bound retries. If validation or evidentiary support remains inadequate, downgrade the result rather than laundering it into a fact.

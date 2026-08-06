@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { ConvexError } from "convex/values";
 import { describe, expect, test, vi } from "vitest";
 
 import {
@@ -35,9 +36,11 @@ describe("AddSourceDialog", () => {
                 open={true}
                 onOpenChange={vi.fn()}
                 onAdd={vi.fn(async () => {
-                    throw new Error(
-                        "This research dossier has reached its source candidate limit",
-                    );
+                    throw new ConvexError({
+                        area: "manual_source_intake",
+                        code: "candidate_limit",
+                        retryable: false,
+                    });
                 })}
             />,
         );
@@ -51,6 +54,35 @@ describe("AddSourceDialog", () => {
             await screen.findByText(/reached its source review limit/i),
         ).toBeTruthy();
         expect(screen.queryByText(/candidate limit/i)).toBeNull();
+    });
+
+    test.each([
+        ["duplicate_source", /already in this dossier/i],
+        ["intake_rate_limited", /wait a moment before trying again/i],
+        ["preparation_expired", /add this source again before starting/i],
+        ["dossier_not_accepting_sources", /isn't accepting new sources/i],
+    ])("renders safe copy for %s", async (code, expectedMessage) => {
+        render(
+            <AddSourceDialog
+                open={true}
+                onOpenChange={vi.fn()}
+                onAdd={vi.fn(async () => {
+                    throw new ConvexError({
+                        area: "manual_source_intake",
+                        code,
+                        retryable: false,
+                    });
+                })}
+            />,
+        );
+
+        fireEvent.change(screen.getByLabelText(/Public source link/i), {
+            target: { value: "https://example.com/report" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /^Add$/i }));
+
+        expect(await screen.findByText(expectedMessage)).toBeTruthy();
+        expect(screen.queryByText(/manual_source_intake|CONVEX/i)).toBeNull();
     });
 
     test("renders trigger and opens dialog when trigger is clicked", async () => {

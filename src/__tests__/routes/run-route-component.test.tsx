@@ -10,7 +10,7 @@ const {
     decideSource,
     approveCorpus,
     decideSufficiency,
-    addManualUrl,
+    submitManualUrl,
     navigate,
 } = vi.hoisted(() => ({
     useQuery: vi.fn(),
@@ -20,7 +20,7 @@ const {
     decideSource: vi.fn(),
     approveCorpus: vi.fn(),
     decideSufficiency: vi.fn(),
-    addManualUrl: vi.fn(),
+    submitManualUrl: vi.fn(),
     navigate: vi.fn(),
 }));
 
@@ -47,13 +47,13 @@ beforeEach(() => {
     decideSource.mockReset();
     approveCorpus.mockReset();
     decideSufficiency.mockReset();
-    addManualUrl.mockReset();
+    submitManualUrl.mockReset();
     navigate.mockReset();
     useMutation.mockImplementation(() => {
         const index = (useMutation.mock.calls.length - 1) % 3;
         return [decideSource, approveCorpus, decideSufficiency][index];
     });
-    useAction.mockReturnValue(addManualUrl);
+    useAction.mockReturnValue(submitManualUrl);
     usePaginatedQuery.mockReturnValue({
         results: [],
         status: "Exhausted",
@@ -84,7 +84,12 @@ test("wires the evidence sufficiency checkpoint", async () => {
             undefined,
         ][index];
     });
-    addManualUrl.mockResolvedValue({ sourceId: "source-1" });
+    submitManualUrl.mockResolvedValue({
+        kind: "persisted",
+        sourceId: "source-1",
+        canonicalUrl: "https://example.com/report",
+        title: "Public report",
+    });
     decideSufficiency.mockResolvedValue({ accepted: true });
 
     render(<RunRouteComponent runId={"run-1" as never} section="progress" />);
@@ -97,10 +102,14 @@ test("wires the evidence sufficiency checkpoint", async () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /^Add$/i }));
     await waitFor(() =>
-        expect(addManualUrl).toHaveBeenCalledWith({
-            runId: "run-1",
-            corpusRevisionId: "revision-1",
+        expect(submitManualUrl).toHaveBeenCalledWith({
+            requestKey: expect.any(String),
             url: "https://example.com/report",
+            target: {
+                kind: "run",
+                runId: "run-1",
+                corpusRevisionId: "revision-1",
+            },
         }),
     );
     fireEvent.click(screen.getByRole("button", { name: /Done/i }));
@@ -260,7 +269,14 @@ test("keeps the approved source set visible for inspection", () => {
                 lifecycleState: "corpus_approved",
                 executionStatus: "idle",
                 activeCorpusRevisionId: "revision-1",
-                providerFailures: [],
+                providerFailures: [
+                    {
+                        service: "exa",
+                        operation: "search",
+                        errorCode: "exa_not_configured",
+                        occurredAt: 1,
+                    },
+                ],
                 updatedAt: 2,
             };
         }
@@ -312,4 +328,48 @@ test("keeps the approved source set visible for inspection", () => {
     expect(
         screen.queryByText(/Sources will appear here when discovery is ready/i),
     ).toBeNull();
+});
+
+test("does not advertise manual source intake after corpus approval", () => {
+    useQuery.mockImplementation((reference) => {
+        const functionName = getFunctionName(reference);
+        if (functionName === "researchRuns:getMine") {
+            return {
+                runId: "run-1",
+                company: {
+                    legalName: "Example Corp",
+                    ticker: "EXM",
+                    exchange: "NASDAQ",
+                    cik: "123",
+                },
+                lifecycleState: "corpus_approved",
+                executionStatus: "idle",
+                activeCorpusRevisionId: "revision-1",
+                providerFailures: [
+                    {
+                        service: "exa",
+                        operation: "search",
+                        errorCode: "exa_not_configured",
+                        occurredAt: 1,
+                    },
+                ],
+                updatedAt: 2,
+            };
+        }
+        if (functionName === "researchRuns:listMyEvents") {
+            return [];
+        }
+        return undefined;
+    });
+
+    render(<RunRouteComponent runId={"run-1" as never} section="progress" />);
+
+    expect(
+        screen.queryByText(/you can add a public source manually/i),
+    ).toBeNull();
+    expect(
+        screen.getByText(
+            /Independent web discovery was unavailable.*filing sources remain available in this approved source set/i,
+        ),
+    ).toBeTruthy();
 });

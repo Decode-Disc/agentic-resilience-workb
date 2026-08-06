@@ -95,6 +95,13 @@ accepts or rejects individual sources, leaves candidates pending, or adds public
 HTTPS URLs. No retrieval, evidence extraction, or assessment starts before
 explicit approval.
 
+The Start composer validates an attached public HTTPS reference immediately and
+holds only an expiring server-owned preparation receipt. Dossier creation
+atomically converts valid receipts into pending candidates in the first draft
+corpus revision. The same intake action adds a pending candidate directly when
+the analyst is already reviewing an active dossier. A prepared or pending URL
+still requires the normal corpus decision and cannot contribute downstream.
+
 An approved `CorpusRevision` contains accepted sources only. Pending sources
 remain visible but cannot contribute downstream. Accepting one later creates
 `CorpusRevision N+1` and reopens the source checkpoint rather than mutating an

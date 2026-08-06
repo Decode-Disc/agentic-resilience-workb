@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { getFunctionName } from "convex/server";
+import { ConvexError } from "convex/values";
 import type { ComponentType, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -9,6 +10,7 @@ const {
     navigate,
     preflight,
     searchCompanies,
+    submitManualUrl,
     useAction,
     useQuery,
 } = vi.hoisted(() => ({
@@ -17,6 +19,7 @@ const {
     navigate: vi.fn(),
     preflight: vi.fn(),
     searchCompanies: vi.fn(),
+    submitManualUrl: vi.fn(),
     useAction: vi.fn(),
     useQuery: vi.fn(),
 }));
@@ -36,8 +39,8 @@ vi.mock("@/hooks/use-anonymous-session", () => ({
     }),
 }));
 
-import { ResearchComposer } from "@/components/workspace/research-composer";
 import { InvitationAccessProvider } from "@/components/workspace/invitation-access-context";
+import { ResearchComposer } from "@/components/workspace/research-composer";
 import { Route } from "@/routes/workspace/start";
 
 const resolvedCompany = {
@@ -79,6 +82,7 @@ describe("ResearchComposer", () => {
         navigate.mockReset();
         preflight.mockReset();
         searchCompanies.mockReset();
+        submitManualUrl.mockReset();
         confirmAndStart.mockReset();
         claimInvitation.mockReset();
         useAction.mockReset();
@@ -92,6 +96,8 @@ describe("ResearchComposer", () => {
                     return preflight;
                 case "researchLaunch:confirmAndStart":
                     return confirmAndStart;
+                case "sourceActions:submitManualUrl":
+                    return submitManualUrl;
                 case "invitations:claim":
                     return claimInvitation;
                 default:
@@ -293,6 +299,21 @@ describe("ResearchComposer", () => {
             runId: "run-with-references",
             remainingAnalyses: 1,
         });
+        submitManualUrl
+            .mockResolvedValueOnce({
+                kind: "prepared",
+                preparationId: "preparation-1",
+                canonicalUrl: "https://example.com/public-report",
+                title: "Public report",
+                expiresAt: Date.now() + 60_000,
+            })
+            .mockResolvedValueOnce({
+                kind: "prepared",
+                preparationId: "preparation-2",
+                canonicalUrl: "https://example.com/investor-update",
+                title: "Investor update",
+                expiresAt: Date.now() + 60_000,
+            });
         renderWithInvitationAccess(<ResearchComposer />);
 
         fireEvent.click(
@@ -316,6 +337,16 @@ describe("ResearchComposer", () => {
             target: { value: "https://example.com/public-report" },
         });
         fireEvent.click(screen.getByRole("button", { name: /^Add$/i }));
+        await waitFor(() =>
+            expect(submitManualUrl).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    url: "https://example.com/public-report",
+                    target: expect.objectContaining({
+                        kind: "prelaunch",
+                    }),
+                }),
+            ),
+        );
         expect(
             screen.getByText("https://example.com/public-report"),
         ).toBeTruthy();
@@ -325,7 +356,7 @@ describe("ResearchComposer", () => {
         });
         fireEvent.click(screen.getByRole("button", { name: /^Add$/i }));
         expect(
-            screen.getByText("https://example.com/investor-update"),
+            await screen.findByText("https://example.com/investor-update"),
         ).toBeTruthy();
         fireEvent.click(screen.getByRole("button", { name: /Done/i }));
         expect(
@@ -342,14 +373,118 @@ describe("ResearchComposer", () => {
         await waitFor(() =>
             expect(confirmAndStart).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    manualSourceUrls: [
-                        "https://example.com/public-report",
-                        "https://example.com/investor-update",
+                    manualSourcePreparationIds: [
+                        "preparation-1",
+                        "preparation-2",
                     ],
                 }),
             ),
         );
     }, 10_000);
+
+    it("keeps one prepared reference when different inputs resolve to the same canonical URL", async () => {
+        searchCompanies.mockResolvedValue(companyCandidates);
+        preflight.mockResolvedValue(resolvedCompany);
+        confirmAndStart.mockResolvedValue({
+            runId: "run-with-canonical-reference",
+            remainingAnalyses: 1,
+        });
+        submitManualUrl
+            .mockResolvedValueOnce({
+                kind: "prepared",
+                preparationId: "preparation-canonical-1",
+                canonicalUrl: "https://example.com/public-report",
+                title: "Public report",
+                expiresAt: Date.now() + 60_000,
+            })
+            .mockResolvedValueOnce({
+                kind: "prepared",
+                preparationId: "preparation-canonical-2",
+                canonicalUrl: "https://example.com/public-report",
+                title: "Public report",
+                expiresAt: Date.now() + 60_000,
+            });
+        renderWithInvitationAccess(<ResearchComposer />);
+
+        fireEvent.click(
+            screen.getByRole("button", { name: /Attach references/i }),
+        );
+        for (const url of [
+            "https://example.com/public-report#overview",
+            "https://example.com/public-report#summary",
+        ]) {
+            fireEvent.change(screen.getByLabelText(/Public source link/i), {
+                target: { value: url },
+            });
+            fireEvent.click(screen.getByRole("button", { name: /^Add$/i }));
+            await waitFor(() =>
+                expect(submitManualUrl).toHaveBeenCalledTimes(
+                    url.endsWith("overview") ? 1 : 2,
+                ),
+            );
+        }
+
+        expect(
+            screen.getAllByText("https://example.com/public-report"),
+        ).toHaveLength(1);
+        fireEvent.click(screen.getByRole("button", { name: /Done/i }));
+        expect(
+            screen.getByRole("button", { name: /Attach references \(1\)/i }),
+        ).toBeTruthy();
+
+        await searchAndSelectCompany("CCCS");
+        fireEvent.click(
+            screen.getByRole("button", { name: /Confirm and start/i }),
+        );
+        await waitFor(() =>
+            expect(confirmAndStart).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    manualSourcePreparationIds: ["preparation-canonical-1"],
+                }),
+            ),
+        );
+    });
+
+    it("asks the analyst to re-add an expired reference before launch", async () => {
+        searchCompanies.mockResolvedValue(companyCandidates);
+        preflight.mockResolvedValue(resolvedCompany);
+        submitManualUrl.mockResolvedValue({
+            kind: "prepared",
+            preparationId: "preparation-expired",
+            canonicalUrl: "https://example.com/expired-report",
+            title: "Expired report",
+            expiresAt: Date.now() + 60_000,
+        });
+        confirmAndStart.mockRejectedValue(
+            new ConvexError({
+                area: "manual_source_intake",
+                code: "preparation_expired",
+                retryable: false,
+                preparationId: "preparation-expired",
+            }),
+        );
+        renderWithInvitationAccess(<ResearchComposer />);
+
+        fireEvent.click(
+            screen.getByRole("button", { name: /Attach references/i }),
+        );
+        fireEvent.change(screen.getByLabelText(/Public source link/i), {
+            target: { value: "https://example.com/expired-report" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /^Add$/i }));
+        await screen.findByText("https://example.com/expired-report");
+        fireEvent.click(screen.getByRole("button", { name: /Done/i }));
+
+        await searchAndSelectCompany("CCCS");
+        fireEvent.click(
+            screen.getByRole("button", { name: /Confirm and start/i }),
+        );
+
+        expect(
+            await screen.findByText(/add this source again before starting/i),
+        ).toBeTruthy();
+        expect(screen.queryByText(/manual_source_intake|CONVEX/i)).toBeNull();
+    });
 
     it("asks for an access code only when an anonymous visitor confirms launch", async () => {
         useQuery.mockReturnValue(null);

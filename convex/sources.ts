@@ -4,7 +4,7 @@ import {
     paginationOptsValidator,
     paginationResultValidator,
 } from "convex/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import type { Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
@@ -14,12 +14,10 @@ import {
     mutation,
     query,
 } from "./_generated/server";
-import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
 import { claimPausedRunExecution } from "./domain/executionClaim";
-import {
-    assertSourceCandidateRequestFits,
-    readSourceCandidateCapacity,
-} from "./domain/sourceCandidateCapacity";
+import { manualSourceIntakeError } from "./domain/manualSourceIntake";
+import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
+import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
 import { sourceCandidateLimit } from "./resourceLimits";
 import { corpusRevisionApproved, workflow } from "./workflow";
 
@@ -48,6 +46,55 @@ const sourceReviewSourceValidator = v.object({
     decision: sourceReviewDecisionValidator,
     reason: v.optional(v.string()),
 });
+
+export async function insertPendingManualSource(
+    ctx: Parameters<typeof upsertSourceReviewItem>[0],
+    input: {
+        runId: Id<"researchRuns">;
+        corpusRevisionId: Id<"corpusRevisions">;
+        reviewerVisitorId: Id<"visitors">;
+        canonicalUrl: string;
+        title: string;
+        providerReference: string;
+        now: number;
+    },
+): Promise<Id<"sources">> {
+    const sourceId = await ctx.db.insert("sources", {
+        runId: input.runId,
+        canonicalUrl: input.canonicalUrl,
+        title: input.title,
+        origin: "analyst_url",
+        category: "analyst_supplied",
+        providerReference: input.providerReference,
+        createdAt: input.now,
+    });
+    const decisionId = await ctx.db.insert("sourceDecisions", {
+        runId: input.runId,
+        corpusRevisionId: input.corpusRevisionId,
+        sourceId,
+        decisionKey: `manual:${sourceId}`,
+        decision: "pending",
+        reviewerVisitorId: input.reviewerVisitorId,
+        occurredAt: input.now,
+    });
+    await upsertSourceReviewItem(ctx, {
+        runId: input.runId,
+        corpusRevisionId: input.corpusRevisionId,
+        sourceId,
+        decision: "pending",
+        sourceCreatedAt: input.now,
+        latestDecisionId: decisionId,
+        decisionOccurredAt: input.now,
+    });
+    await ctx.db.insert("auditEvents", {
+        actor: { type: "visitor", visitorId: input.reviewerVisitorId },
+        action: "manual_source_added",
+        targetType: "source",
+        targetId: sourceId,
+        occurredAt: input.now,
+    });
+    return sourceId;
+}
 
 async function authorizeReviewRead(
     ctx: QueryCtx,
@@ -222,7 +269,9 @@ export const decide = mutation({
     handler: async (ctx, args) => {
         const authUserId = await getAuthUserId(ctx);
         if (!authUserId) {
-            throw new Error("Not authenticated");
+            throw new ConvexError(
+                manualSourceIntakeError("not_authenticated").data,
+            );
         }
         const visitor = await ctx.db
             .query("visitors")
@@ -333,22 +382,34 @@ export const persistManualCandidate = internalMutation({
             visitor?.status !== "active" ||
             run?.ownerVisitorId !== visitor._id ||
             revision?.runId !== run._id ||
-            run.executionGeneration !== args.executionGeneration
+            revision.status !== "draft"
         ) {
-            throw new Error("Unauthorized");
+            throw new ConvexError(
+                manualSourceIntakeError("not_authorized").data,
+            );
+        }
+        if (run.executionGeneration !== args.executionGeneration) {
+            throw new ConvexError(
+                manualSourceIntakeError("stale_execution").data,
+            );
         }
         if (
-            revision.status !== "draft" ||
             run.executionStatus !== "paused" ||
             ![
                 "awaiting_evidence_sufficiency_review",
                 "awaiting_source_review",
             ].includes(run.lifecycleState)
         ) {
-            throw new Error("Approved corpus revisions are immutable");
+            throw new ConvexError(
+                manualSourceIntakeError("dossier_not_accepting_sources").data,
+            );
         }
         const capacity = await readSourceCandidateCapacity(ctx.db, run._id);
-        assertSourceCandidateRequestFits(1, capacity.remaining);
+        if (capacity.remaining < 1) {
+            throw new ConvexError(
+                manualSourceIntakeError("candidate_limit").data,
+            );
+        }
         const duplicate = await ctx.db
             .query("sources")
             .withIndex("by_run_and_url", (builder) =>
@@ -358,44 +419,22 @@ export const persistManualCandidate = internalMutation({
             )
             .unique();
         if (duplicate) {
-            throw new Error("Source URL is already in this research run");
+            throw new ConvexError(
+                manualSourceIntakeError("duplicate_source", {
+                    field: "url",
+                }).data,
+            );
         }
         const now = Date.now();
-        const sourceId = await ctx.db.insert("sources", {
+        return insertPendingManualSource(ctx, {
             runId: run._id,
+            corpusRevisionId: revision._id,
+            reviewerVisitorId: visitor._id,
             canonicalUrl: args.canonicalUrl,
             title: args.title,
-            origin: "analyst_url",
-            category: "analyst_supplied",
             providerReference: args.providerReference,
-            createdAt: now,
+            now,
         });
-        const decisionId = await ctx.db.insert("sourceDecisions", {
-            runId: run._id,
-            corpusRevisionId: revision._id,
-            sourceId,
-            decisionKey: `manual:${sourceId}`,
-            decision: "pending",
-            reviewerVisitorId: visitor._id,
-            occurredAt: now,
-        });
-        await upsertSourceReviewItem(ctx, {
-            runId: run._id,
-            corpusRevisionId: revision._id,
-            sourceId,
-            decision: "pending",
-            sourceCreatedAt: now,
-            latestDecisionId: decisionId,
-            decisionOccurredAt: now,
-        });
-        await ctx.db.insert("auditEvents", {
-            actor: { type: "visitor", visitorId: visitor._id },
-            action: "manual_source_added",
-            targetType: "source",
-            targetId: sourceId,
-            occurredAt: now,
-        });
-        return sourceId;
     },
 });
 
@@ -406,15 +445,19 @@ export const authorizeManualCandidate = internalQuery({
     },
     returns: v.object({
         executionGeneration: v.number(),
+        workflowVersion: v.number(),
         stepKey: v.union(
             v.literal("evidence_sufficiency_review"),
             v.literal("source_review"),
         ),
+        hasCapacity: v.boolean(),
     }),
     handler: async (ctx, args) => {
         const authUserId = await getAuthUserId(ctx);
         if (!authUserId) {
-            throw new Error("Not authenticated");
+            throw new ConvexError(
+                manualSourceIntakeError("not_authenticated").data,
+            );
         }
         const visitor = await ctx.db
             .query("visitors")
@@ -429,7 +472,9 @@ export const authorizeManualCandidate = internalQuery({
             run?.ownerVisitorId !== visitor._id ||
             revision?.runId !== run._id
         ) {
-            throw new Error("Unauthorized");
+            throw new ConvexError(
+                manualSourceIntakeError("not_authorized").data,
+            );
         }
         if (
             revision.status !== "draft" ||
@@ -440,16 +485,19 @@ export const authorizeManualCandidate = internalQuery({
                 "awaiting_source_review",
             ].includes(run.lifecycleState)
         ) {
-            throw new Error("Research run is not accepting manual sources");
+            throw new ConvexError(
+                manualSourceIntakeError("dossier_not_accepting_sources").data,
+            );
         }
         const capacity = await readSourceCandidateCapacity(ctx.db, run._id);
-        assertSourceCandidateRequestFits(1, capacity.remaining);
         return {
             executionGeneration: run.executionGeneration,
+            workflowVersion: run.workflowVersion ?? 2,
             stepKey:
                 run.lifecycleState === "awaiting_evidence_sufficiency_review"
                     ? ("evidence_sufficiency_review" as const)
                     : ("source_review" as const),
+            hasCapacity: capacity.remaining >= 1,
         };
     },
 });
@@ -459,7 +507,14 @@ export const findManualCandidateByProviderReference = internalQuery({
         runId: v.id("researchRuns"),
         providerReference: v.string(),
     },
-    returns: v.union(v.id("sources"), v.null()),
+    returns: v.union(
+        v.object({
+            sourceId: v.id("sources"),
+            canonicalUrl: v.string(),
+            title: v.string(),
+        }),
+        v.null(),
+    ),
     handler: async (ctx, args) => {
         const sources = await ctx.db
             .query("sources")
@@ -467,13 +522,18 @@ export const findManualCandidateByProviderReference = internalQuery({
                 builder.eq("runId", args.runId),
             )
             .collect();
-        return (
-            sources.find(
-                (source) =>
-                    source.origin === "analyst_url" &&
-                    source.providerReference === args.providerReference,
-            )?._id ?? null
+        const source = sources.find(
+            (candidate) =>
+                candidate.origin === "analyst_url" &&
+                candidate.providerReference === args.providerReference,
         );
+        return source
+            ? {
+                  sourceId: source._id,
+                  canonicalUrl: source.canonicalUrl,
+                  title: source.title,
+              }
+            : null;
     },
 });
 

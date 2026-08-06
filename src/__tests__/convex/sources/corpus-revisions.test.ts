@@ -3,6 +3,7 @@ import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { afterEach, expect, test } from "vitest";
+import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 const originalSourceCandidateLimit = process.env.SOURCE_CANDIDATE_LIMIT;
@@ -57,15 +58,36 @@ const decideSource = makeFunctionReference<
     },
     { accepted: boolean }
 >("sources:decide");
-const addManualUrl = makeFunctionReference<
+const submitManualUrl = makeFunctionReference<
     "action",
+    {
+        requestKey: string;
+        url: string;
+        target: {
+            kind: "run";
+            runId: Id<"researchRuns">;
+            corpusRevisionId: Id<"corpusRevisions">;
+        };
+    },
+    {
+        kind: "persisted";
+        sourceId: Id<"sources">;
+        canonicalUrl: string;
+        title: string;
+    }
+>("sourceActions:submitManualUrl");
+const persistManualCandidate = makeFunctionReference<
+    "mutation",
     {
         runId: Id<"researchRuns">;
         corpusRevisionId: Id<"corpusRevisions">;
-        url: string;
+        executionGeneration: number;
+        providerReference: string;
+        canonicalUrl: string;
+        title: string;
     },
-    { sourceId: Id<"sources"> }
->("sourceActions:addManualUrl");
+    Id<"sources">
+>("sources:persistManualCandidate");
 const approveCorpus = makeFunctionReference<
     "mutation",
     {
@@ -234,18 +256,28 @@ test("owner appends source decisions while other visitors are rejected", async (
 
 test("rejects manual URL intake before network access for a non-owner", async () => {
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     const fixture = await createSourceReviewFixture(t);
     const other = t.withIdentity({
         subject: `${fixture.otherUserId}|source-other`,
     });
 
     await expect(
-        other.action(addManualUrl, {
-            runId: fixture.runId,
-            corpusRevisionId: fixture.corpusRevisionId,
+        other.action(submitManualUrl, {
+            requestKey: "non-owner-manual-source",
             url: "https://127.0.0.1/private",
+            target: {
+                kind: "run",
+                runId: fixture.runId,
+                corpusRevisionId: fixture.corpusRevisionId,
+            },
         }),
-    ).rejects.toThrow("Unauthorized");
+    ).rejects.toMatchObject({
+        data: {
+            code: "not_authorized",
+            retryable: false,
+        },
+    });
 });
 
 test("paginates the all view by pending, accepted, then rejected groups", async () => {
@@ -320,18 +352,73 @@ test("paginates the all view by pending, accepted, then rejected groups", async 
 test("rejects a manual URL before inspection when the dossier is at capacity", async () => {
     process.env.SOURCE_CANDIDATE_LIMIT = "1";
     const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
     const fixture = await createSourceReviewFixture(t);
     const owner = t.withIdentity({
         subject: `${fixture.userId}|source-owner`,
     });
 
     await expect(
-        owner.action(addManualUrl, {
+        owner.action(submitManualUrl, {
+            requestKey: "capacity-manual-source",
+            url: "https://example.com/never-inspected",
+            target: {
+                kind: "run",
+                runId: fixture.runId,
+                corpusRevisionId: fixture.corpusRevisionId,
+            },
+        }),
+    ).rejects.toMatchObject({
+        data: {
+            code: "candidate_limit",
+            retryable: false,
+        },
+    });
+});
+
+test("rejects duplicate and stale manual candidates without inserting source state", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createSourceReviewFixture(t);
+    const owner = t.withIdentity({
+        subject: `${fixture.userId}|source-owner`,
+    });
+
+    await expect(
+        owner.mutation(persistManualCandidate, {
             runId: fixture.runId,
             corpusRevisionId: fixture.corpusRevisionId,
-            url: "https://example.com/never-inspected",
+            executionGeneration: 1,
+            providerReference: "url_metadata:duplicate",
+            canonicalUrl: "https://example.com/report",
+            title: "Duplicate report",
         }),
-    ).rejects.toThrow("source candidate limit");
+    ).rejects.toMatchObject({
+        data: { code: "duplicate_source", retryable: false },
+    });
+    await expect(
+        owner.mutation(persistManualCandidate, {
+            runId: fixture.runId,
+            corpusRevisionId: fixture.corpusRevisionId,
+            executionGeneration: 0,
+            providerReference: "url_metadata:stale",
+            canonicalUrl: "https://example.com/stale-report",
+            title: "Stale report",
+        }),
+    ).rejects.toMatchObject({
+        data: { code: "stale_execution", retryable: false },
+    });
+
+    await expect(
+        t.run(async (ctx) => ({
+            sources: await ctx.db.query("sources").collect(),
+            decisions: await ctx.db.query("sourceDecisions").collect(),
+            reviewItems: await ctx.db.query("sourceReviewItems").collect(),
+        })),
+    ).resolves.toMatchObject({
+        sources: [expect.objectContaining({ _id: fixture.sourceId })],
+        decisions: [expect.objectContaining({ sourceId: fixture.sourceId })],
+        reviewItems: [expect.objectContaining({ sourceId: fixture.sourceId })],
+    });
 });
 
 test("does not resume source review while another owner run is running", async () => {

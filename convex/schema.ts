@@ -67,6 +67,27 @@ export default defineSchema({
     })
         .index("by_owner_auth_user_and_status", ["ownerAuthUserId", "status"])
         .index("by_owner_and_status", ["ownerVisitorId", "status"]),
+    manualSourcePreparations: defineTable({
+        ownerAuthUserId: v.id("users"),
+        collectionKey: v.string(),
+        requestKey: v.string(),
+        inputDigest: v.string(),
+        canonicalUrl: v.string(),
+        title: v.string(),
+        providerReference: v.string(),
+        expiresAt: v.number(),
+        consumedAt: v.optional(v.number()),
+        createdAt: v.number(),
+    })
+        .index("by_owner_auth_user_and_collection_key_and_request_key", [
+            "ownerAuthUserId",
+            "collectionKey",
+            "requestKey",
+        ])
+        .index("by_owner_auth_user_and_canonical_url", [
+            "ownerAuthUserId",
+            "canonicalUrl",
+        ]),
     researchRuns: defineTable({
         ownerVisitorId: v.optional(v.id("visitors")),
         reservationKey: v.optional(v.string()),

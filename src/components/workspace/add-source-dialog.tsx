@@ -206,16 +206,13 @@ export function AddSourceDialog({
                                 variant="secondary"
                                 className="mx-0 rounded-4xl"
                                 disabled={
-                                    isSubmitting ||
-                                    urlInput.trim() === ""
+                                    isSubmitting || urlInput.trim() === ""
                                 }>
                                 {isSubmitting ? (
                                     <Icon
                                         iconNode={Loading02Icon}
                                         className={
-                                            isSubmitting
-                                                ? "animate-spin"
-                                                : ""
+                                            isSubmitting ? "animate-spin" : ""
                                         }
                                     />
                                 ) : (

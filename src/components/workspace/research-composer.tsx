@@ -46,7 +46,10 @@ import { useInvitationAccess } from "@/components/workspace/invitation-access-co
 import { useAnonymousSession } from "@/hooks/use-anonymous-session";
 import { usePagination } from "@/hooks/use-pagination";
 import { useResponsive } from "@/hooks/use-responsive";
-import { companyLookupErrorMessage } from "@/lib/presentation/research-copy";
+import {
+    companyLookupErrorMessage,
+    sourceAddErrorMessage,
+} from "@/lib/presentation/research-copy";
 import { cn } from "@/lib/utils";
 
 type PreflightResult = FunctionReturnType<
@@ -55,6 +58,10 @@ type PreflightResult = FunctionReturnType<
 type CompanyCandidate = FunctionReturnType<
     typeof api.companyResolution.search
 >[number];
+type ManualSourceResult = FunctionReturnType<
+    typeof api.sourceActions.submitManualUrl
+>;
+type PreparedManualSource = Extract<ManualSourceResult, { kind: "prepared" }>;
 
 const viewEnterTransition = {
     type: "spring" as const,
@@ -87,6 +94,7 @@ export function ResearchComposer({
     const searchCompanies = useAction(api.companyResolution.search);
     const preflight = useAction(api.companyResolution.preflight);
     const confirmAndStart = useAction(api.researchLaunch.confirmAndStart);
+    const submitManualUrl = useAction(api.sourceActions.submitManualUrl);
     const reduceMotion = useReducedMotion();
     const { isSessionReady, sessionError } = useAnonymousSession();
     const visitor = useQuery(
@@ -123,7 +131,9 @@ export function ResearchComposer({
     const [launchError, setLaunchError] = useState<string | null>(null);
     const { openInvitationDrawer } = useInvitationAccess();
     const [referencesOpen, setReferencesOpen] = useState(false);
-    const [manualSourceUrls, setManualSourceUrls] = useState<Array<string>>([]);
+    const [manualSources, setManualSources] = useState<
+        Array<PreparedManualSource>
+    >([]);
     const launchKey = useRef<string | null>(null);
 
     const searchForCompanies = async () => {
@@ -211,17 +221,24 @@ export function ResearchComposer({
                 idempotencyKey: launchKey.current,
                 coveragePreset,
                 researchAngle: researchAngle.trim() || undefined,
-                manualSourceUrls:
-                    manualSourceUrls.length > 0 ? manualSourceUrls : undefined,
+                manualSourcePreparationIds:
+                    manualSources.length > 0
+                        ? manualSources.map(
+                            ({ preparationId }) => preparationId,
+                        )
+                        : undefined,
             });
             await navigate({
                 to: "/workspace/$runId",
                 params: { runId: result.runId },
                 search: { section: "progress" },
             });
-        } catch {
+        } catch (error) {
+            const sourceErrorMessage = sourceAddErrorMessage(error);
             setLaunchError(
-                "We couldn't start this research dossier. Try again.",
+                sourceErrorMessage === "We couldn't add that source. Try again."
+                    ? "We couldn't start this research dossier. Try again."
+                    : sourceErrorMessage,
             );
             setIsLaunching(false);
         }
@@ -407,7 +424,7 @@ export function ResearchComposer({
                                     <ToolbarIconButton
                                         label="Attach references"
                                         icon={Plus}
-                                        count={manualSourceUrls.length}
+                                        count={manualSources.length}
                                         onClick={() => setReferencesOpen(true)}
                                     />
                                     <MoreOptionsButton />
@@ -505,8 +522,35 @@ export function ResearchComposer({
             <AddSourceDialog
                 open={referencesOpen}
                 onOpenChange={setReferencesOpen}
-                urls={manualSourceUrls}
-                onUrlsChange={setManualSourceUrls}
+                urls={manualSources.map(({ canonicalUrl }) => canonicalUrl)}
+                onUrlsChange={(urls) =>
+                    setManualSources((current) =>
+                        current.filter(({ canonicalUrl }) =>
+                            urls.includes(canonicalUrl),
+                        ),
+                    )
+                }
+                onAdd={async (url) => {
+                    const result = await submitManualUrl({
+                        requestKey: crypto.randomUUID(),
+                        url,
+                        target: {
+                            kind: "prelaunch",
+                            collectionKey: "research-composer",
+                        },
+                    });
+                    if (result.kind !== "prepared") {
+                        throw new Error("Unexpected manual source result");
+                    }
+                    setManualSources((current) =>
+                        current.some(
+                            ({ canonicalUrl }) =>
+                                canonicalUrl === result.canonicalUrl,
+                        )
+                            ? current
+                            : [...current, result],
+                    );
+                }}
             />
         </>
     );
