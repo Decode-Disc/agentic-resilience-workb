@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "Create an implementation plan for Phase 5 evidence retrieval and claim extraction in this repository. Preserve the existing source-review workspace and persistent rail, use Convex Workflow, Unstructured Jobs, typed AI tasks, and deterministic policy gates. Do not implement anything.",
+      "prompt": "Use the implementation-plan skill to create a formal implementation plan for Phase 5 evidence retrieval and claim extraction in this repository. Preserve the existing source-review workspace and persistent rail, use Convex Workflow, Unstructured Jobs, typed AI tasks, and deterministic policy gates. Do not implement anything.",
       "expected_output": "A project-specific plan that reads the authoritative documents, maps the current UI and backend owners, preserves existing surfaces, separates Convex actions/mutations/workflows and integration adapters, defines approved-corpus-only retrieval, cancellation and late-result safety, stable passage locators, audience copy, TDD tasks, and complete admitted browser/live gates.",
       "assertions": [
         "References the principal writing-plans skill and the project implementation-plan overlay",
@@ -19,7 +19,7 @@
     },
     {
       "id": 2,
-      "prompt": "Revise the existing Phase 4 plan after learning that access codes are reusable, Start is public, company search returns candidates before preflight, CCC changed ticker, URL references must stay, and admin routes use a pathless protected layout. Documentation only.",
+      "prompt": "Invoke implementation-plan to revise the existing Phase 4 plan after learning that access codes are reusable, Start is public, company search returns candidates before preflight, CCC changed ticker, URL references must stay, and admin routes use a pathless protected layout. Documentation only.",
       "expected_output": "A scoped plan revision that updates the access journey, uses CIK as stable identity, preserves HTTPS references while excluding uploads, corrects protected route paths and terminology, and adds browser/security gates without rewriting unrelated product requirements.",
       "assertions": [
         "Treats CIK as canonical and ticker as mutable",
@@ -33,7 +33,7 @@
     },
     {
       "id": 3,
-      "prompt": "Plan how to connect the existing research dossier cards to live Convex data. The cards already use CutoutCard with a generated cover, pin, inset label, footer, hover/focus action, staggered content, and a matching skeleton. Keep the visual design exactly as it is.",
+      "prompt": "Use the project implementation-plan skill to plan how to connect the existing research dossier cards to live Convex data. The cards already use CutoutCard with a generated cover, pin, inset label, footer, hover/focus action, staggered content, and a matching skeleton. Keep the visual design exactly as it is.",
       "expected_output": "A narrow integration plan that marks the existing card and skeleton composition as preserved, changes only data ownership and navigation, tests observable loading/empty/error/live states, and requires desktop/mobile/keyboard/hover visual verification without changing shared CutoutCard defaults.",
       "assertions": [
         "Marks the existing card structure and motion as preserved",

@@ -1,6 +1,6 @@
 ---
 name: implementation-plan
-description: Create, revise, or audit implementation plans for this evidence-workbench repository. Use whenever work spans multiple tasks, modifies an existing feature, crosses Convex and TanStack boundaries, integrates providers, changes a user journey, or prepares phases from ROADMAP.md. Extends the principal writing-plans skill with mandatory scope preservation, existing-UI fidelity, durable-workflow safety, access-code journeys, copy boundaries, and end-to-end verification gates.
+description: Opt-in project overlay for creating, revising, or auditing a formal implementation plan for this evidence-workbench repository. Use only when the user explicitly invokes implementation-plan or explicitly asks to use the project implementation-plan skill. Do not trigger for ordinary planning, native Plan mode, task decomposition, multi-step work, provider integration, or roadmap discussion unless the user names this skill. When invoked, extend the principal writing-plans skill with scope preservation, existing-UI fidelity, durable-workflow safety, access-code journeys, copy boundaries, and end-to-end verification gates.
 compatibility: Requires repository access and the principal writing-plans skill. Uses project documentation, Git, tests, and read-only browser inspection when an existing user-facing surface is affected.
 ---
 
@@ -11,9 +11,15 @@ of files and tests. This skill is a project-specific overlay on the principal
 `writing-plans` skill; it does not replace its task sizing, TDD structure,
 concrete code examples, exact commands, or no-placeholder rules.
 
+## Trigger policy
+
+This skill is opt-in. Use the AI harness's native planning mode by default, even when work has multiple steps, affects several files, crosses Convex and TanStack boundaries, or would benefit from careful sequencing. Load this skill only when the user explicitly names `implementation-plan` or explicitly asks to use the project implementation-plan skill. Do not infer invocation from requests such as “plan this”, “what should be next?”, “break this down”, or “use planning mode”.
+
+The principal `writing-plans` skill is also opt-in outside this overlay. Explicitly invoking `writing-plans` alone uses that principal skill without automatically loading this project overlay. Explicitly invoking `implementation-plan` loads `writing-plans` first because the overlay depends on it.
+
 ## Required base skill
 
-1. Read the principal `writing-plans` skill completely before drafting.
+1. After the user explicitly invokes this skill, read the principal `writing-plans` skill completely before drafting.
 2. Apply this skill after it. When the two differ, the repository contracts and
    this project-specific overlay win.
 3. If `writing-plans` is unavailable, stop and report the missing dependency.
@@ -250,4 +256,3 @@ Before handing off a plan, verify:
 
 If implementation later exposes a stale or incorrect assumption, pause, revise
 the plan, and obtain approval for any material product change before resuming.
-
