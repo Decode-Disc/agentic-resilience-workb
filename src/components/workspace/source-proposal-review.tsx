@@ -13,7 +13,6 @@ import { useReducedMotion } from "motion/react";
 import { type ReactNode, useState } from "react";
 
 import Icon from "@/components/icon";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -34,6 +33,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { SourceFamilyBadge } from "@/components/workspace/source-family-badge";
 import { SourceMasterList } from "@/components/workspace/source-master-list";
 import { SourceProposalAdjustmentBoard } from "@/components/workspace/source-proposal-adjustment-board";
 import { SourceReview } from "@/components/workspace/source-review";
@@ -344,9 +344,7 @@ export function SourceProposalReview({
                             </p>
                             <div className="mt-2 flex flex-wrap gap-2">
                                 {summary.gaps.map((gap) => (
-                                    <Badge key={gap} variant="outline">
-                                        {humanize(gap)}
-                                    </Badge>
+                                    <SourceFamilyBadge key={gap} family={gap} />
                                 ))}
                             </div>
                         </CardContent>
@@ -425,6 +423,7 @@ export function SourceProposalReview({
                         isLoadingInitial={proposalIsLoadingInitial}
                         onLoadMore={onLoadMoreProposal}
                         className="rounded-none rounded-b-(--radius-source-card)"
+                        listClassName="grid lg:grid-cols-2 gap-4"
                     />
                 </div>
             </section>
@@ -459,7 +458,7 @@ function ProposalViewTransition({
             }
             animate={shouldReduceMotion ? { opacity: 1 } : undefined}
             exit={{ opacity: 0 }}
-            duration={shouldReduceMotion ? 0.15 : 0.22}
+            duration={shouldReduceMotion ? 0.22 : 0.5}
             wrapperClassName="min-w-0 overflow-x-clip"
             className="min-w-0">
             {children}
@@ -497,7 +496,7 @@ function SecondaryViewHeader({
 function renderProposalAnnotation(source: ProposalSource) {
     return (
         <div className="mt-3 flex flex-wrap items-center gap-2 px-1 text-[11px] text-muted-foreground">
-            <Badge variant="outline">{humanize(source.sourceFamily)}</Badge>
+            <SourceFamilyBadge family={source.sourceFamily} />
             <span>{proposalReason(source)}</span>
             {source.decision !== "pending" ? (
                 <span className="font-medium text-foreground">
