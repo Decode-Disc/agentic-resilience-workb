@@ -2,7 +2,7 @@ import type { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { motion, useReducedMotion } from "motion/react";
-import type { ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 
 import { FaviconAvatar } from "@/components/favicon-avatar";
 import Icon from "@/components/icon";
@@ -49,6 +49,8 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
     onDecide,
     rowAction,
     annotation,
+    itemWrapper,
+    itemHandle,
     groupByDecision = false,
     headerAction,
     hasMore = false,
@@ -73,6 +75,8 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
     ) => void | Promise<void>;
     rowAction?: (source: TSource) => ReactNode;
     annotation?: (source: TSource) => ReactNode;
+    itemWrapper?: (source: TSource, item: ReactNode) => ReactNode;
+    itemHandle?: (source: TSource) => ReactNode;
     groupByDecision?: boolean;
     headerAction?: ReactNode;
     hasMore?: boolean;
@@ -85,6 +89,12 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
     className?: string;
 }) {
     const shouldReduceMotion = useReducedMotion();
+    const loadedCount =
+        items.length > 0 ? (
+            <p className="text-xs text-muted-foreground">
+                {items.length} of {total} loaded
+            </p>
+        ) : null;
 
     return (
         <Card className={cn("rounded-(--radius-source-card) py-4", className)}>
@@ -115,13 +125,8 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                         className="h-[min(42rem,80vh)]"
                         viewportClassName="pr-3 pl-1"
                         loadingFallback={<SourceContinuationSkeleton />}
-                        endContent={
-                            items.length > 0 ? (
-                                <p className="text-xs text-muted-foreground">
-                                    {items.length} of {total} loaded
-                                </p>
-                            ) : null
-                        }>
+                        progressContent={loadedCount}
+                        endContent={loadedCount}>
                         {isLoadingInitial ? (
                             <SourceListSkeleton />
                         ) : items.length === 0 ? (
@@ -142,34 +147,46 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                     const startsDecisionGroup =
                                         groupByDecision &&
                                         previous?.decision !== source.decision;
-                                    const sourceIdentity = (
-                                        <>
-                                            <FaviconAvatar
-                                                canonicalUrl={
-                                                    source.canonicalUrl
-                                                }
-                                                size="default"
-                                            />
-                                            <span className="min-w-0 flex-1">
-                                                <span className="block truncate text-sm font-semibold">
-                                                    {source.title}
-                                                </span>
-                                                <span className="mt-1 block truncate font-mono text-[11px] text-muted-foreground">
-                                                    {sourceOriginLabel(
-                                                        source.origin,
-                                                    )}
-                                                    {" · "}
-                                                    {sourceCategoryLabel(
-                                                        source.category,
-                                                    )}
-                                                </span>
-                                            </span>
-                                        </>
-                                    );
-                                    return (
-                                        <motion.li
+                                    const sourceRowProps = onSelect
+                                        ? {
+                                              role: "button" as const,
+                                              tabIndex: 0,
+                                              "aria-pressed": isActive,
+                                              "data-active": isActive
+                                                  ? "true"
+                                                  : undefined,
+                                              "aria-label": `Open ${source.title} for review`,
+                                              onClick: () =>
+                                                  onSelect(source.sourceId),
+                                              onKeyDown: (
+                                                  event: ReactKeyboardEvent<HTMLDivElement>,
+                                              ) => {
+                                                  if (
+                                                      event.target !==
+                                                      event.currentTarget
+                                                  ) {
+                                                      return;
+                                                  }
+                                                  if (
+                                                      event.key !== "Enter" &&
+                                                      event.key !== " "
+                                                  ) {
+                                                      return;
+                                                  }
+                                                  event.preventDefault();
+                                                  onSelect(source.sourceId);
+                                              },
+                                          }
+                                        : {};
+                                    const rowActionClassName =
+                                        "-mx-3 -mb-3 mt-3 flex flex-wrap gap-1 border-t border-border/60 bg-muted/20 p-1";
+                                    const canMove =
+                                        reviewStatus === "draft" &&
+                                        itemWrapper !== undefined;
+                                    const sourceItem = (
+                                        <motion.div
                                             layout={
-                                                shouldReduceMotion
+                                                shouldReduceMotion || canMove
                                                     ? false
                                                     : "position"
                                             }
@@ -180,7 +197,18 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                                 ease: [0.32, 0.72, 0, 1],
                                             }}
                                             key={source.sourceId}
-                                            className="group/source-row flex flex-col items-center">
+                                            data-slot="source-row"
+                                            data-active={
+                                                isActive ? "true" : undefined
+                                            }
+                                            data-drag-enabled={
+                                                canMove ? "true" : undefined
+                                            }
+                                            className={cn(
+                                                "group/source-row flex flex-col items-center",
+                                                canMove &&
+                                                    "cursor-grab active:cursor-grabbing",
+                                            )}>
                                             {startsDecisionGroup ? (
                                                 <p className="mb-2 w-full text-micro text-muted-foreground">
                                                     {sourceDecisionDefinitions.find(
@@ -190,48 +218,59 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                                     )?.label ?? source.decision}
                                                 </p>
                                             ) : null}
-                                            <span className="w-full max-w-[calc(100%-2rem)] truncate rounded-t-sm border border-border bg-secondary/50 px-2 py-1 text-start text-[10px] font-medium">
-                                                {source.canonicalUrl}
+                                            <span className="flex w-full max-w-[calc(100%-2rem)] items-center gap-1 rounded-t-sm border border-border bg-secondary/50 px-2 py-1 text-start text-[10px] font-medium">
+                                                <span className="min-w-0 flex-1 truncate">
+                                                    {source.canonicalUrl}
+                                                </span>
+                                                {canMove
+                                                    ? itemHandle?.(source)
+                                                    : null}
                                             </span>
                                             <div
+                                                data-slot="source-row-content"
                                                 className={cn(
                                                     "source-selection relative flex min-h-28 w-full flex-col justify-between border p-3",
+                                                    onSelect &&
+                                                        "cursor-pointer",
                                                     isActive &&
-                                                    "source-selection-active",
-                                                )}>
-                                                {onSelect ? (
-                                                    <button
-                                                        type="button"
-                                                        aria-pressed={isActive}
-                                                        data-slot="source-row"
-                                                        data-active={
-                                                            isActive
-                                                                ? "true"
-                                                                : undefined
-                                                        }
-                                                        aria-label={`Open ${source.title} for review`}
-                                                        className="flex w-full items-start gap-3 text-left text-wrap"
-                                                        onClick={() =>
-                                                            onSelect(
-                                                                source.sourceId,
-                                                            )
-                                                        }>
-                                                        {sourceIdentity}
-                                                    </button>
-                                                ) : (
-                                                    <div
-                                                        data-slot="source-row"
-                                                        className="flex w-full items-start gap-3 text-left text-wrap">
-                                                        {sourceIdentity}
-                                                    </div>
+                                                        "source-selection-active",
                                                 )}
+                                                {...sourceRowProps}>
+                                                <div className="flex w-full items-start gap-3 text-left text-wrap">
+                                                    <FaviconAvatar
+                                                        canonicalUrl={
+                                                            source.canonicalUrl
+                                                        }
+                                                        size="default"
+                                                    />
+                                                    <span className="min-w-0 flex-1">
+                                                        <span className="block truncate text-sm font-semibold">
+                                                            {source.title}
+                                                        </span>
+                                                        <span className="mt-1 block truncate font-mono text-[11px] text-muted-foreground">
+                                                            {sourceOriginLabel(
+                                                                source.origin,
+                                                            )}
+                                                            {" · "}
+                                                            {sourceCategoryLabel(
+                                                                source.category,
+                                                            )}
+                                                        </span>
+                                                    </span>
+                                                </div>
                                                 {annotation?.(source)}
                                                 {rowAction ? (
-                                                    <div className="mt-3 flex flex-wrap gap-1 px-1">
+                                                    <div
+                                                        className={
+                                                            rowActionClassName
+                                                        }>
                                                         {rowAction(source)}
                                                     </div>
                                                 ) : onDecide ? (
-                                                    <div className="mt-3 flex flex-wrap gap-1 px-1">
+                                                    <div
+                                                        className={
+                                                            rowActionClassName
+                                                        }>
                                                         {sourceDecisionDefinitions.map(
                                                             (definition) => {
                                                                 const isSelected =
@@ -266,8 +305,8 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                                                         className={
                                                                             isSelected
                                                                                 ? getSourceDecisionActiveButtonClassName(
-                                                                                    definition.decision,
-                                                                                )
+                                                                                      definition.decision,
+                                                                                  )
                                                                                 : undefined
                                                                         }
                                                                         onClick={() =>
@@ -294,7 +333,14 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                                     </div>
                                                 ) : null}
                                             </div>
-                                        </motion.li>
+                                        </motion.div>
+                                    );
+                                    return itemWrapper ? (
+                                        itemWrapper(source, sourceItem)
+                                    ) : (
+                                        <li key={source.sourceId}>
+                                            {sourceItem}
+                                        </li>
                                     );
                                 })}
                             </ul>

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 
+import { sourceDecisionForKanbanMove } from "@/components/workspace/source-proposal-adjustment-board";
 import { SourceProposalReview } from "@/components/workspace/source-proposal-review";
 
 const recommended = {
@@ -110,6 +111,53 @@ test("presents a summary-first proposal with only the three proposal tabs", () =
     ).toBeNull();
 });
 
+test("explains the purpose of the proposal actions in tooltips", async () => {
+    render(
+        <SourceProposalReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            summary={summary as never}
+            proposalItems={[recommended] as never}
+            disposition="recommended"
+            onDispositionChange={vi.fn()}
+            adjustmentSets={
+                {
+                    included: [recommended],
+                    available: [alternative],
+                } as never
+            }
+            inspectionReview={inspectionReview as never}
+            onDecide={vi.fn()}
+            onApprove={vi.fn()}
+            onRecompute={vi.fn()}
+        />,
+    );
+
+    const adjustButton = screen.getByRole("button", {
+        name: "Adjust proposal",
+    });
+    fireEvent.mouseOver(adjustButton);
+    fireEvent.focus(adjustButton);
+    expect(
+        await screen.findByText(
+            /Refine the proposed corpus by moving sources between Included and Available before approval/i,
+        ),
+    ).toBeTruthy();
+
+    fireEvent.mouseOut(adjustButton);
+    fireEvent.blur(adjustButton);
+    const inspectButton = screen.getByRole("button", {
+        name: "Inspect all candidates",
+    });
+    fireEvent.mouseOver(inspectButton);
+    fireEvent.focus(inspectButton);
+    expect(
+        await screen.findByText(
+            /Review every discovered candidate, its provenance, and its current source decision/i,
+        ),
+    ).toBeTruthy();
+});
+
 test("groups adjustment choices without showing an inspection filter", () => {
     const onDecide = vi.fn();
     render(
@@ -142,6 +190,54 @@ test("groups adjustment choices without showing an inspection filter", () => {
         screen.getByRole("button", { name: /Include Independent analysis/i }),
     );
     expect(onDecide).toHaveBeenCalledWith("source-alternative", "accepted");
+});
+
+test("maps kanban column changes to persisted source decisions", () => {
+    expect(sourceDecisionForKanbanMove("available", "included")).toBe(
+        "accepted",
+    );
+    expect(sourceDecisionForKanbanMove("included", "available")).toBe(
+        "rejected",
+    );
+    expect(sourceDecisionForKanbanMove("included", "included")).toBeNull();
+});
+
+test("uses the shared kanban interaction with accessible source handles", () => {
+    const { container } = render(
+        <SourceProposalReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            summary={summary as never}
+            proposalItems={[recommended] as never}
+            disposition="recommended"
+            onDispositionChange={vi.fn()}
+            adjustmentSets={
+                {
+                    included: [recommended],
+                    available: [alternative],
+                } as never
+            }
+            inspectionReview={inspectionReview as never}
+            onDecide={vi.fn()}
+            onApprove={vi.fn()}
+            onRecompute={vi.fn()}
+        />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Adjust proposal" }));
+
+    expect(container.querySelector('[data-slot="kanban"]')).not.toBeNull();
+    expect(
+        container.querySelectorAll('[data-slot="kanban-column"]'),
+    ).toHaveLength(2);
+    expect(
+        container.querySelectorAll('[data-slot="kanban-item"]'),
+    ).toHaveLength(2);
+    expect(
+        screen.getByRole("button", {
+            name: "Move Independent analysis between proposal sets",
+        }),
+    ).toBeTruthy();
 });
 
 test("lets the analyst reset an explicit override to the proposal", () => {

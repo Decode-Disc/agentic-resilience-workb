@@ -14,6 +14,7 @@ export interface InfiniteCollectionViewportProps {
     ariaLabel: string;
     loadMoreLabel?: string;
     loadingFallback?: ReactNode;
+    progressContent?: ReactNode;
     endContent?: ReactNode;
     className?: string;
     viewportClassName?: string;
@@ -29,6 +30,7 @@ export function InfiniteCollectionViewport({
     ariaLabel,
     loadMoreLabel = "Load more",
     loadingFallback,
+    progressContent,
     endContent,
     className,
     viewportClassName,
@@ -53,24 +55,27 @@ export function InfiniteCollectionViewport({
             {children}
             <div className="flex min-h-12 items-center justify-center px-2 py-3">
                 {hasMore ? (
-                    isLoadingMore && loadingFallback ? (
-                        <div
-                            role="status"
-                            aria-label="Loading more items"
-                            aria-live="polite"
-                            className="w-full">
-                            {loadingFallback}
-                        </div>
-                    ) : (
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            disabled={isLoadingMore}
-                            onClick={onLoadMore}>
-                            {isLoadingMore ? "Loading…" : loadMoreLabel}
-                        </Button>
-                    )
+                    <div className="flex w-full flex-col items-center gap-2">
+                        {progressContent}
+                        {isLoadingMore && loadingFallback ? (
+                            <div
+                                role="status"
+                                aria-label="Loading more items"
+                                aria-live="polite"
+                                className="w-full">
+                                {loadingFallback}
+                            </div>
+                        ) : (
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={isLoadingMore}
+                                onClick={onLoadMore}>
+                                {isLoadingMore ? "Loading…" : loadMoreLabel}
+                            </Button>
+                        )}
+                    </div>
                 ) : (
                     endContent
                 )}

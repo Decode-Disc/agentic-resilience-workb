@@ -121,6 +121,10 @@ Build the smallest runnable vertical slice that preserves the relevant invariant
 
 Keep domain rules out of UI components. Keep provider-specific types and model names out of domain records and workflow business logic. Convex remains the state owner.
 
+### Coding Rules
+
+- Do not run `pnpm run build` for each changes. Only build after a substantial change to verify that the build succeeds. Use `pnpm run lint` and `pnpm run typecheck` for correctness verification. 
+
 ### Centralization and Shared Ownership
 
 - Give each shared responsibility one explicit owner. A decision's labels, semantic status, iconography, presentation tokens, validation, or policy must not be redefined independently by multiple consumers.

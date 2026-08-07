@@ -299,7 +299,7 @@ export default function AnimatedListFilter<TValue extends string>({
                                             className={cn(
                                                 "flex size-5 items-center justify-center rounded-full border border-border",
                                                 isSelected &&
-                                                "border-primary bg-primary text-primary-foreground",
+                                                    "border-primary bg-primary text-primary-foreground",
                                             )}>
                                             {isSelected ? (
                                                 <Icon

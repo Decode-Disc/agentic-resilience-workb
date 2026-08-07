@@ -15,11 +15,27 @@ import { type ReactNode, useState } from "react";
 import Icon from "@/components/icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+    Card,
+    CardAction,
+    CardContent,
+    CardDescription,
+    CardFooter,
+    CardHeader,
+    CardTitle,
+} from "@/components/ui/card";
 import DiscreteTabs, {
     type DiscreteTabItem,
 } from "@/components/ui/discrete-tabs";
 import MotionAnimatePresence from "@/components/ui/motion-animate-presence";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { SourceMasterList } from "@/components/workspace/source-master-list";
+import { SourceProposalAdjustmentBoard } from "@/components/workspace/source-proposal-adjustment-board";
 import { SourceReview } from "@/components/workspace/source-review";
 
 type ProposalSummary = NonNullable<
@@ -42,24 +58,24 @@ type ProposalNavigationPreset = "slide-left" | "slide-right";
 const dispositionTabs: ReadonlyArray<
     Omit<DiscreteTabItem, "count"> & { id: ProposalDisposition }
 > = [
-        {
-            id: "recommended",
-            title: "Recommended",
-            icon: CheckmarkCircle02Icon,
-            iconClassName: "text-approved",
-        },
-        {
-            id: "needs_attention",
-            title: "Needs attention",
-            icon: AlertCircleIcon,
-            iconClassName: "text-review",
-        },
-        {
-            id: "alternative",
-            title: "Alternatives",
-            icon: CheckListIcon,
-        },
-    ];
+    {
+        id: "recommended",
+        title: "Recommended",
+        icon: CheckmarkCircle02Icon,
+        iconClassName: "text-approved",
+    },
+    {
+        id: "needs_attention",
+        title: "Needs attention",
+        icon: AlertCircleIcon,
+        iconClassName: "text-review",
+    },
+    {
+        id: "alternative",
+        title: "Alternatives",
+        icon: CheckListIcon,
+    },
+];
 
 function humanize(value: string): string {
     const text = value.replaceAll("_", " ");
@@ -206,7 +222,6 @@ export function SourceProposalReview({
     }
 
     if (view === "adjust") {
-        const actionDisabled = isApproved;
         return (
             <ProposalViewTransition
                 view={view}
@@ -216,115 +231,15 @@ export function SourceProposalReview({
                 <section aria-label="Adjust source proposal">
                     <SecondaryViewHeader
                         title="Adjust proposal"
-                        description="Included sources form the corpus. Available sources stay excluded unless you add them."
+                        description="Drag sources between Included and Available, or use the card actions. Included sources form the corpus."
                         onBack={returnToProposal}
                     />
-                    <div className="grid gap-4 md:grid-cols-2">
-                        <section aria-labelledby="included-sources-heading">
-                            <h2
-                                id="included-sources-heading"
-                                className="mb-2 text-section">
-                                Included
-                            </h2>
-                            <SourceMasterList
-                                heading="Included in proposal"
-                                description="Sources currently selected for the proposed corpus."
-                                items={adjustmentSets.included}
-                                total={adjustmentSets.included.length}
-                                reviewStatus={summary.revisionStatus}
-                                collectionLabel="Included proposal sources"
-                                emptyTitle="No included sources"
-                                emptyDescription="Include at least one source before approval."
-                                annotation={renderProposalAnnotation}
-                                rowAction={(source) => (
-                                    <>
-                                        <Button
-                                            type="button"
-                                            size="xs"
-                                            variant="outline"
-                                            disabled={actionDisabled}
-                                            aria-label={`Remove ${source.title} from proposal`}
-                                            onClick={() =>
-                                                void onDecide(
-                                                    source.sourceId,
-                                                    "rejected",
-                                                )
-                                            }>
-                                            Remove
-                                        </Button>
-                                        {source.decision !== "pending" ? (
-                                            <Button
-                                                type="button"
-                                                size="xs"
-                                                variant="ghost"
-                                                disabled={actionDisabled}
-                                                aria-label={`Reset ${source.title} to proposal`}
-                                                onClick={() =>
-                                                    void onDecide(
-                                                        source.sourceId,
-                                                        "pending",
-                                                    )
-                                                }>
-                                                Reset to proposal
-                                            </Button>
-                                        ) : null}
-                                    </>
-                                )}
-                            />
-                        </section>
-                        <section aria-labelledby="available-sources-heading">
-                            <h2
-                                id="available-sources-heading"
-                                className="mb-2 text-section">
-                                Available
-                            </h2>
-                            <SourceMasterList
-                                heading="Available alternatives"
-                                description="Candidates excluded from the proposal unless you include them."
-                                items={adjustmentSets.available}
-                                total={adjustmentSets.available.length}
-                                reviewStatus={summary.revisionStatus}
-                                collectionLabel="Available proposal sources"
-                                emptyTitle="No available alternatives"
-                                emptyDescription="Every candidate source is already included."
-                                annotation={renderProposalAnnotation}
-                                rowAction={(source) => (
-                                    <>
-                                        <Button
-                                            type="button"
-                                            size="xs"
-                                            variant="outline"
-                                            disabled={actionDisabled}
-                                            aria-label={`Include ${source.title}`}
-                                            onClick={() =>
-                                                void onDecide(
-                                                    source.sourceId,
-                                                    "accepted",
-                                                )
-                                            }>
-                                            Include
-                                        </Button>
-                                        {source.decision !== "pending" ? (
-                                            <Button
-                                                type="button"
-                                                size="xs"
-                                                variant="ghost"
-                                                disabled={actionDisabled}
-                                                aria-label={`Reset ${source.title} to proposal`}
-                                                onClick={() =>
-                                                    void onDecide(
-                                                        source.sourceId,
-                                                        "pending",
-                                                    )
-                                                }>
-                                                Reset to proposal
-                                            </Button>
-                                        ) : null}
-                                    </>
-                                )}
-                            />
-                        </section>
-                    </div>
+                    <SourceProposalAdjustmentBoard
+                        adjustmentSets={adjustmentSets}
+                        reviewStatus={summary.revisionStatus}
+                        onDecide={onDecide}
+                        annotation={renderProposalAnnotation}
+                    />
                 </section>
             </ProposalViewTransition>
         );
@@ -336,15 +251,15 @@ export function SourceProposalReview({
             tab.id === "recommended"
                 ? summary.counts.recommended
                 : tab.id === "needs_attention"
-                    ? summary.counts.needsAttention
-                    : summary.counts.alternative,
+                  ? summary.counts.needsAttention
+                  : summary.counts.alternative,
     }));
     const dispositionTotal =
         disposition === "recommended"
             ? summary.counts.recommended
             : disposition === "needs_attention"
-                ? summary.counts.needsAttention
-                : summary.counts.alternative;
+              ? summary.counts.needsAttention
+              : summary.counts.alternative;
 
     return (
         <ProposalViewTransition
@@ -353,42 +268,77 @@ export function SourceProposalReview({
             hasNavigated={hasNavigated}
             shouldReduceMotion={shouldReduceMotion}>
             <section aria-label="Proposed source set" className="space-y-4">
-                <div className="surface-floating rounded-2xl border border-border/60 p-4 sm:p-5">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="min-w-0">
-                            <p className="text-micro text-brand-purple">
-                                Proposed source set
-                            </p>
-                            <h2 className="mt-2 text-xl font-medium">
-                                {`${summary.effectiveIncludedCount} source${summary.effectiveIncludedCount === 1 ? "" : "s"} included`}
-                            </h2>
-                            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                                The system selected a focused corpus from the
-                                full candidate list. Review the exceptions or
-                                approve it as proposed. Selection uses discovery
-                                details only; source content has not been read.
-                            </p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => openSecondaryView("adjust")}>
-                                <Icon iconNode={Settings02Icon} />
-                                Adjust proposal
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => openSecondaryView("inspect")}>
-                                <Icon iconNode={Search01Icon} />
-                                Inspect all candidates
-                            </Button>
-                        </div>
-                    </div>
-
+                <Card className="surface-floating">
+                    <CardHeader>
+                        <p className="text-micro text-accent-foreground">
+                            Proposed source set
+                        </p>
+                        <CardTitle>
+                            {`${summary.effectiveIncludedCount} source${summary.effectiveIncludedCount === 1 ? "" : "s"} included`}
+                        </CardTitle>
+                        <CardDescription>
+                            The system selected a focused corpus from the full
+                            candidate list. Review the exceptions or approve it
+                            as proposed. Selection uses discovery details only;
+                            source content has not been read.
+                        </CardDescription>
+                        <CardAction>
+                            <TooltipProvider delay={200}>
+                                <div className="flex flex-wrap gap-2">
+                                    <Tooltip>
+                                        <TooltipTrigger
+                                            render={
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() =>
+                                                        openSecondaryView(
+                                                            "adjust",
+                                                        )
+                                                    }
+                                                />
+                                            }>
+                                            <Icon iconNode={Settings02Icon} />
+                                            Adjust proposal
+                                        </TooltipTrigger>
+                                        <TooltipContent
+                                            side="bottom"
+                                            className="max-w-72 text-center">
+                                            Refine the proposed corpus by moving
+                                            sources between Included and
+                                            Available before approval.
+                                        </TooltipContent>
+                                    </Tooltip>
+                                    <Tooltip>
+                                        <TooltipTrigger
+                                            render={
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() =>
+                                                        openSecondaryView(
+                                                            "inspect",
+                                                        )
+                                                    }
+                                                />
+                                            }>
+                                            <Icon iconNode={Search01Icon} />
+                                            Inspect all candidates
+                                        </TooltipTrigger>
+                                        <TooltipContent
+                                            side="bottom"
+                                            className="max-w-72 text-center">
+                                            Review every discovered candidate,
+                                            its provenance, and its current
+                                            source decision.
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </div>
+                            </TooltipProvider>
+                        </CardAction>
+                    </CardHeader>
                     {summary.gaps.length > 0 ? (
-                        <div className="mt-4 rounded-xl border border-review/30 bg-review/10 p-3">
+                        <CardContent className="rounded-xl border border-review/30 bg-review/10">
                             <p className="text-xs font-medium text-foreground">
                                 Coverage gaps to keep in view
                             </p>
@@ -399,22 +349,21 @@ export function SourceProposalReview({
                                     </Badge>
                                 ))}
                             </div>
-                        </div>
+                        </CardContent>
                     ) : null}
-
-                    <div className="mt-4 flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                    <CardFooter className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <p className="text-xs text-muted-foreground">
                             {isApproved
                                 ? "This source set is approved and read-only."
                                 : summary.effectiveStatus === "stale"
-                                    ? "The candidate list changed. Refresh the proposal before approval."
-                                    : summary.effectiveStatus === "failed"
-                                        ? "The proposal could not be prepared. Refresh it before approval."
-                                        : `${summary.effectiveIncludedCount} source${summary.effectiveIncludedCount === 1 ? " is" : "s are"} currently included.`}
+                                  ? "The candidate list changed. Refresh the proposal before approval."
+                                  : summary.effectiveStatus === "failed"
+                                    ? "The proposal could not be prepared. Refresh it before approval."
+                                    : `${summary.effectiveIncludedCount} source${summary.effectiveIncludedCount === 1 ? " is" : "s are"} currently included.`}
                         </p>
                         <div className="flex flex-wrap gap-2">
                             {summary.effectiveStatus !== "ready" &&
-                                !isApproved ? (
+                            !isApproved ? (
                                 <Button
                                     type="button"
                                     variant="secondary"
@@ -434,8 +383,8 @@ export function SourceProposalReview({
                                     : "Approve source set"}
                             </Button>
                         </div>
-                    </div>
-                </div>
+                    </CardFooter>
+                </Card>
 
                 <div>
                     <div className="bg-card rounded-t-(--radius-source-card) border border-border/60 p-3">
@@ -461,8 +410,8 @@ export function SourceProposalReview({
                             disposition === "recommended"
                                 ? "Sources selected for the proposed corpus."
                                 : disposition === "needs_attention"
-                                    ? "Sources whose discovery details need analyst review."
-                                    : "Other candidates retained for comparison."
+                                  ? "Sources whose discovery details need analyst review."
+                                  : "Other candidates retained for comparison."
                         }
                         items={proposalItems}
                         total={dispositionTotal}
@@ -505,8 +454,8 @@ function ProposalViewTransition({
                 shouldReduceMotion
                     ? { opacity: 0 }
                     : hasNavigated
-                        ? undefined
-                        : false
+                      ? undefined
+                      : false
             }
             animate={shouldReduceMotion ? { opacity: 1 } : undefined}
             exit={{ opacity: 0 }}

@@ -209,7 +209,7 @@ export function SourceReview({
     const masterList = (
         <SourceMasterList
             heading="Candidate sources"
-            description="Review provenance and record source-level decisions across the full candidate set."
+            description="Review the full source candidate set."
             items={visibleSources}
             total={filterTotal}
             selectedId={selectedId}
