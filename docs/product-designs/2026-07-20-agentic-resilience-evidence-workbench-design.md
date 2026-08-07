@@ -2,11 +2,11 @@
 
 ## Status
 
-Validated design. Refined for Roadmap Phases 4–8 on 2026-07-27.
+Validated design. Refined for Roadmap Phases 4–8 on 2026-07-27 and deterministic source-proposal review on 2026-08-07.
 
 ## Date
 
-2026-07-20; revised 2026-07-27
+2026-07-20; revised 2026-07-27 and 2026-08-07
 
 ## Purpose
 
@@ -90,17 +90,22 @@ The system creates a research plan tailored to the company and searches by sourc
 
 ### 3. Mandatory source checkpoint
 
-The workflow stops after discovery. The analyst reviews the proposed corpus,
-accepts or rejects individual sources, leaves candidates pending, or adds public
-HTTPS URLs. No retrieval, evidence extraction, or assessment starts before
-explicit approval.
+The workflow stops after discovery and creates a versioned `SourceSelectionProposal` for the active draft corpus revision. The deterministic metadata-only policy recommends a balanced, bounded source set without an additional model call. No retrieval, evidence extraction, or assessment starts before explicit analyst approval.
+
+The policy first removes exact duplicates and identifies metadata-proven superseding versions, then recommends the best eligible source from each available source family required by the coverage preset, and finally fills remaining places by source priority, discovery rank, recency, publisher diversity, preset, and research angle. A missing or weak family remains a visible gap; the system never recommends a weak source merely to reach a target.
+
+The server-owned `SOURCE_RECOMMENDED_TARGET` defaults to 12, remains configurable, and cannot exceed `SOURCE_CANDIDATE_LIMIT`. It is a maximum automatic recommendation target rather than a quota to fill. Proposal items are `recommended`, `needs_attention`, or `alternative`; `needs_attention` never blocks approval.
+
+The default source-checkpoint surface summarizes the proposed corpus, source-family coverage, visible gaps, exceptions, and analyst adjustments. `DiscreteTabs` switches among `Recommended`, `Needs attention`, and `Alternatives`. The analyst may approve the proposal without opening every source, adjust it through separate `Included` and `Available` working sets, inspect every candidate in the preserved master-detail view, or add public HTTPS URLs.
 
 The Start composer validates an attached public HTTPS reference immediately and
 holds only an expiring server-owned preparation receipt. Dossier creation
 atomically converts valid receipts into pending candidates in the first draft
 corpus revision. The same intake action adds a pending candidate directly when
 the analyst is already reviewing an active dossier. A prepared or pending URL
-still requires the normal corpus decision and cannot contribute downstream.
+still requires the normal corpus decision and cannot contribute downstream. Once it becomes a valid candidate, an analyst-supplied source is recommended by default, counts toward the configured target, and remains removable before approval.
+
+System recommendations never become human decisions by themselves. Analyst adjustments use append-only source decisions. `Approve proposed corpus` atomically preserves those overrides, writes an individual accepted decision for every still-pending recommended source, leaves all other candidates pending, approves the corpus revision, and resumes the workflow. A changed candidate set makes the proposal stale and requires recomputation without overwriting analyst decisions.
 
 An approved `CorpusRevision` contains accepted sources only. Pending sources
 remain visible but cannot contribute downstream. Accepting one later creates
@@ -176,9 +181,7 @@ their exact persisted prerequisite. On desktop, the selected item opens in a
 retractable contextual panel beside the primary workspace. On smaller screens,
 that panel becomes a drawer.
 
-Source review is a dedicated workspace mode with the candidate list in the
-primary area and source detail in the contextual panel. The matrix is never
-shown as if unapproved sources had already produced evidence.
+Source review is a dedicated, summary-first workspace mode. The proposal summary and corpus-approval action occupy the primary decision surface. The existing source-specific master list, source detail, pagination, filters, responsive drawer, and preview remain available through proposal adjustment and full-candidate inspection. The matrix is never shown as if unapproved sources had already produced evidence.
 
 ## Evidence Model
 
@@ -194,6 +197,8 @@ ResearchRun
 ResearchPlan
 RunEvent
 Source
+SourceSelectionProposal
+SourceSelectionProposalItem
 SourceDecision
 CorpusRevision
 SourceVersion
@@ -224,6 +229,7 @@ Important invariants:
 - A retry must not duplicate claims, quota reservations, or billing records.
 - AI results are typed proposals. Application-owned, versioned policy determines
   structural validity and quality gates.
+- Source-selection proposals never replace append-only analyst decisions or approve a corpus without an explicit human checkpoint.
 
 ## Assessment Dimensions
 
@@ -288,7 +294,7 @@ Sources are prioritized as follows:
 
 A source receives a relevance estimate, not a truth score. Truth is evaluated at the claim level through provenance, corroboration, and counter-evidence.
 
-The source checkpoint shows why each source was selected, which dimensions it may inform, its date and authority, duplicate or superseding versions, and extraction restrictions.
+The source checkpoint shows why each source was recommended or deferred, its likely source-family contribution, date and authority, duplicate or superseding versions, extraction restrictions, and whether the analyst changed the proposal. Metadata-derived family labels are estimates and never claim that a source establishes a fact before extraction.
 
 The start surface offers three coverage presets: `Balanced` by default,
 `First-party depth`, and `Independent scrutiny`. They adjust discovery priority
@@ -308,7 +314,7 @@ Preflight-resolve company
 → Await evidence decision when insufficient
 → Build research plan
 → Discover sources in parallel
-→ Persist proposed CorpusRevision
+→ Persist proposed CorpusRevision and SourceSelectionProposal
 → Await corpus-revision approval
 → Retrieve and normalize approved sources
 → Extract passages and atomic claims
@@ -395,6 +401,8 @@ claim-correction      → grounded replacement proposal
 dimension-assessment  → strongest suitable reasoning
 brief-generation      → grounded synthesis and writing
 ```
+
+The deterministic Phase 4 source-selection proposal does not call the `source-relevance` capability. That capability remains an optional future path only if measured metadata-policy failures justify its additional cost and provider boundary.
 
 A provider-agnostic `ModelRouter` resolves each request based on capability, quality, approximate cost, configured resource guards, availability, and prior failures.
 
@@ -489,6 +497,8 @@ or policy configuration console.
   continuation, or explicit completion; it is not rendered as a generic error.
 - Human decisions are never overwritten by a workflow retry or later provider response.
 - Cancellation may allow an already-running external request to finish, but its result must not advance a cancelled run.
+- A proposal with no eligible recommendation disables corpus approval and directs the analyst to inspect candidates or add a source.
+- A changed candidate set marks the proposal stale; approval cannot continue until deterministic recomputation succeeds.
 
 ## Demonstration Strategy
 
@@ -531,6 +541,7 @@ Software verification includes:
 - atomic quota reservation under concurrency;
 - workflow resumption and idempotency;
 - mandatory source checkpoint enforcement;
+- deterministic source-proposal targeting, dynamic family coverage, stale detection, and grouped approval writing individual decisions;
 - exclusion of rejected sources;
 - provider schema validation;
 - preservation of analyst decisions;
@@ -602,8 +613,7 @@ The MVP is complete when an invited analyst can:
 3. Resolve an evidence-sufficiency checkpoint through URL addition, explicit
    completion, or a justified override.
 4. Observe real source-discovery progress.
-5. Review and approve a versioned source corpus while leaving candidates
-   pending when appropriate.
+5. Review a deterministic, versioned source proposal, adjust only when needed, and approve the corpus in one action while leaving unselected candidates pending.
 6. Resume a durable workflow after that approval.
 7. Review typed, policy-evaluated claims through an exception-driven surface
    with precise citations and counter-evidence.
@@ -632,3 +642,5 @@ The MVP is complete when an invited analyst can:
 - [ADR-013: Use rate-limited four-digit invitation OTPs](../decisions/013-use-rate-limited-four-digit-invitation-otps.md)
 - [ADR-014: Use reusable access codes for stable visitors](../decisions/014-use-reusable-access-codes-for-stable-visitors.md)
 - [ADR-015: Use bounded Exa company website enrichment before admission](../decisions/015-use-bounded-exa-company-website-enrichment-before-admission.md)
+- [ADR-016: Centralize manual source intake with expiring preparations](../decisions/016-centralize-manual-source-intake-with-expiring-preparations.md)
+- [ADR-017: Use deterministic source selection proposals](../decisions/017-use-deterministic-source-selection-proposals.md)

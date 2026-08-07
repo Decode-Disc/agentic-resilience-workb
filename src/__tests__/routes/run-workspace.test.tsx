@@ -276,13 +276,15 @@ describe("production run workspace", () => {
             />,
         );
 
-        const allSources = screen.getByRole("tab", { name: /All.*3/i });
-        expect(allSources.getAttribute("aria-selected")).toBe("true");
-        expect(screen.getByRole("tab", { name: /Accepted.*1/i })).toBeTruthy();
+        const decisionFilter = screen.getByRole("button", {
+            name: /Filter candidate sources: All decisions/i,
+        });
+        expect(decisionFilter.getAttribute("aria-expanded")).toBe("false");
         expect(
-            screen.getByRole("tab", { name: /Pending review.*1/i }),
-        ).toBeTruthy();
-        expect(screen.getByRole("tab", { name: /Rejected.*1/i })).toBeTruthy();
+            screen.queryByRole("tablist", {
+                name: "Filter candidate sources by decision",
+            }),
+        ).toBeNull();
         expect(
             screen.queryByRole("button", { name: "Corpus approval" }),
         ).toBeNull();
@@ -306,14 +308,6 @@ describe("production run workspace", () => {
             .map((label) => label.textContent);
         expect(groupLabels).toEqual(["Pending review", "Accepted", "Rejected"]);
 
-        const decisionTabs = screen.getByRole("tablist", {
-            name: "Filter candidate sources by decision",
-        });
-        expect(decisionTabs.className).toContain("flex-nowrap");
-        expect(decisionTabs.className).toContain("w-max");
-        expect(decisionTabs.className).toContain("min-w-full");
-        expect(decisionTabs.style.display).not.toBe("block");
-
         const toolbarActions = document.querySelector(
             '[data-slot="toolbar-action-list"]',
         );
@@ -323,7 +317,8 @@ describe("production run workspace", () => {
         expect(toolbarActions?.className).toContain("min-w-full");
         expect((toolbarActions as HTMLElement).style.display).not.toBe("block");
 
-        fireEvent.click(screen.getByRole("tab", { name: /Accepted.*1/i }));
+        fireEvent.click(decisionFilter);
+        fireEvent.click(screen.getByRole("radio", { name: /Accepted.*1/i }));
         expect(
             screen.getByRole("button", {
                 name: /Open Accepted report for review/i,

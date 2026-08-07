@@ -170,6 +170,14 @@ test("persists valid Exa candidates and records a partial provider result", asyn
     });
     expect(exaSearch).toHaveBeenCalledOnce();
     await expect(
+        t.run((ctx) => ctx.db.query("sources").collect()),
+    ).resolves.toEqual([
+        expect.objectContaining({
+            providerResultPosition: 0,
+            discoveryQueryIndex: 0,
+        }),
+    ]);
+    await expect(
         t.run((ctx) => ctx.db.query("providerCalls").collect()),
     ).resolves.toEqual([
         expect.objectContaining({

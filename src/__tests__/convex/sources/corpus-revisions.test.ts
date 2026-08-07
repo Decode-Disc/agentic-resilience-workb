@@ -7,12 +7,18 @@ import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 const originalSourceCandidateLimit = process.env.SOURCE_CANDIDATE_LIMIT;
+const originalSourceRecommendedTarget = process.env.SOURCE_RECOMMENDED_TARGET;
 
 afterEach(() => {
     if (originalSourceCandidateLimit === undefined) {
         delete process.env.SOURCE_CANDIDATE_LIMIT;
     } else {
         process.env.SOURCE_CANDIDATE_LIMIT = originalSourceCandidateLimit;
+    }
+    if (originalSourceRecommendedTarget === undefined) {
+        delete process.env.SOURCE_RECOMMENDED_TARGET;
+    } else {
+        process.env.SOURCE_RECOMMENDED_TARGET = originalSourceRecommendedTarget;
     }
 });
 const getReviewSummary = makeFunctionReference<
@@ -93,10 +99,24 @@ const approveCorpus = makeFunctionReference<
     {
         runId: Id<"researchRuns">;
         corpusRevisionId: Id<"corpusRevisions">;
+        proposalId: Id<"sourceSelectionProposals">;
+        proposalVersion: number;
         decisionKey: string;
     },
     { accepted: boolean }
->("sources:approveCorpusRevision");
+>("sourceSelectionProposals:approveProposedCorpus");
+const generateSourceSelectionProposal = makeFunctionReference<
+    "mutation",
+    {
+        runId: Id<"researchRuns">;
+        expectedExecutionGeneration: number;
+    },
+    {
+        proposalId: Id<"sourceSelectionProposals">;
+        version: number;
+        status: "ready" | "failed";
+    }
+>("sourceSelectionProposals:generateForRun");
 const backfillSourceReviewProjection = makeFunctionReference<
     "mutation",
     { paginationOpts: { numItems: number; cursor: string | null } },
@@ -112,7 +132,7 @@ const backfillSourceReviewProjection = makeFunctionReference<
 >("adminOperations:backfillSourceReviewProjection");
 
 async function createSourceReviewFixture(t: ReturnType<typeof convexTest>) {
-    return t.run(async (ctx) => {
+    const fixture = await t.run(async (ctx) => {
         const userId = await ctx.db.insert("users", { isAnonymous: true });
         const otherUserId = await ctx.db.insert("users", {
             isAnonymous: true,
@@ -149,9 +169,9 @@ async function createSourceReviewFixture(t: ReturnType<typeof convexTest>) {
         });
         const runId = await ctx.db.insert("researchRuns", {
             ownerVisitorId: visitorId,
-            lifecycleState: "awaiting_source_review",
-            executionStatus: "paused",
-            pauseReason: "source_review",
+            coveragePreset: "balanced",
+            lifecycleState: "discovering_sources",
+            executionStatus: "running",
             executionGeneration: 1,
             workflowId: "paused-workflow",
             nextEventSequence: 1,
@@ -199,6 +219,18 @@ async function createSourceReviewFixture(t: ReturnType<typeof convexTest>) {
             sourceId,
         };
     });
+    const proposal = await t.mutation(generateSourceSelectionProposal, {
+        runId: fixture.runId,
+        expectedExecutionGeneration: 1,
+    });
+    await t.run((ctx) =>
+        ctx.db.patch(fixture.runId, {
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        }),
+    );
+    return { ...fixture, ...proposal };
 }
 
 test("owner appends source decisions while other visitors are rejected", async () => {
@@ -351,6 +383,7 @@ test("paginates the all view by pending, accepted, then rejected groups", async 
 
 test("rejects a manual URL before inspection when the dossier is at capacity", async () => {
     process.env.SOURCE_CANDIDATE_LIMIT = "1";
+    process.env.SOURCE_RECOMMENDED_TARGET = "1";
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
     const fixture = await createSourceReviewFixture(t);
@@ -421,6 +454,59 @@ test("rejects duplicate and stale manual candidates without inserting source sta
     });
 });
 
+test("recomputes the source proposal after an analyst adds a source", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createSourceReviewFixture(t);
+    const owner = t.withIdentity({
+        subject: `${fixture.userId}|source-owner`,
+    });
+
+    const manualSourceId = await owner.mutation(persistManualCandidate, {
+        runId: fixture.runId,
+        corpusRevisionId: fixture.corpusRevisionId,
+        executionGeneration: 1,
+        providerReference: "url_metadata:manual-proposal",
+        canonicalUrl: "https://example.com/manual-proposal",
+        title: "Analyst supplied source",
+    });
+
+    const recomputed = await t.run(async (ctx) => {
+        const revision = await ctx.db.get(fixture.corpusRevisionId);
+        if (!revision?.sourceSelectionProposalId) {
+            throw new Error("Recomputed proposal was not persisted");
+        }
+        const proposalId = revision.sourceSelectionProposalId;
+        const proposal = await ctx.db.get(proposalId);
+        const item = await ctx.db
+            .query("sourceSelectionProposalItems")
+            .withIndex("by_proposal_and_source", (query) =>
+                query
+                    .eq("proposalId", proposalId)
+                    .eq("sourceId", manualSourceId),
+            )
+            .unique();
+        return { proposal, item };
+    });
+
+    expect(recomputed.proposal).toMatchObject({ version: 2, status: "ready" });
+    expect(recomputed.item).toMatchObject({
+        disposition: "recommended",
+        reasonCodes: ["added_by_analyst"],
+    });
+    await expect(
+        t.run(async (ctx) =>
+            ctx.db
+                .query("sourceDecisions")
+                .withIndex("by_revision_source_and_occurred_at", (query) =>
+                    query
+                        .eq("corpusRevisionId", fixture.corpusRevisionId)
+                        .eq("sourceId", fixture.sourceId),
+                )
+                .collect(),
+        ),
+    ).resolves.toHaveLength(1);
+});
+
 test("does not resume source review while another owner run is running", async () => {
     const t = convexTest(schema, modules);
     const fixture = await createSourceReviewFixture(t);
@@ -455,6 +541,8 @@ test("does not resume source review while another owner run is running", async (
         owner.mutation(approveCorpus, {
             runId: fixture.runId,
             corpusRevisionId: fixture.corpusRevisionId,
+            proposalId: fixture.proposalId,
+            proposalVersion: fixture.version,
             decisionKey: "approve-with-conflict",
         }),
     ).rejects.toThrow("already running");

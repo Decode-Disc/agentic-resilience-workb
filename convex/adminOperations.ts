@@ -9,6 +9,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
 import { sourceCandidateLimit } from "./resourceLimits";
+import { createSourceSelectionProposal } from "./sourceSelectionProposals";
 
 async function requireAdmin(ctx: QueryCtx | MutationCtx) {
     const authUserId = await getAuthUserId(ctx);
@@ -230,6 +231,79 @@ export const backfillSourceReviewProjection = mutation({
                 revisionId: revision._id,
                 sourceTotal: sources.length,
                 projectionTotal: projection.length,
+            });
+        }
+        return { ...revisions, page };
+    },
+});
+
+const sourceSelectionProposalBackfillResultValidator = v.object({
+    revisionId: v.id("corpusRevisions"),
+    proposalId: v.union(v.id("sourceSelectionProposals"), v.null()),
+    outcome: v.union(
+        v.literal("created"),
+        v.literal("unchanged"),
+        v.literal("skipped"),
+    ),
+});
+
+export const backfillSourceSelectionProposals = mutation({
+    args: { paginationOpts: paginationOptsValidator },
+    returns: paginationResultValidator(
+        sourceSelectionProposalBackfillResultValidator,
+    ),
+    handler: async (ctx, args) => {
+        await requireAdmin(ctx);
+        if (
+            args.paginationOpts.numItems < 1 ||
+            args.paginationOpts.numItems > 10
+        ) {
+            throw new Error("Backfill page size must be between 1 and 10");
+        }
+        const revisions = await ctx.db
+            .query("corpusRevisions")
+            .order("asc")
+            .paginate(args.paginationOpts);
+        const page = [];
+        for (const revision of revisions.page) {
+            const run = await ctx.db.get(revision.runId);
+            if (
+                revision.status !== "draft" ||
+                !run ||
+                run.activeCorpusRevisionId !== revision._id ||
+                run.lifecycleState !== "awaiting_source_review"
+            ) {
+                page.push({
+                    revisionId: revision._id,
+                    proposalId: null,
+                    outcome: "skipped" as const,
+                });
+                continue;
+            }
+            if (revision.sourceSelectionProposalId) {
+                const existing = await ctx.db.get(
+                    revision.sourceSelectionProposalId,
+                );
+                if (!existing) {
+                    throw new Error(
+                        "Source selection proposal pointer is invalid",
+                    );
+                }
+                page.push({
+                    revisionId: revision._id,
+                    proposalId: existing._id,
+                    outcome: "unchanged" as const,
+                });
+                continue;
+            }
+            const proposal = await createSourceSelectionProposal(ctx, {
+                run,
+                revision,
+            });
+            page.push({
+                revisionId: revision._id,
+                proposalId: proposal.proposalId,
+                outcome: "created" as const,
             });
         }
         return { ...revisions, page };

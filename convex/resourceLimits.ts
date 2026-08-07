@@ -2,6 +2,7 @@ import { env } from "./_generated/server";
 
 const DEFAULT_COMPANY_SEARCH_RESULT_LIMIT = 40;
 const DEFAULT_SOURCE_CANDIDATE_LIMIT = 48;
+const DEFAULT_SOURCE_RECOMMENDED_TARGET = 12;
 const MAX_CONFIGURED_COLLECTION_LIMIT = 200;
 
 function configuredPositiveInteger(
@@ -40,4 +41,18 @@ export function sourceCandidateLimit(): number {
         DEFAULT_SOURCE_CANDIDATE_LIMIT,
         "Source candidate limit",
     );
+}
+
+export function sourceRecommendedTarget(): number {
+    const target = configuredPositiveInteger(
+        env.SOURCE_RECOMMENDED_TARGET,
+        DEFAULT_SOURCE_RECOMMENDED_TARGET,
+        "Source recommendation target",
+    );
+    if (target > sourceCandidateLimit()) {
+        throw new Error(
+            "Source recommendation target must not exceed source candidate limit",
+        );
+    }
+    return target;
 }

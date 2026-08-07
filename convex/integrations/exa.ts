@@ -25,6 +25,7 @@ export type DiscoveredSourceCandidate = {
     title: string;
     publishedAt?: number;
     providerReference: string;
+    providerResultPosition: number;
 };
 
 export type ExaCandidateBatch<Candidate> = {
@@ -139,7 +140,10 @@ export function createExaDiscoveryAdapter(client: ExaSearchClient): {
             });
             const candidates: Array<DiscoveredSourceCandidate> = [];
             let rejected = 0;
-            for (const result of response.results) {
+            for (const [
+                providerResultPosition,
+                result,
+            ] of response.results.entries()) {
                 try {
                     const url = new URL(result.url);
                     if (
@@ -162,6 +166,7 @@ export function createExaDiscoveryAdapter(client: ExaSearchClient): {
                             ? publishedAt
                             : undefined,
                         providerReference: result.id,
+                        providerResultPosition,
                     });
                 } catch {
                     rejected += 1;

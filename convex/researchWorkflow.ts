@@ -117,6 +117,13 @@ export const run = workflow
                 stepKey: "check_public_evidence",
             });
         }
+        await step.runMutation(
+            internal.sourceSelectionProposals.generateForRun,
+            {
+                runId: args.runId,
+                expectedExecutionGeneration: executionGeneration,
+            },
+        );
         await step.runMutation(internal.researchRuns.transition, {
             runId: args.runId,
             expectedExecutionGeneration: executionGeneration,

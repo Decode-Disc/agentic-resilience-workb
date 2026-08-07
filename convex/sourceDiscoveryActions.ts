@@ -33,7 +33,7 @@ export const discoverForRun = internalAction({
         );
         const candidates = args.filings
             .slice(0, Math.min(8, initialCapacity.remaining))
-            .map((filing) => {
+            .map((filing, providerResultPosition) => {
                 const accession = filing.accessionNumber.replaceAll("-", "");
                 const baseUrl = `https://www.sec.gov/Archives/edgar/data/${args.cik}/${accession}/`;
                 return {
@@ -47,6 +47,8 @@ export const discoverForRun = internalAction({
                         ? Date.parse(filing.filingDate)
                         : undefined,
                     providerReference: filing.accessionNumber,
+                    providerResultPosition,
+                    discoveryQueryIndex: -1,
                 };
             });
         const result = await ctx.runMutation(

@@ -1,5 +1,4 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import type { WorkflowId } from "@convex-dev/workflow";
 import {
     paginationOptsValidator,
     paginationResultValidator,
@@ -14,12 +13,11 @@ import {
     mutation,
     query,
 } from "./_generated/server";
-import { claimPausedRunExecution } from "./domain/executionClaim";
 import { manualSourceIntakeError } from "./domain/manualSourceIntake";
 import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
 import { sourceCandidateLimit } from "./resourceLimits";
-import { corpusRevisionApproved, workflow } from "./workflow";
+import { createSourceSelectionProposal } from "./sourceSelectionProposals";
 
 const sourceReviewDecisionValidator = v.union(
     v.literal("accepted"),
@@ -426,7 +424,7 @@ export const persistManualCandidate = internalMutation({
             );
         }
         const now = Date.now();
-        return insertPendingManualSource(ctx, {
+        const sourceId = await insertPendingManualSource(ctx, {
             runId: run._id,
             corpusRevisionId: revision._id,
             reviewerVisitorId: visitor._id,
@@ -435,6 +433,10 @@ export const persistManualCandidate = internalMutation({
             providerReference: args.providerReference,
             now,
         });
+        if (run.lifecycleState === "awaiting_source_review") {
+            await createSourceSelectionProposal(ctx, { run, revision });
+        }
+        return sourceId;
     },
 });
 
@@ -559,109 +561,5 @@ export const verifyApprovedHandoff = internalMutation({
             throw new Error("Approved corpus revision handoff is invalid");
         }
         return null;
-    },
-});
-
-export const approveCorpusRevision = mutation({
-    args: {
-        runId: v.id("researchRuns"),
-        corpusRevisionId: v.id("corpusRevisions"),
-        decisionKey: v.string(),
-    },
-    returns: v.object({ accepted: v.boolean() }),
-    handler: async (ctx, args) => {
-        const authUserId = await getAuthUserId(ctx);
-        if (!authUserId) {
-            throw new Error("Not authenticated");
-        }
-        const visitor = await ctx.db
-            .query("visitors")
-            .withIndex("by_auth_user_id", (builder) =>
-                builder.eq("authUserId", authUserId),
-            )
-            .unique();
-        const run = await ctx.db.get(args.runId);
-        const revision = await ctx.db.get(args.corpusRevisionId);
-        if (
-            visitor?.status !== "active" ||
-            run?.ownerVisitorId !== visitor._id ||
-            revision?.runId !== run._id
-        ) {
-            throw new Error("Unauthorized");
-        }
-        const decisionKey = args.decisionKey.trim();
-        if (decisionKey.length === 0 || decisionKey.length > 128) {
-            throw new Error("Invalid decision key");
-        }
-        const existing = await ctx.db
-            .query("checkpointDecisions")
-            .withIndex("by_run_and_decision_key", (builder) =>
-                builder.eq("runId", run._id).eq("decisionKey", decisionKey),
-            )
-            .unique();
-        if (existing) {
-            return { accepted: false };
-        }
-        if (
-            revision.status !== "draft" ||
-            run.activeCorpusRevisionId !== revision._id ||
-            run.lifecycleState !== "awaiting_source_review" ||
-            run.executionStatus !== "paused" ||
-            run.pauseReason !== "source_review" ||
-            !run.workflowId
-        ) {
-            throw new Error("Corpus revision cannot be approved");
-        }
-        const accepted = await ctx.db
-            .query("sourceReviewItems")
-            .withIndex("by_revision_decision_and_order", (builder) =>
-                builder
-                    .eq("corpusRevisionId", revision._id)
-                    .eq("decision", "accepted"),
-            )
-            .first();
-        if (!accepted) {
-            throw new Error("At least one accepted source is required");
-        }
-        const now = Date.now();
-        const executionGeneration = await claimPausedRunExecution(ctx, {
-            visitor,
-            run,
-            checkpoint: {
-                lifecycleState: "awaiting_source_review",
-                pauseReason: "source_review",
-            },
-            now,
-        });
-        await ctx.db.patch(revision._id, {
-            status: "approved",
-            approvedByVisitorId: visitor._id,
-            approvedAt: now,
-        });
-        const decisionId = await ctx.db.insert("checkpointDecisions", {
-            runId: run._id,
-            checkpoint: "source_review",
-            decisionKey,
-            reviewerVisitorId: visitor._id,
-            decision: "approved",
-            occurredAt: now,
-        });
-        await workflow.sendEvent(ctx, {
-            ...corpusRevisionApproved,
-            workflowId: run.workflowId as WorkflowId,
-            value: {
-                decisionId,
-                corpusRevisionId: revision._id,
-                executionGeneration,
-            },
-        });
-        await ctx.db.insert("auditEvents", {
-            actor: { type: "visitor", visitorId: visitor._id },
-            action: "corpus_revision_approved",
-            targetType: "corpus_revision",
-            targetId: revision._id,
-            occurredAt: now,
-        });
-        return { accepted: true };
     },
 });

@@ -1,13 +1,15 @@
 import { FilterIcon, Tick01Icon } from "@hugeicons/core-free-icons";
-import { MotionConfig, motion } from "motion/react";
-import { type ReactNode, useId, useMemo, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+
 import Icon from "@/components/icon";
 import { cn } from "@/lib/utils";
+import type { PlatformIcon } from "@/types/ui";
 
-type AnimatedListFilterOption<TValue extends string> = {
+export type AnimatedListFilterOption<TValue extends string> = {
     value: TValue;
     label: string;
-    renderIcon: (size: number) => ReactNode;
+    icon: PlatformIcon;
 };
 
 type AnimatedListFilterProps<TValue extends string> = {
@@ -15,163 +17,304 @@ type AnimatedListFilterProps<TValue extends string> = {
     value: TValue;
     options: ReadonlyArray<AnimatedListFilterOption<TValue>>;
     onChange: (value: TValue) => void;
+    align?: "start" | "center" | "end";
+    alignOffset?: number;
+    side?: "top" | "bottom" | "left" | "right";
+    sideOffset?: number;
     className?: string;
 };
 
-type AnimatedOptionItemProps<TValue extends string> = {
-    index: number;
-    option: AnimatedListFilterOption<TValue>;
-    isSelected: boolean;
-    onSelect: (value: TValue) => void;
-};
+function getPositionStyle(
+    side: "top" | "bottom" | "left" | "right",
+    sideOffset: number,
+    align: "start" | "center" | "end",
+    alignOffset: number,
+): React.CSSProperties {
+    const style: React.CSSProperties = {};
 
-/**
- * One animated filter option row used by the expandable list selector.
- */
-function AnimatedOptionItem<TValue extends string>({
-    index,
-    option,
-    isSelected,
-    onSelect,
-}: AnimatedOptionItemProps<TValue>) {
-    const delay = (index + 8) * 0.025;
+    if (side === "bottom") {
+        style.top = `calc(100% + ${sideOffset}px)`;
+    } else if (side === "top") {
+        style.bottom = `calc(100% + ${sideOffset}px)`;
+    } else if (side === "left") {
+        style.right = `calc(100% + ${sideOffset}px)`;
+    } else if (side === "right") {
+        style.left = `calc(100% + ${sideOffset}px)`;
+    }
 
-    return (
-        <motion.button
-            type="button"
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{
-                type: "spring",
-                bounce: 0.1,
-                duration: 0.25,
-                delay,
-                ease: [0.215, 0.61, 0.355, 1],
-            }}
-            onClick={() => {
-                onSelect(option.value);
-            }}
-            className="flex w-full cursor-pointer items-center justify-between rounded-2xl px-3 py-2 text-foreground hover:bg-accent">
-            <div className="flex items-center gap-x-3">
-                <span className="text-muted-foreground">
-                    {option.renderIcon(20)}
-                </span>
-                <span className="text-sm capitalize">{option.label}</span>
-            </div>
-            <div
-                className={cn(
-                    "relative h-5 w-5 overflow-hidden rounded-full border border-border",
-                    isSelected
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "bg-background",
-                )}>
-                {isSelected ? (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                        <Icon iconNode={Tick01Icon} size={14} />
-                    </div>
-                ) : null}
-            </div>
-        </motion.button>
-    );
+    if (side === "bottom" || side === "top") {
+        if (align === "start") {
+            style.left = `${alignOffset}px`;
+        } else if (align === "end") {
+            style.right = `${-alignOffset}px`;
+        } else if (align === "center") {
+            style.left = `calc(50% + ${alignOffset}px)`;
+            style.translate = "-50% 0";
+        }
+    } else {
+        if (align === "start") {
+            style.top = `${alignOffset}px`;
+        } else if (align === "end") {
+            style.bottom = `${-alignOffset}px`;
+        } else if (align === "center") {
+            style.top = `calc(50% + ${alignOffset}px)`;
+            style.translate = "0 -50%";
+        }
+    }
+
+    return style;
 }
 
-/**
- * Reusable animated list filter selector with expanding options popover panel.
- */
+function getMotionVariants(
+    side: "top" | "bottom" | "left" | "right",
+    shouldReduceMotion: boolean | null,
+) {
+    if (shouldReduceMotion) {
+        return {
+            initial: false,
+            animate: { opacity: 1, scale: 1 },
+            exit: { opacity: 0 },
+        };
+    }
+
+    switch (side) {
+        case "top":
+            return {
+                initial: { opacity: 0, y: 6, scale: 0.98 },
+                animate: { opacity: 1, y: 0, scale: 1 },
+                exit: { opacity: 0, y: 4, scale: 0.98 },
+            };
+        case "bottom":
+            return {
+                initial: { opacity: 0, y: -6, scale: 0.98 },
+                animate: { opacity: 1, y: 0, scale: 1 },
+                exit: { opacity: 0, y: -4, scale: 0.98 },
+            };
+        case "left":
+            return {
+                initial: { opacity: 0, x: 6, scale: 0.98 },
+                animate: { opacity: 1, x: 0, scale: 1 },
+                exit: { opacity: 0, x: 4, scale: 0.98 },
+            };
+        case "right":
+            return {
+                initial: { opacity: 0, x: -6, scale: 0.98 },
+                animate: { opacity: 1, x: 0, scale: 1 },
+                exit: { opacity: 0, x: -4, scale: 0.98 },
+            };
+    }
+}
+
+/** Accessible compact selector for secondary list filters. */
 export default function AnimatedListFilter<TValue extends string>({
     label,
     value,
     options,
     onChange,
+    align = "start",
+    alignOffset = 0,
+    side = "bottom",
+    sideOffset = 4,
     className,
 }: AnimatedListFilterProps<TValue>) {
-    const [isOpened, setIsOpened] = useState(false);
-    const layoutId = useId();
+    const [isOpen, setIsOpen] = useState(false);
+    const shouldReduceMotion = useReducedMotion();
+    const panelId = useId();
+    const rootRef = useRef<HTMLElement | null>(null);
+    const triggerRef = useRef<HTMLButtonElement | null>(null);
+    const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+    const selectedIndex = Math.max(
+        0,
+        options.findIndex((option) => option.value === value),
+    );
     const selectedOption = useMemo(
-        () => options.find((option) => option.value === value) ?? options[0],
-        [options, value],
+        () => options[selectedIndex] ?? options[0],
+        [options, selectedIndex],
     );
 
+    const positionStyle = useMemo(
+        () => getPositionStyle(side, sideOffset, align, alignOffset),
+        [side, sideOffset, align, alignOffset],
+    );
+    const motionVariants = useMemo(
+        () => getMotionVariants(side, shouldReduceMotion),
+        [side, shouldReduceMotion],
+    );
+
+    const close = (restoreFocus: boolean) => {
+        setIsOpen(false);
+        if (restoreFocus) {
+            triggerRef.current?.focus();
+        }
+    };
+
+    useEffect(() => {
+        if (!isOpen) {
+            return;
+        }
+        optionRefs.current[selectedIndex]?.focus();
+        const handleOutsidePointer = (event: PointerEvent) => {
+            if (!rootRef.current?.contains(event.target as Node)) {
+                close(false);
+            }
+        };
+        document.addEventListener("pointerdown", handleOutsidePointer);
+        return () => {
+            document.removeEventListener("pointerdown", handleOutsidePointer);
+        };
+    }, [isOpen, selectedIndex]);
+
+    const moveFocus = (currentIndex: number, key: string) => {
+        let nextIndex: number | null = null;
+        if (key === "ArrowDown" || key === "ArrowRight") {
+            nextIndex = (currentIndex + 1) % options.length;
+        } else if (key === "ArrowUp" || key === "ArrowLeft") {
+            nextIndex = (currentIndex - 1 + options.length) % options.length;
+        } else if (key === "Home") {
+            nextIndex = 0;
+        } else if (key === "End") {
+            nextIndex = options.length - 1;
+        }
+        if (nextIndex !== null) {
+            optionRefs.current[nextIndex]?.focus();
+        }
+    };
+
+    if (!selectedOption) {
+        return null;
+    }
+
     return (
-        <section
-            className={cn(
-                "relative flex items-center fill-muted-foreground/70",
-                className,
-            )}>
-            <MotionConfig
-                transition={{ type: "spring", duration: 0.85, bounce: 0.35 }}>
-                <button
-                    type="button"
-                    onClick={() => {
-                        setIsOpened(true);
-                    }}
-                    className="relative left-2.5 flex h-10 w-10 items-center justify-center"
-                    aria-label={label}
-                    title={label}>
-                    <Icon
-                        iconNode={FilterIcon}
-                        className="relative z-10 text-foreground"
-                        size={18}
-                    />
-                    <motion.div
-                        layoutId={`wrapper-${layoutId}`}
-                        className="absolute inset-0 z-[2] border border-border bg-background"
-                        style={{ borderRadius: 9999 }}
-                    />
-                </button>
+        <section ref={rootRef} className={cn("relative", className)}>
+            <button
+                ref={triggerRef}
+                type="button"
+                aria-label={`${label}: ${selectedOption.label}`}
+                aria-expanded={isOpen}
+                aria-controls={panelId}
+                onClick={() => setIsOpen((open) => !open)}
+                className="surface-panel inline-flex h-9 items-center gap-2 rounded-full border border-border/60 px-3 text-xs text-muted-foreground transition-colors hover:text-foreground">
+                <Icon iconNode={FilterIcon} size={16} />
+                <Icon iconNode={selectedOption.icon} size={15} />
+                <span>{selectedOption.label}</span>
+            </button>
 
-                <motion.button
-                    type="button"
-                    initial={{ x: 0 }}
-                    animate={{ x: isOpened ? 30 : 0 }}
-                    transition={{ type: "spring", bounce: 0.3, duration: 1.5 }}
-                    className="relative right-2.5 flex h-10 min-w-28 items-center justify-center gap-2 rounded-full border border-border bg-background px-3 text-xs text-muted-foreground"
-                    onClick={() => {
-                        setIsOpened((open) => !open);
-                    }}
-                    aria-label={`${label}: ${selectedOption?.label ?? ""}`}>
-                    <span>{selectedOption?.renderIcon(16)}</span>
-                    <span className="truncate capitalize">
-                        {selectedOption?.label}
-                    </span>
-                </motion.button>
-
-                {isOpened ? (
+            <AnimatePresence>
+                {isOpen ? (
                     <motion.section
-                        layoutId={`wrapper-${layoutId}`}
-                        className="absolute top-12 z-20 w-64 overflow-hidden rounded-2xl border border-border bg-card px-1 py-1 shadow-lg">
-                        <div className="mb-1 flex items-center justify-between px-2 py-1.5 text-xs text-muted-foreground">
+                        id={panelId}
+                        role="dialog"
+                        aria-label={label}
+                        style={positionStyle}
+                        initial={motionVariants.initial}
+                        animate={motionVariants.animate}
+                        exit={motionVariants.exit}
+                        transition={{
+                            duration: shouldReduceMotion ? 0 : 0.18,
+                            ease: [0.32, 0.72, 0, 1],
+                        }}
+                        className="surface-floating absolute z-30 w-64 rounded-2xl border border-border/60 p-1.5">
+                        <div className="flex items-center justify-between px-2 py-1.5 text-xs text-muted-foreground">
                             <span>{label}</span>
                             <button
                                 type="button"
-                                className="rounded px-1.5 py-0.5 hover:bg-accent"
-                                onClick={() => {
-                                    setIsOpened(false);
-                                }}>
-                                Confirmer
+                                className="rounded-md px-2 py-1 hover:bg-accent"
+                                onClick={() => close(true)}>
+                                Done
                             </button>
                         </div>
-
-                        <div className="flex flex-col gap-1">
-                            {options.map((option, index) => (
-                                <AnimatedOptionItem
-                                    key={option.value}
-                                    index={index}
-                                    option={option}
-                                    isSelected={option.value === value}
-                                    onSelect={(nextValue) => {
-                                        onChange(nextValue);
-
-                                        window.setTimeout(() => {
-                                            setIsOpened(false);
-                                        }, 150);
-                                    }}
-                                />
-                            ))}
+                        <div role="radiogroup" aria-label={label}>
+                            {options.map((option, index) => {
+                                const isSelected = option.value === value;
+                                return (
+                                    <motion.button
+                                        key={option.value}
+                                        ref={(node) => {
+                                            optionRefs.current[index] = node;
+                                        }}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={isSelected}
+                                        tabIndex={
+                                            index === selectedIndex ? 0 : -1
+                                        }
+                                        initial={
+                                            shouldReduceMotion
+                                                ? false
+                                                : { opacity: 0, y: 8 }
+                                        }
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{
+                                            duration: shouldReduceMotion
+                                                ? 0
+                                                : 0.16,
+                                            delay: shouldReduceMotion
+                                                ? 0
+                                                : index * 0.025,
+                                            ease: [0.32, 0.72, 0, 1],
+                                        }}
+                                        onClick={() => {
+                                            onChange(option.value);
+                                            close(true);
+                                        }}
+                                        onKeyDown={(event) => {
+                                            if (event.key === "Escape") {
+                                                event.preventDefault();
+                                                close(true);
+                                                return;
+                                            }
+                                            if (
+                                                event.key === "Enter" ||
+                                                event.key === " "
+                                            ) {
+                                                event.preventDefault();
+                                                onChange(option.value);
+                                                close(true);
+                                                return;
+                                            }
+                                            if (
+                                                [
+                                                    "ArrowDown",
+                                                    "ArrowRight",
+                                                    "ArrowUp",
+                                                    "ArrowLeft",
+                                                    "Home",
+                                                    "End",
+                                                ].includes(event.key)
+                                            ) {
+                                                event.preventDefault();
+                                                moveFocus(index, event.key);
+                                            }
+                                        }}
+                                        className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                                        <span className="flex items-center gap-3">
+                                            <Icon
+                                                iconNode={option.icon}
+                                                size={18}
+                                                className="text-muted-foreground"
+                                            />
+                                            {option.label}
+                                        </span>
+                                        <span
+                                            className={cn(
+                                                "flex size-5 items-center justify-center rounded-full border border-border",
+                                                isSelected &&
+                                                "border-primary bg-primary text-primary-foreground",
+                                            )}>
+                                            {isSelected ? (
+                                                <Icon
+                                                    iconNode={Tick01Icon}
+                                                    size={13}
+                                                />
+                                            ) : null}
+                                        </span>
+                                    </motion.button>
+                                );
+                            })}
                         </div>
                     </motion.section>
                 ) : null}
-            </MotionConfig>
+            </AnimatePresence>
         </section>
     );
 }

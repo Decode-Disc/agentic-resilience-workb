@@ -49,9 +49,18 @@ beforeEach(() => {
     decideSufficiency.mockReset();
     submitManualUrl.mockReset();
     navigate.mockReset();
-    useMutation.mockImplementation(() => {
-        const index = (useMutation.mock.calls.length - 1) % 3;
-        return [decideSource, approveCorpus, decideSufficiency][index];
+    useMutation.mockImplementation((reference) => {
+        const functionName = getFunctionName(reference);
+        if (functionName === "sources:decide") {
+            return decideSource;
+        }
+        if (functionName === "evidenceSufficiency:decide") {
+            return decideSufficiency;
+        }
+        if (functionName === "sourceSelectionProposals:approveProposedCorpus") {
+            return approveCorpus;
+        }
+        return vi.fn();
     });
     useAction.mockReturnValue(submitManualUrl);
     usePaginatedQuery.mockReturnValue({
@@ -239,22 +248,34 @@ test("routes the analyst to the active source-review checkpoint", async () => {
 });
 
 test("keeps the approved source set visible for inspection", () => {
-    usePaginatedQuery.mockReturnValue({
-        results: [
-            {
-                sourceId: "source-1",
-                canonicalUrl: "https://example.com/report",
-                title: "Approved report",
-                origin: "exa",
-                category: "independent_analysis",
-                decision: "accepted",
-                publishedAt: undefined,
-                reason: undefined,
-            },
-        ],
+    const reviewSource = {
+        sourceId: "source-1",
+        canonicalUrl: "https://example.com/report",
+        title: "Approved report",
+        origin: "exa",
+        category: "independent_analysis",
+        decision: "accepted",
+        publishedAt: undefined,
+        reason: undefined,
+    } as const;
+    const proposalSource = {
+        ...reviewSource,
+        disposition: "recommended",
+        sourceFamily: "independent_analysis",
+        rank: 0,
+        reasonCodes: ["ranked_fill"],
+        included: true,
+        decisionReason: undefined,
+    } as const;
+    usePaginatedQuery.mockImplementation((reference) => ({
+        results:
+            getFunctionName(reference) ===
+            "sourceSelectionProposals:listItemsPage"
+                ? [proposalSource]
+                : [reviewSource],
         status: "Exhausted",
         loadMore: vi.fn(),
-    });
+    }));
     useQuery.mockImplementation((reference) => {
         const functionName = getFunctionName(reference);
         if (functionName === "researchRuns:getMine") {
@@ -292,17 +313,28 @@ test("keeps the approved source set visible for inspection", () => {
                 candidateLimit: 48,
             };
         }
-        if (functionName === "sources:getReviewSource") {
+        if (functionName === "sourceSelectionProposals:getCurrent") {
             return {
-                sourceId: "source-1",
-                canonicalUrl: "https://example.com/report",
-                title: "Approved report",
-                origin: "exa",
-                category: "independent_analysis",
-                decision: "accepted",
-                publishedAt: undefined,
-                reason: undefined,
+                proposalId: "proposal-1",
+                version: 1,
+                status: "ready",
+                effectiveStatus: "ready",
+                recommendedTarget: 12,
+                counts: {
+                    recommended: 1,
+                    needsAttention: 0,
+                    alternative: 0,
+                },
+                gaps: [],
+                effectiveIncludedCount: 1,
+                revisionStatus: "approved",
             };
+        }
+        if (functionName === "sourceSelectionProposals:getAdjustmentSets") {
+            return { included: [proposalSource], available: [] };
+        }
+        if (functionName === "sources:getReviewSource") {
+            return reviewSource;
         }
         return undefined;
     });
@@ -311,6 +343,9 @@ test("keeps the approved source set visible for inspection", () => {
 
     expect(screen.getAllByText("Source set approved").length).toBeGreaterThan(
         0,
+    );
+    fireEvent.click(
+        screen.getByRole("button", { name: "Inspect all candidates" }),
     );
     expect(
         screen.getByRole("button", {

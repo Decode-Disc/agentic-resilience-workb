@@ -7,6 +7,7 @@ const app = defineApp({
     env: {
         COMPANY_SEARCH_RESULT_LIMIT: v.optional(v.string()),
         SOURCE_CANDIDATE_LIMIT: v.optional(v.string()),
+        SOURCE_RECOMMENDED_TARGET: v.optional(v.string()),
     },
 });
 app.use(workflow);

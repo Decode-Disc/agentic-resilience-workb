@@ -71,10 +71,12 @@ const approveCorpus = makeFunctionReference<
     {
         runId: Id<"researchRuns">;
         corpusRevisionId: Id<"corpusRevisions">;
+        proposalId: Id<"sourceSelectionProposals">;
+        proposalVersion: number;
         decisionKey: string;
     },
     { accepted: boolean }
->("sources:approveCorpusRevision");
+>("sourceSelectionProposals:approveProposedCorpus");
 const getRun = makeFunctionReference<
     "query",
     { runId: Id<"researchRuns"> },
@@ -173,40 +175,57 @@ test("ends Phase 4 at an immutable approved corpus", async () => {
     );
     expect(exaCalls.length).toBeGreaterThan(0);
     expect(exaCalls.every(({ status }) => status === "succeeded")).toBe(true);
-    const { corpusRevisionId, sourceId } = await t.run(async (ctx) => {
-        const run = await ctx.db.get(runId);
-        if (!run?.activeCorpusRevisionId) {
-            throw new Error("Draft corpus revision not found");
-        }
-        const source = await ctx.db
-            .query("sources")
-            .withIndex("by_run_and_url", (builder) =>
-                builder.eq("runId", runId),
-            )
-            .first();
-        if (!source) {
-            throw new Error("Discovery did not persist a source");
-        }
-        return {
-            corpusRevisionId: run.activeCorpusRevisionId,
-            sourceId: source._id,
-        };
-    });
+    const { corpusRevisionId, proposalId, sourceId } = await t.run(
+        async (ctx) => {
+            const run = await ctx.db.get(runId);
+            if (!run?.activeCorpusRevisionId) {
+                throw new Error("Draft corpus revision not found");
+            }
+            const source = await ctx.db
+                .query("sources")
+                .withIndex("by_run_and_url", (builder) =>
+                    builder.eq("runId", runId),
+                )
+                .first();
+            if (!source) {
+                throw new Error("Discovery did not persist a source");
+            }
+            const revision = await ctx.db.get(run.activeCorpusRevisionId);
+            if (!revision?.sourceSelectionProposalId) {
+                throw new Error("Source selection proposal not found");
+            }
+            return {
+                corpusRevisionId: run.activeCorpusRevisionId,
+                proposalId: revision.sourceSelectionProposalId,
+                sourceId: source._id,
+            };
+        },
+    );
+    await expect(t.run((ctx) => ctx.db.get(proposalId))).resolves.toMatchObject(
+        {
+            status: "ready",
+            version: 1,
+        },
+    );
 
-    await analyst.mutation(decideSource, {
-        runId,
-        corpusRevisionId,
-        sourceId,
-        decision: "accepted",
-        decisionKey: "accept-source",
-    });
     await expect(
         analyst.mutation(approveCorpus, {
             runId,
             corpusRevisionId,
+            proposalId,
+            proposalVersion: 1,
             decisionKey: "approve-corpus-1",
         }),
     ).resolves.toEqual({ accepted: true });
+    await expect(
+        analyst.mutation(approveCorpus, {
+            runId,
+            corpusRevisionId,
+            proposalId,
+            proposalVersion: 1,
+            decisionKey: "approve-corpus-1",
+        }),
+    ).resolves.toEqual({ accepted: false });
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
     await expect(t.query(getRun, { runId })).resolves.toMatchObject({
@@ -223,6 +242,22 @@ test("ends Phase 4 at an immutable approved corpus", async () => {
     await expect(
         t.run(async (ctx) => ctx.db.get(corpusRevisionId)),
     ).resolves.toMatchObject({ status: "approved" });
+    const { acceptedDecisions, recommendedCount } = await t.run(async (ctx) => {
+        const proposal = await ctx.db.get(proposalId);
+        const decisions = await ctx.db
+            .query("sourceDecisions")
+            .withIndex("by_revision_and_source", (query) =>
+                query.eq("corpusRevisionId", corpusRevisionId),
+            )
+            .collect();
+        return {
+            acceptedDecisions: decisions.filter(
+                ({ decision }) => decision === "accepted",
+            ).length,
+            recommendedCount: proposal?.counts.recommended,
+        };
+    });
+    expect(acceptedDecisions).toBe(recommendedCount);
     await expect(
         analyst.mutation(decideSource, {
             runId,

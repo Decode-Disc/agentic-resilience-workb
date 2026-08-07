@@ -11,6 +11,8 @@ const candidateValidator = v.object({
     category: v.string(),
     publishedAt: v.optional(v.number()),
     providerReference: v.optional(v.string()),
+    providerResultPosition: v.optional(v.number()),
+    discoveryQueryIndex: v.optional(v.number()),
 });
 
 export const persistCandidates = internalMutation({

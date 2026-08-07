@@ -67,6 +67,8 @@ The completed design contains these explicit concepts:
 - `ResearchPlan`
 - `RunEvent`
 - `Source`
+- `SourceSelectionProposal`
+- `SourceSelectionProposalItem`
 - `SourceDecision`
 - `CorpusRevision`
 - `SourceVersion`
@@ -107,7 +109,7 @@ Search a bounded company-candidate set
 → Await evidence decision when insufficient
 → Build research plan
 → Discover sources in parallel
-→ Persist proposed CorpusRevision
+→ Persist proposed CorpusRevision and SourceSelectionProposal
 → Await explicit corpus-revision approval
 → Retrieve and normalize approved sources
 → Extract passages and atomic claims
@@ -174,6 +176,14 @@ Represent source-scope choice as one of three bounded presets: `balanced`,
 `first_party_depth`, or `independent_scrutiny`. Presets alter query priority and
 budgets only. They never disable required workflow stages, regulatory coverage,
 provenance enforcement, or counter-evidence handling.
+
+After discovery, create one immutable, versioned `SourceSelectionProposal` for the active draft corpus revision and immutable `SourceSelectionProposalItem` records for its candidates. Store the policy version, configured target, candidate-input fingerprint, status, and per-source disposition, rank, and reason codes. Proposal states are `recommended`, `needs_attention`, and `alternative`; they are system recommendations, not analyst decisions.
+
+Build the proposal without a model call. Use validated discovery metadata, source origin and category, provider result position, publication date, canonical identity, coverage preset, research angle, and analyst-supplied origin. Apply three deterministic passes: remove exact duplicates and metadata-proven superseded versions; select the best eligible candidate from each available required source family; then fill remaining places by source-policy priority, discovery rank, recency, publisher diversity, preset, and angle. Missing or weak families remain visible gaps. Never include a weak source merely to reach the configured target.
+
+Recommend every valid analyst-supplied source by default with the visible reason `Added by analyst`, and count it toward the configured target. Manual removal remains possible before approval. `needs_attention` is non-blocking; only no accepted source, stale proposal state, failed integrity checks, or failed authorization blocks approval.
+
+Keep proposal state separate from `SourceDecision`. Proposal generation writes no accepted or rejected decision. Analyst adjustments use the existing append-only decision history: include writes `accepted`, remove writes `rejected`, and undo writes a superseding `pending` decision. `Approve proposed corpus` is one atomic, idempotent server operation that revalidates ownership, active execution generation, draft revision, proposal version, and candidate fingerprint; preserves explicit overrides; writes an individual accepted decision for each still-pending recommended source; leaves other candidates pending; approves the corpus revision; records the checkpoint and audit event; and resumes the workflow. A candidate-set change marks the proposal stale and requires recomputation without overwriting analyst decisions.
 
 Every accepted passage needs a stable, reproducible locator appropriate to its
 source, such as page and bounding text for a public PDF or URL plus anchored
@@ -278,6 +288,8 @@ Implement a provider-agnostic `ModelRouter`. Workflow code requests capabilities
 - `dimension-assessment`
 - `brief-generation`
 
+The Phase 4 deterministic `SourceSelectionProposal` does not call `source-relevance`. Keep that capability deferred unless measured metadata-policy failures justify a model-backed proposal under the normal provider-call, schema, retry, telemetry, and cost contracts.
+
 Routing considers capability, quality, approximate cost, configured resource guards, availability, and prior failures. Model names are configuration data.
 
 Required provider boundaries are:
@@ -360,6 +372,7 @@ Neither CLIProxyAPI production readiness nor precise dossier economics is a prer
   before external URL inspection or discovery, again inside persistence, and
   stop later provider calls when no capacity remains. Never truncate an
   existing dossier during migration.
+- Set the server-owned `SOURCE_RECOMMENDED_TARGET` to 12 by default. Validate it as a positive integer no greater than `SOURCE_CANDIDATE_LIMIT`. Treat it as the maximum number of automatic recommendations, not a quota to fill; the analyst may explicitly include more sources.
 - Use provider-side spending controls when available and provide an emergency server-side switch that prevents new paid work.
 - Record provider-reported usage, latency, and cost when available.
 - Provide an admin-only operational projection for running workflows,
@@ -389,12 +402,11 @@ consumer-specific stacking, sizing, motion, and copy stay at the consumer unless
 they become a documented shared contract. Any material visual or structural
 change requires an explicit product decision before implementation.
 
-Keep `Progress`, `Sources`, `Evidence`, `Assessment`, `Map`, and `Brief`
-visible. Derive active, completed, and locked states from persisted workflow
-state; locked items explain their prerequisite. Use a retractable contextual
-panel on desktop and a drawer on smaller screens. Source review is a dedicated
-mode. The architecture map and brief update incrementally from approved claims,
-show incomplete coverage, and never simulate progress.
+Keep `Progress`, `Sources`, `Evidence`, `Assessment`, `Map`, and `Brief` visible. Derive active, completed, and locked states from persisted workflow state; locked items explain their prerequisite. Use a retractable contextual panel on desktop and a drawer on smaller screens. Source review is a dedicated, summary-first mode: the proposal summary, family coverage, gaps, exceptions, adjustments, and `Approve proposed corpus` action form the primary surface.
+
+Use `DiscreteTabs` only for the mutually exclusive proposal dispositions `Recommended`, `Needs attention`, and `Alternatives`. `Adjust proposal` uses separate `Included` and `Available` working sets without unnecessary filters. `Inspect all candidates` preserves the existing master-detail list, cursor pagination, selected-source detail, desktop resizing, mobile drawer, preview, and manual URL action. Extract the source-specific `SourceMasterList` as a reusable presentational component; keep Convex query state, proposal policy, corpus approval, and domain decisions in their owning containers and server modules. Secondary list filters may use `AnimatedListFilter` only after it has accessible popup semantics, keyboard and focus handling, Escape and outside-click behavior, reduced-motion support, English copy, and focused tests.
+
+The architecture map and brief update incrementally from approved claims, show incomplete coverage, and never simulate progress.
 
 Implement responsive, keyboard-accessible layouts with semantic HTML, visible focus, sufficient color contrast, explicit labels, and non-color status cues. Treat loading, empty, partial-failure, needs-review, cancelled, and insufficient-evidence states as first-class UI states.
 
@@ -472,6 +484,9 @@ Cover at minimum:
 - valid and invalid workflow transitions;
 - workflow resumption, cancellation, retries, and idempotency;
 - mandatory source approval before extraction;
+- configurable source-recommendation targeting without forced filling or model calls;
+- deterministic dynamic source-family coverage, proposal versioning, stale detection, and manual-source inclusion;
+- grouped proposal approval writing individual append-only source decisions atomically and idempotently;
 - exclusion of rejected sources everywhere downstream;
 - stable passage and citation validation;
 - provider output schema rejection and bounded retry;
@@ -508,7 +523,7 @@ Build runnable vertical slices in this order unless measured evidence justifies 
 5. Build the Phase 4 vertical slice: bounded company-candidate search, explicit
    CIK selection, preflight confirmation, reservation, authoritative CIK
    revalidation, evidence-sufficiency checkpoint, research plan, real SEC and
-   Exa source discovery, HTTPS URL entry, and `CorpusRevision` approval.
+   Exa source discovery, HTTPS URL entry, deterministic `SourceSelectionProposal`, summary-first exception review, and atomic `CorpusRevision` approval.
 6. Build normalization, stable passages, typed claim tasks, structural
    validation, versioned policy evaluation, claim evidence, and
    counter-evidence handling.
@@ -566,5 +581,7 @@ Never present cached, seeded, or precomputed output as live. Label showcase and 
   single-use property is superseded by ADR-014.
 - ADR-014: reusable access codes for stable visitor sessions.
 - ADR-015: bounded Exa company website enrichment before admission.
+- ADR-016: centralized public-HTTPS manual source intake with expiring preparations.
+- ADR-017: deterministic source-selection proposals and grouped corpus approval.
 
 Read the corresponding record in `docs/decisions/` before revisiting any of these decisions.

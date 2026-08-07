@@ -1,105 +1,143 @@
 import type { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { type ComponentProps, useState } from "react";
-
-import { SourceReview } from "@/components/workspace/source-review";
 import type { FunctionArgs } from "convex/server";
+import { type ComponentProps, useMemo, useState } from "react";
 
-type Projection = ComponentProps<typeof SourceReview>["review"];
+import { SourceProposalReview } from "@/components/workspace/source-proposal-review";
+
+type ProposalProps = ComponentProps<typeof SourceProposalReview>;
+type ProposalSource = ProposalProps["proposalItems"][number];
 type Decision = FunctionArgs<typeof api.sources.decide>["decision"];
 
-const FIXTURE_REVIEW: Projection = {
-    revision: 1,
-    status: "draft",
-    counts: { accepted: 2, rejected: 1, pending: 2 },
-    total: 5,
-    candidateLimit: 48,
-    sources: [
-        {
-            sourceId: "src-1" as Id<"sources">,
-            canonicalUrl:
-                "https://www.sec.gov/Archives/edgar/data/1373715/000162828024032498/snow-20240131.htm",
-            title: "Annual report on Form 10-K",
-            origin: "sec",
-            category: "regulatory_filing",
-            decision: "accepted",
-            publishedAt: 1706745600000,
-            reason: undefined,
-        },
-        {
-            sourceId: "src-2" as Id<"sources">,
-            canonicalUrl:
-                "https://investors.servicenow.com/news-releases/news-details/default.aspx",
-            title: "Q4 earnings release and investor commentary",
-            origin: "sec",
-            category: "regulatory_filing",
-            decision: "accepted",
-            publishedAt: 1706745600000,
-            reason: undefined,
-        },
-        {
-            sourceId: "src-3" as Id<"sources">,
-            canonicalUrl:
-                "https://seekingalpha.com/article/4651234-servicenow-platform-resilience",
-            title: "Platform resilience and AI distribution thesis",
-            origin: "exa",
-            category: "independent_analysis",
-            decision: "pending",
-            publishedAt: 1709164800000,
-            reason: undefined,
-        },
-        {
-            sourceId: "src-4" as Id<"sources">,
-            canonicalUrl:
-                "https://www.zdnet.com/article/servicenow-meets-the-agentic-era",
-            title: "ServiceNow meets the agentic era",
-            origin: "exa",
-            category: "press_coverage",
-            decision: "pending",
-            publishedAt: 1709164800000,
-            reason: undefined,
-        },
-        {
-            sourceId: "src-5" as Id<"sources">,
-            canonicalUrl:
-                "https://substack.example.com/discontinuity/p/weakening-now",
-            title: "Is the workflow moat weakening?",
-            origin: "exa",
-            category: "counter_evidence",
-            decision: "rejected",
-            publishedAt: 1709164800000,
-            reason: "Author discloses short position",
-        },
-    ],
-};
+const FIXTURE_SOURCES: Array<ProposalSource> = [
+    {
+        sourceId: "src-1" as Id<"sources">,
+        canonicalUrl:
+            "https://www.sec.gov/Archives/edgar/data/1373715/000162828024032498/snow-20240131.htm",
+        title: "Annual report on Form 10-K",
+        origin: "sec",
+        category: "regulatory",
+        decision: "pending",
+        disposition: "recommended",
+        sourceFamily: "regulatory",
+        rank: 0,
+        reasonCodes: ["required_family_coverage"],
+        included: true,
+        publishedAt: 1706745600000,
+        decisionReason: undefined,
+    },
+    {
+        sourceId: "src-2" as Id<"sources">,
+        canonicalUrl:
+            "https://investors.servicenow.com/news-releases/news-details/default.aspx",
+        title: "Q4 earnings release and investor commentary",
+        origin: "exa",
+        category: "investor_relations",
+        decision: "pending",
+        disposition: "recommended",
+        sourceFamily: "investor_relations",
+        rank: 1,
+        reasonCodes: ["required_family_coverage"],
+        included: true,
+        publishedAt: 1706745600000,
+        decisionReason: undefined,
+    },
+    {
+        sourceId: "src-3" as Id<"sources">,
+        canonicalUrl:
+            "https://seekingalpha.com/article/4651234-servicenow-platform-resilience",
+        title: "Platform resilience and AI distribution thesis",
+        origin: "exa",
+        category: "independent_analysis",
+        decision: "pending",
+        disposition: "recommended",
+        sourceFamily: "independent_analysis",
+        rank: 2,
+        reasonCodes: ["ranked_fill"],
+        included: true,
+        publishedAt: 1709164800000,
+        decisionReason: undefined,
+    },
+    {
+        sourceId: "src-4" as Id<"sources">,
+        canonicalUrl:
+            "https://www.zdnet.com/article/servicenow-meets-the-agentic-era",
+        title: "ServiceNow meets the agentic era",
+        origin: "exa",
+        category: "press_coverage",
+        decision: "pending",
+        disposition: "needs_attention",
+        sourceFamily: "unrecognized",
+        rank: 3,
+        reasonCodes: ["unrecognized_source_family"],
+        included: false,
+        publishedAt: 1709164800000,
+        decisionReason: undefined,
+    },
+    {
+        sourceId: "src-5" as Id<"sources">,
+        canonicalUrl:
+            "https://substack.example.com/discontinuity/p/weakening-now",
+        title: "Is the workflow moat weakening?",
+        origin: "exa",
+        category: "counter_evidence",
+        decision: "pending",
+        disposition: "alternative",
+        sourceFamily: "counter_evidence",
+        rank: 4,
+        reasonCodes: ["not_selected"],
+        included: false,
+        publishedAt: 1709164800000,
+        decisionReason: undefined,
+    },
+];
 
 /** Prototype companion component for /prototype/source-review. */
 export function ProtoSourceReview() {
-    const [review, setReview] = useState(FIXTURE_REVIEW);
-
-    const onDecide: ComponentProps<typeof SourceReview>["onDecide"] = (
+    const [sources, setSources] = useState(FIXTURE_SOURCES);
+    const [disposition, setDisposition] =
+        useState<ProposalProps["disposition"]>("recommended");
+    const [approved, setApproved] = useState(false);
+    const inspectionSources = useMemo(
+        () =>
+            sources.map((source) => ({
+                sourceId: source.sourceId,
+                canonicalUrl: source.canonicalUrl,
+                title: source.title,
+                origin: source.origin,
+                category: source.category,
+                publishedAt: source.publishedAt,
+                decision: source.decision,
+                reason: source.decisionReason,
+            })),
+        [sources],
+    );
+    const included = sources.filter((source) => source.included);
+    const available = sources.filter((source) => !source.included);
+    const onDecide: ProposalProps["onDecide"] = (
         sourceId,
         decision: Decision,
     ) => {
-        setReview((current) => {
-            const nextSources = current.sources.map((s) =>
-                s.sourceId === sourceId ? { ...s, decision } : s,
-            );
-            return {
-                ...current,
-                sources: nextSources,
-                counts: {
-                    accepted: nextSources.filter(
-                        (s) => s.decision === "accepted",
-                    ).length,
-                    rejected: nextSources.filter(
-                        (s) => s.decision === "rejected",
-                    ).length,
-                    pending: nextSources.filter((s) => s.decision === "pending")
-                        .length,
-                },
-            };
-        });
+        setSources((current) =>
+            current.map((source) =>
+                source.sourceId === sourceId
+                    ? {
+                          ...source,
+                          decision,
+                          included:
+                              decision === "accepted"
+                                  ? true
+                                  : decision === "rejected"
+                                    ? false
+                                    : source.disposition === "recommended",
+                          decisionReason:
+                              decision === "pending"
+                                  ? undefined
+                                  : "Prototype analyst override",
+                      }
+                    : source,
+            ),
+        );
     };
 
     return (
@@ -109,16 +147,62 @@ export function ProtoSourceReview() {
                 <h1 className="mt-2 text-2xl font-medium">ServiceNow, Inc.</h1>
             </header>
             <p className="mb-4 rounded-lg border border-review/30 bg-review/10 p-3 text-xs text-muted-foreground sm:max-w-xl">
-                Prototype fixture. Five sources, two accepted, one rejected, two
-                pending. Used to refine the source-review layout against the
-                reference.
+                Prototype fixture. This proposal uses source details collected
+                during discovery; source content has not been read.
             </p>
-            <SourceReview
+            <SourceProposalReview
                 runId={"proto-run" as Id<"researchRuns">}
                 corpusRevisionId={"proto-rev" as Id<"corpusRevisions">}
-                review={review}
+                summary={{
+                    proposalId:
+                        "proto-proposal" as Id<"sourceSelectionProposals">,
+                    version: 1,
+                    status: "ready",
+                    effectiveStatus: "ready",
+                    recommendedTarget: 12,
+                    counts: {
+                        recommended: sources.filter(
+                            ({ disposition: value }) => value === "recommended",
+                        ).length,
+                        needsAttention: sources.filter(
+                            ({ disposition: value }) =>
+                                value === "needs_attention",
+                        ).length,
+                        alternative: sources.filter(
+                            ({ disposition: value }) => value === "alternative",
+                        ).length,
+                    },
+                    gaps: ["official_product", "official_commercial"],
+                    effectiveIncludedCount: included.length,
+                    revisionStatus: approved ? "approved" : "draft",
+                }}
+                proposalItems={sources.filter(
+                    ({ disposition: value }) => value === disposition,
+                )}
+                disposition={disposition}
+                onDispositionChange={setDisposition}
+                adjustmentSets={{ included, available }}
+                inspectionReview={{
+                    revision: 1,
+                    status: approved ? "approved" : "draft",
+                    counts: {
+                        accepted: inspectionSources.filter(
+                            ({ decision }) => decision === "accepted",
+                        ).length,
+                        rejected: inspectionSources.filter(
+                            ({ decision }) => decision === "rejected",
+                        ).length,
+                        pending: inspectionSources.filter(
+                            ({ decision }) => decision === "pending",
+                        ).length,
+                    },
+                    total: inspectionSources.length,
+                    candidateLimit: 48,
+                    sources: inspectionSources,
+                }}
                 onDecide={onDecide}
-                onApprove={() => undefined}
+                onApprove={() => setApproved(true)}
+                onRecompute={() => undefined}
                 onAddManualUrl={() => undefined}
             />
         </div>

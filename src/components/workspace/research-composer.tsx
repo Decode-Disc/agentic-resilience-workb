@@ -224,8 +224,8 @@ export function ResearchComposer({
                 manualSourcePreparationIds:
                     manualSources.length > 0
                         ? manualSources.map(
-                            ({ preparationId }) => preparationId,
-                        )
+                              ({ preparationId }) => preparationId,
+                          )
                         : undefined,
             });
             await navigate({

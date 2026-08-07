@@ -60,8 +60,8 @@ export function RunProgress({
                         {canAddManualSource
                             ? "Independent web discovery is unavailable. Filing sources remain available, and you can add a public source manually."
                             : run.lifecycleState === "corpus_approved"
-                                ? "Independent web discovery was unavailable. Filing sources remain available in this approved source set."
-                                : "Independent web discovery is unavailable. Filing sources remain available for the source review checkpoint."}
+                              ? "Independent web discovery was unavailable. Filing sources remain available in this approved source set."
+                              : "Independent web discovery is unavailable. Filing sources remain available for the source review checkpoint."}
                     </p>
                 </div>
             ) : null}

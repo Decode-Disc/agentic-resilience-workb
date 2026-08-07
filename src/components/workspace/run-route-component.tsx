@@ -37,7 +37,6 @@ export function RunRouteComponent({
     const run = useQuery(api.researchRuns.getMine, { runId });
     const events = useQuery(api.researchRuns.listMyEvents, { runId });
     const decide = useMutation(api.sources.decide);
-    const approve = useMutation(api.sources.approveCorpusRevision);
     const decideSufficiency = useMutation(api.evidenceSufficiency.decide);
     const submitManualUrl = useAction(api.sourceActions.submitManualUrl);
     const [error, setError] = useState<string | null>(null);
@@ -187,21 +186,6 @@ export function RunRouteComponent({
                                 } catch {
                                     setError(
                                         "We couldn't save that source decision. Try again.",
-                                    );
-                                }
-                            }}
-                            onApprove={async () => {
-                                setError(null);
-                                try {
-                                    await approve({
-                                        runId,
-                                        corpusRevisionId: corpusRevisionId,
-                                        decisionKey:
-                                            decisionKey("corpus-approval"),
-                                    });
-                                } catch {
-                                    setError(
-                                        "We couldn't approve this source set. Try again.",
                                     );
                                 }
                             }}

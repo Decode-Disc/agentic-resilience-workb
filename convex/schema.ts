@@ -168,6 +168,8 @@ export default defineSchema({
         category: v.string(),
         publishedAt: v.optional(v.number()),
         providerReference: v.optional(v.string()),
+        providerResultPosition: v.optional(v.number()),
+        discoveryQueryIndex: v.optional(v.number()),
         createdAt: v.number(),
     }).index("by_run_and_url", ["runId", "canonicalUrl"]),
     corpusRevisions: defineTable({
@@ -176,8 +178,86 @@ export default defineSchema({
         status: v.union(v.literal("draft"), v.literal("approved")),
         approvedByVisitorId: v.optional(v.id("visitors")),
         approvedAt: v.optional(v.number()),
+        sourceSelectionProposalId: v.optional(v.id("sourceSelectionProposals")),
         createdAt: v.number(),
     }).index("by_run_and_revision", ["runId", "revision"]),
+    sourceSelectionProposals: defineTable({
+        runId: v.id("researchRuns"),
+        corpusRevisionId: v.id("corpusRevisions"),
+        version: v.number(),
+        policyVersion: v.string(),
+        coveragePreset: coveragePresetValidator,
+        researchAngle: v.optional(v.string()),
+        recommendedTarget: v.number(),
+        candidateFingerprint: v.string(),
+        status: v.union(v.literal("ready"), v.literal("failed")),
+        failureCode: v.optional(v.string()),
+        counts: v.object({
+            recommended: v.number(),
+            needsAttention: v.number(),
+            alternative: v.number(),
+        }),
+        gaps: v.array(
+            v.union(
+                v.literal("regulatory"),
+                v.literal("investor_relations"),
+                v.literal("official_product"),
+                v.literal("official_commercial"),
+                v.literal("counter_evidence"),
+                v.literal("official_security"),
+                v.literal("independent_analysis"),
+            ),
+        ),
+        createdAt: v.number(),
+    }).index("by_corpus_revision_id_and_version", [
+        "corpusRevisionId",
+        "version",
+    ]),
+    sourceSelectionProposalItems: defineTable({
+        runId: v.id("researchRuns"),
+        corpusRevisionId: v.id("corpusRevisions"),
+        proposalId: v.id("sourceSelectionProposals"),
+        sourceId: v.id("sources"),
+        disposition: v.union(
+            v.literal("recommended"),
+            v.literal("needs_attention"),
+            v.literal("alternative"),
+        ),
+        sourceFamily: v.union(
+            v.literal("regulatory"),
+            v.literal("investor_relations"),
+            v.literal("official_product"),
+            v.literal("official_commercial"),
+            v.literal("counter_evidence"),
+            v.literal("official_security"),
+            v.literal("independent_analysis"),
+            v.literal("unrecognized"),
+            v.literal("analyst_supplied"),
+        ),
+        rank: v.number(),
+        reasonCodes: v.array(
+            v.union(
+                v.literal("added_by_analyst"),
+                v.literal("required_family_coverage"),
+                v.literal("ranked_fill"),
+                v.literal("unrecognized_source_family"),
+                v.literal("not_selected"),
+            ),
+        ),
+        createdAt: v.number(),
+    })
+        .index("by_proposal_and_disposition_and_rank_and_source", [
+            "proposalId",
+            "disposition",
+            "rank",
+            "sourceId",
+        ])
+        .index("by_proposal_and_source", ["proposalId", "sourceId"])
+        .index("by_proposal_and_rank_and_source", [
+            "proposalId",
+            "rank",
+            "sourceId",
+        ]),
     sourceDecisions: defineTable({
         runId: v.id("researchRuns"),
         corpusRevisionId: v.id("corpusRevisions"),

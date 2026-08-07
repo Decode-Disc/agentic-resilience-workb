@@ -161,6 +161,7 @@ export const discoverForRun = internalAction({
                                           ...candidate,
                                           origin: "exa" as const,
                                           category: planQuery.category,
+                                          discoveryQueryIndex: index,
                                       })),
                                   async (hostname) =>
                                       (
