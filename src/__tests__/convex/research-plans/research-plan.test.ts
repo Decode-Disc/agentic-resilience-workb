@@ -9,19 +9,31 @@ describe("buildResearchPlan", () => {
         "balanced",
         "first_party_depth",
         "independent_scrutiny",
-    ] as const)("keeps regulatory and counter-evidence coverage for %s", (coveragePreset) => {
+    ] as const)("keeps direct SEC discovery separate from web discovery for %s", (coveragePreset) => {
         const plan = buildResearchPlan({
             company: {
                 legalName: "CCC Intelligent Solutions Holdings Inc.",
                 ticker: "CCCS",
+                websiteUrl: "https://www.cccis.com/",
+                investorRelationsUrl: "https://ir.cccis.com/",
             },
             coveragePreset,
             researchAngle: "claims workflow control",
         });
 
-        expect(plan.queries.map(({ category }) => category)).toEqual(
-            expect.arrayContaining(["regulatory", "counter_evidence"]),
+        expect(
+            plan.queries.map(({ category }) => category).includes("regulatory"),
+        ).toBe(false);
+        expect(
+            plan.queries.map(({ discoveryIntent }) => discoveryIntent),
+        ).toEqual(
+            expect.arrayContaining(["official_product", "counter_evidence"]),
         );
+        expect(
+            plan.queries.find(
+                ({ discoveryIntent }) => discoveryIntent === "official_product",
+            ),
+        ).toMatchObject({ includeDomains: ["cccis.com"] });
         expect(
             new Set(plan.queries.flatMap(({ dimensionKeys }) => dimensionKeys)),
         ).toEqual(new Set(ASSESSMENT_DIMENSION_KEYS));

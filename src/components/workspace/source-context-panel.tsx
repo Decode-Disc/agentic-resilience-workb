@@ -12,14 +12,19 @@ import {
 import { SourceBrowserView } from "@/components/workspace/source-browser-view";
 import { SourceDecisionStatus } from "@/components/workspace/source-decision";
 import {
-    sourceCategoryLabel,
-    sourceOriginLabel,
+    sourceAuthorityLabel,
+    sourceDocumentKindLabel,
 } from "@/lib/presentation/research-copy";
 import { cn } from "@/lib/utils";
 
-type SourceContext = FunctionReturnType<
+type SourceContextResult = FunctionReturnType<
     typeof api.sources.listForReviewPage
 >["page"][number];
+type SourceContext = Omit<
+    SourceContextResult,
+    "documentKind" | "authorityTier"
+> &
+    Partial<Pick<SourceContextResult, "documentKind" | "authorityTier">>;
 
 /**
  * Selected source detail panel: an embedded best-effort preview by default,
@@ -91,10 +96,10 @@ export function SourceContextPanel({
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                     <Badge variant="secondary">
-                        {sourceOriginLabel(source.origin)}
+                        {sourceAuthorityLabel(source.authorityTier)}
                     </Badge>
                     <Badge variant="outline">
-                        {sourceCategoryLabel(source.category)}
+                        {sourceDocumentKindLabel(source.documentKind)}
                     </Badge>
                     <SourceDecisionStatus decision={source.decision} />
                 </div>

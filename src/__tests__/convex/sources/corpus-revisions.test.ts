@@ -7,18 +7,12 @@ import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 const originalSourceCandidateLimit = process.env.SOURCE_CANDIDATE_LIMIT;
-const originalSourceRecommendedTarget = process.env.SOURCE_RECOMMENDED_TARGET;
 
 afterEach(() => {
     if (originalSourceCandidateLimit === undefined) {
         delete process.env.SOURCE_CANDIDATE_LIMIT;
     } else {
         process.env.SOURCE_CANDIDATE_LIMIT = originalSourceCandidateLimit;
-    }
-    if (originalSourceRecommendedTarget === undefined) {
-        delete process.env.SOURCE_RECOMMENDED_TARGET;
-    } else {
-        process.env.SOURCE_RECOMMENDED_TARGET = originalSourceRecommendedTarget;
     }
 });
 const getReviewSummary = makeFunctionReference<
@@ -383,7 +377,7 @@ test("paginates the all view by pending, accepted, then rejected groups", async 
 
 test("rejects a manual URL before inspection when the dossier is at capacity", async () => {
     process.env.SOURCE_CANDIDATE_LIMIT = "1";
-    process.env.SOURCE_RECOMMENDED_TARGET = "1";
+    process.env.SOURCE_RECOMMENDATION_CEILING = "1";
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
     const fixture = await createSourceReviewFixture(t);

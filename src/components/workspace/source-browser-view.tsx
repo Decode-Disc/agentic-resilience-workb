@@ -3,9 +3,14 @@ import type { FunctionReturnType } from "convex/server";
 
 import { BrowserView } from "@/components/ui/browser-view";
 
-type SourceContext = FunctionReturnType<
+type SourceContextResult = FunctionReturnType<
     typeof api.sources.listForReviewPage
 >["page"][number];
+type SourceContext = Omit<
+    SourceContextResult,
+    "documentKind" | "authorityTier"
+> &
+    Partial<Pick<SourceContextResult, "documentKind" | "authorityTier">>;
 
 /** Maps a reviewed source record to the shared external browser destination. */
 export function SourceBrowserView({ source }: { source: SourceContext }) {

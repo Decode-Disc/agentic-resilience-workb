@@ -257,6 +257,8 @@ describe("production run workspace", () => {
                             decision: "pending",
                             publishedAt: undefined,
                             reason: undefined,
+                            documentKind: "independent_analysis",
+                            authorityTier: "institutional_independent",
                         },
                         {
                             sourceId: "source-3" as never,
@@ -394,6 +396,8 @@ describe("production run workspace", () => {
                             decision: "pending",
                             publishedAt: undefined,
                             reason: undefined,
+                            documentKind: "independent_analysis",
+                            authorityTier: "institutional_independent",
                         },
                     ],
                 }}
@@ -430,8 +434,9 @@ describe("production run workspace", () => {
         );
         expect(band).not.toBeNull();
         expect(band?.textContent).toContain("Independent report");
-        expect(band?.textContent).toContain("Independent web source");
-        expect(band?.textContent).toContain("Independent Analysis");
+        expect(band?.textContent).toContain("Institutional independent source");
+        expect(band?.textContent).toContain("Independent analysis");
+        expect(band?.textContent).not.toContain("Independent web source");
         expect(band?.textContent).toContain("Pending");
 
         const previewTrigger = screen

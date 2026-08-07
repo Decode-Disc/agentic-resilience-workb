@@ -1,138 +1,126 @@
 import { buildSourceSelectionProposal } from "@convex/domain/sourceSelectionPolicy";
 import { describe, expect, test } from "vitest";
 
-const candidate = (
+type Candidate = Parameters<
+    typeof buildSourceSelectionProposal
+>[0]["candidates"][number];
+
+const company = {
+    cik: "1373715",
+    legalName: "ServiceNow, Inc.",
+    ticker: "NOW",
+    websiteUrl: "https://servicenow.com/",
+};
+
+function candidate(
     sourceId: string,
+    overrides: Partial<Candidate> = {},
+): Candidate {
+    return {
+        sourceId,
+        canonicalUrl: `https://www.reuters.com/technology/${sourceId}`,
+        title: `ServiceNow ${sourceId} analysis`,
+        origin: "exa",
+        category: "counter_evidence",
+        providerResultPosition: 0,
+        discoveryQueryIndex: 0,
+        createdAt: 1,
+        ...overrides,
+    };
+}
+
+function build(
+    candidates: ReadonlyArray<Candidate>,
     overrides: Partial<
-        Parameters<typeof buildSourceSelectionProposal>[0]["candidates"][number]
+        Omit<Parameters<typeof buildSourceSelectionProposal>[0], "candidates">
     > = {},
-) => ({
-    sourceId,
-    canonicalUrl: `https://${sourceId}.example.com/report`,
-    title: `${sourceId} source`,
-    origin: "exa" as const,
-    category: "independent_analysis",
-    providerResultPosition: 0,
-    discoveryQueryIndex: 0,
-    createdAt: 1,
-    ...overrides,
-});
+) {
+    return buildSourceSelectionProposal({
+        company,
+        coveragePreset: "balanced",
+        ceiling: 24,
+        candidates,
+        ...overrides,
+    });
+}
 
 describe("buildSourceSelectionProposal", () => {
-    test("covers each available balanced family before filling the target", () => {
-        const result = buildSourceSelectionProposal({
-            coveragePreset: "balanced",
-            target: 5,
-            candidates: [
-                candidate("regulatory-older", {
-                    category: "regulatory",
-                    publishedAt: 10,
-                    providerResultPosition: 1,
-                }),
-                candidate("regulatory-best", {
-                    category: "regulatory",
-                    publishedAt: 20,
-                    providerResultPosition: 0,
-                }),
-                candidate("investor", { category: "investor_relations" }),
-                candidate("product", { category: "official_product" }),
-                candidate("commercial", { category: "official_commercial" }),
-                candidate("counter", { category: "counter_evidence" }),
-                candidate("extra", { category: "independent_analysis" }),
-            ],
-        });
+    test("returns the same ranked proposal for the same metadata snapshot", () => {
+        const candidates = [
+            candidate("annual", {
+                canonicalUrl:
+                    "https://www.sec.gov/Archives/edgar/data/1373715/annual.htm",
+                title: "10-K · 2026-01-29",
+                origin: "sec",
+                category: "regulatory",
+                secForm: "10-K",
+            }),
+            candidate("risk"),
+        ];
 
-        expect(
-            result.items
-                .filter(({ disposition }) => disposition === "recommended")
-                .map(({ sourceId }) => sourceId),
-        ).toEqual([
-            "regulatory-best",
-            "investor",
-            "product",
-            "commercial",
-            "counter",
-        ]);
-        expect(result.gaps).toEqual([]);
-        expect(result.counts).toEqual({
-            recommended: 5,
-            needsAttention: 0,
-            alternative: 2,
-        });
+        expect(build(candidates)).toEqual(build([...candidates].reverse()));
     });
 
-    test("recommends analyst sources first and counts them toward the target", () => {
-        const result = buildSourceSelectionProposal({
-            coveragePreset: "balanced",
-            target: 2,
-            candidates: [
+    test("includes analyst sources first and counts them against the ceiling", () => {
+        const result = build(
+            [
                 candidate("analyst", {
+                    canonicalUrl: "https://specialist.example/source",
+                    title: "Analyst supplied source",
                     origin: "analyst_url",
                     category: "analyst_supplied",
-                    providerResultPosition: undefined,
-                    discoveryQueryIndex: undefined,
                 }),
-                candidate("regulatory", { category: "regulatory" }),
-                candidate("counter", { category: "counter_evidence" }),
+                candidate("counter"),
             ],
-        });
+            { ceiling: 1 },
+        );
 
         expect(result.items[0]).toMatchObject({
             sourceId: "analyst",
             disposition: "recommended",
             reasonCodes: ["added_by_analyst"],
         });
-        expect(
-            result.items.filter(
-                ({ disposition }) => disposition === "recommended",
-            ),
-        ).toHaveLength(2);
+        expect(result.counts.recommended).toBe(1);
     });
 
-    test("does not recommend weak metadata merely to reach the target", () => {
-        const result = buildSourceSelectionProposal({
-            coveragePreset: "balanced",
-            target: 12,
-            candidates: [
-                candidate("unknown", {
-                    category: "unrecognized",
-                    providerResultPosition: undefined,
-                    discoveryQueryIndex: undefined,
-                }),
-            ],
-        });
+    test("keeps unverified metadata as a non-blocking alternative", () => {
+        const result = build([
+            candidate("unknown", {
+                canonicalUrl: "https://unknown.example/report",
+                category: "official_product",
+            }),
+        ]);
 
         expect(result.items).toEqual([
             expect.objectContaining({
                 sourceId: "unknown",
-                disposition: "needs_attention",
-                reasonCodes: ["unrecognized_source_family"],
+                disposition: "alternative",
+                reasonCodes: ["unverified_publisher"],
             }),
         ]);
-        expect(result.counts.recommended).toBe(0);
-        expect(result.gaps).toEqual([
-            "regulatory",
-            "investor_relations",
-            "official_product",
-            "official_commercial",
-            "counter_evidence",
-        ]);
+        expect(result.counts.needsAttention).toBe(0);
     });
 
-    test("uses research-angle relevance only as a stable tie breaker", () => {
-        const result = buildSourceSelectionProposal({
-            coveragePreset: "independent_scrutiny",
-            researchAngle: "workflow migration",
-            target: 1,
-            candidates: [
+    test("uses the research angle as a stable tie breaker between qualified publishers", () => {
+        const result = build(
+            [
                 candidate("generic", {
-                    title: "Independent company analysis",
+                    title: "ServiceNow independent company analysis",
+                    providerResultPosition: 1,
                 }),
                 candidate("angle-match", {
-                    title: "Workflow migration analysis",
+                    canonicalUrl:
+                        "https://www.bloomberg.com/technology/servicenow-workflow-migration",
+                    title: "ServiceNow workflow migration analysis",
+                    providerResultPosition: 1,
                 }),
             ],
-        });
+            {
+                coveragePreset: "independent_scrutiny",
+                researchAngle: "workflow migration",
+                ceiling: 1,
+            },
+        );
 
         expect(result.items[0]).toMatchObject({
             sourceId: "angle-match",
@@ -140,30 +128,21 @@ describe("buildSourceSelectionProposal", () => {
         });
     });
 
-    test("prefers a new publisher when filling beyond required families", () => {
-        const result = buildSourceSelectionProposal({
-            coveragePreset: "balanced",
-            target: 2,
-            candidates: [
-                candidate("regulatory", {
-                    canonicalUrl: "https://primary.example.com/filing",
-                    category: "regulatory",
-                }),
-                candidate("same-publisher", {
-                    canonicalUrl: "https://primary.example.com/analysis",
-                    providerResultPosition: 0,
-                }),
-                candidate("diverse-publisher", {
-                    canonicalUrl: "https://independent.example.com/analysis",
-                    providerResultPosition: 1,
-                }),
-            ],
-        });
+    test("uses distinct qualified publishers for counter-evidence coverage", () => {
+        const result = build([
+            candidate("reuters-one"),
+            candidate("reuters-two", { providerResultPosition: 1 }),
+            candidate("morningstar", {
+                canonicalUrl:
+                    "https://www.morningstar.com/stocks/servicenow-analysis",
+            }),
+        ]);
 
         expect(
             result.items
                 .filter(({ disposition }) => disposition === "recommended")
                 .map(({ sourceId }) => sourceId),
-        ).toEqual(["regulatory", "diverse-publisher"]);
+        ).toEqual(["morningstar", "reuters-one"]);
+        expect(result.coverageGaps).not.toContain("counter_evidence_secondary");
     });
 });

@@ -2,7 +2,12 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
+import {
+    useAction,
+    useMutation,
+    usePaginatedQuery,
+    useQuery,
+} from "convex/react";
 import {
     Component,
     type ErrorInfo,
@@ -54,6 +59,7 @@ function SourceReviewData({
         useState<SourceFilter>("all");
     const [selectedId, setSelectedId] = useState<Id<"sources"> | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
+    const [isRebuilding, setIsRebuilding] = useState(false);
     const [repairStatus, setRepairStatus] = useState<
         "idle" | "loading" | "complete" | "failed"
     >("idle");
@@ -62,6 +68,9 @@ function SourceReviewData({
     );
     const recomputeProposal = useMutation(
         api.sourceSelectionProposals.recompute,
+    );
+    const rebuildProposal = useAction(
+        api.sourceSelectionProposalActions.rebuild,
     );
     const ensureCurrentProposal = useMutation(
         api.sourceSelectionProposals.ensureCurrentForReview,
@@ -81,7 +90,14 @@ function SourceReviewData({
     });
     const proposalPage = usePaginatedQuery(
         api.sourceSelectionProposals.listItemsPage,
-        hasProposal ? { runId, corpusRevisionId, disposition } : "skip",
+        hasProposal
+            ? {
+                  runId,
+                  corpusRevisionId,
+                  proposalId: proposal.proposalId,
+                  disposition,
+              }
+            : "skip",
         { initialNumItems: SOURCE_REVIEW_PAGE_SIZE },
     );
     const inspectionPage = usePaginatedQuery(
@@ -234,6 +250,29 @@ function SourceReviewData({
                         );
                     }
                 }}
+                isRebuilding={isRebuilding}
+                onRebuild={async () => {
+                    setActionError(null);
+                    setIsRebuilding(true);
+                    try {
+                        const result = await rebuildProposal({
+                            runId,
+                            corpusRevisionId,
+                            expectedProposalId: proposal.proposalId,
+                        });
+                        if (result.outcome === "blocked") {
+                            setActionError(
+                                "Source discovery is temporarily unavailable. Your existing draft and source decisions are unchanged. Try again later or add a public source.",
+                            );
+                        }
+                    } catch {
+                        setActionError(
+                            "We couldn't rebuild the source proposal. Your source decisions are unchanged. Try again.",
+                        );
+                    } finally {
+                        setIsRebuilding(false);
+                    }
+                }}
                 onAddManualUrl={onAddManualUrl}
                 proposalHasMore={proposalPage.status === "CanLoadMore"}
                 proposalIsLoadingMore={proposalPage.status === "LoadingMore"}
@@ -251,7 +290,9 @@ function SourceReviewData({
                     }
                 }}
                 inspectionSelectedId={selectedId}
-                inspectionSelectedSource={selectedId ? selectedSource : undefined}
+                inspectionSelectedSource={
+                    selectedId ? selectedSource : undefined
+                }
                 onInspectionSelectedIdChange={setSelectedId}
                 inspectionHasMore={inspectionPage.status === "CanLoadMore"}
                 inspectionIsLoadingMore={

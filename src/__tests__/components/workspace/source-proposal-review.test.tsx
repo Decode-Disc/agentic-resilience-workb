@@ -13,6 +13,10 @@ const recommended = {
     publishedAt: undefined,
     disposition: "recommended",
     sourceFamily: "regulatory",
+    documentKind: "regulatory_annual",
+    authorityTier: "regulator_primary",
+    coverageContributions: ["regulatory_annual"],
+    duplicateOfSourceId: undefined,
     rank: 0,
     reasonCodes: ["required_family_coverage"],
     decision: "pending",
@@ -40,8 +44,10 @@ const summary = {
     status: "ready",
     effectiveStatus: "ready",
     recommendedTarget: 12,
+    recommendationCeiling: 24,
     counts: { recommended: 1, needsAttention: 0, alternative: 1 },
     gaps: ["counter_evidence"],
+    coverageGaps: ["counter_evidence_primary"],
     effectiveIncludedCount: 1,
     revisionStatus: "draft",
 } as const;
@@ -102,12 +108,88 @@ test("presents a summary-first proposal with only the three proposal tabs", () =
     expect(
         screen.getByRole("button", { name: "Approve source set" }),
     ).toBeTruthy();
-    expect(screen.getByText(/Counter evidence/i)).toBeTruthy();
+    expect(
+        screen.getByText(/independent counter-evidence source/i),
+    ).toBeTruthy();
     expect(screen.getByText(/source content has not been read/i)).toBeTruthy();
     expect(
         screen.queryByText(
-            /SOURCE_RECOMMENDED_TARGET|sourceSelectionProposals|version 1/i,
+            /sourceSelectionProposals|version 1/i,
         ),
+    ).toBeNull();
+});
+
+test("requires an outdated draft to be rebuilt before approval", () => {
+    const onRebuild = vi.fn();
+    render(
+        <SourceProposalReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            summary={{ ...summary, effectiveStatus: "outdated" } as never}
+            proposalItems={[recommended] as never}
+            disposition="recommended"
+            onDispositionChange={vi.fn()}
+            adjustmentSets={{ included: [recommended], available: [] } as never}
+            inspectionReview={inspectionReview as never}
+            onDecide={vi.fn()}
+            onApprove={vi.fn()}
+            onRecompute={vi.fn()}
+            onRebuild={onRebuild}
+        />,
+    );
+
+    expect(screen.getByText("Improved proposal method available")).toBeTruthy();
+    expect(
+        screen.queryByRole("button", { name: "Refresh proposal" }),
+    ).toBeNull();
+    expect(
+        screen.getByRole("button", { name: "Approve source set" }),
+    ).toHaveProperty("disabled", true);
+    fireEvent.click(screen.getByRole("button", { name: "Rebuild proposal" }));
+    expect(onRebuild).toHaveBeenCalledTimes(1);
+});
+
+test("keeps a partial rebuild visible with analyst-readable coverage consequences", () => {
+    render(
+        <SourceProposalReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            summary={
+                {
+                    ...summary,
+                    rebuildOutcome: "partial",
+                    failedDiscoveryFamilies: [
+                        "investor_relations",
+                        "official_product",
+                    ],
+                } as never
+            }
+            proposalItems={[recommended] as never}
+            disposition="recommended"
+            onDispositionChange={vi.fn()}
+            adjustmentSets={{ included: [recommended], available: [] } as never}
+            inspectionReview={inspectionReview as never}
+            onDecide={vi.fn()}
+            onApprove={vi.fn()}
+            onRecompute={vi.fn()}
+        />,
+    );
+
+    expect(
+        screen.getByText("Some source discovery was unavailable"),
+    ).toBeTruthy();
+    expect(
+        screen.getByText(
+            /proposal uses the reliable sources that were available/i,
+        ),
+    ).toBeTruthy();
+    expect(screen.getByText("Investor relations")).toBeTruthy();
+    expect(screen.getByText("Official product")).toBeTruthy();
+    expect(
+        screen.getByRole("button", { name: "Approve source set" }),
+    ).toHaveProperty("disabled", false);
+    expect(
+        screen.queryByText(/official_product|EXA_API_KEY|provider/i),
     ).toBeNull();
 });
 

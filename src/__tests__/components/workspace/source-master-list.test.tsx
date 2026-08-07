@@ -13,6 +13,8 @@ const testSource = {
     publishedAt: undefined,
     decision: "pending" as const,
     reason: undefined,
+    documentKind: "regulatory_annual" as const,
+    authorityTier: "regulator_primary" as const,
 };
 
 describe("SourceMasterList", () => {
@@ -36,6 +38,11 @@ describe("SourceMasterList", () => {
         expect(onSelect).toHaveBeenCalledWith("source-1");
         expect(screen.getByRole("dialog")).toBeTruthy();
         expect(screen.getByText("Selected source:")).toBeTruthy();
+        expect(screen.getAllByText("Primary regulator").length).toBeGreaterThan(
+            0,
+        );
+        expect(screen.getAllByText("Annual report").length).toBeGreaterThan(0);
+        expect(screen.queryByText("Independent web source")).toBeNull();
     });
 
     test("does not open dialog preview when enableDialogPreview = false", () => {

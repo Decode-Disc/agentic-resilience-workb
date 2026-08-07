@@ -6,6 +6,8 @@ import { buildResearchPlan } from "./domain/researchPlan";
 const planQueryValidator = v.object({
     query: v.string(),
     category: v.string(),
+    discoveryIntent: v.optional(v.string()),
+    includeDomains: v.optional(v.array(v.string())),
     dimensionKeys: v.array(v.string()),
 });
 
@@ -79,6 +81,7 @@ export const getDiscoveryContext = internalQuery({
         cik: v.string(),
         corpusRevisionId: v.id("corpusRevisions"),
         executionGeneration: v.number(),
+        researchAngle: v.optional(v.string()),
         queries: v.array(planQueryValidator),
     }),
     handler: async (ctx, args) => {
@@ -106,6 +109,7 @@ export const getDiscoveryContext = internalQuery({
             cik: company.cik,
             corpusRevisionId: run.activeCorpusRevisionId,
             executionGeneration: run.executionGeneration,
+            researchAngle: run.researchAngle,
             queries: plan.queries,
         };
     },

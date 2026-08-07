@@ -17,6 +17,7 @@ import type * as domain_evidenceAvailabilityPolicy from "../domain/evidenceAvail
 import type * as domain_executionClaim from "../domain/executionClaim.js";
 import type * as domain_invitationCodes from "../domain/invitationCodes.js";
 import type * as domain_manualSourceIntake from "../domain/manualSourceIntake.js";
+import type * as domain_providerAvailability from "../domain/providerAvailability.js";
 import type * as domain_publicSourceUrl from "../domain/publicSourceUrl.js";
 import type * as domain_researchPlan from "../domain/researchPlan.js";
 import type * as domain_sourceCandidateCapacity from "../domain/sourceCandidateCapacity.js";
@@ -42,6 +43,7 @@ import type * as sourceActions from "../sourceActions.js";
 import type * as sourceDiscovery from "../sourceDiscovery.js";
 import type * as sourceDiscoveryActions from "../sourceDiscoveryActions.js";
 import type * as sourceIntake from "../sourceIntake.js";
+import type * as sourceSelectionProposalActions from "../sourceSelectionProposalActions.js";
 import type * as sourceSelectionProposals from "../sourceSelectionProposals.js";
 import type * as sources from "../sources.js";
 import type * as visitors from "../visitors.js";
@@ -64,6 +66,7 @@ declare const fullApi: ApiFromModules<{
   "domain/executionClaim": typeof domain_executionClaim;
   "domain/invitationCodes": typeof domain_invitationCodes;
   "domain/manualSourceIntake": typeof domain_manualSourceIntake;
+  "domain/providerAvailability": typeof domain_providerAvailability;
   "domain/publicSourceUrl": typeof domain_publicSourceUrl;
   "domain/researchPlan": typeof domain_researchPlan;
   "domain/sourceCandidateCapacity": typeof domain_sourceCandidateCapacity;
@@ -89,6 +92,7 @@ declare const fullApi: ApiFromModules<{
   sourceDiscovery: typeof sourceDiscovery;
   sourceDiscoveryActions: typeof sourceDiscoveryActions;
   sourceIntake: typeof sourceIntake;
+  sourceSelectionProposalActions: typeof sourceSelectionProposalActions;
   sourceSelectionProposals: typeof sourceSelectionProposals;
   sources: typeof sources;
   visitors: typeof visitors;

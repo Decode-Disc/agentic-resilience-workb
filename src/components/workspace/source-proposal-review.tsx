@@ -13,6 +13,8 @@ import { useReducedMotion } from "motion/react";
 import { type ReactNode, useState } from "react";
 
 import Icon from "@/components/icon";
+import { AlertStatus } from "@/components/ui/alert-status";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -37,6 +39,10 @@ import { SourceFamilyBadge } from "@/components/workspace/source-family-badge";
 import { SourceMasterList } from "@/components/workspace/source-master-list";
 import { SourceProposalAdjustmentBoard } from "@/components/workspace/source-proposal-adjustment-board";
 import { SourceReview } from "@/components/workspace/source-review";
+import {
+    sourceCoverageRoleLabel,
+    sourceSelectionReasonLabel,
+} from "@/lib/presentation/research-copy";
 
 type ProposalSummary = NonNullable<
     FunctionReturnType<typeof api.sourceSelectionProposals.getCurrent>
@@ -82,23 +88,6 @@ function humanize(value: string): string {
     return `${text.charAt(0).toLocaleUpperCase("en")}${text.slice(1)}`;
 }
 
-function proposalReason(source: ProposalSource): string {
-    const reason = source.reasonCodes[0];
-    if (reason === "added_by_analyst") {
-        return "Added by analyst";
-    }
-    if (reason === "required_family_coverage") {
-        return "Fills a required evidence family";
-    }
-    if (reason === "ranked_fill") {
-        return "Adds breadth within the available source details";
-    }
-    if (reason === "unrecognized_source_family") {
-        return "Source family needs analyst review";
-    }
-    return "Available as an alternative";
-}
-
 /** Summary-first human checkpoint for a deterministic source proposal. */
 export function SourceProposalReview({
     runId,
@@ -112,6 +101,8 @@ export function SourceProposalReview({
     onDecide,
     onApprove,
     onRecompute,
+    onRebuild = () => undefined,
+    isRebuilding = false,
     onAddManualUrl,
     proposalHasMore = false,
     proposalIsLoadingMore = false,
@@ -141,6 +132,8 @@ export function SourceProposalReview({
     ) => void | Promise<void>;
     onApprove: () => void | Promise<void>;
     onRecompute: () => void | Promise<void>;
+    onRebuild?: () => void | Promise<void>;
+    isRebuilding?: boolean;
     onAddManualUrl?: (url: string) => void | Promise<void>;
     proposalHasMore?: boolean;
     proposalIsLoadingMore?: boolean;
@@ -172,6 +165,7 @@ export function SourceProposalReview({
         !isApproved &&
         summary.effectiveStatus === "ready" &&
         summary.effectiveIncludedCount > 0;
+    const coverageGaps = summary.coverageGaps ?? [];
 
     const openSecondaryView = (nextView: "adjust" | "inspect") => {
         setNavigationPreset("slide-left");
@@ -268,6 +262,56 @@ export function SourceProposalReview({
             hasNavigated={hasNavigated}
             shouldReduceMotion={shouldReduceMotion}>
             <section aria-label="Proposed source set" className="space-y-4">
+                {summary.effectiveStatus === "outdated" && !isApproved ? (
+                    <AlertStatus
+                        status="info"
+                        variant="outline"
+                        closable={false}
+                        className="has-data-[slot=alert-action]:pr-4 [&_[data-slot=alert-action]]:static [&_[data-slot=alert-action]]:mt-2 sm:has-data-[slot=alert-action]:pr-36 sm:[&_[data-slot=alert-action]]:absolute sm:[&_[data-slot=alert-action]]:top-2.5 sm:[&_[data-slot=alert-action]]:right-3 sm:[&_[data-slot=alert-action]]:mt-0"
+                        title="Improved proposal method available"
+                        description="Rebuild this draft source set with the improved selection method before approval."
+                        action={
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                className="w-full sm:w-auto"
+                                disabled={isRebuilding}
+                                onClick={() => void onRebuild()}>
+                                {isRebuilding
+                                    ? "Rebuilding proposal…"
+                                    : "Rebuild proposal"}
+                            </Button>
+                        }
+                    />
+                ) : null}
+                {summary.rebuildOutcome === "partial" && !isApproved ? (
+                    <AlertStatus
+                        status="warning"
+                        variant="outline"
+                        closable={false}
+                        title="Some source discovery was unavailable"
+                        description={
+                            <div className="space-y-2">
+                                <p>
+                                    The proposal uses the reliable sources that
+                                    were available. Review the affected coverage
+                                    areas or add a public source before
+                                    approval.
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {summary.failedDiscoveryFamilies.map(
+                                        (family) => (
+                                            <SourceFamilyBadge
+                                                key={family}
+                                                family={family}
+                                            />
+                                        ),
+                                    )}
+                                </div>
+                            </div>
+                        }
+                    />
+                ) : null}
                 <Card className="surface-floating">
                     <CardHeader>
                         <p className="text-micro text-accent-foreground">
@@ -337,14 +381,16 @@ export function SourceProposalReview({
                             </TooltipProvider>
                         </CardAction>
                     </CardHeader>
-                    {summary.gaps.length > 0 ? (
+                    {coverageGaps.length > 0 ? (
                         <CardContent className="rounded-xl border border-review/30 bg-review/10">
                             <p className="text-xs font-medium text-foreground">
                                 Coverage gaps to keep in view
                             </p>
                             <div className="mt-2 flex flex-wrap gap-2">
-                                {summary.gaps.map((gap) => (
-                                    <SourceFamilyBadge key={gap} family={gap} />
+                                {coverageGaps.map((gap) => (
+                                    <Badge key={gap} variant="outline">
+                                        {sourceCoverageRoleLabel(gap)}
+                                    </Badge>
                                 ))}
                             </div>
                         </CardContent>
@@ -357,10 +403,13 @@ export function SourceProposalReview({
                                   ? "The candidate list changed. Refresh the proposal before approval."
                                   : summary.effectiveStatus === "failed"
                                     ? "The proposal could not be prepared. Refresh it before approval."
-                                    : `${summary.effectiveIncludedCount} source${summary.effectiveIncludedCount === 1 ? " is" : "s are"} currently included.`}
+                                    : summary.effectiveStatus === "outdated"
+                                      ? "Rebuild this proposal before approval."
+                                      : `${summary.effectiveIncludedCount} source${summary.effectiveIncludedCount === 1 ? " is" : "s are"} currently included.`}
                         </p>
                         <div className="flex flex-wrap gap-2">
-                            {summary.effectiveStatus !== "ready" &&
+                            {(summary.effectiveStatus === "stale" ||
+                                summary.effectiveStatus === "failed") &&
                             !isApproved ? (
                                 <Button
                                     type="button"
@@ -497,7 +546,7 @@ function renderProposalAnnotation(source: ProposalSource) {
     return (
         <div className="mt-3 flex flex-wrap items-center gap-2 px-1 text-[11px] text-muted-foreground">
             <SourceFamilyBadge family={source.sourceFamily} />
-            <span>{proposalReason(source)}</span>
+            <span>{sourceSelectionReasonLabel(source.reasonCodes)}</span>
             {source.decision !== "pending" ? (
                 <span className="font-medium text-foreground">
                     Analyst override: {humanize(source.decision)}

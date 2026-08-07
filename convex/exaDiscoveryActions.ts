@@ -138,6 +138,7 @@ export const discoverForRun = internalAction({
                         exa.search(
                             planQuery.query,
                             Math.min(4, capacity.remaining),
+                            planQuery.includeDomains,
                         ),
                         EXA_DISCOVERY_TIMEOUT_MS,
                     );

@@ -2,18 +2,9 @@ import type { Id } from "@convex/_generated/dataModel";
 import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
-import { afterEach, expect, test } from "vitest";
+import { expect, test } from "vitest";
 
 const modules = import.meta.glob("/convex/**/*.ts");
-const originalRecommendedTarget = process.env.SOURCE_RECOMMENDED_TARGET;
-
-afterEach(() => {
-    if (originalRecommendedTarget === undefined) {
-        delete process.env.SOURCE_RECOMMENDED_TARGET;
-    } else {
-        process.env.SOURCE_RECOMMENDED_TARGET = originalRecommendedTarget;
-    }
-});
 const generateForRun = makeFunctionReference<
     "mutation",
     {
@@ -104,7 +95,16 @@ const backfillSourceSelectionProposals = makeFunctionReference<
 test("persists one versioned source-selection proposal after discovery", async () => {
     const t = convexTest(schema, modules);
     const { runId, corpusRevisionId } = await t.run(async (ctx) => {
+        const companyId = await ctx.db.insert("companies", {
+            cik: "1373715",
+            legalName: "ServiceNow, Inc.",
+            ticker: "NOW",
+            exchange: "NYSE",
+            websiteUrl: "https://www.servicenow.com/",
+            canonicalizedAt: 1,
+        });
         const runId = await ctx.db.insert("researchRuns", {
+            companyId,
             coveragePreset: "balanced",
             researchAngle: "workflow migration",
             lifecycleState: "discovering_sources",
@@ -123,10 +123,12 @@ test("persists one versioned source-selection proposal after discovery", async (
         await ctx.db.patch(runId, { activeCorpusRevisionId: corpusRevisionId });
         await ctx.db.insert("sources", {
             runId,
-            canonicalUrl: "https://www.sec.gov/filing",
+            canonicalUrl:
+                "https://www.sec.gov/Archives/edgar/data/1373715/000137371526000001/now-20251231.htm",
             title: "10-K filing",
             origin: "sec",
             category: "regulatory",
+            secForm: "10-K",
             providerResultPosition: 0,
             discoveryQueryIndex: 0,
             publishedAt: 20,
@@ -163,12 +165,13 @@ test("persists one versioned source-selection proposal after discovery", async (
         runId,
         corpusRevisionId,
         version: 1,
-        policyVersion: "source-selection-v1",
+        policyVersion: "source-selection-v2",
+        publisherRegistryVersion: "source-publishers-v1",
         coveragePreset: "balanced",
-        recommendedTarget: 12,
+        recommendedTarget: 24,
+        recommendationCeiling: 24,
         status: "ready",
-        counts: { recommended: 2, needsAttention: 0, alternative: 0 },
-        gaps: ["investor_relations", "official_product", "official_commercial"],
+        counts: { recommended: 1, needsAttention: 0, alternative: 1 },
     });
     const items = await t.run(async (ctx) =>
         ctx.db
@@ -181,8 +184,13 @@ test("persists one versioned source-selection proposal after discovery", async (
     expect(items).toHaveLength(2);
     expect(items.map(({ disposition }) => disposition)).toEqual([
         "recommended",
-        "recommended",
+        "alternative",
     ]);
+    expect(items[0]).toMatchObject({
+        documentKind: "regulatory_annual",
+        authorityTier: "regulator_primary",
+        coverageContributions: expect.arrayContaining(["regulatory_annual"]),
+    });
 });
 
 test("rejects proposal generation for a stale execution generation", async () => {
@@ -358,7 +366,7 @@ test("creates a missing proposal for an authorized legacy draft idempotently", a
 });
 
 test("projects recommendation pages and adjustment sets through analyst decisions", async () => {
-    process.env.SOURCE_RECOMMENDED_TARGET = "2";
+    process.env.SOURCE_RECOMMENDATION_CEILING = "2";
     const t = convexTest(schema, modules);
     const fixture = await t.run(async (ctx) => {
         const userId = await ctx.db.insert("users", { isAnonymous: true });
@@ -377,8 +385,17 @@ test("projects recommendation pages and adjustment sets through analyst decision
             analysesReserved: 1,
             admittedAt: 1,
         });
+        const companyId = await ctx.db.insert("companies", {
+            cik: "1373715",
+            legalName: "ServiceNow, Inc.",
+            ticker: "NOW",
+            exchange: "NYSE",
+            websiteUrl: "https://www.servicenow.com/",
+            canonicalizedAt: 1,
+        });
         const runId = await ctx.db.insert("researchRuns", {
             ownerVisitorId: visitorId,
+            companyId,
             coveragePreset: "balanced",
             lifecycleState: "discovering_sources",
             executionStatus: "running",
@@ -395,17 +412,32 @@ test("projects recommendation pages and adjustment sets through analyst decision
         });
         await ctx.db.patch(runId, { activeCorpusRevisionId: corpusRevisionId });
         const sources = [];
-        for (const [index, category] of [
-            "regulatory",
-            "counter_evidence",
-            "independent_analysis",
-        ].entries()) {
+        const candidates = [
+            {
+                canonicalUrl:
+                    "https://www.sec.gov/Archives/edgar/data/1373715/000137371526000001/now-20251231.htm",
+                title: "ServiceNow annual report",
+                origin: "sec" as const,
+                category: "regulatory",
+                secForm: "10-K",
+            },
+            {
+                canonicalUrl: "https://www.reuters.com/workflow-risk",
+                title: "ServiceNow workflow migration risks",
+                origin: "exa" as const,
+                category: "counter_evidence",
+            },
+            {
+                canonicalUrl: "https://www.morningstar.com/workflow-analysis",
+                title: "Independent ServiceNow workflow analysis",
+                origin: "exa" as const,
+                category: "independent_analysis",
+            },
+        ];
+        for (const [index, candidate] of candidates.entries()) {
             const sourceId = await ctx.db.insert("sources", {
                 runId,
-                canonicalUrl: `https://example.com/${category}`,
-                title: `${category} source`,
-                origin: "exa",
-                category,
+                ...candidate,
                 providerResultPosition: index,
                 discoveryQueryIndex: index,
                 createdAt: index + 1,
@@ -493,7 +525,7 @@ test("projects recommendation pages and adjustment sets through analyst decision
         ]),
     });
 
-    process.env.SOURCE_RECOMMENDED_TARGET = "3";
+    process.env.SOURCE_RECOMMENDATION_CEILING = "3";
     await expect(
         analyst.query(getCurrent, {
             runId: fixture.runId,

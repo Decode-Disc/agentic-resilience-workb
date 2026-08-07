@@ -16,6 +16,7 @@ import {
 import { manualSourceIntakeError } from "./domain/manualSourceIntake";
 import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
+import { SOURCE_SELECTION_POLICY_VERSION } from "./domain/sourceSelectionPolicy";
 import { sourceCandidateLimit } from "./resourceLimits";
 import { createSourceSelectionProposal } from "./sourceSelectionProposals";
 
@@ -43,7 +44,62 @@ const sourceReviewSourceValidator = v.object({
     publishedAt: v.optional(v.number()),
     decision: sourceReviewDecisionValidator,
     reason: v.optional(v.string()),
+    documentKind: v.optional(
+        v.union(
+            v.literal("regulatory_annual"),
+            v.literal("regulatory_interim"),
+            v.literal("regulatory_material"),
+            v.literal("regulatory_proxy"),
+            v.literal("regulatory_ownership"),
+            v.literal("regulatory_registration"),
+            v.literal("regulatory_other"),
+            v.literal("earnings_release"),
+            v.literal("investor_presentation"),
+            v.literal("earnings_transcript"),
+            v.literal("official_product_documentation"),
+            v.literal("official_integration_documentation"),
+            v.literal("official_pricing"),
+            v.literal("official_commercial_terms"),
+            v.literal("official_security_documentation"),
+            v.literal("independent_analysis"),
+            v.literal("news_reporting"),
+            v.literal("partner_evidence"),
+            v.literal("community_content"),
+            v.literal("search_or_index"),
+            v.literal("unknown"),
+        ),
+    ),
+    authorityTier: v.optional(
+        v.union(
+            v.literal("regulator_primary"),
+            v.literal("company_primary"),
+            v.literal("company_hosted_ir"),
+            v.literal("institutional_independent"),
+            v.literal("qualified_partner"),
+            v.literal("unverified"),
+            v.literal("analyst_supplied"),
+        ),
+    ),
 });
+
+async function readProposalClassification(
+    ctx: QueryCtx,
+    revision: { sourceSelectionProposalId?: Id<"sourceSelectionProposals"> },
+    sourceId: Id<"sources">,
+) {
+    if (!revision.sourceSelectionProposalId) return null;
+    return ctx.db
+        .query("sourceSelectionProposalItems")
+        .withIndex("by_proposal_and_source", (query) =>
+            query
+                .eq(
+                    "proposalId",
+                    revision.sourceSelectionProposalId as Id<"sourceSelectionProposals">,
+                )
+                .eq("sourceId", sourceId),
+        )
+        .unique();
+}
 
 export async function insertPendingManualSource(
     ctx: Parameters<typeof upsertSourceReviewItem>[0],
@@ -204,6 +260,11 @@ export const listForReviewPage = query({
                 if (!source || source.runId !== args.runId) {
                     throw new Error("Source review projection is invalid");
                 }
+                const classification = await readProposalClassification(
+                    ctx,
+                    revision,
+                    source._id,
+                );
                 return {
                     sourceId: source._id,
                     canonicalUrl: source.canonicalUrl,
@@ -213,6 +274,8 @@ export const listForReviewPage = query({
                     publishedAt: source.publishedAt,
                     decision: item.decision,
                     reason: item.reason,
+                    documentKind: classification?.documentKind,
+                    authorityTier: classification?.authorityTier,
                 };
             }),
         );
@@ -241,6 +304,11 @@ export const getReviewSource = query({
         if (!item || !source || source.runId !== args.runId) {
             return null;
         }
+        const classification = await readProposalClassification(
+            ctx,
+            revision,
+            source._id,
+        );
         return {
             sourceId: source._id,
             canonicalUrl: source.canonicalUrl,
@@ -250,6 +318,8 @@ export const getReviewSource = query({
             publishedAt: source.publishedAt,
             decision: item.decision,
             reason: item.reason,
+            documentKind: classification?.documentKind,
+            authorityTier: classification?.authorityTier,
         };
     },
 });
@@ -434,7 +504,16 @@ export const persistManualCandidate = internalMutation({
             now,
         });
         if (run.lifecycleState === "awaiting_source_review") {
-            await createSourceSelectionProposal(ctx, { run, revision });
+            const currentProposal = revision.sourceSelectionProposalId
+                ? await ctx.db.get(revision.sourceSelectionProposalId)
+                : null;
+            if (
+                !currentProposal ||
+                currentProposal.policyVersion ===
+                    SOURCE_SELECTION_POLICY_VERSION
+            ) {
+                await createSourceSelectionProposal(ctx, { run, revision });
+            }
         }
         return sourceId;
     },

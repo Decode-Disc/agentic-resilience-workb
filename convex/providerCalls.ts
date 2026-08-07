@@ -2,6 +2,7 @@ import { ConvexError, v } from "convex/values";
 
 import { internalMutation, internalQuery } from "./_generated/server";
 import { manualSourceIntakeError } from "./domain/manualSourceIntake";
+import { paidWorkDisabledErrorData } from "./domain/providerAvailability";
 import { rateLimiter } from "./rateLimiter";
 
 const serviceValidator = v.union(
@@ -109,7 +110,7 @@ export const recordAttempt = internalMutation({
                 .withIndex("by_key", (query) => query.eq("key", "global"))
                 .unique();
             if (paidWork?.enabled === false) {
-                throw new Error("Paid provider work is disabled");
+                throw new ConvexError(paidWorkDisabledErrorData());
             }
         }
         const matches = await ctx.db
@@ -154,14 +155,19 @@ export const recordAttempt = internalMutation({
             }
             if (args.runId) {
                 const run = await ctx.db.get(args.runId);
-                const executionIsActive =
-                    args.service === "url_metadata"
-                        ? run?.executionStatus === "paused" &&
-                          [
-                              "awaiting_evidence_sufficiency_review",
-                              "awaiting_source_review",
-                          ].includes(run.lifecycleState)
-                        : run?.executionStatus === "running";
+                const executionIsActive = args.operation.startsWith(
+                    "rebuild_source_proposal_",
+                )
+                    ? run?.executionStatus === "paused" &&
+                      run.lifecycleState === "awaiting_source_review" &&
+                      run.pauseReason === "source_review"
+                    : args.service === "url_metadata"
+                      ? run?.executionStatus === "paused" &&
+                        [
+                            "awaiting_evidence_sufficiency_review",
+                            "awaiting_source_review",
+                        ].includes(run.lifecycleState)
+                      : run?.executionStatus === "running";
                 if (
                     !run ||
                     args.executionGeneration === undefined ||

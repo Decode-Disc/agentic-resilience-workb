@@ -12,6 +12,7 @@ export type ExaSearchClient = {
             type: "auto";
             numResults: number;
             contents: false;
+            includeDomains?: Array<string>;
         },
     ): Promise<{
         results: ReadonlyArray<ExaSearchResult>;
@@ -129,14 +130,18 @@ export function createExaDiscoveryAdapter(client: ExaSearchClient): {
     search(
         query: string,
         limit: number,
+        includeDomains?: ReadonlyArray<string>,
     ): Promise<ExaCandidateBatch<DiscoveredSourceCandidate>>;
 } {
     return {
-        async search(query, limit) {
+        async search(query, limit, includeDomains) {
             const response = await client.search(query, {
                 type: "auto",
                 numResults: Math.max(1, Math.min(10, Math.floor(limit))),
                 contents: false,
+                ...(includeDomains && includeDomains.length > 0
+                    ? { includeDomains: [...includeDomains] }
+                    : {}),
             });
             const candidates: Array<DiscoveredSourceCandidate> = [];
             let rejected = 0;

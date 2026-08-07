@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted; source-ranking and fixed-target sections superseded by ADR-018
 
 ## Date
 

@@ -19,7 +19,10 @@ export type CoveragePreset =
     | "independent_scrutiny";
 
 type ResearchPlanInput = {
-    company: Pick<SecCompanyMatch, "legalName" | "ticker">;
+    company: Pick<
+        SecCompanyMatch,
+        "legalName" | "ticker" | "websiteUrl" | "investorRelationsUrl"
+    >;
     coveragePreset: CoveragePreset;
     researchAngle?: string;
 };
@@ -27,20 +30,30 @@ type ResearchPlanInput = {
 export type ResearchPlanQuery = {
     query: string;
     category: string;
+    discoveryIntent: string;
+    includeDomains?: Array<string>;
     dimensionKeys: Array<(typeof ASSESSMENT_DIMENSION_KEYS)[number]>;
 };
 
 const balancedCategories = [
-    ["regulatory", "10-K 10-Q 8-K SEC filings"],
     ["investor_relations", "investor relations earnings presentation"],
     ["official_product", "official product API integration documentation"],
     ["official_commercial", "official pricing terms customer workflow"],
     ["counter_evidence", "independent analysis risks competitors replacement"],
 ] as const;
 
+function hostname(url: string | undefined): string | undefined {
+    if (!url) return undefined;
+    try {
+        return new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+    } catch {
+        return undefined;
+    }
+}
+
 /**
  * Builds a bounded metadata-discovery plan. Presets change search depth only;
- * they cannot remove regulatory or counter-evidence coverage.
+ * SEC filings are discovered directly; these queries only discover web sources.
  */
 export function buildResearchPlan(input: ResearchPlanInput): {
     coveragePreset: CoveragePreset;
@@ -67,10 +80,29 @@ export function buildResearchPlan(input: ResearchPlanInput): {
     return {
         coveragePreset: input.coveragePreset,
         researchAngle: researchAngle || undefined,
-        queries: categories.map(([category, terms]) => ({
-            query: `"${input.company.legalName}" ${input.company.ticker} ${terms}${qualifier}`,
-            category,
-            dimensionKeys: [...ASSESSMENT_DIMENSION_KEYS],
-        })),
+        queries: categories.map(([category, terms]) => {
+            const officialDomain = hostname(input.company.websiteUrl);
+            const investorDomain = hostname(input.company.investorRelationsUrl);
+            const includeDomains =
+                category === "investor_relations"
+                    ? [
+                          ...new Set(
+                              [officialDomain, investorDomain].filter(Boolean),
+                          ),
+                      ]
+                    : category.startsWith("official_") && officialDomain
+                      ? [officialDomain]
+                      : undefined;
+            return {
+                query: `"${input.company.legalName}" ${input.company.ticker} ${terms}${qualifier}`,
+                category,
+                discoveryIntent: category,
+                includeDomains:
+                    includeDomains && includeDomains.length > 0
+                        ? (includeDomains as Array<string>)
+                        : undefined,
+                dimensionKeys: [...ASSESSMENT_DIMENSION_KEYS],
+            };
+        }),
     };
 }

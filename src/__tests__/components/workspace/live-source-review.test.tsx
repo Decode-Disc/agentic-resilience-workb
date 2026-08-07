@@ -6,19 +6,28 @@ const {
     useQuery,
     usePaginatedQuery,
     useMutation,
+    useAction,
     approve,
     recompute,
     ensureCurrent,
+    rebuild,
 } = vi.hoisted(() => ({
     useQuery: vi.fn(),
     usePaginatedQuery: vi.fn(),
     useMutation: vi.fn(),
+    useAction: vi.fn(),
     approve: vi.fn(),
     recompute: vi.fn(),
     ensureCurrent: vi.fn(),
+    rebuild: vi.fn(),
 }));
 
-vi.mock("convex/react", () => ({ useQuery, usePaginatedQuery, useMutation }));
+vi.mock("convex/react", () => ({
+    useQuery,
+    usePaginatedQuery,
+    useMutation,
+    useAction,
+}));
 
 import { LiveSourceReview } from "@/components/workspace/live-source-review";
 
@@ -31,6 +40,10 @@ const proposalSource = {
     publishedAt: undefined,
     disposition: "recommended",
     sourceFamily: "regulatory",
+    documentKind: "regulatory_annual",
+    authorityTier: "regulator_primary",
+    coverageContributions: ["regulatory_annual"],
+    duplicateOfSourceId: undefined,
     rank: 0,
     reasonCodes: ["required_family_coverage"],
     decision: "pending",
@@ -42,9 +55,12 @@ beforeEach(() => {
     useQuery.mockReset();
     usePaginatedQuery.mockReset();
     useMutation.mockReset();
+    useAction.mockReset();
     approve.mockReset();
     recompute.mockReset();
     ensureCurrent.mockReset();
+    rebuild.mockReset();
+    useAction.mockReturnValue(rebuild);
     useMutation.mockImplementation((reference) => {
         const name = getFunctionName(reference);
         if (name === "sourceSelectionProposals:approveProposedCorpus") {
@@ -93,6 +109,8 @@ test("queries proposal dispositions and approves the exact visible version", asy
                 status: "ready",
                 effectiveStatus: "ready",
                 recommendedTarget: 12,
+                recommendationCeiling: 24,
+                coverageGaps: [],
                 counts: {
                     recommended: 1,
                     needsAttention: 0,
@@ -160,7 +178,10 @@ test("queries proposal dispositions and approves the exact visible version", asy
     await waitFor(() =>
         expect(usePaginatedQuery).toHaveBeenCalledWith(
             expect.anything(),
-            expect.objectContaining({ disposition: "alternative" }),
+            expect.objectContaining({
+                disposition: "alternative",
+                proposalId: "proposal-1",
+            }),
             { initialNumItems: 12 },
         ),
     );
@@ -175,6 +196,86 @@ test("queries proposal dispositions and approves the exact visible version", asy
             decisionKey: expect.stringMatching(/^corpus-approval:/),
         }),
     );
+});
+
+test("explains a blocked rebuild without exposing provider or configuration details", async () => {
+    rebuild.mockResolvedValue({
+        proposalId: "proposal-1",
+        version: 1,
+        outcome: "blocked",
+        failedDiscoveryFamilies: ["regulatory", "official_product"],
+    });
+    useQuery.mockImplementation((reference, args) => {
+        const functionName = getFunctionName(reference);
+        if (functionName === "sourceSelectionProposals:getCurrent") {
+            return {
+                proposalId: "proposal-1",
+                version: 1,
+                status: "ready",
+                effectiveStatus: "outdated",
+                recommendedTarget: 12,
+                recommendationCeiling: 24,
+                rebuildOutcome: undefined,
+                failedDiscoveryFamilies: [],
+                coverageGaps: [],
+                counts: {
+                    recommended: 1,
+                    needsAttention: 0,
+                    alternative: 0,
+                },
+                gaps: [],
+                effectiveIncludedCount: 1,
+                revisionStatus: "draft",
+            };
+        }
+        if (functionName === "sourceSelectionProposals:getAdjustmentSets") {
+            return { included: [proposalSource], available: [] };
+        }
+        if (functionName === "sources:getReviewSummary") {
+            return {
+                revision: 1,
+                status: "draft",
+                counts: { accepted: 0, rejected: 0, pending: 1 },
+                total: 1,
+                candidateLimit: 48,
+            };
+        }
+        if (functionName === "sources:getReviewSource") {
+            return args === "skip" ? undefined : proposalSource;
+        }
+        return undefined;
+    });
+    usePaginatedQuery.mockImplementation((reference) => {
+        const functionName = getFunctionName(reference);
+        return {
+            results:
+                functionName === "sourceSelectionProposals:listItemsPage"
+                    ? [proposalSource]
+                    : [],
+            status: "Exhausted",
+            loadMore: vi.fn(),
+        };
+    });
+
+    render(
+        <LiveSourceReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            onDecide={vi.fn()}
+        />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Rebuild proposal" }));
+
+    expect(
+        await screen.findByText(/Source discovery is temporarily unavailable/i),
+    ).toBeTruthy();
+    expect(
+        screen.getByText(/existing draft and source decisions are unchanged/i),
+    ).toBeTruthy();
+    expect(
+        screen.queryByText(/SEC_USER_AGENT|EXA_API_KEY|provider|blocked/i),
+    ).toBeNull();
 });
 
 test("shows an approved legacy source set without querying missing proposal items", () => {

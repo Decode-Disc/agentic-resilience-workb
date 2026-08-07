@@ -3,6 +3,87 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 
+type SecFiling = {
+    accessionNumber: string;
+    form?: string;
+    filingDate?: string;
+    primaryDocument?: string;
+};
+
+const ANNUAL_FORMS = new Set(["10-K", "20-F", "40-F"]);
+const INTERIM_FORMS = new Set(["10-Q"]);
+const MATERIAL_FORMS = new Set(["8-K", "6-K"]);
+const GOVERNANCE_FORMS = new Set(["DEF 14A", "3", "4", "5", "144"]);
+const FINANCING_FORMS = new Set(["S-1", "S-3", "S-8"]);
+
+function normalizedBaseForm(form: string | undefined): string {
+    return (form ?? "").trim().toUpperCase().replace(/\/A$/, "");
+}
+
+function newestFirst(left: SecFiling, right: SecFiling): number {
+    return (right.filingDate ?? "").localeCompare(left.filingDate ?? "", "en");
+}
+
+export function selectSecFilingsForDiscovery(
+    filings: ReadonlyArray<SecFiling>,
+    limit: number,
+    researchAngle?: string,
+): Array<SecFiling> {
+    const sorted = [...filings].sort(newestFirst);
+    const selected: Array<SecFiling> = [];
+    const addFirst = (forms: ReadonlySet<string>) => {
+        const filing = sorted.find((candidate) =>
+            forms.has(normalizedBaseForm(candidate.form)),
+        );
+        if (filing && !selected.includes(filing)) {
+            selected.push(filing);
+        }
+    };
+
+    addFirst(ANNUAL_FORMS);
+    addFirst(INTERIM_FORMS);
+    for (const filing of sorted) {
+        if (
+            selected.length >= limit ||
+            !MATERIAL_FORMS.has(normalizedBaseForm(filing.form)) ||
+            selected.includes(filing)
+        ) {
+            continue;
+        }
+        if (
+            selected.filter((candidate) =>
+                MATERIAL_FORMS.has(normalizedBaseForm(candidate.form)),
+            ).length >= 3
+        ) {
+            break;
+        }
+        selected.push(filing);
+    }
+    const normalizedAngle = (researchAngle ?? "").toLocaleLowerCase("en");
+    const includeGovernance = [
+        "governance",
+        "compensation",
+        "remuneration",
+        "ownership",
+    ].some((term) => normalizedAngle.includes(term));
+    const includeFinancing = ["financing", "funding", "capital raise"].some(
+        (term) => normalizedAngle.includes(term),
+    );
+    for (const filing of sorted) {
+        if (selected.length >= limit || selected.includes(filing)) {
+            continue;
+        }
+        const form = normalizedBaseForm(filing.form);
+        if (
+            (includeGovernance && GOVERNANCE_FORMS.has(form)) ||
+            (includeFinancing && FINANCING_FORMS.has(form))
+        ) {
+            selected.push(filing);
+        }
+    }
+    return selected.slice(0, limit);
+}
+
 export const discoverForRun = internalAction({
     args: {
         runId: v.id("researchRuns"),
@@ -31,26 +112,30 @@ export const discoverForRun = internalAction({
                 executionGeneration: context.executionGeneration,
             },
         );
-        const candidates = args.filings
-            .slice(0, Math.min(8, initialCapacity.remaining))
-            .map((filing, providerResultPosition) => {
-                const accession = filing.accessionNumber.replaceAll("-", "");
-                const baseUrl = `https://www.sec.gov/Archives/edgar/data/${args.cik}/${accession}/`;
-                return {
-                    canonicalUrl: filing.primaryDocument
-                        ? `${baseUrl}${filing.primaryDocument}`
-                        : baseUrl,
-                    title: `${filing.form ?? "SEC filing"} · ${filing.filingDate ?? filing.accessionNumber}`,
-                    origin: "sec" as const,
-                    category: "regulatory",
-                    publishedAt: filing.filingDate
-                        ? Date.parse(filing.filingDate)
-                        : undefined,
-                    providerReference: filing.accessionNumber,
-                    providerResultPosition,
-                    discoveryQueryIndex: -1,
-                };
-            });
+        const candidates = selectSecFilingsForDiscovery(
+            args.filings,
+            Math.min(8, initialCapacity.remaining),
+            context.researchAngle,
+        ).map((filing, providerResultPosition) => {
+            const accession = filing.accessionNumber.replaceAll("-", "");
+            const baseUrl = `https://www.sec.gov/Archives/edgar/data/${args.cik}/${accession}/`;
+            return {
+                canonicalUrl: filing.primaryDocument
+                    ? `${baseUrl}${filing.primaryDocument}`
+                    : baseUrl,
+                title: `${filing.form ?? "SEC filing"} · ${filing.filingDate ?? filing.accessionNumber}`,
+                origin: "sec" as const,
+                category: "regulatory",
+                publishedAt: filing.filingDate
+                    ? Date.parse(filing.filingDate)
+                    : undefined,
+                providerReference: filing.accessionNumber,
+                secForm: filing.form,
+                secAccessionNumber: filing.accessionNumber,
+                providerResultPosition,
+                discoveryQueryIndex: -1,
+            };
+        });
         const result = await ctx.runMutation(
             internal.sourceDiscovery.persistCandidates,
             {

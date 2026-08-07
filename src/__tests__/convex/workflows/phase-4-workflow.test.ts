@@ -109,7 +109,14 @@ test("ends Phase 4 at an immutable approved corpus", async () => {
                     name: "CCC Intelligent Solutions Holdings Inc.",
                     tickers: ["CCCS"],
                     exchanges: ["Nasdaq"],
-                    filings: { recent: { accessionNumber: ["0001"] } },
+                    filings: {
+                        recent: {
+                            accessionNumber: ["0001"],
+                            form: ["10-K"],
+                            filingDate: ["2026-01-29"],
+                            primaryDocument: ["annual-report.htm"],
+                        },
+                    },
                 }),
                 { status: 200 },
             ),

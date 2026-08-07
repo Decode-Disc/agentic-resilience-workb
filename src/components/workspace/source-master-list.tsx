@@ -32,14 +32,18 @@ import {
     sourceDecisionDefinitions,
 } from "@/components/workspace/source-decision";
 import {
+    sourceAuthorityLabel,
     sourceCategoryLabel,
+    sourceDocumentKindLabel,
     sourceOriginLabel,
 } from "@/lib/presentation/research-copy";
 import { cn } from "@/lib/utils";
 
-type ReviewSource = FunctionReturnType<
+type ReviewSourceResult = FunctionReturnType<
     typeof api.sources.listForReviewPage
 >["page"][number];
+type ReviewSource = Omit<ReviewSourceResult, "documentKind" | "authorityTier"> &
+    Partial<Pick<ReviewSourceResult, "documentKind" | "authorityTier">>;
 type ProposalSource = FunctionReturnType<
     typeof api.sourceSelectionProposals.listItemsPage
 >["page"][number];
@@ -56,6 +60,8 @@ function toSourceContext(source: SourceMasterListItem) {
         publishedAt: source.publishedAt,
         decision: source.decision,
         reason: "reason" in source ? source.reason : source.decisionReason,
+        documentKind: source.documentKind,
+        authorityTier: source.authorityTier,
     };
 }
 
@@ -92,7 +98,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
     total: number;
     selectedId?: Id<"sources"> | null;
     onSelect?: (sourceId: Id<"sources">) => void;
-        enableDialogPreview?: boolean;
+    enableDialogPreview?: boolean;
     reviewStatus: "draft" | "approved";
     onDecide?: (
         sourceId: Id<"sources">,
@@ -112,7 +118,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
     emptyTitle?: string;
     emptyDescription?: string;
     className?: string;
-        listClassName?: string;
+    listClassName?: string;
 }) {
     const shouldReduceMotion = useReducedMotion();
     const [previewSource, setPreviewSource] = useState<TSource | null>(null);
@@ -166,7 +172,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                 </EmptyHeader>
                             </Empty>
                         ) : (
-                                    <ul className={cn("space-y-5", listClassName)}>
+                            <ul className={cn("space-y-5", listClassName)}>
                                 {items.map((source, index) => {
                                     const isActive =
                                         selectedId === source.sourceId;
@@ -192,7 +198,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                                   ? "true"
                                                   : undefined,
                                               "aria-label": `Open ${source.title} for review`,
-                                            onClick: handleRowActivate,
+                                              onClick: handleRowActivate,
                                               onKeyDown: (
                                                   event: ReactKeyboardEvent<HTMLDivElement>,
                                               ) => {
@@ -270,7 +276,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                                     isInteractive &&
                                                         "cursor-pointer",
                                                     isActive &&
-                                                    "bg-source-selection-accent/10 text-foreground ring ring-source-selection-accent",
+                                                        "bg-source-selection-accent/10 text-foreground ring ring-source-selection-accent",
                                                 )}
                                                 {...sourceRowProps}>
                                                 <div
@@ -287,13 +293,21 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                                             {source.title}
                                                         </span>
                                                         <span className="mt-1 block truncate font-mono text-[11px] text-muted-foreground">
-                                                            {sourceOriginLabel(
-                                                                source.origin,
-                                                            )}
+                                                            {source.authorityTier
+                                                                ? sourceAuthorityLabel(
+                                                                      source.authorityTier,
+                                                                  )
+                                                                : sourceOriginLabel(
+                                                                      source.origin,
+                                                                  )}
                                                             {" · "}
-                                                            {sourceCategoryLabel(
-                                                                source.category,
-                                                            )}
+                                                            {source.documentKind
+                                                                ? sourceDocumentKindLabel(
+                                                                      source.documentKind,
+                                                                  )
+                                                                : sourceCategoryLabel(
+                                                                      source.category,
+                                                                  )}
                                                         </span>
                                                     </span>
                                                 </div>

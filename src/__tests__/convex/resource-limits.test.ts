@@ -2,7 +2,7 @@ import { sourceRecommendedTarget } from "@convex/resourceLimits";
 import { afterEach, expect, test } from "vitest";
 
 const originalCandidateLimit = process.env.SOURCE_CANDIDATE_LIMIT;
-const originalRecommendedTarget = process.env.SOURCE_RECOMMENDED_TARGET;
+const originalRecommendationCeiling = process.env.SOURCE_RECOMMENDATION_CEILING;
 
 afterEach(() => {
     if (originalCandidateLimit === undefined) {
@@ -10,25 +10,35 @@ afterEach(() => {
     } else {
         process.env.SOURCE_CANDIDATE_LIMIT = originalCandidateLimit;
     }
-    if (originalRecommendedTarget === undefined) {
-        delete process.env.SOURCE_RECOMMENDED_TARGET;
+    if (originalRecommendationCeiling === undefined) {
+        delete process.env.SOURCE_RECOMMENDATION_CEILING;
     } else {
-        process.env.SOURCE_RECOMMENDED_TARGET = originalRecommendedTarget;
+        process.env.SOURCE_RECOMMENDATION_CEILING =
+            originalRecommendationCeiling;
     }
 });
 
-test("defaults the source recommendation target to twelve", () => {
+test("derives the source recommendation ceiling from half the candidate pool", () => {
     delete process.env.SOURCE_CANDIDATE_LIMIT;
-    delete process.env.SOURCE_RECOMMENDED_TARGET;
+    delete process.env.SOURCE_RECOMMENDATION_CEILING;
 
-    expect(sourceRecommendedTarget()).toBe(12);
+    expect(sourceRecommendedTarget()).toBe(24);
+    process.env.SOURCE_CANDIDATE_LIMIT = "49";
+    expect(sourceRecommendedTarget()).toBe(25);
 });
 
-test("rejects a source recommendation target above the candidate limit", () => {
+test("prefers the explicit ceiling over the computed default", () => {
+    process.env.SOURCE_CANDIDATE_LIMIT = "48";
+    process.env.SOURCE_RECOMMENDATION_CEILING = "20";
+
+    expect(sourceRecommendedTarget()).toBe(20);
+});
+
+test("rejects a source recommendation ceiling above the candidate limit", () => {
     process.env.SOURCE_CANDIDATE_LIMIT = "10";
-    process.env.SOURCE_RECOMMENDED_TARGET = "11";
+    process.env.SOURCE_RECOMMENDATION_CEILING = "11";
 
     expect(() => sourceRecommendedTarget()).toThrow(
-        "Source recommendation target must not exceed source candidate limit",
+        "Source recommendation ceiling must not exceed source candidate limit",
     );
 });

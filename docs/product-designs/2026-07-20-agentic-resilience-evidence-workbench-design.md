@@ -92,9 +92,9 @@ The system creates a research plan tailored to the company and searches by sourc
 
 The workflow stops after discovery and creates a versioned `SourceSelectionProposal` for the active draft corpus revision. The deterministic metadata-only policy recommends a balanced, bounded source set without an additional model call. No retrieval, evidence extraction, or assessment starts before explicit analyst approval.
 
-The policy first removes exact duplicates and identifies metadata-proven superseding versions, then recommends the best eligible source from each available source family required by the coverage preset, and finally fills remaining places by source priority, discovery rank, recency, publisher diversity, preset, and research angle. A missing or weak family remains a visible gap; the system never recommends a weak source merely to reach a target.
+The policy first removes exact duplicates and identifies metadata-proven superseding versions, then preserves analyst-supplied sources, covers preset-specific document roles, and adds only candidates that contribute a new document type, normalized period, material event, qualified independent producer, or research-angle match. A missing role remains a visible gap; the system never recommends a low-value source merely to fill a slot.
 
-The server-owned `SOURCE_RECOMMENDED_TARGET` defaults to 12, remains configurable, and cannot exceed `SOURCE_CANDIDATE_LIMIT`. It is a maximum automatic recommendation target rather than a quota to fill. Proposal items are `recommended`, `needs_attention`, or `alternative`; `needs_attention` never blocks approval.
+The server-owned `SOURCE_RECOMMENDATION_CEILING` defaults to half of `SOURCE_CANDIDATE_LIMIT`, rounded up, remains configurable, and cannot exceed the candidate limit. It is a circuit breaker rather than a quota: the adaptive policy stops when no candidate adds a distinct document role, period, event, qualified independent producer, or research-angle contribution. Proposal items are `recommended`, `needs_attention`, or `alternative`; `needs_attention` is reserved for rare identity or provenance conflicts.
 
 The default source-checkpoint surface summarizes the proposed corpus, source-family coverage, visible gaps, exceptions, and analyst adjustments. `DiscreteTabs` switches among `Recommended`, `Needs attention`, and `Alternatives`. The analyst may approve the proposal without opening every source, adjust it through separate `Included` and `Available` working sets, inspect every candidate in the preserved master-detail view, or add public HTTPS URLs.
 
@@ -103,9 +103,9 @@ holds only an expiring server-owned preparation receipt. Dossier creation
 atomically converts valid receipts into pending candidates in the first draft
 corpus revision. The same intake action adds a pending candidate directly when
 the analyst is already reviewing an active dossier. A prepared or pending URL
-still requires the normal corpus decision and cannot contribute downstream. Once it becomes a valid candidate, an analyst-supplied source is recommended by default, counts toward the configured target, and remains removable before approval.
+still requires the normal corpus decision and cannot contribute downstream. Once it becomes a valid candidate, an analyst-supplied source is recommended by default, counts toward the recommendation ceiling, and remains removable before approval.
 
-System recommendations never become human decisions by themselves. Analyst adjustments use append-only source decisions. `Approve proposed corpus` atomically preserves those overrides, writes an individual accepted decision for every still-pending recommended source, leaves all other candidates pending, approves the corpus revision, and resumes the workflow. A changed candidate set makes the proposal stale and requires recomputation without overwriting analyst decisions.
+System recommendations never become human decisions by themselves. Analyst adjustments use append-only source decisions. `Approve proposed corpus` atomically preserves those overrides, writes an individual accepted decision for every still-pending recommended source, leaves all other candidates pending, approves the corpus revision, and resumes the workflow. A changed candidate set makes the proposal stale and requires recomputation without overwriting analyst decisions. A draft created by an older policy displays `Improved proposal method available`, blocks approval, and requires an explicit rebuild that preserves analyst decisions; approved corpora remain unchanged. A rebuild that refreshes only part of discovery creates a reviewable proposal with the affected source families and coverage consequence visible before approval. A blocked rebuild keeps the outdated draft in place and tells the analyst that the existing draft and decisions are unchanged.
 
 An approved `CorpusRevision` contains accepted sources only. Pending sources
 remain visible but cannot contribute downstream. Accepting one later creates
@@ -644,3 +644,4 @@ The MVP is complete when an invited analyst can:
 - [ADR-015: Use bounded Exa company website enrichment before admission](../decisions/015-use-bounded-exa-company-website-enrichment-before-admission.md)
 - [ADR-016: Centralize manual source intake with expiring preparations](../decisions/016-centralize-manual-source-intake-with-expiring-preparations.md)
 - [ADR-017: Use deterministic source selection proposals](../decisions/017-use-deterministic-source-selection-proposals.md)
+- [ADR-018: Use an adaptive source selection policy](../decisions/018-use-adaptive-source-selection-policy.md)

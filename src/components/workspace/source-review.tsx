@@ -46,9 +46,14 @@ import { useResponsive } from "@/hooks/use-responsive";
 type SourceReviewSummary = FunctionReturnType<
     typeof api.sources.getReviewSummary
 >;
-export type SourceReviewSource = FunctionReturnType<
+type SourceReviewServerSource = FunctionReturnType<
     typeof api.sources.listForReviewPage
 >["page"][number];
+export type SourceReviewSource = Omit<
+    SourceReviewServerSource,
+    "documentKind" | "authorityTier"
+> &
+    Partial<Pick<SourceReviewServerSource, "documentKind" | "authorityTier">>;
 type SourceDecision = FunctionArgs<typeof api.sources.decide>["decision"];
 export type SourceFilter = "all" | SourceDecision;
 type SourceReviewModel = Omit<SourceReviewSummary, "total" | "candidateLimit"> &
@@ -273,23 +278,23 @@ export function SourceReview({
                         data-panel="source-context"
                         minSize="26rem">
                         <div className="h-full min-w-0">
-                                <MotionAnimatePresence
-                                    contentKey={
-                                        selected ? selected.sourceId : "empty"
-                                    }
-                                    mode="wait"
-                                    preset="shrink-pop"
-                                    className="h-full"
-                                    wrapperClassName="h-full">
-                                    {selected ? (
-                                        <SourceContextPanel source={selected} />
-                                    ) : (
-                                        <div className="surface-panel flex h-full min-h-64 items-center justify-center rounded-2xl text-sm text-muted-foreground">
-                                            Select a source to review its preview and
-                                            provenance.
-                                        </div>
-                                    )}
-                                </MotionAnimatePresence>
+                            <MotionAnimatePresence
+                                contentKey={
+                                    selected ? selected.sourceId : "empty"
+                                }
+                                mode="wait"
+                                preset="shrink-pop"
+                                className="h-full"
+                                wrapperClassName="h-full">
+                                {selected ? (
+                                    <SourceContextPanel source={selected} />
+                                ) : (
+                                    <div className="surface-panel flex h-full min-h-64 items-center justify-center rounded-2xl text-sm text-muted-foreground">
+                                        Select a source to review its preview
+                                        and provenance.
+                                    </div>
+                                )}
+                            </MotionAnimatePresence>
                         </div>
                     </ResizablePanel>
                 </ResizablePanelGroup>

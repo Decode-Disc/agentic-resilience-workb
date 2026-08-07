@@ -12,6 +12,15 @@ type RunEvent = FunctionReturnType<
 type Source = FunctionReturnType<
     typeof api.sources.listForReviewPage
 >["page"][number];
+type ProposalSource = FunctionReturnType<
+    typeof api.sourceSelectionProposals.listItemsPage
+>["page"][number];
+type AuthorityTier = ProposalSource["authorityTier"];
+type DocumentKind = ProposalSource["documentKind"];
+type SelectionReason = ProposalSource["reasonCodes"][number];
+type CoverageRole = NonNullable<
+    FunctionReturnType<typeof api.sourceSelectionProposals.getCurrent>
+>["coverageGaps"][number];
 
 function errorText(error: unknown): string {
     return error instanceof Error ? error.message : "";
@@ -156,9 +165,88 @@ const eventLabels = {
 
 const sourceOriginLabels = {
     sec: "SEC filing",
-    exa: "Independent web source",
+    exa: "Public web source",
     analyst_url: "Added by analyst",
 } satisfies Record<Source["origin"], string>;
+
+const authorityTierLabels = {
+    regulator_primary: "Primary regulator",
+    company_primary: "Official company source",
+    company_hosted_ir: "Qualified investor relations source",
+    institutional_independent: "Institutional independent source",
+    qualified_partner: "Qualified partner source",
+    unverified: "Unverified public source",
+    analyst_supplied: "Analyst-supplied source",
+} satisfies Record<AuthorityTier, string>;
+
+const documentKindLabels = {
+    regulatory_annual: "Annual report",
+    regulatory_interim: "Interim report",
+    regulatory_material: "Material event filing",
+    regulatory_proxy: "Proxy filing",
+    regulatory_ownership: "Ownership filing",
+    regulatory_registration: "Registration filing",
+    regulatory_other: "Other regulatory filing",
+    earnings_release: "Earnings results",
+    investor_presentation: "Investor presentation",
+    earnings_transcript: "Earnings transcript",
+    official_product_documentation: "Product documentation",
+    official_integration_documentation: "Integration documentation",
+    official_pricing: "Pricing",
+    official_commercial_terms: "Commercial terms",
+    official_security_documentation: "Security documentation",
+    independent_analysis: "Independent analysis",
+    news_reporting: "News reporting",
+    partner_evidence: "Partner evidence",
+    community_content: "Community content",
+    search_or_index: "Index or search page",
+    unknown: "Document type unavailable",
+} satisfies Record<DocumentKind, string>;
+
+const selectionReasonLabels = {
+    added_by_analyst: "Included because it was added by the analyst",
+    required_family_coverage: "Included to cover a required evidence family",
+    ranked_fill: "Included to broaden the available source set",
+    unrecognized_source_family: "Source family could not be verified",
+    not_selected: "Kept available as an alternative",
+    required_coverage_role: "Included to cover a required document role",
+    additional_coverage: "Included because it adds distinct coverage",
+    canonical_duplicate:
+        "Excluded because the same canonical source is already represented",
+    metadata_duplicate:
+        "Excluded because the same document or event is already represented",
+    search_or_index:
+        "Excluded because index and search pages do not add direct evidence",
+    low_information_document:
+        "Excluded because this document type has low value for this research angle",
+    company_identity_unverified:
+        "Excluded because the source could not be matched to the selected company",
+    unverified_publisher:
+        "Excluded because its authority could not be verified",
+    no_new_coverage: "Excluded because it does not add distinct coverage",
+    recommendation_ceiling_reached:
+        "Kept available after the reliable recommendation ceiling was reached",
+    integrity_conflict:
+        "Needs attention because identity or provenance could not be reconciled",
+} satisfies Record<SelectionReason, string>;
+
+const coverageRoleLabels = {
+    regulatory_annual: "Annual regulatory report",
+    regulatory_interim: "Interim regulatory report",
+    regulatory_material_event: "Material event filing",
+    investor_results: "Recent results",
+    investor_presentation: "Presentation or transcript",
+    official_product_platform: "Product or platform documentation",
+    official_product_integration: "Integration or API documentation",
+    official_commercial_pricing: "Pricing",
+    official_commercial_terms: "Terms or offer details",
+    counter_evidence_primary: "First independent counter-evidence source",
+    counter_evidence_secondary: "Second independent counter-evidence source",
+    official_security_architecture: "Security architecture",
+    official_security_trust: "Trust or data protection documentation",
+    independent_analysis_primary: "First independent analysis source",
+    independent_analysis_secondary: "Second independent analysis source",
+} satisfies Record<CoverageRole, string>;
 
 const sourceDecisionLabels = {
     accepted: "Accepted",
@@ -184,6 +272,35 @@ export function eventLabel(type: RunEvent["type"]): string {
 /** Translates source provenance codes at the analyst presentation boundary. */
 export function sourceOriginLabel(origin: Source["origin"]): string {
     return sourceOriginLabels[origin];
+}
+
+export function sourceAuthorityLabel(
+    authorityTier: AuthorityTier | undefined,
+): string {
+    return authorityTier
+        ? authorityTierLabels[authorityTier]
+        : "Authority not classified";
+}
+
+export function sourceDocumentKindLabel(
+    documentKind: DocumentKind | undefined,
+): string {
+    return documentKind
+        ? documentKindLabels[documentKind]
+        : "Document type not classified";
+}
+
+export function sourceSelectionReasonLabel(
+    reasonCodes: ReadonlyArray<SelectionReason>,
+): string {
+    const reason = reasonCodes[0];
+    return reason
+        ? selectionReasonLabels[reason]
+        : "No additional selection explanation is available";
+}
+
+export function sourceCoverageRoleLabel(role: CoverageRole): string {
+    return coverageRoleLabels[role];
 }
 
 /** Translates persisted source decisions for display. */
