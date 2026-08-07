@@ -23,6 +23,8 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { AnalyzedCompanyList } from "@/components/workbench-shell/analyzed-company-list";
 import { useInvitationAccess } from "@/components/workspace/invitation-access-context";
+import { uiLayerClasses } from "@/lib/ui-layers";
+import { cn } from "@/lib/utils";
 import { getWorkspaceDestination } from "@/lib/workspace/access-destination";
 
 export interface WorkbenchShellProps {
@@ -91,7 +93,7 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
 
     return (
         <div className="min-h-svh bg-background text-foreground">
-            <header className="sticky top-0 z-30 border-b border-border bg-card/80 backdrop-blur-md">
+            <header className={cn('sticky top-0 z-30 border-b border-border bg-card/80 backdrop-blur-md', uiLayerClasses.workbenchShellHeader)}>
                 <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
                     <div className="flex min-w-0 items-center gap-3">
                         {/* Home Button / Link using shadcn Button */}
@@ -186,7 +188,9 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                 </div>
             </header>
 
-            <BackgroundImageTexture opacity={0.9} variant="fabric-of-squares">
+            <BackgroundImageTexture
+                opacity={0.9}
+                variant="fabric-of-squares">
                 <main className="mx-auto w-full min-h-screen max-w-8xl px-4 py-4 sm:px-6">
                     {children}
                 </main>

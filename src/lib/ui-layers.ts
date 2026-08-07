@@ -6,6 +6,7 @@ export const uiLayerOrder = {
     pageOverlay: 49,
     modal: 44,
     expandableScreen: 43,
+    workbenchShellHeader: 30,
 
     /**
      * Radix portalled overlays (dialog, sheet, dropdown, select, tooltip,

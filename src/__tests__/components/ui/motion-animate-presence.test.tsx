@@ -99,4 +99,27 @@ describe("MotionAnimatePresence", () => {
 
         expect(screen.getByTestId("infinite-child")).toBeTruthy();
     });
+
+    it("supports shrink-pop built-in preset and direct PresetDefinition object", () => {
+        const { rerender } = render(
+            <MotionAnimatePresence preset="shrink-pop">
+                <div data-testid="shrink-pop-child">Shrink Pop Content</div>
+            </MotionAnimatePresence>,
+        );
+        expect(screen.getByTestId("shrink-pop-child")).toBeTruthy();
+
+        const customObjectPreset = {
+            initial: { opacity: 0, scale: 0.8 },
+            animate: { opacity: 1, scale: 1 },
+            exit: { opacity: 0, scale: 0.8 },
+            transition: { duration: 0.2 },
+        };
+
+        rerender(
+            <MotionAnimatePresence preset={customObjectPreset}>
+                <div data-testid="custom-object-child">Custom Object Content</div>
+            </MotionAnimatePresence>,
+        );
+        expect(screen.getByTestId("custom-object-child")).toBeTruthy();
+    });
 });

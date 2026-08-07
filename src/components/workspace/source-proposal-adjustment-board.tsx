@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 
 import { FaviconAvatar } from "@/components/favicon-avatar";
 import Icon from "@/components/icon";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
     Kanban,
@@ -115,7 +116,10 @@ export function SourceProposalAdjustmentBoard({
             getItemValue={(source) => source.sourceId}
             onMove={handleMove}>
             <KanbanBoard className="grid-cols-1 sm:grid-cols-1 md:grid-cols-2">
-                <ProposalAdjustmentColumn column="included" title="Included">
+                <ProposalAdjustmentColumn
+                    column="included"
+                    title="Included"
+                    badgeValue={adjustmentSets.included.length}>
                     <SourceMasterList
                         heading="Included in proposal"
                         description="Sources currently selected for the proposed corpus."
@@ -139,7 +143,10 @@ export function SourceProposalAdjustmentBoard({
                     />
                 </ProposalAdjustmentColumn>
 
-                <ProposalAdjustmentColumn column="available" title="Available">
+                <ProposalAdjustmentColumn
+                    column="available"
+                    title="Available"
+                    badgeValue={adjustmentSets.available.length}>
                     <SourceMasterList
                         heading="Available alternatives"
                         description="Candidates excluded from the proposal unless you include them."
@@ -185,10 +192,12 @@ export function SourceProposalAdjustmentBoard({
 function ProposalAdjustmentColumn({
     column,
     title,
+    badgeValue,
     children,
 }: {
     column: AdjustmentColumn;
     title: string;
+        badgeValue: number;
     children: ReactNode;
 }) {
     return (
@@ -196,7 +205,10 @@ function ProposalAdjustmentColumn({
             value={column}
             aria-label={`${title} proposal drop zone`}
             className="min-w-0 rounded-(--radius-source-card) outline-2 outline-offset-2 outline-transparent transition-colors data-[dragging=true]:opacity-60">
-            <h2 className="mb-2 text-section">{title}</h2>
+            <div className="flex gap-1 items-center mb-2">
+                <h2 className="text-section">{title}</h2>
+                <Badge variant="secondary">{badgeValue}</Badge>
+            </div>
             <KanbanColumnContent value={column}>{children}</KanbanColumnContent>
         </KanbanColumn>
     );
@@ -262,6 +274,7 @@ function SourceAdjustmentActions({
                         ? `Remove ${source.title} from proposal`
                         : `Include ${source.title}`
                 }
+                className={isIncluded ? "text-danger" : "text-info"}
                 onClick={() =>
                     void onDecide(
                         source.sourceId,

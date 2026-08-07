@@ -217,10 +217,29 @@ export function ExpandableScreenContent({
     const { isExpanded, collapse, layoutId, contentRadius, animationDuration } =
         useExpandableScreen();
 
+    useEffect(() => {
+        if (!isExpanded) {
+            return;
+        }
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                collapse();
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [isExpanded, collapse]);
+
     return (
         <AnimatePresence initial={false}>
             {isExpanded && (
                 <div
+                    role="dialog"
+                    aria-modal="true"
                     className={`fixed inset-0 ${uiLayerClasses.expandableScreen} flex items-center justify-center p-3 sm:p-2`}>
                     {/* Backdrop overlay */}
                     <motion.div
@@ -229,6 +248,7 @@ export function ExpandableScreenContent({
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: animationDuration * 0.4 }}
+                        onClick={collapse}
                     />
                     {/* Morphing background with shared layoutId */}
                     <motion.div

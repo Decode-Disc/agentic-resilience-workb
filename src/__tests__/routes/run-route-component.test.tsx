@@ -348,10 +348,10 @@ test("keeps the approved source set visible for inspection", () => {
         screen.getByRole("button", { name: "Inspect all candidates" }),
     );
     expect(
-        screen.getByRole("button", {
+        screen.getAllByRole("button", {
             name: /Open Approved report for review/i,
-        }),
-    ).toBeTruthy();
+        }).length,
+    ).toBeGreaterThan(0);
     expect(
         screen
             .getByRole("button", {

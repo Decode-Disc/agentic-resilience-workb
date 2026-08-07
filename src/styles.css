@@ -4,6 +4,9 @@
 @import "./assets/styles/base-preset.css";
 @import "./assets/styles/themes/evidence-workbench.css";
 
+@source inline('z-{20..100}');
+@source inline('z-999');
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -58,23 +61,6 @@
 
     .link {
         @apply text-blue-500 underline underline-offset-4 transition-colors hover:text-blue-800;
-    }
-
-    .source-selection {
-        @apply transition-[background-image,background-color,border-color,box-shadow] duration-200 ease-out;
-        @apply hover:bg-source-selection-accent/20;
-    }
-    .source-selection-active {
-        @apply bg-source-selection-accent/10 text-foreground;
-        @apply ring ring-source-selection-accent;
-    }
-    /* The selected source remains legible without competing with the panel divider. */
-    .source-selection-bridge {
-        background-image: linear-gradient(
-            to right,
-            color-mix(in oklab, var(--brand-green) 26%, transparent),
-            color-mix(in oklab, var(--brand-green) 10%, transparent)
-        );
     }
 }
 

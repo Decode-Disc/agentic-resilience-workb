@@ -15,6 +15,7 @@ interface BackgroundImageTextureProps {
     className?: string;
     children?: React.ReactNode;
     childrenClassName?: string;
+    textureUrl?: string | null;
 }
 
 const textureMap: Record<Exclude<TextureVariant, "none">, string> = {
@@ -31,8 +32,10 @@ export function BackgroundImageTexture({
     className,
     children,
     childrenClassName,
+    textureUrl,
 }: BackgroundImageTextureProps) {
-    const textureUrl = variant !== "none" ? textureMap[variant] : null;
+    textureUrl =
+        textureUrl ?? (variant !== "none" ? textureMap[variant] : null);
 
     return (
         <div className={cn("relative", className)}>

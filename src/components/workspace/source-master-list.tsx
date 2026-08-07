@@ -2,7 +2,11 @@ import type { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { motion, useReducedMotion } from "motion/react";
-import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
+import {
+    type KeyboardEvent as ReactKeyboardEvent,
+    type ReactNode,
+    useState,
+} from "react";
 
 import { FaviconAvatar } from "@/components/favicon-avatar";
 import Icon from "@/components/icon";
@@ -15,7 +19,12 @@ import {
     EmptyHeader,
     EmptyTitle,
 } from "@/components/ui/empty";
+import {
+    ExpandableScreen,
+    ExpandableScreenContent,
+} from "@/components/ui/expandable-screen";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SourceContextPanel } from "@/components/workspace/source-context-panel";
 import {
     getSourceDecisionActiveButtonClassName,
     getSourceDecisionButtonLabel,
@@ -37,6 +46,19 @@ type ProposalSource = FunctionReturnType<
 export type SourceMasterListItem = ReviewSource | ProposalSource;
 type SourceDecision = FunctionArgs<typeof api.sources.decide>["decision"];
 
+function toSourceContext(source: SourceMasterListItem) {
+    return {
+        sourceId: source.sourceId,
+        canonicalUrl: source.canonicalUrl,
+        title: source.title,
+        origin: source.origin,
+        category: source.category,
+        publishedAt: source.publishedAt,
+        decision: source.decision,
+        reason: "reason" in source ? source.reason : source.decisionReason,
+    };
+}
+
 /** Reusable source collection; filters and grouping controls belong to consumers. */
 export function SourceMasterList<TSource extends SourceMasterListItem>({
     heading,
@@ -45,6 +67,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
     total,
     selectedId,
     onSelect,
+    enableDialogPreview = true,
     reviewStatus,
     onDecide,
     rowAction,
@@ -61,6 +84,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
     emptyTitle = "No candidate sources",
     emptyDescription = "No sources currently match this view.",
     className,
+    listClassName,
 }: {
     heading: string;
     description?: string;
@@ -68,6 +92,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
     total: number;
     selectedId?: Id<"sources"> | null;
     onSelect?: (sourceId: Id<"sources">) => void;
+        enableDialogPreview?: boolean;
     reviewStatus: "draft" | "approved";
     onDecide?: (
         sourceId: Id<"sources">,
@@ -87,8 +112,10 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
     emptyTitle?: string;
     emptyDescription?: string;
     className?: string;
+        listClassName?: string;
 }) {
     const shouldReduceMotion = useReducedMotion();
+    const [previewSource, setPreviewSource] = useState<TSource | null>(null);
     const loadedCount =
         items.length > 0 ? (
             <p className="text-xs text-muted-foreground">
@@ -139,7 +166,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                 </EmptyHeader>
                             </Empty>
                         ) : (
-                            <ul className="space-y-5">
+                                    <ul className={cn("space-y-5", listClassName)}>
                                 {items.map((source, index) => {
                                     const isActive =
                                         selectedId === source.sourceId;
@@ -147,7 +174,16 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                     const startsDecisionGroup =
                                         groupByDecision &&
                                         previous?.decision !== source.decision;
-                                    const sourceRowProps = onSelect
+                                    const isInteractive =
+                                        onSelect !== undefined ||
+                                        enableDialogPreview;
+                                    const handleRowActivate = () => {
+                                        onSelect?.(source.sourceId);
+                                        if (enableDialogPreview) {
+                                            setPreviewSource(source);
+                                        }
+                                    };
+                                    const sourceRowProps = isInteractive
                                         ? {
                                               role: "button" as const,
                                               tabIndex: 0,
@@ -156,8 +192,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                                   ? "true"
                                                   : undefined,
                                               "aria-label": `Open ${source.title} for review`,
-                                              onClick: () =>
-                                                  onSelect(source.sourceId),
+                                            onClick: handleRowActivate,
                                               onKeyDown: (
                                                   event: ReactKeyboardEvent<HTMLDivElement>,
                                               ) => {
@@ -174,12 +209,12 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                                       return;
                                                   }
                                                   event.preventDefault();
-                                                  onSelect(source.sourceId);
+                                                  handleRowActivate();
                                               },
                                           }
                                         : {};
                                     const rowActionClassName =
-                                        "-mx-3 -mb-3 mt-3 flex flex-wrap gap-1 border-t border-border/60 bg-muted/20 p-1";
+                                        "-mx-3 -mb-3 mt-3 flex flex-wrap gap-1 border-t border-border/60 bg-muted/20 group-hover/source-row:bg-muted/70 p-1";
                                     const canMove =
                                         reviewStatus === "draft" &&
                                         itemWrapper !== undefined;
@@ -227,16 +262,20 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                                     : null}
                                             </span>
                                             <div
-                                                data-slot="source-row-content"
+                                                data-slot="source-row-container"
                                                 className={cn(
-                                                    "source-selection relative flex min-h-28 w-full flex-col justify-between border p-3",
-                                                    onSelect &&
+                                                    "relative flex w-full flex-col justify-between border p-3",
+                                                    "transition-[background-image,background-color,border-color,box-shadow] duration-200 ease-out",
+                                                    "group-hover/source-row:bg-source-selection-accent/15",
+                                                    isInteractive &&
                                                         "cursor-pointer",
                                                     isActive &&
-                                                        "source-selection-active",
+                                                    "bg-source-selection-accent/10 text-foreground ring ring-source-selection-accent",
                                                 )}
                                                 {...sourceRowProps}>
-                                                <div className="flex w-full items-start gap-3 text-left text-wrap">
+                                                <div
+                                                    data-slot="source-row-content"
+                                                    className="flex w-full items-start gap-3 text-left text-wrap">
                                                     <FaviconAvatar
                                                         canonicalUrl={
                                                             source.canonicalUrl
@@ -348,6 +387,23 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                     </InfiniteCollectionViewport>
                 </div>
             </CardContent>
+            {enableDialogPreview && previewSource ? (
+                <ExpandableScreen
+                    defaultExpanded={true}
+                    onExpandChange={(expanded) => {
+                        if (!expanded) {
+                            setPreviewSource(null);
+                        }
+                    }}
+                    layoutId={`source-preview-${previewSource.sourceId}`}>
+                    <ExpandableScreenContent className="h-[85vh] max-w-4xl overflow-hidden p-0 bg-background border border-border shadow-xl">
+                        <SourceContextPanel
+                            source={toSourceContext(previewSource)}
+                            className="h-full border-none rounded-none"
+                        />
+                    </ExpandableScreenContent>
+                </ExpandableScreen>
+            ) : null}
         </Card>
     );
 }

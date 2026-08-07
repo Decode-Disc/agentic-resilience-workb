@@ -25,6 +25,7 @@ import {
     EmptyHeader,
     EmptyTitle,
 } from "@/components/ui/empty";
+import MotionAnimatePresence from "@/components/ui/motion-animate-presence";
 import {
     ResizableHandle,
     ResizablePanel,
@@ -220,6 +221,7 @@ export function SourceReview({
                     setDrawerOpen(true);
                 }
             }}
+            enableDialogPreview={false}
             reviewStatus={review.status}
             groupByDecision={filter === "all"}
             headerAction={
@@ -271,14 +273,23 @@ export function SourceReview({
                         data-panel="source-context"
                         minSize="26rem">
                         <div className="h-full min-w-0">
-                            {selected ? (
-                                <SourceContextPanel source={selected} />
-                            ) : (
-                                <div className="surface-panel flex h-full min-h-64 items-center justify-center rounded-2xl text-sm text-muted-foreground">
-                                    Select a source to review its preview and
-                                    provenance.
-                                </div>
-                            )}
+                                <MotionAnimatePresence
+                                    contentKey={
+                                        selected ? selected.sourceId : "empty"
+                                    }
+                                    mode="wait"
+                                    preset="shrink-pop"
+                                    className="h-full"
+                                    wrapperClassName="h-full">
+                                    {selected ? (
+                                        <SourceContextPanel source={selected} />
+                                    ) : (
+                                        <div className="surface-panel flex h-full min-h-64 items-center justify-center rounded-2xl text-sm text-muted-foreground">
+                                            Select a source to review its preview and
+                                            provenance.
+                                        </div>
+                                    )}
+                                </MotionAnimatePresence>
                         </div>
                     </ResizablePanel>
                 </ResizablePanelGroup>

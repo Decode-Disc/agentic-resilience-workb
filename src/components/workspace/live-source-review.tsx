@@ -137,7 +137,7 @@ function SourceReviewData({
                         }
                     }}
                     selectedId={selectedId}
-                    selectedSource={selectedId ? selectedSource : null}
+                    selectedSource={selectedId ? selectedSource : undefined}
                     onSelectedIdChange={setSelectedId}
                     hasMore={inspectionPage.status === "CanLoadMore"}
                     isLoadingMore={inspectionPage.status === "LoadingMore"}
@@ -251,7 +251,7 @@ function SourceReviewData({
                     }
                 }}
                 inspectionSelectedId={selectedId}
-                inspectionSelectedSource={selectedId ? selectedSource : null}
+                inspectionSelectedSource={selectedId ? selectedSource : undefined}
                 onInspectionSelectedIdChange={setSelectedId}
                 inspectionHasMore={inspectionPage.status === "CanLoadMore"}
                 inspectionIsLoadingMore={
