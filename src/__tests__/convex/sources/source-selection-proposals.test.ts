@@ -193,6 +193,204 @@ test("persists one versioned source-selection proposal after discovery", async (
     });
 });
 
+test("uses current company website metadata when a legacy run snapshot is stale", async () => {
+    const t = convexTest(schema, modules);
+    const { runId, sourceId } = await t.run(async (ctx) => {
+        const companyId = await ctx.db.insert("companies", {
+            cik: "1373715",
+            legalName: "ServiceNow, Inc.",
+            ticker: "NOW",
+            exchange: "NYSE",
+            websiteUrl: "https://www.servicenow.com/",
+            canonicalizedAt: 2,
+        });
+        const runId = await ctx.db.insert("researchRuns", {
+            companyId,
+            companySnapshot: {
+                cik: "1373715",
+                legalName: "ServiceNow, Inc.",
+                ticker: "NOW",
+                exchange: "NYSE",
+                websiteUrl: "https://old.example/",
+            },
+            coveragePreset: "balanced",
+            lifecycleState: "discovering_sources",
+            executionStatus: "running",
+            executionGeneration: 1,
+            nextEventSequence: 1,
+            createdAt: 1,
+            updatedAt: 1,
+        });
+        const corpusRevisionId = await ctx.db.insert("corpusRevisions", {
+            runId,
+            revision: 1,
+            status: "draft",
+            createdAt: 1,
+        });
+        await ctx.db.patch(runId, { activeCorpusRevisionId: corpusRevisionId });
+        const sourceId = await ctx.db.insert("sources", {
+            runId,
+            canonicalUrl: "https://www.servicenow.com/lpgp/pricing.html",
+            title: "Pricing",
+            origin: "exa",
+            category: "official_commercial",
+            createdAt: 1,
+        });
+        return { runId, sourceId };
+    });
+
+    const proposal = await t.mutation(generateForRun, {
+        runId,
+        expectedExecutionGeneration: 1,
+    });
+    const item = await t.run(async (ctx) =>
+        ctx.db
+            .query("sourceSelectionProposalItems")
+            .withIndex("by_proposal_and_source", (query) =>
+                query
+                    .eq("proposalId", proposal.proposalId)
+                    .eq("sourceId", sourceId),
+            )
+            .unique(),
+    );
+
+    expect(item).toMatchObject({
+        sourceId,
+        disposition: "recommended",
+        authorityTier: "company_primary",
+        documentKind: "official_pricing",
+        reasonCodes: ["required_coverage_role"],
+    });
+});
+
+test("marks and refreshes a proposal after current company website enrichment", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await t.run(async (ctx) => {
+        const userId = await ctx.db.insert("users", { isAnonymous: true });
+        const invitationId = await ctx.db.insert("invitations", {
+            slotKey: "company-enrichment-owner",
+            role: "analyst",
+            codeDigest: "company-enrichment-digest",
+            status: "claimed",
+            createdAt: 1,
+        });
+        const visitorId = await ctx.db.insert("visitors", {
+            authUserId: userId,
+            invitationId,
+            role: "analyst",
+            status: "active",
+            analysesReserved: 1,
+            admittedAt: 1,
+        });
+        const companyId = await ctx.db.insert("companies", {
+            cik: "1373715",
+            legalName: "ServiceNow, Inc.",
+            ticker: "NOW",
+            exchange: "NYSE",
+            canonicalizedAt: 1,
+        });
+        const runId = await ctx.db.insert("researchRuns", {
+            ownerVisitorId: visitorId,
+            companyId,
+            companySnapshot: {
+                cik: "1373715",
+                legalName: "ServiceNow, Inc.",
+                ticker: "NOW",
+                exchange: "NYSE",
+            },
+            coveragePreset: "balanced",
+            lifecycleState: "discovering_sources",
+            executionStatus: "running",
+            executionGeneration: 1,
+            nextEventSequence: 1,
+            createdAt: 1,
+            updatedAt: 1,
+        });
+        const corpusRevisionId = await ctx.db.insert("corpusRevisions", {
+            runId,
+            revision: 1,
+            status: "draft",
+            createdAt: 1,
+        });
+        await ctx.db.patch(runId, { activeCorpusRevisionId: corpusRevisionId });
+        const sourceId = await ctx.db.insert("sources", {
+            runId,
+            canonicalUrl: "https://www.servicenow.com/lpgp/pricing.html",
+            title: "Pricing",
+            origin: "exa",
+            category: "official_commercial",
+            createdAt: 1,
+        });
+        const decisionId = await ctx.db.insert("sourceDecisions", {
+            runId,
+            corpusRevisionId,
+            sourceId,
+            decisionKey: "company-enrichment-pending",
+            decision: "pending",
+            reviewerVisitorId: visitorId,
+            occurredAt: 1,
+        });
+        await ctx.db.insert("sourceReviewItems", {
+            runId,
+            corpusRevisionId,
+            sourceId,
+            decision: "pending",
+            decisionRank: 0,
+            sourceCreatedAt: 1,
+            latestDecisionId: decisionId,
+            decisionOccurredAt: 1,
+        });
+        return { userId, companyId, runId, corpusRevisionId, sourceId };
+    });
+    const initial = await t.mutation(generateForRun, {
+        runId: fixture.runId,
+        expectedExecutionGeneration: 1,
+    });
+    await t.run(async (ctx) => {
+        await ctx.db.patch(fixture.runId, {
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        });
+        await ctx.db.patch(fixture.companyId, {
+            websiteUrl: "https://www.servicenow.com/",
+            canonicalizedAt: 2,
+        });
+    });
+    const owner = t.withIdentity({
+        subject: `${fixture.userId}|company-enrichment-session`,
+    });
+    const args = {
+        runId: fixture.runId,
+        corpusRevisionId: fixture.corpusRevisionId,
+    };
+
+    await expect(owner.query(getCurrent, args)).resolves.toMatchObject({
+        proposalId: initial.proposalId,
+        effectiveStatus: "stale",
+    });
+    const refreshed = await owner.mutation(recompute, {
+        ...args,
+        expectedProposalId: initial.proposalId,
+    });
+    const refreshedItem = await t.run(async (ctx) =>
+        ctx.db
+            .query("sourceSelectionProposalItems")
+            .withIndex("by_proposal_and_source", (query) =>
+                query
+                    .eq("proposalId", refreshed.proposalId)
+                    .eq("sourceId", fixture.sourceId),
+            )
+            .unique(),
+    );
+
+    expect(refreshedItem).toMatchObject({
+        disposition: "recommended",
+        authorityTier: "company_primary",
+        documentKind: "official_pricing",
+    });
+});
+
 test("rejects proposal generation for a stale execution generation", async () => {
     const t = convexTest(schema, modules);
     const runId = await t.run(async (ctx) =>

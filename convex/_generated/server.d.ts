@@ -28,7 +28,6 @@ type Env = {
   readonly COMPANY_SEARCH_RESULT_LIMIT: string | undefined;
   readonly SOURCE_CANDIDATE_LIMIT: string | undefined;
   readonly SOURCE_RECOMMENDATION_CEILING: string | undefined;
-  readonly SOURCE_RECOMMENDED_TARGET: string | undefined;
 };
 
 /**

@@ -15,6 +15,7 @@ import {
     type QueryCtx,
     query,
 } from "./_generated/server";
+import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
 import { claimPausedRunExecution } from "./domain/executionClaim";
 import { buildResearchPlan } from "./domain/researchPlan";
 import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
@@ -238,9 +239,13 @@ async function readSelectionCompany(
     ctx: MutationCtx | QueryCtx,
     run: Doc<"researchRuns">,
 ) {
-    const company =
-        run.companySnapshot ??
-        (run.companyId ? await ctx.db.get(run.companyId) : null);
+    const currentCompany = run.companyId
+        ? await ctx.db.get(run.companyId)
+        : null;
+    const company = mergeRunCompanyMetadata(
+        run.companySnapshot,
+        currentCompany,
+    );
     if (!company) {
         return undefined;
     }
@@ -881,9 +886,7 @@ export const claimRebuild = internalMutation({
         ) {
             throw new Error("Source selection proposal cannot be rebuilt");
         }
-        const company =
-            run.companySnapshot ??
-            (run.companyId ? await ctx.db.get(run.companyId) : null);
+        const company = await readSelectionCompany(ctx, run);
         if (!company) {
             throw new Error("Confirmed company was not found");
         }

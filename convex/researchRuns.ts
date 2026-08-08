@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./_generated/server";
+import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
 import { assertLifecycleTransition } from "./domain/transitions";
 import {
     executionStatusValidator,
@@ -203,7 +204,10 @@ async function getActiveVisitor(ctx: QueryCtx) {
 
 async function projectRun(ctx: QueryCtx, run: Doc<"researchRuns">) {
     const company = run.companyId ? await ctx.db.get(run.companyId) : null;
-    const companySnapshot = run.companySnapshot ?? company;
+    const companySnapshot = mergeRunCompanyMetadata(
+        run.companySnapshot,
+        company,
+    );
     const providerFailures = (await ctx.db.query("providerCalls").collect())
         .filter((call) => call.runId === run._id && call.status === "failed")
         .sort((left, right) => right.createdAt - left.createdAt)
@@ -222,13 +226,9 @@ async function projectRun(ctx: QueryCtx, run: Doc<"researchRuns">) {
                   ticker: companySnapshot.ticker,
                   exchange: companySnapshot.exchange,
                   cik: companySnapshot.cik,
-                  investorRelationsUrl:
-                      companySnapshot.investorRelationsUrl ??
-                      company?.investorRelationsUrl,
-                  websiteUrl: companySnapshot.websiteUrl ?? company?.websiteUrl,
-                  websiteUrlSource:
-                      companySnapshot.websiteUrlSource ??
-                      company?.websiteUrlSource,
+                  investorRelationsUrl: companySnapshot.investorRelationsUrl,
+                  websiteUrl: companySnapshot.websiteUrl,
+                  websiteUrlSource: companySnapshot.websiteUrlSource,
               }
             : null,
         lifecycleState: run.lifecycleState,

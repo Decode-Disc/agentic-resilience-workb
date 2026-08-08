@@ -13,6 +13,7 @@ import type * as adminOperations from "../adminOperations.js";
 import type * as audit from "../audit.js";
 import type * as auth from "../auth.js";
 import type * as companyResolution from "../companyResolution.js";
+import type * as domain_companyMetadata from "../domain/companyMetadata.js";
 import type * as domain_evidenceAvailabilityPolicy from "../domain/evidenceAvailabilityPolicy.js";
 import type * as domain_executionClaim from "../domain/executionClaim.js";
 import type * as domain_invitationCodes from "../domain/invitationCodes.js";
@@ -62,6 +63,7 @@ declare const fullApi: ApiFromModules<{
   audit: typeof audit;
   auth: typeof auth;
   companyResolution: typeof companyResolution;
+  "domain/companyMetadata": typeof domain_companyMetadata;
   "domain/evidenceAvailabilityPolicy": typeof domain_evidenceAvailabilityPolicy;
   "domain/executionClaim": typeof domain_executionClaim;
   "domain/invitationCodes": typeof domain_invitationCodes;

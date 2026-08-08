@@ -5,6 +5,7 @@ import {
     ArrowLeft01Icon,
     CheckListIcon,
     CheckmarkCircle02Icon,
+    RefreshIcon,
     Search01Icon,
     Settings02Icon,
 } from "@hugeicons/core-free-icons";
@@ -382,17 +383,16 @@ export function SourceProposalReview({
                         </CardAction>
                     </CardHeader>
                     {coverageGaps.length > 0 ? (
-                        <CardContent className="rounded-xl border border-review/30 bg-review/10">
-                            <p className="text-xs font-medium text-foreground">
-                                Coverage gaps to keep in view
-                            </p>
-                            <div className="mt-2 flex flex-wrap gap-2">
+                        <CardContent>
+                            <AlertStatus title="Coverage gaps to keep in view"
+                                description={<div className="flex flex-wrap gap-1.5">
                                 {coverageGaps.map((gap) => (
                                     <Badge key={gap} variant="outline">
                                         {sourceCoverageRoleLabel(gap)}
                                     </Badge>
                                 ))}
-                            </div>
+                                </div>}
+                                status="warning" />
                         </CardContent>
                     ) : null}
                     <CardFooter className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -413,8 +413,9 @@ export function SourceProposalReview({
                             !isApproved ? (
                                 <Button
                                     type="button"
-                                    variant="secondary"
+                                        variant="default"
                                     onClick={() => void onRecompute()}>
+                                        <Icon iconNode={RefreshIcon} />
                                     Refresh proposal
                                 </Button>
                             ) : null}

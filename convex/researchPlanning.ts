@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
 import { internalMutation, internalQuery } from "./_generated/server";
+import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
 import { buildResearchPlan } from "./domain/researchPlan";
 
 const planQueryValidator = v.object({
@@ -39,8 +40,10 @@ export const createForRun = internalMutation({
         if (existing) {
             return existing._id;
         }
-        const company =
-            run.companySnapshot ?? (await ctx.db.get(run.companyId));
+        const company = mergeRunCompanyMetadata(
+            run.companySnapshot,
+            await ctx.db.get(run.companyId),
+        );
         if (!company) {
             throw new Error("Confirmed company was not found");
         }
@@ -94,8 +97,10 @@ export const getDiscoveryContext = internalQuery({
         ) {
             throw new Error("Research run is missing discovery inputs");
         }
-        const company =
-            run.companySnapshot ?? (await ctx.db.get(run.companyId));
+        const company = mergeRunCompanyMetadata(
+            run.companySnapshot,
+            await ctx.db.get(run.companyId),
+        );
         const plan = await ctx.db
             .query("researchPlans")
             .withIndex("by_run_and_version", (query) =>

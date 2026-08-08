@@ -66,6 +66,7 @@ test("projects only the current visitor runs with canonical company data", async
                 legalName: "CCC Intelligent Solutions Holdings Inc.",
                 ticker: "CCCS",
                 exchange: "NASDAQ",
+                websiteUrl: "https://old.example/",
             },
             reservationKey: "mine",
             reservationStatus: "consumed",

@@ -12,6 +12,7 @@ import {
     internalMutation,
     internalQuery,
 } from "./_generated/server";
+import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
 import { companySnapshotValidator } from "./domain/validators";
 import { createExaWebsiteAdapter } from "./integrations/exa";
 import {
@@ -208,24 +209,24 @@ export async function backfillRunCompanyWebsiteWithResolver<
         }) => Promise<void>;
     },
 ): Promise<WebsiteBackfillResult> {
-    if (args.companySnapshot?.websiteUrl) {
+    const company = mergeRunCompanyMetadata(args.companySnapshot, args.company);
+    if (company?.websiteUrl) {
+        if (
+            args.companySnapshot?.websiteUrl !== company.websiteUrl ||
+            args.companySnapshot?.websiteUrlSource !== company.websiteUrlSource
+        ) {
+            await dependencies.persist({
+                runId: args.runId,
+                companyId: args.companyId,
+                websiteUrl: company.websiteUrl,
+                ...(company.websiteUrlSource
+                    ? { websiteUrlSource: company.websiteUrlSource }
+                    : {}),
+            });
+        }
         return {
-            websiteUrl: args.companySnapshot.websiteUrl,
-            websiteUrlSource: args.companySnapshot.websiteUrlSource,
-        };
-    }
-    if (args.company.websiteUrl) {
-        await dependencies.persist({
-            runId: args.runId,
-            companyId: args.companyId,
-            websiteUrl: args.company.websiteUrl,
-            ...(args.company.websiteUrlSource
-                ? { websiteUrlSource: args.company.websiteUrlSource }
-                : {}),
-        });
-        return {
-            websiteUrl: args.company.websiteUrl,
-            websiteUrlSource: args.company.websiteUrlSource,
+            websiteUrl: company.websiteUrl,
+            websiteUrlSource: company.websiteUrlSource,
         };
     }
 
@@ -574,26 +575,38 @@ export const persistRunCompanyWebsite = internalMutation({
             websiteUrl: company.websiteUrl,
             websiteUrlSource: company.websiteUrlSource,
         };
-        if (snapshot.websiteUrl) {
+        mergeRunCompanyMetadata(run.companySnapshot, company);
+        if (
+            snapshot.websiteUrl === args.websiteUrl &&
+            (!args.websiteUrlSource ||
+                snapshot.websiteUrlSource === args.websiteUrlSource)
+        ) {
             return null;
         }
 
         const now = Date.now();
+        const companyWebsiteUrlSource =
+            args.websiteUrlSource ??
+            (company.websiteUrl === args.websiteUrl
+                ? company.websiteUrlSource
+                : undefined);
+        const snapshotWebsiteUrlSource =
+            args.websiteUrlSource ??
+            (snapshot.websiteUrl === args.websiteUrl
+                ? snapshot.websiteUrlSource
+                : undefined);
+        const nextSnapshot = {
+            ...snapshot,
+            websiteUrl: args.websiteUrl,
+            websiteUrlSource: snapshotWebsiteUrlSource,
+        };
         await ctx.db.patch(company._id, {
             websiteUrl: args.websiteUrl,
-            ...(args.websiteUrlSource
-                ? { websiteUrlSource: args.websiteUrlSource }
-                : {}),
+            websiteUrlSource: companyWebsiteUrlSource,
             canonicalizedAt: now,
         });
         await ctx.db.patch(run._id, {
-            companySnapshot: {
-                ...snapshot,
-                websiteUrl: args.websiteUrl,
-                ...(args.websiteUrlSource
-                    ? { websiteUrlSource: args.websiteUrlSource }
-                    : {}),
-            },
+            companySnapshot: nextSnapshot,
             updatedAt: now,
         });
         return null;
@@ -859,20 +872,22 @@ export const getRunCompany = internalQuery({
         ) {
             throw new Error("Research run has no confirmed company");
         }
-        const company = await ctx.db.get(run.companyId);
-        const snapshot = run.companySnapshot ?? company;
-        if (!snapshot) {
+        const company = mergeRunCompanyMetadata(
+            run.companySnapshot,
+            await ctx.db.get(run.companyId),
+        );
+        if (!company) {
             throw new Error("Confirmed company was not found");
         }
         return {
             executionGeneration: run.executionGeneration,
             company: {
-                cik: snapshot.cik,
-                legalName: snapshot.legalName,
-                ticker: snapshot.ticker,
-                exchange: snapshot.exchange,
-                investorRelationsUrl: snapshot.investorRelationsUrl,
-                websiteUrl: snapshot.websiteUrl,
+                cik: company.cik,
+                legalName: company.legalName,
+                ticker: company.ticker,
+                exchange: company.exchange,
+                investorRelationsUrl: company.investorRelationsUrl,
+                websiteUrl: company.websiteUrl,
             },
         };
     },
@@ -895,19 +910,21 @@ export const verifyRevalidation = internalMutation({
             return false;
         }
         const company = await ctx.db.get(run.companyId);
-        const snapshot = run.companySnapshot ?? company;
-        if (snapshot?.cik === args.resolved.cik && company) {
+        const knownCompany = mergeRunCompanyMetadata(
+            run.companySnapshot,
+            company,
+        );
+        if (knownCompany?.cik === args.resolved.cik && company) {
             const now = Date.now();
             const companyMetadata = {
                 ...args.resolved,
-                websiteUrl:
-                    args.resolved.websiteUrl ??
-                    snapshot.websiteUrl ??
-                    company.websiteUrl,
+                websiteUrl: args.resolved.websiteUrl ?? knownCompany.websiteUrl,
                 websiteUrlSource:
                     args.resolved.websiteUrlSource ??
-                    snapshot.websiteUrlSource ??
-                    company.websiteUrlSource,
+                    knownCompany.websiteUrlSource,
+                investorRelationsUrl:
+                    args.resolved.investorRelationsUrl ??
+                    knownCompany.investorRelationsUrl,
             };
             await ctx.db.patch(company._id, {
                 ...companyMetadata,

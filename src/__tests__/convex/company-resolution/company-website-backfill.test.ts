@@ -73,6 +73,73 @@ describe("backfillRunCompanyWebsiteWithResolver", () => {
         });
     });
 
+    it("replaces stale snapshot metadata with the current same-CIK company URL", async () => {
+        const resolveWebsite = vi.fn();
+        const persist = vi.fn(async () => undefined);
+
+        const result = await backfillRunCompanyWebsiteWithResolver(
+            {
+                runId: "run-1",
+                companyId: "company-1",
+                company: {
+                    ...legacyCompany,
+                    websiteUrl: "https://servicenow.com/",
+                    websiteUrlSource: "exa",
+                },
+                companySnapshot: {
+                    ...legacyCompany,
+                    websiteUrl: "https://old.example/",
+                    websiteUrlSource: "probe",
+                },
+            },
+            { resolveWebsite, persist },
+        );
+
+        expect(result).toEqual({
+            websiteUrl: "https://servicenow.com/",
+            websiteUrlSource: "exa",
+        });
+        expect(resolveWebsite).not.toHaveBeenCalled();
+        expect(persist).toHaveBeenCalledWith({
+            runId: "run-1",
+            companyId: "company-1",
+            websiteUrl: "https://servicenow.com/",
+            websiteUrlSource: "exa",
+        });
+    });
+
+    it("does not attach stale provenance to a newer company URL", async () => {
+        const resolveWebsite = vi.fn();
+        const persist = vi.fn(async () => undefined);
+
+        const result = await backfillRunCompanyWebsiteWithResolver(
+            {
+                runId: "run-1",
+                companyId: "company-1",
+                company: {
+                    ...legacyCompany,
+                    websiteUrl: "https://servicenow.com/",
+                },
+                companySnapshot: {
+                    ...legacyCompany,
+                    websiteUrl: "https://old.example/",
+                    websiteUrlSource: "probe",
+                },
+            },
+            { resolveWebsite, persist },
+        );
+
+        expect(result).toEqual({
+            websiteUrl: "https://servicenow.com/",
+            websiteUrlSource: undefined,
+        });
+        expect(persist).toHaveBeenCalledWith({
+            runId: "run-1",
+            companyId: "company-1",
+            websiteUrl: "https://servicenow.com/",
+        });
+    });
+
     it("preserves missing provenance for an existing company URL", async () => {
         const resolveWebsite = vi.fn();
         const persist = vi.fn(async () => undefined);

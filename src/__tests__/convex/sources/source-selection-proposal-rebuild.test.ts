@@ -48,6 +48,23 @@ const approveProposedCorpus = makeFunctionReference<
     },
     { accepted: boolean }
 >("sourceSelectionProposals:approveProposedCorpus");
+const claimRebuild = makeFunctionReference<
+    "mutation",
+    {
+        authUserId: Id<"users">;
+        runId: Id<"researchRuns">;
+        corpusRevisionId: Id<"corpusRevisions">;
+        expectedProposalId: Id<"sourceSelectionProposals">;
+    },
+    {
+        shouldExecute: boolean;
+        company?: { websiteUrl?: string };
+        queries?: Array<{
+            category: string;
+            includeDomains?: Array<string>;
+        }>;
+    }
+>("sourceSelectionProposals:claimRebuild");
 
 const originalSecUserAgent = process.env.SEC_USER_AGENT;
 const originalExaKey = process.env.EXA_API_KEY;
@@ -169,6 +186,82 @@ test("authorizes before provider I/O", async () => {
         }),
     ).rejects.toThrow("Not authenticated");
     expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+test("claims a rebuild with current company domains when the run snapshot is incomplete", async () => {
+    const { t, fixture } = await seedDraft();
+    await t.run((ctx) =>
+        ctx.db.patch(fixture.runId, {
+            companySnapshot: {
+                cik: "1373715",
+                legalName: "ServiceNow, Inc.",
+                ticker: "NOW",
+                exchange: "NYSE",
+            },
+        }),
+    );
+
+    const claim = await t.mutation(claimRebuild, {
+        authUserId: fixture.userId,
+        runId: fixture.runId,
+        corpusRevisionId: fixture.corpusRevisionId,
+        expectedProposalId: fixture.proposalId,
+    });
+
+    expect(claim).toMatchObject({
+        shouldExecute: true,
+        company: { websiteUrl: "https://www.servicenow.com/" },
+    });
+    expect(claim.queries).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                category: "official_product",
+                includeDomains: ["servicenow.com"],
+            }),
+            expect.objectContaining({
+                category: "official_commercial",
+                includeDomains: ["servicenow.com"],
+            }),
+        ]),
+    );
+});
+
+test("rejects mismatched snapshot and company CIK before rebuild I/O", async () => {
+    process.env.SEC_USER_AGENT = "prototype@example.com";
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const { t, fixture } = await seedDraft();
+    await t.run(async (ctx) => {
+        const run = await ctx.db.get(fixture.runId);
+        if (!run?.companyId) {
+            throw new Error("Fixture company was not found");
+        }
+        await ctx.db.patch(fixture.runId, {
+            companySnapshot: {
+                cik: "1373715",
+                legalName: "ServiceNow, Inc.",
+                ticker: "NOW",
+                exchange: "NYSE",
+            },
+        });
+        await ctx.db.patch(run.companyId, { cik: "1818201" });
+    });
+    const owner = t.withIdentity({
+        subject: `${fixture.userId}|rebuild-mismatch-session`,
+    });
+
+    await expect(
+        owner.action(rebuild, {
+            runId: fixture.runId,
+            corpusRevisionId: fixture.corpusRevisionId,
+            expectedProposalId: fixture.proposalId,
+        }),
+    ).rejects.toThrow("company identity is inconsistent");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    await expect(
+        t.run((ctx) =>
+            ctx.db.query("sourceSelectionProposalRebuilds").collect(),
+        ),
+    ).resolves.toHaveLength(0);
 });
 
 test("persists a partial rebuild, keeps analyst decisions, and replays idempotently", async () => {
