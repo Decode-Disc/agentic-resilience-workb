@@ -150,6 +150,15 @@ const executionLabels = {
     completed: "Complete",
 } satisfies Record<ExecutionStatus, string>;
 
+const executionStatusColors = {
+    idle: "secondary",
+    running: "info",
+    paused: "warning",
+    failed: "danger",
+    cancelled: "muted",
+    completed: "success",
+} satisfies Record<ExecutionStatus, string>;
+
 const eventLabels = {
     run_created: "Research dossier created",
     run_transitioned: "Research advanced",
@@ -263,6 +272,23 @@ export function lifecycleLabel(state: LifecycleState): string {
 /** Returns an analyst-readable execution label. */
 export function executionLabel(status: ExecutionStatus): string {
     return executionLabels[status];
+}
+
+/**
+ * Returns Tailwind surface-tint classes (bg, text, ring) for an execution
+ * status, so a badge or pin can carry the status's semantic tone without
+ * hardcoding colors at each call site.
+ */
+export function executionStatusTone(status: ExecutionStatus): string {
+    return `bg-${executionStatusColors[status]} text-${executionStatusColors[status]}-foreground ring-${executionStatusColors[status]}/25`;
+}
+
+/** Returns a Tailwind color name for an execution status,
+ * so a badge or pin can carry the status's semantic tone
+ * without hardcoding colors at each call site.
+ */
+export function executionStatusColor(status: ExecutionStatus): string {
+    return executionStatusColors[status];
 }
 
 /** Returns a stable milestone label without exposing event keys. */

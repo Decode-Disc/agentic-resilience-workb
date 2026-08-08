@@ -247,7 +247,7 @@ export function SourceReview({
     );
 
     return (
-        <section aria-label={`Source set ${review.revision}`}>
+        <section aria-label={`Source set ${review.revision}`} className="flex flex-col gap-4">
             <SourceReviewToolbar
                 review={{ ...review, total, candidateLimit }}
                 onApprove={onApprove}
@@ -366,7 +366,7 @@ function SourceReviewToolbar({
     }
 
     return (
-        <div className="mb-4 space-y-2">
+        <div className="empty:hidden space-y-2">
             {showApprovalAction ? (
                 <motion.div
                     key={
