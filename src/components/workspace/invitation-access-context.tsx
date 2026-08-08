@@ -3,6 +3,7 @@
 import type { api } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import {
+    type Context,
     createContext,
     type ReactNode,
     useCallback,
@@ -26,8 +27,17 @@ export interface InvitationAccessContextValue {
     isOpen: boolean;
 }
 
-const InvitationAccessContext =
-    createContext<InvitationAccessContextValue | null>(null);
+// Store on globalThis so the context reference survives Vite HMR re-evaluation.
+// Without this, each HMR cycle recreates the context object, breaking the
+// Provider ↔ Consumer contract for components mounted before the update.
+const InvitationAccessContext = (() => {
+    const key = "__INVITATION_ACCESS_CONTEXT__";
+    if (!(key in globalThis)) {
+        (globalThis as Record<string, unknown>)[key] =
+            createContext<InvitationAccessContextValue | null>(null);
+    }
+    return (globalThis as Record<string, unknown>)[key] as Context<InvitationAccessContextValue | null>;
+})();
 
 export function InvitationAccessProvider({
     children,
