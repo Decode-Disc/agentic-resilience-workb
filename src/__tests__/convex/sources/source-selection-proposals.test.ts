@@ -806,3 +806,245 @@ test("backfills a missing draft proposal idempotently without touching approved 
         }),
     ]);
 });
+
+const startNewCorpusRevision = makeFunctionReference<
+    "mutation",
+    {
+        runId: Id<"researchRuns">;
+        corpusRevisionId: Id<"corpusRevisions">;
+    },
+    {
+        corpusRevisionId: Id<"corpusRevisions">;
+        proposalId: Id<"sourceSelectionProposals">;
+    }
+>("sourceSelectionProposals:startNewCorpusRevision");
+
+test("creates a new draft revision and reopens the source checkpoint", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await t.run(async (ctx) => {
+        const userId = await ctx.db.insert("users", { isAnonymous: true });
+        const invitationId = await ctx.db.insert("invitations", {
+            slotKey: "new-revision-owner",
+            role: "analyst",
+            codeDigest: "new-revision-digest",
+            status: "claimed",
+            createdAt: 1,
+        });
+        const visitorId = await ctx.db.insert("visitors", {
+            authUserId: userId,
+            invitationId,
+            role: "analyst",
+            status: "active",
+            analysesReserved: 1,
+            admittedAt: 1,
+        });
+        const companyId = await ctx.db.insert("companies", {
+            cik: "1373715",
+            legalName: "ServiceNow, Inc.",
+            ticker: "NOW",
+            exchange: "NYSE",
+            websiteUrl: "https://www.servicenow.com/",
+            canonicalizedAt: 1,
+        });
+        const runId = await ctx.db.insert("researchRuns", {
+            ownerVisitorId: visitorId,
+            companyId,
+            coveragePreset: "balanced",
+            lifecycleState: "corpus_approved",
+            executionStatus: "idle",
+            executionGeneration: 3,
+            nextEventSequence: 1,
+            createdAt: 1,
+            updatedAt: 1,
+        });
+        const revisionId = await ctx.db.insert("corpusRevisions", {
+            runId,
+            revision: 1,
+            status: "approved",
+            approvedByVisitorId: visitorId,
+            approvedAt: 2,
+            createdAt: 1,
+        });
+        await ctx.db.insert("sources", {
+            runId,
+            canonicalUrl:
+                "https://www.sec.gov/Archives/edgar/data/1373715/000137371526000001/now-20251231.htm",
+            title: "10-K",
+            origin: "sec",
+            category: "regulatory",
+            secForm: "10-K",
+            createdAt: 1,
+        });
+        await ctx.db.patch(runId, { activeCorpusRevisionId: revisionId });
+        return { userId, runId, revisionId };
+    });
+
+    const owner = t.withIdentity({
+        subject: `${fixture.userId}|new-revision-session`,
+    });
+    const result = await owner.mutation(startNewCorpusRevision, {
+        runId: fixture.runId,
+        corpusRevisionId: fixture.revisionId,
+    });
+
+    expect(result.corpusRevisionId).not.toBe(fixture.revisionId);
+
+    const run = await t.run((ctx) => ctx.db.get(fixture.runId));
+    expect(run?.activeCorpusRevisionId).toBe(result.corpusRevisionId);
+    expect(run?.lifecycleState).toBe("awaiting_source_review");
+    expect(run?.executionStatus).toBe("paused");
+    expect(run?.executionGeneration).toBe(4);
+
+    const newRevision = await t.run((ctx) =>
+        ctx.db.get(result.corpusRevisionId),
+    );
+    expect(newRevision?.status).toBe("draft");
+    expect(newRevision?.revision).toBe(2);
+
+    const proposal = await t.run((ctx) => ctx.db.get(result.proposalId));
+    expect(proposal?.corpusRevisionId).toBe(result.corpusRevisionId);
+    expect(proposal?.version).toBe(1);
+    expect(proposal?.policyVersion).toBe("source-selection-v2");
+});
+
+test("rejects starting a new revision when the current corpus is not approved", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await t.run(async (ctx) => {
+        const userId = await ctx.db.insert("users", { isAnonymous: true });
+        const invitationId = await ctx.db.insert("invitations", {
+            slotKey: "new-revision-denied",
+            role: "analyst",
+            codeDigest: "new-revision-denied-digest",
+            status: "claimed",
+            createdAt: 1,
+        });
+        const visitorId = await ctx.db.insert("visitors", {
+            authUserId: userId,
+            invitationId,
+            role: "analyst",
+            status: "active",
+            analysesReserved: 1,
+            admittedAt: 1,
+        });
+        const companyId = await ctx.db.insert("companies", {
+            cik: "1373715",
+            legalName: "ServiceNow, Inc.",
+            ticker: "NOW",
+            exchange: "NYSE",
+            websiteUrl: "https://www.servicenow.com/",
+            canonicalizedAt: 1,
+        });
+        const runId = await ctx.db.insert("researchRuns", {
+            ownerVisitorId: visitorId,
+            companyId,
+            coveragePreset: "balanced",
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+            executionGeneration: 1,
+            nextEventSequence: 1,
+            createdAt: 1,
+            updatedAt: 1,
+        });
+        const revisionId = await ctx.db.insert("corpusRevisions", {
+            runId,
+            revision: 1,
+            status: "draft",
+            createdAt: 1,
+        });
+        await ctx.db.patch(runId, { activeCorpusRevisionId: revisionId });
+        return { userId, runId, revisionId };
+    });
+
+    const owner = t.withIdentity({
+        subject: `${fixture.userId}|denied-session`,
+    });
+    await expect(
+        owner.mutation(startNewCorpusRevision, {
+            runId: fixture.runId,
+            corpusRevisionId: fixture.revisionId,
+        }),
+    ).rejects.toThrow(
+        "Current corpus revision must be approved before starting a new one",
+    );
+});
+
+test("rejects an unauthorized visitor", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await t.run(async (ctx) => {
+        const ownerUserId = await ctx.db.insert("users", {
+            isAnonymous: true,
+        });
+        const ownerInvitation = await ctx.db.insert("invitations", {
+            slotKey: "new-revision-owner-only",
+            role: "analyst",
+            codeDigest: "new-revision-owner-digest",
+            status: "claimed",
+            createdAt: 1,
+        });
+        const ownerVisitorId = await ctx.db.insert("visitors", {
+            authUserId: ownerUserId,
+            invitationId: ownerInvitation,
+            role: "analyst",
+            status: "active",
+            analysesReserved: 1,
+            admittedAt: 1,
+        });
+        const companyId = await ctx.db.insert("companies", {
+            cik: "1373715",
+            legalName: "ServiceNow, Inc.",
+            ticker: "NOW",
+            exchange: "NYSE",
+            websiteUrl: "https://www.servicenow.com/",
+            canonicalizedAt: 1,
+        });
+        const runId = await ctx.db.insert("researchRuns", {
+            ownerVisitorId: ownerVisitorId,
+            companyId,
+            coveragePreset: "balanced",
+            lifecycleState: "corpus_approved",
+            executionStatus: "idle",
+            executionGeneration: 1,
+            nextEventSequence: 1,
+            createdAt: 1,
+            updatedAt: 1,
+        });
+        const revisionId = await ctx.db.insert("corpusRevisions", {
+            runId,
+            revision: 1,
+            status: "approved",
+            createdAt: 1,
+        });
+        await ctx.db.patch(runId, { activeCorpusRevisionId: revisionId });
+
+        const intruderUserId = await ctx.db.insert("users", {
+            isAnonymous: true,
+        });
+        const intruderInvitation = await ctx.db.insert("invitations", {
+            slotKey: "intruder",
+            role: "analyst",
+            codeDigest: "intruder-digest",
+            status: "claimed",
+            createdAt: 1,
+        });
+        await ctx.db.insert("visitors", {
+            authUserId: intruderUserId,
+            invitationId: intruderInvitation,
+            role: "analyst",
+            status: "active",
+            analysesReserved: 1,
+            admittedAt: 1,
+        });
+        return { intruderUserId, runId, revisionId };
+    });
+
+    const intruder = t.withIdentity({
+        subject: `${fixture.intruderUserId}|intruder-session`,
+    });
+    await expect(
+        intruder.mutation(startNewCorpusRevision, {
+            runId: fixture.runId,
+            corpusRevisionId: fixture.revisionId,
+        }),
+    ).rejects.toThrow("Unauthorized");
+});

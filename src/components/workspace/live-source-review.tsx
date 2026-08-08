@@ -16,8 +16,10 @@ import {
     useState,
 } from "react";
 
+import { RefreshIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import Icon from "@/components/icon";
 import { SourceProposalReview } from "@/components/workspace/source-proposal-review";
 import {
     type SourceFilter,
@@ -74,6 +76,9 @@ function SourceReviewData({
     );
     const ensureCurrentProposal = useMutation(
         api.sourceSelectionProposals.ensureCurrentForReview,
+    );
+    const startNewRevision = useMutation(
+        api.sourceSelectionProposals.startNewCorpusRevision,
     );
     const proposal = useQuery(api.sourceSelectionProposals.getCurrent, {
         runId,
@@ -138,7 +143,23 @@ function SourceReviewData({
     if (proposal === null) {
         if (inspectionSummary.status === "approved") {
             return (
-                <SourceReview
+                <div className="space-y-3">
+                    <ApprovedRevisionBanner
+                        onStartNewRevision={async () => {
+                            setActionError(null);
+                            try {
+                                await startNewRevision({
+                                    runId,
+                                    corpusRevisionId,
+                                });
+                            } catch {
+                                setActionError(
+                                    "We couldn't start a new revision. Try again.",
+                                );
+                            }
+                        }}
+                    />
+                    <SourceReview
                     runId={runId}
                     corpusRevisionId={corpusRevisionId}
                     review={{
@@ -167,6 +188,7 @@ function SourceReviewData({
                     onApprove={() => undefined}
                     showApprovalAction={false}
                 />
+                </div>
             );
         }
         if (repairStatus === "failed") {
@@ -206,6 +228,23 @@ function SourceReviewData({
                     className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
                     {actionError}
                 </p>
+            ) : null}
+            {inspectionSummary.status === "approved" ? (
+                <ApprovedRevisionBanner
+                    onStartNewRevision={async () => {
+                        setActionError(null);
+                        try {
+                            await startNewRevision({
+                                runId,
+                                corpusRevisionId,
+                            });
+                        } catch {
+                            setActionError(
+                                "We couldn't start a new revision. Try again.",
+                            );
+                        }
+                    }}
+                />
             ) : null}
             <SourceProposalReview
                 runId={runId}
@@ -391,4 +430,33 @@ class SourceReviewQueryBoundary extends Component<
             </div>
         );
     }
+}
+
+function ApprovedRevisionBanner({
+    onStartNewRevision,
+}: {
+    onStartNewRevision: () => void | Promise<void>;
+}) {
+    return (
+        <div className="surface-floating rounded-2xl border border-border/60 p-5">
+            <p className="text-micro text-accent-foreground">
+                Corpus approved
+            </p>
+            <h2 className="mt-1 text-lg font-medium">
+                Source set is approved and read-only
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+                Start a new revision to re-discover sources and rebuild the
+                proposal with the current selection method.
+            </p>
+            <Button
+                type="button"
+                variant="outline"
+                className="mt-3"
+                onClick={() => void onStartNewRevision()}>
+                <Icon iconNode={RefreshIcon} />
+                Start new revision
+            </Button>
+        </div>
+    );
 }

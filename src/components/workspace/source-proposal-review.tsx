@@ -413,23 +413,23 @@ export function SourceProposalReview({
                             !isApproved ? (
                                 <Button
                                     type="button"
-                                        variant="default"
+                                    variant="default"
                                     onClick={() => void onRecompute()}>
-                                        <Icon iconNode={RefreshIcon} />
+                                    <Icon iconNode={RefreshIcon} />
                                     Refresh proposal
                                 </Button>
                             ) : null}
-                            <Button
-                                type="button"
-                                size="lg"
-                                onClick={() => void onApprove()}
-                                disabled={!canApprove}
-                                className="bg-approved">
-                                <Icon iconNode={CheckmarkCircle02Icon} />
-                                {isApproved
-                                    ? "Source set approved"
-                                    : "Approve source set"}
-                            </Button>
+                            {!isApproved ? (
+                                <Button
+                                    type="button"
+                                    size="lg"
+                                    onClick={() => void onApprove()}
+                                    disabled={!canApprove}
+                                    className="bg-approved">
+                                    <Icon iconNode={CheckmarkCircle02Icon} />
+                                    Approve source set
+                                </Button>
+                            ) : null}
                         </div>
                     </CardFooter>
                 </Card>

@@ -96,6 +96,7 @@ export const runEventTypeValidator = v.union(
     v.literal("research_plan_created"),
     v.literal("source_discovery_progress"),
     v.literal("corpus_revision_approved"),
+    v.literal("corpus_revision_started"),
 );
 
 export const auditActorValidator = v.union(
@@ -119,5 +120,6 @@ export const auditEventActionValidator = v.union(
     v.literal("source_decided"),
     v.literal("manual_source_added"),
     v.literal("corpus_revision_approved"),
+    v.literal("new_corpus_revision"),
     v.literal("paid_work_toggled"),
 );

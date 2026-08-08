@@ -387,3 +387,30 @@ test("requires a stale proposal to be refreshed before approval", () => {
     fireEvent.click(screen.getByRole("button", { name: "Refresh proposal" }));
     expect(onRecompute).toHaveBeenCalledOnce();
 });
+
+test("renders approved state without an approve button", () => {
+    render(
+        <SourceProposalReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            summary={{ ...summary, revisionStatus: "approved" } as never}
+            proposalItems={[recommended] as never}
+            disposition="recommended"
+            onDispositionChange={vi.fn()}
+            adjustmentSets={
+                { included: [recommended], available: [] } as never
+            }
+            inspectionReview={inspectionReview as never}
+            onDecide={vi.fn()}
+            onApprove={vi.fn()}
+            onRecompute={vi.fn()}
+        />,
+    );
+
+    expect(
+        screen.getByText("This source set is approved and read-only."),
+    ).toBeTruthy();
+    expect(
+        screen.queryByRole("button", { name: "Approve source set" }),
+    ).toBeNull();
+});

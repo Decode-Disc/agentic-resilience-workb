@@ -358,6 +358,9 @@ async function hydrateProposalItem(
     item: Doc<"sourceSelectionProposalItems">,
 ) {
     const source = await ctx.db.get(item.sourceId);
+    if (!source) {
+        throw new Error("Source proposal projection is incomplete");
+    }
     const reviewItem = await ctx.db
         .query("sourceReviewItems")
         .withIndex("by_revision_and_source", (query) =>
@@ -366,9 +369,7 @@ async function hydrateProposalItem(
                 .eq("sourceId", item.sourceId),
         )
         .unique();
-    if (!source || !reviewItem) {
-        throw new Error("Source proposal projection is incomplete");
-    }
+    const decision = reviewItem?.decision ?? "pending";
     return {
         sourceId: source._id,
         canonicalUrl: source.canonicalUrl,
@@ -384,9 +385,9 @@ async function hydrateProposalItem(
         duplicateOfSourceId: item.duplicateOfSourceId,
         rank: item.rank,
         reasonCodes: item.reasonCodes,
-        decision: reviewItem.decision,
-        included: isIncluded(item.disposition, reviewItem.decision),
-        decisionReason: reviewItem.reason,
+        decision,
+        included: isIncluded(item.disposition, decision),
+        decisionReason: reviewItem?.reason,
     };
 }
 
@@ -493,6 +494,40 @@ export async function createSourceSelectionProposal(
             reasonCodes: item.reasonCodes,
             createdAt: now,
         });
+        // Ensure a source review item exists for this revision so the proposal
+        // can be hydrated. This is needed when a new revision is created from
+        // an already-approved corpus (no discovery has run for it yet).
+        const existingReviewItem = await ctx.db
+            .query("sourceReviewItems")
+            .withIndex("by_revision_and_source", (query) =>
+                query
+                    .eq("corpusRevisionId", revision._id)
+                    .eq("sourceId", item.sourceId as Id<"sources">),
+            )
+            .unique();
+        if (!existingReviewItem) {
+            const source = await ctx.db.get(item.sourceId as Id<"sources">);
+            if (source) {
+                const decisionId = await ctx.db.insert("sourceDecisions", {
+                    runId: run._id,
+                    corpusRevisionId: revision._id,
+                    sourceId: source._id,
+                    decisionKey: `revision-${revision.revision}:initial:${source._id}`,
+                    decision: "pending",
+                    occurredAt: now,
+                });
+                await ctx.db.insert("sourceReviewItems", {
+                    runId: run._id,
+                    corpusRevisionId: revision._id,
+                    sourceId: source._id,
+                    decision: "pending",
+                    decisionRank: 0,
+                    sourceCreatedAt: source.createdAt,
+                    latestDecisionId: decisionId,
+                    decisionOccurredAt: now,
+                });
+            }
+        }
     }
     await ctx.db.patch(revision._id, { sourceSelectionProposalId: proposalId });
     return { proposalId, version, status: "ready" };
@@ -1360,5 +1395,118 @@ export const approveProposedCorpus = mutation({
             occurredAt: now,
         });
         return { accepted: true };
+    },
+});
+
+export const startNewCorpusRevision = mutation({
+    args: {
+        runId: v.id("researchRuns"),
+        corpusRevisionId: v.id("corpusRevisions"),
+    },
+    returns: v.object({
+        corpusRevisionId: v.id("corpusRevisions"),
+        proposalId: v.id("sourceSelectionProposals"),
+    }),
+    handler: async (ctx, args) => {
+        const authUserId = await getAuthUserId(ctx);
+        if (!authUserId) {
+            throw new Error("Not authenticated");
+        }
+        const visitor = await ctx.db
+            .query("visitors")
+            .withIndex("by_auth_user_id", (query) =>
+                query.eq("authUserId", authUserId),
+            )
+            .unique();
+        const run = await ctx.db.get(args.runId);
+        const revision = await ctx.db.get(args.corpusRevisionId);
+        if (
+            visitor?.status !== "active" ||
+            run?.ownerVisitorId !== visitor._id ||
+            revision?.runId !== run._id ||
+            revision._id !== run.activeCorpusRevisionId
+        ) {
+            throw new Error("Unauthorized");
+        }
+        if (
+            revision.status !== "approved" ||
+            run.lifecycleState !== "corpus_approved" ||
+            run.executionStatus !== "idle"
+        ) {
+            throw new Error(
+                "Current corpus revision must be approved before starting a new one",
+            );
+        }
+        if (!run.coveragePreset) {
+            throw new Error("Research run has no coverage preset");
+        }
+
+        const executionGeneration = run.executionGeneration + 1;
+        const now = Date.now();
+
+        // Transition run to awaiting_source_review / paused.
+        await ctx.db.patch(run._id, {
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+            executionGeneration,
+            updatedAt: now,
+        });
+
+        // Compute next revision number.
+        const existingRevisions = await ctx.db
+            .query("corpusRevisions")
+            .withIndex("by_run_and_revision", (query) =>
+                query.eq("runId", run._id),
+            )
+            .order("desc")
+            .take(1);
+        const nextRevision = (existingRevisions[0]?.revision ?? 0) + 1;
+
+        const newRevisionId = await ctx.db.insert("corpusRevisions", {
+            runId: run._id,
+            revision: nextRevision,
+            status: "draft",
+            createdAt: now,
+        });
+
+        await ctx.db.patch(run._id, {
+            activeCorpusRevisionId: newRevisionId,
+            executionGeneration,
+        });
+
+        const newRevision = await ctx.db.get(newRevisionId);
+        if (!newRevision) {
+            throw new Error("New corpus revision was not created");
+        }
+        const proposal = await createSourceSelectionProposal(ctx, {
+            run: { ...run, executionGeneration },
+            revision: newRevision,
+        });
+
+        await ctx.db.insert("runEvents", {
+            runId: run._id,
+            sequence: run.nextEventSequence + 1,
+            type: "corpus_revision_started",
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            occurredAt: now,
+        });
+        await ctx.db.patch(run._id, {
+            nextEventSequence: run.nextEventSequence + 1,
+        });
+
+        await ctx.db.insert("auditEvents", {
+            actor: { type: "visitor", visitorId: visitor._id },
+            action: "new_corpus_revision",
+            targetType: "corpus_revision",
+            targetId: newRevisionId,
+            occurredAt: now,
+        });
+
+        return {
+            corpusRevisionId: newRevisionId,
+            proposalId: proposal.proposalId,
+        };
     },
 });

@@ -161,6 +161,7 @@ const eventLabels = {
     research_plan_created: "Research focus prepared",
     source_discovery_progress: "Public sources reviewed",
     corpus_revision_approved: "Source set approved",
+    corpus_revision_started: "New source revision started",
 } satisfies Record<RunEvent["type"], string>;
 
 const sourceOriginLabels = {
