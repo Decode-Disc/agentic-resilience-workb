@@ -20,6 +20,7 @@ import {
     WorkspaceNavigationRail,
     type WorkspaceSection,
 } from "@/components/workspace/workspace-navigation-rail";
+import { uiLayerClasses } from "@/lib/ui-layers";
 
 function decisionKey(prefix: string) {
     return `${prefix}:${crypto.randomUUID()}`;
@@ -127,14 +128,14 @@ export function RunRouteComponent({
                     {run.company.legalName}
                 </h1>
             </header>
-            <div className="grid items-start gap-4 md:grid-cols-[auto_minmax(0,1fr)]">
-                <div className="md:sticky md:top-20">
+            <div className="grid items-start gap-4 grid-cols-[4.25rem_minmax(0,1fr)] lg:grid-cols-[auto_minmax(0,1fr)]">
+                <aside className={`sticky top-20 ${uiLayerClasses.navigationRail} w-17 shrink-0 lg:w-full`}>
                     <WorkspaceNavigationRail
                         runId={runId}
                         section={section}
                         lifecycleState={run.lifecycleState}
                     />
-                </div>
+                </aside>
                 <main className="min-w-0">
                     {error ? (
                         <p

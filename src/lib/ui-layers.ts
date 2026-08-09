@@ -14,6 +14,7 @@ export const uiLayerOrder = {
      * when triggered from inside the panel.
      */
     stackedDialog: 38,
+    navigationRail: 35,
 } as const;
 
 /**

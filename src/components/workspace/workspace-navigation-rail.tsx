@@ -25,6 +25,8 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useResponsive } from "@/hooks/use-responsive";
+import { uiLayerClasses } from "@/lib/ui-layers";
 import { cn } from "@/lib/utils";
 
 const COLLAPSED_STORAGE_KEY = "evidence-workbench.nav-rail.collapsed.v1";
@@ -129,7 +131,16 @@ export function WorkspaceNavigationRail({
     lifecycleState: LifecycleState;
 }) {
     const reduceMotion = useReducedMotion();
-    const [collapsed, setCollapsed] = useState<boolean>(readStoredCollapsed);
+    const { isTabletOrBelow } = useResponsive();
+    const [collapsed, setCollapsed] = useState<boolean>(() => {
+        if (
+            typeof window !== "undefined" &&
+            window.matchMedia("(max-width: 64rem)").matches
+        ) {
+            return true;
+        }
+        return readStoredCollapsed();
+    });
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -144,6 +155,13 @@ export function WorkspaceNavigationRail({
         });
     };
 
+    const handleItemSelect = () => {
+        if (isTabletOrBelow) {
+            setCollapsed(true);
+            persistCollapsed(true);
+        }
+    };
+
     const toggleLabel = collapsed ? "Expand navigation" : "Collapse navigation";
     const ToggleIcon = collapsed ? PanelLeftOpenIcon : PanelLeftCloseIcon;
 
@@ -152,7 +170,10 @@ export function WorkspaceNavigationRail({
             <LiquidGlassCard
                 data-slot="workspace-navigation-rail"
                 aria-label="Research workspace sections"
-                className="min-h-0 overflow-hidden p-2 shadow-xl"
+                className={cn(
+                    "relative min-h-0 overflow-hidden p-2 shadow-xl",
+                    uiLayerClasses.navigationRail,
+                )}
                 glowIntensity="md"
                 blurIntensity="sm"
                 shadowIntensity="xl"
@@ -221,6 +242,7 @@ export function WorkspaceNavigationRail({
                                             active={active}
                                             collapsed={collapsed}
                                             icon={item.icon}
+                                            onSelect={handleItemSelect}
                                         />
                                     ) : (
                                         <LockedSection
@@ -266,6 +288,7 @@ type NavigationItemLinkProps = {
     active: boolean;
     collapsed: boolean;
     icon: NavigationIcon;
+    onSelect?: () => void;
 };
 
 function NavigationItemLink({
@@ -276,6 +299,7 @@ function NavigationItemLink({
     active,
     collapsed,
     icon,
+    onSelect,
 }: NavigationItemLinkProps) {
     const reduceMotion = useReducedMotion();
     const link = (
@@ -283,6 +307,7 @@ function NavigationItemLink({
             to={to}
             params={params}
             search={search}
+            onClick={onSelect}
             aria-current={active ? "page" : undefined}
             title={collapsed ? label : undefined}
             className={cn(
