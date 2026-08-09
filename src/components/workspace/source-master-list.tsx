@@ -147,7 +147,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                 </div>
             </CardHeader>
             <CardContent className="min-h-0 overflow-hidden px-4">
-                <div data-slot="source-master-list">
+                <div data-slot="source-master-list" className="min-w-0 w-full">
                     <InfiniteCollectionViewport
                         hasMore={hasMore}
                         isLoadingMore={isLoadingMore}
@@ -172,7 +172,12 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                 </EmptyHeader>
                             </Empty>
                         ) : (
-                            <ul className={cn("space-y-5", listClassName)}>
+                                    <ul
+                                        className={cn(
+                                            !listClassName?.includes("grid") &&
+                                            "space-y-5",
+                                            listClassName,
+                                        )}>
                                 {items.map((source, index) => {
                                     const isActive =
                                         selectedId === source.sourceId;
@@ -246,7 +251,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                                 canMove ? "true" : undefined
                                             }
                                             className={cn(
-                                                "group/source-row flex flex-col items-center",
+                                                "group/source-row flex w-full min-w-0 flex-col items-center",
                                                 canMove &&
                                                     "cursor-grab active:cursor-grabbing",
                                             )}>
@@ -270,7 +275,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                             <div
                                                 data-slot="source-row-container"
                                                 className={cn(
-                                                    "relative flex w-full flex-col justify-between border p-3",
+                                                    "relative flex w-full min-w-0 flex-col justify-between border p-3",
                                                     "transition-[background-image,background-color,border-color,box-shadow] duration-200 ease-out",
                                                     "group-hover/source-row:bg-source-selection-accent/15",
                                                     isInteractive &&
@@ -343,8 +348,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                                                         size="xs"
                                                                         variant="outline"
                                                                         disabled={
-                                                                            reviewStatus ===
-                                                                            "approved"
+                                                                            reviewStatus === "approved" || isSelected
                                                                         }
                                                                         aria-pressed={
                                                                             isSelected
@@ -391,7 +395,9 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                     return itemWrapper ? (
                                         itemWrapper(source, sourceItem)
                                     ) : (
-                                        <li key={source.sourceId}>
+                                            <li
+                                                key={source.sourceId}
+                                                className="w-full min-w-0">
                                             {sourceItem}
                                         </li>
                                     );

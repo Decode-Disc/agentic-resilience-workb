@@ -268,7 +268,7 @@ export function SourceProposalReview({
                         status="info"
                         variant="outline"
                         closable={false}
-                        className="has-data-[slot=alert-action]:pr-4 [&_[data-slot=alert-action]]:static [&_[data-slot=alert-action]]:mt-2 sm:has-data-[slot=alert-action]:pr-36 sm:[&_[data-slot=alert-action]]:absolute sm:[&_[data-slot=alert-action]]:top-2.5 sm:[&_[data-slot=alert-action]]:right-3 sm:[&_[data-slot=alert-action]]:mt-0"
+                        className="has-data-[slot=alert-action]:pr-4 **:data-[slot=alert-action]:static **:data-[slot=alert-action]:mt-2 sm:has-data-[slot=alert-action]:pr-36 sm:**:data-[slot=alert-action]:absolute sm:**:data-[slot=alert-action]:top-2.5 sm:**:data-[slot=alert-action]:right-3 sm:**:data-[slot=alert-action]:mt-0"
                         title="Improved proposal method available"
                         description="Rebuild this draft source set with the improved selection method before approval."
                         action={
@@ -313,8 +313,8 @@ export function SourceProposalReview({
                         }
                     />
                 ) : null}
-                <Card className="surface-floating">
-                    <CardHeader>
+                <Card className="surface-floating gap-2">
+                    <CardHeader className="flex flex-col md:grid">
                         <p className="text-micro text-accent-foreground">
                             Proposed source set
                         </p>
@@ -385,6 +385,7 @@ export function SourceProposalReview({
                     {coverageGaps.length > 0 ? (
                         <CardContent>
                             <AlertStatus title="Coverage gaps to keep in view"
+                                closable
                                 description={<div className="flex flex-wrap gap-1.5">
                                 {coverageGaps.map((gap) => (
                                     <Badge key={gap} variant="outline">
@@ -395,7 +396,7 @@ export function SourceProposalReview({
                                 status="warning" />
                         </CardContent>
                     ) : null}
-                    <CardFooter className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <CardFooter className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <p className="text-xs text-muted-foreground">
                             {isApproved
                                 ? "This source set is approved and read-only."
@@ -473,7 +474,7 @@ export function SourceProposalReview({
                         isLoadingInitial={proposalIsLoadingInitial}
                         onLoadMore={onLoadMoreProposal}
                         className="rounded-none rounded-b-(--radius-source-card)"
-                        listClassName="grid lg:grid-cols-2 gap-4"
+                        listClassName="grid grid-cols-1 lg:grid-cols-2 gap-4"
                     />
                 </div>
             </section>
