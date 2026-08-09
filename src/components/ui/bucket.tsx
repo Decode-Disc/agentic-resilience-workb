@@ -8,7 +8,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useResponsive } from "@/hooks/use-responsive";
 
 const INITIAL_CHIPS = [
     {
@@ -40,7 +40,7 @@ const INITIAL_CHIPS = [
 const Bucket = () => {
     const [items, setItems] = useState(INITIAL_CHIPS);
 
-    const isMobile = useIsMobile();
+    const { isMobile } = useResponsive();
     useEffect(() => {
         const interval = setInterval(() => {
             setItems((prev) => {
