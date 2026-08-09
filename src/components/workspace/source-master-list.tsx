@@ -74,6 +74,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
     selectedId,
     onSelect,
     enableDialogPreview = true,
+    runId,
     reviewStatus,
     onDecide,
     rowAction,
@@ -99,6 +100,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
     selectedId?: Id<"sources"> | null;
     onSelect?: (sourceId: Id<"sources">) => void;
     enableDialogPreview?: boolean;
+        runId?: string;
     reviewStatus: "draft" | "approved";
     onDecide?: (
         sourceId: Id<"sources">,
@@ -419,6 +421,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                     <ExpandableScreenContent className="h-[85vh] max-w-4xl overflow-hidden p-0 bg-background border border-border shadow-xl">
                         <SourceContextPanel
                             source={toSourceContext(previewSource)}
+                            runId={runId}
                             className="h-full border-none rounded-none"
                         />
                     </ExpandableScreenContent>

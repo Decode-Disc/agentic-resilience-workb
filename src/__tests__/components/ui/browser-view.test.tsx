@@ -65,4 +65,90 @@ describe("BrowserView", () => {
         expect(writeText).toHaveBeenCalledWith(destination.url);
         expect(await screen.findByText("Link copied")).toBeTruthy();
     });
+
+    it("shows skeleton placeholder when preview is loading", () => {
+        render(
+            <BrowserView
+                {...destination}
+                previewState="loading"
+            />,
+        );
+
+        // Should not show the external-link heading or iframe
+        expect(document.querySelector("iframe")).toBeNull();
+        expect(
+            screen.queryByRole("heading", {
+                name: /Open .+ in a new tab/,
+            }),
+        ).toBeNull();
+
+        // Should still show the address bar
+        expect(
+            screen.getByLabelText("Source address").textContent,
+        ).toContain(destination.url);
+    });
+
+    it("shows screenshot with visual-reference label", () => {
+        render(
+            <BrowserView
+                {...destination}
+                previewState="screenshot"
+                previewDataUrl="data:image/png;base64,fake"
+            />,
+        );
+
+        // Should show the preview label
+        expect(
+            screen.getByText("Preview — for visual reference only"),
+        ).toBeTruthy();
+
+        // Should show an image
+        const img = document.querySelector("img");
+        expect(img).toBeTruthy();
+        expect(img?.getAttribute("src")).toBe("data:image/png;base64,fake");
+        expect(img?.getAttribute("alt")).toContain("Independent report");
+
+        // Should not show external-link heading
+        expect(
+            screen.queryByRole("heading", {
+                name: /Open .+ in a new tab/,
+            }),
+        ).toBeNull();
+        expect(document.querySelector("iframe")).toBeNull();
+    });
+
+    it("falls back to external link when preview is unavailable", () => {
+        render(
+            <BrowserView
+                {...destination}
+                previewState="unavailable"
+            />,
+        );
+
+        // Should show the external-link heading (fallback)
+        expect(
+            screen.getByRole("heading", {
+                name: "Open Independent report in a new tab",
+            }),
+        ).toBeTruthy();
+        expect(
+            screen.getByText(
+                "Review the original page in a separate browser tab.",
+            ),
+        ).toBeTruthy();
+        expect(document.querySelector("img")).toBeNull();
+    });
+
+    it("behaves identically without preview props", () => {
+        // No previewState or previewDataUrl → backward-compatible behavior
+        render(<BrowserView {...destination} />);
+
+        expect(
+            screen.getByRole("heading", {
+                name: "Open Independent report in a new tab",
+            }),
+        ).toBeTruthy();
+        expect(document.querySelector("img")).toBeNull();
+        expect(document.querySelector("iframe")).toBeNull();
+    });
 });

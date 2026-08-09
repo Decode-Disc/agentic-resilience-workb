@@ -2,11 +2,11 @@
 
 ## Status
 
-Validated design. Refined for Roadmap Phases 4–8 on 2026-07-27 and deterministic source-proposal review on 2026-08-07.
+Validated design. Refined for Roadmap Phases 4–8 on 2026-07-27, deterministic source-proposal review on 2026-08-07, and ephemeral visual preview on 2026-08-09.
 
 ## Date
 
-2026-07-20; revised 2026-07-27 and 2026-08-07
+2026-07-20; revised 2026-07-27, 2026-08-07, and 2026-08-09
 
 ## Purpose
 
@@ -182,6 +182,26 @@ retractable contextual panel beside the primary workspace. On smaller screens,
 that panel becomes a drawer.
 
 Source review is a dedicated, summary-first workspace mode. The proposal summary and corpus-approval action occupy the primary decision surface. The existing source-specific master list, source detail, pagination, filters, responsive drawer, and preview remain available through proposal adjustment and full-candidate inspection. The matrix is never shown as if unapproved sources had already produced evidence.
+
+### Ephemeral visual preview
+
+A candidate source may display an ephemeral visual preview — a fixed-viewport
+screenshot of the public HTTPS URL — inside the Preview tab of the source
+context panel. This preview exists to reduce context-switching during review
+and is available only for pending (undecided) candidates.
+
+The preview is a **visual convenience, not evidence**. It is not source
+retrieval, content normalization, structured extraction, or a substitute for
+the mandatory corpus-approval checkpoint. A preview never contributes to a
+corpus, claim, assessment, map, or brief. The screenshot is transient and never
+persisted.
+
+Previews carry a visible `Preview — for visual reference only` label and use
+distinct visual treatment from accepted evidence. A rendering failure or
+unreachable service falls back cleanly to the existing `Open original` external
+link without blocking review or approval.
+
+See ADR-019 for the full boundary and security contract.
 
 ## Evidence Model
 

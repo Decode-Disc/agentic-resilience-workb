@@ -2,6 +2,7 @@ import type { api } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 
 import { BrowserView } from "@/components/ui/browser-view";
+import { useSourcePreview } from "@/hooks/use-source-preview";
 
 type SourceContextResult = FunctionReturnType<
     typeof api.sources.listForReviewPage
@@ -12,13 +13,41 @@ type SourceContext = Omit<
 > &
     Partial<Pick<SourceContextResult, "documentKind" | "authorityTier">>;
 
-/** Maps a reviewed source record to the shared external browser destination. */
-export function SourceBrowserView({ source }: { source: SourceContext }) {
+/** Maps a reviewed source record to the shared external browser destination,
+ *  with an ephemeral visual preview for pending candidates. */
+export function SourceBrowserView({
+    source,
+    runId,
+}: {
+    source: SourceContext;
+    runId?: string;
+}) {
+    const preview = useSourcePreview(
+        source.sourceId as string,
+        runId,
+        source.decision,
+    );
+
+    const previewState =
+        preview.status === "loading"
+            ? "loading"
+            : preview.status === "screenshot"
+                ? "screenshot"
+                : preview.status === "unavailable"
+                    ? "unavailable"
+                    : undefined;
+
     return (
         <BrowserView
             url={source.canonicalUrl}
             title={source.title}
             actionLabel="Open original"
+            previewState={previewState}
+            previewDataUrl={
+                preview.status === "screenshot"
+                    ? preview.dataUrl
+                    : undefined
+            }
         />
     );
 }

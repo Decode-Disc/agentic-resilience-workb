@@ -15,7 +15,7 @@ The repository separates agent conduct, product context, technical contracts, an
 - `AGENTS.md` defines how agents work in the project and the non-negotiable guardrails they must preserve.
 - `context/PROJECT.md` defines why the product exists, whom it serves, and what it must demonstrate.
 - `context/TECH.md` consolidates the active technical architecture, implementation contracts, and verification expectations.
-- `docs/product-designs/2026-07-20-agentic-resilience-evidence-workbench-design.md` defines the complete product design and MVP acceptance contract.
+- `docs/product-architecture/2026-07-20-agentic-resilience-evidence-workbench-design.md` defines the complete product design and MVP acceptance contract.
 - Accepted records in `docs/decisions/` explain the rationale and trade-offs behind individual architectural decisions.
 
 Read `context/PROJECT.md` in full before planning, coding, installing dependencies, or changing architecture.

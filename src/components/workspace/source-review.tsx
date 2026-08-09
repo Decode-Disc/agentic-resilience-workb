@@ -65,6 +65,8 @@ const DEFAULT_SOURCE_CANDIDATE_LIMIT = 48;
 
 /** Full candidate inspection surface with master/detail review controls. */
 export function SourceReview({
+    runId,
+    corpusRevisionId: _corpusRevisionId,
     review,
     onDecide,
     onApprove,
@@ -287,7 +289,7 @@ export function SourceReview({
                                 className="h-full"
                                 wrapperClassName="h-full">
                                 {selected ? (
-                                    <SourceContextPanel source={selected} />
+                                        <SourceContextPanel source={selected} runId={runId} />
                                 ) : (
                                     <div className="surface-panel flex h-full min-h-64 items-center justify-center rounded-2xl text-sm text-muted-foreground">
                                         Select a source to review its preview
@@ -314,7 +316,7 @@ export function SourceReview({
                         </DrawerHeader>
                         <div className="min-h-0 overflow-y-auto p-4">
                             {selected ? (
-                                <SourceContextPanel source={selected} />
+                                <SourceContextPanel source={selected} runId={runId} />
                             ) : null}
                         </div>
                     </DrawerContent>

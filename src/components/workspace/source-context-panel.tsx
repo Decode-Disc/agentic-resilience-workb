@@ -27,18 +27,17 @@ type SourceContext = Omit<
     Partial<Pick<SourceContextResult, "documentKind" | "authorityTier">>;
 
 /**
- * Selected source detail panel: an embedded best-effort preview by default,
- * behind a record header band that announces the source's provenance, plus a
- * direction-aware tab control. Both reinterpretations of the Sales Hub
- * reference: the record header band + tabs are reproduced structurally, while
- * the reference's warm lime tint is translated to brand-green so the
- * prototype's purple/green-only discipline holds.
+ * Selected source detail panel with preview, provenance header, and source
+ * details. When a visual preview is available for a pending candidate source,
+ * it is shown inside the Preview tab with a clear reference-only label.
  */
 export function SourceContextPanel({
     source,
+    runId,
     className,
 }: {
     source: SourceContext;
+        runId?: string;
     className?: string;
 }) {
     const tabs: Tab[] = useMemo(
@@ -48,7 +47,7 @@ export function SourceContextPanel({
                 label: "Preview",
                 content: (
                     <div className="h-full min-h-0 w-full overflow-hidden rounded-xl border border-border/60">
-                        <SourceBrowserView source={source} />
+                        <SourceBrowserView source={source} runId={runId} />
                     </div>
                 ),
             },
@@ -76,7 +75,7 @@ export function SourceContextPanel({
                 ),
             },
         ],
-        [source],
+        [source, runId],
     );
 
     return (

@@ -33,4 +33,9 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
         rate: 5,
         period: 15 * MINUTE,
     },
+    previewRender: {
+        kind: "fixed window",
+        rate: 2,
+        period: 30 * SECOND,
+    },
 });

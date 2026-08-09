@@ -10,6 +10,7 @@ const IGNORE = new Set([
     ".agents",
     "dist",
     "build",
+    "services",
 ]);
 
 /**

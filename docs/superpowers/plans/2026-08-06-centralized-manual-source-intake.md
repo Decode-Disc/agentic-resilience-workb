@@ -106,7 +106,7 @@
 - Create: `src/__tests__/convex/sources/manual-source-intake.test.ts`
 - Create: `docs/decisions/016-centralize-manual-source-intake-with-expiring-preparations.md`
 - Modify: `context/TECH.md`
-- Modify: `docs/product-designs/2026-07-20-agentic-resilience-evidence-workbench-design.md`
+- Modify: `docs/product-architecture/2026-07-20-agentic-resilience-evidence-workbench-design.md`
 
 **RED:** Import the missing classifier and assert representative URL-policy, HTTP, timeout, network, lifecycle, duplicate, limit, and unknown failures map to stable codes and retryability.
 

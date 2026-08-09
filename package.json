@@ -89,8 +89,7 @@
         "@vitejs/plugin-react": "6.0.3",
         "convex-test": "0.0.54",
         "jsdom": "28.1.0",
-        "typescript": "6.0.3",
-        "typescript-7": "npm:typescript@rc",
+        "typescript": "7.0.2",
         "vite": "8.1.4",
         "vitest": "4.1.10"
     }

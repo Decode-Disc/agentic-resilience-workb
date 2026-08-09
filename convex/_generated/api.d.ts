@@ -33,6 +33,8 @@ import type * as integrations_exa from "../integrations/exa.js";
 import type * as integrations_sec from "../integrations/sec.js";
 import type * as integrations_websiteResolver from "../integrations/websiteResolver.js";
 import type * as invitations from "../invitations.js";
+import type * as preview from "../preview.js";
+import type * as previewInternals from "../previewInternals.js";
 import type * as providerCalls from "../providerCalls.js";
 import type * as rateLimiter from "../rateLimiter.js";
 import type * as researchLaunch from "../researchLaunch.js";
@@ -83,6 +85,8 @@ declare const fullApi: ApiFromModules<{
   "integrations/sec": typeof integrations_sec;
   "integrations/websiteResolver": typeof integrations_websiteResolver;
   invitations: typeof invitations;
+  preview: typeof preview;
+  previewInternals: typeof previewInternals;
   providerCalls: typeof providerCalls;
   rateLimiter: typeof rateLimiter;
   researchLaunch: typeof researchLaunch;
