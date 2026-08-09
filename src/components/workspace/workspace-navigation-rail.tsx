@@ -30,8 +30,10 @@ import { uiLayerClasses } from "@/lib/ui-layers";
 import { cn } from "@/lib/utils";
 
 const COLLAPSED_STORAGE_KEY = "evidence-workbench.nav-rail.collapsed.v1";
-const RAIL_COLLAPSED_WIDTH = "4.25rem";
-const RAIL_EXPANDED_WIDTH = "14rem";
+const RAIL_COLLAPSED_WIDTH_DESKTOP = "4.25rem";
+const RAIL_COLLAPSED_WIDTH_MOBILE = "3.25rem";
+const RAIL_EXPANDED_WIDTH_DESKTOP = "14rem";
+const RAIL_EXPANDED_WIDTH_MOBILE = "11.5rem";
 
 export type WorkspaceSection =
     | "progress"
@@ -131,7 +133,7 @@ export function WorkspaceNavigationRail({
     lifecycleState: LifecycleState;
 }) {
     const reduceMotion = useReducedMotion();
-    const { isTabletOrBelow } = useResponsive();
+    const { isMobile, isTabletOrBelow } = useResponsive();
     const [collapsed, setCollapsed] = useState<boolean>(() => {
         if (
             typeof window !== "undefined" &&
@@ -162,6 +164,13 @@ export function WorkspaceNavigationRail({
         }
     };
 
+    const targetCollapsedWidth = isMobile
+        ? RAIL_COLLAPSED_WIDTH_MOBILE
+        : RAIL_COLLAPSED_WIDTH_DESKTOP;
+    const targetExpandedWidth = isMobile
+        ? RAIL_EXPANDED_WIDTH_MOBILE
+        : RAIL_EXPANDED_WIDTH_DESKTOP;
+
     const toggleLabel = collapsed ? "Expand navigation" : "Collapse navigation";
     const ToggleIcon = collapsed ? PanelLeftOpenIcon : PanelLeftCloseIcon;
 
@@ -171,7 +180,8 @@ export function WorkspaceNavigationRail({
                 data-slot="workspace-navigation-rail"
                 aria-label="Research workspace sections"
                 className={cn(
-                    "relative min-h-0 overflow-hidden p-2 shadow-xl",
+                    "relative min-h-0 overflow-hidden shadow-xl transition-[padding]",
+                    isMobile ? "p-1.5" : "p-2",
                     uiLayerClasses.navigationRail,
                 )}
                 glowIntensity="md"
@@ -184,29 +194,29 @@ export function WorkspaceNavigationRail({
                         ? undefined
                         : {
                               width: collapsed
-                                  ? RAIL_COLLAPSED_WIDTH
-                                  : RAIL_EXPANDED_WIDTH,
+                                  ? targetCollapsedWidth
+                                  : targetExpandedWidth,
                           }
                 }
                 style={{
                     width: mounted
                         ? collapsed
-                            ? RAIL_COLLAPSED_WIDTH
-                            : RAIL_EXPANDED_WIDTH
+                            ? targetCollapsedWidth
+                            : targetExpandedWidth
                         : undefined,
                 }}>
                 <div
                     className={cn(
-                        "flex items-center gap-1 rounded-t-xl px-2",
+                        "flex items-center gap-1 rounded-t-xl",
                         collapsed
-                            ? "justify-center pt-1"
-                            : "justify-between py-2",
+                            ? "justify-center py-1"
+                            : "justify-between px-2 py-1.5 sm:py-2",
                     )}>
                     {collapsed ? null : (
-                        <span className="flex items-center gap-1.5 px-1 text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
+                        <span className="flex items-center gap-1.5 px-1 text-[10px] font-medium tracking-[0.12em] text-muted-foreground uppercase sm:text-[11px]">
                             <Icon
                                 iconNode={LeftToRightListDashIcon}
-                                size={13}
+                                size={isMobile ? 12 : 13}
                             />
                             Sections
                         </span>
@@ -214,12 +224,15 @@ export function WorkspaceNavigationRail({
                     <Button
                         type="button"
                         variant="secondary"
-                        size="icon-sm"
+                        size={isMobile ? "icon-xs" : "icon-sm"}
                         aria-label={toggleLabel}
                         aria-expanded={!collapsed}
                         onClick={toggleCollapsed}
                         title={toggleLabel}>
-                        <Icon iconNode={ToggleIcon} />
+                        <Icon
+                            iconNode={ToggleIcon}
+                            size={isMobile ? 14 : 16}
+                        />
                     </Button>
                 </div>
 
@@ -302,6 +315,7 @@ function NavigationItemLink({
     onSelect,
 }: NavigationItemLinkProps) {
     const reduceMotion = useReducedMotion();
+    const { isMobile } = useResponsive();
     const link = (
         <Link
             to={to}
@@ -311,14 +325,18 @@ function NavigationItemLink({
             aria-current={active ? "page" : undefined}
             title={collapsed ? label : undefined}
             className={cn(
-                "group/nav-item relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-[background-color,color] duration-200",
-                collapsed && "justify-center",
+                "group/nav-item relative flex items-center transition-[background-color,color,padding] duration-200",
+                isMobile
+                    ? "gap-2 px-2 py-1.5 text-xs"
+                    : "gap-2.5 px-2.5 py-2 text-sm",
+                collapsed ? "justify-center rounded-sm" : "rounded-md",
                 active
                     ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",
             )}>
             <Icon
                 iconNode={icon}
+                size={isMobile ? 15 : 16}
                 className={cn(
                     "shrink-0",
                     active
@@ -331,7 +349,10 @@ function NavigationItemLink({
                 <motion.span
                     aria-hidden="true"
                     layoutId={reduceMotion ? undefined : "nav-active-rail"}
-                    className="absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-full bg-brand-purple"
+                    className={cn(
+                        "absolute top-1/2 left-0 -translate-y-1/2 rounded-full bg-sidebar-accent-foreground",
+                        isMobile ? "h-4 w-0.5" : "h-5 w-1",
+                    )}
                     transition={
                         reduceMotion
                             ? { duration: 0 }
@@ -365,19 +386,22 @@ function LockedSection({
     collapsed: boolean;
     hint: string;
 }) {
+    const { isMobile } = useResponsive();
     const content = (
         <div
             title={collapsed ? label : undefined}
             className={cn(
-                "rounded-lg px-2.5 py-2 text-muted-foreground/70",
+                "rounded-lg text-muted-foreground/70 transition-[padding]",
+                isMobile ? "px-2 py-1.5" : "px-2.5 py-2",
                 collapsed && "flex flex-col items-center gap-1",
             )}>
             <span
                 className={cn(
-                    "flex items-center gap-2.5 text-sm",
+                    "flex items-center",
+                    isMobile ? "gap-2 text-xs" : "gap-2.5 text-sm",
                     collapsed && "justify-center",
                 )}>
-                <Icon iconNode={icon} />
+                <Icon iconNode={icon} size={isMobile ? 15 : 16} />
                 {collapsed ? (
                     <span className="sr-only">{label}</span>
                 ) : (
@@ -393,7 +417,11 @@ function LockedSection({
                     <span className="sr-only">{hint}</span>
                 </>
             ) : (
-                <span className="mt-1 block pl-6.5 text-[11px] leading-snug">
+                <span
+                    className={cn(
+                        "mt-1 block leading-snug",
+                        isMobile ? "pl-5.5 text-[10px]" : "pl-6.5 text-[11px]",
+                    )}>
                     {hint}
                 </span>
             )}

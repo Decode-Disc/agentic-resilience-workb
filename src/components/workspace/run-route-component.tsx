@@ -128,8 +128,8 @@ export function RunRouteComponent({
                     {run.company.legalName}
                 </h1>
             </header>
-            <div className="grid items-start gap-4 grid-cols-[4.25rem_minmax(0,1fr)] lg:grid-cols-[auto_minmax(0,1fr)]">
-                <aside className={`sticky top-20 ${uiLayerClasses.navigationRail} w-17 shrink-0 lg:w-full`}>
+            <div className="grid items-start gap-4 grid-cols-[3.25rem_minmax(0,1fr)] md:grid-cols-[4.25rem_minmax(0,1fr)]">
+                <aside className={`sticky top-20 ${uiLayerClasses.navigationRail} w-13 md:w-17 shrink-0`}>
                     <WorkspaceNavigationRail
                         runId={runId}
                         section={section}

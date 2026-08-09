@@ -33,7 +33,7 @@
 }
 
 :root {
-    --brand-green: oklch(88.01% 0.051 137.14);
+    --brand-green: oklch(0.61 0.05 157.84);
     --brand-purple: oklch(0.415 0.2019 300.7);
 
     --background: oklch(0.9522 0.0022 308);
@@ -72,7 +72,7 @@
     --sidebar-foreground: oklch(0.1811 0.0092 308);
     --sidebar-primary: oklch(0.29 0.04 307.99);
     --sidebar-primary-foreground: oklch(0.985 0.002 308);
-    --sidebar-accent: color-mix(in oklab, var(--brand-green) 18%, white);
+    --sidebar-accent: color-mix(in oklab, var(--brand-green) 22%, white);
     --sidebar-accent-foreground: oklch(0.31 0.055 190);
     --sidebar-border: oklch(0.8753 0.0048 308);
     --sidebar-ring: oklch(0.415 0.2019 300.7);
