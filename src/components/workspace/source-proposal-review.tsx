@@ -231,6 +231,7 @@ export function SourceProposalReview({
                     />
                     <SourceProposalAdjustmentBoard
                         adjustmentSets={adjustmentSets}
+                        runId={runId}
                         reviewStatus={summary.revisionStatus}
                         onDecide={onDecide}
                         annotation={renderProposalAnnotation}
@@ -462,6 +463,7 @@ export function SourceProposalReview({
                                   ? "Sources whose discovery details need analyst review."
                                   : "Other candidates retained for comparison."
                         }
+                        runId={runId}
                         items={proposalItems}
                         total={dispositionTotal}
                         reviewStatus={summary.revisionStatus}

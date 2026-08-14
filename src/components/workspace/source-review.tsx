@@ -218,6 +218,7 @@ export function SourceReview({
         <SourceMasterList
             heading="Candidate sources"
             description="Review the full source candidate set."
+            runId={runId}
             items={visibleSources}
             total={filterTotal}
             selectedId={selectedId}
