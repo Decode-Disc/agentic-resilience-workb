@@ -5,7 +5,7 @@ import { type Browser, chromium } from "playwright";
 // ─── Configuration ────────────────────────────────────────────────────────
 
 const PORT = Number.parseInt(process.env["PORT"] ?? "3000", 10);
-const SHARED_SECRET = process.env["PREVIEW_SHARED_SECRET"];
+const SHARED_SECRET = process.env["PREVIEW_SERVICE_SECRET"];
 const MAX_CONCURRENT_RENDERS = Number.parseInt(
     process.env["MAX_CONCURRENT_RENDERS"] ?? "3",
     10,
@@ -380,7 +380,7 @@ async function handleRequest(
 // ─── Startup ──────────────────────────────────────────────────────────────
 
 if (!SHARED_SECRET) {
-    console.error("PREVIEW_SHARED_SECRET is required");
+    console.error("PREVIEW_SERVICE_SECRET is required");
     process.exit(1);
 }
 

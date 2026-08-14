@@ -6,7 +6,7 @@ const BASE_URL = "http://127.0.0.1:3099";
 const SECRET = "test-secret-for-preview";
 
 beforeAll(async () => {
-    process.env.PREVIEW_SHARED_SECRET = SECRET;
+    process.env.PREVIEW_SERVICE_SECRET = SECRET;
     process.env.PORT = "3099";
     process.env.MAX_CONCURRENT_RENDERS = "2";
 
