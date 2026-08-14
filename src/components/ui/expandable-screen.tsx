@@ -209,9 +209,9 @@ interface ExpandableScreenContentProps {
 
 export function ExpandableScreenContent({
     children,
-    className = "",
+    className,
     showCloseButton = true,
-    closeButtonClassName = "",
+    closeButtonClassName,
     closeButtonIcon = Cancel02Icon,
 }: ExpandableScreenContentProps) {
     const { isExpanded, collapse, layoutId, contentRadius, animationDuration } =
@@ -275,7 +275,7 @@ export function ExpandableScreenContent({
                         {showCloseButton && (
                             <motion.button
                                 onClick={collapse}
-                                className={`absolute right-6 top-6 z-30 flex h-10 w-10 items-center justify-center transition-colors rounded-full ${
+                                className={`absolute right-4 top-4 z-30 flex h-10 w-10 items-center justify-center transition-colors rounded-full ${
                                     closeButtonClassName ||
                                     "text-foreground bg-transparent hover:bg-foreground/10"
                                 }`}

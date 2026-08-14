@@ -61,7 +61,7 @@ export function SourceProposalAdjustmentBoard({
     annotation,
 }: {
     adjustmentSets: AdjustmentSets;
-        runId?: string;
+        runId?: Id<"researchRuns">;
     reviewStatus: "draft" | "approved";
     onDecide: (
         sourceId: Id<"sources">,

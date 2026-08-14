@@ -100,7 +100,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
     selectedId?: Id<"sources"> | null;
     onSelect?: (sourceId: Id<"sources">) => void;
     enableDialogPreview?: boolean;
-        runId?: string;
+        runId?: Id<"researchRuns">;
     reviewStatus: "draft" | "approved";
     onDecide?: (
         sourceId: Id<"sources">,

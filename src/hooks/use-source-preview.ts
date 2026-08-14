@@ -1,3 +1,6 @@
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { useAction } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type PreviewState =
@@ -12,10 +15,11 @@ export type PreviewState =
  * Fetches at most once per mount — callers re-mount to retry.
  */
 export function useSourcePreview(
-    sourceId: string | undefined,
-    runId: string | undefined,
+    sourceId: Id<"sources"> | undefined,
+    runId: Id<"researchRuns"> | undefined,
     decision: string | undefined,
 ): PreviewState {
+    const renderPreview = useAction(api.browserPreview.renderPreview);
     const [state, setState] = useState<PreviewState>({ status: "idle" });
     const fetchedRef = useRef(false);
 
@@ -32,38 +36,16 @@ export function useSourcePreview(
         setState({ status: "loading" });
 
         try {
-            const convexUrl = import.meta.env.VITE_CONVEX_URL;
-            const response = await fetch(`${convexUrl}/api/preview/render`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ sourceId, runId }),
-            });
-
-            if (!response.ok) {
-                setState({ status: "unavailable" });
-                return;
-            }
-
-            const data: unknown = await response.json();
-            if (
-                data &&
-                typeof data === "object" &&
-                "status" in data &&
-                (data as Record<string, unknown>).status === "ok" &&
-                "base64" in data &&
-                typeof (data as Record<string, unknown>).base64 === "string"
-            ) {
-                setState({
-                    status: "screenshot",
-                    dataUrl: (data as { base64: string }).base64,
-                });
+            const result = await renderPreview({ sourceId, runId });
+            if (result.status === "ok") {
+                setState({ status: "screenshot", dataUrl: result.base64 });
             } else {
-                setState({ status: "unavailable" });
+                setState({ status: "unavailable", reason: result.error });
             }
         } catch {
             setState({ status: "unavailable" });
         }
-    }, [sourceId, runId, decision]);
+    }, [renderPreview, sourceId, runId, decision]);
 
     useEffect(() => {
         void fetchPreview();

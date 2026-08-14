@@ -1,4 +1,5 @@
 import type { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import type { FunctionReturnType } from "convex/server";
 
 import { BrowserView } from "@/components/ui/browser-view";
@@ -20,10 +21,10 @@ export function SourceBrowserView({
     runId,
 }: {
     source: SourceContext;
-    runId?: string;
+        runId?: Id<"researchRuns">;
 }) {
     const preview = useSourcePreview(
-        source.sourceId as string,
+        source.sourceId,
         runId,
         source.decision,
     );

@@ -1,7 +1,13 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { SourceBrowserView } from "@/components/workspace/source-browser-view";
+
+const { useAction } = vi.hoisted(() => ({
+    useAction: vi.fn(),
+}));
+
+vi.mock(import("convex/react"), () => ({ useAction }));
 
 const SAMPLE = {
     sourceId: "source-1" as never,
@@ -16,6 +22,7 @@ const SAMPLE = {
 
 describe("SourceBrowserView", () => {
     it("maps source context to the external browser destination", () => {
+        useAction.mockReturnValue(vi.fn());
         render(<SourceBrowserView source={SAMPLE} />);
 
         const link = screen.getByRole("link", {

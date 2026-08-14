@@ -1,4 +1,5 @@
 import type { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import { LinkSquare01Icon } from "@hugeicons/core-free-icons";
 import type { FunctionReturnType } from "convex/server";
 import { useMemo } from "react";
@@ -37,7 +38,7 @@ export function SourceContextPanel({
     className,
 }: {
     source: SourceContext;
-        runId?: string;
+        runId?: Id<"researchRuns">;
     className?: string;
 }) {
     const tabs: Tab[] = useMemo(
