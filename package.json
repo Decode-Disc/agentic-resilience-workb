@@ -22,7 +22,7 @@
         "dev": "CONVEX_TMPDIR=/tmp convex dev --start 'vite dev --port 3000'",
         "dev:web": "vite dev --port 3000",
         "dev:browser": "cd services/playwright-browser && npm run build && npm run dev",
-        "dev:all": "concurrently -n web,browser \"pnpm dev\" \"pnpm dev:browser\"",
+        "dev:all": "concurrently -k -n web,browser \"pnpm dev\" \"pnpm dev:browser\"",
         "build": "vite build",
         "preview": "vite preview",
         "generate:routes": "tsr generate",

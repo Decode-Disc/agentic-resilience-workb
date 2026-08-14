@@ -23,6 +23,7 @@ import {
     cutoutCardSurfaceClassName,
     useCutoutContentStaggerVariants,
 } from "@/components/ui/cutout-card";
+import { useCompanyCoverImage } from "@/hooks/use-company-cover-image";
 import {
     executionLabel,
     executionStatusColor,
@@ -64,6 +65,10 @@ export function ResearchDossierCard({ dossier }: { dossier: ResearchDossier }) {
         params: { runId: dossier.runId },
         search: { section: "progress" as const },
     };
+    const coverImage = useCompanyCoverImage(
+        dossier.company?.websiteUrl,
+        dossier.company?.investorRelationsUrl,
+    );
 
     return (
         <CutoutCard
@@ -84,7 +89,8 @@ export function ResearchDossierCard({ dossier }: { dossier: ResearchDossier }) {
                     <CutoutCardImage
                         alt={`${companyName} research dossier cover`}
                         sizes="(max-width: 768px) 100vw, 448px"
-                        src="/images/placeholders/research-dossier-cover.png"
+                        src={coverImage.src}
+                        onError={coverImage.onError}
                     />
                     <CutoutCardOverlay />
                     <CutoutCardInsetLabel className="bottom-0 left-0 rounded-tr-[20px] bg-card px-5 py-3">

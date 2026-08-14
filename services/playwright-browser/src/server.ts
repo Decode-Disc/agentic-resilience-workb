@@ -2,6 +2,12 @@ import { createServer, type Server } from "node:http";
 import { isIP } from "node:net";
 import { type Browser, chromium } from "playwright";
 
+import {
+    buildBrowserContextOptions,
+    buildLaunchOptions,
+    STEALTH_INIT_SCRIPT,
+} from "./stealth.js";
+
 // ─── Configuration ────────────────────────────────────────────────────────
 
 const PORT = Number.parseInt(process.env["PORT"] ?? "3000", 10);
@@ -201,8 +207,11 @@ async function render(url: string): Promise<RenderResult> {
 
     let browser: Browser | null = null;
     try {
-        browser = await chromium.launch({ headless: true });
-        const context = await browser.newContext({ viewport: VIEWPORT });
+        browser = await chromium.launch(buildLaunchOptions());
+        const context = await browser.newContext(
+            buildBrowserContextOptions(VIEWPORT),
+        );
+        await context.addInitScript(STEALTH_INIT_SCRIPT);
         const page = await context.newPage();
 
         // Block unnecessary resource types
