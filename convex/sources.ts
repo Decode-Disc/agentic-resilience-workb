@@ -14,6 +14,7 @@ import {
     query,
 } from "./_generated/server";
 import { manualSourceIntakeError } from "./domain/manualSourceIntake";
+import { purgePreviewCacheForSource } from "./domain/previewCache";
 import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
 import { SOURCE_SELECTION_POLICY_VERSION } from "./domain/sourceSelectionPolicy";
@@ -414,15 +415,7 @@ export const decide = mutation({
         // A decided source is no longer previewable; drop its cached preview
         // so it cannot be served as a stale candidate screenshot.
         if (args.decision !== "pending") {
-            const cachedPreview = await ctx.db
-                .query("previewCaches")
-                .withIndex("by_source", (builder) =>
-                    builder.eq("sourceId", source._id),
-                )
-                .first();
-            if (cachedPreview) {
-                await ctx.db.delete(cachedPreview._id);
-            }
+            await purgePreviewCacheForSource(ctx, source._id);
         }
         await ctx.db.insert("auditEvents", {
             actor: { type: "visitor", visitorId: visitor._id },

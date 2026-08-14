@@ -17,6 +17,7 @@ import {
 } from "./_generated/server";
 import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
 import { claimPausedRunExecution } from "./domain/executionClaim";
+import { purgePreviewCacheForSource } from "./domain/previewCache";
 import { buildResearchPlan } from "./domain/researchPlan";
 import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
@@ -1340,6 +1341,9 @@ export const approveProposedCorpus = mutation({
                 decisionOccurredAt: now,
                 reason: "Accepted with proposed corpus",
             });
+            // The source is now accepted (decided), so its candidate preview
+            // must not linger in the cache.
+            await purgePreviewCacheForSource(ctx, source._id);
             await ctx.db.insert("auditEvents", {
                 actor: { type: "visitor", visitorId: visitor._id },
                 action: "source_decided",

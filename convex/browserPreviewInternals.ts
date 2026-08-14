@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./_generated/server";
+import { purgePreviewCacheForSource } from "./domain/previewCache";
 import { rateLimiter } from "./rateLimiter";
 
 // ─── Internal query: validate source ownership and return decision ────────────
@@ -143,15 +144,7 @@ export const purgePreviewForSource = internalMutation({
     args: { sourceId: v.id("sources") },
     returns: v.null(),
     handler: async (ctx, args) => {
-        const existing = await ctx.db
-            .query("previewCaches")
-            .withIndex("by_source", (builder) =>
-                builder.eq("sourceId", args.sourceId),
-            )
-            .first();
-        if (existing) {
-            await ctx.db.delete(existing._id);
-        }
+        await purgePreviewCacheForSource(ctx, args.sourceId);
         return null;
     },
 });
