@@ -176,6 +176,15 @@ export default defineSchema({
         discoveryQueryIndex: v.optional(v.number()),
         createdAt: v.number(),
     }).index("by_run_and_url", ["runId", "canonicalUrl"]),
+    previewCaches: defineTable({
+        sourceId: v.id("sources"),
+        dataUrl: v.string(),
+        sizeBytes: v.number(),
+        createdAt: v.number(),
+        expiresAt: v.number(),
+    })
+        .index("by_source", ["sourceId"])
+        .index("by_expires_at", ["expiresAt"]),
     corpusRevisions: defineTable({
         runId: v.id("researchRuns"),
         revision: v.number(),

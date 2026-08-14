@@ -3,11 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import { SourceBrowserView } from "@/components/workspace/source-browser-view";
 
-const { useAction } = vi.hoisted(() => ({
+const { useAction, useQuery } = vi.hoisted(() => ({
     useAction: vi.fn(),
+    useQuery: vi.fn(),
 }));
 
-vi.mock(import("convex/react"), () => ({ useAction }));
+vi.mock(import("convex/react"), () => ({ useAction, useQuery }));
 
 const SAMPLE = {
     sourceId: "source-1" as never,
@@ -15,7 +16,7 @@ const SAMPLE = {
     title: "Independent report",
     origin: "exa" as const,
     category: "independent_analysis",
-    decision: "pending" as const,
+    decision: "accepted" as const,
     publishedAt: undefined,
     reason: undefined,
 };
@@ -23,6 +24,7 @@ const SAMPLE = {
 describe("SourceBrowserView", () => {
     it("maps source context to the external browser destination", () => {
         useAction.mockReturnValue(vi.fn());
+        useQuery.mockReturnValue(undefined);
         render(<SourceBrowserView source={SAMPLE} />);
 
         const link = screen.getByRole("link", {

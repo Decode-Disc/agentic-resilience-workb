@@ -12,6 +12,15 @@ const checkRateLimit = makeFunctionReference<"mutation">(
 const getSourceForPreview = makeFunctionReference<"query">(
     "browserPreviewInternals:getSourceForPreview",
 );
+const getPreview = makeFunctionReference<"query">(
+    "browserPreviewInternals:getPreview",
+);
+const storePreview = makeFunctionReference<"mutation">(
+    "browserPreviewInternals:storePreview",
+);
+const purgePreviewForSource = makeFunctionReference<"mutation">(
+    "browserPreviewInternals:purgePreviewForSource",
+);
 
 type TestCtx = ReturnType<typeof convexTest>;
 
@@ -185,6 +194,63 @@ describe("browserPreviewInternals", () => {
             expect(result?.canonicalUrl).toBe("https://example.com/report");
             expect(result?.title).toBe("Test Report");
             expect(result?.decision).toBe("pending");
+        });
+    });
+
+    describe("preview cache", () => {
+        it("returns null when no cache entry exists", async () => {
+            const t = convexTest(schema, modules);
+            const { sourceId } = await seedVisitorAndRun(t);
+
+            const result = await t.query(getPreview, { sourceId });
+            expect(result).toBeNull();
+        });
+
+        it("stores then returns a fresh cached preview", async () => {
+            const t = convexTest(schema, modules);
+            const { sourceId } = await seedVisitorAndRun(t);
+
+            await t.mutation(storePreview, {
+                sourceId,
+                dataUrl: "data:image/png;base64,AAAA",
+                sizeBytes: 4,
+                expiresAt: Date.now() + 60_000,
+            });
+
+            const result = await t.query(getPreview, { sourceId });
+            expect(result).toEqual({ dataUrl: "data:image/png;base64,AAAA" });
+        });
+
+        it("treats an expired entry as a miss", async () => {
+            const t = convexTest(schema, modules);
+            const { sourceId } = await seedVisitorAndRun(t);
+
+            await t.mutation(storePreview, {
+                sourceId,
+                dataUrl: "data:image/png;base64,BBBB",
+                sizeBytes: 4,
+                expiresAt: Date.now() - 1000,
+            });
+
+            const result = await t.query(getPreview, { sourceId });
+            expect(result).toBeNull();
+        });
+
+        it("purges a cached entry for a source", async () => {
+            const t = convexTest(schema, modules);
+            const { sourceId } = await seedVisitorAndRun(t);
+
+            await t.mutation(storePreview, {
+                sourceId,
+                dataUrl: "data:image/png;base64,CCCC",
+                sizeBytes: 4,
+                expiresAt: Date.now() + 60_000,
+            });
+
+            await t.mutation(purgePreviewForSource, { sourceId });
+
+            const result = await t.query(getPreview, { sourceId });
+            expect(result).toBeNull();
         });
     });
 });

@@ -8,6 +8,7 @@ const app = defineApp({
         COMPANY_SEARCH_RESULT_LIMIT: v.optional(v.string()),
         SOURCE_CANDIDATE_LIMIT: v.optional(v.string()),
         SOURCE_RECOMMENDATION_CEILING: v.optional(v.string()),
+        PREVIEW_CACHE_TTL_MS: v.optional(v.string()),
     },
 });
 app.use(workflow);

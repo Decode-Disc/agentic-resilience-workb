@@ -5,6 +5,7 @@ import { v } from "convex/values";
 
 import { api, internal } from "./_generated/api";
 import { action } from "./_generated/server";
+import { PREVIEW_CACHE_MAX_BYTES, previewCacheTtlMs } from "./resourceLimits";
 
 export const renderPreview = action({
     args: {
@@ -48,7 +49,17 @@ export const renderPreview = action({
             return { status: "unavailable", error: "not_pending" };
         }
 
-        // Rate-limit: max 2 renders per (visitor, run, source) in 30s window.
+        // Serve a fresh cached screenshot without touching the render service.
+        const cached = await ctx.runQuery(
+            api.browserPreviewInternals.getPreview,
+            { sourceId: args.sourceId },
+        );
+        if (cached) {
+            return { status: "ok", base64: cached.dataUrl };
+        }
+
+        // Rate-limit only the expensive render path: max 2 renders per
+        // (visitor, run, source) in a 30s window.
         const rateLimitKey = `preview:${visitorId}:${args.runId}:${args.sourceId}`;
         const rateLimitResult = await ctx.runMutation(
             internal.browserPreviewInternals.checkRateLimit,
@@ -87,10 +98,23 @@ export const renderPreview = action({
                 }
                 const buffer = await response.arrayBuffer();
                 const base64 = Buffer.from(buffer).toString("base64");
-                return {
-                    status: "ok",
-                    base64: `data:${contentType};base64,${base64}`,
-                };
+                const dataUrl = `data:${contentType};base64,${base64}`;
+
+                // Cache the rendered screenshot when it fits within the size
+                // cap; otherwise return it without persisting.
+                if (buffer.byteLength <= PREVIEW_CACHE_MAX_BYTES) {
+                    await ctx.runMutation(
+                        internal.browserPreviewInternals.storePreview,
+                        {
+                            sourceId: args.sourceId,
+                            dataUrl,
+                            sizeBytes: buffer.byteLength,
+                            expiresAt: Date.now() + previewCacheTtlMs(),
+                        },
+                    );
+                }
+
+                return { status: "ok", base64: dataUrl };
             }
 
             const errorBody = await response.json().catch(() => ({}));

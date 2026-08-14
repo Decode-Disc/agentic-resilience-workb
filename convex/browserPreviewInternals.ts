@@ -2,7 +2,7 @@ import { v } from "convex/values";
 
 import type { Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery, query } from "./_generated/server";
 import { rateLimiter } from "./rateLimiter";
 
 // ─── Internal query: validate source ownership and return decision ────────────
@@ -84,5 +84,74 @@ export const checkRateLimit = internalMutation({
                 ? result.retryAfter * 1000
                 : undefined,
         };
+    },
+});
+
+// ─── Public read path: fresh cached preview, or null on miss/expiry ──────────
+
+export const getPreview = query({
+    args: { sourceId: v.id("sources") },
+    returns: v.union(v.object({ dataUrl: v.string() }), v.null()),
+    handler: async (ctx, args) => {
+        const entry = await ctx.db
+            .query("previewCaches")
+            .withIndex("by_source", (builder) =>
+                builder.eq("sourceId", args.sourceId),
+            )
+            .first();
+        if (!entry || entry.expiresAt <= Date.now()) {
+            return null;
+        }
+        return { dataUrl: entry.dataUrl };
+    },
+});
+
+// ─── Internal mutation: upsert a cache entry (delete-then-insert) ────────────
+
+export const storePreview = internalMutation({
+    args: {
+        sourceId: v.id("sources"),
+        dataUrl: v.string(),
+        sizeBytes: v.number(),
+        expiresAt: v.number(),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const existing = await ctx.db
+            .query("previewCaches")
+            .withIndex("by_source", (builder) =>
+                builder.eq("sourceId", args.sourceId),
+            )
+            .first();
+        if (existing) {
+            await ctx.db.delete(existing._id);
+        }
+        await ctx.db.insert("previewCaches", {
+            sourceId: args.sourceId,
+            dataUrl: args.dataUrl,
+            sizeBytes: args.sizeBytes,
+            createdAt: Date.now(),
+            expiresAt: args.expiresAt,
+        });
+        return null;
+    },
+});
+
+// ─── Internal mutation: purge a source's cached preview ──────────────────────
+
+export const purgePreviewForSource = internalMutation({
+    args: { sourceId: v.id("sources") },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const existing = await ctx.db
+            .query("previewCaches")
+            .withIndex("by_source", (builder) =>
+                builder.eq("sourceId", args.sourceId),
+            )
+            .first();
+        if (existing) {
+            await ctx.db.delete(existing._id);
+        }
+        return null;
     },
 });

@@ -2,11 +2,11 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Date
 
-2026-08-09
+2026-08-09; amended 2026-08-14 to authorize a short-TTL preview cache
 
 ## Context
 
@@ -27,7 +27,8 @@ The following constraints apply:
 ### What a preview is
 
 - A fixed-viewport PNG screenshot of a candidate public HTTPS URL.
-- Transient — never persisted to Convex or durable storage.
+- Transient — cached for a short TTL (see "Preview caching" below), never
+  persisted as evidence or a durable document record.
 - Visually distinct from accepted evidence in the UI.
 - Only available for pending (undecided) candidate sources.
 - A convenience that saves the analyst from opening a separate browser tab.
@@ -62,20 +63,47 @@ a single `POST /render` endpoint that:
 
 ### Application boundary
 
-The frontend never communicates with the preview service directly. A new Convex
-HTTP action routes requests through the authorized backend:
+The frontend never communicates with the preview service directly. A Convex
+action routes requests through the authorized backend:
 
 - authenticates the visitor via Convex Auth;
 - validates that the source belongs to an active research run owned by the
   visitor;
 - validates that the source decision is `pending` — previews are only for
   undecided candidates;
-- rate-limits per visitor, run, and source (max one render attempt per 30
-  seconds);
+- returns a cached screenshot when a fresh entry exists, without touching the
+  preview service;
+- rate-limits only the render path (max two render attempts per visitor, run,
+  and source in a 30-second window);
 - proxies the render request to the preview service with the shared secret;
 - returns the screenshot as a base64-encoded data URL to the frontend;
-- records a lightweight preview-attempt metadata row (visitor, run, source,
-  status, duration, error type) without persisting the screenshot image.
+- stores the rendered screenshot in a short-TTL cache (see below), never as
+  evidence.
+
+### Preview caching
+
+Rendering a screenshot launches Chromium, which is the expensive operation.
+To avoid re-rendering on every view and preserve the preview service, the
+rendered screenshot is cached for a bounded time:
+
+- A `previewCaches` record is keyed by `sourceId` (stable, unique per
+  candidate).
+- The entry holds only the rendered data URL, its byte size, and an
+  `expiresAt` timestamp derived from a server-configured TTL
+  (`PREVIEW_CACHE_TTL_MS`, default one hour). Entries past `expiresAt` are
+  treated as absent.
+- A size cap bounds each entry (over-sized screenshots are returned but not
+  cached), preventing unbounded storage growth.
+- The cache is read through a reactive Convex query, so a repeat view within a
+  session returns the screenshot immediately without re-rendering, and a cache
+  hit never reaches the preview service.
+- When a source's decision becomes `accepted` or `rejected`, its cache entry is
+  purged. The approval checkpoint and the "rejected sources cannot contribute
+  downstream" rule remain unchanged.
+
+The cached screenshot remains distinct from evidence: it has no claim
+classification, provenance, or passage locator, and it is never read by
+extraction, assessment, map, or brief surfaces.
 
 ### UI contract
 
@@ -142,8 +170,11 @@ decision:
   during source review.
 - A new Playwright Docker container adds an operational dependency, deployment
   surface, and maintenance cost.
-- The Convex HTTP action boundary adds a new authenticated route and rate-limit
+- The Convex action boundary adds an authenticated render path and rate-limit
   configuration.
+- A short-TTL `previewCaches` table stores bounded screenshot data URLs keyed
+  by source, purged on decision and on TTL expiry. This cache is a rendering
+  optimization, not evidence storage.
 - Previews are explicitly non-evidence. If a future feature requires
   screenshot persistence (e.g., a visual archive of approved sources), a
   separate ADR must authorize storage, retention, and provenance rules.

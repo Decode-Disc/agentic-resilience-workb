@@ -56,3 +56,24 @@ export function sourceRecommendedTarget(): number {
     }
     return ceiling;
 }
+
+const DEFAULT_PREVIEW_CACHE_TTL_MS = 60 * 60 * 1000; // one hour
+const MIN_PREVIEW_CACHE_TTL_MS = 1000;
+
+export function previewCacheTtlMs(): number {
+    const value = env.PREVIEW_CACHE_TTL_MS;
+    if (value === undefined || value.trim().length === 0) {
+        return DEFAULT_PREVIEW_CACHE_TTL_MS;
+    }
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < MIN_PREVIEW_CACHE_TTL_MS) {
+        throw new Error(
+            `PREVIEW_CACHE_TTL_MS must be an integer >= ${MIN_PREVIEW_CACHE_TTL_MS}`,
+        );
+    }
+    return parsed;
+}
+
+// Maximum PNG byte size we persist in the preview cache. Larger screenshots are
+// returned to the caller but not cached, to avoid unbounded storage growth.
+export const PREVIEW_CACHE_MAX_BYTES = 700 * 1024;

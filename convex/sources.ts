@@ -411,6 +411,19 @@ export const decide = mutation({
             decisionOccurredAt: now,
             reason: args.reason?.trim() || undefined,
         });
+        // A decided source is no longer previewable; drop its cached preview
+        // so it cannot be served as a stale candidate screenshot.
+        if (args.decision !== "pending") {
+            const cachedPreview = await ctx.db
+                .query("previewCaches")
+                .withIndex("by_source", (builder) =>
+                    builder.eq("sourceId", source._id),
+                )
+                .first();
+            if (cachedPreview) {
+                await ctx.db.delete(cachedPreview._id);
+            }
+        }
         await ctx.db.insert("auditEvents", {
             actor: { type: "visitor", visitorId: visitor._id },
             action: "source_decided",
