@@ -473,6 +473,27 @@ substituting a nearby public surface.
 
 Mock only nondeterministic or external boundaries. Do not copy production logic into tests, mock the domain behavior being tested, rely solely on snapshots for core rules, or assert only mock call counts when a real result is observable.
 
+### Reactive Browser-Test Architecture
+
+Use three distinct verification layers. They are complementary and must not be substituted for one another:
+
+1. **React integration tests with Vitest and React Testing Library** verify rendering, loading, errors, interaction semantics, and component-to-hook wiring. Mock `convex/react` only through the shared harness under `src/__tests__/helpers/`. The harness routes generated function references to stable query snapshots and explicit mutation or action implementations; tests must never dispatch mock results by hook call order. Query fixtures may be deliberately partial because this layer tests presentation projections rather than reconstructing complete persisted documents.
+2. **Convex tests with `convex-test`** verify server authorization, validators, persistence, transitions, workflow contracts, idempotency, and deterministic fixture behavior. They import real Convex modules and use mocked identities or external adapters only where the server boundary requires them. `convex-test` does not simulate the React client's live subscription lifecycle and must not be presented as proof of browser reactivity.
+3. **Playwright tests against the real local Convex backend** verify critical protected journeys whose contract depends on subscriptions or persisted workflow events. The browser performs real anonymous sign-in and access-code admission, then uses the normal authorized UI mutations and reactive queries. Assertions cover fresh user-visible post-action state and, when needed, a guarded internal read model of the same persisted scenario.
+
+The Playwright harness is local-only and follows these controls:
+
+- `playwright.config.ts` starts the local Convex deployment and Vite application, runs Chromium serially with one worker, and captures traces, screenshots, and video on failure.
+- Global setup reads invitation material from the ignored local OTP file, configures only `--deployment local`, enables `E2E_FIXTURES_ENABLED`, and bootstraps the normal invitation records.
+- Internal functions in `convex/e2eFixtures.ts` derive ownership from a claimed invitation slot. They never accept a visitor ID, auth user ID, or fabricated browser identity. Scenario keys are deterministic and idempotent.
+- E2E fixtures may create bounded local records and a minimal real workflow, but they must reuse production mutations, projections, authorization-sensitive browser operations, and workflow events for the behavior under test.
+- Fixture inspection is internal, read-only, bounded, and limited to evidence needed for assertions such as lifecycle state, source decisions, revision status, and provider-call count.
+- Default browser scenarios configure no paid provider work and assert that no provider call was persisted when the journey should remain provider-free.
+- Global teardown removes `E2E_FIXTURES_ENABLED`. A verification run is incomplete if the flag remains on the local deployment afterward.
+- No E2E command may target a cloud dev, preview, or production deployment. No public test endpoint, `--identity` impersonation, client-side authorization bypass, or manually edited generated Convex type is permitted.
+
+Use Playwright selectively for behavior that cannot be proven honestly by the first two layers, especially subscription-driven row/count/detail updates, protected checkpoint transitions, durable reconnection, and persisted progress. Keep deterministic domain and component coverage in the faster layers.
+
 ### Minimum Automated Coverage
 
 Cover at minimum:

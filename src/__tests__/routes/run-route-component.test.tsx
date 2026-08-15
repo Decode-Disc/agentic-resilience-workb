@@ -1,35 +1,37 @@
+import { api } from "@convex/_generated/api";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { getFunctionName } from "convex/server";
 import { beforeEach, expect, test, vi } from "vitest";
 
 const {
-    useQuery,
-    usePaginatedQuery,
-    useMutation,
-    useAction,
     decideSource,
     approveCorpus,
     decideSufficiency,
     submitManualUrl,
     navigate,
+    recompute,
+    ensureCurrent,
+    startNewRevision,
+    rebuild,
+    renderPreview,
 } = vi.hoisted(() => ({
-    useQuery: vi.fn(),
-    usePaginatedQuery: vi.fn(),
-    useMutation: vi.fn(),
-    useAction: vi.fn(),
     decideSource: vi.fn(),
     approveCorpus: vi.fn(),
     decideSufficiency: vi.fn(),
     submitManualUrl: vi.fn(),
     navigate: vi.fn(),
+    recompute: vi.fn(),
+    ensureCurrent: vi.fn(),
+    startNewRevision: vi.fn(),
+    rebuild: vi.fn(),
+    renderPreview: vi.fn(),
 }));
 
-vi.mock("convex/react", () => ({
-    useQuery,
-    usePaginatedQuery,
-    useMutation,
-    useAction,
-}));
+vi.mock("convex/react", async () => {
+    const { convexReactHarness } = await import(
+        "@/__tests__/helpers/convex-react-harness"
+    );
+    return convexReactHarness.module;
+});
 vi.mock("@tanstack/react-router", () => ({
     useNavigate: () => navigate,
     Link: ({ children, ...props }: React.ComponentProps<"a">) => (
@@ -37,62 +39,80 @@ vi.mock("@tanstack/react-router", () => ({
     ),
 }));
 
+import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
 import { RunRouteComponent } from "@/components/workspace/run-route-component";
 
 beforeEach(() => {
-    useQuery.mockReset();
-    usePaginatedQuery.mockReset();
-    useMutation.mockReset();
-    useAction.mockReset();
+    convexReactHarness.reset();
     decideSource.mockReset();
     approveCorpus.mockReset();
     decideSufficiency.mockReset();
     submitManualUrl.mockReset();
     navigate.mockReset();
-    useMutation.mockImplementation((reference) => {
-        const functionName = getFunctionName(reference);
-        if (functionName === "sources:decide") {
-            return decideSource;
-        }
-        if (functionName === "evidenceSufficiency:decide") {
-            return decideSufficiency;
-        }
-        if (functionName === "sourceSelectionProposals:approveProposedCorpus") {
-            return approveCorpus;
-        }
-        return vi.fn();
-    });
-    useAction.mockReturnValue(submitManualUrl);
-    usePaginatedQuery.mockReturnValue({
+    recompute.mockReset();
+    ensureCurrent.mockReset();
+    startNewRevision.mockReset();
+    rebuild.mockReset();
+    renderPreview.mockReset();
+    convexReactHarness.query(api.researchRuns.listMyEvents).returns([]);
+    convexReactHarness.mutation(api.sources.decide).uses(decideSource);
+    convexReactHarness
+        .mutation(api.evidenceSufficiency.decide)
+        .uses(decideSufficiency);
+    convexReactHarness
+        .mutation(api.sourceSelectionProposals.approveProposedCorpus)
+        .uses(approveCorpus);
+    convexReactHarness
+        .mutation(api.sourceSelectionProposals.recompute)
+        .uses(recompute);
+    convexReactHarness
+        .mutation(api.sourceSelectionProposals.ensureCurrentForReview)
+        .uses(ensureCurrent);
+    convexReactHarness
+        .mutation(api.sourceSelectionProposals.startNewCorpusRevision)
+        .uses(startNewRevision);
+    convexReactHarness
+        .action(api.sourceActions.submitManualUrl)
+        .uses(submitManualUrl);
+    convexReactHarness
+        .action(api.sourceSelectionProposalActions.rebuild)
+        .uses(rebuild);
+    convexReactHarness
+        .action(api.browserPreview.renderPreview)
+        .uses(renderPreview);
+    convexReactHarness
+        .query(api.browserPreviewInternals.getPreview)
+        .returns(undefined);
+    const emptyPage = {
         results: [],
         status: "Exhausted",
         loadMore: vi.fn(),
-    });
+    };
+    convexReactHarness
+        .paginatedQuery(api.sourceSelectionProposals.listItemsPage)
+        .returns(emptyPage);
+    convexReactHarness
+        .paginatedQuery(api.sources.listForReviewPage)
+        .returns(emptyPage);
 });
 
 test("wires the evidence sufficiency checkpoint", async () => {
-    useQuery.mockImplementation(() => {
-        const index = (useQuery.mock.calls.length - 1) % 3;
-        return [
-            {
-                runId: "run-1",
-                company: {
-                    legalName: "Example Corp",
-                    ticker: "EXM",
-                    exchange: "NASDAQ",
-                    cik: "123",
-                },
-                lifecycleState: "awaiting_evidence_sufficiency_review",
-                executionStatus: "paused",
-                pauseReason: "evidence_sufficiency_review",
-                activeCorpusRevisionId: "revision-1",
-                providerFailures: [],
-                updatedAt: 1,
-            },
-            [],
-            undefined,
-        ][index];
-    });
+    convexReactHarness.query(api.researchRuns.getMine).returns({
+        runId: "run-1",
+        company: {
+            legalName: "Example Corp",
+            ticker: "EXM",
+            exchange: "NASDAQ",
+            cik: "123",
+        },
+        lifecycleState: "awaiting_evidence_sufficiency_review",
+        executionStatus: "paused",
+        pauseReason: "evidence_sufficiency_review",
+        activeCorpusRevisionId: "revision-1",
+        providerFailures: [],
+        updatedAt: 1,
+    } as never);
+    convexReactHarness.query(api.sources.getReviewSummary).returns(undefined);
     submitManualUrl.mockResolvedValue({
         kind: "persisted",
         sourceId: "source-1",
@@ -151,32 +171,20 @@ test("wires the evidence sufficiency checkpoint", async () => {
 });
 
 test("does not expose corpus approval while discovery is running", () => {
-    useQuery.mockImplementation(() => {
-        const index = (useQuery.mock.calls.length - 1) % 3;
-        return [
-            {
-                runId: "run-1",
-                company: {
-                    legalName: "Example Corp",
-                    ticker: "EXM",
-                    exchange: "NASDAQ",
-                    cik: "123",
-                },
-                lifecycleState: "discovering_sources",
-                executionStatus: "running",
-                activeCorpusRevisionId: "revision-1",
-                providerFailures: [],
-                updatedAt: 1,
-            },
-            [],
-            {
-                revision: 1,
-                status: "draft",
-                counts: { accepted: 0, rejected: 0, pending: 0 },
-                sources: [],
-            },
-        ][index];
-    });
+    convexReactHarness.query(api.researchRuns.getMine).returns({
+        runId: "run-1",
+        company: {
+            legalName: "Example Corp",
+            ticker: "EXM",
+            exchange: "NASDAQ",
+            cik: "123",
+        },
+        lifecycleState: "discovering_sources",
+        executionStatus: "running",
+        activeCorpusRevisionId: "revision-1",
+        providerFailures: [],
+        updatedAt: 1,
+    } as never);
 
     render(<RunRouteComponent runId={"run-1" as never} section="sources" />);
 
@@ -189,40 +197,42 @@ test("does not expose corpus approval while discovery is running", () => {
 });
 
 test("routes the analyst to the active source-review checkpoint", async () => {
-    useQuery.mockImplementation(() => {
-        const index = (useQuery.mock.calls.length - 1) % 3;
-        return [
+    convexReactHarness.query(api.researchRuns.getMine).returns({
+        runId: "run-1",
+        company: {
+            legalName: "Example Corp",
+            ticker: "EXM",
+            exchange: "NASDAQ",
+            cik: "123",
+        },
+        lifecycleState: "awaiting_source_review",
+        executionStatus: "paused",
+        pauseReason: "source_review",
+        activeCorpusRevisionId: "revision-1",
+        providerFailures: [
             {
-                runId: "run-1",
-                company: {
-                    legalName: "Example Corp",
-                    ticker: "EXM",
-                    exchange: "NASDAQ",
-                    cik: "123",
-                },
-                lifecycleState: "awaiting_source_review",
-                executionStatus: "paused",
-                pauseReason: "source_review",
-                activeCorpusRevisionId: "revision-1",
-                providerFailures: [
-                    {
-                        service: "exa",
-                        operation: "search",
-                        errorCode: "exa_not_configured",
-                        occurredAt: 1,
-                    },
-                ],
-                updatedAt: 1,
+                service: "exa",
+                operation: "search",
+                errorCode: "exa_not_configured",
+                occurredAt: 1,
             },
-            [],
-            {
-                revision: 1,
-                status: "draft",
-                counts: { accepted: 0, rejected: 0, pending: 0 },
-                sources: [],
-            },
-        ][index];
+        ],
+        updatedAt: 1,
+    } as never);
+    convexReactHarness.query(api.sources.getReviewSummary).returns({
+        revision: 1,
+        status: "draft",
+        counts: { accepted: 0, rejected: 0, pending: 0 },
+        total: 0,
+        candidateLimit: 48,
     });
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getCurrent)
+        .returns(undefined);
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getAdjustmentSets)
+        .returns(undefined);
+    convexReactHarness.query(api.sources.getReviewSource).returns(undefined);
 
     render(<RunRouteComponent runId={"run-1" as never} section="progress" />);
 
@@ -267,77 +277,67 @@ test("keeps the approved source set visible for inspection", () => {
         included: true,
         decisionReason: undefined,
     } as const;
-    usePaginatedQuery.mockImplementation((reference) => ({
-        results:
-            getFunctionName(reference) ===
-            "sourceSelectionProposals:listItemsPage"
-                ? [proposalSource]
-                : [reviewSource],
+    convexReactHarness
+        .paginatedQuery(api.sourceSelectionProposals.listItemsPage)
+        .returns({
+            results: [proposalSource],
+            status: "Exhausted",
+            loadMore: vi.fn(),
+        });
+    convexReactHarness.paginatedQuery(api.sources.listForReviewPage).returns({
+        results: [reviewSource],
         status: "Exhausted",
         loadMore: vi.fn(),
-    }));
-    useQuery.mockImplementation((reference) => {
-        const functionName = getFunctionName(reference);
-        if (functionName === "researchRuns:getMine") {
-            return {
-                runId: "run-1",
-                company: {
-                    legalName: "Example Corp",
-                    ticker: "EXM",
-                    exchange: "NASDAQ",
-                    cik: "123",
-                },
-                lifecycleState: "corpus_approved",
-                executionStatus: "idle",
-                activeCorpusRevisionId: "revision-1",
-                providerFailures: [
-                    {
-                        service: "exa",
-                        operation: "search",
-                        errorCode: "exa_not_configured",
-                        occurredAt: 1,
-                    },
-                ],
-                updatedAt: 2,
-            };
-        }
-        if (functionName === "researchRuns:listMyEvents") {
-            return [];
-        }
-        if (functionName === "sources:getReviewSummary") {
-            return {
-                revision: 1,
-                status: "approved",
-                counts: { accepted: 1, rejected: 0, pending: 0 },
-                total: 1,
-                candidateLimit: 48,
-            };
-        }
-        if (functionName === "sourceSelectionProposals:getCurrent") {
-            return {
-                proposalId: "proposal-1",
-                version: 1,
-                status: "ready",
-                effectiveStatus: "ready",
-                recommendedTarget: 12,
-                counts: {
-                    recommended: 1,
-                    needsAttention: 0,
-                    alternative: 0,
-                },
-                gaps: [],
-                effectiveIncludedCount: 1,
-                revisionStatus: "approved",
-            };
-        }
-        if (functionName === "sourceSelectionProposals:getAdjustmentSets") {
-            return { included: [proposalSource], available: [] };
-        }
-        if (functionName === "sources:getReviewSource") {
-            return reviewSource;
-        }
-        return undefined;
     });
+    convexReactHarness.query(api.researchRuns.getMine).returns({
+        runId: "run-1",
+        company: {
+            legalName: "Example Corp",
+            ticker: "EXM",
+            exchange: "NASDAQ",
+            cik: "123",
+        },
+        lifecycleState: "corpus_approved",
+        executionStatus: "idle",
+        activeCorpusRevisionId: "revision-1",
+        providerFailures: [
+            {
+                service: "exa",
+                operation: "search",
+                errorCode: "exa_not_configured",
+                occurredAt: 1,
+            },
+        ],
+        updatedAt: 2,
+    } as never);
+    convexReactHarness.query(api.sources.getReviewSummary).returns({
+        revision: 1,
+        status: "approved",
+        counts: { accepted: 1, rejected: 0, pending: 0 },
+        total: 1,
+        candidateLimit: 48,
+    });
+    convexReactHarness.query(api.sourceSelectionProposals.getCurrent).returns({
+        proposalId: "proposal-1" as never,
+        version: 1,
+        status: "ready",
+        effectiveStatus: "ready",
+        recommendedTarget: 12,
+        counts: {
+            recommended: 1,
+            needsAttention: 0,
+            alternative: 0,
+        },
+        gaps: [],
+        effectiveIncludedCount: 1,
+        revisionStatus: "approved",
+    } as never);
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getAdjustmentSets)
+        .returns({ included: [proposalSource], available: [] } as never);
+    convexReactHarness
+        .query(api.sources.getReviewSource)
+        .returns(reviewSource as never);
 
     render(<RunRouteComponent runId={"run-1" as never} section="sources" />);
 
@@ -366,36 +366,27 @@ test("keeps the approved source set visible for inspection", () => {
 });
 
 test("does not advertise manual source intake after corpus approval", () => {
-    useQuery.mockImplementation((reference) => {
-        const functionName = getFunctionName(reference);
-        if (functionName === "researchRuns:getMine") {
-            return {
-                runId: "run-1",
-                company: {
-                    legalName: "Example Corp",
-                    ticker: "EXM",
-                    exchange: "NASDAQ",
-                    cik: "123",
-                },
-                lifecycleState: "corpus_approved",
-                executionStatus: "idle",
-                activeCorpusRevisionId: "revision-1",
-                providerFailures: [
-                    {
-                        service: "exa",
-                        operation: "search",
-                        errorCode: "exa_not_configured",
-                        occurredAt: 1,
-                    },
-                ],
-                updatedAt: 2,
-            };
-        }
-        if (functionName === "researchRuns:listMyEvents") {
-            return [];
-        }
-        return undefined;
-    });
+    convexReactHarness.query(api.researchRuns.getMine).returns({
+        runId: "run-1",
+        company: {
+            legalName: "Example Corp",
+            ticker: "EXM",
+            exchange: "NASDAQ",
+            cik: "123",
+        },
+        lifecycleState: "corpus_approved",
+        executionStatus: "idle",
+        activeCorpusRevisionId: "revision-1",
+        providerFailures: [
+            {
+                service: "exa",
+                operation: "search",
+                errorCode: "exa_not_configured",
+                occurredAt: 1,
+            },
+        ],
+        updatedAt: 2,
+    } as never);
 
     render(<RunRouteComponent runId={"run-1" as never} section="progress" />);
 

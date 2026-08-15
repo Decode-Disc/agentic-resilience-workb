@@ -26,6 +26,7 @@ import type { DataModel } from "./dataModel.js";
  */
 type Env = {
   readonly COMPANY_SEARCH_RESULT_LIMIT: string | undefined;
+  readonly E2E_FIXTURES_ENABLED: string | undefined;
   readonly PREVIEW_CACHE_TTL_MS: string | undefined;
   readonly SOURCE_CANDIDATE_LIMIT: string | undefined;
   readonly SOURCE_RECOMMENDATION_CEILING: string | undefined;

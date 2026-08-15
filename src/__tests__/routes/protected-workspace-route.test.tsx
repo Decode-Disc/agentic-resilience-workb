@@ -1,23 +1,21 @@
+import { api } from "@convex/_generated/api";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-const {
-    claimInvitation,
-    navigate,
-    retrySession,
-    useAction,
-    useAnonymousSession,
-    useQuery,
-} = vi.hoisted(() => ({
-    claimInvitation: vi.fn(),
-    navigate: vi.fn(),
-    retrySession: vi.fn(),
-    useAction: vi.fn(),
-    useAnonymousSession: vi.fn(),
-    useQuery: vi.fn(),
-}));
+const { claimInvitation, navigate, retrySession, useAnonymousSession } =
+    vi.hoisted(() => ({
+        claimInvitation: vi.fn(),
+        navigate: vi.fn(),
+        retrySession: vi.fn(),
+        useAnonymousSession: vi.fn(),
+    }));
 
-vi.mock(import("convex/react"), () => ({ useAction, useQuery }));
+vi.mock("convex/react", async () => {
+    const { convexReactHarness } = await import(
+        "@/__tests__/helpers/convex-react-harness"
+    );
+    return convexReactHarness.module;
+});
 vi.mock(import("@tanstack/react-router"), async (importOriginal) => {
     const router = await importOriginal();
     return {
@@ -31,6 +29,7 @@ vi.mock(import("@tanstack/react-router"), async (importOriginal) => {
 });
 vi.mock("@/hooks/use-anonymous-session", () => ({ useAnonymousSession }));
 
+import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
 import { InvitationAccessProvider } from "@/components/workspace/invitation-access-context";
 import { ProtectedWorkspaceRoute } from "@/components/workspace/protected-workspace-route";
 
@@ -39,8 +38,8 @@ describe("ProtectedWorkspaceRoute", () => {
         claimInvitation.mockReset();
         navigate.mockReset();
         retrySession.mockReset();
-        useAction.mockReset();
-        useAction.mockReturnValue(claimInvitation);
+        convexReactHarness.reset();
+        convexReactHarness.action(api.invitations.claim).uses(claimInvitation);
         useAnonymousSession.mockReset();
         useAnonymousSession.mockReturnValue({
             isSessionLoading: false,
@@ -48,11 +47,10 @@ describe("ProtectedWorkspaceRoute", () => {
             sessionError: null,
             retrySession,
         });
-        useQuery.mockReset();
     });
 
     test("withholds protected content and opens admission for an anonymous visitor", () => {
-        useQuery.mockReturnValue(null);
+        convexReactHarness.query(api.visitors.current).returns(null);
 
         render(
             <InvitationAccessProvider>
@@ -67,7 +65,9 @@ describe("ProtectedWorkspaceRoute", () => {
     });
 
     test("renders protected content for an active visitor", () => {
-        useQuery.mockReturnValue({ role: "analyst", status: "active" });
+        convexReactHarness
+            .query(api.visitors.current)
+            .returns({ role: "analyst", status: "active" } as never);
 
         render(
             <InvitationAccessProvider>
@@ -82,7 +82,7 @@ describe("ProtectedWorkspaceRoute", () => {
     });
 
     test("sends an admitted analyst to the dossiers page", async () => {
-        useQuery.mockReturnValue(null);
+        convexReactHarness.query(api.visitors.current).returns(null);
         claimInvitation.mockResolvedValue({
             visitorId: "visitor-analyst",
             role: "analyst",
@@ -131,13 +131,8 @@ describe("ProtectedWorkspaceRoute", () => {
         const consoleError = vi
             .spyOn(console, "error")
             .mockImplementation(() => undefined);
-        let shouldFail = true;
-        useQuery.mockImplementation(() => {
-            if (shouldFail) {
-                throw new Error("Visitor query failed");
-            }
-            return { role: "analyst", status: "active" };
-        });
+        const visitorQuery = convexReactHarness.query(api.visitors.current);
+        visitorQuery.throws(new Error("Visitor query failed"));
 
         render(
             <InvitationAccessProvider>
@@ -145,7 +140,7 @@ describe("ProtectedWorkspaceRoute", () => {
             </InvitationAccessProvider>,
         );
 
-        shouldFail = false;
+        visitorQuery.returns({ role: "analyst", status: "active" } as never);
         fireEvent.click(screen.getByRole("button", { name: /Try again/i }));
 
         expect(screen.getByText("Protected route content")).toBeTruthy();

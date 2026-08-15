@@ -9,6 +9,7 @@ const app = defineApp({
         SOURCE_CANDIDATE_LIMIT: v.optional(v.string()),
         SOURCE_RECOMMENDATION_CEILING: v.optional(v.string()),
         PREVIEW_CACHE_TTL_MS: v.optional(v.string()),
+        E2E_FIXTURES_ENABLED: v.optional(v.string()),
     },
 });
 app.use(workflow);

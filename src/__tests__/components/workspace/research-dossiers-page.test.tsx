@@ -1,16 +1,14 @@
+import { api } from "@convex/_generated/api";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { useAction, useQuery } = vi.hoisted(() => ({
-    useAction: vi.fn(() => vi.fn()),
-    useQuery: vi.fn(),
-}));
-
-vi.mock(import("convex/react"), () => ({
-    useAction,
-    useQuery,
-}));
+vi.mock("convex/react", async () => {
+    const { convexReactHarness } = await import(
+        "@/__tests__/helpers/convex-react-harness"
+    );
+    return convexReactHarness.module;
+});
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
     const router =
@@ -39,15 +37,19 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
     };
 });
 
+import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
 import { ResearchDossiersPage } from "@/components/workspace/research-dossiers-page";
 
 describe("ResearchDossiersPage", () => {
     beforeEach(() => {
-        useQuery.mockReset();
+        convexReactHarness.reset();
+        convexReactHarness
+            .action(api.companyCoverImage.renderCompanyPreview)
+            .uses(vi.fn());
     });
 
     it("lists each research dossier in a cutout card", () => {
-        useQuery.mockReturnValue([
+        convexReactHarness.query(api.researchRuns.listMine).returns([
             {
                 runId: "run-1",
                 company: {
@@ -66,7 +68,7 @@ describe("ResearchDossiersPage", () => {
                 updatedAt: Date.UTC(2026, 6, 27),
                 providerFailures: [],
             },
-        ]);
+        ] as never);
 
         render(<ResearchDossiersPage />);
 
@@ -113,7 +115,7 @@ describe("ResearchDossiersPage", () => {
     });
 
     it("preserves the page layout while dossiers load", () => {
-        useQuery.mockReturnValue(undefined);
+        convexReactHarness.query(api.researchRuns.listMine).returns(undefined);
 
         render(<ResearchDossiersPage />);
 
@@ -145,7 +147,7 @@ describe("ResearchDossiersPage", () => {
     });
 
     it("offers a clear first action when no dossier exists", () => {
-        useQuery.mockReturnValue([]);
+        convexReactHarness.query(api.researchRuns.listMine).returns([]);
 
         render(<ResearchDossiersPage />);
 
@@ -161,20 +163,17 @@ describe("ResearchDossiersPage", () => {
         const consoleError = vi
             .spyOn(console, "error")
             .mockImplementation(() => undefined);
-        let shouldFail = true;
-        useQuery.mockImplementation(() => {
-            if (shouldFail) {
-                throw new Error("Unavailable");
-            }
-            return [];
-        });
+        const dossiersQuery = convexReactHarness.query(
+            api.researchRuns.listMine,
+        );
+        dossiersQuery.throws(new Error("Unavailable"));
 
         render(<ResearchDossiersPage />);
 
         expect(screen.getByRole("alert").textContent).toContain(
             "Research dossiers unavailable",
         );
-        shouldFail = false;
+        dossiersQuery.returns([]);
         fireEvent.click(screen.getByRole("button", { name: "Try again" }));
         expect(screen.getByText("No research dossiers yet")).toBeTruthy();
         consoleError.mockRestore();

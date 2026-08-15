@@ -1,34 +1,31 @@
+import { api } from "@convex/_generated/api";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { getFunctionName } from "convex/server";
 import { beforeEach, expect, test, vi } from "vitest";
 
 const {
-    useQuery,
-    usePaginatedQuery,
-    useMutation,
-    useAction,
     approve,
     recompute,
     ensureCurrent,
     rebuild,
+    startNewRevision,
+    renderPreview,
 } = vi.hoisted(() => ({
-    useQuery: vi.fn(),
-    usePaginatedQuery: vi.fn(),
-    useMutation: vi.fn(),
-    useAction: vi.fn(),
     approve: vi.fn(),
     recompute: vi.fn(),
     ensureCurrent: vi.fn(),
     rebuild: vi.fn(),
+    startNewRevision: vi.fn(),
+    renderPreview: vi.fn(),
 }));
 
-vi.mock("convex/react", () => ({
-    useQuery,
-    usePaginatedQuery,
-    useMutation,
-    useAction,
-}));
+vi.mock("convex/react", async () => {
+    const { convexReactHarness } = await import(
+        "@/__tests__/helpers/convex-react-harness"
+    );
+    return convexReactHarness.module;
+});
 
+import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
 import { LiveSourceReview } from "@/components/workspace/live-source-review";
 
 const proposalSource = {
@@ -52,46 +49,50 @@ const proposalSource = {
 } as const;
 
 beforeEach(() => {
-    useQuery.mockReset();
-    usePaginatedQuery.mockReset();
-    useMutation.mockReset();
-    useAction.mockReset();
+    convexReactHarness.reset();
     approve.mockReset();
     recompute.mockReset();
     ensureCurrent.mockReset();
     rebuild.mockReset();
-    useAction.mockReturnValue(rebuild);
-    useMutation.mockImplementation((reference) => {
-        const name = getFunctionName(reference);
-        if (name === "sourceSelectionProposals:approveProposedCorpus") {
-            return approve;
-        }
-        if (name === "sourceSelectionProposals:recompute") {
-            return recompute;
-        }
-        if (name === "sourceSelectionProposals:ensureCurrentForReview") {
-            return ensureCurrent;
-        }
-        return vi.fn();
-    });
+    startNewRevision.mockReset();
+    renderPreview.mockReset();
+    convexReactHarness
+        .mutation(api.sourceSelectionProposals.approveProposedCorpus)
+        .uses(approve);
+    convexReactHarness
+        .mutation(api.sourceSelectionProposals.recompute)
+        .uses(recompute);
+    convexReactHarness
+        .mutation(api.sourceSelectionProposals.ensureCurrentForReview)
+        .uses(ensureCurrent);
+    convexReactHarness
+        .mutation(api.sourceSelectionProposals.startNewCorpusRevision)
+        .uses(startNewRevision);
+    convexReactHarness
+        .action(api.sourceSelectionProposalActions.rebuild)
+        .uses(rebuild);
+    convexReactHarness
+        .action(api.browserPreview.renderPreview)
+        .uses(renderPreview);
+    convexReactHarness
+        .query(api.browserPreviewInternals.getPreview)
+        .returns(undefined);
 });
 
 test("retries source review queries after a load failure", () => {
     const consoleError = vi
         .spyOn(console, "error")
         .mockImplementation(() => undefined);
-    let shouldFail = true;
-    useQuery.mockImplementation(() => {
-        if (shouldFail) {
-            throw new Error("Source review query failed");
-        }
-        return undefined;
-    });
-    usePaginatedQuery.mockReturnValue({
+    const queryError = new Error("Source review query failed");
+    const proposalQuery = convexReactHarness.query(
+        api.sourceSelectionProposals.getCurrent,
+    );
+    proposalQuery.throws(queryError);
+    const loadingPage = {
         results: [],
         status: "LoadingFirstPage",
         loadMore: vi.fn(),
-    });
+    };
 
     render(
         <LiveSourceReview
@@ -102,7 +103,18 @@ test("retries source review queries after a load failure", () => {
     );
 
     expect(screen.getByText("Source review could not be loaded")).toBeTruthy();
-    shouldFail = false;
+    proposalQuery.returns(undefined);
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getAdjustmentSets)
+        .returns(undefined);
+    convexReactHarness.query(api.sources.getReviewSummary).returns(undefined);
+    convexReactHarness.query(api.sources.getReviewSource).returns(undefined);
+    convexReactHarness
+        .paginatedQuery(api.sourceSelectionProposals.listItemsPage)
+        .returns(loadingPage);
+    convexReactHarness
+        .paginatedQuery(api.sources.listForReviewPage)
+        .returns(loadingPage);
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(
         screen.getByLabelText("Loading source proposal summary"),
@@ -111,13 +123,25 @@ test("retries source review queries after a load failure", () => {
 });
 
 test("keeps proposal summary, source list, and detail geometry while loading", () => {
-    useQuery.mockReturnValue(undefined);
     const loadingPage = {
         results: [],
         status: "LoadingFirstPage",
         loadMore: vi.fn(),
     };
-    usePaginatedQuery.mockReturnValue(loadingPage);
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getCurrent)
+        .returns(undefined);
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getAdjustmentSets)
+        .returns(undefined);
+    convexReactHarness.query(api.sources.getReviewSummary).returns(undefined);
+    convexReactHarness.query(api.sources.getReviewSource).returns(undefined);
+    convexReactHarness
+        .paginatedQuery(api.sourceSelectionProposals.listItemsPage)
+        .returns(loadingPage);
+    convexReactHarness
+        .paginatedQuery(api.sources.listForReviewPage)
+        .returns(loadingPage);
 
     render(
         <LiveSourceReview
@@ -186,31 +210,30 @@ test("queries proposal dispositions and approves the exact visible version", asy
         status: "Exhausted",
         loadMore: vi.fn(),
     };
-    useQuery.mockImplementation((reference, args) => {
-        const functionName = getFunctionName(reference);
-        if (functionName === "sourceSelectionProposals:getCurrent") {
-            return currentProposal;
-        }
-        if (functionName === "sourceSelectionProposals:getAdjustmentSets") {
-            return adjustmentSets;
-        }
-        if (functionName === "sources:getReviewSummary") {
-            return reviewSummary;
-        }
-        if (functionName === "sources:getReviewSource") {
-            return args === "skip" ? undefined : proposalSource;
-        }
-        return undefined;
-    });
-    usePaginatedQuery.mockImplementation((reference, args) => {
-        const functionName = getFunctionName(reference);
-        if (functionName === "sourceSelectionProposals:listItemsPage") {
-            return args.disposition === "recommended"
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getCurrent)
+        .returns(currentProposal);
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getAdjustmentSets)
+        .returns(adjustmentSets);
+    convexReactHarness
+        .query(api.sources.getReviewSummary)
+        .returns(reviewSummary);
+    convexReactHarness
+        .query(api.sources.getReviewSource)
+        .returnsFrom(({ args }) =>
+            args === "skip" ? undefined : proposalSource,
+        );
+    convexReactHarness
+        .paginatedQuery(api.sourceSelectionProposals.listItemsPage)
+        .returnsFrom(({ args }) =>
+            args === "skip" || args.disposition === "recommended"
                 ? recommendedPage
-                : alternativePage;
-        }
-        return inspectionPage;
-    });
+                : alternativePage,
+        );
+    convexReactHarness
+        .paginatedQuery(api.sources.listForReviewPage)
+        .returns(inspectionPage);
 
     render(
         <LiveSourceReview
@@ -222,7 +245,9 @@ test("queries proposal dispositions and approves the exact visible version", asy
 
     fireEvent.click(screen.getByRole("tab", { name: /Alternatives.*1/i }));
     await waitFor(() =>
-        expect(usePaginatedQuery).toHaveBeenCalledWith(
+        expect(
+            convexReactHarness.module.usePaginatedQuery,
+        ).toHaveBeenCalledWith(
             expect.anything(),
             expect.objectContaining({
                 disposition: "alternative",
@@ -288,28 +313,26 @@ test("explains a blocked rebuild without exposing provider or configuration deta
         status: "Exhausted",
         loadMore: vi.fn(),
     };
-    useQuery.mockImplementation((reference, args) => {
-        const functionName = getFunctionName(reference);
-        if (functionName === "sourceSelectionProposals:getCurrent") {
-            return currentProposal;
-        }
-        if (functionName === "sourceSelectionProposals:getAdjustmentSets") {
-            return adjustmentSets;
-        }
-        if (functionName === "sources:getReviewSummary") {
-            return reviewSummary;
-        }
-        if (functionName === "sources:getReviewSource") {
-            return args === "skip" ? undefined : proposalSource;
-        }
-        return undefined;
-    });
-    usePaginatedQuery.mockImplementation((reference) => {
-        const functionName = getFunctionName(reference);
-        return functionName === "sourceSelectionProposals:listItemsPage"
-            ? proposalPage
-            : inspectionPage;
-    });
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getCurrent)
+        .returns(currentProposal);
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getAdjustmentSets)
+        .returns(adjustmentSets);
+    convexReactHarness
+        .query(api.sources.getReviewSummary)
+        .returns(reviewSummary);
+    convexReactHarness
+        .query(api.sources.getReviewSource)
+        .returnsFrom(({ args }) =>
+            args === "skip" ? undefined : proposalSource,
+        );
+    convexReactHarness
+        .paginatedQuery(api.sourceSelectionProposals.listItemsPage)
+        .returns(proposalPage);
+    convexReactHarness
+        .paginatedQuery(api.sources.listForReviewPage)
+        .returns(inspectionPage);
 
     render(
         <LiveSourceReview
@@ -361,28 +384,24 @@ test("shows an approved legacy source set without querying missing proposal item
         status: "Exhausted",
         loadMore: vi.fn(),
     };
-    useQuery.mockImplementation((reference, args) => {
-        const functionName = getFunctionName(reference);
-        if (functionName === "sourceSelectionProposals:getCurrent") {
-            return null;
-        }
-        if (functionName === "sourceSelectionProposals:getAdjustmentSets") {
-            return args === "skip"
-                ? undefined
-                : { included: [], available: [] };
-        }
-        if (functionName === "sources:getReviewSummary") {
-            return reviewSummary;
-        }
-        return undefined;
-    });
-    usePaginatedQuery.mockImplementation((reference) => {
-        const functionName = getFunctionName(reference);
-        if (functionName === "sourceSelectionProposals:listItemsPage") {
-            return skippedProposalPage;
-        }
-        return inspectionPage;
-    });
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getCurrent)
+        .returns(null);
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getAdjustmentSets)
+        .returnsFrom(({ args }) =>
+            args === "skip" ? undefined : { included: [], available: [] },
+        );
+    convexReactHarness
+        .query(api.sources.getReviewSummary)
+        .returns(reviewSummary);
+    convexReactHarness.query(api.sources.getReviewSource).returns(undefined);
+    convexReactHarness
+        .paginatedQuery(api.sourceSelectionProposals.listItemsPage)
+        .returns(skippedProposalPage);
+    convexReactHarness
+        .paginatedQuery(api.sources.listForReviewPage)
+        .returns(inspectionPage);
 
     render(
         <LiveSourceReview
@@ -397,9 +416,11 @@ test("shows an approved legacy source set without querying missing proposal item
         screen.queryByRole("button", { name: "Approve source set" }),
     ).toBeNull();
     expect(ensureCurrent).not.toHaveBeenCalled();
-    expect(usePaginatedQuery).toHaveBeenCalledWith(expect.anything(), "skip", {
-        initialNumItems: 12,
-    });
+    expect(convexReactHarness.module.usePaginatedQuery).toHaveBeenCalledWith(
+        expect.anything(),
+        "skip",
+        { initialNumItems: 12 },
+    );
 });
 
 test("repairs an authorized legacy draft before loading proposal items", async () => {
@@ -415,21 +436,27 @@ test("repairs an authorized legacy draft before loading proposal items", async (
         total: 1,
         candidateLimit: 48,
     };
-    useQuery.mockImplementation((reference) => {
-        const functionName = getFunctionName(reference);
-        if (functionName === "sourceSelectionProposals:getCurrent") {
-            return null;
-        }
-        if (functionName === "sources:getReviewSummary") {
-            return reviewSummary;
-        }
-        return undefined;
-    });
-    usePaginatedQuery.mockReturnValue({
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getCurrent)
+        .returns(null);
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getAdjustmentSets)
+        .returns(undefined);
+    convexReactHarness
+        .query(api.sources.getReviewSummary)
+        .returns(reviewSummary);
+    convexReactHarness.query(api.sources.getReviewSource).returns(undefined);
+    const loadingPage = {
         results: [],
         status: "LoadingFirstPage",
         loadMore: vi.fn(),
-    });
+    };
+    convexReactHarness
+        .paginatedQuery(api.sourceSelectionProposals.listItemsPage)
+        .returns(loadingPage);
+    convexReactHarness
+        .paginatedQuery(api.sources.listForReviewPage)
+        .returns(loadingPage);
 
     render(
         <LiveSourceReview
@@ -445,7 +472,9 @@ test("repairs an authorized legacy draft before loading proposal items", async (
             corpusRevisionId: "revision-draft",
         }),
     );
-    expect(usePaginatedQuery).toHaveBeenCalledWith(expect.anything(), "skip", {
-        initialNumItems: 12,
-    });
+    expect(convexReactHarness.module.usePaginatedQuery).toHaveBeenCalledWith(
+        expect.anything(),
+        "skip",
+        { initialNumItems: 12 },
+    );
 });

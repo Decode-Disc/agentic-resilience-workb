@@ -1,5 +1,5 @@
+import { api } from "@convex/_generated/api";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { getFunctionName } from "convex/server";
 import { ConvexError } from "convex/values";
 import type { ComponentType, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,9 +12,7 @@ const {
     searchCompanies,
     submitManualUrl,
     retrySession,
-    useAction,
     useAnonymousSession,
-    useQuery,
 } = vi.hoisted(() => ({
     claimInvitation: vi.fn(),
     confirmAndStart: vi.fn(),
@@ -23,9 +21,7 @@ const {
     searchCompanies: vi.fn(),
     submitManualUrl: vi.fn(),
     retrySession: vi.fn(),
-    useAction: vi.fn(),
     useAnonymousSession: vi.fn(),
-    useQuery: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
@@ -34,9 +30,15 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
     return { ...router, useNavigate: () => navigate };
 });
 
-vi.mock("convex/react", () => ({ useAction, useQuery }));
+vi.mock("convex/react", async () => {
+    const { convexReactHarness } = await import(
+        "@/__tests__/helpers/convex-react-harness"
+    );
+    return convexReactHarness.module;
+});
 vi.mock("@/hooks/use-anonymous-session", () => ({ useAnonymousSession }));
 
+import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
 import { InvitationAccessProvider } from "@/components/workspace/invitation-access-context";
 import { ResearchComposer } from "@/components/workspace/research-composer";
 import { Route } from "@/routes/workspace/start";
@@ -84,9 +86,10 @@ describe("ResearchComposer", () => {
         retrySession.mockReset();
         confirmAndStart.mockReset();
         claimInvitation.mockReset();
-        useAction.mockReset();
-        useQuery.mockReset();
-        useQuery.mockReturnValue({ status: "active" });
+        convexReactHarness.reset();
+        convexReactHarness
+            .query(api.visitors.current)
+            .returns({ status: "active" } as never);
         useAnonymousSession.mockReset();
         useAnonymousSession.mockReturnValue({
             isSessionLoading: false,
@@ -94,24 +97,19 @@ describe("ResearchComposer", () => {
             sessionError: null,
             retrySession,
         });
-        useAction.mockImplementation((action) => {
-            switch (getFunctionName(action)) {
-                case "companyResolution:search":
-                    return searchCompanies;
-                case "companyResolution:preflight":
-                    return preflight;
-                case "researchLaunch:confirmAndStart":
-                    return confirmAndStart;
-                case "sourceActions:submitManualUrl":
-                    return submitManualUrl;
-                case "invitations:claim":
-                    return claimInvitation;
-                default:
-                    throw new Error(
-                        `Unexpected action: ${getFunctionName(action)}`,
-                    );
-            }
-        });
+        convexReactHarness
+            .action(api.companyResolution.search)
+            .uses(searchCompanies);
+        convexReactHarness
+            .action(api.companyResolution.preflight)
+            .uses(preflight);
+        convexReactHarness
+            .action(api.researchLaunch.confirmAndStart)
+            .uses(confirmAndStart);
+        convexReactHarness
+            .action(api.sourceActions.submitManualUrl)
+            .uses(submitManualUrl);
+        convexReactHarness.action(api.invitations.claim).uses(claimInvitation);
     });
 
     it("selects the company picker layer only while it is open", () => {
@@ -148,13 +146,8 @@ describe("ResearchComposer", () => {
         const consoleError = vi
             .spyOn(console, "error")
             .mockImplementation(() => undefined);
-        let shouldFail = false;
-        useQuery.mockImplementation(() => {
-            if (shouldFail) {
-                throw new Error("Visitor query failed");
-            }
-            return { status: "active" };
-        });
+        const visitorQuery = convexReactHarness.query(api.visitors.current);
+        visitorQuery.returns({ status: "active" } as never);
         searchCompanies.mockResolvedValue(companyCandidates);
         preflight.mockResolvedValue(resolvedCompany);
 
@@ -165,14 +158,14 @@ describe("ResearchComposer", () => {
         });
         await searchAndSelectCompany();
 
-        shouldFail = true;
+        visitorQuery.throws(new Error("Visitor query failed"));
         rerender(
             <InvitationAccessProvider>
                 <ResearchComposer />
             </InvitationAccessProvider>,
         );
 
-        shouldFail = false;
+        visitorQuery.returns({ status: "active" } as never);
         fireEvent.click(screen.getByRole("button", { name: /Try again/i }));
 
         expect(
@@ -553,7 +546,7 @@ describe("ResearchComposer", () => {
     });
 
     it("asks for an access code only when an anonymous visitor confirms launch", async () => {
-        useQuery.mockReturnValue(null);
+        convexReactHarness.query(api.visitors.current).returns(null);
         searchCompanies.mockResolvedValue(companyCandidates);
         preflight.mockResolvedValue(resolvedCompany);
         claimInvitation.mockResolvedValue({

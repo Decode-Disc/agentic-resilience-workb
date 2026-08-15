@@ -8,6 +8,8 @@ node_modules/
 
 # Build, test, and framework output
 coverage/
+playwright-report/
+test-results/
 dist/
 dist-ssr/
 .output/

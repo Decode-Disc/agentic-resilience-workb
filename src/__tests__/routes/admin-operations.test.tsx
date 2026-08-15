@@ -1,30 +1,30 @@
+import { api } from "@convex/_generated/api";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { getFunctionName } from "convex/server";
 import { beforeEach, expect, test, vi } from "vitest";
 
-const { useQuery, useMutation, setPaidWorkEnabled, restoreQuota } = vi.hoisted(
-    () => ({
-        useQuery: vi.fn(),
-        useMutation: vi.fn(),
-        setPaidWorkEnabled: vi.fn(),
-        restoreQuota: vi.fn(),
-    }),
-);
+const { setPaidWorkEnabled, restoreQuota } = vi.hoisted(() => ({
+    setPaidWorkEnabled: vi.fn(),
+    restoreQuota: vi.fn(),
+}));
 
-vi.mock("convex/react", () => ({ useQuery, useMutation }));
+vi.mock("convex/react", async () => {
+    const { convexReactHarness } = await import(
+        "@/__tests__/helpers/convex-react-harness"
+    );
+    return convexReactHarness.module;
+});
 
+import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
 import { OperationsPage } from "@/components/admin/operations-page";
 
 beforeEach(() => {
-    useQuery.mockReset();
-    useMutation.mockReset();
+    convexReactHarness.reset();
     setPaidWorkEnabled.mockReset();
     restoreQuota.mockReset();
-    useMutation.mockImplementation(() =>
-        useMutation.mock.calls.length % 2 === 1
-            ? setPaidWorkEnabled
-            : restoreQuota,
-    );
+    convexReactHarness
+        .mutation(api.adminOperations.setPaidWorkEnabled)
+        .uses(setPaidWorkEnabled);
+    convexReactHarness.mutation(api.admin.restoreQuota).uses(restoreQuota);
 });
 
 test("renders the bounded admin projection and confirms paid-work changes", async () => {
@@ -58,11 +58,8 @@ test("renders the bounded admin projection and confirms paid-work changes", asyn
             },
         ],
     };
-    useQuery.mockImplementation((reference) =>
-        getFunctionName(reference) === "visitors:current"
-            ? visitor
-            : operations,
-    );
+    convexReactHarness.query(api.visitors.current).returns(visitor);
+    convexReactHarness.query(api.adminOperations.get).returns(operations);
     setPaidWorkEnabled.mockResolvedValue({ enabled: false });
     render(<OperationsPage />);
 
@@ -103,9 +100,8 @@ test("renders the bounded admin projection and confirms paid-work changes", asyn
 
 test("does not expose operations to an analyst", () => {
     const visitor = { role: "analyst", status: "active" };
-    useQuery.mockImplementation((reference) =>
-        getFunctionName(reference) === "visitors:current" ? visitor : undefined,
-    );
+    convexReactHarness.query(api.visitors.current).returns(visitor);
+    convexReactHarness.query(api.adminOperations.get).returns(undefined);
     render(<OperationsPage />);
     expect(screen.getByText(/Admin access required/i)).toBeTruthy();
 });
@@ -114,7 +110,6 @@ test("retries operations queries after a load failure", () => {
     const consoleError = vi
         .spyOn(console, "error")
         .mockImplementation(() => undefined);
-    let shouldFail = true;
     const visitor = { role: "admin", status: "active" };
     const operations = {
         paidWork: { enabled: true },
@@ -124,21 +119,17 @@ test("retries operations queries after a load failure", () => {
         reservations: [],
         restorableRuns: [],
     };
-    useQuery.mockImplementation((reference) => {
-        if (shouldFail) {
-            throw new Error("Operations query failed");
-        }
-        return getFunctionName(reference) === "visitors:current"
-            ? visitor
-            : operations;
-    });
+    const visitorQuery = convexReactHarness.query(api.visitors.current);
+    const operationsQuery = convexReactHarness.query(api.adminOperations.get);
+    visitorQuery.throws(new Error("Operations query failed"));
+    operationsQuery.throws(new Error("Operations query failed"));
 
     render(<OperationsPage />);
 
     expect(screen.getByText("Operations unavailable")).toBeTruthy();
-    shouldFail = false;
+    visitorQuery.returns(visitor as never);
+    operationsQuery.returns(operations as never);
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(screen.getByText("Operations control")).toBeTruthy();
     consoleError.mockRestore();
 });
-

@@ -1,22 +1,20 @@
+import { api } from "@convex/_generated/api";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-const {
-    ensureRunCompanyWebsite,
-    navigate,
-    useAction,
-    useQuery,
-    useResponsive,
-} = vi.hoisted(() => ({
+const { ensureRunCompanyWebsite, navigate, useResponsive } = vi.hoisted(() => ({
     ensureRunCompanyWebsite: vi.fn(async () => ({})),
     navigate: vi.fn(),
-    useAction: vi.fn(),
-    useQuery: vi.fn(),
     useResponsive: vi.fn(),
 }));
 
-vi.mock(import("convex/react"), () => ({ useAction, useQuery }));
+vi.mock("convex/react", async () => {
+    const { convexReactHarness } = await import(
+        "@/__tests__/helpers/convex-react-harness"
+    );
+    return convexReactHarness.module;
+});
 vi.mock(import("@/hooks/use-responsive"), () => ({ useResponsive }));
 vi.mock("@tanstack/react-router", () => ({
     Link: ({
@@ -39,15 +37,17 @@ vi.mock("@tanstack/react-router", () => ({
     useNavigate: () => navigate,
 }));
 
+import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
 import { AnalyzedCompanyList } from "@/components/workbench-shell/analyzed-company-list";
 
 beforeEach(() => {
     ensureRunCompanyWebsite.mockReset();
     navigate.mockReset();
-    useAction.mockReset();
-    useQuery.mockReset();
+    convexReactHarness.reset();
     useResponsive.mockReset();
-    useAction.mockReturnValue(ensureRunCompanyWebsite);
+    convexReactHarness
+        .action(api.companyResolution.ensureRunCompanyWebsite)
+        .uses(ensureRunCompanyWebsite);
     useResponsive.mockReturnValue({ isMobile: false, isDesktop: true });
 });
 
@@ -56,7 +56,7 @@ afterEach(() => {
 });
 
 test("keeps horizontal company navigation on desktop", () => {
-    useQuery.mockReturnValue([
+    convexReactHarness.query(api.researchRuns.listMine).returns([
         {
             runId: "run-1",
             company: {
@@ -83,7 +83,7 @@ test("keeps horizontal company navigation on desktop", () => {
             updatedAt: 1,
             providerFailures: [],
         },
-    ]);
+    ] as never);
 
     render(<AnalyzedCompanyList activeRunId="run-1" />);
 
@@ -111,7 +111,7 @@ test("keeps horizontal company navigation on desktop", () => {
 
 test("keeps the compact company menu on mobile", async () => {
     useResponsive.mockReturnValue({ isMobile: true, isDesktop: false });
-    useQuery.mockReturnValue([
+    convexReactHarness.query(api.researchRuns.listMine).returns([
         {
             runId: "run-1",
             company: {
@@ -138,7 +138,7 @@ test("keeps the compact company menu on mobile", async () => {
             updatedAt: 1,
             providerFailures: [],
         },
-    ]);
+    ] as never);
 
     render(<AnalyzedCompanyList activeRunId="run-1" />);
 
@@ -163,25 +163,27 @@ test("keeps the compact company menu on mobile", async () => {
 });
 
 test("distinguishes loading from the empty state", () => {
-    useQuery.mockReturnValue(undefined);
+    convexReactHarness.query(api.researchRuns.listMine).returns(undefined);
     const { rerender } = render(<AnalyzedCompanyList />);
     expect(screen.getByLabelText(/Loading research dossiers/i)).toBeTruthy();
 
-    useQuery.mockReturnValue([]);
+    convexReactHarness.query(api.researchRuns.listMine).returns([]);
     rerender(<AnalyzedCompanyList />);
     expect(screen.getByText(/No research dossiers yet/i)).toBeTruthy();
 });
 
 test("skips the owner query when no admitted visitor is available", () => {
-    useQuery.mockReturnValue(undefined);
+    convexReactHarness.query(api.researchRuns.listMine).returns(undefined);
     const { container } = render(<AnalyzedCompanyList enabled={false} />);
 
-    expect(useQuery.mock.calls.at(-1)?.[1]).toBe("skip");
+    expect(convexReactHarness.module.useQuery.mock.calls.at(-1)?.[1]).toBe(
+        "skip",
+    );
     expect(container.innerHTML).toBe("");
 });
 
 test("backfills one legacy company website without re-resolving known URLs", async () => {
-    useQuery.mockReturnValue([
+    convexReactHarness.query(api.researchRuns.listMine).returns([
         {
             runId: "legacy-run",
             company: {
@@ -209,7 +211,7 @@ test("backfills one legacy company website without re-resolving known URLs", asy
             updatedAt: 1,
             providerFailures: [],
         },
-    ]);
+    ] as never);
 
     render(<AnalyzedCompanyList />);
 
@@ -223,20 +225,15 @@ test("backfills one legacy company website without re-resolving known URLs", asy
 
 test("keeps a compact error state when company runs fail", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
-    let shouldFail = true;
-    useQuery.mockImplementation(() => {
-        if (shouldFail) {
-            throw new Error("Company runs unavailable");
-        }
-        return [];
-    });
+    const runsQuery = convexReactHarness.query(api.researchRuns.listMine);
+    runsQuery.throws(new Error("Company runs unavailable"));
 
     render(<AnalyzedCompanyList />);
 
     expect(screen.getByRole("alert").textContent).toMatch(
         /Research dossiers are temporarily unavailable/i,
     );
-    shouldFail = false;
+    runsQuery.returns([]);
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(screen.getByText("No research dossiers yet")).toBeTruthy();
 });

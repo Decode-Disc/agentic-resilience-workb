@@ -1,16 +1,14 @@
+import { api } from "@convex/_generated/api";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { claimInvitation, navigate, signIn, signOut, useAction, useQuery } =
-    vi.hoisted(() => ({
-        claimInvitation: vi.fn(),
-        navigate: vi.fn(),
-        signIn: vi.fn(),
-        signOut: vi.fn(),
-        useAction: vi.fn(),
-        useQuery: vi.fn(),
-    }));
+const { claimInvitation, navigate, signIn, signOut } = vi.hoisted(() => ({
+    claimInvitation: vi.fn(),
+    navigate: vi.fn(),
+    signIn: vi.fn(),
+    signOut: vi.fn(),
+}));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
     const router =
@@ -43,10 +41,12 @@ vi.mock(import("@convex-dev/auth/react"), async (importOriginal) => {
     };
 });
 
-vi.mock(import("convex/react"), () => ({
-    useAction,
-    useQuery,
-}));
+vi.mock("convex/react", async () => {
+    const { convexReactHarness } = await import(
+        "@/__tests__/helpers/convex-react-harness"
+    );
+    return convexReactHarness.module;
+});
 
 vi.mock(import("@/components/workbench-shell/analyzed-company-list"), () => ({
     AnalyzedCompanyList: ({
@@ -64,6 +64,7 @@ vi.mock(import("@/components/workbench-shell/analyzed-company-list"), () => ({
     ),
 }));
 
+import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
 import { WorkbenchShell } from "@/components/workbench-shell/workbench-shell";
 import { InvitationAccessProvider } from "@/components/workspace/invitation-access-context";
 
@@ -74,10 +75,9 @@ describe("WorkbenchShell", () => {
         signIn.mockReset();
         signOut.mockReset();
         signOut.mockResolvedValue(undefined);
-        useAction.mockReset();
-        useAction.mockReturnValue(claimInvitation);
-        useQuery.mockReset();
-        useQuery.mockReturnValue(undefined);
+        convexReactHarness.reset();
+        convexReactHarness.action(api.invitations.claim).uses(claimInvitation);
+        convexReactHarness.query(api.visitors.current).returns(undefined);
     });
 
     it("renders header with Home link and analyzed company list", () => {
@@ -132,13 +132,8 @@ describe("WorkbenchShell", () => {
         const consoleError = vi
             .spyOn(console, "error")
             .mockImplementation(() => undefined);
-        let shouldFail = true;
-        useQuery.mockImplementation(() => {
-            if (shouldFail) {
-                throw new Error("Visitor query failed");
-            }
-            return null;
-        });
+        const visitorQuery = convexReactHarness.query(api.visitors.current);
+        visitorQuery.throws(new Error("Visitor query failed"));
 
         render(
             <InvitationAccessProvider>
@@ -152,14 +147,14 @@ describe("WorkbenchShell", () => {
         expect(
             screen.getByText("Workspace navigation unavailable"),
         ).toBeTruthy();
-        shouldFail = false;
+        visitorQuery.returns(null);
         fireEvent.click(screen.getByRole("button", { name: "Retry" }));
         expect(screen.getByRole("button", { name: "Workspace" })).toBeTruthy();
         consoleError.mockRestore();
     });
 
     it("opens workspace access from the public workspace button", async () => {
-        useQuery.mockReturnValue(null);
+        convexReactHarness.query(api.visitors.current).returns(null);
 
         render(
             <InvitationAccessProvider>
@@ -180,7 +175,7 @@ describe("WorkbenchShell", () => {
     });
 
     it("sends an analyst to their dossiers after workspace access", async () => {
-        useQuery.mockReturnValue(null);
+        convexReactHarness.query(api.visitors.current).returns(null);
         claimInvitation.mockResolvedValue({
             visitorId: "visitor-analyst",
             role: "analyst",
@@ -210,7 +205,7 @@ describe("WorkbenchShell", () => {
     });
 
     it("sends an admin to operations after workspace access", async () => {
-        useQuery.mockReturnValue(null);
+        convexReactHarness.query(api.visitors.current).returns(null);
         claimInvitation.mockResolvedValue({
             visitorId: "visitor-admin",
             role: "admin",
@@ -240,10 +235,10 @@ describe("WorkbenchShell", () => {
     });
 
     it("lets an admitted analyst sign out without exposing admin operations", async () => {
-        useQuery.mockReturnValue({
+        convexReactHarness.query(api.visitors.current).returns({
             role: "analyst",
             status: "active",
-        });
+        } as never);
 
         render(
             <InvitationAccessProvider>
@@ -270,10 +265,10 @@ describe("WorkbenchShell", () => {
     });
 
     it("keeps Operations in the session menu for an admitted admin", async () => {
-        useQuery.mockReturnValue({
+        convexReactHarness.query(api.visitors.current).returns({
             role: "admin",
             status: "active",
-        });
+        } as never);
 
         render(
             <InvitationAccessProvider>

@@ -343,6 +343,8 @@ RED → verify the expected failure → GREEN → REFACTOR → verify the releva
 - Write Vitest tests for components that own non-trivial rendering logic, using React Testing Library when browser-style rendering helpers are needed. Import real production modules; mock only external boundaries.
 - Keep every test file under `src/__tests__/`; never colocate tests with production modules. Organize tests into domain-based subdirectories that mirror the tested boundary, for example `components/`, `routes/`, `config/`, `design-system/`, and `convex/<domain>/`. Keep shared test setup under `src/__tests__/setup/` and feature-specific helpers beside the tests that use them.
 - Do not test pure Convex logic through the React layer. Convex-side behavior is tested under `src/__tests__/convex/<domain>/` using `convexTest`.
+- Do not use `convex-test` as a React subscription simulator. React integration tests use the shared reference-routed Convex hook harness; critical subscription and persisted-reactivity behavior is verified with Playwright against the real local Convex backend.
+- Browser tests must use real anonymous authentication and access-code admission. Seed and inspect deterministic state only through internal E2E functions guarded by `E2E_FIXTURES_ENABLED`; never add a public test endpoint, browser-side state bypass, or CLI identity impersonation.
 - Provide a JSDoc comment on any shared component, hook, or utility whose intent isn't obvious from the name.
 - Keep all source code, schemas, copy, and documentation in English — even when communicating with the user in French.
 
