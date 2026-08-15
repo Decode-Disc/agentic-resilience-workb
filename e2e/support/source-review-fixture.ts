@@ -65,10 +65,11 @@ export function seedSourceReview(fixtureKey: string): SeededSourceReview {
 }
 
 export function inspectSourceReview(
+    runId: string,
     fixtureKey: string,
 ): SourceReviewSnapshot {
     return runConvexJson<SourceReviewSnapshot>(
         "e2eFixtures:inspectSourceReviewScenario",
-        { fixtureKey },
+        { runId, fixtureKey },
     );
 }

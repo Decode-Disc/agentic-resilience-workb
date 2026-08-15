@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted; source-ranking and fixed-target sections superseded by ADR-018
+Accepted; source-ranking and fixed-target sections superseded by ADR-018; analyst-source ceiling rule superseded by ADR-021
 
 ## Date
 

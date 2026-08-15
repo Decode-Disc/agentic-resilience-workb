@@ -61,7 +61,7 @@ test("source decisions update the row, count, and detail without reload", async 
         )
         .toBe("source-review");
     await expect
-        .poll(() => inspectSourceReview(key))
+        .poll(() => inspectSourceReview(seeded.runId, key))
         .toMatchObject({
             lifecycleState: "awaiting_source_review",
             revisionStatus: "draft",
@@ -102,7 +102,7 @@ test("corpus approval exits the checkpoint without reload or provider work", asy
         )
         .toBe("approval");
     await expect
-        .poll(() => inspectSourceReview(key))
+        .poll(() => inspectSourceReview(seeded.runId, key))
         .toMatchObject({
             lifecycleState: "corpus_approved",
             executionStatus: "idle",
@@ -113,7 +113,50 @@ test("corpus approval exits the checkpoint without reload or provider work", asy
                     title: "Product architecture overview",
                     decision: "accepted",
                 },
+                {
+                    title: "Reactive Systems Test Company analysis",
+                    decision: "accepted",
+                },
             ],
+            providerCallCount: 0,
+        });
+});
+
+test("metadata-linked sources stay explicit through protected approval", async ({
+    page,
+}) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await admitAnalyst(page);
+    const key = fixtureKey("metadata-linkage");
+    const seeded = seedSourceReview(key);
+    await page.goto(`/workspace/${seeded.runId}?section=sources`);
+
+    await expect(
+        page.getByText("Reactive Systems Test Company analysis"),
+    ).toBeVisible();
+    await expect(
+        page.getByText(
+            "Linked from discovery metadata; source content has not been read",
+        ),
+    ).toBeVisible();
+    await expect(
+        page.getByText("First independent counter-evidence source"),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: "Approve source set" }).click();
+
+    await expect(page.getByText("Corpus approved", { exact: true })).toBeVisible();
+    await expect
+        .poll(() => inspectSourceReview(seeded.runId, key))
+        .toMatchObject({
+            lifecycleState: "corpus_approved",
+            revisionStatus: "approved",
+            decisions: expect.arrayContaining([
+                {
+                    title: "Reactive Systems Test Company analysis",
+                    decision: "accepted",
+                },
+            ]),
             providerCallCount: 0,
         });
 });

@@ -1,5 +1,5 @@
-import { describe, expect, test } from "vitest";
 import { buildSourceSelectionProposal } from "@convex/domain/sourceSelectionPolicy";
+import { describe, expect, test } from "vitest";
 
 import { evaluateSourceSelectionPools } from "./source-selection-v2-benchmark";
 import {
@@ -29,13 +29,17 @@ describe("source selection v2 golden corpus", () => {
         expect(metrics.maximumNeedsAttention).toBeLessThanOrEqual(1);
         expect(metrics.precision).toBeGreaterThanOrEqual(0.95);
         expect(metrics.mustIncludeRecall).toBeGreaterThanOrEqual(0.9);
+        expect(metrics.metadataTriageRecall).toBe(1);
+        expect(metrics.classificationMismatches).toBe(0);
         expect(metrics).toMatchObject({
-            recommended: 44,
-            truePositiveRecommendations: 44,
-            mustIncludeObligations: 37,
-            satisfiedMustIncludeObligations: 37,
-            mustIncludeCandidates: 39,
-            includedMustIncludeCandidates: 37,
+            metadataTriageObligations: 2,
+            satisfiedMetadataTriageObligations: 2,
+            recommended: 37,
+            truePositiveRecommendations: 37,
+            mustIncludeObligations: 34,
+            satisfiedMustIncludeObligations: 34,
+            mustIncludeCandidates: 36,
+            includedMustIncludeCandidates: 34,
         });
     });
 
@@ -138,8 +142,47 @@ describe("source selection v2 golden corpus", () => {
         expect(metrics.mustIncludeObligations).toBe(2);
         expect(metrics.satisfiedMustIncludeObligations).toBe(2);
         expect(metrics.mustIncludeCandidates).toBe(3);
-        expect(metrics.includedMustIncludeCandidates).toBe(2);
+        expect(metrics.includedMustIncludeCandidates).toBe(3);
         expect(metrics.mustIncludeRecall).toBe(1);
-        expect(metrics.mustIncludeCandidateRecall).toBeCloseTo(2 / 3);
+        expect(metrics.mustIncludeCandidateRecall).toBe(1);
+    });
+
+    test("does not treat matching titles as duplicate identity", () => {
+        const pool: GoldenSourcePool = {
+            fixtureRunKey: "matching-titles",
+            company: {
+                cik: "1373715",
+                legalName: "ServiceNow, Inc.",
+                ticker: "NOW",
+                websiteUrl: "https://servicenow.com/",
+            },
+            coveragePreset: "balanced",
+            candidates: [
+                {
+                    sourceId: "matching-title-a",
+                    canonicalUrl: "https://analyst.example/distinct-a",
+                    title: "Quarterly update",
+                    origin: "analyst_url",
+                    category: "analyst_supplied",
+                    createdAt: 1,
+                    expectedEligibility: "may_include",
+                    expectedJustification: "distinct analyst source",
+                },
+                {
+                    sourceId: "matching-title-b",
+                    canonicalUrl: "https://analyst.example/distinct-b",
+                    title: "Quarterly update",
+                    origin: "analyst_url",
+                    category: "analyst_supplied",
+                    createdAt: 2,
+                    expectedEligibility: "may_include",
+                    expectedJustification: "distinct analyst source",
+                },
+            ],
+        };
+
+        const metrics = evaluateSourceSelectionPools([pool]);
+
+        expect(metrics.duplicateRecommendations).toBe(0);
     });
 });

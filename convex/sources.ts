@@ -67,6 +67,7 @@ const sourceReviewSourceValidator = v.object({
             v.literal("partner_evidence"),
             v.literal("community_content"),
             v.literal("search_or_index"),
+            v.literal("unverified_counter_evidence"),
             v.literal("unknown"),
         ),
     ),

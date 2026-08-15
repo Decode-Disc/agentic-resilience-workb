@@ -98,7 +98,7 @@ export const seedSourceReviewScenario = internalMutation({
                     query.eq("runId", existingRun._id),
                 )
                 .collect();
-            if (revision && proposal && sources.length === 2) {
+            if (revision && proposal && sources.length === 3) {
                 return {
                     runId: existingRun._id,
                     corpusRevisionId: revision._id,
@@ -151,10 +151,21 @@ export const seedSourceReviewScenario = internalMutation({
             {
                 canonicalUrl: "https://example.com/e2e/annual-report",
                 title: "Annual report",
+                origin: "analyst_url" as const,
+                category: "analyst_supplied",
             },
             {
                 canonicalUrl: "https://example.com/e2e/product-architecture",
                 title: "Product architecture overview",
+                origin: "analyst_url" as const,
+                category: "analyst_supplied",
+            },
+            {
+                canonicalUrl:
+                    "https://www.morningstar.com/stocks/opaque-e2e-analysis",
+                title: "Reactive Systems Test Company analysis",
+                origin: "exa" as const,
+                category: "counter_evidence",
             },
         ];
         const sourceIds = [];
@@ -163,8 +174,8 @@ export const seedSourceReviewScenario = internalMutation({
                 runId,
                 canonicalUrl: source.canonicalUrl,
                 title: source.title,
-                origin: "analyst_url",
-                category: "analyst_supplied",
+                origin: source.origin,
+                category: source.category,
                 providerReference: `e2e:${fixtureKey}:${index}`,
                 createdAt: now + index,
             });
@@ -201,7 +212,10 @@ export const seedSourceReviewScenario = internalMutation({
 });
 
 export const inspectSourceReviewScenario = internalQuery({
-    args: { fixtureKey: v.string() },
+    args: {
+        runId: v.id("researchRuns"),
+        fixtureKey: v.string(),
+    },
     returns: v.object({
         lifecycleState: v.string(),
         executionStatus: v.string(),
@@ -223,11 +237,11 @@ export const inspectSourceReviewScenario = internalQuery({
             throw new Error("E2E fixtures are disabled");
         }
         const reservationKey = `e2e:${args.fixtureKey.trim()}`;
-        const runs = await ctx.db.query("researchRuns").take(100);
-        const run = runs.find(
-            (candidate) => candidate.reservationKey === reservationKey,
-        );
-        if (!run?.activeCorpusRevisionId) {
+        const run = await ctx.db.get(args.runId);
+        if (
+            !run?.activeCorpusRevisionId ||
+            run.reservationKey !== reservationKey
+        ) {
             throw new Error("E2E source review scenario not found");
         }
         const revision = await ctx.db.get(run.activeCorpusRevisionId);

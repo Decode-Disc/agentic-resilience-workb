@@ -41,6 +41,7 @@ import { SourceMasterList } from "@/components/workspace/source-master-list";
 import { SourceProposalAdjustmentBoard } from "@/components/workspace/source-proposal-adjustment-board";
 import { SourceReview } from "@/components/workspace/source-review";
 import {
+    sourceCompanyLinkageLabel,
     sourceCoverageRoleLabel,
     sourceSelectionReasonLabel,
 } from "@/lib/presentation/research-copy";
@@ -385,16 +386,20 @@ export function SourceProposalReview({
                     </CardHeader>
                     {coverageGaps.length > 0 ? (
                         <CardContent>
-                            <AlertStatus title="Coverage gaps to keep in view"
+                            <AlertStatus
+                                title="Coverage gaps to keep in view"
                                 closable
-                                description={<div className="flex flex-wrap gap-1.5">
-                                {coverageGaps.map((gap) => (
-                                    <Badge key={gap} variant="outline">
-                                        {sourceCoverageRoleLabel(gap)}
-                                    </Badge>
-                                ))}
-                                </div>}
-                                status="warning" />
+                                description={
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {coverageGaps.map((gap) => (
+                                            <Badge key={gap} variant="outline">
+                                                {sourceCoverageRoleLabel(gap)}
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                }
+                                status="warning"
+                            />
                         </CardContent>
                     ) : null}
                     <CardFooter className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -547,10 +552,16 @@ function SecondaryViewHeader({
 }
 
 function renderProposalAnnotation(source: ProposalSource) {
+    const companyLinkageLabel = sourceCompanyLinkageLabel(
+        source.companyLinkageBasis,
+    );
     return (
         <div className="mt-3 flex flex-wrap items-center gap-2 px-1 text-[11px] text-muted-foreground">
             <SourceFamilyBadge family={source.sourceFamily} />
-            <span>{sourceSelectionReasonLabel(source.reasonCodes)}</span>
+            <span>
+                {companyLinkageLabel ??
+                    sourceSelectionReasonLabel(source.reasonCodes)}
+            </span>
             {source.decision !== "pending" ? (
                 <span className="font-medium text-foreground">
                     Analyst override: {humanize(source.decision)}

@@ -1,6 +1,10 @@
 import type { CoveragePreset } from "@convex/domain/researchPlan";
 import type {
+    SourceAuthorityTier,
+    SourceCompanyLinkageBasis,
     SourceCoverageRole,
+    SourceDocumentKind,
+    SourceFamily,
     SourceSelectionCandidate,
     SourceSelectionCompany,
 } from "@convex/domain/sourceSelectionPolicy";
@@ -8,11 +12,19 @@ import type {
 export type GoldenSourceCandidate = SourceSelectionCandidate & {
     expectedEligibility: "must_include" | "may_include" | "must_exclude";
     expectedJustification: string;
+    expectedClassification?: {
+        authorityTier: SourceAuthorityTier;
+        documentKind: SourceDocumentKind;
+        sourceFamily: SourceFamily | "unrecognized" | "analyst_supplied";
+        companyLinkageBasis?: SourceCompanyLinkageBasis;
+        declaredCoverageRoles?: Array<SourceCoverageRole>;
+        eligibleCoverageRoles: Array<SourceCoverageRole>;
+    };
+    expectedMetadataTriage?: string;
     expectedRequirement?: {
         role: SourceCoverageRole;
         eventKey: string;
     };
-    duplicateGroup?: string;
 };
 
 export type GoldenSourcePool = {
@@ -75,7 +87,6 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 3,
                 expectedEligibility: "must_exclude",
                 expectedJustification: "specialized SEC filing",
-                duplicateGroup: "ccc-balanced:title:4 · 2026-05-26",
             },
             {
                 sourceId: "ccc-balanced-04",
@@ -90,7 +101,6 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 4,
                 expectedEligibility: "must_exclude",
                 expectedJustification: "specialized SEC filing",
-                duplicateGroup: "ccc-balanced:title:4 · 2026-05-26",
             },
             {
                 sourceId: "ccc-balanced-05",
@@ -105,7 +115,6 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 5,
                 expectedEligibility: "must_exclude",
                 expectedJustification: "specialized SEC filing",
-                duplicateGroup: "ccc-balanced:title:4 · 2026-05-26",
             },
             {
                 sourceId: "ccc-balanced-06",
@@ -120,7 +129,6 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 6,
                 expectedEligibility: "must_exclude",
                 expectedJustification: "specialized SEC filing",
-                duplicateGroup: "ccc-balanced:title:4 · 2026-05-26",
             },
             {
                 sourceId: "ccc-balanced-07",
@@ -135,7 +143,6 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 7,
                 expectedEligibility: "must_exclude",
                 expectedJustification: "specialized SEC filing",
-                duplicateGroup: "ccc-balanced:title:4 · 2026-05-26",
             },
             {
                 sourceId: "ccc-balanced-08",
@@ -150,7 +157,6 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 8,
                 expectedEligibility: "must_exclude",
                 expectedJustification: "specialized SEC filing",
-                duplicateGroup: "ccc-balanced:title:4 · 2026-05-26",
             },
             {
                 sourceId: "ccc-balanced-09",
@@ -228,8 +234,9 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 providerReference:
                     "https://ir.cccis.com/news-releases/news-release-details/ccc-intelligent-solutions-holdings-inc-announces-fourth-4",
                 createdAt: 14,
-                expectedEligibility: "must_include",
-                expectedJustification: "results or investor presentation",
+                expectedEligibility: "must_exclude",
+                expectedJustification:
+                    "title-only investor-results classification requires manual review",
             },
             {
                 sourceId: "ccc-balanced-15",
@@ -255,8 +262,9 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 providerReference:
                     "https://ir.cccis.com/static-files/5f9fc085-bd98-4e5b-b40d-859c46a16874",
                 createdAt: 16,
-                expectedEligibility: "must_include",
-                expectedJustification: "results or investor presentation",
+                expectedEligibility: "must_exclude",
+                expectedJustification:
+                    "title-only investor-material classification requires manual review",
             },
             {
                 sourceId: "ccc-balanced-17",
@@ -340,7 +348,13 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 22,
                 expectedEligibility: "must_exclude",
                 expectedJustification:
-                    "community, aggregator, or unqualified publisher",
+                    "unverified counter-evidence requires manual review",
+                expectedClassification: {
+                    authorityTier: "unverified",
+                    documentKind: "unverified_counter_evidence",
+                    sourceFamily: "counter_evidence",
+                    eligibleCoverageRoles: [],
+                },
             },
             {
                 sourceId: "ccc-balanced-23",
@@ -409,8 +423,6 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 2,
                 expectedEligibility: "must_exclude",
                 expectedJustification: "specialized SEC filing",
-                duplicateGroup:
-                    "servicenow-balanced-legacy:title:s-8 · 2026-07-22",
             },
             {
                 sourceId: "servicenow-balanced-legacy-03",
@@ -425,8 +437,6 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 3,
                 expectedEligibility: "must_exclude",
                 expectedJustification: "specialized SEC filing",
-                duplicateGroup:
-                    "servicenow-balanced-legacy:title:s-8 · 2026-07-22",
             },
             {
                 sourceId: "servicenow-balanced-legacy-04",
@@ -668,7 +678,14 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                     "https://static.carahsoft.com/concrete/files/9414/3569/2932/ServiceNow_EULA.PDF",
                 createdAt: 21,
                 expectedEligibility: "must_exclude",
-                expectedJustification: "unverified external publisher",
+                expectedJustification:
+                    "qualified reseller terms require manual review",
+                expectedClassification: {
+                    authorityTier: "qualified_partner",
+                    documentKind: "partner_evidence",
+                    sourceFamily: "official_commercial",
+                    eligibleCoverageRoles: [],
+                },
             },
             {
                 sourceId: "servicenow-balanced-legacy-22",
@@ -680,9 +697,15 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 providerReference:
                     "https://aws.amazon.com/marketplace/pp/prodview-ruxchcof6gjpg",
                 createdAt: 22,
-                expectedEligibility: "may_include",
+                expectedEligibility: "must_exclude",
                 expectedJustification:
-                    "qualified first-party, IR, or partner source",
+                    "qualified partner material requires manual review",
+                expectedClassification: {
+                    authorityTier: "qualified_partner",
+                    documentKind: "partner_evidence",
+                    sourceFamily: "official_commercial",
+                    eligibleCoverageRoles: [],
+                },
             },
             {
                 sourceId: "servicenow-balanced-legacy-23",
@@ -711,7 +734,13 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 24,
                 expectedEligibility: "must_exclude",
                 expectedJustification:
-                    "community, aggregator, or unqualified publisher",
+                    "unverified counter-evidence requires manual review",
+                expectedClassification: {
+                    authorityTier: "unverified",
+                    documentKind: "unverified_counter_evidence",
+                    sourceFamily: "counter_evidence",
+                    eligibleCoverageRoles: [],
+                },
             },
             {
                 sourceId: "servicenow-balanced-legacy-25",
@@ -725,7 +754,13 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 25,
                 expectedEligibility: "must_exclude",
                 expectedJustification:
-                    "community, aggregator, or unqualified publisher",
+                    "unverified counter-evidence requires manual review",
+                expectedClassification: {
+                    authorityTier: "unverified",
+                    documentKind: "unverified_counter_evidence",
+                    sourceFamily: "counter_evidence",
+                    eligibleCoverageRoles: [],
+                },
             },
             {
                 sourceId: "servicenow-balanced-legacy-26",
@@ -739,7 +774,14 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                     "https://secure.fundsupermart.com/fsmone/article/rcms380621/servicenow-fy2027-the-time-is-now",
                 createdAt: 26,
                 expectedEligibility: "must_exclude",
-                expectedJustification: "unverified external publisher",
+                expectedJustification:
+                    "unverified counter-evidence requires manual review",
+                expectedClassification: {
+                    authorityTier: "unverified",
+                    documentKind: "unverified_counter_evidence",
+                    sourceFamily: "counter_evidence",
+                    eligibleCoverageRoles: [],
+                },
             },
             {
                 sourceId: "servicenow-balanced-legacy-27",
@@ -754,7 +796,13 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 27,
                 expectedEligibility: "must_exclude",
                 expectedJustification:
-                    "community, aggregator, or unqualified publisher",
+                    "unverified counter-evidence requires manual review",
+                expectedClassification: {
+                    authorityTier: "unverified",
+                    documentKind: "unverified_counter_evidence",
+                    sourceFamily: "counter_evidence",
+                    eligibleCoverageRoles: [],
+                },
             },
         ],
     },
@@ -795,7 +843,6 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 2,
                 expectedEligibility: "must_exclude",
                 expectedJustification: "specialized SEC filing",
-                duplicateGroup: "servicenow-first-party:title:s-8 · 2026-07-22",
             },
             {
                 sourceId: "servicenow-first-party-03",
@@ -810,7 +857,6 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 3,
                 expectedEligibility: "must_exclude",
                 expectedJustification: "specialized SEC filing",
-                duplicateGroup: "servicenow-first-party:title:s-8 · 2026-07-22",
             },
             {
                 sourceId: "servicenow-first-party-04",
@@ -1053,7 +1099,14 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                     "https://static.carahsoft.com/concrete/files/9414/3569/2932/ServiceNow_EULA.PDF",
                 createdAt: 21,
                 expectedEligibility: "must_exclude",
-                expectedJustification: "unverified external publisher",
+                expectedJustification:
+                    "qualified reseller terms require manual review",
+                expectedClassification: {
+                    authorityTier: "qualified_partner",
+                    documentKind: "partner_evidence",
+                    sourceFamily: "official_commercial",
+                    eligibleCoverageRoles: [],
+                },
             },
             {
                 sourceId: "servicenow-first-party-22",
@@ -1065,9 +1118,15 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 providerReference:
                     "https://aws.amazon.com/marketplace/pp/prodview-ruxchcof6gjpg",
                 createdAt: 22,
-                expectedEligibility: "may_include",
+                expectedEligibility: "must_exclude",
                 expectedJustification:
-                    "qualified first-party, IR, or partner source",
+                    "qualified partner material requires manual review",
+                expectedClassification: {
+                    authorityTier: "qualified_partner",
+                    documentKind: "partner_evidence",
+                    sourceFamily: "official_commercial",
+                    eligibleCoverageRoles: [],
+                },
             },
             {
                 sourceId: "servicenow-first-party-23",
@@ -1096,7 +1155,16 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 24,
                 expectedEligibility: "may_include",
                 expectedJustification:
-                    "qualified first-party, IR, or partner source",
+                    "shared IR source explicitly linked by discovery metadata",
+                expectedMetadataTriage: "servicenow:q4-annual-report-2025",
+                expectedClassification: {
+                    authorityTier: "company_hosted_ir",
+                    documentKind: "unknown",
+                    sourceFamily: "unrecognized",
+                    companyLinkageBasis: "discovery_metadata",
+                    declaredCoverageRoles: [],
+                    eligibleCoverageRoles: [],
+                },
             },
             {
                 sourceId: "servicenow-first-party-25",
@@ -1111,7 +1179,13 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 25,
                 expectedEligibility: "must_exclude",
                 expectedJustification:
-                    "community, aggregator, or unqualified publisher",
+                    "unverified counter-evidence requires manual review",
+                expectedClassification: {
+                    authorityTier: "unverified",
+                    documentKind: "unverified_counter_evidence",
+                    sourceFamily: "counter_evidence",
+                    eligibleCoverageRoles: [],
+                },
             },
             {
                 sourceId: "servicenow-first-party-26",
@@ -1126,7 +1200,13 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 26,
                 expectedEligibility: "must_exclude",
                 expectedJustification:
-                    "community, aggregator, or unqualified publisher",
+                    "unverified counter-evidence requires manual review",
+                expectedClassification: {
+                    authorityTier: "unverified",
+                    documentKind: "unverified_counter_evidence",
+                    sourceFamily: "counter_evidence",
+                    eligibleCoverageRoles: [],
+                },
             },
             {
                 sourceId: "servicenow-first-party-27",
@@ -1140,7 +1220,13 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 27,
                 expectedEligibility: "must_exclude",
                 expectedJustification:
-                    "community, aggregator, or unqualified publisher",
+                    "unverified counter-evidence requires manual review",
+                expectedClassification: {
+                    authorityTier: "unverified",
+                    documentKind: "unverified_counter_evidence",
+                    sourceFamily: "counter_evidence",
+                    eligibleCoverageRoles: [],
+                },
             },
             {
                 sourceId: "servicenow-first-party-28",
@@ -1233,8 +1319,6 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 2,
                 expectedEligibility: "must_exclude",
                 expectedJustification: "specialized SEC filing",
-                duplicateGroup:
-                    "servicenow-balanced-current:title:s-8 · 2026-07-22",
             },
             {
                 sourceId: "servicenow-balanced-current-03",
@@ -1249,8 +1333,6 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 3,
                 expectedEligibility: "must_exclude",
                 expectedJustification: "specialized SEC filing",
-                duplicateGroup:
-                    "servicenow-balanced-current:title:s-8 · 2026-07-22",
             },
             {
                 sourceId: "servicenow-balanced-current-04",
@@ -1334,8 +1416,6 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 9,
                 expectedEligibility: "must_exclude",
                 expectedJustification: "index or document landing page",
-                duplicateGroup:
-                    "servicenow-balanced-current:title:edgar search results",
             },
             {
                 sourceId: "servicenow-balanced-current-10",
@@ -1349,8 +1429,6 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 10,
                 expectedEligibility: "must_exclude",
                 expectedJustification: "index or document landing page",
-                duplicateGroup:
-                    "servicenow-balanced-current:title:edgar search results",
             },
             {
                 sourceId: "servicenow-balanced-current-11",
@@ -1557,7 +1635,13 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 25,
                 expectedEligibility: "must_exclude",
                 expectedJustification:
-                    "community, aggregator, or unqualified publisher",
+                    "unverified counter-evidence requires manual review",
+                expectedClassification: {
+                    authorityTier: "unverified",
+                    documentKind: "unverified_counter_evidence",
+                    sourceFamily: "counter_evidence",
+                    eligibleCoverageRoles: [],
+                },
             },
             {
                 sourceId: "servicenow-balanced-current-26",
@@ -1570,8 +1654,23 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 providerReference:
                     "https://www.morningstar.com/stocks/deeply-undervalued-stock-long-term-investors-who-can-handle-uncertainty",
                 createdAt: 26,
-                expectedEligibility: "must_include",
-                expectedJustification: "qualified independent producer",
+                expectedEligibility: "may_include",
+                expectedJustification:
+                    "institutional source explicitly linked by discovery metadata",
+                expectedMetadataTriage: "servicenow:morningstar-analysis",
+                expectedClassification: {
+                    authorityTier: "institutional_independent",
+                    documentKind: "independent_analysis",
+                    sourceFamily: "independent_analysis",
+                    companyLinkageBasis: "discovery_metadata",
+                    declaredCoverageRoles: [
+                        "counter_evidence_primary",
+                        "counter_evidence_secondary",
+                        "independent_analysis_primary",
+                        "independent_analysis_secondary",
+                    ],
+                    eligibleCoverageRoles: [],
+                },
             },
             {
                 sourceId: "servicenow-balanced-current-27",
@@ -1586,7 +1685,13 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 27,
                 expectedEligibility: "must_exclude",
                 expectedJustification:
-                    "community, aggregator, or unqualified publisher",
+                    "unverified counter-evidence requires manual review",
+                expectedClassification: {
+                    authorityTier: "unverified",
+                    documentKind: "unverified_counter_evidence",
+                    sourceFamily: "counter_evidence",
+                    eligibleCoverageRoles: [],
+                },
             },
             {
                 sourceId: "servicenow-balanced-current-28",
@@ -1601,7 +1706,13 @@ const SOURCE_SELECTION_V2_EXISTING_CORPUS_BASE = [
                 createdAt: 28,
                 expectedEligibility: "must_exclude",
                 expectedJustification:
-                    "community, aggregator, or unqualified publisher",
+                    "unverified counter-evidence requires manual review",
+                expectedClassification: {
+                    authorityTier: "unverified",
+                    documentKind: "unverified_counter_evidence",
+                    sourceFamily: "counter_evidence",
+                    eligibleCoverageRoles: [],
+                },
             },
         ],
     },
@@ -1611,8 +1722,6 @@ const MUST_INCLUDE_REQUIREMENTS = {
     "ccc-balanced-02": ["regulatory_material_event", "0001193125-26-248437"],
     "ccc-balanced-10": ["regulatory_annual", "ccc-fy2025"],
     "ccc-balanced-11": ["regulatory_interim", "ccc-q1-2026"],
-    "ccc-balanced-14": ["investor_results", "ccc-fy2025-results"],
-    "ccc-balanced-16": ["investor_presentation", "ccc-q1-2026-transcript"],
     "ccc-balanced-17": ["official_commercial_terms", "ccc-amplify-terms"],
     "ccc-balanced-18": ["official_commercial_terms", "ccc-payroll-terms"],
     "servicenow-balanced-legacy-01": [
@@ -1729,10 +1838,6 @@ const MUST_INCLUDE_REQUIREMENTS = {
     "servicenow-balanced-current-21": [
         "official_commercial_pricing",
         "servicenow-pricing",
-    ],
-    "servicenow-balanced-current-26": [
-        "counter_evidence_primary",
-        "morningstar-servicenow-uncertainty",
     ],
 } as const satisfies Record<string, readonly [SourceCoverageRole, string]>;
 

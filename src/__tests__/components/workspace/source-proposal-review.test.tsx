@@ -38,6 +38,28 @@ const alternative = {
     included: false,
 } as const;
 
+const metadataLinked = {
+    ...alternative,
+    sourceId: "source-metadata-linked",
+    canonicalUrl:
+        "https://www.morningstar.com/stocks/deeply-undervalued-stock-long-term-investors-who-can-handle-uncertainty",
+    title: "ServiceNow downside analysis",
+    disposition: "recommended",
+    companyLinkageBasis: "discovery_metadata",
+    declaredCoverageRoles: [
+        "counter_evidence_primary",
+        "counter_evidence_secondary",
+        "independent_analysis_primary",
+        "independent_analysis_secondary",
+    ],
+    eligibleCoverageRoles: [],
+    coverageContributions: [
+        "company_linkage:discovery_metadata:morningstar.com:uncertainty",
+    ],
+    reasonCodes: ["additional_coverage"],
+    included: true,
+} as const;
+
 const summary = {
     proposalId: "proposal-1",
     version: 1,
@@ -113,10 +135,41 @@ test("presents a summary-first proposal with only the three proposal tabs", () =
     ).toBeTruthy();
     expect(screen.getByText(/source content has not been read/i)).toBeTruthy();
     expect(
-        screen.queryByText(
-            /sourceSelectionProposals|version 1/i,
-        ),
+        screen.queryByText(/sourceSelectionProposals|version 1/i),
     ).toBeNull();
+});
+
+test("labels metadata-linked recommendations without hiding coverage gaps", () => {
+    render(
+        <SourceProposalReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            summary={summary as never}
+            proposalItems={[metadataLinked] as never}
+            disposition="recommended"
+            onDispositionChange={vi.fn()}
+            adjustmentSets={
+                {
+                    included: [metadataLinked],
+                    available: [alternative],
+                } as never
+            }
+            inspectionReview={inspectionReview as never}
+            onDecide={vi.fn()}
+            onApprove={vi.fn()}
+            onRecompute={vi.fn()}
+        />,
+    );
+
+    expect(
+        screen.getByText(
+            "Linked from discovery metadata; source content has not been read",
+        ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/adds distinct coverage/i)).toBeNull();
+    expect(
+        screen.getByText(/independent counter-evidence source/i),
+    ).toBeTruthy();
 });
 
 test("requires an outdated draft to be rebuilt before approval", () => {
@@ -397,9 +450,7 @@ test("renders approved state without an approve button", () => {
             proposalItems={[recommended] as never}
             disposition="recommended"
             onDispositionChange={vi.fn()}
-            adjustmentSets={
-                { included: [recommended], available: [] } as never
-            }
+            adjustmentSets={{ included: [recommended], available: [] } as never}
             inspectionReview={inspectionReview as never}
             onDecide={vi.fn()}
             onApprove={vi.fn()}

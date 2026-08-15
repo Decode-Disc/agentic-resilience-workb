@@ -61,7 +61,7 @@ describe("buildSourceSelectionProposal", () => {
         expect(build(candidates)).toEqual(build([...candidates].reverse()));
     });
 
-    test("includes analyst sources first and counts them against the ceiling", () => {
+    test("includes analyst sources before the discovered-candidate ceiling", () => {
         const result = build(
             [
                 candidate("analyst", {
@@ -70,7 +70,10 @@ describe("buildSourceSelectionProposal", () => {
                     origin: "analyst_url",
                     category: "analyst_supplied",
                 }),
-                candidate("counter"),
+                candidate("counter", {
+                    canonicalUrl:
+                        "https://www.reuters.com/technology/servicenow-counter",
+                }),
             ],
             { ceiling: 1 },
         );
@@ -80,7 +83,15 @@ describe("buildSourceSelectionProposal", () => {
             disposition: "recommended",
             reasonCodes: ["added_by_analyst"],
         });
-        expect(result.counts.recommended).toBe(1);
+        expect(result.items).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    sourceId: "counter",
+                    disposition: "recommended",
+                }),
+            ]),
+        );
+        expect(result.counts.recommended).toBe(2);
     });
 
     test("keeps unverified metadata as a non-blocking alternative", () => {
@@ -130,8 +141,15 @@ describe("buildSourceSelectionProposal", () => {
 
     test("uses distinct qualified publishers for counter-evidence coverage", () => {
         const result = build([
-            candidate("reuters-one"),
-            candidate("reuters-two", { providerResultPosition: 1 }),
+            candidate("reuters-one", {
+                canonicalUrl:
+                    "https://www.reuters.com/technology/servicenow-risk",
+            }),
+            candidate("reuters-two", {
+                canonicalUrl:
+                    "https://www.reuters.com/technology/servicenow-risk-update",
+                providerResultPosition: 1,
+            }),
             candidate("morningstar", {
                 canonicalUrl:
                     "https://www.morningstar.com/stocks/servicenow-analysis",

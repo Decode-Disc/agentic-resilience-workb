@@ -85,6 +85,8 @@ const reasonCodeValidator = v.union(
     v.literal("low_information_document"),
     v.literal("company_identity_unverified"),
     v.literal("unverified_publisher"),
+    v.literal("unverified_counter_evidence"),
+    v.literal("qualified_partner_manual_review"),
     v.literal("no_new_coverage"),
     v.literal("recommendation_ceiling_reached"),
     v.literal("integrity_conflict"),
@@ -129,6 +131,7 @@ const documentKindValidator = v.union(
     v.literal("partner_evidence"),
     v.literal("community_content"),
     v.literal("search_or_index"),
+    v.literal("unverified_counter_evidence"),
     v.literal("unknown"),
 );
 
@@ -141,6 +144,15 @@ const authorityTierValidator = v.union(
     v.literal("unverified"),
     v.literal("analyst_supplied"),
 );
+
+const companyLinkageBasisValidator = v.union(
+    v.literal("structural"),
+    v.literal("discovery_metadata"),
+    v.literal("unverified"),
+    v.literal("not_evaluated"),
+);
+
+const eligibleCoverageRolesValidator = v.array(coverageRoleValidator);
 
 const decisionValidator = v.union(
     v.literal("accepted"),
@@ -184,7 +196,11 @@ const proposalSourceValidator = v.object({
     sourceFamily: sourceFamilyValidator,
     documentKind: documentKindValidator,
     authorityTier: authorityTierValidator,
+    companyLinkageBasis: companyLinkageBasisValidator,
     coverageContributions: v.array(v.string()),
+    recommendationContributions: v.array(v.string()),
+    declaredCoverageRoles: eligibleCoverageRolesValidator,
+    eligibleCoverageRoles: eligibleCoverageRolesValidator,
     duplicateOfSourceId: v.optional(v.id("sources")),
     rank: v.number(),
     reasonCodes: v.array(reasonCodeValidator),
@@ -382,7 +398,11 @@ async function hydrateProposalItem(
         sourceFamily: item.sourceFamily,
         documentKind: item.documentKind ?? "unknown",
         authorityTier: item.authorityTier ?? "unverified",
+        companyLinkageBasis: item.companyLinkageBasis ?? "not_evaluated",
         coverageContributions: item.coverageContributions ?? [],
+        recommendationContributions: item.recommendationContributions ?? [],
+        declaredCoverageRoles: item.declaredCoverageRoles ?? [],
+        eligibleCoverageRoles: item.eligibleCoverageRoles ?? [],
         duplicateOfSourceId: item.duplicateOfSourceId,
         rank: item.rank,
         reasonCodes: item.reasonCodes,
@@ -487,7 +507,11 @@ export async function createSourceSelectionProposal(
             sourceFamily: item.sourceFamily,
             documentKind: item.documentKind,
             authorityTier: item.authorityTier,
+            companyLinkageBasis: item.companyLinkageBasis,
             coverageContributions: item.coverageContributions,
+            recommendationContributions: item.recommendationContributions,
+            declaredCoverageRoles: item.declaredCoverageRoles,
+            eligibleCoverageRoles: item.eligibleCoverageRoles,
             duplicateOfSourceId: item.duplicateOfSourceId
                 ? (item.duplicateOfSourceId as Id<"sources">)
                 : undefined,

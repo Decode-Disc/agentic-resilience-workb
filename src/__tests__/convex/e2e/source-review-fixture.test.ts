@@ -22,7 +22,7 @@ const seedSourceReviewScenario = makeFunctionReference<
 
 const inspectSourceReviewScenario = makeFunctionReference<
     "query",
-    { fixtureKey: string },
+    { runId: Id<"researchRuns">; fixtureKey: string },
     {
         lifecycleState: string;
         executionStatus: string;
@@ -70,10 +70,16 @@ async function createAdmittedVisitor(t: ReturnType<typeof convexTest>) {
 }
 
 test("rejects source review fixtures unless E2E mode is enabled", async () => {
-    delete process.env.E2E_FIXTURES_ENABLED;
+    process.env.E2E_FIXTURES_ENABLED = "true";
     const t = convexTest(schema, modules);
     workflowTest.register(t);
     await createAdmittedVisitor(t);
+
+    const seeded = await t.mutation(seedSourceReviewScenario, {
+        slotKey: "e2e-analyst",
+        fixtureKey: "disabled",
+    });
+    delete process.env.E2E_FIXTURES_ENABLED;
 
     await expect(
         t.mutation(seedSourceReviewScenario, {
@@ -82,7 +88,10 @@ test("rejects source review fixtures unless E2E mode is enabled", async () => {
         }),
     ).rejects.toThrow("E2E fixtures are disabled");
     await expect(
-        t.query(inspectSourceReviewScenario, { fixtureKey: "disabled" }),
+        t.query(inspectSourceReviewScenario, {
+            runId: seeded.runId,
+            fixtureKey: "disabled",
+        }),
     ).rejects.toThrow("E2E fixtures are disabled");
 });
 
@@ -92,12 +101,44 @@ test("seeds an owned source review checkpoint through production projections", a
     workflowTest.register(t);
     const { visitorId } = await createAdmittedVisitor(t);
 
+    await t.run(async (ctx) => {
+        const companyId = await ctx.db.insert("companies", {
+            cik: "e2e-noise",
+            legalName: "E2E Noise Company",
+            ticker: "NOISE",
+            exchange: "NASDAQ",
+            canonicalizedAt: 1,
+        });
+        for (let index = 0; index < 101; index += 1) {
+            await ctx.db.insert("researchRuns", {
+                ownerVisitorId: visitorId,
+                reservationKey: `e2e:noise-${index}`,
+                reservationStatus: "consumed",
+                companyId,
+                companySnapshot: {
+                    cik: "e2e-noise",
+                    legalName: "E2E Noise Company",
+                    ticker: "NOISE",
+                    exchange: "NASDAQ",
+                },
+                coveragePreset: "balanced",
+                lifecycleState: "draft",
+                executionStatus: "idle",
+                executionGeneration: 1,
+                nextEventSequence: 1,
+                workflowVersion: 1,
+                createdAt: index + 1,
+                updatedAt: index + 1,
+            });
+        }
+    });
+
     const seeded = await t.mutation(seedSourceReviewScenario, {
         slotKey: "e2e-analyst",
         fixtureKey: "source-review-reactivity",
     });
 
-    expect(seeded.sourceIds).toHaveLength(2);
+    expect(seeded.sourceIds).toHaveLength(3);
     const snapshot = await t.run(async (ctx) => {
         const run = await ctx.db.get(seeded.runId);
         const revision = await ctx.db.get(seeded.corpusRevisionId);
@@ -133,17 +174,19 @@ test("seeds an owned source review checkpoint through production projections", a
     expect(snapshot.proposal).toMatchObject({
         status: "ready",
         version: seeded.proposalVersion,
-        counts: { recommended: 2, needsAttention: 0, alternative: 0 },
+        counts: { recommended: 3, needsAttention: 0, alternative: 0 },
     });
-    expect(snapshot.proposalItems).toHaveLength(2);
-    expect(snapshot.reviewItems).toHaveLength(2);
+    expect(snapshot.proposalItems).toHaveLength(3);
+    expect(snapshot.reviewItems).toHaveLength(3);
     expect(snapshot.reviewItems.map(({ decision }) => decision)).toEqual([
+        "pending",
         "pending",
         "pending",
     ]);
 
     await expect(
         t.query(inspectSourceReviewScenario, {
+            runId: seeded.runId,
             fixtureKey: "source-review-reactivity",
         }),
     ).resolves.toEqual({
@@ -154,6 +197,10 @@ test("seeds an owned source review checkpoint through production projections", a
             { title: "Annual report", decision: "pending" },
             {
                 title: "Product architecture overview",
+                decision: "pending",
+            },
+            {
+                title: "Reactive Systems Test Company analysis",
                 decision: "pending",
             },
         ],

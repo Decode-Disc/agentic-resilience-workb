@@ -11,13 +11,17 @@ export type SourceSelectionBenchmarkMetrics = {
     includedMustIncludeCandidates: number;
     mustInclude: number;
     includedMustInclude: number;
+    metadataTriageObligations: number;
+    satisfiedMetadataTriageObligations: number;
     forbiddenRecommendations: number;
     recommendationsWithoutContribution: number;
     duplicateRecommendations: number;
+    classificationMismatches: number;
     maximumNeedsAttention: number;
     precision: number;
     mustIncludeRecall: number;
     mustIncludeCandidateRecall: number;
+    metadataTriageRecall: number;
 };
 
 export function evaluateSourceSelectionPools(
@@ -30,9 +34,12 @@ export function evaluateSourceSelectionPools(
     let includedMustInclude = 0;
     let mustIncludeCandidates = 0;
     let includedMustIncludeCandidates = 0;
+    let metadataTriageObligations = 0;
+    let satisfiedMetadataTriageObligations = 0;
     let forbiddenRecommendations = 0;
     let recommendationsWithoutContribution = 0;
     let duplicateRecommendations = 0;
+    let classificationMismatches = 0;
     let maximumNeedsAttention = 0;
 
     for (const pool of pools) {
@@ -51,6 +58,38 @@ export function evaluateSourceSelectionPools(
         const recommendedIds = new Set(
             recommendedItems.map(({ sourceId }) => sourceId),
         );
+        for (const candidate of pool.candidates) {
+            if (!candidate.expectedClassification) continue;
+            const item = result.items.find(
+                ({ sourceId }) => sourceId === candidate.sourceId,
+            );
+            if (
+                !item ||
+                item.authorityTier !==
+                    candidate.expectedClassification.authorityTier ||
+                item.documentKind !==
+                    candidate.expectedClassification.documentKind ||
+                item.sourceFamily !==
+                    candidate.expectedClassification.sourceFamily ||
+                (candidate.expectedClassification.companyLinkageBasis !==
+                    undefined &&
+                    item.companyLinkageBasis !==
+                        candidate.expectedClassification.companyLinkageBasis) ||
+                (candidate.expectedClassification.declaredCoverageRoles !==
+                    undefined &&
+                    JSON.stringify(item.declaredCoverageRoles) !==
+                        JSON.stringify(
+                            candidate.expectedClassification
+                                .declaredCoverageRoles,
+                        )) ||
+                JSON.stringify(item.eligibleCoverageRoles) !==
+                    JSON.stringify(
+                        candidate.expectedClassification.eligibleCoverageRoles,
+                    )
+            ) {
+                classificationMismatches += 1;
+            }
+        }
         recommended += recommendedItems.length;
         maximumNeedsAttention = Math.max(
             maximumNeedsAttention,
@@ -79,7 +118,22 @@ export function evaluateSourceSelectionPools(
         includedMustInclude += [...obligations.values()].filter((sourceIds) =>
             sourceIds.some((sourceId) => recommendedIds.has(sourceId)),
         ).length;
-        const duplicateGroups = new Set<string>();
+        const metadataTriageRows = pool.candidates.filter(
+            ({ expectedMetadataTriage }) =>
+                expectedMetadataTriage !== undefined,
+        );
+        metadataTriageObligations += metadataTriageRows.length;
+        satisfiedMetadataTriageObligations += metadataTriageRows.filter(
+            ({ sourceId }) => {
+                const item = result.items.find(
+                    (candidate) => candidate.sourceId === sourceId,
+                );
+                return (
+                    item?.disposition === "recommended" &&
+                    item.companyLinkageBasis === "discovery_metadata"
+                );
+            },
+        ).length;
         for (const item of recommendedItems) {
             const expected = expectedById.get(item.sourceId);
             if (!expected) continue;
@@ -88,14 +142,14 @@ export function evaluateSourceSelectionPools(
             } else {
                 truePositiveRecommendations += 1;
             }
-            if (item.coverageContributions.length === 0) {
+            if (
+                item.coverageContributions.length === 0 &&
+                item.recommendationContributions.length === 0
+            ) {
                 recommendationsWithoutContribution += 1;
             }
-            if (expected.duplicateGroup) {
-                if (duplicateGroups.has(expected.duplicateGroup)) {
-                    duplicateRecommendations += 1;
-                }
-                duplicateGroups.add(expected.duplicateGroup);
+            if (item.duplicateOfSourceId) {
+                duplicateRecommendations += 1;
             }
         }
     }
@@ -109,9 +163,12 @@ export function evaluateSourceSelectionPools(
         includedMustIncludeCandidates,
         mustInclude,
         includedMustInclude,
+        metadataTriageObligations,
+        satisfiedMetadataTriageObligations,
         forbiddenRecommendations,
         recommendationsWithoutContribution,
         duplicateRecommendations,
+        classificationMismatches,
         maximumNeedsAttention,
         precision:
             recommended === 0 ? 1 : truePositiveRecommendations / recommended,
@@ -121,5 +178,10 @@ export function evaluateSourceSelectionPools(
             mustIncludeCandidates === 0
                 ? 1
                 : includedMustIncludeCandidates / mustIncludeCandidates,
+        metadataTriageRecall:
+            metadataTriageObligations === 0
+                ? 1
+                : satisfiedMetadataTriageObligations /
+                  metadataTriageObligations,
     };
 }

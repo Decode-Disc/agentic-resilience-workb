@@ -1,7 +1,7 @@
 import type { CoveragePreset } from "@convex/domain/researchPlan";
 
-export const SOURCE_SELECTION_POLICY_VERSION = "source-selection-v2";
-export const SOURCE_PUBLISHER_REGISTRY_VERSION = "source-publishers-v1";
+export const SOURCE_SELECTION_POLICY_VERSION = "source-selection-v6";
+export const SOURCE_PUBLISHER_REGISTRY_VERSION = "source-publishers-v4";
 
 export const SOURCE_FAMILIES = [
     "regulatory",
@@ -52,6 +52,7 @@ export const SOURCE_DOCUMENT_KINDS = [
     "partner_evidence",
     "community_content",
     "search_or_index",
+    "unverified_counter_evidence",
     "unknown",
 ] as const;
 
@@ -65,10 +66,19 @@ export const SOURCE_AUTHORITY_TIERS = [
     "analyst_supplied",
 ] as const;
 
+export const SOURCE_COMPANY_LINKAGE_BASES = [
+    "structural",
+    "discovery_metadata",
+    "unverified",
+    "not_evaluated",
+] as const;
+
 export type SourceFamily = (typeof SOURCE_FAMILIES)[number];
 export type SourceCoverageRole = (typeof SOURCE_COVERAGE_ROLES)[number];
 export type SourceDocumentKind = (typeof SOURCE_DOCUMENT_KINDS)[number];
 export type SourceAuthorityTier = (typeof SOURCE_AUTHORITY_TIERS)[number];
+export type SourceCompanyLinkageBasis =
+    (typeof SOURCE_COMPANY_LINKAGE_BASES)[number];
 export type SourceSelectionDisposition =
     | "recommended"
     | "needs_attention"
@@ -87,6 +97,8 @@ export type SourceSelectionReasonCode =
     | "low_information_document"
     | "company_identity_unverified"
     | "unverified_publisher"
+    | "unverified_counter_evidence"
+    | "qualified_partner_manual_review"
     | "no_new_coverage"
     | "recommendation_ceiling_reached"
     | "integrity_conflict";
@@ -121,7 +133,11 @@ export type SourceSelectionProposalResult = {
         sourceFamily: SourceFamily | "unrecognized" | "analyst_supplied";
         documentKind: SourceDocumentKind;
         authorityTier: SourceAuthorityTier;
+        companyLinkageBasis: SourceCompanyLinkageBasis;
         coverageContributions: Array<string>;
+        recommendationContributions: Array<string>;
+        declaredCoverageRoles: Array<SourceCoverageRole>;
+        eligibleCoverageRoles: Array<SourceCoverageRole>;
         duplicateOfSourceId?: string;
         rank: number;
         reasonCodes: Array<SourceSelectionReasonCode>;
@@ -139,7 +155,11 @@ type ClassifiedCandidate = SourceSelectionCandidate & {
     sourceFamily: SourceFamily | "unrecognized" | "analyst_supplied";
     documentKind: SourceDocumentKind;
     authorityTier: SourceAuthorityTier;
+    companyLinkageBasis: SourceCompanyLinkageBasis;
     coverageContributions: Array<string>;
+    recommendationContributions: Array<string>;
+    declaredCoverageRoles: Array<SourceCoverageRole>;
+    eligibleCoverageRoles: Array<SourceCoverageRole>;
     host: string;
     companyIdentityConfirmed: boolean;
     eligible: boolean;
@@ -154,23 +174,147 @@ const IR_HOSTS = new Set([
     "q4ir.com",
     "nasdaqomx.com",
 ]);
-const INSTITUTIONAL_HOSTS = new Set([
-    "reuters.com",
-    "bloomberg.com",
-    "ft.com",
-    "wsj.com",
-    "morningstar.com",
-    "gartner.com",
-    "forrester.com",
-    "idc.com",
-    "ftc.gov",
-    "justice.gov",
-]);
-const PARTNER_HOSTS = new Set([
-    "aws.amazon.com",
-    "azuremarketplace.microsoft.com",
-    "appsource.microsoft.com",
-    "gsa.gov",
+type PublisherCapability = {
+    host: string;
+    authorityTier: "institutional_independent" | "qualified_partner";
+    documentKind: SourceDocumentKind;
+    eligibleCoverageRoles: ReadonlyArray<SourceCoverageRole>;
+};
+
+const PUBLISHER_CAPABILITY_REGISTRY: ReadonlyArray<PublisherCapability> = [
+    {
+        host: "reuters.com",
+        authorityTier: "institutional_independent",
+        documentKind: "news_reporting",
+        eligibleCoverageRoles: [
+            "counter_evidence_primary",
+            "counter_evidence_secondary",
+        ],
+    },
+    {
+        host: "bloomberg.com",
+        authorityTier: "institutional_independent",
+        documentKind: "news_reporting",
+        eligibleCoverageRoles: [
+            "counter_evidence_primary",
+            "counter_evidence_secondary",
+        ],
+    },
+    {
+        host: "ft.com",
+        authorityTier: "institutional_independent",
+        documentKind: "news_reporting",
+        eligibleCoverageRoles: [
+            "counter_evidence_primary",
+            "counter_evidence_secondary",
+        ],
+    },
+    {
+        host: "wsj.com",
+        authorityTier: "institutional_independent",
+        documentKind: "news_reporting",
+        eligibleCoverageRoles: [
+            "counter_evidence_primary",
+            "counter_evidence_secondary",
+        ],
+    },
+    {
+        host: "morningstar.com",
+        authorityTier: "institutional_independent",
+        documentKind: "independent_analysis",
+        eligibleCoverageRoles: [
+            "counter_evidence_primary",
+            "counter_evidence_secondary",
+            "independent_analysis_primary",
+            "independent_analysis_secondary",
+        ],
+    },
+    {
+        host: "gartner.com",
+        authorityTier: "institutional_independent",
+        documentKind: "independent_analysis",
+        eligibleCoverageRoles: [
+            "counter_evidence_primary",
+            "counter_evidence_secondary",
+            "independent_analysis_primary",
+            "independent_analysis_secondary",
+        ],
+    },
+    {
+        host: "forrester.com",
+        authorityTier: "institutional_independent",
+        documentKind: "independent_analysis",
+        eligibleCoverageRoles: [
+            "counter_evidence_primary",
+            "counter_evidence_secondary",
+            "independent_analysis_primary",
+            "independent_analysis_secondary",
+        ],
+    },
+    {
+        host: "idc.com",
+        authorityTier: "institutional_independent",
+        documentKind: "independent_analysis",
+        eligibleCoverageRoles: [
+            "counter_evidence_primary",
+            "counter_evidence_secondary",
+            "independent_analysis_primary",
+            "independent_analysis_secondary",
+        ],
+    },
+    {
+        host: "ftc.gov",
+        authorityTier: "institutional_independent",
+        documentKind: "news_reporting",
+        eligibleCoverageRoles: [
+            "counter_evidence_primary",
+            "counter_evidence_secondary",
+        ],
+    },
+    {
+        host: "justice.gov",
+        authorityTier: "institutional_independent",
+        documentKind: "news_reporting",
+        eligibleCoverageRoles: [
+            "counter_evidence_primary",
+            "counter_evidence_secondary",
+        ],
+    },
+    {
+        host: "aws.amazon.com",
+        authorityTier: "qualified_partner",
+        documentKind: "partner_evidence",
+        eligibleCoverageRoles: [],
+    },
+    {
+        host: "azuremarketplace.microsoft.com",
+        authorityTier: "qualified_partner",
+        documentKind: "partner_evidence",
+        eligibleCoverageRoles: [],
+    },
+    {
+        host: "appsource.microsoft.com",
+        authorityTier: "qualified_partner",
+        documentKind: "partner_evidence",
+        eligibleCoverageRoles: [],
+    },
+    {
+        host: "gsa.gov",
+        authorityTier: "qualified_partner",
+        documentKind: "partner_evidence",
+        eligibleCoverageRoles: [],
+    },
+    {
+        host: "carahsoft.com",
+        authorityTier: "qualified_partner",
+        documentKind: "partner_evidence",
+        eligibleCoverageRoles: [],
+    },
+];
+const EXCLUDED_PUBLISHER_HOSTS = new Set([
+    "askcyborg.com",
+    "koalagains.com",
+    "orbyd.app",
 ]);
 const ANNUAL_FORMS = new Set(["10-K", "20-F", "40-F"]);
 const INTERIM_FORMS = new Set(["10-Q"]);
@@ -264,6 +408,12 @@ function registeredHost(
     return [...registry].find((entry) => matchesHost(host, entry));
 }
 
+function publisherCapability(host: string): PublisherCapability | undefined {
+    return PUBLISHER_CAPABILITY_REGISTRY.find((entry) =>
+        matchesHost(host, entry.host),
+    );
+}
+
 function normalizedForm(value: string | undefined): string {
     return (value ?? "").trim().toUpperCase().replace(/\/A$/, "");
 }
@@ -302,27 +452,159 @@ function candidateMatchesCompany(
     candidate: SourceSelectionCandidate,
     company: SourceSelectionCompany,
 ): boolean {
-    const searchable = `${candidate.title} ${candidate.canonicalUrl}`
+    const pathTokens = decodedPathTokens(candidate.canonicalUrl);
+    const domainAlias = normalizedHost(company.websiteUrl ?? "")
+        .split(".")[0]
+        ?.toLocaleLowerCase("en");
+    const legalNameTokens = company.legalName
         .toLocaleLowerCase("en")
-        .replace(/[^a-z0-9]+/g, "");
-    const aliases = [
-        company.legalName
-            .toLocaleLowerCase("en")
-            .replace(
-                /\b(incorporated|inc|corp|corporation|holdings|limited|ltd|company)\b/g,
-                "",
-            )
-            .replace(/[^a-z0-9]+/g, ""),
-        normalizedHost(company.websiteUrl ?? "")
-            .split(".")[0]
-            ?.replace(/[^a-z0-9]+/g, "") ?? "",
-    ].filter((alias) => alias.length >= 4);
-    return aliases.some((alias) => searchable.includes(alias));
+        .replace(
+            /\b(incorporated|inc|corp|corporation|holdings|limited|ltd|company)\b/g,
+            " ",
+        )
+        .split(/[^a-z0-9]+/)
+        .filter((token) => token.length >= 3);
+    return (
+        Boolean(domainAlias && hasPathToken(pathTokens, domainAlias)) ||
+        (legalNameTokens.length >= 2 &&
+            hasPathTokenSequence(pathTokens, legalNameTokens))
+    );
 }
 
-function containsAny(value: string, tokens: ReadonlyArray<string>): boolean {
-    const normalized = value.toLocaleLowerCase("en");
-    return tokens.some((token) => normalized.includes(token));
+function titleMatchesCompanyDiscoveryMetadata(
+    candidate: SourceSelectionCandidate,
+    company: SourceSelectionCompany,
+): boolean {
+    const titleTokens = candidate.title
+        .toLocaleLowerCase("en")
+        .split(/[^a-z0-9]+/)
+        .filter(Boolean);
+    const legalNameTokens = company.legalName
+        .toLocaleLowerCase("en")
+        .replace(
+            /\b(incorporated|inc|corp|corporation|holdings|limited|ltd|company)\b/g,
+            " ",
+        )
+        .split(/[^a-z0-9]+/)
+        .filter((token) => token.length >= 3);
+    const domainAlias = normalizedHost(company.websiteUrl ?? "")
+        .split(".")[0]
+        ?.toLocaleLowerCase("en");
+    return (
+        (legalNameTokens.length >= 2 &&
+            hasPathTokenSequence(titleTokens, legalNameTokens)) ||
+        Boolean(
+            domainAlias &&
+                domainAlias.length >= 5 &&
+                titleTokens.includes(domainAlias),
+        )
+    );
+}
+
+function decodedPathTokens(canonicalUrl: string): Array<string> {
+    try {
+        return decodeURIComponent(new URL(canonicalUrl).pathname)
+            .toLocaleLowerCase("en")
+            .split(/[^a-z0-9]+/)
+            .filter(Boolean);
+    } catch {
+        return [];
+    }
+}
+
+function decodedPathSegments(canonicalUrl: string): Array<string> {
+    try {
+        return decodeURIComponent(new URL(canonicalUrl).pathname)
+            .toLocaleLowerCase("en")
+            .split("/")
+            .filter(Boolean);
+    } catch {
+        return [];
+    }
+}
+
+function hasPathToken(tokens: ReadonlyArray<string>, token: string): boolean {
+    return tokens.includes(token);
+}
+
+function hasAnyPathToken(
+    tokens: ReadonlyArray<string>,
+    expected: ReadonlyArray<string>,
+): boolean {
+    return expected.some((token) => hasPathToken(tokens, token));
+}
+
+function hasPathTokenSequence(
+    tokens: ReadonlyArray<string>,
+    sequence: ReadonlyArray<string>,
+): boolean {
+    return tokens.some((_, index) =>
+        sequence.every((token, offset) => tokens[index + offset] === token),
+    );
+}
+
+function hasPathSegment(
+    segments: ReadonlyArray<string>,
+    expected: string,
+): boolean {
+    return segments.includes(expected);
+}
+
+function hasPathSegmentSequence(
+    segments: ReadonlyArray<string>,
+    sequence: ReadonlyArray<string>,
+): boolean {
+    return segments.some((_, index) =>
+        sequence.every(
+            (segment, offset) => segments[index + offset] === segment,
+        ),
+    );
+}
+
+function hasSegmentTokenSequence(
+    segments: ReadonlyArray<string>,
+    sequence: ReadonlyArray<string>,
+): boolean {
+    return segments.some((segment) =>
+        hasPathTokenSequence(
+            segment.split(/[^a-z0-9]+/).filter(Boolean),
+            sequence,
+        ),
+    );
+}
+
+const COUNTER_EVIDENCE_CATEGORIES = new Set([
+    "counter_evidence",
+    "independent_analysis",
+]);
+
+const COMMERCIAL_TERM_PATH_TOKENS = [
+    "eula",
+    "terms",
+    "agreement",
+    "licensing",
+    "subscription",
+    "ordering",
+];
+
+const COMMERCIAL_TERM_PATH_SEQUENCES = [
+    ["order", "management"],
+    ["grant", "of", "use", "rights"],
+    ["conditions", "of", "use"],
+];
+
+function hasCommercialTermsPath(canonicalUrl: string): boolean {
+    const pathTokens = decodedPathTokens(canonicalUrl);
+    return (
+        hasAnyPathToken(pathTokens, COMMERCIAL_TERM_PATH_TOKENS) ||
+        COMMERCIAL_TERM_PATH_SEQUENCES.some((sequence) =>
+            hasPathTokenSequence(pathTokens, sequence),
+        )
+    );
+}
+
+function isCounterEvidenceIntent(candidate: SourceSelectionCandidate): boolean {
+    return COUNTER_EVIDENCE_CATEGORIES.has(candidate.category);
 }
 
 function topicKey(candidate: SourceSelectionCandidate): string {
@@ -335,9 +617,9 @@ function topicKey(candidate: SourceSelectionCandidate): string {
             .join("-")
             .replace(/[^a-z0-9-]+/gi, "-")
             .toLocaleLowerCase("en");
-        return path || normalizedTokens(candidate.title).slice(0, 4).join("-");
+        return path || candidate.sourceId;
     } catch {
-        return normalizedTokens(candidate.title).slice(0, 4).join("-");
+        return candidate.sourceId;
     }
 }
 
@@ -371,11 +653,9 @@ function authorityTier(
     if (registeredHost(host, IR_HOSTS)) {
         return "company_hosted_ir";
     }
-    if (registeredHost(host, INSTITUTIONAL_HOSTS)) {
-        return "institutional_independent";
-    }
-    if (registeredHost(host, PARTNER_HOSTS)) {
-        return "qualified_partner";
+    const capability = publisherCapability(host);
+    if (capability) {
+        return capability.authorityTier;
     }
     return "unverified";
 }
@@ -384,9 +664,14 @@ function companyIdentity(
     candidate: SourceSelectionCandidate,
     company: SourceSelectionCompany | undefined,
     authority: SourceAuthorityTier,
-): "confirmed" | "conflict" | "unverified" {
+):
+    | "confirmed"
+    | "discovery_metadata"
+    | "conflict"
+    | "unverified"
+    | "not_evaluated" {
     if (candidate.origin === "analyst_url") {
-        return "confirmed";
+        return "not_evaluated";
     }
     if (!company) {
         return "unverified";
@@ -403,14 +688,15 @@ function companyIdentity(
             ? "confirmed"
             : "conflict";
     }
+    if (candidateMatchesCompany(candidate, company)) {
+        return "confirmed";
+    }
     if (
-        authority === "company_hosted_ir" ||
-        authority === "institutional_independent" ||
-        authority === "qualified_partner"
+        (authority === "company_hosted_ir" ||
+            authority === "institutional_independent") &&
+        titleMatchesCompanyDiscoveryMetadata(candidate, company)
     ) {
-        return candidateMatchesCompany(candidate, company)
-            ? "confirmed"
-            : "unverified";
+        return "discovery_metadata";
     }
     return "unverified";
 }
@@ -418,29 +704,21 @@ function companyIdentity(
 function classifyDocument(
     candidate: SourceSelectionCandidate,
     authority: SourceAuthorityTier,
+    host: string,
 ): SourceDocumentKind {
-    const combined =
-        `${candidate.title} ${candidate.canonicalUrl}`.toLocaleLowerCase("en");
+    const urlPathTokens = decodedPathTokens(candidate.canonicalUrl);
+    const urlPathSegments = decodedPathSegments(candidate.canonicalUrl);
     if (
-        containsAny(combined, [
-            "edgar search results",
-            "edgar filing documents",
-            "sec filings -",
-            "sec-filings",
-            "-index.htm",
-            "/filings",
-            "/sf/us/",
-        ])
+        hasSegmentTokenSequence(urlPathSegments, ["sec", "filings"]) ||
+        hasSegmentTokenSequence(urlPathSegments, ["index", "htm"]) ||
+        hasPathSegment(urlPathSegments, "filings") ||
+        hasPathSegmentSequence(urlPathSegments, ["sf", "us"])
     ) {
         return "search_or_index";
     }
     if (
-        containsAny(combined, [
-            "/community/",
-            "/forum/",
-            " community",
-            "solved:",
-        ])
+        hasPathSegment(urlPathSegments, "community") ||
+        hasPathSegment(urlPathSegments, "forum")
     ) {
         return "community_content";
     }
@@ -469,20 +747,21 @@ function classifyDocument(
     }
 
     if (authority === "institutional_independent") {
-        return containsAny(combined, [
-            "analysis",
-            "risk",
-            "competition",
-            "competitor",
-            "replacement",
-            "research",
-        ])
-            ? "independent_analysis"
-            : "news_reporting";
+        return publisherCapability(host)?.documentKind ?? "news_reporting";
     }
 
     if (authority === "qualified_partner") {
-        return "partner_evidence";
+        return publisherCapability(host)?.documentKind ?? "partner_evidence";
+    }
+
+    if (authority === "unverified") {
+        if (
+            !isCounterEvidenceIntent(candidate) ||
+            registeredHost(host, EXCLUDED_PUBLISHER_HOSTS)
+        ) {
+            return "unknown";
+        }
+        return "unverified_counter_evidence";
     }
 
     if (authority !== "company_primary" && authority !== "company_hosted_ir") {
@@ -490,67 +769,86 @@ function classifyDocument(
     }
 
     if (
-        containsAny(combined, [
-            "financial results",
-            "earnings release",
-            "reports first quarter",
-            "reports second quarter",
-            "reports third quarter",
-            "reports fourth quarter",
-        ])
+        hasPathTokenSequence(urlPathTokens, ["financial", "results"]) ||
+        hasPathTokenSequence(urlPathTokens, ["earnings", "release"]) ||
+        (hasPathToken(urlPathTokens, "reports") &&
+            hasAnyPathToken(urlPathTokens, [
+                "first",
+                "second",
+                "third",
+                "fourth",
+            ]) &&
+            hasPathToken(urlPathTokens, "quarter")) ||
+        (hasPathToken(urlPathTokens, "results") &&
+            hasAnyPathToken(urlPathTokens, [
+                "news",
+                "press",
+                "releases",
+                "newsroom",
+            ])) ||
+        (hasPathTokenSequence(urlPathTokens, ["doc", "financials"]) &&
+            hasPathToken(urlPathTokens, "results"))
     ) {
         return "earnings_release";
     }
-    if (containsAny(combined, ["presentation", "investor day"])) {
+    if (
+        hasPathToken(urlPathTokens, "presentation") ||
+        hasPathTokenSequence(urlPathTokens, ["investor", "day"]) ||
+        (hasPathTokenSequence(urlPathTokens, ["doc", "financials"]) &&
+            hasAnyPathToken(urlPathTokens, ["q1", "q2", "q3", "q4"]))
+    ) {
         return "investor_presentation";
     }
-    if (containsAny(combined, ["transcript", "earnings call"])) {
+    if (
+        hasPathToken(urlPathTokens, "transcript") ||
+        hasPathTokenSequence(urlPathTokens, ["earnings", "call"])
+    ) {
         return "earnings_transcript";
     }
     if (authority === "company_hosted_ir") {
         return "unknown";
     }
     if (
-        containsAny(combined, [
-            "security",
-            "encryption",
-            "zero trust",
-            "privacy",
-            "data protection",
-        ])
+        hasAnyPathToken(urlPathTokens, ["security", "encryption", "privacy"]) ||
+        hasPathTokenSequence(urlPathTokens, ["zero", "trust"]) ||
+        hasPathTokenSequence(urlPathTokens, ["data", "protection"])
     ) {
         return "official_security_documentation";
     }
-    if (containsAny(combined, ["pricing", "/pricing"])) {
+    if (hasPathToken(urlPathTokens, "pricing")) {
         return "official_pricing";
     }
     if (
-        containsAny(combined, [
+        hasAnyPathToken(urlPathTokens, [
             "terms",
             "agreement",
             "licensing",
-            "subscription",
             "ordering",
-            "order management",
-        ])
+        ]) ||
+        (hasPathToken(urlPathTokens, "subscription") &&
+            hasAnyPathToken(urlPathTokens, ["terms", "agreement", "order"]))
     ) {
         return "official_commercial_terms";
     }
+    if (hasAnyPathToken(urlPathTokens, ["api", "integration", "developer"])) {
+        return "official_integration_documentation";
+    }
     if (
-        containsAny(combined, [
-            "product",
-            "platform",
-            "workflow",
-            "documentation",
-            "api",
-            "integration",
-        ])
+        hasAnyPathToken(urlPathTokens, ["docs", "documentation", "products"]) ||
+        hasPathTokenSequence(urlPathTokens, ["now", "platform"])
     ) {
-        return containsAny(combined, ["api", "integration", "developer"])
-            ? "official_integration_documentation"
-            : "official_product_documentation";
+        return "official_product_documentation";
     }
     return "unknown";
+}
+
+function isSecurityTrustPath(canonicalUrl: string): boolean {
+    const tokens = decodedPathTokens(canonicalUrl);
+    return (
+        hasPathToken(tokens, "trust") ||
+        hasPathToken(tokens, "privacy") ||
+        hasPathTokenSequence(tokens, ["data", "protection"])
+    );
 }
 
 function familyFor(
@@ -596,6 +894,9 @@ function familyFor(
         return "independent_analysis";
     }
     if (kind === "news_reporting") {
+        return "counter_evidence";
+    }
+    if (kind === "unverified_counter_evidence") {
         return "counter_evidence";
     }
     return "unrecognized";
@@ -658,16 +959,18 @@ function contributionsFor(
         return [`commercial_partner:${host}:${topic}`];
     }
     if (kind === "official_security_documentation") {
-        const role = containsAny(candidate.title, [
-            "trust",
-            "privacy",
-            "data protection",
-        ])
+        const role = isSecurityTrustPath(candidate.canonicalUrl)
             ? "official_security_trust"
             : "official_security_architecture";
         return [role, `official_security:${topic}`];
     }
-    if (["independent_analysis", "news_reporting"].includes(kind)) {
+    if (
+        [
+            "independent_analysis",
+            "news_reporting",
+            "unverified_counter_evidence",
+        ].includes(kind)
+    ) {
         return [
             family === "independent_analysis"
                 ? `independent_analysis_publisher:${host}`
@@ -677,6 +980,50 @@ function contributionsFor(
     return [];
 }
 
+function eligibleCoverageRolesFor(
+    candidate: SourceSelectionCandidate,
+    authority: SourceAuthorityTier,
+    documentKind: SourceDocumentKind,
+    host: string,
+): Array<SourceCoverageRole> {
+    if (candidate.origin === "analyst_url") {
+        return [];
+    }
+    if (authority === "regulator_primary") {
+        if (documentKind === "regulatory_annual") {
+            return ["regulatory_annual"];
+        }
+        if (documentKind === "regulatory_interim") {
+            return ["regulatory_interim"];
+        }
+        if (documentKind === "regulatory_material") {
+            return ["regulatory_material_event"];
+        }
+        return [];
+    }
+    if (authority === "company_primary" || authority === "company_hosted_ir") {
+        const roleByDocumentKind: Partial<
+            Record<SourceDocumentKind, SourceCoverageRole>
+        > = {
+            earnings_release: "investor_results",
+            investor_presentation: "investor_presentation",
+            earnings_transcript: "investor_presentation",
+            official_product_documentation: "official_product_platform",
+            official_integration_documentation: "official_product_integration",
+            official_pricing: "official_commercial_pricing",
+            official_commercial_terms: "official_commercial_terms",
+            official_security_documentation: isSecurityTrustPath(
+                candidate.canonicalUrl,
+            )
+                ? "official_security_trust"
+                : "official_security_architecture",
+        };
+        const role = roleByDocumentKind[documentKind];
+        return role ? [role] : [];
+    }
+    return [...(publisherCapability(host)?.eligibleCoverageRoles ?? [])];
+}
+
 function classifyCandidate(
     candidate: SourceSelectionCandidate,
     company: SourceSelectionCompany | undefined,
@@ -684,23 +1031,45 @@ function classifyCandidate(
     const host = normalizedHost(candidate.canonicalUrl);
     const authority = authorityTier(candidate, company, host);
     const identity = companyIdentity(candidate, company, authority);
-    const documentKind = classifyDocument(candidate, authority);
+    const documentKind = classifyDocument(candidate, authority, host);
     const sourceFamily = familyFor(candidate, documentKind);
-    const coverageContributions = contributionsFor(
+    const declaredCoverageRoles = eligibleCoverageRolesFor(
         candidate,
+        authority,
         documentKind,
-        sourceFamily,
         host,
     );
+    const companyLinkageBasis: SourceCompanyLinkageBasis =
+        identity === "confirmed"
+            ? "structural"
+            : identity === "conflict"
+              ? "unverified"
+              : identity;
+    const eligibleCoverageRoles =
+        companyLinkageBasis === "structural" ? declaredCoverageRoles : [];
+    const coverageContributions =
+        companyLinkageBasis === "discovery_metadata"
+            ? []
+            : contributionsFor(candidate, documentKind, sourceFamily, host);
+    const recommendationContributions =
+        companyLinkageBasis === "discovery_metadata"
+            ? [
+                  `company_linkage:discovery_metadata:${host}:${topicKey(candidate)}`,
+              ]
+            : [];
     if (!host) {
         return {
             ...candidate,
             host,
             companyIdentityConfirmed: false,
             authorityTier: authority,
+            companyLinkageBasis,
             documentKind,
             sourceFamily,
             coverageContributions,
+            recommendationContributions,
+            declaredCoverageRoles,
+            eligibleCoverageRoles,
             eligible: false,
             needsAttentionReason: "integrity_conflict",
         };
@@ -711,9 +1080,13 @@ function classifyCandidate(
             host,
             companyIdentityConfirmed: false,
             authorityTier: authority,
+            companyLinkageBasis,
             documentKind,
             sourceFamily,
             coverageContributions,
+            recommendationContributions,
+            declaredCoverageRoles,
+            eligibleCoverageRoles,
             eligible: false,
             needsAttentionReason: "integrity_conflict",
         };
@@ -728,9 +1101,13 @@ function classifyCandidate(
             host,
             companyIdentityConfirmed: false,
             authorityTier: authority,
+            companyLinkageBasis,
             documentKind,
             sourceFamily,
             coverageContributions,
+            recommendationContributions,
+            declaredCoverageRoles,
+            eligibleCoverageRoles,
             eligible: false,
             alternativeReason: "company_identity_unverified",
         };
@@ -741,9 +1118,13 @@ function classifyCandidate(
             host,
             companyIdentityConfirmed: identity === "confirmed",
             authorityTier: authority,
+            companyLinkageBasis,
             documentKind,
             sourceFamily,
             coverageContributions,
+            recommendationContributions,
+            declaredCoverageRoles,
+            eligibleCoverageRoles,
             eligible: false,
             alternativeReason: "search_or_index",
         };
@@ -762,24 +1143,59 @@ function classifyCandidate(
             host,
             companyIdentityConfirmed: identity === "confirmed",
             authorityTier: authority,
+            companyLinkageBasis,
             documentKind,
             sourceFamily,
             coverageContributions,
+            recommendationContributions,
+            declaredCoverageRoles,
+            eligibleCoverageRoles,
             eligible: false,
             alternativeReason: "low_information_document",
         };
     }
     if (authority === "unverified") {
+        const isInspectableCounterEvidence =
+            Boolean(company && candidateMatchesCompany(candidate, company)) &&
+            documentKind === "unverified_counter_evidence" &&
+            coverageContributions.length > 0;
         return {
             ...candidate,
             host,
             companyIdentityConfirmed: identity === "confirmed",
             authorityTier: authority,
+            companyLinkageBasis,
             documentKind,
             sourceFamily,
             coverageContributions,
+            recommendationContributions,
+            declaredCoverageRoles,
+            eligibleCoverageRoles,
             eligible: false,
-            alternativeReason: "unverified_publisher",
+            alternativeReason: isInspectableCounterEvidence
+                ? "unverified_counter_evidence"
+                : "unverified_publisher",
+        };
+    }
+    if (
+        authority === "qualified_partner" &&
+        (eligibleCoverageRoles.length === 0 ||
+            hasCommercialTermsPath(candidate.canonicalUrl))
+    ) {
+        return {
+            ...candidate,
+            host,
+            companyIdentityConfirmed: identity === "confirmed",
+            authorityTier: authority,
+            companyLinkageBasis,
+            documentKind,
+            sourceFamily,
+            coverageContributions,
+            recommendationContributions,
+            declaredCoverageRoles,
+            eligibleCoverageRoles,
+            eligible: false,
+            alternativeReason: "qualified_partner_manual_review",
         };
     }
     return {
@@ -787,12 +1203,22 @@ function classifyCandidate(
         host,
         companyIdentityConfirmed: identity === "confirmed",
         authorityTier: authority,
+        companyLinkageBasis,
         documentKind,
         sourceFamily,
         coverageContributions,
-        eligible: coverageContributions.length > 0,
+        recommendationContributions,
+        declaredCoverageRoles,
+        eligibleCoverageRoles,
+        eligible:
+            coverageContributions.length > 0 ||
+            recommendationContributions.length > 0 ||
+            eligibleCoverageRoles.length > 0,
         alternativeReason:
-            coverageContributions.length > 0 ? undefined : "no_new_coverage",
+            coverageContributions.length > 0 ||
+            recommendationContributions.length > 0
+                ? undefined
+                : "no_new_coverage",
     };
 }
 
@@ -874,19 +1300,6 @@ function secAccessionIdentity(
     }
 }
 
-function titlePeriodIdentity(title: string): string | undefined {
-    const normalized = title.toLocaleLowerCase("en");
-    const year = normalized.match(/\b(20\d{2})\b/)?.[1];
-    const numericQuarter = normalized.match(/\bq([1-4])\b/)?.[1];
-    const namedQuarter = ["first", "second", "third", "fourth"].findIndex(
-        (name) => normalized.includes(`${name} quarter`),
-    );
-    const quarter =
-        numericQuarter ??
-        (namedQuarter >= 0 ? String(namedQuarter + 1) : undefined);
-    return year && quarter ? `${year}-q${quarter}` : undefined;
-}
-
 function periodicDocumentIdentity(
     candidate: ClassifiedCandidate,
 ): string | undefined {
@@ -894,17 +1307,13 @@ function periodicDocumentIdentity(
         ? new Date(candidate.publishedAt)
         : undefined;
     if (candidate.documentKind === "regulatory_annual") {
-        const year =
-            candidate.title.match(/\b(20\d{2})\b/)?.[1] ??
-            publishedDate?.getUTCFullYear();
+        const year = publishedDate?.getUTCFullYear();
         return year ? `regulatory_annual:${year}` : undefined;
     }
     if (candidate.documentKind === "regulatory_interim") {
-        const period =
-            titlePeriodIdentity(candidate.title) ??
-            (publishedDate
-                ? `${publishedDate.getUTCFullYear()}-q${Math.floor(publishedDate.getUTCMonth() / 3) + 1}`
-                : undefined);
+        const period = publishedDate
+            ? `${publishedDate.getUTCFullYear()}-q${Math.floor(publishedDate.getUTCMonth() / 3) + 1}`
+            : undefined;
         return period ? `regulatory_interim:${period}` : undefined;
     }
     if (
@@ -914,11 +1323,9 @@ function periodicDocumentIdentity(
             "earnings_transcript",
         ].includes(candidate.documentKind)
     ) {
-        const period =
-            titlePeriodIdentity(candidate.title) ??
-            (publishedDate
-                ? `${publishedDate.getUTCFullYear()}-q${Math.floor(publishedDate.getUTCMonth() / 3) + 1}`
-                : undefined);
+        const period = publishedDate
+            ? `${publishedDate.getUTCFullYear()}-q${Math.floor(publishedDate.getUTCMonth() / 3) + 1}`
+            : undefined;
         return period ? `${candidate.documentKind}:${period}` : undefined;
     }
     return undefined;
@@ -990,33 +1397,25 @@ function roleMatches(
     role: SourceCoverageRole,
     selected: ReadonlyArray<ClassifiedCandidate>,
 ): boolean {
-    if (candidate.coverageContributions.includes(role)) {
-        return true;
+    if (!candidate.eligibleCoverageRoles.includes(role)) {
+        return false;
     }
     if (role.startsWith("counter_evidence_")) {
-        return (
-            ["counter_evidence", "independent_analysis"].includes(
-                candidate.sourceFamily,
-            ) &&
-            !selected.some(
-                (existing) =>
-                    ["counter_evidence", "independent_analysis"].includes(
-                        existing.sourceFamily,
-                    ) && existing.host === candidate.host,
-            )
+        return !selected.some(
+            (existing) =>
+                ["counter_evidence", "independent_analysis"].includes(
+                    existing.sourceFamily,
+                ) && existing.host === candidate.host,
         );
     }
     if (role.startsWith("independent_analysis_")) {
-        return (
-            candidate.sourceFamily === "independent_analysis" &&
-            !selected.some(
-                (existing) =>
-                    existing.sourceFamily === "independent_analysis" &&
-                    existing.host === candidate.host,
-            )
+        return !selected.some(
+            (existing) =>
+                existing.sourceFamily === "independent_analysis" &&
+                existing.host === candidate.host,
         );
     }
-    return false;
+    return true;
 }
 
 function familyCap(
@@ -1119,13 +1518,16 @@ export function buildSourceSelectionProposal(input: {
     );
     const selected: Array<ClassifiedCandidate> = [];
     const selectedReason = new Map<string, SourceSelectionReasonCode>();
+    const selectedDiscoveryCount = () =>
+        selected.filter(({ origin }) => origin !== "analyst_url").length;
     const select = (
         candidate: ClassifiedCandidate,
         reason: SourceSelectionReasonCode,
+        enforceCeiling = true,
     ) => {
         if (
             selectedReason.has(candidate.sourceId) ||
-            selected.length >= ceiling
+            (enforceCeiling && selectedDiscoveryCount() >= ceiling)
         ) {
             return;
         }
@@ -1136,7 +1538,7 @@ export function buildSourceSelectionProposal(input: {
     for (const candidate of selectable.filter(
         ({ origin }) => origin === "analyst_url",
     )) {
-        select(candidate, "added_by_analyst");
+        select(candidate, "added_by_analyst", false);
     }
 
     const coverageGaps: Array<SourceCoverageRole> = [];
@@ -1146,7 +1548,7 @@ export function buildSourceSelectionProposal(input: {
                 !selectedReason.has(candidate.sourceId) &&
                 roleMatches(candidate, role, selected),
         );
-        if (!best || selected.length >= ceiling) {
+        if (!best || selectedDiscoveryCount() >= ceiling) {
             coverageGaps.push(role);
             continue;
         }
@@ -1154,10 +1556,13 @@ export function buildSourceSelectionProposal(input: {
     }
 
     const covered = new Set(
-        selected.flatMap(({ coverageContributions }) => coverageContributions),
+        selected.flatMap((candidate) => [
+            ...candidate.coverageContributions,
+            ...candidate.recommendationContributions,
+        ]),
     );
     for (const candidate of selectable) {
-        if (selected.length >= ceiling) {
+        if (selectedDiscoveryCount() >= ceiling) {
             break;
         }
         if (selectedReason.has(candidate.sourceId)) {
@@ -1166,14 +1571,18 @@ export function buildSourceSelectionProposal(input: {
         if (candidateCapReached(candidate, selected, input.coveragePreset)) {
             continue;
         }
-        const novel = candidate.coverageContributions.some(
+        const contributions = [
+            ...candidate.coverageContributions,
+            ...candidate.recommendationContributions,
+        ];
+        const novel = contributions.some(
             (contribution) => !covered.has(contribution),
         );
         if (!novel) {
             continue;
         }
         select(candidate, "additional_coverage");
-        for (const contribution of candidate.coverageContributions) {
+        for (const contribution of contributions) {
             covered.add(contribution);
         }
     }
@@ -1199,7 +1608,7 @@ export function buildSourceSelectionProposal(input: {
         const ceilingReached =
             !selectionReason &&
             candidate.eligible &&
-            selected.length >= ceiling;
+            selectedDiscoveryCount() >= ceiling;
         return {
             sourceId: candidate.sourceId,
             disposition: selectionReason
@@ -1210,7 +1619,11 @@ export function buildSourceSelectionProposal(input: {
             sourceFamily: candidate.sourceFamily,
             documentKind: candidate.documentKind,
             authorityTier: candidate.authorityTier,
+            companyLinkageBasis: candidate.companyLinkageBasis,
             coverageContributions: candidate.coverageContributions,
+            recommendationContributions: candidate.recommendationContributions,
+            declaredCoverageRoles: candidate.declaredCoverageRoles,
+            eligibleCoverageRoles: candidate.eligibleCoverageRoles,
             duplicateOfSourceId: duplicate?.duplicateOfSourceId,
             rank,
             reasonCodes: [

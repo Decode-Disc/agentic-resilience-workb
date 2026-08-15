@@ -165,8 +165,8 @@ test("persists one versioned source-selection proposal after discovery", async (
         runId,
         corpusRevisionId,
         version: 1,
-        policyVersion: "source-selection-v2",
-        publisherRegistryVersion: "source-publishers-v1",
+        policyVersion: "source-selection-v6",
+        publisherRegistryVersion: "source-publishers-v4",
         coveragePreset: "balanced",
         recommendedTarget: 24,
         recommendationCeiling: 24,
@@ -189,7 +189,11 @@ test("persists one versioned source-selection proposal after discovery", async (
     expect(items[0]).toMatchObject({
         documentKind: "regulatory_annual",
         authorityTier: "regulator_primary",
+        companyLinkageBasis: "structural",
         coverageContributions: expect.arrayContaining(["regulatory_annual"]),
+        recommendationContributions: [],
+        declaredCoverageRoles: ["regulatory_annual"],
+        eligibleCoverageRoles: ["regulatory_annual"],
     });
 });
 
@@ -563,6 +567,126 @@ test("creates a missing proposal for an authorized legacy draft idempotently", a
     });
 });
 
+test("hydrates legacy proposal items without automatic role metadata", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await t.run(async (ctx) => {
+        const userId = await ctx.db.insert("users", { isAnonymous: true });
+        const invitationId = await ctx.db.insert("invitations", {
+            slotKey: "legacy-proposal-owner",
+            role: "analyst",
+            codeDigest: "legacy-proposal-digest",
+            status: "claimed",
+            createdAt: 1,
+        });
+        const visitorId = await ctx.db.insert("visitors", {
+            authUserId: userId,
+            invitationId,
+            role: "analyst",
+            status: "active",
+            analysesReserved: 1,
+            admittedAt: 1,
+        });
+        const runId = await ctx.db.insert("researchRuns", {
+            ownerVisitorId: visitorId,
+            coveragePreset: "balanced",
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+            executionGeneration: 1,
+            nextEventSequence: 1,
+            createdAt: 1,
+            updatedAt: 1,
+        });
+        const corpusRevisionId = await ctx.db.insert("corpusRevisions", {
+            runId,
+            revision: 1,
+            status: "draft",
+            createdAt: 1,
+        });
+        const sourceId = await ctx.db.insert("sources", {
+            runId,
+            canonicalUrl:
+                "https://www.sec.gov/Archives/edgar/data/1373715/legacy.htm",
+            title: "Legacy annual report",
+            origin: "sec",
+            category: "regulatory",
+            createdAt: 1,
+        });
+        const proposalId = await ctx.db.insert("sourceSelectionProposals", {
+            runId,
+            corpusRevisionId,
+            version: 1,
+            policyVersion: "source-selection-v3",
+            coveragePreset: "balanced",
+            recommendedTarget: 24,
+            candidateFingerprint: "legacy-fingerprint",
+            status: "ready",
+            counts: { recommended: 1, needsAttention: 0, alternative: 0 },
+            gaps: [],
+            createdAt: 1,
+        });
+        await ctx.db.insert("sourceSelectionProposalItems", {
+            runId,
+            corpusRevisionId,
+            proposalId,
+            sourceId,
+            disposition: "recommended",
+            sourceFamily: "regulatory",
+            documentKind: "regulatory_annual",
+            authorityTier: "regulator_primary",
+            coverageContributions: ["regulatory_annual"],
+            rank: 0,
+            reasonCodes: ["required_coverage_role"],
+            createdAt: 1,
+        });
+        const decisionId = await ctx.db.insert("sourceDecisions", {
+            runId,
+            corpusRevisionId,
+            sourceId,
+            decisionKey: "legacy-proposal-pending",
+            decision: "pending",
+            reviewerVisitorId: visitorId,
+            occurredAt: 1,
+        });
+        await ctx.db.insert("sourceReviewItems", {
+            runId,
+            corpusRevisionId,
+            sourceId,
+            decision: "pending",
+            decisionRank: 0,
+            sourceCreatedAt: 1,
+            latestDecisionId: decisionId,
+            decisionOccurredAt: 1,
+        });
+        await ctx.db.patch(corpusRevisionId, {
+            sourceSelectionProposalId: proposalId,
+        });
+        await ctx.db.patch(runId, { activeCorpusRevisionId: corpusRevisionId });
+        return { userId, runId, corpusRevisionId };
+    });
+    const owner = t.withIdentity({
+        subject: `${fixture.userId}|legacy-proposal-session`,
+    });
+
+    await expect(
+        owner.query(listItemsPage, {
+            runId: fixture.runId,
+            corpusRevisionId: fixture.corpusRevisionId,
+            disposition: "recommended",
+            paginationOpts: { numItems: 10, cursor: null },
+        }),
+    ).resolves.toMatchObject({
+        page: [
+            expect.objectContaining({
+                companyLinkageBasis: "not_evaluated",
+                recommendationContributions: [],
+                declaredCoverageRoles: [],
+                eligibleCoverageRoles: [],
+            }),
+        ],
+    });
+});
+
 test("projects recommendation pages and adjustment sets through analyst decisions", async () => {
     process.env.SOURCE_RECOMMENDATION_CEILING = "2";
     const t = convexTest(schema, modules);
@@ -620,7 +744,8 @@ test("projects recommendation pages and adjustment sets through analyst decision
                 secForm: "10-K",
             },
             {
-                canonicalUrl: "https://www.reuters.com/workflow-risk",
+                canonicalUrl:
+                    "https://www.reuters.com/technology/servicenow-workflow-risk",
                 title: "ServiceNow workflow migration risks",
                 origin: "exa" as const,
                 category: "counter_evidence",
@@ -904,7 +1029,7 @@ test("creates a new draft revision and reopens the source checkpoint", async () 
     const proposal = await t.run((ctx) => ctx.db.get(result.proposalId));
     expect(proposal?.corpusRevisionId).toBe(result.corpusRevisionId);
     expect(proposal?.version).toBe(1);
-    expect(proposal?.policyVersion).toBe("source-selection-v2");
+    expect(proposal?.policyVersion).toBe("source-selection-v6");
 });
 
 test("rejects starting a new revision when the current corpus is not approved", async () => {

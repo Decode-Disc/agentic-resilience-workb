@@ -17,6 +17,7 @@ type ProposalSource = FunctionReturnType<
 >["page"][number];
 type AuthorityTier = ProposalSource["authorityTier"];
 type DocumentKind = ProposalSource["documentKind"];
+type CompanyLinkageBasis = ProposalSource["companyLinkageBasis"];
 type SelectionReason = ProposalSource["reasonCodes"][number];
 type CoverageRole = NonNullable<
     FunctionReturnType<typeof api.sourceSelectionProposals.getCurrent>
@@ -210,6 +211,7 @@ const documentKindLabels = {
     partner_evidence: "Partner evidence",
     community_content: "Community content",
     search_or_index: "Index or search page",
+    unverified_counter_evidence: "Unverified counter-evidence",
     unknown: "Document type unavailable",
 } satisfies Record<DocumentKind, string>;
 
@@ -233,6 +235,10 @@ const selectionReasonLabels = {
         "Excluded because the source could not be matched to the selected company",
     unverified_publisher:
         "Excluded because its authority could not be verified",
+    unverified_counter_evidence:
+        "Available for manual review as unverified counter-evidence",
+    qualified_partner_manual_review:
+        "Available for manual review as qualified partner material",
     no_new_coverage: "Excluded because it does not add distinct coverage",
     recommendation_ceiling_reached:
         "Kept available after the reliable recommendation ceiling was reached",
@@ -324,6 +330,15 @@ export function sourceSelectionReasonLabel(
     return reason
         ? selectionReasonLabels[reason]
         : "No additional selection explanation is available";
+}
+
+/** Explains discovery-only linkage without implying that source content was verified. */
+export function sourceCompanyLinkageLabel(
+    companyLinkageBasis: CompanyLinkageBasis,
+): string | null {
+    return companyLinkageBasis === "discovery_metadata"
+        ? "Linked from discovery metadata; source content has not been read"
+        : null;
 }
 
 export function sourceCoverageRoleLabel(role: CoverageRole): string {
