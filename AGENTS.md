@@ -299,6 +299,8 @@ Every async region — evidence queries, source discovery, assessment review —
 - **Loading**: skeleton or placeholder that preserves layout dimensions. Never swap a populated region for a spinner-only state that causes layout shift.
 - **Empty**: an explicit empty state (use `Empty` from `@/components/ui/empty` or equivalent) when there is genuinely nothing to show. The empty state must be visually distinct from "still loading."
 - **Error**: surface the actionable error inline (retry, contact support). Do not swallow Convex errors into a generic blank screen.
+- **Shared loading-error components are mandatory**: use `LoadErrorAlert` from `@/components/ui/load-error-alert` for analyst-safe recoverable loading-error presentation, and `LoadErrorBoundary` from `@/components/load-error-boundary` when a loading, query, or session-bootstrap subtree must be remounted on retry. Do not create feature-local replicas of their alert, retry, or captured-error behavior.
+- Keep `LoadErrorBoundary` narrowly scoped around the query-owning or loading-owning subtree. Drafts, form values, dialogs, mutation controls, and other interactive state must remain above the boundary so retry cannot discard analyst work. Route loader recovery must use `LoadErrorAlert` and re-run the loader through the router rather than exposing raw errors.
 - **Insufficient evidence**: per Product Invariant 15, a weak evidence base yields `0 / Mixed or unclear`, `Hypothesis`, `Unknown`, or `insufficient public evidence`. The UI must render these states visibly, not collapse them into a fake-confident view.
 
 ### Error handling and validation

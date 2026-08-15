@@ -1,14 +1,21 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-const { claimInvitation, navigate, useAction, useAnonymousSession, useQuery } =
-    vi.hoisted(() => ({
-        claimInvitation: vi.fn(),
-        navigate: vi.fn(),
-        useAction: vi.fn(),
-        useAnonymousSession: vi.fn(),
-        useQuery: vi.fn(),
-    }));
+const {
+    claimInvitation,
+    navigate,
+    retrySession,
+    useAction,
+    useAnonymousSession,
+    useQuery,
+} = vi.hoisted(() => ({
+    claimInvitation: vi.fn(),
+    navigate: vi.fn(),
+    retrySession: vi.fn(),
+    useAction: vi.fn(),
+    useAnonymousSession: vi.fn(),
+    useQuery: vi.fn(),
+}));
 
 vi.mock(import("convex/react"), () => ({ useAction, useQuery }));
 vi.mock(import("@tanstack/react-router"), async (importOriginal) => {
@@ -31,6 +38,7 @@ describe("ProtectedWorkspaceRoute", () => {
     beforeEach(() => {
         claimInvitation.mockReset();
         navigate.mockReset();
+        retrySession.mockReset();
         useAction.mockReset();
         useAction.mockReturnValue(claimInvitation);
         useAnonymousSession.mockReset();
@@ -38,6 +46,7 @@ describe("ProtectedWorkspaceRoute", () => {
             isSessionLoading: false,
             isSessionReady: true,
             sessionError: null,
+            retrySession,
         });
         useQuery.mockReset();
     });
@@ -97,5 +106,49 @@ describe("ProtectedWorkspaceRoute", () => {
                 to: "/workspace/dossiers",
             }),
         );
+    });
+
+    test("retries anonymous session preparation", () => {
+        useAnonymousSession.mockReturnValue({
+            isSessionLoading: false,
+            isSessionReady: false,
+            sessionError: "We couldn't prepare the private workspace.",
+            retrySession,
+        });
+
+        render(
+            <InvitationAccessProvider>
+                <ProtectedWorkspaceRoute />
+            </InvitationAccessProvider>,
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: /Try again/i }));
+
+        expect(retrySession).toHaveBeenCalledOnce();
+    });
+
+    test("recovers when the visitor query fails", () => {
+        const consoleError = vi
+            .spyOn(console, "error")
+            .mockImplementation(() => undefined);
+        let shouldFail = true;
+        useQuery.mockImplementation(() => {
+            if (shouldFail) {
+                throw new Error("Visitor query failed");
+            }
+            return { role: "analyst", status: "active" };
+        });
+
+        render(
+            <InvitationAccessProvider>
+                <ProtectedWorkspaceRoute />
+            </InvitationAccessProvider>,
+        );
+
+        shouldFail = false;
+        fireEvent.click(screen.getByRole("button", { name: /Try again/i }));
+
+        expect(screen.getByText("Protected route content")).toBeTruthy();
+        consoleError.mockRestore();
     });
 });

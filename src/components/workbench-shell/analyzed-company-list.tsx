@@ -7,9 +7,10 @@ import {
 } from "@hugeicons/core-free-icons";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useAction, useQuery } from "convex/react";
-import React, { Component, type ReactNode, useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
 import Icon from "@/components/icon";
+import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
     NestedMenu,
@@ -30,9 +31,14 @@ export interface AnalyzedCompanyListProps {
 /** Owner-scoped run navigation with explicit loading and empty states. */
 export function AnalyzedCompanyList(props: AnalyzedCompanyListProps) {
     return (
-        <AnalyzedCompanyListErrorBoundary className={props.className}>
+        <LoadErrorBoundary
+            title="Research dossiers are temporarily unavailable"
+            description="The dossier navigation could not be loaded."
+            retryLabel="Retry"
+            variant="compact"
+            className={props.className}>
             <AnalyzedCompanyListContent {...props} />
-        </AnalyzedCompanyListErrorBoundary>
+        </LoadErrorBoundary>
     );
 }
 
@@ -301,39 +307,4 @@ function AnalyzedCompanyListContent({
             </div>
         </nav>
     );
-}
-
-class AnalyzedCompanyListErrorBoundary extends Component<
-    { children: ReactNode; className?: string },
-    { hasError: boolean }
-> {
-    state = { hasError: false };
-
-    static getDerivedStateFromError() {
-        return { hasError: true };
-    }
-
-    render() {
-        if (!this.state.hasError) {
-            return this.props.children;
-        }
-
-        return (
-            <div
-                role="alert"
-                className={cn(
-                    "flex items-center gap-2 py-0.5 text-xs text-muted-foreground",
-                    this.props.className,
-                )}>
-                <span>Research dossiers are temporarily unavailable</span>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="xs"
-                    onClick={() => this.setState({ hasError: false })}>
-                    Retry
-                </Button>
-            </div>
-        );
-    }
 }

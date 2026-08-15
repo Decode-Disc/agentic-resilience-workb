@@ -11,7 +11,9 @@ const {
     preflight,
     searchCompanies,
     submitManualUrl,
+    retrySession,
     useAction,
+    useAnonymousSession,
     useQuery,
 } = vi.hoisted(() => ({
     claimInvitation: vi.fn(),
@@ -20,7 +22,9 @@ const {
     preflight: vi.fn(),
     searchCompanies: vi.fn(),
     submitManualUrl: vi.fn(),
+    retrySession: vi.fn(),
     useAction: vi.fn(),
+    useAnonymousSession: vi.fn(),
     useQuery: vi.fn(),
 }));
 
@@ -31,13 +35,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 });
 
 vi.mock("convex/react", () => ({ useAction, useQuery }));
-vi.mock("@/hooks/use-anonymous-session", () => ({
-    useAnonymousSession: () => ({
-        isSessionLoading: false,
-        isSessionReady: true,
-        sessionError: null,
-    }),
-}));
+vi.mock("@/hooks/use-anonymous-session", () => ({ useAnonymousSession }));
 
 import { InvitationAccessProvider } from "@/components/workspace/invitation-access-context";
 import { ResearchComposer } from "@/components/workspace/research-composer";
@@ -83,11 +81,19 @@ describe("ResearchComposer", () => {
         preflight.mockReset();
         searchCompanies.mockReset();
         submitManualUrl.mockReset();
+        retrySession.mockReset();
         confirmAndStart.mockReset();
         claimInvitation.mockReset();
         useAction.mockReset();
         useQuery.mockReset();
         useQuery.mockReturnValue({ status: "active" });
+        useAnonymousSession.mockReset();
+        useAnonymousSession.mockReturnValue({
+            isSessionLoading: false,
+            isSessionReady: true,
+            sessionError: null,
+            retrySession,
+        });
         useAction.mockImplementation((action) => {
             switch (getFunctionName(action)) {
                 case "companyResolution:search":
@@ -121,6 +127,66 @@ describe("ResearchComposer", () => {
 
         fireEvent.mouseDown(document.body);
         expect(picker.classList.contains("z-10")).toBe(false);
+    });
+
+    it("retries anonymous session preparation", () => {
+        useAnonymousSession.mockReturnValue({
+            isSessionLoading: false,
+            isSessionReady: false,
+            sessionError: "We couldn't prepare your research workspace.",
+            retrySession,
+        });
+
+        renderWithInvitationAccess(<ResearchComposer />);
+
+        fireEvent.click(screen.getByRole("button", { name: /Try again/i }));
+
+        expect(retrySession).toHaveBeenCalledOnce();
+    });
+
+    it("preserves the draft when the visitor query retries", async () => {
+        const consoleError = vi
+            .spyOn(console, "error")
+            .mockImplementation(() => undefined);
+        let shouldFail = false;
+        useQuery.mockImplementation(() => {
+            if (shouldFail) {
+                throw new Error("Visitor query failed");
+            }
+            return { status: "active" };
+        });
+        searchCompanies.mockResolvedValue(companyCandidates);
+        preflight.mockResolvedValue(resolvedCompany);
+
+        const { rerender } = renderWithInvitationAccess(<ResearchComposer />);
+
+        fireEvent.change(screen.getByLabelText(/Research angle/i), {
+            target: { value: "Preserve this analyst draft." },
+        });
+        await searchAndSelectCompany();
+
+        shouldFail = true;
+        rerender(
+            <InvitationAccessProvider>
+                <ResearchComposer />
+            </InvitationAccessProvider>,
+        );
+
+        shouldFail = false;
+        fireEvent.click(screen.getByRole("button", { name: /Try again/i }));
+
+        expect(
+            screen.getByRole("button", { name: /Confirm and start/i }),
+        ).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: /^Back$/i }));
+        expect(await screen.findByLabelText(/Research angle/i)).toHaveProperty(
+            "value",
+            "Preserve this analyst draft.",
+        );
+        expect(
+            screen.getByText("Selected company:").parentElement?.textContent,
+        ).toContain("CCC Intelligent Solutions Holdings Inc.");
+        consoleError.mockRestore();
     });
 
     it("keeps the composer open until the user continues after selection", async () => {

@@ -3,7 +3,8 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ComponentType } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { responsive } = vi.hoisted(() => ({
+const { invalidate, responsive } = vi.hoisted(() => ({
+    invalidate: vi.fn(),
     responsive: {
         isMobile: false,
         isTabletOrBelow: false,
@@ -20,6 +21,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
         await importOriginal<typeof import("@tanstack/react-router")>();
     return {
         ...router,
+        useRouter: () => ({ invalidate }),
         Link: ({
             children,
             to,
@@ -728,6 +730,7 @@ describe("production run workspace", () => {
         );
         expect(screen.queryByText(/Run query failed/i)).toBeNull();
         fireEvent.click(screen.getByRole("button", { name: /Try again/i }));
-        expect(reset).toHaveBeenCalledOnce();
+        expect(invalidate).toHaveBeenCalledOnce();
+        expect(reset).not.toHaveBeenCalled();
     });
 });

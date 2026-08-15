@@ -223,8 +223,12 @@ test("backfills one legacy company website without re-resolving known URLs", asy
 
 test("keeps a compact error state when company runs fail", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
+    let shouldFail = true;
     useQuery.mockImplementation(() => {
-        throw new Error("Company runs unavailable");
+        if (shouldFail) {
+            throw new Error("Company runs unavailable");
+        }
+        return [];
     });
 
     render(<AnalyzedCompanyList />);
@@ -232,4 +236,7 @@ test("keeps a compact error state when company runs fail", () => {
     expect(screen.getByRole("alert").textContent).toMatch(
         /Research dossiers are temporarily unavailable/i,
     );
+    shouldFail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(screen.getByText("No research dossiers yet")).toBeTruthy();
 });

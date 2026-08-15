@@ -16,7 +16,12 @@ export function useAnonymousSession() {
     const [sessionError, setSessionError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (isLoading || isAuthenticated || attemptedSignIn.current) {
+        if (
+            isLoading ||
+            isAuthenticated ||
+            attemptedSignIn.current ||
+            sessionError
+        ) {
             return;
         }
 
@@ -32,11 +37,20 @@ export function useAnonymousSession() {
             .finally(() => {
                 setIsSigningIn(false);
             });
-    }, [isAuthenticated, isLoading, signIn]);
+    }, [isAuthenticated, isLoading, sessionError, signIn]);
+
+    const retrySession = () => {
+        if (isLoading || isAuthenticated || isSigningIn) {
+            return;
+        }
+        attemptedSignIn.current = false;
+        setSessionError(null);
+    };
 
     return {
         isSessionLoading: isLoading || isSigningIn,
         isSessionReady: isAuthenticated,
         sessionError,
+        retrySession,
     };
 }

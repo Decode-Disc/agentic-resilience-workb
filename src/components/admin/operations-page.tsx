@@ -4,8 +4,10 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { Shield01Icon } from "@hugeicons/core-free-icons";
 import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import type { FunctionReturnType } from "convex/server";
+import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 import Icon from "@/components/icon";
+import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,11 +32,12 @@ import {
 
 /** Minimal, read-mostly operational view for the single invited admin. */
 export function OperationsPage() {
-    const visitor = useQuery(api.visitors.current);
-    const operations = useQuery(
-        api.adminOperations.get,
-        visitor?.role === "admin" ? {} : "skip",
-    );
+    const [visitor, setVisitor] = useState<
+        FunctionReturnType<typeof api.visitors.current> | undefined
+    >(undefined);
+    const [operations, setOperations] = useState<
+        FunctionReturnType<typeof api.adminOperations.get> | undefined
+    >(undefined);
     const setPaidWorkEnabled = useMutation(
         api.adminOperations.setPaidWorkEnabled,
     );
@@ -49,35 +52,66 @@ export function OperationsPage() {
     const [restorePending, setRestorePending] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const queryBridge = (
+        <LoadErrorBoundary
+            title="Operations unavailable"
+            description="We couldn’t load the operations view. Try again.">
+            <OperationsQueryBridge
+                setVisitor={setVisitor}
+                setOperations={setOperations}
+            />
+        </LoadErrorBoundary>
+    );
+
     if (visitor === undefined) {
         return (
-            <div role="status" aria-label="Loading operations" aria-busy="true">
-                <Skeleton className="h-64" />
-            </div>
+            <>
+                {queryBridge}
+                <div
+                    role="status"
+                    aria-label="Loading operations"
+                    aria-busy="true">
+                    <Skeleton className="h-64" />
+                </div>
+            </>
         );
     }
     if (visitor?.role !== "admin") {
         return (
-            <div className="surface-panel rounded-xl p-8 text-center">
-                <h1 className="text-xl font-medium">Admin access required</h1>
-                <p className="mt-2 text-sm text-muted-foreground">
-                    Operations data is restricted to the invited administrator.
-                </p>
-            </div>
+            <>
+                {queryBridge}
+                <div className="surface-panel rounded-xl p-8 text-center">
+                    <h1 className="text-xl font-medium">
+                        Admin access required
+                    </h1>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                        Operations data is restricted to the invited
+                        administrator.
+                    </p>
+                </div>
+            </>
         );
     }
     if (operations === undefined) {
         return (
-            <div role="status" aria-label="Loading operations" aria-busy="true">
-                <Skeleton className="h-64" />
-            </div>
+            <>
+                {queryBridge}
+                <div
+                    role="status"
+                    aria-label="Loading operations"
+                    aria-busy="true">
+                    <Skeleton className="h-64" />
+                </div>
+            </>
         );
     }
 
     const nextEnabled = !operations.paidWork.enabled;
 
     return (
-        <div className="mx-auto max-w-6xl py-8">
+        <>
+            {queryBridge}
+            <div className="mx-auto max-w-6xl py-8">
             <header className="flex flex-col gap-4 border-b border-border/60 pb-6 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                     <p className="text-micro">
@@ -363,6 +397,36 @@ export function OperationsPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
+            </div>
+        </>
     );
+}
+
+function OperationsQueryBridge({
+    setVisitor,
+    setOperations,
+}: {
+    setVisitor: Dispatch<
+        SetStateAction<
+            FunctionReturnType<typeof api.visitors.current> | undefined
+        >
+    >;
+    setOperations: Dispatch<
+        SetStateAction<
+            FunctionReturnType<typeof api.adminOperations.get> | undefined
+        >
+    >;
+}) {
+    const visitor = useQuery(api.visitors.current);
+    const operations = useQuery(
+        api.adminOperations.get,
+        visitor?.role === "admin" ? {} : "skip",
+    );
+
+    useEffect(() => {
+        setVisitor(visitor);
+        setOperations(operations);
+    }, [operations, setOperations, setVisitor, visitor]);
+
+    return null;
 }

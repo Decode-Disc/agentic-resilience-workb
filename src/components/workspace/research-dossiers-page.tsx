@@ -4,9 +4,9 @@ import { api } from "@convex/_generated/api";
 import { Add01Icon, Folder02Icon } from "@hugeicons/core-free-icons";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
-import { Component, type ReactNode } from "react";
 
 import Icon from "@/components/icon";
+import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { Button } from "@/components/ui/button";
 import {
     Empty,
@@ -113,51 +113,15 @@ function DossiersContent() {
     );
 }
 
-interface DossiersErrorBoundaryProps {
-    children: ReactNode;
-}
-
-interface DossiersErrorBoundaryState {
-    hasError: boolean;
-}
-
-class DossiersErrorBoundary extends Component<
-    DossiersErrorBoundaryProps,
-    DossiersErrorBoundaryState
-> {
-    state: DossiersErrorBoundaryState = { hasError: false };
-
-    static getDerivedStateFromError(): DossiersErrorBoundaryState {
-        return { hasError: true };
-    }
-
-    render() {
-        if (this.state.hasError) {
-            return (
-                <div
-                    role="alert"
-                    className="surface-panel mx-auto max-w-xl rounded-xl p-6">
-                    <h1 className="text-lg font-medium">
-                        Research dossiers unavailable
-                    </h1>
-                    <p className="mt-2 text-sm text-destructive">
-                        We couldn’t load your dossiers. Try again.
-                    </p>
-                </div>
-            );
-        }
-
-        return this.props.children;
-    }
-}
-
 /**
  * Lists the admitted analyst's persisted research dossiers.
  */
 export function ResearchDossiersPage() {
     return (
-        <DossiersErrorBoundary>
+        <LoadErrorBoundary
+            title="Research dossiers unavailable"
+            description="We couldn’t load your dossiers. Try again.">
             <DossiersContent />
-        </DossiersErrorBoundary>
+        </LoadErrorBoundary>
     );
 }

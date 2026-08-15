@@ -37,4 +37,24 @@ describe("useAnonymousSession", () => {
 
         await waitFor(() => expect(signIn).toHaveBeenCalledWith("anonymous"));
     });
+
+    test("retries a failed anonymous session", async () => {
+        useConvexAuth.mockReturnValue({
+            isLoading: false,
+            isAuthenticated: false,
+        });
+        signIn
+            .mockRejectedValueOnce(new Error("Anonymous sign-in failed"))
+            .mockResolvedValueOnce({ signingIn: true });
+
+        const { result } = renderHook(() => useAnonymousSession());
+
+        await waitFor(() =>
+            expect(result.current.sessionError).toMatch(/couldn't prepare/i),
+        );
+        result.current.retrySession();
+
+        await waitFor(() => expect(signIn).toHaveBeenCalledTimes(2));
+        expect(result.current.sessionError).toBeNull();
+    });
 });

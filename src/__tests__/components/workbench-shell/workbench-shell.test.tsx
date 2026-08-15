@@ -128,6 +128,36 @@ describe("WorkbenchShell", () => {
         ).toBeTruthy();
     });
 
+    it("keeps page content visible when the workspace header fails", () => {
+        const consoleError = vi
+            .spyOn(console, "error")
+            .mockImplementation(() => undefined);
+        let shouldFail = true;
+        useQuery.mockImplementation(() => {
+            if (shouldFail) {
+                throw new Error("Visitor query failed");
+            }
+            return null;
+        });
+
+        render(
+            <InvitationAccessProvider>
+                <WorkbenchShell>
+                    <div>Page content</div>
+                </WorkbenchShell>
+            </InvitationAccessProvider>,
+        );
+
+        expect(screen.getByText("Page content")).toBeTruthy();
+        expect(
+            screen.getByText("Workspace navigation unavailable"),
+        ).toBeTruthy();
+        shouldFail = false;
+        fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+        expect(screen.getByRole("button", { name: "Workspace" })).toBeTruthy();
+        consoleError.mockRestore();
+    });
+
     it("opens workspace access from the public workspace button", async () => {
         useQuery.mockReturnValue(null);
 

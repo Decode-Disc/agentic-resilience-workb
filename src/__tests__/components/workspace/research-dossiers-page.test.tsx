@@ -2,11 +2,13 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { useQuery } = vi.hoisted(() => ({
+const { useAction, useQuery } = vi.hoisted(() => ({
+    useAction: vi.fn(() => vi.fn()),
     useQuery: vi.fn(),
 }));
 
 vi.mock(import("convex/react"), () => ({
+    useAction,
     useQuery,
 }));
 
@@ -94,7 +96,7 @@ describe("ResearchDossiersPage", () => {
             card
                 ?.querySelector('[data-slot="cutout-card-image"]')
                 ?.getAttribute("src"),
-        ).toBe("/placeholders/research-dossier-cover.png");
+        ).toBe("/images/placeholders/research-dossier-cover.png");
         expect(
             screen
                 .getByRole("button", { name: "Open dossier" })
@@ -159,8 +161,12 @@ describe("ResearchDossiersPage", () => {
         const consoleError = vi
             .spyOn(console, "error")
             .mockImplementation(() => undefined);
+        let shouldFail = true;
         useQuery.mockImplementation(() => {
-            throw new Error("Unavailable");
+            if (shouldFail) {
+                throw new Error("Unavailable");
+            }
+            return [];
         });
 
         render(<ResearchDossiersPage />);
@@ -168,6 +174,9 @@ describe("ResearchDossiersPage", () => {
         expect(screen.getByRole("alert").textContent).toContain(
             "Research dossiers unavailable",
         );
+        shouldFail = false;
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+        expect(screen.getByText("No research dossiers yet")).toBeTruthy();
         consoleError.mockRestore();
     });
 });

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { getFunctionName } from "convex/server";
 import { beforeEach, expect, test, vi } from "vitest";
 
 const { useQuery, useMutation, setPaidWorkEnabled, restoreQuota } = vi.hoisted(
@@ -27,40 +28,40 @@ beforeEach(() => {
 });
 
 test("renders the bounded admin projection and confirms paid-work changes", async () => {
-    useQuery.mockImplementation(() =>
-        useQuery.mock.calls.length % 2 === 1
-            ? { role: "admin", status: "active" }
-            : {
-                  paidWork: { enabled: true },
-                  runs: [
-                      {
-                          runId: "run-1",
-                          lifecycleState: "awaiting_source_review",
-                          executionStatus: "paused",
-                          updatedAt: 1,
-                      },
-                  ],
-                  checkpoints: [],
-                  providerCalls: [
-                      {
-                          service: "exa",
-                          operation: "search",
-                          status: "failed",
-                          errorCode: "exa_not_configured",
-                          createdAt: 1,
-                      },
-                  ],
-                  reservations: [
-                      { visitorId: "v1", role: "analyst", remaining: 2 },
-                  ],
-                  restorableRuns: [
-                      {
-                          runId: "run-unused",
-                          ownerVisitorId: "v1",
-                          createdAt: 1,
-                      },
-                  ],
-              },
+    const visitor = { role: "admin", status: "active" };
+    const operations = {
+        paidWork: { enabled: true },
+        runs: [
+            {
+                runId: "run-1",
+                lifecycleState: "awaiting_source_review",
+                executionStatus: "paused",
+                updatedAt: 1,
+            },
+        ],
+        checkpoints: [],
+        providerCalls: [
+            {
+                service: "exa",
+                operation: "search",
+                status: "failed",
+                errorCode: "exa_not_configured",
+                createdAt: 1,
+            },
+        ],
+        reservations: [{ visitorId: "v1", role: "analyst", remaining: 2 }],
+        restorableRuns: [
+            {
+                runId: "run-unused",
+                ownerVisitorId: "v1",
+                createdAt: 1,
+            },
+        ],
+    };
+    useQuery.mockImplementation((reference) =>
+        getFunctionName(reference) === "visitors:current"
+            ? visitor
+            : operations,
     );
     setPaidWorkEnabled.mockResolvedValue({ enabled: false });
     render(<OperationsPage />);
@@ -101,11 +102,43 @@ test("renders the bounded admin projection and confirms paid-work changes", asyn
 });
 
 test("does not expose operations to an analyst", () => {
-    useQuery.mockImplementation(() =>
-        useQuery.mock.calls.length % 2 === 1
-            ? { role: "analyst", status: "active" }
-            : undefined,
+    const visitor = { role: "analyst", status: "active" };
+    useQuery.mockImplementation((reference) =>
+        getFunctionName(reference) === "visitors:current" ? visitor : undefined,
     );
     render(<OperationsPage />);
     expect(screen.getByText(/Admin access required/i)).toBeTruthy();
 });
+
+test("retries operations queries after a load failure", () => {
+    const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined);
+    let shouldFail = true;
+    const visitor = { role: "admin", status: "active" };
+    const operations = {
+        paidWork: { enabled: true },
+        runs: [],
+        checkpoints: [],
+        providerCalls: [],
+        reservations: [],
+        restorableRuns: [],
+    };
+    useQuery.mockImplementation((reference) => {
+        if (shouldFail) {
+            throw new Error("Operations query failed");
+        }
+        return getFunctionName(reference) === "visitors:current"
+            ? visitor
+            : operations;
+    });
+
+    render(<OperationsPage />);
+
+    expect(screen.getByText("Operations unavailable")).toBeTruthy();
+    shouldFail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(screen.getByText("Operations control")).toBeTruthy();
+    consoleError.mockRestore();
+});
+

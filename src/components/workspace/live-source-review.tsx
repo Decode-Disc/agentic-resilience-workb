@@ -2,6 +2,7 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { RefreshIcon } from "@hugeicons/core-free-icons";
 import {
     useAction,
     useMutation,
@@ -9,17 +10,15 @@ import {
     useQuery,
 } from "convex/react";
 import {
-    Component,
-    type ErrorInfo,
-    type ReactNode,
+    type Dispatch,
+    type SetStateAction,
     useEffect,
     useState,
 } from "react";
-
-import { RefreshIcon } from "@hugeicons/core-free-icons";
+import Icon from "@/components/icon";
+import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import Icon from "@/components/icon";
 import { SourceProposalReview } from "@/components/workspace/source-proposal-review";
 import {
     type SourceFilter,
@@ -38,22 +37,7 @@ type LiveSourceReviewProps = {
 };
 
 export function LiveSourceReview(props: LiveSourceReviewProps) {
-    const [retryKey, setRetryKey] = useState(0);
-    return (
-        <SourceReviewQueryBoundary
-            key={retryKey}
-            onRetry={() => setRetryKey((current) => current + 1)}>
-            <SourceReviewData {...props} />
-        </SourceReviewQueryBoundary>
-    );
-}
-
-function SourceReviewData({
-    runId,
-    corpusRevisionId,
-    onDecide,
-    onAddManualUrl,
-}: LiveSourceReviewProps) {
+    const { runId, corpusRevisionId, onDecide, onAddManualUrl } = props;
     const [disposition, setDisposition] = useState<
         "recommended" | "needs_attention" | "alternative"
     >("recommended");
@@ -65,6 +49,8 @@ function SourceReviewData({
     const [repairStatus, setRepairStatus] = useState<
         "idle" | "loading" | "complete" | "failed"
     >("idle");
+    const [queries, setQueries] =
+        useState<SourceReviewQuerySnapshot | null>(null);
     const approveProposal = useMutation(
         api.sourceSelectionProposals.approveProposedCorpus,
     );
@@ -80,43 +66,28 @@ function SourceReviewData({
     const startNewRevision = useMutation(
         api.sourceSelectionProposals.startNewCorpusRevision,
     );
-    const proposal = useQuery(api.sourceSelectionProposals.getCurrent, {
-        runId,
-        corpusRevisionId,
-    });
-    const hasProposal = proposal !== undefined && proposal !== null;
-    const adjustmentSets = useQuery(
-        api.sourceSelectionProposals.getAdjustmentSets,
-        hasProposal ? { runId, corpusRevisionId } : "skip",
+    const queryBridge = (
+        <LoadErrorBoundary
+            title="Source review could not be loaded"
+            description="The candidate source collection is temporarily unavailable. Try loading it again."
+            variant="inline">
+            <SourceReviewQueryBridge
+                runId={runId}
+                corpusRevisionId={corpusRevisionId}
+                disposition={disposition}
+                inspectionFilter={inspectionFilter}
+                selectedId={selectedId}
+                setQueries={setQueries}
+            />
+        </LoadErrorBoundary>
     );
-    const inspectionSummary = useQuery(api.sources.getReviewSummary, {
-        runId,
-        corpusRevisionId,
-    });
-    const proposalPage = usePaginatedQuery(
-        api.sourceSelectionProposals.listItemsPage,
-        hasProposal
-            ? {
-                  runId,
-                  corpusRevisionId,
-                  proposalId: proposal.proposalId,
-                  disposition,
-              }
-            : "skip",
-        { initialNumItems: SOURCE_REVIEW_PAGE_SIZE },
-    );
-    const inspectionPage = usePaginatedQuery(
-        api.sources.listForReviewPage,
-        { runId, corpusRevisionId, filter: inspectionFilter },
-        { initialNumItems: SOURCE_REVIEW_PAGE_SIZE },
-    );
-    const selectedSource = useQuery(
-        api.sources.getReviewSource,
-        selectedId ? { runId, corpusRevisionId, sourceId: selectedId } : "skip",
-    );
+
+    const proposal = queries?.proposal;
+    const inspectionSummary = queries?.inspectionSummary;
 
     useEffect(() => {
         if (
+            !queries ||
             proposal !== null ||
             inspectionSummary?.status !== "draft" ||
             repairStatus !== "idle"
@@ -132,96 +103,142 @@ function SourceReviewData({
         ensureCurrentProposal,
         inspectionSummary?.status,
         proposal,
+        queries,
         repairStatus,
         runId,
     ]);
 
+    if (!queries) {
+        return (
+            <>
+                {queryBridge}
+                <LiveSourceReviewSkeleton />
+            </>
+        );
+    }
+
+    const {
+        adjustmentSets,
+        proposalPage,
+        inspectionPage,
+        selectedSource,
+    } = queries;
+
     if (proposal === undefined || inspectionSummary === undefined) {
-        return <LiveSourceReviewSkeleton />;
+        return (
+            <>
+                {queryBridge}
+                <LiveSourceReviewSkeleton />
+            </>
+        );
     }
 
     if (proposal === null) {
         if (inspectionSummary.status === "approved") {
             return (
-                <div className="space-y-3">
-                    <ApprovedRevisionBanner
-                        onStartNewRevision={async () => {
-                            setActionError(null);
-                            try {
-                                await startNewRevision({
-                                    runId,
-                                    corpusRevisionId,
-                                });
-                            } catch {
-                                setActionError(
-                                    "We couldn't start a new revision. Try again.",
-                                );
+                <>
+                    {queryBridge}
+                    <div className="space-y-3">
+                        <ApprovedRevisionBanner
+                            onStartNewRevision={async () => {
+                                setActionError(null);
+                                try {
+                                    await startNewRevision({
+                                        runId,
+                                        corpusRevisionId,
+                                    });
+                                } catch {
+                                    setActionError(
+                                        "We couldn't start a new revision. Try again.",
+                                    );
+                                }
+                            }}
+                        />
+                        <SourceReview
+                            runId={runId}
+                            corpusRevisionId={corpusRevisionId}
+                            review={{
+                                ...inspectionSummary,
+                                sources: [...inspectionPage.results],
+                            }}
+                            filter={inspectionFilter}
+                            onFilterChange={(nextFilter) => {
+                                setInspectionFilter(nextFilter);
+                                if (nextFilter !== "all") {
+                                    setSelectedId(null);
+                                }
+                            }}
+                            selectedId={selectedId}
+                            selectedSource={
+                                selectedId ? selectedSource : undefined
                             }
-                        }}
-                    />
-                    <SourceReview
-                    runId={runId}
-                    corpusRevisionId={corpusRevisionId}
-                    review={{
-                        ...inspectionSummary,
-                        sources: [...inspectionPage.results],
-                    }}
-                    filter={inspectionFilter}
-                    onFilterChange={(nextFilter) => {
-                        setInspectionFilter(nextFilter);
-                        if (nextFilter !== "all") {
-                            setSelectedId(null);
-                        }
-                    }}
-                    selectedId={selectedId}
-                    selectedSource={selectedId ? selectedSource : undefined}
-                    onSelectedIdChange={setSelectedId}
-                    hasMore={inspectionPage.status === "CanLoadMore"}
-                    isLoadingMore={inspectionPage.status === "LoadingMore"}
-                    isLoadingInitial={
-                        inspectionPage.status === "LoadingFirstPage"
-                    }
-                    onLoadMore={() =>
-                        inspectionPage.loadMore(SOURCE_REVIEW_PAGE_SIZE)
-                    }
-                    onDecide={onDecide}
-                    onApprove={() => undefined}
-                    showApprovalAction={false}
-                />
-                </div>
+                            onSelectedIdChange={setSelectedId}
+                            hasMore={inspectionPage.status === "CanLoadMore"}
+                            isLoadingMore={
+                                inspectionPage.status === "LoadingMore"
+                            }
+                            isLoadingInitial={
+                                inspectionPage.status === "LoadingFirstPage"
+                            }
+                            onLoadMore={() =>
+                                inspectionPage.loadMore(
+                                    SOURCE_REVIEW_PAGE_SIZE,
+                                )
+                            }
+                            onDecide={onDecide}
+                            onApprove={() => undefined}
+                            showApprovalAction={false}
+                        />
+                    </div>
+                </>
             );
         }
         if (repairStatus === "failed") {
             return (
-                <div
-                    role="alert"
-                    className="surface-panel rounded-xl border border-destructive/30 p-5">
-                    <h2 className="text-base font-medium">
-                        Source proposal could not be prepared
-                    </h2>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                        Your candidate sources are unchanged. Try preparing the
-                        proposal again.
-                    </p>
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        className="mt-4"
-                        onClick={() => setRepairStatus("idle")}>
-                        Try again
-                    </Button>
-                </div>
+                <>
+                    {queryBridge}
+                    <div
+                        role="alert"
+                        className="surface-panel rounded-xl border border-destructive/30 p-5">
+                        <h2 className="text-base font-medium">
+                            Source proposal could not be prepared
+                        </h2>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                            Your candidate sources are unchanged. Try preparing
+                            the proposal again.
+                        </p>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            className="mt-4"
+                            onClick={() => setRepairStatus("idle")}>
+                            Try again
+                        </Button>
+                    </div>
+                </>
             );
         }
-        return <LiveSourceReviewSkeleton />;
+        return (
+            <>
+                {queryBridge}
+                <LiveSourceReviewSkeleton />
+            </>
+        );
     }
 
     if (adjustmentSets === undefined) {
-        return <LiveSourceReviewSkeleton />;
+        return (
+            <>
+                {queryBridge}
+                <LiveSourceReviewSkeleton />
+            </>
+        );
     }
 
     return (
-        <div className="space-y-3">
+        <>
+            {queryBridge}
+            <div className="space-y-3">
             {actionError ? (
                 <p
                     role="alert"
@@ -344,8 +361,97 @@ function SourceReviewData({
                     inspectionPage.loadMore(SOURCE_REVIEW_PAGE_SIZE)
                 }
             />
-        </div>
+            </div>
+        </>
     );
+}
+
+function useSourceReviewQueries({
+    runId,
+    corpusRevisionId,
+    disposition,
+    inspectionFilter,
+    selectedId,
+}: Pick<LiveSourceReviewProps, "runId" | "corpusRevisionId"> & {
+    disposition: "recommended" | "needs_attention" | "alternative";
+    inspectionFilter: SourceFilter;
+    selectedId: Id<"sources"> | null;
+}) {
+    const proposal = useQuery(api.sourceSelectionProposals.getCurrent, {
+        runId,
+        corpusRevisionId,
+    });
+    const hasProposal = proposal !== undefined && proposal !== null;
+    const adjustmentSets = useQuery(
+        api.sourceSelectionProposals.getAdjustmentSets,
+        hasProposal ? { runId, corpusRevisionId } : "skip",
+    );
+    const inspectionSummary = useQuery(api.sources.getReviewSummary, {
+        runId,
+        corpusRevisionId,
+    });
+    const proposalPage = usePaginatedQuery(
+        api.sourceSelectionProposals.listItemsPage,
+        hasProposal
+            ? {
+                runId,
+                corpusRevisionId,
+                proposalId: proposal.proposalId,
+                disposition,
+            }
+            : "skip",
+        { initialNumItems: SOURCE_REVIEW_PAGE_SIZE },
+    );
+    const inspectionPage = usePaginatedQuery(
+        api.sources.listForReviewPage,
+        { runId, corpusRevisionId, filter: inspectionFilter },
+        { initialNumItems: SOURCE_REVIEW_PAGE_SIZE },
+    );
+    const selectedSource = useQuery(
+        api.sources.getReviewSource,
+        selectedId ? { runId, corpusRevisionId, sourceId: selectedId } : "skip",
+    );
+
+    return {
+        proposal,
+        adjustmentSets,
+        inspectionSummary,
+        proposalPage,
+        inspectionPage,
+        selectedSource,
+    };
+}
+
+type SourceReviewQuerySnapshot = ReturnType<typeof useSourceReviewQueries>;
+
+function SourceReviewQueryBridge({
+    setQueries,
+    ...queryArgs
+}: Parameters<typeof useSourceReviewQueries>[0] & {
+    setQueries: Dispatch<SetStateAction<SourceReviewQuerySnapshot | null>>;
+}) {
+    const queries = useSourceReviewQueries(queryArgs);
+
+    useEffect(() => {
+        setQueries((current) =>
+            current !== null &&
+                current.proposal === queries.proposal &&
+                current.adjustmentSets === queries.adjustmentSets &&
+                current.inspectionSummary === queries.inspectionSummary &&
+                current.proposalPage.results === queries.proposalPage.results &&
+                current.proposalPage.status === queries.proposalPage.status &&
+                current.proposalPage.loadMore === queries.proposalPage.loadMore &&
+                current.inspectionPage.results === queries.inspectionPage.results &&
+                current.inspectionPage.status === queries.inspectionPage.status &&
+                current.inspectionPage.loadMore ===
+                queries.inspectionPage.loadMore &&
+                current.selectedSource === queries.selectedSource
+                ? current
+                : queries,
+        );
+    }, [queries, setQueries]);
+
+    return null;
 }
 
 function LiveSourceReviewSkeleton() {
@@ -391,47 +497,6 @@ function LiveSourceReviewSkeleton() {
     );
 }
 
-class SourceReviewQueryBoundary extends Component<
-    { children: ReactNode; onRetry: () => void },
-    { error: boolean }
-> {
-    state = { error: false };
-
-    static getDerivedStateFromError() {
-        return { error: true };
-    }
-
-    componentDidCatch(_error: unknown, _info: ErrorInfo) {
-        // Convex query details remain intentionally outside analyst-facing UI.
-    }
-
-    render() {
-        if (!this.state.error) {
-            return this.props.children;
-        }
-        return (
-            <div
-                role="alert"
-                className="surface-panel rounded-xl border border-destructive/30 p-5">
-                <h2 className="text-base font-medium">
-                    Source review could not be loaded
-                </h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                    The candidate source collection is temporarily unavailable.
-                    Try loading it again.
-                </p>
-                <Button
-                    type="button"
-                    variant="secondary"
-                    className="mt-4"
-                    onClick={this.props.onRetry}>
-                    Try again
-                </Button>
-            </div>
-        );
-    }
-}
-
 function ApprovedRevisionBanner({
     onStartNewRevision,
 }: {
@@ -439,9 +504,7 @@ function ApprovedRevisionBanner({
 }) {
     return (
         <div className="surface-floating rounded-2xl border border-border/60 p-5">
-            <p className="text-micro text-accent-foreground">
-                Corpus approved
-            </p>
+            <p className="text-micro text-accent-foreground">Corpus approved</p>
             <h2 className="mt-1 text-lg font-medium">
                 Source set is approved and read-only
             </h2>

@@ -2,9 +2,10 @@ import type { Id } from "@convex/_generated/dataModel";
 import {
     createFileRoute,
     type ErrorComponentProps,
+    useRouter,
 } from "@tanstack/react-router";
 
-import { Button } from "@/components/ui/button";
+import { LoadErrorAlert } from "@/components/ui/load-error-alert";
 import { RunRouteComponent } from "@/components/workspace/run-route-component";
 import type { WorkspaceSection } from "@/components/workspace/workspace-navigation-rail";
 
@@ -38,20 +39,15 @@ function RunRoute() {
     );
 }
 
-function RunError({ reset }: ErrorComponentProps) {
+function RunError(_props: ErrorComponentProps) {
+    const router = useRouter();
+
     return (
-        <div
-            role="alert"
-            className="surface-panel bg-destructive/8 rounded-xl p-6">
-            <h1 className="text-lg font-medium text-destructive">
-                Research workspace unavailable
-            </h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-                We couldn’t load this research dossier. Try again.
-            </p>
-            <Button type="button" className="mt-4" onClick={reset}>
-                Try again
-            </Button>
-        </div>
+        <LoadErrorAlert
+            title="Research workspace unavailable"
+            description="We couldn’t load this research dossier. Try again."
+            className="bg-destructive/8"
+            onRetry={() => void router.invalidate()}
+        />
     );
 }

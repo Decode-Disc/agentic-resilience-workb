@@ -17,6 +17,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useRef, useState } from "react";
 import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
 import Icon from "@/components/icon";
+import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { PaginationControls } from "@/components/pagination-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ import {
     InputGroupAddon,
     InputGroupInput,
 } from "@/components/ui/input-group";
+import { LoadErrorAlert } from "@/components/ui/load-error-alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SmoothDropdwon } from "@/components/ui/smooth-dropdown";
 import {
@@ -88,19 +90,42 @@ export interface ResearchComposerProps {
  */
 export function ResearchComposer({
     className,
-    placeholderText = "How can I help? Describe the resilience question to investigate.",
+    placeholderText,
 }: ResearchComposerProps) {
+    const { isSessionReady, sessionError, retrySession } =
+        useAnonymousSession();
+
+    if (sessionError) {
+        return (
+            <LoadErrorAlert
+                className={className}
+                title="Research workspace unavailable"
+                description="We couldn’t prepare your research workspace."
+                onRetry={retrySession}
+            />
+        );
+    }
+
+    return (
+        <ResearchComposerContent
+            className={className}
+            placeholderText={placeholderText}
+            isSessionReady={isSessionReady}
+        />
+    );
+}
+
+function ResearchComposerContent({
+    className,
+    placeholderText = "How can I help? Describe the resilience question to investigate.",
+    isSessionReady,
+}: ResearchComposerProps & { isSessionReady: boolean }) {
     const navigate = useNavigate();
     const searchCompanies = useAction(api.companyResolution.search);
     const preflight = useAction(api.companyResolution.preflight);
     const confirmAndStart = useAction(api.researchLaunch.confirmAndStart);
     const submitManualUrl = useAction(api.sourceActions.submitManualUrl);
     const reduceMotion = useReducedMotion();
-    const { isSessionReady, sessionError } = useAnonymousSession();
-    const visitor = useQuery(
-        api.visitors.current,
-        isSessionReady ? {} : "skip",
-    );
     const [researchAngle, setResearchAngle] = useState("");
     const [companyQuery, setCompanyQuery] = useState("");
     const [coveragePreset, setCoveragePreset] =
@@ -129,7 +154,6 @@ export function ResearchComposer({
     const [isLaunching, setIsLaunching] = useState(false);
     const [lookupError, setLookupError] = useState<string | null>(null);
     const [launchError, setLaunchError] = useState<string | null>(null);
-    const { openInvitationDrawer } = useInvitationAccess();
     const [referencesOpen, setReferencesOpen] = useState(false);
     const [manualSources, setManualSources] = useState<
         Array<PreparedManualSource>
@@ -138,9 +162,7 @@ export function ResearchComposer({
 
     const searchForCompanies = async () => {
         if (!isSessionReady) {
-            setLookupError(
-                sessionError ?? "Preparing your research workspace…",
-            );
+            setLookupError("Preparing your research workspace…");
             setPickerOpen(true);
             return;
         }
@@ -242,26 +264,6 @@ export function ResearchComposer({
             );
             setIsLaunching(false);
         }
-    };
-
-    const launch = () => {
-        if (!resolution || isLaunching) {
-            if (!resolution) {
-                setPickerOpen(true);
-            }
-            return;
-        }
-
-        if (visitor?.status !== "active") {
-            openInvitationDrawer({
-                onSuccess: () => {
-                    void startResearch();
-                },
-            });
-            return;
-        }
-
-        void startResearch();
     };
 
     return (
@@ -377,9 +379,7 @@ export function ResearchComposer({
                                             <CompanyLookup
                                                 companyQuery={companyQuery}
                                                 isSearching={isSearching}
-                                                lookupError={
-                                                    sessionError ?? lookupError
-                                                }
+                                                lookupError={lookupError}
                                                 hasResolution={
                                                     resolution !== null
                                                 }
@@ -499,20 +499,16 @@ export function ResearchComposer({
                                     <Icon iconNode={ArrowLeft01Icon} />
                                     Back
                                 </Button>
-                                <Button
-                                    type="button"
-                                    aria-label="Confirm and start"
-                                    onClick={launch}
-                                    disabled={isLaunching}
-                                    className="rounded-full px-4">
-                                    {isLaunching
-                                        ? "Starting…"
-                                        : "Confirm and start"}
-                                    <Icon
-                                        iconNode={ArrowRight01Icon}
-                                        size={18}
+                                    <LoadErrorBoundary
+                                        title="Workspace access unavailable"
+                                        description="We couldn’t verify your workspace access."
+                                        variant="compact">
+                                        <ResearchLaunchButton
+                                            isSessionReady={isSessionReady}
+                                            isLaunching={isLaunching}
+                                            onStart={startResearch}
                                     />
-                                </Button>
+                                    </LoadErrorBoundary>
                             </div>
                         </motion.div>
                     ) : null}
@@ -553,6 +549,49 @@ export function ResearchComposer({
                 }}
             />
         </>
+    );
+}
+
+function ResearchLaunchButton({
+    isSessionReady,
+    isLaunching,
+    onStart,
+}: {
+    isSessionReady: boolean;
+    isLaunching: boolean;
+    onStart: () => Promise<void>;
+}) {
+    const visitor = useQuery(
+        api.visitors.current,
+        isSessionReady ? {} : "skip",
+    );
+    const { openInvitationDrawer } = useInvitationAccess();
+
+    const launch = () => {
+        if (isLaunching) {
+            return;
+        }
+        if (visitor?.status !== "active") {
+            openInvitationDrawer({
+                onSuccess: () => {
+                    void onStart();
+                },
+            });
+            return;
+        }
+        void onStart();
+    };
+
+    return (
+        <Button
+            type="button"
+            aria-label="Confirm and start"
+            onClick={launch}
+            disabled={isLaunching}
+            className="rounded-full px-4">
+            {isLaunching ? "Starting…" : "Confirm and start"}
+            <Icon iconNode={ArrowRight01Icon} size={18} />
+        </Button>
     );
 }
 

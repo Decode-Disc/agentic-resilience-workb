@@ -76,13 +76,48 @@ beforeEach(() => {
     });
 });
 
-test("keeps proposal summary, source list, and detail geometry while loading", () => {
-    useQuery.mockReturnValue(undefined);
+test("retries source review queries after a load failure", () => {
+    const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined);
+    let shouldFail = true;
+    useQuery.mockImplementation(() => {
+        if (shouldFail) {
+            throw new Error("Source review query failed");
+        }
+        return undefined;
+    });
     usePaginatedQuery.mockReturnValue({
         results: [],
         status: "LoadingFirstPage",
         loadMore: vi.fn(),
     });
+
+    render(
+        <LiveSourceReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            onDecide={vi.fn()}
+        />,
+    );
+
+    expect(screen.getByText("Source review could not be loaded")).toBeTruthy();
+    shouldFail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(
+        screen.getByLabelText("Loading source proposal summary"),
+    ).toBeTruthy();
+    consoleError.mockRestore();
+});
+
+test("keeps proposal summary, source list, and detail geometry while loading", () => {
+    useQuery.mockReturnValue(undefined);
+    const loadingPage = {
+        results: [],
+        status: "LoadingFirstPage",
+        loadMore: vi.fn(),
+    };
+    usePaginatedQuery.mockReturnValue(loadingPage);
 
     render(
         <LiveSourceReview
@@ -100,38 +135,67 @@ test("keeps proposal summary, source list, and detail geometry while loading", (
 });
 
 test("queries proposal dispositions and approves the exact visible version", async () => {
+    const currentProposal = {
+        proposalId: "proposal-1",
+        version: 2,
+        status: "ready",
+        effectiveStatus: "ready",
+        recommendedTarget: 12,
+        recommendationCeiling: 24,
+        coverageGaps: [],
+        counts: {
+            recommended: 1,
+            needsAttention: 0,
+            alternative: 1,
+        },
+        gaps: [],
+        effectiveIncludedCount: 1,
+        revisionStatus: "draft",
+    };
+    const adjustmentSets = { included: [proposalSource], available: [] };
+    const reviewSummary = {
+        revision: 1,
+        status: "draft",
+        counts: { accepted: 0, rejected: 0, pending: 1 },
+        total: 1,
+        candidateLimit: 48,
+    };
+    const recommendedPage = {
+        results: [proposalSource],
+        status: "Exhausted",
+        loadMore: vi.fn(),
+    };
+    const alternativePage = {
+        results: [],
+        status: "Exhausted",
+        loadMore: vi.fn(),
+    };
+    const inspectionPage = {
+        results: [
+            {
+                sourceId: proposalSource.sourceId,
+                canonicalUrl: proposalSource.canonicalUrl,
+                title: proposalSource.title,
+                origin: proposalSource.origin,
+                category: proposalSource.category,
+                decision: proposalSource.decision,
+                publishedAt: undefined,
+                reason: undefined,
+            },
+        ],
+        status: "Exhausted",
+        loadMore: vi.fn(),
+    };
     useQuery.mockImplementation((reference, args) => {
         const functionName = getFunctionName(reference);
         if (functionName === "sourceSelectionProposals:getCurrent") {
-            return {
-                proposalId: "proposal-1",
-                version: 2,
-                status: "ready",
-                effectiveStatus: "ready",
-                recommendedTarget: 12,
-                recommendationCeiling: 24,
-                coverageGaps: [],
-                counts: {
-                    recommended: 1,
-                    needsAttention: 0,
-                    alternative: 1,
-                },
-                gaps: [],
-                effectiveIncludedCount: 1,
-                revisionStatus: "draft",
-            };
+            return currentProposal;
         }
         if (functionName === "sourceSelectionProposals:getAdjustmentSets") {
-            return { included: [proposalSource], available: [] };
+            return adjustmentSets;
         }
         if (functionName === "sources:getReviewSummary") {
-            return {
-                revision: 1,
-                status: "draft",
-                counts: { accepted: 0, rejected: 0, pending: 1 },
-                total: 1,
-                candidateLimit: 48,
-            };
+            return reviewSummary;
         }
         if (functionName === "sources:getReviewSource") {
             return args === "skip" ? undefined : proposalSource;
@@ -141,29 +205,11 @@ test("queries proposal dispositions and approves the exact visible version", asy
     usePaginatedQuery.mockImplementation((reference, args) => {
         const functionName = getFunctionName(reference);
         if (functionName === "sourceSelectionProposals:listItemsPage") {
-            return {
-                results:
-                    args.disposition === "recommended" ? [proposalSource] : [],
-                status: "Exhausted",
-                loadMore: vi.fn(),
-            };
+            return args.disposition === "recommended"
+                ? recommendedPage
+                : alternativePage;
         }
-        return {
-            results: [
-                {
-                    sourceId: proposalSource.sourceId,
-                    canonicalUrl: proposalSource.canonicalUrl,
-                    title: proposalSource.title,
-                    origin: proposalSource.origin,
-                    category: proposalSource.category,
-                    decision: proposalSource.decision,
-                    publishedAt: undefined,
-                    reason: undefined,
-                },
-            ],
-            status: "Exhausted",
-            loadMore: vi.fn(),
-        };
+        return inspectionPage;
     });
 
     render(
@@ -205,40 +251,53 @@ test("explains a blocked rebuild without exposing provider or configuration deta
         outcome: "blocked",
         failedDiscoveryFamilies: ["regulatory", "official_product"],
     });
+    const currentProposal = {
+        proposalId: "proposal-1",
+        version: 1,
+        status: "ready",
+        effectiveStatus: "outdated",
+        recommendedTarget: 12,
+        recommendationCeiling: 24,
+        rebuildOutcome: undefined,
+        failedDiscoveryFamilies: [],
+        coverageGaps: [],
+        counts: {
+            recommended: 1,
+            needsAttention: 0,
+            alternative: 0,
+        },
+        gaps: [],
+        effectiveIncludedCount: 1,
+        revisionStatus: "draft",
+    };
+    const adjustmentSets = { included: [proposalSource], available: [] };
+    const reviewSummary = {
+        revision: 1,
+        status: "draft",
+        counts: { accepted: 0, rejected: 0, pending: 1 },
+        total: 1,
+        candidateLimit: 48,
+    };
+    const proposalPage = {
+        results: [proposalSource],
+        status: "Exhausted",
+        loadMore: vi.fn(),
+    };
+    const inspectionPage = {
+        results: [],
+        status: "Exhausted",
+        loadMore: vi.fn(),
+    };
     useQuery.mockImplementation((reference, args) => {
         const functionName = getFunctionName(reference);
         if (functionName === "sourceSelectionProposals:getCurrent") {
-            return {
-                proposalId: "proposal-1",
-                version: 1,
-                status: "ready",
-                effectiveStatus: "outdated",
-                recommendedTarget: 12,
-                recommendationCeiling: 24,
-                rebuildOutcome: undefined,
-                failedDiscoveryFamilies: [],
-                coverageGaps: [],
-                counts: {
-                    recommended: 1,
-                    needsAttention: 0,
-                    alternative: 0,
-                },
-                gaps: [],
-                effectiveIncludedCount: 1,
-                revisionStatus: "draft",
-            };
+            return currentProposal;
         }
         if (functionName === "sourceSelectionProposals:getAdjustmentSets") {
-            return { included: [proposalSource], available: [] };
+            return adjustmentSets;
         }
         if (functionName === "sources:getReviewSummary") {
-            return {
-                revision: 1,
-                status: "draft",
-                counts: { accepted: 0, rejected: 0, pending: 1 },
-                total: 1,
-                candidateLimit: 48,
-            };
+            return reviewSummary;
         }
         if (functionName === "sources:getReviewSource") {
             return args === "skip" ? undefined : proposalSource;
@@ -247,14 +306,9 @@ test("explains a blocked rebuild without exposing provider or configuration deta
     });
     usePaginatedQuery.mockImplementation((reference) => {
         const functionName = getFunctionName(reference);
-        return {
-            results:
-                functionName === "sourceSelectionProposals:listItemsPage"
-                    ? [proposalSource]
-                    : [],
-            status: "Exhausted",
-            loadMore: vi.fn(),
-        };
+        return functionName === "sourceSelectionProposals:listItemsPage"
+            ? proposalPage
+            : inspectionPage;
     });
 
     render(
@@ -279,6 +333,34 @@ test("explains a blocked rebuild without exposing provider or configuration deta
 });
 
 test("shows an approved legacy source set without querying missing proposal items", () => {
+    const reviewSummary = {
+        revision: 1,
+        status: "approved",
+        counts: { accepted: 1, rejected: 0, pending: 0 },
+        total: 1,
+        candidateLimit: 48,
+    };
+    const skippedProposalPage = {
+        results: [],
+        status: "LoadingFirstPage",
+        loadMore: vi.fn(),
+    };
+    const inspectionPage = {
+        results: [
+            {
+                sourceId: proposalSource.sourceId,
+                canonicalUrl: proposalSource.canonicalUrl,
+                title: proposalSource.title,
+                origin: proposalSource.origin,
+                category: proposalSource.category,
+                decision: "accepted",
+                publishedAt: undefined,
+                reason: undefined,
+            },
+        ],
+        status: "Exhausted",
+        loadMore: vi.fn(),
+    };
     useQuery.mockImplementation((reference, args) => {
         const functionName = getFunctionName(reference);
         if (functionName === "sourceSelectionProposals:getCurrent") {
@@ -290,41 +372,16 @@ test("shows an approved legacy source set without querying missing proposal item
                 : { included: [], available: [] };
         }
         if (functionName === "sources:getReviewSummary") {
-            return {
-                revision: 1,
-                status: "approved",
-                counts: { accepted: 1, rejected: 0, pending: 0 },
-                total: 1,
-                candidateLimit: 48,
-            };
+            return reviewSummary;
         }
         return undefined;
     });
     usePaginatedQuery.mockImplementation((reference) => {
         const functionName = getFunctionName(reference);
         if (functionName === "sourceSelectionProposals:listItemsPage") {
-            return {
-                results: [],
-                status: "LoadingFirstPage",
-                loadMore: vi.fn(),
-            };
+            return skippedProposalPage;
         }
-        return {
-            results: [
-                {
-                    sourceId: proposalSource.sourceId,
-                    canonicalUrl: proposalSource.canonicalUrl,
-                    title: proposalSource.title,
-                    origin: proposalSource.origin,
-                    category: proposalSource.category,
-                    decision: "accepted",
-                    publishedAt: undefined,
-                    reason: undefined,
-                },
-            ],
-            status: "Exhausted",
-            loadMore: vi.fn(),
-        };
+        return inspectionPage;
     });
 
     render(
@@ -351,19 +408,20 @@ test("repairs an authorized legacy draft before loading proposal items", async (
         version: 1,
         status: "ready",
     });
+    const reviewSummary = {
+        revision: 1,
+        status: "draft",
+        counts: { accepted: 0, rejected: 0, pending: 1 },
+        total: 1,
+        candidateLimit: 48,
+    };
     useQuery.mockImplementation((reference) => {
         const functionName = getFunctionName(reference);
         if (functionName === "sourceSelectionProposals:getCurrent") {
             return null;
         }
         if (functionName === "sources:getReviewSummary") {
-            return {
-                revision: 1,
-                status: "draft",
-                counts: { accepted: 0, rejected: 0, pending: 1 },
-                total: 1,
-                candidateLimit: 48,
-            };
+            return reviewSummary;
         }
         return undefined;
     });
