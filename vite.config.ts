@@ -22,4 +22,24 @@ export default defineConfig({
             ],
         },
     },
+    build: {
+        rolldownOptions: {
+            output: {
+                codeSplitting: {
+                    groups: [
+                        {
+                            name: "react-vendor",
+                            test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+                            priority: 20,
+                        },
+                        {
+                            name: "base-ui",
+                            test: /node_modules[\\/]@base-ui[\\/]/,
+                            priority: 15,
+                        },
+                    ],
+                },
+            },
+        },
+    },
 });
