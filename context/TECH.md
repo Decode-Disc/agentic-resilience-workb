@@ -177,7 +177,7 @@ Represent source-scope choice as one of three bounded presets: `balanced`,
 budgets only. They never disable required workflow stages, regulatory coverage,
 provenance enforcement, or counter-evidence handling.
 
-After discovery, create one immutable, versioned `SourceSelectionProposal` for the active draft corpus revision and immutable `SourceSelectionProposalItem` records for its candidates. Store the policy version, configured target, candidate-input fingerprint, status, and per-source disposition, rank, and reason codes. Proposal states are `recommended`, `needs_attention`, and `alternative`; they are system recommendations, not analyst decisions.
+After discovery, create one immutable, versioned `SourceSelectionProposal` for the active draft corpus revision and immutable `SourceSelectionProposalItem` records for its candidates. Store the policy version, adaptive recommendation ceiling, candidate-input fingerprint, status, and per-source disposition, rank, and reason codes. Proposal states are `recommended`, `needs_attention`, and `alternative`; they are system recommendations, not analyst decisions.
 
 From `source-selection-v5`, each immutable item also persists `companyLinkageBasis`, `declaredCoverageRoles`, and `eligibleCoverageRoles`. Company linkage is `structural`, `discovery_metadata`, `unverified`, or `not_evaluated`. `structural` preserves the existing CIK, official-domain, decoded-path domain-alias, and complete legal-name path checks. `discovery_metadata` is limited to declared institutional publishers and shared IR hosts whose discovery title contains either the complete normalized legal-name sequence or the exact confirmed website-domain alias as a token of at least five characters. It may support a recommendation contribution, but it never establishes structural identity, document kind, duplicate identity, evidence, or automatic coverage. `declaredCoverageRoles` records registry capability; `eligibleCoverageRoles` records candidate-specific automatic eligibility, and every non-structural discovered candidate has an empty eligible-role list. Analyst-supplied and historical items use `not_evaluated` rather than inventing a linkage proof. See ADR-022.
 
@@ -509,7 +509,7 @@ Cover at minimum:
 - valid and invalid workflow transitions;
 - workflow resumption, cancellation, retries, and idempotency;
 - mandatory source approval before extraction;
-- configurable source-recommendation targeting without forced filling or model calls;
+- adaptive source-recommendation ceiling without forced filling or model calls;
 - deterministic dynamic source-family coverage, proposal versioning, stale detection, and manual-source inclusion;
 - grouped proposal approval writing individual append-only source decisions atomically and idempotently;
 - exclusion of rejected sources everywhere downstream;

@@ -18,7 +18,7 @@ The prototype also needs to limit later retrieval and extraction costs. A model-
 
 ## Decision
 
-Create one immutable, versioned `SourceSelectionProposal` for the active draft `CorpusRevision`, with immutable `SourceSelectionProposalItem` records for its candidate classifications. The proposal stores its policy version, configured target, candidate-input fingerprint, status, creation time, and per-source disposition, rank, and reason codes.
+Create one immutable, versioned `SourceSelectionProposal` for the active draft `CorpusRevision`, with immutable `SourceSelectionProposalItem` records for its candidate classifications. The proposal stores its policy version, recommendation ceiling, candidate-input fingerprint, status, creation time, and per-source disposition, rank, and reason codes. The active ceiling contract is defined by ADR-018.
 
 Build the proposal without an additional model call. Use only validated discovery metadata, source origin, source category, provider result position, publication date, canonical identity, and analyst-supplied origin. The proposal is a relevance estimate and corpus-composition aid, never a truth score or evidence decision.
 
@@ -26,13 +26,13 @@ Apply the deterministic policy in three passes:
 
 1. Remove exact canonical duplicates from consideration, identify manifestly superseded versions where metadata proves the relationship, and classify candidates without sufficient metadata as alternatives or items needing attention.
 2. Recommend the best eligible candidate from each available source family required by the selected coverage preset, including regulatory coverage and counter-evidence. Missing or weak families remain visible gaps; the policy never recommends a weak source merely to fill a category.
-3. Fill the remaining places up to the configured target using source-policy priority, provider result position, recency, publisher diversity, coverage preset, and research angle.
+3. Historical rule, superseded by ADR-018: fill the remaining places up to a fixed recommendation target using source-policy priority, provider result position, recency, publisher diversity, coverage preset, and research angle. The active policy instead adds only candidates with a reliable novel contribution and stops when none remains or the adaptive recommendation ceiling is reached.
 
-Set the server-owned `SOURCE_RECOMMENDED_TARGET` to 12 by default. Validate it as a positive integer no greater than `SOURCE_CANDIDATE_LIMIT`. Treat it as a maximum automatic recommendation target, not a number that must be reached. The analyst may explicitly include more sources.
+Historical rule, superseded by ADR-018: set the server-owned `SOURCE_RECOMMENDED_TARGET` to 12 by default. The active policy uses `SOURCE_RECOMMENDATION_CEILING`, which defaults to `ceil(SOURCE_CANDIDATE_LIMIT / 2)` and is a ceiling, never a fill target. The analyst may explicitly include more sources.
 
 Classify each proposal item as `recommended`, `needs_attention`, or `alternative`. `needs_attention` is non-blocking. Approval is blocked only when there is no source to accept, the proposal is stale, or an integrity or authorization check fails.
 
-Treat every valid analyst-supplied public HTTPS source as `recommended` by default and count it toward the configured target. Display `Added by analyst` as its selection reason. The analyst may still remove it before approval.
+Treat every valid analyst-supplied public HTTPS source as `recommended` by default. Under the active ADR-021 rule, analyst-supplied sources are outside the discovery recommendation ceiling. Display `Added by analyst` as its selection reason. The analyst may still remove it before approval.
 
 Keep the recommendation separate from human authority. Proposal creation writes no accepted or rejected `SourceDecision`. Before approval, analyst adjustments use the existing append-only decisions: including an item writes `accepted`, removing one writes `rejected`, and undoing an adjustment writes a superseding `pending` decision.
 
