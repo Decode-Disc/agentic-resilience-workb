@@ -4,8 +4,12 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./_generated/server";
+import { applyEvidenceExtractionFailed } from "./domain/evidenceFailure";
 import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
-import { assertLifecycleTransition } from "./domain/transitions";
+import {
+    assertLifecycleTransition,
+    canStartNewCorpusRevision,
+} from "./domain/transitions";
 import {
     executionStatusValidator,
     researchRunLifecycleValidator,
@@ -34,6 +38,91 @@ export const createDraft = internalMutation({
             occurredAt: now,
         });
         return runId;
+    },
+});
+
+export const pauseForClaimGenerationUnavailable = internalMutation({
+    args: {
+        runId: v.id("researchRuns"),
+        expectedExecutionGeneration: v.number(),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const run = await ctx.db.get(args.runId);
+        if (!run) {
+            throw new Error("Research run not found");
+        }
+        if (run.executionGeneration !== args.expectedExecutionGeneration) {
+            throw new Error("Stale research execution generation");
+        }
+        if (
+            run.lifecycleState === "extracting_evidence" &&
+            run.executionStatus === "paused" &&
+            run.pauseReason === "claim_generation_unavailable"
+        ) {
+            return null;
+        }
+        if (
+            run.lifecycleState !== "extracting_evidence" ||
+            run.executionStatus !== "running"
+        ) {
+            throw new Error("Research run is not extracting evidence");
+        }
+        const now = Date.now();
+        await ctx.db.patch(run._id, {
+            executionStatus: "paused",
+            pauseReason: "claim_generation_unavailable",
+            nextEventSequence: run.nextEventSequence + 1,
+            updatedAt: now,
+        });
+
+        const existingStep = await ctx.db
+            .query("workflowSteps")
+            .withIndex("by_run_and_key", (query) =>
+                query.eq("runId", run._id).eq("key", "generate_claims"),
+            )
+            .order("desc")
+            .first();
+        if (existingStep) {
+            await ctx.db.patch(existingStep._id, {
+                state: "needs_review",
+                completedAt: undefined,
+                updatedAt: now,
+            });
+        } else {
+            await ctx.db.insert("workflowSteps", {
+                runId: run._id,
+                key: "generate_claims",
+                state: "needs_review",
+                attempt: 1,
+                startedAt: now,
+                updatedAt: now,
+            });
+        }
+
+        await ctx.db.insert("runEvents", {
+            runId: run._id,
+            sequence: run.nextEventSequence + 1,
+            type: "claim_generation_paused",
+            lifecycleState: run.lifecycleState,
+            executionStatus: "paused",
+            stepKey: "generate_claims",
+            occurredAt: now,
+        });
+        return null;
+    },
+});
+
+export const failEvidenceExtraction = internalMutation({
+    args: {
+        runId: v.id("researchRuns"),
+        expectedExecutionGeneration: v.number(),
+        failureCode: v.string(),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        await applyEvidenceExtractionFailed(ctx, args);
+        return null;
     },
 });
 
@@ -208,8 +297,13 @@ async function projectRun(ctx: QueryCtx, run: Doc<"researchRuns">) {
         run.companySnapshot,
         company,
     );
-    const providerFailures = (await ctx.db.query("providerCalls").collect())
-        .filter((call) => call.runId === run._id && call.status === "failed")
+    const providerFailures = (
+        await ctx.db
+            .query("providerCalls")
+            .withIndex("by_run", (query) => query.eq("runId", run._id))
+            .filter((query) => query.eq(query.field("status"), "failed"))
+            .collect()
+    )
         .sort((left, right) => right.createdAt - left.createdAt)
         .slice(0, 5)
         .map((call) => ({
@@ -251,7 +345,18 @@ export const getMine = query({
         if (run?.ownerVisitorId !== visitor._id) {
             throw new Error("Unauthorized");
         }
-        return projectRun(ctx, run);
+        const projection = await projectRun(ctx, run);
+        const revision = run.activeCorpusRevisionId
+            ? await ctx.db.get(run.activeCorpusRevisionId)
+            : null;
+        return {
+            ...projection,
+            corpusRevisionStatus: revision?.status,
+            canStartNewCorpusRevision: canStartNewCorpusRevision(
+                run,
+                revision?.status,
+            ),
+        };
     },
 });
 

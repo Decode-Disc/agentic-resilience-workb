@@ -466,6 +466,10 @@ export const rebuild = action({
                         break;
                     }
                     if (!lease.shouldExecute) {
+                        if (lease.status === "failed") {
+                            failedFamilies.add(family);
+                            break;
+                        }
                         if (
                             lease.status === "succeeded" ||
                             lease.status === "partial"

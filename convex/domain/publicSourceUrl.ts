@@ -10,6 +10,7 @@ import {
 export type PublicSourceUrl = {
     canonicalUrl: string;
     hostname: string;
+    addresses: ReadonlyArray<string>;
 };
 
 export class PublicSourceUrlError extends ManualSourceIntakeError {
@@ -166,5 +167,6 @@ export async function validatePublicSourceUrl(
     return {
         canonicalUrl: url.toString(),
         hostname,
+        addresses,
     };
 }

@@ -23,7 +23,11 @@ const recordAttempt = makeFunctionReference<
         status: "started";
         attempt: number;
     },
-    string
+    {
+        providerCallId: any;
+        shouldExecute: boolean;
+        status: string;
+    }
 >("providerCalls:recordAttempt");
 
 async function createVisitors(t: ReturnType<typeof convexTest>) {
@@ -97,15 +101,15 @@ test("admin controls paid work while analysts remain unauthorized", async () => 
             reason: "Provider spend must stop now.",
         },
     });
-    await expect(
-        t.mutation(recordAttempt, {
-            service: "exa",
-            operation: "search",
-            operationKey: "blocked-paid-step",
-            status: "started",
-            attempt: 1,
-        }),
-    ).rejects.toThrow("Paid provider work is disabled");
+    const attemptResult = await t.mutation(recordAttempt, {
+        service: "exa",
+        operation: "search",
+        operationKey: "blocked-paid-step",
+        status: "started",
+        attempt: 1,
+    });
+    expect(attemptResult.shouldExecute).toBe(false);
+    expect(attemptResult.status).toBe("failed");
     await expect(
         t.run(async (ctx) =>
             ctx.db

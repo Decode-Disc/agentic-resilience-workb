@@ -1,6 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 
+vi.mock("@/hooks/use-source-preview", () => ({
+    useSourcePreview: () => ({ status: "idle" }),
+}));
+
 import { sourceDecisionForKanbanMove } from "@/components/workspace/source-proposal-adjustment-board";
 import { SourceProposalReview } from "@/components/workspace/source-proposal-review";
 

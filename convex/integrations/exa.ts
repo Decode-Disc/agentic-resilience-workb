@@ -1,9 +1,346 @@
-type ExaSearchResult = {
+import { MAX_APPROVED_SOURCE_BYTES } from "@convex/resourceLimits";
+
+export type ExaSearchResult = {
     id: string;
     url: string;
     title: string | null;
     publishedDate?: string;
+    text?: string;
 };
+
+export type ExaContentsClient = {
+    getContents(
+        urls: string[],
+        options?: {
+            text?: { maxCharacters?: number } | true;
+            filterEmptyResults?: boolean;
+        },
+        requestOptions?: { signal: AbortSignal },
+    ): Promise<{
+        results: ReadonlyArray<{
+            id: string;
+            url: string;
+            title?: string | null;
+            text?: string;
+        }>;
+        searchTime?: number;
+        costDollars?: { total: number };
+    }>;
+};
+
+export type ExaContentsAdapterDependencies = {
+    recordAttempt?: (attempt: {
+        operation: string;
+        operationKey: string;
+        status: "started" | "succeeded" | "failed";
+        attempt: number;
+        latencyMs?: number;
+        errorCode?: string;
+        usage?: Record<string, unknown>;
+        reportedCost?: number;
+    }) => Promise<{ shouldExecute: boolean }>;
+    operationScope?: string;
+    timeoutMs?: number;
+    now?: () => number;
+};
+
+export class ExaLogicalTimeoutError extends Error {
+    constructor() {
+        super("Exa request exceeded its application timeout");
+        this.name = "ExaLogicalTimeoutError";
+    }
+}
+
+export class ExaContentsError extends Error {
+    readonly errorCode: string;
+    constructor(message: string, errorCode = "ExaContentsError") {
+        super(message);
+        this.name = "ExaContentsError";
+        this.errorCode = errorCode;
+    }
+}
+
+export function canonicalizeUrl(rawUrl: string): string {
+    const url = new URL(rawUrl);
+    url.hostname = url.hostname.toLowerCase();
+    url.hash = "";
+    if (url.port === "80" && url.protocol === "http:") url.port = "";
+    if (url.port === "443" && url.protocol === "https:") url.port = "";
+    if (url.pathname.length > 1 && url.pathname.endsWith("/")) {
+        url.pathname = url.pathname.slice(0, -1);
+    }
+    return url.toString();
+}
+
+function isRetryableExaError(error: unknown): boolean {
+    if (error instanceof ExaLogicalTimeoutError) {
+        return true;
+    }
+    if (error && typeof error === "object") {
+        const errorObj = error as Record<string, unknown>;
+        const causeObj =
+            errorObj.cause && typeof errorObj.cause === "object"
+                ? (errorObj.cause as Record<string, unknown>)
+                : undefined;
+        const status =
+            typeof errorObj.status === "number"
+                ? errorObj.status
+                : typeof errorObj.statusCode === "number"
+                  ? errorObj.statusCode
+                  : typeof causeObj?.status === "number"
+                    ? causeObj.status
+                    : typeof causeObj?.statusCode === "number"
+                      ? causeObj.statusCode
+                      : undefined;
+        if (typeof status === "number") {
+            return (
+                status === 408 ||
+                status === 429 ||
+                (status >= 500 && status <= 599)
+            );
+        }
+        const code =
+            typeof errorObj.code === "string"
+                ? errorObj.code
+                : typeof causeObj?.code === "string"
+                  ? causeObj.code
+                  : undefined;
+        if (
+            code &&
+            [
+                "ECONNRESET",
+                "ETIMEDOUT",
+                "ECONNREFUSED",
+                "EAI_AGAIN",
+                "ENOTFOUND",
+                "UND_ERR_CONNECT_TIMEOUT",
+                "UND_ERR_SOCKET",
+            ].includes(code)
+        ) {
+            return true;
+        }
+    }
+    if (error instanceof Error) {
+        if (error.name === "AbortError" || error.name === "TimeoutError") {
+            return true;
+        }
+        if (error instanceof ExaContentsError) {
+            if (
+                error.errorCode === "http_408" ||
+                error.errorCode === "http_429" ||
+                /^http_5\d{2}$/.test(error.errorCode) ||
+                error.errorCode === "timeout" ||
+                error.errorCode === "network_error"
+            ) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+async function withAbortableTimeout<T>(
+    work: (signal: AbortSignal) => Promise<T>,
+    timeoutMs: number,
+): Promise<T> {
+    const controller = new AbortController();
+    const timeout = setTimeout(
+        () => controller.abort(new ExaLogicalTimeoutError()),
+        timeoutMs,
+    );
+    try {
+        const result = await work(controller.signal);
+        controller.signal.throwIfAborted();
+        return result;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+export const MAX_EXA_CONTENTS_ATTEMPTS = 2;
+export const DEFAULT_EXA_CONTENTS_TIMEOUT_MS = 120_000;
+
+export function createExaContentsAdapter(
+    client: ExaContentsClient,
+    dependencies: ExaContentsAdapterDependencies = {},
+): {
+    retrieveText(
+        canonicalUrl: string,
+        options?: { maxCharacters?: number },
+    ): Promise<{
+        text: string;
+        providerReference?: string;
+        title?: string;
+        searchTime?: number;
+        costDollars?: number;
+    }>;
+} {
+    const timeoutMs = dependencies.timeoutMs ?? DEFAULT_EXA_CONTENTS_TIMEOUT_MS;
+    const now = dependencies.now ?? Date.now;
+
+    return {
+        async retrieveText(canonicalUrl, options = {}) {
+            const operation = "get_contents";
+            const operationKey = `${dependencies.operationScope ?? "exa"}:${operation}:${canonicalUrl}`;
+
+            for (
+                let attempt = 1;
+                attempt <= MAX_EXA_CONTENTS_ATTEMPTS;
+                attempt += 1
+            ) {
+                const startedAt = now();
+                if (dependencies.recordAttempt) {
+                    const lease = await dependencies.recordAttempt({
+                        operation,
+                        operationKey,
+                        status: "started",
+                        attempt,
+                    });
+                    if (!lease.shouldExecute) {
+                        throw new ExaContentsError(
+                            "Exa provider attempt was already recorded",
+                            "ExaAttemptReplayError",
+                        );
+                    }
+                }
+
+                try {
+                    const defaultMaxCharacters = Math.floor(
+                        MAX_APPROVED_SOURCE_BYTES / 4,
+                    );
+                    const maxCharacters =
+                        typeof options.maxCharacters === "number"
+                            ? Math.min(
+                                  options.maxCharacters,
+                                  defaultMaxCharacters,
+                              )
+                            : defaultMaxCharacters;
+                    const response = await withAbortableTimeout(
+                        (signal) =>
+                            client.getContents(
+                                [canonicalUrl],
+                                {
+                                    text: { maxCharacters },
+                                    filterEmptyResults: false,
+                                },
+                                { signal },
+                            ),
+                        timeoutMs,
+                    );
+
+                    if (response.results.length === 0) {
+                        throw new ExaContentsError(
+                            "No contents returned for URL",
+                            "no_contents_returned",
+                        );
+                    }
+                    if (response.results.length > 1) {
+                        throw new ExaContentsError(
+                            `Exa returned multiple results (${response.results.length}) for a single URL request`,
+                            "unexpected_result_count",
+                        );
+                    }
+
+                    const firstResult = response.results[0];
+                    if (!firstResult) {
+                        throw new ExaContentsError(
+                            "No contents returned for URL",
+                            "no_contents_returned",
+                        );
+                    }
+
+                    if (
+                        canonicalizeUrl(firstResult.url) !==
+                        canonicalizeUrl(canonicalUrl)
+                    ) {
+                        throw new ExaContentsError(
+                            `Exa result URL mismatch: expected ${canonicalUrl}, got ${firstResult.url}`,
+                            "url_mismatch",
+                        );
+                    }
+
+                    const rawResultText = firstResult.text;
+                    if (typeof rawResultText !== "string") {
+                        throw new ExaContentsError(
+                            "No text returned for URL",
+                            "no_text_returned",
+                        );
+                    }
+
+                    const rawBytes = new TextEncoder().encode(
+                        rawResultText,
+                    ).byteLength;
+                    if (rawBytes > MAX_APPROVED_SOURCE_BYTES) {
+                        throw new ExaContentsError(
+                            `Raw Exa text byte length ${rawBytes} exceeds limit of ${MAX_APPROVED_SOURCE_BYTES} bytes`,
+                            "response_too_large",
+                        );
+                    }
+
+                    const rawText = rawResultText.trim();
+                    if (!rawText) {
+                        throw new ExaContentsError(
+                            "No text returned for URL",
+                            "no_text_returned",
+                        );
+                    }
+
+                    if (dependencies.recordAttempt) {
+                        await dependencies.recordAttempt({
+                            operation,
+                            operationKey,
+                            status: "succeeded",
+                            attempt,
+                            latencyMs: Math.max(0, now() - startedAt),
+                            reportedCost: response.costDollars?.total,
+                            usage: {
+                                searchTime: response.searchTime,
+                                providerReference: firstResult.id,
+                            },
+                        });
+                    }
+
+                    return {
+                        text: rawText,
+                        providerReference: firstResult.id,
+                        title: firstResult.title ?? undefined,
+                        searchTime: response.searchTime,
+                        costDollars: response.costDollars?.total,
+                    };
+                } catch (error) {
+                    const latencyMs = Math.max(0, now() - startedAt);
+                    const errorCode =
+                        error instanceof ExaContentsError
+                            ? error.errorCode
+                            : error instanceof Error
+                              ? error.name
+                              : "UnknownProviderError";
+
+                    if (dependencies.recordAttempt) {
+                        await dependencies.recordAttempt({
+                            operation,
+                            operationKey,
+                            status: "failed",
+                            attempt,
+                            latencyMs,
+                            errorCode,
+                        });
+                    }
+
+                    const retryable = isRetryableExaError(error);
+                    if (!retryable || attempt === MAX_EXA_CONTENTS_ATTEMPTS) {
+                        throw error;
+                    }
+                }
+            }
+
+            throw new ExaContentsError(
+                "Exa contents retrieval exhausted its retry budget",
+                "ExaRetryExhaustedError",
+            );
+        },
+    };
+}
 
 export type ExaSearchClient = {
     search(

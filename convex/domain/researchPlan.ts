@@ -1,4 +1,5 @@
 import type { SecCompanyMatch } from "@convex/companyResolution";
+import { v } from "convex/values";
 
 export const ASSESSMENT_DIMENSION_KEYS = [
     "context_ownership",
@@ -12,6 +13,31 @@ export const ASSESSMENT_DIMENSION_KEYS = [
     "learning_loops",
     "abstraction_exposure",
 ] as const;
+
+export type AssessmentDimensionKey = (typeof ASSESSMENT_DIMENSION_KEYS)[number];
+
+export const assessmentDimensionKeyValidator = v.union(
+    ...ASSESSMENT_DIMENSION_KEYS.map((k) => v.literal(k)),
+);
+
+export const RESEARCH_PLAN_TEMPLATE_VERSION = 2;
+
+export const DIMENSION_LABELS: Record<AssessmentDimensionKey, string> = {
+    context_ownership: "context ownership",
+    workflow_control: "workflow control",
+    system_of_action_capability: "system-of-action capability",
+    orchestration_position: "orchestration position",
+    model_platform_dependency: "model-platform dependency",
+    data_defensibility: "data defensibility",
+    switching_costs: "switching costs",
+    pricing_resilience: "pricing resilience",
+    learning_loops: "learning loops",
+    abstraction_exposure: "abstraction exposure",
+};
+
+export function dimensionLabel(key: AssessmentDimensionKey): string {
+    return DIMENSION_LABELS[key];
+}
 
 export type CoveragePreset =
     | "balanced"
@@ -35,6 +61,12 @@ export type ResearchPlanQuery = {
     dimensionKeys: Array<(typeof ASSESSMENT_DIMENSION_KEYS)[number]>;
 };
 
+export type ResearchPlanQuestionInput = {
+    questionKey: string;
+    prompt: string;
+    dimensionKeys: Array<AssessmentDimensionKey>;
+};
+
 const balancedCategories = [
     ["investor_relations", "investor relations earnings presentation"],
     ["official_product", "official product API integration documentation"],
@@ -49,6 +81,34 @@ function hostname(url: string | undefined): string | undefined {
     } catch {
         return undefined;
     }
+}
+
+/**
+ * Builds the immutable, versioned semantic questions for a research plan.
+ * One question per assessment dimension, plus a bounded research-angle question
+ * when a nonempty angle was supplied. Prompts use the confirmed company name
+ * and a human-readable dimension label so question text never leaks raw keys.
+ */
+export function buildResearchPlanQuestions(input: {
+    company: { legalName: string };
+    researchAngle?: string;
+}): Array<ResearchPlanQuestionInput> {
+    const trimmedAngle = input.researchAngle?.trim();
+    const boundedAngle = trimmedAngle ? trimmedAngle.slice(0, 500) : undefined;
+    const questions: Array<ResearchPlanQuestionInput> =
+        ASSESSMENT_DIMENSION_KEYS.map((dimensionKey) => ({
+            questionKey: `dimension:${dimensionKey}`,
+            prompt: `What public evidence supports or challenges ${dimensionLabel(dimensionKey)} for ${input.company.legalName}?`,
+            dimensionKeys: [dimensionKey],
+        }));
+    if (boundedAngle) {
+        questions.push({
+            questionKey: "research-angle",
+            prompt: `What public evidence addresses this research focus: ${boundedAngle}?`,
+            dimensionKeys: [...ASSESSMENT_DIMENSION_KEYS],
+        });
+    }
+    return questions;
 }
 
 /**

@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 
 import {
+    startSanitizedTrace,
+    stopSanitizedTraceIfActive,
+} from "./support/sanitized-trace";
+import {
     admitAnalyst,
     inspectSourceReview,
     seedSourceReview,
@@ -10,6 +14,12 @@ function fixtureKey(name: string): string {
     return `${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+test.afterEach(async ({ page }) => {
+    // Stop any credential-safe trace so a still-active trace cannot capture
+    // admission code from a later failure within the same worker.
+    await stopSanitizedTraceIfActive(page);
+});
+
 test("source decisions update the row, count, and detail without reload", async ({
     page,
 }) => {
@@ -17,6 +27,9 @@ test("source decisions update the row, count, and detail without reload", async 
     const key = fixtureKey("source-decision");
     const seeded = seedSourceReview(key);
     await page.goto(`/workspace/${seeded.runId}?section=sources`);
+    // Credential-bearing admission is complete and the seeded run document is
+    // fully loaded; only now may sanitized diagnostics run.
+    await startSanitizedTrace(page);
 
     await expect(
         page.getByRole("heading", { name: "Reactive Systems Test Company" }),
@@ -72,13 +85,19 @@ test("source decisions update the row, count, and detail without reload", async 
         });
 });
 
-test("corpus approval exits the checkpoint without reload or provider work", async ({
+test("corpus approval starts evidence preparation without reload or provider work", async ({
     page,
 }) => {
     await admitAnalyst(page);
     const key = fixtureKey("corpus-approval");
     const seeded = seedSourceReview(key);
-    await page.goto(`/workspace/${seeded.runId}?section=sources`);
+    await page
+        .getByRole("navigation", { name: "Analyzed companies" })
+        .locator(`a[href*="${seeded.runId}"]`)
+        .click();
+    // Credential-bearing admission is complete and the seeded run document is
+    // fully loaded; only now may sanitized diagnostics run.
+    await startSanitizedTrace(page);
 
     await expect(
         page.getByRole("button", { name: "Approve source set" }),
@@ -104,8 +123,8 @@ test("corpus approval exits the checkpoint without reload or provider work", asy
     await expect
         .poll(() => inspectSourceReview(seeded.runId, key))
         .toMatchObject({
-            lifecycleState: "corpus_approved",
-            executionStatus: "idle",
+            lifecycleState: "extracting_evidence",
+            executionStatus: "failed",
             revisionStatus: "approved",
             decisions: [
                 { title: "Annual report", decision: "accepted" },
@@ -120,6 +139,10 @@ test("corpus approval exits the checkpoint without reload or provider work", asy
             ],
             providerCallCount: 0,
         });
+    await expect(page.getByRole("button", { name: "Start new revision" })).toBeDisabled();
+    await page.getByRole("link", { name: "Progress", exact: true }).click();
+    await expect(page.getByText("Evidence could not be prepared", { exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Research progress" })).not.toContainText(/e2e_fixture|no_committed_passages|extracting_evidence|evidenceExecution/);
 });
 
 test("metadata-linked sources stay explicit through protected approval", async ({
@@ -130,6 +153,9 @@ test("metadata-linked sources stay explicit through protected approval", async (
     const key = fixtureKey("metadata-linkage");
     const seeded = seedSourceReview(key);
     await page.goto(`/workspace/${seeded.runId}?section=sources`);
+    // Credential-bearing admission is complete and the seeded run document is
+    // fully loaded; only now may sanitized diagnostics run.
+    await startSanitizedTrace(page);
 
     await expect(
         page.getByText("Reactive Systems Test Company analysis"),
@@ -149,7 +175,8 @@ test("metadata-linked sources stay explicit through protected approval", async (
     await expect
         .poll(() => inspectSourceReview(seeded.runId, key))
         .toMatchObject({
-            lifecycleState: "corpus_approved",
+            lifecycleState: "extracting_evidence",
+            executionStatus: "failed",
             revisionStatus: "approved",
             decisions: expect.arrayContaining([
                 {

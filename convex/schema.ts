@@ -3,6 +3,15 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 import {
+    aiTaskExecutionModeValidator,
+    claimClassificationValidator,
+    claimDimensionLinkOriginValidator,
+    evidenceRelationValidator,
+} from "./domain/claims";
+import { assessmentDimensionKeyValidator } from "./domain/researchPlan";
+import { showcaseClaimOutputValidator } from "./domain/showcaseManifest";
+import { sourceLocatorValidator } from "./domain/sourcePassages";
+import {
     auditActorValidator,
     auditEventActionValidator,
     companySnapshotValidator,
@@ -115,11 +124,13 @@ export default defineSchema({
                 v.literal("evidence_sufficiency_review"),
                 v.literal("source_review"),
                 v.literal("assessment_review"),
+                v.literal("claim_generation_unavailable"),
             ),
         ),
         nextEventSequence: v.number(),
         workflowId: v.optional(v.string()),
         workflowVersion: v.optional(v.number()),
+        evidenceStartRequestKey: v.optional(v.string()),
         retryCount: v.optional(v.number()),
         createdAt: v.number(),
         updatedAt: v.number(),
@@ -158,6 +169,19 @@ export default defineSchema({
         ),
         createdAt: v.number(),
     }).index("by_run_and_version", ["runId", "version"]),
+    // Stable, versioned semantic questions derived from the confirmed company
+    // snapshot and bounded research angle. Immutably created with the plan.
+    researchPlanQuestions: defineTable({
+        runId: v.id("researchRuns"),
+        researchPlanId: v.id("researchPlans"),
+        planVersion: v.number(),
+        questionKey: v.string(),
+        prompt: v.string(),
+        dimensionKeys: v.array(v.string()),
+        createdAt: v.number(),
+    })
+        .index("by_plan_and_key", ["researchPlanId", "questionKey"])
+        .index("by_run", ["runId"]),
     sources: defineTable({
         runId: v.id("researchRuns"),
         canonicalUrl: v.string(),
@@ -172,6 +196,7 @@ export default defineSchema({
         providerReference: v.optional(v.string()),
         secForm: v.optional(v.string()),
         secAccessionNumber: v.optional(v.string()),
+        secPrimaryDocument: v.optional(v.string()),
         providerResultPosition: v.optional(v.number()),
         discoveryQueryIndex: v.optional(v.number()),
         createdAt: v.number(),
@@ -498,6 +523,148 @@ export default defineSchema({
             "sourceCreatedAt",
             "sourceId",
         ]),
+    evidenceSourceStatuses: defineTable({
+        runId: v.id("researchRuns"),
+        corpusRevisionId: v.id("corpusRevisions"),
+        sourceId: v.id("sources"),
+        sourceVersionId: v.optional(v.id("sourceVersions")),
+        acceptedDecisionId: v.id("sourceDecisions"),
+        executionGeneration: v.number(),
+        status: v.union(
+            v.literal("queued"),
+            v.literal("running"),
+            v.literal("succeeded"),
+            v.literal("partial"),
+            v.literal("failed"),
+        ),
+        requestKey: v.optional(v.string()),
+        failureReason: v.optional(v.string()),
+        createdAt: v.number(),
+        updatedAt: v.number(),
+    })
+        .index("by_run_and_execution_generation", [
+            "runId",
+            "executionGeneration",
+        ])
+        .index("by_run_and_execution_generation_and_source", [
+            "runId",
+            "executionGeneration",
+            "sourceId",
+        ])
+        .index("by_run_corpus_generation_source", [
+            "runId",
+            "corpusRevisionId",
+            "executionGeneration",
+            "sourceId",
+        ])
+        .index("by_run_and_request_key", ["runId", "requestKey"]),
+    artifactUploadLeases: defineTable({
+        runId: v.id("researchRuns"),
+        corpusRevisionId: v.id("corpusRevisions"),
+        sourceId: v.id("sources"),
+        acceptedDecisionId: v.id("sourceDecisions"),
+        contentHash: v.string(),
+        normalizerVersion: v.string(),
+        executionGeneration: v.number(),
+        status: v.union(
+            v.literal("reserved"),
+            v.literal("uploaded"),
+            v.literal("committed"),
+            v.literal("orphaned"),
+            v.literal("reconciled"),
+        ),
+        storageId: v.optional(v.id("_storage")),
+        reconciledAt: v.optional(v.number()),
+        createdAt: v.number(),
+        updatedAt: v.number(),
+    })
+        .index("by_full_identity", [
+            "corpusRevisionId",
+            "sourceId",
+            "acceptedDecisionId",
+            "contentHash",
+            "normalizerVersion",
+        ])
+        .index("by_run_and_execution_generation", [
+            "runId",
+            "executionGeneration",
+        ])
+        .index("by_source_and_content_hash", [
+            "sourceId",
+            "contentHash",
+            "normalizerVersion",
+        ])
+        .index("by_status", ["status"])
+        .index("by_status_and_updated_at", ["status", "updatedAt"])
+        .index("by_storage_id", ["storageId"]),
+    sourceVersions: defineTable({
+        runId: v.id("researchRuns"),
+        corpusRevisionId: v.id("corpusRevisions"),
+        sourceId: v.id("sources"),
+        acceptedDecisionId: v.id("sourceDecisions"),
+        contentHash: v.string(),
+        normalizerVersion: v.string(),
+        storageId: v.id("_storage"),
+        mediaType: v.string(),
+        byteCount: v.number(),
+        pageCount: v.optional(v.number()),
+        canonicalUrl: v.string(),
+        retrievalVersion: v.string(),
+        retrievalMetadata: v.optional(
+            v.object({
+                secAccessionNumber: v.optional(v.string()),
+                secForm: v.optional(v.string()),
+                companyCik: v.optional(v.string()),
+                primaryDocument: v.optional(v.string()),
+                providerReference: v.optional(v.string()),
+                searchTime: v.optional(v.number()),
+                costDollars: v.optional(v.number()),
+                contentType: v.optional(v.string()),
+                pageCount: v.optional(v.number()),
+                pdfFingerprint: v.optional(v.string()),
+            }),
+        ),
+        executionGeneration: v.number(),
+        createdAt: v.number(),
+    })
+        .index("by_full_identity", [
+            "corpusRevisionId",
+            "sourceId",
+            "acceptedDecisionId",
+            "contentHash",
+            "normalizerVersion",
+        ])
+        .index("by_source_and_hash", [
+            "sourceId",
+            "contentHash",
+            "normalizerVersion",
+        ])
+        .index("by_revision_and_source", ["corpusRevisionId", "sourceId"])
+        .index("by_run", ["runId"])
+        .index("by_run_and_execution_generation", [
+            "runId",
+            "executionGeneration",
+        ])
+        .index("by_storage_id", ["storageId"]),
+    sourcePassages: defineTable({
+        sourceVersionId: v.id("sourceVersions"),
+        locatorVersion: v.string(),
+        passageKey: v.optional(v.string()),
+        quotationHash: v.string(),
+        order: v.number(),
+        exactQuotation: v.string(),
+        locator: sourceLocatorValidator,
+        contextBefore: v.optional(v.string()),
+        contextAfter: v.optional(v.string()),
+        headingPath: v.optional(v.array(v.string())),
+        createdAt: v.number(),
+    })
+        .index("by_source_version_and_order", ["sourceVersionId", "order"])
+        .index("by_source_version_and_quotation_hash", [
+            "sourceVersionId",
+            "quotationHash",
+        ])
+        .index("by_passage_key", ["passageKey"]),
     providerCalls: defineTable({
         runId: v.optional(v.id("researchRuns")),
         corpusRevisionId: v.optional(v.id("corpusRevisions")),
@@ -508,6 +675,7 @@ export default defineSchema({
             v.literal("sec"),
             v.literal("exa"),
             v.literal("url_metadata"),
+            v.literal("pdf"),
         ),
         operation: v.string(),
         operationKey: v.string(),
@@ -525,7 +693,9 @@ export default defineSchema({
         leaseExpiresAt: v.optional(v.number()),
         createdAt: v.number(),
         completedAt: v.optional(v.number()),
-    }).index("by_operation_key", ["operationKey"]),
+    })
+        .index("by_operation_key", ["operationKey"])
+        .index("by_run", ["runId"]),
     paidWorkControls: defineTable({
         key: v.literal("global"),
         enabled: v.boolean(),
@@ -583,4 +753,226 @@ export default defineSchema({
     })
         .index("by_run_and_checkpoint", ["runId", "checkpoint"])
         .index("by_run_and_decision_key", ["runId", "decisionKey"]),
+    aiTaskResults: defineTable({
+        runId: v.id("researchRuns"),
+        corpusRevisionId: v.id("corpusRevisions"),
+        taskType: v.union(
+            v.literal("showcase_claim_extraction"),
+            v.literal("semantic_verification"),
+        ),
+        executionMode: aiTaskExecutionModeValidator,
+        fixtureId: v.optional(v.string()),
+        fixtureVersion: v.optional(v.string()),
+        schemaVersion: v.string(),
+        adapterVersion: v.string(),
+        inputHash: v.string(),
+        output: v.union(
+            v.object({
+                kind: v.literal("claim_extraction"),
+                claimCount: v.number(),
+                claimIds: v.array(v.id("claims")),
+            }),
+            v.object({
+                kind: v.literal("semantic_verification"),
+                label: v.union(
+                    v.literal("entailed"),
+                    v.literal("contradicted"),
+                    v.literal("mixed"),
+                ),
+                evidenceReferences: v.array(
+                    v.object({
+                        sourcePassageId: v.id("sourcePassages"),
+                        passageKey: v.string(),
+                    }),
+                ),
+            }),
+        ),
+        providerCallId: v.optional(v.id("providerCalls")),
+        createdAt: v.number(),
+    })
+        .index("by_run_and_task_type_and_input_hash", [
+            "runId",
+            "taskType",
+            "inputHash",
+        ])
+        .index("by_run", ["runId"])
+        .index("by_corpus_revision", ["corpusRevisionId"]),
+    claims: defineTable({
+        runId: v.id("researchRuns"),
+        corpusRevisionId: v.id("corpusRevisions"),
+        statement: v.string(),
+        canonicalText: v.string(),
+        classification: claimClassificationValidator,
+        inputHash: v.optional(v.string()),
+        proposingTaskId: v.id("aiTaskResults"),
+        researchPlanQuestionId: v.optional(v.id("researchPlanQuestions")),
+        schemaVersion: v.string(),
+        createdAt: v.number(),
+    })
+        .index("by_revision_and_canonical", [
+            "corpusRevisionId",
+            "canonicalText",
+            "classification",
+        ])
+        .index("by_revision_input_hash_and_canonical", [
+            "corpusRevisionId",
+            "inputHash",
+            "canonicalText",
+            "classification",
+        ])
+        .index("by_run", ["runId"])
+        .index("by_run_and_corpus", ["runId", "corpusRevisionId"])
+        .index("by_task", ["proposingTaskId"]),
+    claimEvidence: defineTable({
+        claimId: v.id("claims"),
+        sourcePassageId: v.id("sourcePassages"),
+        relation: evidenceRelationValidator,
+        proposingTaskId: v.id("aiTaskResults"),
+        createdAt: v.number(),
+    })
+        .index("by_claim", ["claimId"])
+        .index("by_claim_and_passage", ["claimId", "sourcePassageId"])
+        .index("by_claim_and_passage_and_relation", [
+            "claimId",
+            "sourcePassageId",
+            "relation",
+        ])
+        .index("by_passage", ["sourcePassageId"]),
+    claimDimensionLinks: defineTable({
+        claimId: v.id("claims"),
+        runId: v.id("researchRuns"),
+        corpusRevisionId: v.id("corpusRevisions"),
+        dimensionKey: assessmentDimensionKeyValidator,
+        proposalRevision: v.number(),
+        origin: claimDimensionLinkOriginValidator,
+        proposingTaskId: v.optional(v.id("aiTaskResults")),
+        rationale: v.optional(v.string()),
+        createdAt: v.number(),
+    })
+        .index("by_claim", ["claimId"])
+        .index("by_claim_and_dimension", ["claimId", "dimensionKey"])
+        .index("by_run_and_corpus_and_dimension", [
+            "runId",
+            "corpusRevisionId",
+            "dimensionKey",
+        ])
+        .index("by_corpus_and_claim_and_dimension_and_origin", [
+            "corpusRevisionId",
+            "claimId",
+            "dimensionKey",
+            "origin",
+        ]),
+    // Local Convex E2E durable manifest bridge: a gate-protected, deployable
+    // copy of the showcase manifest keyed by exact input hash. The fixture
+    // writes it so the claim adapter can resolve the identical claims across
+    // separate function invocations in a real local deployment. Every read and
+    // write is gated on E2E_FIXTURES_ENABLED; with the gate disabled this table
+    // stays empty and the in-memory showcase manifest remains the only source.
+    showcaseManifestEntries: defineTable({
+        inputHash: v.string(),
+        fixtureId: v.string(),
+        fixtureVersion: v.string(),
+        schemaVersion: v.string(),
+        adapterVersion: v.string(),
+        claims: v.array(showcaseClaimOutputValidator),
+        createdAt: v.number(),
+    }).index("by_input_hash", ["inputHash"]),
+    policyEvaluations: defineTable({
+        runId: v.id("researchRuns"),
+        corpusRevisionId: v.id("corpusRevisions"),
+        claimId: v.id("claims"),
+        policyVersion: v.string(),
+        normalizedInputs: v.object({
+            classification: claimClassificationValidator,
+            asOfTime: v.number(),
+            sources: v.array(
+                v.object({
+                    sourceId: v.string(),
+                    origin: v.union(
+                        v.literal("sec"),
+                        v.literal("exa"),
+                        v.literal("analyst_url"),
+                    ),
+                    category: v.string(),
+                    secForm: v.optional(v.string()),
+                    publisherIdentity: v.string(),
+                    authorityTier: v.union(
+                        v.literal("regulator_primary"),
+                        v.literal("company_primary"),
+                        v.literal("company_hosted_ir"),
+                        v.literal("institutional_independent"),
+                        v.literal("qualified_partner"),
+                        v.literal("unverified"),
+                        v.literal("analyst_supplied"),
+                    ),
+                    documentKind: v.union(
+                        v.literal("regulatory_annual"),
+                        v.literal("regulatory_interim"),
+                        v.literal("regulatory_material"),
+                        v.literal("regulatory_proxy"),
+                        v.literal("regulatory_ownership"),
+                        v.literal("regulatory_registration"),
+                        v.literal("regulatory_other"),
+                        v.literal("earnings_release"),
+                        v.literal("investor_presentation"),
+                        v.literal("earnings_transcript"),
+                        v.literal("official_product_documentation"),
+                        v.literal("official_integration_documentation"),
+                        v.literal("official_pricing"),
+                        v.literal("official_commercial_terms"),
+                        v.literal("official_security_documentation"),
+                        v.literal("independent_analysis"),
+                        v.literal("news_reporting"),
+                        v.literal("partner_evidence"),
+                        v.literal("community_content"),
+                        v.literal("search_or_index"),
+                        v.literal("unverified_counter_evidence"),
+                        v.literal("unknown"),
+                    ),
+                    publishedAt: v.optional(v.number()),
+                }),
+            ),
+            supportingEvidenceCount: v.number(),
+            counterEvidenceCount: v.number(),
+            contextEvidenceCount: v.number(),
+            distinctSourceCount: v.number(),
+            distinctPublisherCount: v.number(),
+            distinctPassageCount: v.number(),
+            unresolvedCounterCount: v.number(),
+            coveredQuestionCount: v.number(),
+            totalQuestionCount: v.number(),
+            currentPlanQuestionCovered: v.boolean(),
+        }),
+        structuralResult: v.union(
+            v.object({ status: v.literal("valid") }),
+            v.object({
+                status: v.literal("blocked"),
+                ruleId: v.string(),
+            }),
+        ),
+        rules: v.array(
+            v.object({
+                ruleId: v.string(),
+                outcome: v.union(
+                    v.literal("pass"),
+                    v.literal("needs_review"),
+                    v.literal("blocked"),
+                ),
+                reasonCode: v.string(),
+            }),
+        ),
+        reasonCodes: v.array(v.string()),
+        result: v.union(
+            v.literal("pass"),
+            v.literal("needs_review"),
+            v.literal("blocked"),
+        ),
+        inputHash: v.string(),
+        verifierTaskId: v.optional(v.id("aiTaskResults")),
+        createdAt: v.number(),
+    })
+        .index("by_run", ["runId"])
+        .index("by_claim", ["claimId"])
+        .index("by_claim_and_input_hash", ["claimId", "inputHash"])
+        .index("by_run_and_corpus_revision", ["runId", "corpusRevisionId"]),
 });

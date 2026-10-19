@@ -49,6 +49,7 @@ export const researchRunLifecycleValidator = v.union(
     v.literal("awaiting_source_review"),
     v.literal("corpus_approved"),
     v.literal("extracting_evidence"),
+    v.literal("evidence_ready"),
     v.literal("assessing_dimensions"),
     v.literal("awaiting_assessment_review"),
     v.literal("completed"),
@@ -80,6 +81,11 @@ export const workflowStepKeyValidator = v.union(
     v.literal("discover_sources"),
     v.literal("source_review"),
     v.literal("extract_evidence"),
+    v.literal("retrieve_approved_sources"),
+    v.literal("normalize_sources"),
+    v.literal("generate_claims"),
+    v.literal("validate_claims"),
+    v.literal("evaluate_evidence_policy"),
     v.literal("assess_dimensions"),
     v.literal("assessment_review"),
     v.literal("generate_derived_views"),
@@ -97,6 +103,9 @@ export const runEventTypeValidator = v.union(
     v.literal("source_discovery_progress"),
     v.literal("corpus_revision_approved"),
     v.literal("corpus_revision_started"),
+    v.literal("evidence_source_progress"),
+    v.literal("claim_generation_paused"),
+    v.literal("evidence_ready"),
 );
 
 export const auditActorValidator = v.union(

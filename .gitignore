@@ -24,9 +24,11 @@ dist-ssr/
 __unconfig*
 
 .codex/
+.claude/
 .pi/
 .factory/
 .vscode/
+.atlas/
 
 .extract-design-system/
 inspirations/

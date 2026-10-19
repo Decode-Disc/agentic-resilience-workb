@@ -1,6 +1,7 @@
 import {
     ASSESSMENT_DIMENSION_KEYS,
     buildResearchPlan,
+    buildResearchPlanQuestions,
 } from "@convex/domain/researchPlan";
 import { describe, expect, test } from "vitest";
 
@@ -70,5 +71,39 @@ describe("buildResearchPlan", () => {
         expect(independent.queries.length).toBeGreaterThan(
             balanced.queries.length,
         );
+    });
+});
+
+describe("buildResearchPlanQuestions", () => {
+    test("builds locked prompt text and dimension keys for 10 dimensions", () => {
+        const questions = buildResearchPlanQuestions({
+            company: { legalName: "ServiceNow, Inc." },
+        });
+        expect(questions).toHaveLength(10);
+        expect(questions.map((q) => q.questionKey)).toEqual(
+            ASSESSMENT_DIMENSION_KEYS.map((k) => `dimension:${k}`),
+        );
+        for (const q of questions) {
+            expect(q.dimensionKeys).toHaveLength(1);
+            expect(q.prompt).toMatch(
+                /^What public evidence supports or challenges .+ for ServiceNow, Inc\.\?$/,
+            );
+        }
+    });
+
+    test("builds locked research-angle prompt without company name or quotes", () => {
+        const questions = buildResearchPlanQuestions({
+            company: { legalName: "ServiceNow, Inc." },
+            researchAngle: "agentic revenue",
+        });
+        expect(questions).toHaveLength(11);
+        const angleQ = questions.find(
+            (q) => q.questionKey === "research-angle",
+        );
+        expect(angleQ).toEqual({
+            questionKey: "research-angle",
+            prompt: "What public evidence addresses this research focus: agentic revenue?",
+            dimensionKeys: ASSESSMENT_DIMENSION_KEYS,
+        });
     });
 });

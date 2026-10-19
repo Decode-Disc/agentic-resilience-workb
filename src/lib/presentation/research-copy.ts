@@ -1,3 +1,4 @@
+import { dimensionLabel as domainDimensionLabel } from "@convex/domain/researchPlan";
 import type { api } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 
@@ -137,6 +138,7 @@ const lifecycleLabels = {
     awaiting_source_review: "Review source set",
     corpus_approved: "Source set approved",
     extracting_evidence: "Reviewing evidence passages",
+    evidence_ready: "Evidence ready for assessment",
     assessing_dimensions: "Preparing dimension assessments",
     awaiting_assessment_review: "Review dimension assessments",
     completed: "Research dossier complete",
@@ -172,6 +174,9 @@ const eventLabels = {
     source_discovery_progress: "Public sources reviewed",
     corpus_revision_approved: "Source set approved",
     corpus_revision_started: "New source revision started",
+    evidence_source_progress: "Evidence source reviewed",
+    claim_generation_paused: "Claim generation paused",
+    evidence_ready: "Evidence ready",
 } satisfies Record<RunEvent["type"], string>;
 
 const sourceOriginLabels = {
@@ -345,10 +350,139 @@ export function sourceCoverageRoleLabel(role: CoverageRole): string {
     return coverageRoleLabels[role];
 }
 
+/** Returns the analyst-readable label for an assessment dimension key. */
+export function dimensionLabel(key: string): string {
+    return domainDimensionLabel(
+        key as Parameters<typeof domainDimensionLabel>[0],
+    );
+}
+
 /** Translates persisted source decisions for display. */
 export function sourceDecisionLabel(decision: Source["decision"]): string {
     return sourceDecisionLabels[decision];
 }
+
+type EvidenceClaimListItem = FunctionReturnType<
+    typeof api.evidenceMatrix.listClaims
+>["page"][number];
+type EvidenceClaimDetail = FunctionReturnType<
+    typeof api.evidenceMatrix.getClaimDetail
+>;
+type ClaimClassification = EvidenceClaimListItem["classification"];
+type ClaimPolicy = NonNullable<EvidenceClaimListItem["policy"]>;
+type ClaimProcessing = EvidenceClaimListItem["processing"];
+type EvidenceRelation = EvidenceClaimDetail["evidence"][number]["relation"];
+type SourceOrigin = EvidenceClaimDetail["evidence"][number]["source"]["origin"];
+
+const claimClassificationLabels = {
+    Fact: "Fact",
+    Inference: "Inference",
+    Hypothesis: "Hypothesis",
+    Unknown: "Unknown",
+} satisfies Record<ClaimClassification, string>;
+
+const claimPolicyLabels = {
+    pass: "Passed evidence review",
+    needs_review: "Needs additional evidence review",
+    blocked: "Blocked by evidence rules",
+} satisfies Record<ClaimPolicy, string>;
+
+const claimProcessingLabels = {
+    complete: "Evidence ready",
+    partial: "Partial evidence",
+    failed: "Evidence retrieval failed",
+    in_progress: "Evidence retrieval in progress",
+} satisfies Record<ClaimProcessing, string>;
+
+const evidenceRelationLabels = {
+    supporting: "Supports this claim",
+    counter: "Counters this claim",
+    context: "Context for this claim",
+} satisfies Record<EvidenceRelation, string>;
+
+const evidenceSourceOriginLabels = {
+    sec: "SEC filing",
+    exa: "Public web source",
+    analyst_url: "Added by analyst",
+} satisfies Record<SourceOrigin, string>;
+
+/** Returns the analyst-facing classification label for a persisted claim value. */
+export function claimClassificationLabel(
+    classification: ClaimClassification,
+): string {
+    return claimClassificationLabels[classification];
+}
+
+/** Translates a persisted claim evidence-policy result for review display. */
+export function claimPolicyLabel(
+    policy: ClaimPolicy | undefined,
+): string | null {
+    return policy ? claimPolicyLabels[policy] : null;
+}
+
+/** Translates the persisted evidence-retrieval state of a claim. */
+export function claimProcessingLabel(processing: ClaimProcessing): string {
+    return claimProcessingLabels[processing];
+}
+
+/** Explains how a cited passage relates to its claim. */
+export function evidenceRelationLabel(relation: EvidenceRelation): string {
+    return evidenceRelationLabels[relation];
+}
+
+/** Explains the cited source origin at the analyst presentation boundary. */
+export function evidenceSourceOriginLabel(origin: SourceOrigin): string {
+    return evidenceSourceOriginLabels[origin];
+}
+
+/** Renders a reproducible locator summary without exposing storage internals. */
+export function locatorLabel(
+    locator: EvidenceClaimDetail["evidence"][number]["locator"],
+): string {
+    if (locator.kind === "pdf") {
+        return locator.pageNumber
+            ? `PDF page ${locator.pageNumber}`
+            : "PDF document";
+    }
+    return "Web page";
+}
+
+interface EvidenceStatusCopy {
+    eyebrow: string;
+    title: string;
+    description: string;
+}
+
+/** Analyst-safe state copy for the read-only evidence matrix. */
+export const evidenceStatusCopy = {
+    ready: {
+        eyebrow: "Evidence review",
+        title: "Evidence is ready for review",
+        description:
+            "Claims below cite exact public passages from the approved source set.",
+    },
+    preparing: {
+        eyebrow: "Evidence review",
+        title: "Evidence is being prepared",
+        description:
+            "Claims will appear here once extraction and evidence review finish.",
+    },
+    unavailable: {
+        eyebrow: "Evidence review",
+        title: "Evidence is temporarily unavailable",
+        description:
+            "Claim generation is not available for this dossier right now. Your approved sources are preserved for when preparation can continue.",
+    },
+    failed: {
+        eyebrow: "Evidence review",
+        title: "Evidence could not be prepared",
+        description:
+            "Your approved source set is preserved. Review Sources to inspect the collection before trying again.",
+    },
+} satisfies Record<
+    "ready" | "preparing" | "unavailable" | "failed",
+    EvidenceStatusCopy
+>;
 
 /** Makes source-plan categories readable without exposing storage tokens. */
 export function sourceCategoryLabel(category: string): string {

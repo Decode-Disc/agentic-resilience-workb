@@ -2,10 +2,11 @@
 
 import Exa from "exa-js";
 import { lookup } from "node:dns/promises";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
+import { paidWorkDisabledErrorData } from "./domain/providerAvailability";
 import {
     PublicSourceUrlError,
     validatePublicSourceUrl,
@@ -113,6 +114,9 @@ export const discoverForRun = internalAction({
                     },
                 );
                 if (!lease.shouldExecute) {
+                    if (lease.status === "failed") {
+                        throw new ConvexError(paidWorkDisabledErrorData());
+                    }
                     if (
                         lease.status === "succeeded" ||
                         lease.status === "partial"

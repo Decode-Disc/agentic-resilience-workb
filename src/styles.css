@@ -10,86 +10,90 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-    --app-max-width: var(--container-8xl, 100rem);
+  --app-max-width: var(--container-8xl, 100rem);
 
-    --color-info: var(--color-sky-500);
-    --color-info-foreground: var(--color-sky-950);
-    --color-success: var(--color-green-500);
-    --color-success-foreground: var(--color-green-950);
-    --color-danger: var(--color-red-500);
-    --color-danger-foreground: var(--color-red-950);
-    --color-warning: var(--color-amber-400);
-    --color-warning-foreground: var(--color-amber-950);
-    --color-source-selection-accent: var(--accent-foreground);
+  --color-info: var(--color-sky-500);
+  --color-info-foreground: var(--color-sky-950);
+  --color-success: var(--color-green-500);
+  --color-success-foreground: var(--color-green-950);
+  --color-danger: var(--color-red-500);
+  --color-danger-foreground: var(--color-red-950);
+  --color-warning: var(--color-amber-400);
+  --color-warning-foreground: var(--color-amber-950);
+  --color-source-selection-accent: var(--accent-foreground);
 
-    --radius-badge: calc(var(--radius) - 0.25rem);
-    --radius-input: calc(var(--radius) - 0.35rem);
-    --radius-source-card: calc(var(--radius) - 0.25rem);
+  --radius-badge: calc(var(--radius) - 0.25rem);
+  --radius-input: calc(var(--radius) - 0.35rem);
+  --radius-source-card: calc(var(--radius) - 0.25rem);
 
-    --input-height: calc(var(--spacing) * 11);
-    --input-group-child-height: calc(var(--spacing) * 9);
-    --input-group-height: calc(var(--spacing) * 11);
+  --input-height: calc(var(--spacing) * 11);
+  --input-group-child-height: calc(var(--spacing) * 9);
+  --input-group-height: calc(var(--spacing) * 11);
 }
 
 @layer base {
-    * {
-        @apply border-border outline-ring/50;
-    }
+  * {
+    @apply border-border outline-ring/50;
+  }
 
-    html {
-        @apply font-sans;
-    }
+  html {
+    @apply font-sans;
+  }
 
-    body {
-        @apply bg-background text-foreground antialiased;
-    }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
 
-    ::selection {
-        @apply bg-brand-purple text-primary-foreground;
-    }
+  ::selection {
+    @apply bg-brand-purple text-primary-foreground;
+  }
 
-    button,
-    input[type="button"],
-    input[type="submit"],
-    a[data-slot="dropdown-menu-item"] {
-        @apply cursor-pointer!;
-    }
+  button,
+  input[type="button"],
+  input[type="submit"],
+  a[data-slot="dropdown-menu-item"] {
+    @apply cursor-pointer!;
+  }
 
-    *[data-slot="dropdown-menu-content"] {
-        @apply rounded-xl!;
-    }
+  *[data-slot="dropdown-menu-content"] {
+    @apply rounded-xl!;
+  }
+}
+
+@utility approve-button {
+  @apply bg-approved! hover:bg-approved/90! text-approved-foreground! [&_svg:not([class*='size-'])]:size-6;
 }
 
 @layer components {
-    .max-width-container {
-        @apply mx-auto w-full max-w-(--app-max-width) px-4 sm:px-6 md:px-12;
-    }
-    
-    .start-double-slash {
-        @apply text-accent-foreground;
-    }
+  .max-width-container {
+    @apply mx-auto w-full max-w-(--app-max-width) px-4 sm:px-6 md:px-12;
+  }
 
-    .link {
-        @apply text-blue-500 underline underline-offset-4 transition-colors hover:text-blue-800;
-    }
+  .start-double-slash {
+    @apply text-accent-foreground;
+  }
+
+  .link {
+    @apply text-blue-500 underline underline-offset-4 transition-colors hover:text-blue-800;
+  }
 }
 
 @utility surface-panel {
-    @apply rounded-3xl border border-border/60 bg-card text-card-foreground shadow-soft;
+  @apply rounded-3xl border border-border/60 bg-card text-card-foreground shadow-soft;
 }
 
 @utility surface-floating {
-    @apply rounded-3xl border border-border/50 bg-card/80 text-card-foreground shadow-floating backdrop-blur-md;
+  @apply rounded-3xl border border-border/50 bg-card/80 text-card-foreground shadow-floating backdrop-blur-md;
 }
 
 @utility text-display {
-    @apply font-heading text-3xl font-semibold tracking-tight sm:text-4xl md:text-5xl;
+  @apply font-heading text-3xl font-semibold tracking-tight sm:text-4xl md:text-5xl;
 }
 
 @utility text-section {
-    @apply font-heading text-lg font-semibold tracking-tight;
+  @apply font-heading text-lg font-semibold tracking-tight;
 }
 
 @utility text-micro {
-    @apply font-mono text-[0.6875rem] font-medium tracking-[0.12em] text-muted-foreground uppercase;
+  @apply font-mono text-[0.6875rem] font-medium tracking-[0.12em] text-muted-foreground uppercase;
 }

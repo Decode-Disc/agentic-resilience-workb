@@ -1,4 +1,13 @@
-import { sourceRecommendedTarget } from "@convex/resourceLimits";
+import {
+    MAX_APPROVED_SOURCE_BYTES,
+    MAX_EVIDENCE_ARTIFACT_BYTES,
+    MAX_NORMALIZED_ARTIFACT_BYTES,
+    MAX_PASSAGES_PER_SOURCE,
+    MAX_PDF_PAGES,
+    MAX_QUOTATION_CHARS,
+    MAX_REDIRECTS,
+    sourceRecommendedTarget,
+} from "@convex/resourceLimits";
 import { afterEach, expect, test } from "vitest";
 
 const originalCandidateLimit = process.env.SOURCE_CANDIDATE_LIMIT;
@@ -41,4 +50,14 @@ test("rejects a source recommendation ceiling above the candidate limit", () => 
     expect(() => sourceRecommendedTarget()).toThrow(
         "Source recommendation ceiling must not exceed source candidate limit",
     );
+});
+
+test("exports Phase 5 locked resource limits", () => {
+    expect(MAX_APPROVED_SOURCE_BYTES).toBe(16 * 1024 * 1024);
+    expect(MAX_NORMALIZED_ARTIFACT_BYTES).toBe(16 * 1024 * 1024);
+    expect(MAX_EVIDENCE_ARTIFACT_BYTES).toBe(16 * 1024 * 1024);
+    expect(MAX_PDF_PAGES).toBe(400);
+    expect(MAX_PASSAGES_PER_SOURCE).toBe(512);
+    expect(MAX_QUOTATION_CHARS).toBe(4000);
+    expect(MAX_REDIRECTS).toBe(5);
 });

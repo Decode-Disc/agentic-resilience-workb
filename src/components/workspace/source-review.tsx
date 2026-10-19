@@ -420,7 +420,7 @@ function SourceReviewToolbar({
                         <Button
                             type="button"
                             size="lg"
-                            className="w-full sm:w-auto"
+                            className="w-full sm:w-auto approve-button"
                             onClick={() => void onApprove()}
                             disabled={!canApprove}>
                             <Icon iconNode={CheckmarkCircle02Icon} />

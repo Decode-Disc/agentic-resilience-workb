@@ -1,4 +1,5 @@
 import type { Infer } from "convex/values";
+import type { Doc } from "@convex/_generated/dataModel";
 
 import type {
     executionStatusValidator,
@@ -7,6 +8,17 @@ import type {
 
 export type ResearchRunLifecycle = Infer<typeof researchRunLifecycleValidator>;
 export type ExecutionStatus = Infer<typeof executionStatusValidator>;
+
+export function canStartNewCorpusRevision(
+    run: Pick<Doc<"researchRuns">, "lifecycleState" | "executionStatus">,
+    revisionStatus: Doc<"corpusRevisions">["status"] | undefined,
+): boolean {
+    return (
+        revisionStatus === "approved" &&
+        run.lifecycleState === "corpus_approved" &&
+        run.executionStatus === "idle"
+    );
+}
 
 const allowedTransitions: Record<
     ResearchRunLifecycle,
@@ -25,7 +37,8 @@ const allowedTransitions: Record<
     discovering_sources: ["awaiting_source_review"],
     awaiting_source_review: ["corpus_approved"],
     corpus_approved: ["extracting_evidence", "awaiting_source_review"],
-    extracting_evidence: ["assessing_dimensions"],
+    extracting_evidence: ["evidence_ready"],
+    evidence_ready: ["assessing_dimensions"],
     assessing_dimensions: ["awaiting_assessment_review"],
     awaiting_assessment_review: ["completed", "awaiting_source_review"],
     completed: ["awaiting_source_review"],
@@ -39,6 +52,7 @@ const requiredExecutionStatus: Record<ResearchRunLifecycle, ExecutionStatus> = {
     awaiting_source_review: "paused",
     corpus_approved: "idle",
     extracting_evidence: "running",
+    evidence_ready: "idle",
     assessing_dimensions: "running",
     awaiting_assessment_review: "paused",
     completed: "completed",

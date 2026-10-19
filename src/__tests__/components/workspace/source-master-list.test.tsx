@@ -2,6 +2,10 @@ import type { Id } from "@convex/_generated/dataModel";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 
+vi.mock("@/hooks/use-source-preview", () => ({
+    useSourcePreview: () => ({ status: "idle" }),
+}));
+
 import { SourceMasterList } from "@/components/workspace/source-master-list";
 
 const testSource = {

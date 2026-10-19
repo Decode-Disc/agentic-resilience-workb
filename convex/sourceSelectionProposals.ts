@@ -18,6 +18,7 @@ import {
 import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
 import { claimPausedRunExecution } from "./domain/executionClaim";
 import { purgePreviewCacheForSource } from "./domain/previewCache";
+import { canStartNewCorpusRevision } from "./domain/transitions";
 import { buildResearchPlan } from "./domain/researchPlan";
 import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
@@ -1456,11 +1457,7 @@ export const startNewCorpusRevision = mutation({
         ) {
             throw new Error("Unauthorized");
         }
-        if (
-            revision.status !== "approved" ||
-            run.lifecycleState !== "corpus_approved" ||
-            run.executionStatus !== "idle"
-        ) {
+        if (!canStartNewCorpusRevision(run, revision.status)) {
             throw new Error(
                 "Current corpus revision must be approved before starting a new one",
             );

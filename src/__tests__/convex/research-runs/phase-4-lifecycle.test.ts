@@ -15,13 +15,9 @@ const transition = makeFunctionReference<
     {
         runId: string;
         expectedExecutionGeneration: number;
-        lifecycleState:
-            | "checking_public_evidence"
-            | "discovering_sources"
-            | "awaiting_source_review"
-            | "corpus_approved";
-        executionStatus: "running" | "paused" | "idle";
-        stepKey: "check_public_evidence" | "discover_sources" | "source_review";
+        lifecycleState: string;
+        executionStatus: string;
+        stepKey: string;
     },
     null
 >("researchRuns:transition");

@@ -2,7 +2,7 @@
 
 ## Status
 
-Validated on 2026-08-15. This document defines the Phase 5 design decision only; production implementation, authoritative ADR updates, and changes to the active lifecycle contract remain separately authorized.
+Validated on 2026-08-15. Accepted as authoritative through ADR-023 on 2026-08-15. Production implementation remains separately authorized; the lifecycle, records, workflow ownership, provider deferral, numeric safety limits, and hybrid showcase/live boundary defined here are now the accepted authority.
 
 ## Problem
 
@@ -67,6 +67,8 @@ Adopt real SEC and Exa retrieval for accepted sources, deterministic normalizati
 
 ## Architecture
 
+The 2026-10-19 amendment to ADR-023 makes continuation automatic for new corpus approvals. The final Phase 4 handoff records the approved state and invokes the shared Phase 5 start implementation in one mutation. A deterministic revision-bound key, expected generation, and atomic execution-slot claim prevent duplicate starts and idle-gap races. The public start remains available for historical approved idle dossiers. Sources remain inspectable read-only during and after extraction, with unchanged evidence-readiness and assessment gates.
+
 Phase 5 is a separate decision-anchored Convex Workflow execution rather than an extension of the Phase 4 workflow. A protected start mutation verifies run ownership, the active approved immutable `CorpusRevision`, `corpus_approved + idle`, the absence of another running workflow, and the visitor execution limit. In the same transaction, it reads the latest effective decision head for every source from the revision's `sourceReviewItems` projection, verifies each `latestDecisionId` against its append-only `SourceDecision`, and freezes only heads whose effective decision is `accepted`. It requires at least one accepted head, persists each source and authoritative accepted-decision ID in the Phase 5 source projection, atomically claims the execution slot, increments the execution generation, and transitions to `extracting_evidence + running`. Historical accepted rows superseded by pending or rejected heads confer no authority.
 
 The workflow is:
@@ -110,7 +112,7 @@ The run owner may request `Retry claim generation`, or a protected administrator
 
 If no valid passage can be created, the workflow stops with a retryable typed failure or reviewable source outcome according to the terminal causes. It does not create empty claims or advance to `evidence_ready`.
 
-This lifecycle change is not yet authoritative. Before implementation, a new ADR must update the product design, `context/TECH.md`, validators, transition rules, pause reasons, workflow ownership rules, progress projections, and `ROADMAP.md` with the exact protocol above.
+This lifecycle change is now authoritative through ADR-023. Implementation must update validators, transition rules, pause reasons, workflow ownership rules, progress projections, and `ROADMAP.md` to match the exact protocol above.
 
 ## Domain and Persistence Model
 
@@ -243,7 +245,7 @@ Cached, seeded, fixture, or precomputed data is always labelled. The distinction
 
 ## Required Documentation Changes Before Implementation
 
-Create a new accepted ADR covering the separate Phase 5 workflow, effective accepted-decision heads, `evidence_ready`, the complete claim-generation pause and retry protocol, `ClaimDimensionLink`, `EvidenceSourceStatus`, artifact-upload ownership, the hybrid live/showcase boundary, and the decision to move approved-source SEC and Exa retrieval ahead of the remaining Phase 8 provider work. Then update the product design and `context/TECH.md` to make the lifecycle and new records authoritative, and revise `ROADMAP.md` so its Phase 5, Phase 8, and Phase 9 acceptance language and ordering match this design. ADR-017 through ADR-022 remain authoritative for source selection and approval; the new ADR consumes their accepted decision boundary without rewriting them.
+ADR-023 has been accepted and the product design, `context/TECH.md`, and `ROADMAP.md` have been aligned. ADR-017 through ADR-022 remain authoritative for source selection and approval; ADR-023 consumes their accepted decision boundary without rewriting them. ADR-004, ADR-009, and ADR-010 remain authoritative for provider boundaries; ADR-023 moves only approved-source SEC and Exa retrieval into Phase 5 without superseding them.
 
 ## Decision
 

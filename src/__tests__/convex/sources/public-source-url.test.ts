@@ -26,6 +26,7 @@ describe("validatePublicSourceUrl", () => {
         ).resolves.toEqual({
             canonicalUrl: "https://example.com/report",
             hostname: "example.com",
+            addresses: ["93.184.216.34"],
         });
     });
 
@@ -92,6 +93,7 @@ test("captures bounded metadata without persisting content", async () => {
     ).resolves.toEqual({
         canonicalUrl: "https://example.com/report",
         title: "Public report",
+        contentType: "text/html",
     });
 });
 
@@ -125,6 +127,7 @@ test("pins the validated address for the initial request and redirects", async (
     ).resolves.toEqual({
         canonicalUrl: "https://reports.example.org/report",
         title: "Pinned public report",
+        contentType: "text/html",
     });
     expect(requests).toEqual([
         {
@@ -174,5 +177,6 @@ test("prepares a public PDF from headers without reading its body", async () => 
     ).resolves.toEqual({
         canonicalUrl: "https://example.com/reports/annual.pdf",
         title: "Annual Report 2025.pdf",
+        contentType: "application/pdf",
     });
 });

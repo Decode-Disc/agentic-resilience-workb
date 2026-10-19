@@ -76,14 +76,19 @@ Outcome: an analyst can start a real company investigation and approve a propose
 
 Outcome: approved sources become inspectable, precisely cited evidence rather than an unsupported narrative.
 
-- [ ] Retrieve and normalize approved sources with visible partial failures.
-- [ ] Create stable, reproducible source passages and locators.
-- [ ] Extract typed atomic `Fact`, `Inference`, `Hypothesis`, and `Unknown` claim proposals.
-- [ ] Apply non-overridable structural validation and versioned deterministic policy evaluation.
-- [ ] Trigger typed semantic verification only when deterministic rules require it.
-- [ ] Link each canonical material claim to exact passages and separately decided dimension links.
-- [ ] Preserve supporting evidence, counter-evidence, and critical unknowns.
-- [ ] Exclude rejected sources from every downstream artifact.
+- [ ] Retrieve approved SEC filings and Exa Contents sources with visible partial failures.
+- [x] Normalize approved sources deterministically; page-aware PDF normalization uses deterministic fixture adapters until real Unstructured is authorized in Phase 8.
+- [x] Create stable, reproducible source passages and locators.
+- [x] Extract typed atomic `Fact`, `Inference`, `Hypothesis`, and `Unknown` claim proposals through a hash-gated deterministic showcase adapter.
+- [x] Apply non-overridable structural validation and versioned deterministic policy evaluation.
+- [x] Trigger typed semantic verification only when deterministic rules require it.
+- [x] Link each canonical material claim to exact passages and separately decided dimension links.
+- [x] Preserve supporting evidence, counter-evidence, and critical unknowns.
+- [x] Exclude rejected sources from every downstream artifact.
+- [x] End successful Phase 5 work at the `evidence_ready + idle` handoff.
+- [x] Preserve arbitrary live retrieval provenance but pause honestly at `claim_generation_unavailable` without fabricated claims or Phase 6 unlock.
+
+Note: Phase 5 implementation and deterministic/local certification are complete (2026-08-22, see `docs/verification/2026-08-15-phase-5-evidence-matrix-provenance.md`), while real SEC/Exa provider certification remains deferred pending explicit authorization. Real Unstructured and real model-provider work remain Phase 8.
 
 ## Phase 6 — Dimension Assessment and Human Review
 
@@ -116,13 +121,16 @@ Outcome: the deterministic workflow can use real services safely through provide
 
 - [ ] Implement capability-based model routing and configuration-driven model selection.
 - [ ] Add direct AI SDK adapters for OpenRouter and the approved Codex subscription transport.
-- [ ] Add SEC HTTP, Exa SDK, and Unstructured Pipeline Jobs HTTP adapters.
+- [ ] Add the real Unstructured Pipeline Jobs HTTP adapter for page-aware PDF normalization.
+- [ ] Integrate real model-provider claim generation, semantic verification, and fallback routing.
 - [ ] Keep retries and explicit fallback application-controlled and fully audited.
 - [ ] Validate structured provider output before it becomes usable evidence.
 - [ ] Record best-effort usage, latency, status, retries, and reported cost.
 - [ ] Enforce configurable breadth limits, bounded retries, and the paid-work emergency switch.
 - [ ] Add the minimal admin operations surface for runs, checkpoints, provider calls, quota restoration, and paid-work shutdown.
 - [ ] Verify partial failures and late results cannot corrupt or advance cancelled runs.
+
+Approved-source SEC HTTP and Exa Contents retrieval has moved to Phase 5 under ADR-023. Phase 8 retains the real Unstructured adapter, real model-provider routing, and the remaining operational guards.
 
 ## Phase 9 — CCC Showcase and Evaluation
 
@@ -137,6 +145,7 @@ Outcome: one carefully curated dossier demonstrates original, contested, and mea
 - [ ] Evaluate citation validity, entailment, classification, contradiction retrieval, and unsupported-claim rate.
 - [ ] Record duration, available provider usage or cost, and analyst corrections.
 - [ ] Label the completed dossier and all fixtures as curated or precomputed.
+- [ ] Allow the curated Phase 5 dossier to demonstrate the read-only Evidence Matrix while keeping showcase labelling in Phase 9.
 - [ ] Add another evaluation company only if it closes a measured gap.
 
 ### Demonstration Checkpoint B — Completed Showcase

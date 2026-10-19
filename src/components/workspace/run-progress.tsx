@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/empty";
 import {
     eventLabel,
+    evidenceStatusCopy,
     executionLabel,
     lifecycleLabel,
 } from "@/lib/presentation/research-copy";
@@ -29,6 +30,16 @@ export function RunProgress({
         "awaiting_evidence_sufficiency_review",
         "awaiting_source_review",
     ].includes(run.lifecycleState);
+    const evidenceCopy =
+        run.lifecycleState === "extracting_evidence"
+            ? run.pauseReason === "claim_generation_unavailable"
+                ? evidenceStatusCopy.unavailable
+                : run.executionStatus === "running"
+                  ? evidenceStatusCopy.preparing
+                  : run.executionStatus === "failed"
+                    ? evidenceStatusCopy.failed
+                    : null
+            : null;
 
     return (
         <section className="space-y-5" aria-label="Research progress">
@@ -44,8 +55,22 @@ export function RunProgress({
                 </div>
                 {run.lifecycleState === "corpus_approved" ? (
                     <p className="mt-4 text-sm text-muted-foreground">
-                        Source set approved. Evidence review will begin from
-                        these sources.
+                        Source set approved. These sources are ready for
+                        evidence preparation.
+                    </p>
+                ) : null}
+                {evidenceCopy ? (
+                    <div className="mt-4 text-sm">
+                        <p className="font-medium">{evidenceCopy.title}</p>
+                        <p className="mt-2 text-muted-foreground">
+                            {evidenceCopy.description}
+                        </p>
+                    </div>
+                ) : null}
+                {run.lifecycleState === "evidence_ready" ? (
+                    <p className="mt-4 text-sm text-muted-foreground">
+                        Evidence is ready. Review the extracted claims in the
+                        Evidence section before assessing dimensions.
                     </p>
                 ) : null}
             </div>
@@ -57,11 +82,14 @@ export function RunProgress({
                         Some sources could not be retrieved
                     </h3>
                     <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                        {canAddManualSource
-                            ? "Independent web discovery is unavailable. Filing sources remain available, and you can add a public source manually."
-                            : run.lifecycleState === "corpus_approved"
-                              ? "Independent web discovery was unavailable. Filing sources remain available in this approved source set."
-                              : "Independent web discovery is unavailable. Filing sources remain available for the source review checkpoint."}
+                        {run.lifecycleState === "extracting_evidence" ||
+                        run.lifecycleState === "evidence_ready"
+                            ? "Some research sources were unavailable. Inspect the approved set in Sources and consider any evidence gaps during review."
+                            : canAddManualSource
+                              ? "Independent web discovery is unavailable. Filing sources remain available, and you can add a public source manually."
+                              : run.lifecycleState === "corpus_approved"
+                                ? "Independent web discovery was unavailable. Filing sources remain available in this approved source set."
+                                : "Independent web discovery is unavailable. Filing sources remain available for the source review checkpoint."}
                     </p>
                 </div>
             ) : null}

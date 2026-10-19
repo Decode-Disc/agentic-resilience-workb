@@ -2,6 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { lookup } from "node:dns/promises";
+import type { IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import { getAuthUserId } from "@convex-dev/auth/server";
@@ -126,7 +127,7 @@ async function readBoundedText(response: Response): Promise<string> {
 export async function inspectPublicSourceMetadata(
     rawUrl: string,
     dependencies: MetadataDependencies,
-): Promise<{ canonicalUrl: string; title: string }> {
+): Promise<{ canonicalUrl: string; title: string; contentType: string }> {
     let current = rawUrl;
     for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
         let resolvedAddresses: ReadonlyArray<string> = [];
@@ -191,7 +192,10 @@ export async function inspectPublicSourceMetadata(
             throw manualSourceIntakeError("access_blocked", { field: "url" });
         }
         const contentType =
-            response.headers.get("content-type")?.toLowerCase() ?? "";
+            (response.headers.get("content-type") ?? "")
+                .toLowerCase()
+                .split(";")[0]
+                ?.trim() ?? "";
         if (
             !contentType.startsWith("text/html") &&
             !contentType.startsWith("application/xhtml+xml") &&
@@ -212,6 +216,7 @@ export async function inspectPublicSourceMetadata(
                 .at(-1);
             return {
                 canonicalUrl: validated.canonicalUrl,
+                contentType,
                 title:
                     (filename ? decodeURIComponent(filename) : pathTitle) ||
                     new URL(validated.canonicalUrl).hostname,
@@ -221,6 +226,7 @@ export async function inspectPublicSourceMetadata(
         const titleMatch = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(body)?.[1];
         return {
             canonicalUrl: validated.canonicalUrl,
+            contentType,
             title:
                 titleMatch?.replace(/\s+/g, " ").trim() ||
                 new URL(validated.canonicalUrl).hostname,
@@ -416,9 +422,54 @@ function normalizeRemoteAddress(address: string | undefined): string {
 export function requestPinnedPublicSource(
     rawUrl: string,
     pinnedAddress: string,
+    options?: {
+        maxBytes?: number;
+        allowPdfBody?: boolean;
+        timeoutMs?: number;
+    },
 ): Promise<Response> {
     const url = new URL(rawUrl);
+    const maxBytes = options?.maxBytes ?? MAX_RESPONSE_BYTES;
+    const timeoutMs = options?.timeoutMs ?? REQUEST_TIMEOUT_MS;
+    const allowPdfBody = options?.allowPdfBody ?? false;
+
     return new Promise((resolve, reject) => {
+        let settled = false;
+        let activeResponse: IncomingMessage | null = null;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+
+        const cleanup = () => {
+            if (timer !== undefined) {
+                clearTimeout(timer);
+                timer = undefined;
+            }
+        };
+
+        const safeReject = (err: unknown) => {
+            if (!settled) {
+                settled = true;
+                cleanup();
+                reject(err);
+            }
+        };
+
+        const safeResolve = (res: Response) => {
+            if (!settled) {
+                settled = true;
+                cleanup();
+                resolve(res);
+            }
+        };
+
+        timer = setTimeout(() => {
+            const timeoutError = manualSourceIntakeError("request_timeout");
+            if (activeResponse) {
+                activeResponse.destroy(timeoutError);
+            }
+            request.destroy(timeoutError);
+            safeReject(timeoutError);
+        }, timeoutMs);
+
         const request = httpsRequest(
             url,
             {
@@ -438,6 +489,7 @@ export function requestPinnedPublicSource(
                 },
             },
             (response) => {
+                activeResponse = response;
                 const connectedAddress = normalizeRemoteAddress(
                     response.socket.remoteAddress,
                 );
@@ -445,7 +497,7 @@ export function requestPinnedPublicSource(
                     connectedAddress !== normalizeRemoteAddress(pinnedAddress)
                 ) {
                     response.destroy();
-                    reject(
+                    safeReject(
                         new Error(
                             "Source connection did not use the validated address",
                         ),
@@ -467,7 +519,7 @@ export function requestPinnedPublicSource(
                     "identity";
                 if (encoding !== "identity") {
                     response.destroy();
-                    reject(
+                    safeReject(
                         manualSourceIntakeError("unsupported_content_type", {
                             field: "url",
                         }),
@@ -477,22 +529,24 @@ export function requestPinnedPublicSource(
                 const contentType =
                     headers.get("content-type")?.toLowerCase() ?? "";
                 if (contentType.startsWith("application/pdf")) {
-                    response.destroy();
-                    resolve(
-                        new Response(null, {
-                            status: response.statusCode ?? 500,
-                            headers,
-                        }),
-                    );
-                    return;
+                    if (!allowPdfBody) {
+                        response.destroy();
+                        safeResolve(
+                            new Response(null, {
+                                status: response.statusCode ?? 500,
+                                headers,
+                            }),
+                        );
+                        return;
+                    }
                 }
                 const declaredLength = Number(headers.get("content-length"));
                 if (
                     Number.isFinite(declaredLength) &&
-                    declaredLength > MAX_RESPONSE_BYTES
+                    declaredLength > maxBytes
                 ) {
                     response.destroy();
-                    reject(
+                    safeReject(
                         manualSourceIntakeError("response_too_large", {
                             field: "url",
                         }),
@@ -503,7 +557,7 @@ export function requestPinnedPublicSource(
                 let bytes = 0;
                 response.on("data", (chunk: Buffer) => {
                     bytes += chunk.byteLength;
-                    if (bytes > MAX_RESPONSE_BYTES) {
+                    if (bytes > maxBytes) {
                         response.destroy(
                             manualSourceIntakeError("response_too_large", {
                                 field: "url",
@@ -513,9 +567,9 @@ export function requestPinnedPublicSource(
                     }
                     chunks.push(chunk);
                 });
-                response.on("error", reject);
+                response.on("error", safeReject);
                 response.on("end", () => {
-                    resolve(
+                    safeResolve(
                         new Response(Buffer.concat(chunks), {
                             status: response.statusCode ?? 500,
                             headers,
@@ -524,10 +578,7 @@ export function requestPinnedPublicSource(
                 });
             },
         );
-        request.setTimeout(REQUEST_TIMEOUT_MS, () => {
-            request.destroy(manualSourceIntakeError("request_timeout"));
-        });
-        request.on("error", reject);
+        request.on("error", safeReject);
         request.end();
     });
 }

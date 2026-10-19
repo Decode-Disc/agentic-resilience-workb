@@ -65,6 +65,7 @@ The completed design contains these explicit concepts:
 - `Company`
 - `ResearchRun`
 - `ResearchPlan`
+- `ResearchPlanQuestion`
 - `RunEvent`
 - `Source`
 - `SourceSelectionProposal`
@@ -75,6 +76,7 @@ The completed design contains these explicit concepts:
 - `SourcePassage`
 - `Claim`
 - `ClaimEvidence`
+- `ClaimDimensionLink`
 - `ClaimDecision`
 - `ClaimDimensionDecision`
 - `Relationship`
@@ -85,6 +87,18 @@ The completed design contains these explicit concepts:
 - `ProviderCall`
 - `AITaskResult`
 - `PolicyEvaluation`
+- `EvidenceSourceStatus`
+- `ArtifactUploadLease`
+
+`ResearchPlanQuestion` is an immutable, versioned record created with the
+research plan. Every `Unknown` claim references at least one unresolved
+question and at least one context passage; coverage is derived from claims and
+passages rather than stored by mutating the question. `ClaimDimensionLink` is
+an immutable proposal record between one claim revision and one assessment
+dimension; it contains no effective decision. `EvidenceSourceStatus` is a
+mutable projection per frozen accepted source and execution generation.
+`ArtifactUploadLease` owns one logical artifact-upload operation and records
+`reserved`, `uploaded`, `committed`, or `orphaned`. See ADR-023.
 
 The persistence backbone also uses `WorkflowStep`, `AuditEvent`, and `CheckpointDecision` as operational support records. `RunEvent` remains exclusively the product-progress stream; security, access-code, and quota history belongs in `AuditEvent`.
 
@@ -133,6 +147,7 @@ draft
 → awaiting_source_review
 → corpus_approved
 → extracting_evidence
+→ evidence_ready
 → assessing_dimensions
 → awaiting_assessment_review
 → completed
@@ -145,14 +160,41 @@ complete with insufficient evidence, or force continuation with an audited
 reason. Force continuation does not weaken any later provenance or confidence
 rule.
 
-`corpus_approved` is the persisted handoff between the Phase 4 and Phase 5
-vertical slices. Phase 4 may finish its workflow execution with
-`executionStatus = idle` in that lifecycle state; it must not emit extraction
-progress until a later workflow version actually starts extraction.
+`corpus_approved` is the persisted handoff between the Phase 4 and Phase 5 vertical slices. New approvals continue automatically: the final Phase 4 handoff records approval and starts the separate Phase 5 workflow in one mutation, using the shared protected start implementation and a deterministic revision-bound key. The execution slot is claimed atomically without an observable idle gap. Historical dossiers at `corpus_approved + idle` retain the owner-authorized start boundary. Extraction progress is emitted only when Phase 5 actually starts. Sources remain inspectable read-only throughout extraction and its terminal states. See the 2026-10-19 amendment to ADR-023.
+
+Phase 5 is a separate decision-anchored workflow definition on the existing
+Convex Workflow engine, not a second engine or persistence authority. A
+protected start mutation freezes the effective accepted `SourceDecision` heads
+from the approved `CorpusRevision`, atomically claims the visitor's execution
+slot, increments the generation, and transitions to `extracting_evidence +
+running`. The run stores the active workflow ID only while a workflow is
+running; Phase 4 `onComplete` success compare-and-clears the stored ID when it
+still matches the completed handle, so a newer execution cannot be erased by a
+late completion. See ADR-023.
+
+`evidence_ready` is the strong handoff between Phase 5 and Phase 6. It
+requires every frozen source branch to be terminal, at least one structurally
+valid reproducible passage, a terminal claim pipeline, and at least one
+structurally valid claim visible in the matrix. Individual sources may have
+failed, and policy outcomes may remain `needs_review` or `blocked`; those
+limitations remain visible without preventing the matrix from being ready.
+
+When a live dossier has valid retrieved passages but the deterministic claim
+adapter is not authorized for their hashes, the run pauses at
+`extracting_evidence + paused + claim_generation_unavailable`. This is an
+inspectable technical stop, not an analyst judgment checkpoint, `Unknown`,
+evidence insufficiency, or successful Phase 5 completion. The workflow
+releases its execution and the visitor running slot; the run has no active
+workflow ID. A retry first verifies that an authorized claim adapter is now
+available; if capability remains unavailable, the mutation performs no state
+change, claims no slot, increments no generation, and issues no external call.
+A valid retry atomically claims the slot, advances the generation, starts a new
+Phase 5 workflow, and schedules only incomplete claim and policy steps. See
+ADR-023.
 
 Enforce transitions server-side. A client must not bypass checkpoints or directly mark workflow stages complete.
 
-Track execution separately from the analytical lifecycle with `idle`, `running`, `paused`, `failed`, `cancelled`, and `completed`. A paused run records whether it awaits source review or assessment review. This separation keeps failure and cancellation from inventing analytical stages.
+Track execution separately from the analytical lifecycle with `idle`, `running`, `paused`, `failed`, `cancelled`, and `completed`. A paused run records whether it awaits source review, assessment review, or `claim_generation_unavailable`. This separation keeps failure and cancellation from inventing analytical stages.
 
 Retries, resumptions, and cancellation must be durable and idempotent. They
 must not duplicate claims, quota reservations, provider-call records, or
@@ -229,6 +271,22 @@ explicit retryability policy; analyst-facing copy never parses or renders raw
 backend errors.
 
 Preserve source retrieval and extraction failures as visible structured states. Failure of one source must not erase it or terminate unrelated retrieval work.
+
+Phase 5 approved-source retrieval uses real SEC direct HTTP for confirmed CIK
+and accession identity and real Exa Contents for approved general-web URLs.
+Real Unstructured page-aware PDF normalization and real model-provider claim
+generation remain Phase 8 deferrals under ADR-004, ADR-009, and ADR-010; Phase 5
+defines and tests the page-aware normalizer contract and the claim-generation
+task schema using deterministic fixture adapters. See ADR-023.
+
+Phase 5 numeric safety limits: `MAX_APPROVED_SOURCE_BYTES = 16 MiB` (declared
+and decompressed), `MAX_NORMALIZED_ARTIFACT_BYTES = 16 MiB`, `MAX_PDF_PAGES =
+400`, `MAX_PASSAGES_PER_SOURCE = 512`, `MAX_QUOTATION_CHARS = 4,000`,
+`MAX_REDIRECTS = 5`, two total attempts per source, SEC and direct HTTP timeout
+10 seconds (abortable), Exa Contents outer timeout 120 seconds (abortable), and
+accepted-source count capped by the existing `SOURCE_CANDIDATE_LIMIT = 48`. The
+frozen fan-out count is the actual number of accepted sources, never the
+source-recommendation ceiling or an assumed target. See ADR-023.
 
 Treat retrieved documents and model output as untrusted input. Generated structured output must pass schema validation before persistence as usable evidence. Bound retries. If validation or evidentiary support remains inadequate, downgrade the result rather than laundering it into a fact.
 
@@ -611,5 +669,6 @@ Never present cached, seeded, or precomputed output as live. Label showcase and 
 - ADR-018: adaptive authority- and document-aware source selection, outdated-draft rebuild, and recommendation ceiling.
 - ADR-021: source provenance and declared role capability separated from candidate-specific automatic role eligibility, as amended by ADR-022.
 - ADR-022: durable company-linkage basis and bounded discovery-metadata recommendations without automatic coverage eligibility.
+- ADR-023: decision-anchored Phase 5 evidence workflow, effective-head freeze, `evidence_ready`, `claim_generation_unavailable`, immutable `ResearchPlanQuestion`, provenance/claim/policy records, upload lease cleanup, real SEC/Exa approved-source retrieval, deferred real Unstructured/model generation, and hybrid showcase/live boundary.
 
 Read the corresponding record in `docs/decisions/` before revisiting any of these decisions.

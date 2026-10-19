@@ -1,14 +1,15 @@
 import { ConvexError, v } from "convex/values";
 
 import { internalMutation, internalQuery } from "./_generated/server";
+import { assertEvidenceExecutionFence } from "./domain/evidenceAuthority";
 import { manualSourceIntakeError } from "./domain/manualSourceIntake";
-import { paidWorkDisabledErrorData } from "./domain/providerAvailability";
 import { rateLimiter } from "./rateLimiter";
 
 const serviceValidator = v.union(
     v.literal("sec"),
     v.literal("exa"),
     v.literal("url_metadata"),
+    v.literal("pdf"),
 );
 const providerCallStatusValidator = v.union(
     v.literal("started"),
@@ -21,12 +22,16 @@ const PROVIDER_LEASE_MS = {
     sec: 15_000,
     exa: 15_000,
     url_metadata: 15_000,
+    pdf: 15_000,
 } as const;
 
 function providerLeaseDurationMs(
-    service: "sec" | "exa" | "url_metadata",
+    service: "sec" | "exa" | "url_metadata" | "pdf",
     operation: string,
 ): number {
+    if (service === "exa" && operation === "get_contents") {
+        return 150_000;
+    }
     if (service === "exa" && operation === "resolve_company_website") {
         return 10_000;
     }
@@ -85,6 +90,8 @@ export const recordAttempt = internalMutation({
     args: {
         runId: v.optional(v.id("researchRuns")),
         corpusRevisionId: v.optional(v.id("corpusRevisions")),
+        sourceId: v.optional(v.id("sources")),
+        acceptedDecisionId: v.optional(v.id("sourceDecisions")),
         executionGeneration: v.optional(v.number()),
         workflowVersion: v.optional(v.number()),
         stepKey: v.optional(v.string()),
@@ -104,30 +111,121 @@ export const recordAttempt = internalMutation({
         status: providerCallStatusValidator,
     }),
     handler: async (ctx, args) => {
-        if (args.service === "exa" && args.status === "started") {
-            const paidWork = await ctx.db
-                .query("paidWorkControls")
-                .withIndex("by_key", (query) => query.eq("key", "global"))
-                .unique();
-            if (paidWork?.enabled === false) {
-                throw new ConvexError(paidWorkDisabledErrorData());
-            }
-        }
-        const matches = await ctx.db
-            .query("providerCalls")
-            .withIndex("by_operation_key", (query) =>
-                query.eq("operationKey", args.operationKey),
-            )
-            .collect();
-        const existing = matches.find(
-            (call) =>
-                call.service === args.service &&
-                call.operation === args.operation &&
-                call.attempt === args.attempt &&
-                call.runId === args.runId,
-        );
         const now = Date.now();
+        if (
+            args.stepKey === "extracting_evidence" ||
+            (args.sourceId && args.acceptedDecisionId)
+        ) {
+            if (
+                !args.runId ||
+                !args.corpusRevisionId ||
+                !args.sourceId ||
+                !args.acceptedDecisionId ||
+                args.executionGeneration === undefined
+            ) {
+                throw new Error(
+                    "Research execution fence violation: missing required fence arguments",
+                );
+            }
+            await assertEvidenceExecutionFence(ctx.db, {
+                runId: args.runId,
+                corpusRevisionId: args.corpusRevisionId,
+                sourceId: args.sourceId,
+                acceptedDecisionId: args.acceptedDecisionId,
+                executionGeneration: args.executionGeneration,
+            });
+        }
+
         if (args.status === "started") {
+            if (
+                !(
+                    args.stepKey === "extracting_evidence" ||
+                    (args.sourceId && args.acceptedDecisionId)
+                ) &&
+                args.runId
+            ) {
+                const run = await ctx.db.get(args.runId);
+                const executionIsActive = args.operation.startsWith(
+                    "rebuild_source_proposal_",
+                )
+                    ? run?.executionStatus === "paused" &&
+                      run.lifecycleState === "awaiting_source_review" &&
+                      run.pauseReason === "source_review"
+                    : args.service === "url_metadata"
+                      ? run?.executionStatus === "paused" &&
+                        [
+                            "awaiting_evidence_sufficiency_review",
+                            "awaiting_source_review",
+                        ].includes(run.lifecycleState)
+                      : run?.executionStatus === "running";
+                if (
+                    !run ||
+                    args.executionGeneration === undefined ||
+                    run.executionGeneration !== args.executionGeneration ||
+                    !executionIsActive
+                ) {
+                    throw new Error("Research execution is no longer active");
+                }
+            }
+
+            if (args.service === "exa") {
+                const paidWork = await ctx.db
+                    .query("paidWorkControls")
+                    .withIndex("by_key", (query) => query.eq("key", "global"))
+                    .unique();
+                if (paidWork?.enabled === false) {
+                    const existing = await ctx.db
+                        .query("providerCalls")
+                        .withIndex("by_operation_key", (query) =>
+                            query.eq("operationKey", args.operationKey),
+                        )
+                        .first();
+                    if (existing) {
+                        return {
+                            providerCallId: existing._id,
+                            shouldExecute: false,
+                            status: "failed" as const,
+                        };
+                    }
+                    const providerCallId = await ctx.db.insert(
+                        "providerCalls",
+                        {
+                            runId: args.runId,
+                            corpusRevisionId: args.corpusRevisionId,
+                            executionGeneration: args.executionGeneration,
+                            workflowVersion: args.workflowVersion,
+                            stepKey: args.stepKey,
+                            service: args.service,
+                            operation: args.operation,
+                            operationKey: args.operationKey,
+                            status: "failed",
+                            attempt: args.attempt,
+                            errorCode: "paid_work_disabled",
+                            createdAt: now,
+                            completedAt: now,
+                        },
+                    );
+                    return {
+                        providerCallId,
+                        shouldExecute: false,
+                        status: "failed" as const,
+                    };
+                }
+            }
+
+            const matches = await ctx.db
+                .query("providerCalls")
+                .withIndex("by_operation_key", (query) =>
+                    query.eq("operationKey", args.operationKey),
+                )
+                .collect();
+            const existing = matches.find(
+                (call) =>
+                    call.service === args.service &&
+                    call.operation === args.operation &&
+                    call.attempt === args.attempt &&
+                    call.runId === args.runId,
+            );
             if (existing) {
                 if (
                     existing.status === "started" &&
@@ -153,30 +251,7 @@ export const recordAttempt = internalMutation({
                     status: existing.status,
                 };
             }
-            if (args.runId) {
-                const run = await ctx.db.get(args.runId);
-                const executionIsActive = args.operation.startsWith(
-                    "rebuild_source_proposal_",
-                )
-                    ? run?.executionStatus === "paused" &&
-                      run.lifecycleState === "awaiting_source_review" &&
-                      run.pauseReason === "source_review"
-                    : args.service === "url_metadata"
-                      ? run?.executionStatus === "paused" &&
-                        [
-                            "awaiting_evidence_sufficiency_review",
-                            "awaiting_source_review",
-                        ].includes(run.lifecycleState)
-                      : run?.executionStatus === "running";
-                if (
-                    !run ||
-                    args.executionGeneration === undefined ||
-                    run.executionGeneration !== args.executionGeneration ||
-                    !executionIsActive
-                ) {
-                    throw new Error("Research execution is no longer active");
-                }
-            }
+
             const providerCallId = await ctx.db.insert("providerCalls", {
                 runId: args.runId,
                 corpusRevisionId: args.corpusRevisionId,
@@ -198,6 +273,20 @@ export const recordAttempt = internalMutation({
                 status: "started" as const,
             };
         }
+
+        const matches = await ctx.db
+            .query("providerCalls")
+            .withIndex("by_operation_key", (query) =>
+                query.eq("operationKey", args.operationKey),
+            )
+            .collect();
+        const existing = matches.find(
+            (call) =>
+                call.service === args.service &&
+                call.operation === args.operation &&
+                call.attempt === args.attempt &&
+                call.runId === args.runId,
+        );
         if (!existing) {
             throw new Error("Provider attempt was not started");
         }
@@ -258,6 +347,9 @@ export const getSucceededUrlMetadata = internalQuery({
 export const recordConfigurationFailure = internalMutation({
     args: {
         runId: v.id("researchRuns"),
+        corpusRevisionId: v.optional(v.id("corpusRevisions")),
+        sourceId: v.optional(v.id("sources")),
+        acceptedDecisionId: v.optional(v.id("sourceDecisions")),
         executionGeneration: v.number(),
         service: serviceValidator,
         operation: v.string(),
@@ -266,13 +358,23 @@ export const recordConfigurationFailure = internalMutation({
     },
     returns: v.id("providerCalls"),
     handler: async (ctx, args) => {
-        const run = await ctx.db.get(args.runId);
-        if (
-            !run ||
-            run.executionGeneration !== args.executionGeneration ||
-            run.executionStatus !== "running"
-        ) {
-            throw new Error("Research execution is no longer active");
+        if (args.sourceId && args.acceptedDecisionId && args.corpusRevisionId) {
+            await assertEvidenceExecutionFence(ctx.db, {
+                runId: args.runId,
+                corpusRevisionId: args.corpusRevisionId,
+                sourceId: args.sourceId,
+                acceptedDecisionId: args.acceptedDecisionId,
+                executionGeneration: args.executionGeneration,
+            });
+        } else {
+            const run = await ctx.db.get(args.runId);
+            if (
+                !run ||
+                run.executionGeneration !== args.executionGeneration ||
+                run.executionStatus !== "running"
+            ) {
+                throw new Error("Research execution is no longer active");
+            }
         }
         const existing = await ctx.db
             .query("providerCalls")
@@ -285,7 +387,9 @@ export const recordConfigurationFailure = internalMutation({
         }
         const now = Date.now();
         return ctx.db.insert("providerCalls", {
-            runId: run._id,
+            runId: args.runId,
+            corpusRevisionId: args.corpusRevisionId,
+            executionGeneration: args.executionGeneration,
             service: args.service,
             operation: args.operation,
             operationKey: args.operationKey,

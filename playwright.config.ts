@@ -16,11 +16,18 @@ export default defineConfig({
         baseURL: process.env.PLAYWRIGHT_BASE_URL ?? appUrl,
         actionTimeout: 10_000,
         navigationTimeout: 20_000,
-        trace: "on-first-retry",
-        screenshot: "only-on-failure",
-        video: "retain-on-failure",
+        // Automatic diagnostics are disabled: retry traces, retained failure
+        // video, and failure screenshots can capture the reusable analyst
+        // access code rendered by the admission drawer. Manual sanitized
+        // tracing runs only after an admission drawer closes (see
+        // e2e/support/sanitized-trace.ts).
+        trace: "off",
+        screenshot: "off",
+        video: "off",
         locale: "en-US",
-        reducedMotion: "reduce",
+        contextOptions: {
+            reducedMotion: "reduce",
+        },
     },
     projects: [
         {

@@ -77,3 +77,20 @@ export function previewCacheTtlMs(): number {
 // Maximum PNG byte size we persist in the preview cache. Larger screenshots are
 // returned to the caller but not cached, to avoid unbounded storage growth.
 export const PREVIEW_CACHE_MAX_BYTES = 700 * 1024;
+
+// Phase 5 locked resource and extraction limits
+export const MAX_APPROVED_SOURCE_BYTES = 16 * 1024 * 1024; // 16 MiB declared/decompressed
+export const MAX_NORMALIZED_ARTIFACT_BYTES = 16 * 1024 * 1024; // 16 MiB
+export const MAX_EVIDENCE_ARTIFACT_BYTES = 16 * 1024 * 1024;
+export const MAX_PDF_PAGES = 400;
+export const MAX_PASSAGES_PER_SOURCE = 512;
+export const MAX_QUOTATION_CHARS = 4000;
+export const MAX_REDIRECTS = 5;
+
+// Phase 5 claim limits
+export const MAX_CLAIMS_PER_RUN = 128;
+export const MAX_EVIDENCE_PER_CLAIM = 32;
+export const MAX_DIMENSION_LINKS_PER_CLAIM = 10;
+export const MAX_CLAIM_STATEMENT_CHARS = 1000;
+export const MAX_CLAIM_RATIONALE_CHARS = 2000;
+export const MAX_CLAIM_INPUT_PASSAGES = 4096;

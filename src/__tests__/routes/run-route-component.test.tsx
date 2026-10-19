@@ -257,7 +257,13 @@ test("routes the analyst to the active source-review checkpoint", async () => {
     ).toBeNull();
 });
 
-test("keeps the approved source set visible for inspection", () => {
+test.each([
+    ["corpus_approved", "idle"],
+    ["extracting_evidence", "running"],
+    ["extracting_evidence", "paused"],
+    ["extracting_evidence", "failed"],
+    ["evidence_ready", "idle"],
+] as const)("keeps approved sources inspectable during %s / %s", (lifecycleState, executionStatus) => {
     const reviewSource = {
         sourceId: "source-1",
         canonicalUrl: "https://example.com/report",
@@ -297,8 +303,10 @@ test("keeps the approved source set visible for inspection", () => {
             exchange: "NASDAQ",
             cik: "123",
         },
-        lifecycleState: "corpus_approved",
-        executionStatus: "idle",
+        lifecycleState,
+        executionStatus,
+        corpusRevisionStatus: "approved",
+        canStartNewCorpusRevision: lifecycleState === "corpus_approved",
         activeCorpusRevisionId: "revision-1",
         providerFailures: [
             {
@@ -341,9 +349,18 @@ test("keeps the approved source set visible for inspection", () => {
 
     render(<RunRouteComponent runId={"run-1" as never} section="sources" />);
 
-    expect(screen.getAllByText("Source set approved").length).toBeGreaterThan(
-        0,
-    );
+    expect(
+        screen.getByRole("heading", {
+            name: "Source set is approved and read-only",
+        }),
+    ).toBeTruthy();
+    if (lifecycleState !== "corpus_approved") {
+        expect(
+            screen
+                .getByRole("button", { name: "Start new revision" })
+                .hasAttribute("disabled"),
+        ).toBe(true);
+    }
     fireEvent.click(
         screen.getByRole("button", { name: "Inspect all candidates" }),
     );
@@ -398,4 +415,47 @@ test("does not advertise manual source intake after corpus approval", () => {
             /Independent web discovery was unavailable.*filing sources remain available in this approved source set/i,
         ),
     ).toBeTruthy();
+});
+
+test.each([
+    ["running", undefined, "Evidence is being prepared"],
+    [
+        "paused",
+        "claim_generation_unavailable",
+        "Evidence is temporarily unavailable",
+    ],
+    ["failed", undefined, "Evidence could not be prepared"],
+] as const)("explains persisted evidence preparation state %s", (executionStatus, pauseReason, title) => {
+    convexReactHarness.query(api.researchRuns.getMine).returns({
+        runId: "run-1",
+        company: {
+            legalName: "Example Corp",
+            ticker: "EXM",
+            exchange: "NASDAQ",
+            cik: "123",
+        },
+        lifecycleState: "extracting_evidence",
+        executionStatus,
+        pauseReason,
+        activeCorpusRevisionId: "revision-1",
+        corpusRevisionStatus: "approved",
+        canStartNewCorpusRevision: false,
+        providerFailures: [{ service: "exa", errorCode: "http_503" }],
+        updatedAt: 2,
+    });
+    render(<RunRouteComponent runId={"run-1" as never} section="progress" />);
+    expect(screen.getByText(title)).toBeTruthy();
+    expect(
+        screen.getByText(
+            "Some research sources were unavailable. Inspect the approved set in Sources and consider any evidence gaps during review.",
+        ),
+    ).toBeTruthy();
+    expect(
+        screen.queryByText(/Independent web discovery is unavailable/),
+    ).toBeNull();
+    expect(
+        screen.getByRole("region", { name: "Research progress" }).textContent,
+    ).not.toMatch(
+        /claim_generation_unavailable|EXA_API_KEY|evidenceExecution|extracting_evidence/,
+    );
 });

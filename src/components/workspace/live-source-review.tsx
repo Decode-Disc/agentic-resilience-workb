@@ -9,12 +9,7 @@ import {
     usePaginatedQuery,
     useQuery,
 } from "convex/react";
-import {
-    type Dispatch,
-    type SetStateAction,
-    useEffect,
-    useState,
-} from "react";
+import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 import Icon from "@/components/icon";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { Button } from "@/components/ui/button";
@@ -30,6 +25,7 @@ const SOURCE_REVIEW_PAGE_SIZE = 12;
 type LiveSourceReviewProps = {
     runId: Id<"researchRuns">;
     corpusRevisionId: Id<"corpusRevisions">;
+    canStartNewRevision?: boolean;
     onDecide: Parameters<typeof SourceProposalReview>[0]["onDecide"];
     onAddManualUrl?: Parameters<
         typeof SourceProposalReview
@@ -37,7 +33,13 @@ type LiveSourceReviewProps = {
 };
 
 export function LiveSourceReview(props: LiveSourceReviewProps) {
-    const { runId, corpusRevisionId, onDecide, onAddManualUrl } = props;
+    const {
+        runId,
+        corpusRevisionId,
+        onDecide,
+        onAddManualUrl,
+        canStartNewRevision = false,
+    } = props;
     const [disposition, setDisposition] = useState<
         "recommended" | "needs_attention" | "alternative"
     >("recommended");
@@ -49,8 +51,9 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
     const [repairStatus, setRepairStatus] = useState<
         "idle" | "loading" | "complete" | "failed"
     >("idle");
-    const [queries, setQueries] =
-        useState<SourceReviewQuerySnapshot | null>(null);
+    const [queries, setQueries] = useState<SourceReviewQuerySnapshot | null>(
+        null,
+    );
     const approveProposal = useMutation(
         api.sourceSelectionProposals.approveProposedCorpus,
     );
@@ -117,12 +120,8 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
         );
     }
 
-    const {
-        adjustmentSets,
-        proposalPage,
-        inspectionPage,
-        selectedSource,
-    } = queries;
+    const { adjustmentSets, proposalPage, inspectionPage, selectedSource } =
+        queries;
 
     if (proposal === undefined || inspectionSummary === undefined) {
         return (
@@ -140,6 +139,7 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
                     {queryBridge}
                     <div className="space-y-3">
                         <ApprovedRevisionBanner
+                            canStartNewRevision={canStartNewRevision}
                             onStartNewRevision={async () => {
                                 setActionError(null);
                                 try {
@@ -181,9 +181,7 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
                                 inspectionPage.status === "LoadingFirstPage"
                             }
                             onLoadMore={() =>
-                                inspectionPage.loadMore(
-                                    SOURCE_REVIEW_PAGE_SIZE,
-                                )
+                                inspectionPage.loadMore(SOURCE_REVIEW_PAGE_SIZE)
                             }
                             onDecide={onDecide}
                             onApprove={() => undefined}
@@ -239,128 +237,131 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
         <>
             {queryBridge}
             <div className="space-y-3">
-            {actionError ? (
-                <p
-                    role="alert"
-                    className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                    {actionError}
-                </p>
-            ) : null}
-            {inspectionSummary.status === "approved" ? (
-                <ApprovedRevisionBanner
-                    onStartNewRevision={async () => {
+                {actionError ? (
+                    <p
+                        role="alert"
+                        className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                        {actionError}
+                    </p>
+                ) : null}
+                {inspectionSummary.status === "approved" ? (
+                    <ApprovedRevisionBanner
+                        canStartNewRevision={canStartNewRevision}
+                        onStartNewRevision={async () => {
+                            setActionError(null);
+                            try {
+                                await startNewRevision({
+                                    runId,
+                                    corpusRevisionId,
+                                });
+                            } catch {
+                                setActionError(
+                                    "We couldn't start a new revision. Try again.",
+                                );
+                            }
+                        }}
+                    />
+                ) : null}
+                <SourceProposalReview
+                    runId={runId}
+                    corpusRevisionId={corpusRevisionId}
+                    summary={proposal}
+                    proposalItems={proposalPage.results}
+                    disposition={disposition}
+                    onDispositionChange={setDisposition}
+                    adjustmentSets={adjustmentSets}
+                    inspectionReview={{
+                        ...inspectionSummary,
+                        sources: inspectionPage.results,
+                    }}
+                    onDecide={onDecide}
+                    onApprove={async () => {
                         setActionError(null);
                         try {
-                            await startNewRevision({
+                            await approveProposal({
                                 runId,
                                 corpusRevisionId,
+                                proposalId: proposal.proposalId,
+                                proposalVersion: proposal.version,
+                                decisionKey: `corpus-approval:${crypto.randomUUID()}`,
                             });
                         } catch {
                             setActionError(
-                                "We couldn't start a new revision. Try again.",
+                                "We couldn't approve this source set. Refresh the proposal and try again.",
                             );
                         }
                     }}
-                />
-            ) : null}
-            <SourceProposalReview
-                runId={runId}
-                corpusRevisionId={corpusRevisionId}
-                summary={proposal}
-                proposalItems={proposalPage.results}
-                disposition={disposition}
-                onDispositionChange={setDisposition}
-                adjustmentSets={adjustmentSets}
-                inspectionReview={{
-                    ...inspectionSummary,
-                    sources: inspectionPage.results,
-                }}
-                onDecide={onDecide}
-                onApprove={async () => {
-                    setActionError(null);
-                    try {
-                        await approveProposal({
-                            runId,
-                            corpusRevisionId,
-                            proposalId: proposal.proposalId,
-                            proposalVersion: proposal.version,
-                            decisionKey: `corpus-approval:${crypto.randomUUID()}`,
-                        });
-                    } catch {
-                        setActionError(
-                            "We couldn't approve this source set. Refresh the proposal and try again.",
-                        );
-                    }
-                }}
-                onRecompute={async () => {
-                    setActionError(null);
-                    try {
-                        await recomputeProposal({
-                            runId,
-                            corpusRevisionId,
-                            expectedProposalId: proposal.proposalId,
-                        });
-                    } catch {
-                        setActionError(
-                            "We couldn't refresh the source proposal. Try again.",
-                        );
-                    }
-                }}
-                isRebuilding={isRebuilding}
-                onRebuild={async () => {
-                    setActionError(null);
-                    setIsRebuilding(true);
-                    try {
-                        const result = await rebuildProposal({
-                            runId,
-                            corpusRevisionId,
-                            expectedProposalId: proposal.proposalId,
-                        });
-                        if (result.outcome === "blocked") {
+                    onRecompute={async () => {
+                        setActionError(null);
+                        try {
+                            await recomputeProposal({
+                                runId,
+                                corpusRevisionId,
+                                expectedProposalId: proposal.proposalId,
+                            });
+                        } catch {
                             setActionError(
-                                "Source discovery is temporarily unavailable. Your existing draft and source decisions are unchanged. Try again later or add a public source.",
+                                "We couldn't refresh the source proposal. Try again.",
                             );
                         }
-                    } catch {
-                        setActionError(
-                            "We couldn't rebuild the source proposal. Your source decisions are unchanged. Try again.",
-                        );
-                    } finally {
-                        setIsRebuilding(false);
+                    }}
+                    isRebuilding={isRebuilding}
+                    onRebuild={async () => {
+                        setActionError(null);
+                        setIsRebuilding(true);
+                        try {
+                            const result = await rebuildProposal({
+                                runId,
+                                corpusRevisionId,
+                                expectedProposalId: proposal.proposalId,
+                            });
+                            if (result.outcome === "blocked") {
+                                setActionError(
+                                    "Source discovery is temporarily unavailable. Your existing draft and source decisions are unchanged. Try again later or add a public source.",
+                                );
+                            }
+                        } catch {
+                            setActionError(
+                                "We couldn't rebuild the source proposal. Your source decisions are unchanged. Try again.",
+                            );
+                        } finally {
+                            setIsRebuilding(false);
+                        }
+                    }}
+                    onAddManualUrl={onAddManualUrl}
+                    proposalHasMore={proposalPage.status === "CanLoadMore"}
+                    proposalIsLoadingMore={
+                        proposalPage.status === "LoadingMore"
                     }
-                }}
-                onAddManualUrl={onAddManualUrl}
-                proposalHasMore={proposalPage.status === "CanLoadMore"}
-                proposalIsLoadingMore={proposalPage.status === "LoadingMore"}
-                proposalIsLoadingInitial={
-                    proposalPage.status === "LoadingFirstPage"
-                }
-                onLoadMoreProposal={() =>
-                    proposalPage.loadMore(SOURCE_REVIEW_PAGE_SIZE)
-                }
-                inspectionFilter={inspectionFilter}
-                onInspectionFilterChange={(nextFilter) => {
-                    setInspectionFilter(nextFilter);
-                    if (nextFilter !== "all") {
-                        setSelectedId(null);
+                    proposalIsLoadingInitial={
+                        proposalPage.status === "LoadingFirstPage"
                     }
-                }}
-                inspectionSelectedId={selectedId}
-                inspectionSelectedSource={
-                    selectedId ? selectedSource : undefined
-                }
-                onInspectionSelectedIdChange={setSelectedId}
-                inspectionHasMore={inspectionPage.status === "CanLoadMore"}
-                inspectionIsLoadingMore={
-                    inspectionPage.status === "LoadingMore"
-                }
-                inspectionIsLoadingInitial={
-                    inspectionPage.status === "LoadingFirstPage"
-                }
-                onLoadMoreInspection={() =>
-                    inspectionPage.loadMore(SOURCE_REVIEW_PAGE_SIZE)
-                }
-            />
+                    onLoadMoreProposal={() =>
+                        proposalPage.loadMore(SOURCE_REVIEW_PAGE_SIZE)
+                    }
+                    inspectionFilter={inspectionFilter}
+                    onInspectionFilterChange={(nextFilter) => {
+                        setInspectionFilter(nextFilter);
+                        if (nextFilter !== "all") {
+                            setSelectedId(null);
+                        }
+                    }}
+                    inspectionSelectedId={selectedId}
+                    inspectionSelectedSource={
+                        selectedId ? selectedSource : undefined
+                    }
+                    onInspectionSelectedIdChange={setSelectedId}
+                    inspectionHasMore={inspectionPage.status === "CanLoadMore"}
+                    inspectionIsLoadingMore={
+                        inspectionPage.status === "LoadingMore"
+                    }
+                    inspectionIsLoadingInitial={
+                        inspectionPage.status === "LoadingFirstPage"
+                    }
+                    onLoadMoreInspection={() =>
+                        inspectionPage.loadMore(SOURCE_REVIEW_PAGE_SIZE)
+                    }
+                />
             </div>
         </>
     );
@@ -394,11 +395,11 @@ function useSourceReviewQueries({
         api.sourceSelectionProposals.listItemsPage,
         hasProposal
             ? {
-                runId,
-                corpusRevisionId,
-                proposalId: proposal.proposalId,
-                disposition,
-            }
+                  runId,
+                  corpusRevisionId,
+                  proposalId: proposal.proposalId,
+                  disposition,
+              }
             : "skip",
         { initialNumItems: SOURCE_REVIEW_PAGE_SIZE },
     );
@@ -435,17 +436,17 @@ function SourceReviewQueryBridge({
     useEffect(() => {
         setQueries((current) =>
             current !== null &&
-                current.proposal === queries.proposal &&
-                current.adjustmentSets === queries.adjustmentSets &&
-                current.inspectionSummary === queries.inspectionSummary &&
-                current.proposalPage.results === queries.proposalPage.results &&
-                current.proposalPage.status === queries.proposalPage.status &&
-                current.proposalPage.loadMore === queries.proposalPage.loadMore &&
-                current.inspectionPage.results === queries.inspectionPage.results &&
-                current.inspectionPage.status === queries.inspectionPage.status &&
-                current.inspectionPage.loadMore ===
+            current.proposal === queries.proposal &&
+            current.adjustmentSets === queries.adjustmentSets &&
+            current.inspectionSummary === queries.inspectionSummary &&
+            current.proposalPage.results === queries.proposalPage.results &&
+            current.proposalPage.status === queries.proposalPage.status &&
+            current.proposalPage.loadMore === queries.proposalPage.loadMore &&
+            current.inspectionPage.results === queries.inspectionPage.results &&
+            current.inspectionPage.status === queries.inspectionPage.status &&
+            current.inspectionPage.loadMore ===
                 queries.inspectionPage.loadMore &&
-                current.selectedSource === queries.selectedSource
+            current.selectedSource === queries.selectedSource
                 ? current
                 : queries,
         );
@@ -499,8 +500,10 @@ function LiveSourceReviewSkeleton() {
 
 function ApprovedRevisionBanner({
     onStartNewRevision,
+    canStartNewRevision,
 }: {
     onStartNewRevision: () => void | Promise<void>;
+    canStartNewRevision: boolean;
 }) {
     return (
         <div className="surface-floating rounded-2xl border border-border/60 p-5">
@@ -509,13 +512,15 @@ function ApprovedRevisionBanner({
                 Source set is approved and read-only
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-                Start a new revision to re-discover sources and rebuild the
-                proposal with the current selection method.
+                {canStartNewRevision
+                    ? "Start a new revision to re-discover sources and rebuild the proposal with the current selection method."
+                    : "Your approved sources remain available for inspection while evidence is prepared and reviewed."}
             </p>
             <Button
                 type="button"
                 variant="outline"
                 className="mt-3"
+                disabled={!canStartNewRevision}
                 onClick={() => void onStartNewRevision()}>
                 <Icon iconNode={RefreshIcon} />
                 Start new revision

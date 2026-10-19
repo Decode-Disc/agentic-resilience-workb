@@ -39,6 +39,20 @@ test("requests metadata-only Exa results", async () => {
     });
 });
 
+test("preserves contents: false when domain filters are supplied", async () => {
+    const search = vi.fn(async () => ({
+        results: [],
+    }));
+    const adapter = createExaDiscoveryAdapter({ search });
+    await adapter.search("CCC query", 5, ["example.com", "sec.gov"]);
+    expect(search).toHaveBeenCalledWith("CCC query", {
+        type: "auto",
+        numResults: 5,
+        contents: false,
+        includeDomains: ["example.com", "sec.gov"],
+    });
+});
+
 test("keeps valid results when another Exa URL is invalid", async () => {
     const adapter = createExaDiscoveryAdapter({
         search: vi.fn(async () => ({

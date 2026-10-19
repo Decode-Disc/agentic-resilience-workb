@@ -16,6 +16,10 @@ vi.mock("@/hooks/use-responsive", () => ({
     useResponsive: () => responsive,
 }));
 
+vi.mock("@/hooks/use-source-preview", () => ({
+    useSourcePreview: () => ({ status: "idle" }),
+}));
+
 vi.mock("@tanstack/react-router", async (importOriginal) => {
     const router =
         await importOriginal<typeof import("@tanstack/react-router")>();
@@ -174,7 +178,9 @@ describe("WorkspaceNavigationRail collapse behavior", () => {
         );
 
         expect(
-            screen.getByText(/Review and approve the source set first/i),
+            screen.getByText(
+                /Wait for claim extraction to finish building the evidence set/i,
+            ),
         ).toBeTruthy();
     });
 
@@ -196,6 +202,112 @@ describe("WorkspaceNavigationRail collapse behavior", () => {
                 .getByRole("link", { name: /Sources/i })
                 .getAttribute("aria-current"),
         ).toBe("page");
+    });
+
+    it("locks Evidence while extracting and unlocks it at evidence_ready", () => {
+        render(
+            <WorkspaceNavigationRail
+                runId={"run-1" as never}
+                section="progress"
+                lifecycleState="extracting_evidence"
+            />,
+        );
+        expect(screen.queryByRole("link", { name: /Evidence/i })).toBeNull();
+        expect(
+            screen.getByText(
+                /Wait for claim extraction to finish building the evidence set/i,
+            ),
+        ).toBeTruthy();
+
+        const { rerender } = render(
+            <WorkspaceNavigationRail
+                runId={"run-1" as never}
+                section="progress"
+                lifecycleState="evidence_ready"
+            />,
+        );
+        expect(
+            screen.queryByRole("link", { name: /Evidence/i }),
+        ).not.toBeNull();
+        rerender(
+            <WorkspaceNavigationRail
+                runId={"run-1" as never}
+                section="progress"
+                lifecycleState="evidence_ready"
+            />,
+        );
+    });
+
+    it("locks Assessment while evidence_ready and unlocks it at assessing_dimensions", () => {
+        render(
+            <WorkspaceNavigationRail
+                runId={"run-1" as never}
+                section="progress"
+                lifecycleState="evidence_ready"
+            />,
+        );
+        expect(screen.queryByRole("link", { name: /Assessment/i })).toBeNull();
+        expect(
+            screen.getByText(/Review and approve the evidence first/i),
+        ).toBeTruthy();
+
+        render(
+            <WorkspaceNavigationRail
+                runId={"run-1" as never}
+                section="progress"
+                lifecycleState="assessing_dimensions"
+            />,
+        );
+        expect(
+            screen.queryByRole("link", { name: /Assessment/i }),
+        ).not.toBeNull();
+    });
+
+    it("keeps rail behavior intact when reduced motion is requested", () => {
+        const originalMatchMedia = window.matchMedia;
+        Object.defineProperty(window, "matchMedia", {
+            writable: true,
+            value: (query: string) => ({
+                matches: query.includes("prefers-reduced-motion"),
+                media: query,
+                onchange: null,
+                addListener: () => undefined,
+                removeListener: () => undefined,
+                addEventListener: () => undefined,
+                removeEventListener: () => undefined,
+                dispatchEvent: () => false,
+            }),
+        });
+
+        const { rerender } = render(
+            <WorkspaceNavigationRail
+                runId={"run-1" as never}
+                section="evidence"
+                lifecycleState="evidence_ready"
+            />,
+        );
+        expect(
+            screen.queryByRole("link", { name: /Evidence/i }),
+        ).not.toBeNull();
+        fireEvent.click(
+            screen.getByRole("button", { name: /Collapse navigation/i }),
+        );
+        expect(
+            screen.getByRole("button", { name: /Expand navigation/i }),
+        ).toBeTruthy();
+
+        rerender(
+            <WorkspaceNavigationRail
+                runId={"run-1" as never}
+                section="evidence"
+                lifecycleState="evidence_ready"
+            />,
+        );
+
+        Object.defineProperty(window, "matchMedia", {
+            writable: true,
+            value: originalMatchMedia,
+        });
     });
 });
 
@@ -220,7 +332,9 @@ describe("production run workspace", () => {
             expect(screen.getByText(label)).toBeTruthy();
         }
         expect(
-            screen.getByText(/Review and approve the source set first/i),
+            screen.getByText(
+                /Wait for claim extraction to finish building the evidence set/i,
+            ),
         ).toBeTruthy();
         expect(
             screen

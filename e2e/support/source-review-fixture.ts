@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -50,8 +51,15 @@ const invitation = (() => {
 
 export async function admitAnalyst(page: Page): Promise<void> {
     await page.goto("/workspace/dossiers");
-    await page.getByLabel("Access code").fill(invitation.code);
+    // Cold-auth bootstrap: the workspace shell can paint before the access-code
+    // admission surface is interactive. Wait for the input to be visible before
+    // filling so first-run and reused sessions both resolve cleanly.
+    const accessCodeInput = page.getByLabel("Access code");
+    await expect(accessCodeInput).toBeVisible({ timeout: 30_000 });
+    await accessCodeInput.fill(invitation.code);
     await page.getByRole("button", { name: "Continue" }).click();
+    // Admission lands on the workspace start page: the analyst destination for
+    // a fresh session is the research launch surface, not the dossiers list.
     await expect(
         page.getByRole("heading", { name: "Start a research dossier" }),
     ).toBeVisible();

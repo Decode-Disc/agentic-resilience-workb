@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import type { WorkflowId } from "@convex-dev/workflow";
 import {
     paginationOptsValidator,
     paginationResultValidator,
@@ -7,9 +8,15 @@ import { v } from "convex/values";
 
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
+import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
+import {
+    ASSESSMENT_DIMENSION_KEYS,
+    buildResearchPlanQuestions,
+} from "./domain/researchPlan";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
 import { sourceCandidateLimit } from "./resourceLimits";
 import { createSourceSelectionProposal } from "./sourceSelectionProposals";
+import { workflow } from "./workflow";
 
 async function requireAdmin(ctx: QueryCtx | MutationCtx) {
     const authUserId = await getAuthUserId(ctx);
@@ -304,6 +311,129 @@ export const backfillSourceSelectionProposals = mutation({
                 revisionId: revision._id,
                 proposalId: proposal.proposalId,
                 outcome: "created" as const,
+            });
+        }
+        return { ...revisions, page };
+    },
+});
+
+const phase5AuthorityBackfillResultValidator = v.object({
+    revisionId: v.id("corpusRevisions"),
+    questionsBackfilled: v.number(),
+    questionVersionReviewRequired: v.boolean(),
+    handleCleared: v.boolean(),
+    handleReviewRequired: v.boolean(),
+});
+
+export const backfillPhase5Authority = mutation({
+    args: { paginationOpts: paginationOptsValidator },
+    returns: paginationResultValidator(phase5AuthorityBackfillResultValidator),
+    handler: async (ctx, args) => {
+        await requireAdmin(ctx);
+        if (
+            args.paginationOpts.numItems < 1 ||
+            args.paginationOpts.numItems > 10
+        ) {
+            throw new Error("Backfill page size must be between 1 and 10");
+        }
+        const revisions = await ctx.db
+            .query("corpusRevisions")
+            .order("asc")
+            .paginate(args.paginationOpts);
+        const page = [];
+
+        for (const revision of revisions.page) {
+            const run = await ctx.db.get(revision.runId);
+            let questionsBackfilled = 0;
+            let questionVersionReviewRequired = false;
+            let handleCleared = false;
+            let handleReviewRequired = false;
+
+            if (
+                run &&
+                run.activeCorpusRevisionId === revision._id &&
+                run.companyId
+            ) {
+                const plan = await ctx.db
+                    .query("researchPlans")
+                    .withIndex("by_run_and_version", (builder) =>
+                        builder.eq("runId", run._id),
+                    )
+                    .order("desc")
+                    .first();
+                if (plan) {
+                    const existingQuestions = await ctx.db
+                        .query("researchPlanQuestions")
+                        .withIndex("by_plan_and_key", (builder) =>
+                            builder.eq("researchPlanId", plan._id),
+                        )
+                        .take(ASSESSMENT_DIMENSION_KEYS.length + 2);
+                    questionVersionReviewRequired = existingQuestions.some(
+                        (question) => question.planVersion !== plan.version,
+                    );
+                    if (existingQuestions.length === 0) {
+                        const company = mergeRunCompanyMetadata(
+                            run.companySnapshot,
+                            await ctx.db.get(run.companyId),
+                        );
+                        if (company) {
+                            const questionInputs = buildResearchPlanQuestions({
+                                company,
+                                researchAngle: plan.researchAngle,
+                            });
+                            const now = Date.now();
+                            for (const questionInput of questionInputs) {
+                                await ctx.db.insert("researchPlanQuestions", {
+                                    runId: run._id,
+                                    researchPlanId: plan._id,
+                                    planVersion: plan.version,
+                                    questionKey: questionInput.questionKey,
+                                    prompt: questionInput.prompt,
+                                    dimensionKeys: questionInput.dimensionKeys,
+                                    createdAt: now,
+                                });
+                            }
+                            questionsBackfilled = questionInputs.length;
+                        }
+                    }
+                }
+            }
+
+            if (
+                run &&
+                run.lifecycleState === "corpus_approved" &&
+                run.executionStatus === "idle" &&
+                run.workflowId
+            ) {
+                try {
+                    const status = await workflow.status(
+                        ctx,
+                        run.workflowId as WorkflowId,
+                    );
+                    if (
+                        status.type === "canceled" ||
+                        status.type === "failed" ||
+                        status.type === "completed"
+                    ) {
+                        await ctx.db.patch(run._id, {
+                            workflowId: undefined,
+                            updatedAt: Date.now(),
+                        });
+                        handleCleared = true;
+                    } else {
+                        handleReviewRequired = true;
+                    }
+                } catch {
+                    handleReviewRequired = true;
+                }
+            }
+
+            page.push({
+                revisionId: revision._id,
+                questionsBackfilled,
+                questionVersionReviewRequired,
+                handleCleared,
+                handleReviewRequired,
             });
         }
         return { ...revisions, page };

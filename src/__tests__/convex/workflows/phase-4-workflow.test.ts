@@ -1,5 +1,6 @@
 import type { Id } from "@convex/_generated/dataModel";
 import schema from "@convex/schema";
+import "@convex/evidenceActions";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
@@ -19,10 +20,17 @@ vi.mock("exa-js", () => ({
 }));
 
 vi.mock("node:dns/promises", async (importOriginal) => {
-    const dns = await importOriginal<typeof import("node:dns/promises")>();
+    const actual = await importOriginal<typeof import("node:dns/promises")>();
+    const lookupMock = vi.fn(async () => [
+        { address: "93.184.216.34", family: 4 },
+    ]);
     return {
-        ...dns,
-        lookup: vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]),
+        ...actual,
+        default: {
+            ...((actual as any).default ?? {}),
+            lookup: lookupMock,
+        },
+        lookup: lookupMock,
     };
 });
 
@@ -88,7 +96,7 @@ const listEvents = makeFunctionReference<
     Array<{ lifecycleState: string }>
 >("researchRuns:listEvents");
 
-test("ends Phase 4 at an immutable approved corpus", async () => {
+test("approved corpus automatically retrieves evidence and pauses honestly without claim capability", async () => {
     vi.useFakeTimers();
     process.env.SEC_USER_AGENT = "Evidence Workbench test@example.com";
     process.env.EXA_API_KEY = "deterministic-test-key";
@@ -101,26 +109,31 @@ test("ends Phase 4 at an immutable approved corpus", async () => {
             },
         ],
     });
-    globalThis.fetch = vi.fn(async () =>
-        Promise.resolve(
-            new Response(
-                JSON.stringify({
-                    cik: "0001818201",
-                    name: "CCC Intelligent Solutions Holdings Inc.",
-                    tickers: ["CCCS"],
-                    exchanges: ["Nasdaq"],
-                    filings: {
-                        recent: {
-                            accessionNumber: ["0001"],
-                            form: ["10-K"],
-                            filingDate: ["2026-01-29"],
-                            primaryDocument: ["annual-report.htm"],
-                        },
-                    },
-                }),
-                { status: 200 },
-            ),
-        ),
+    globalThis.fetch = vi.fn(async (input: string | URL | Request) =>
+        String(input).endsWith(".htm")
+            ? new Response(
+                  "<h1>Platform</h1><p>The public platform supports company workflows through documented integration APIs.</p>",
+                  { headers: { "content-type": "text/html" } },
+              )
+            : Promise.resolve(
+                  new Response(
+                      JSON.stringify({
+                          cik: "0001818201",
+                          name: "CCC Intelligent Solutions Holdings Inc.",
+                          tickers: ["CCCS"],
+                          exchanges: ["Nasdaq"],
+                          filings: {
+                              recent: {
+                                  accessionNumber: ["0001818201-26-000001"],
+                                  form: ["10-K"],
+                                  filingDate: ["2026-01-29"],
+                                  primaryDocument: ["annual-report.htm"],
+                              },
+                          },
+                      }),
+                      { status: 200 },
+                  ),
+              ),
     );
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
@@ -236,16 +249,41 @@ test("ends Phase 4 at an immutable approved corpus", async () => {
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
     await expect(t.query(getRun, { runId })).resolves.toMatchObject({
-        lifecycleState: "corpus_approved",
-        executionStatus: "idle",
-        executionGeneration: 2,
+        lifecycleState: "extracting_evidence",
+        executionStatus: "paused",
+        pauseReason: "claim_generation_unavailable",
+        executionGeneration: 3,
+        workflowVersion: 2,
         activeCorpusRevisionId: corpusRevisionId,
     });
+    const finishedRun = await t.run(async (ctx) => ctx.db.get(runId));
+    expect(finishedRun?.workflowId).toBeUndefined();
     expect(
         (await t.query(listEvents, { runId })).some(
             ({ lifecycleState }) => lifecycleState === "extracting_evidence",
         ),
-    ).toBe(false);
+    ).toBe(true);
+    const evidence = await t.run(async (ctx) => ({
+        statuses: await ctx.db
+            .query("evidenceSourceStatuses")
+            .withIndex("by_run_and_execution_generation", (q) =>
+                q.eq("runId", runId).eq("executionGeneration", 3),
+            )
+            .take(49),
+        versions: await ctx.db
+            .query("sourceVersions")
+            .withIndex("by_run", (q) => q.eq("runId", runId))
+            .take(49),
+        claims: await ctx.db
+            .query("claims")
+            .withIndex("by_run", (q) => q.eq("runId", runId))
+            .take(1),
+    }));
+    expect(
+        evidence.statuses.some((status) => status.status === "succeeded"),
+    ).toBe(true);
+    expect(evidence.versions.length).toBeGreaterThan(0);
+    expect(evidence.claims).toEqual([]);
     await expect(
         t.run(async (ctx) => ctx.db.get(corpusRevisionId)),
     ).resolves.toMatchObject({ status: "approved" });

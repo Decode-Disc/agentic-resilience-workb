@@ -180,18 +180,21 @@ export const cancel = mutation({
         if (run.executionStatus === "cancelled") {
             return { cancelled: false };
         }
-        if (
-            !run.workflowId ||
-            run.executionStatus === "completed" ||
-            run.reservationStatus === "restored"
-        ) {
+        if (run.executionStatus === "completed") {
             throw new Error("Research run cannot be cancelled");
         }
 
-        await workflow.cancel(ctx, run.workflowId as WorkflowId);
+        // Cancelling a run that has no active workflow handle (e.g. the
+        // claim-generation-unavailable paused state, where the completed
+        // workflow already compare-cleared its ID) records cancellation
+        // without issuing a redundant workflow.cancel.
+        if (run.workflowId) {
+            await workflow.cancel(ctx, run.workflowId as WorkflowId);
+        }
         const now = Date.now();
         await ctx.db.patch(run._id, {
             executionStatus: "cancelled",
+            workflowId: undefined,
             executionGeneration: run.executionGeneration + 1,
             nextEventSequence: run.nextEventSequence + 1,
             updatedAt: now,

@@ -17,10 +17,17 @@ vi.mock("exa-js", () => ({
 }));
 
 vi.mock("node:dns/promises", async (importOriginal) => {
-    const dns = await importOriginal<typeof import("node:dns/promises")>();
+    const actual = await importOriginal<typeof import("node:dns/promises")>();
+    const lookupMock = vi.fn(async () => [
+        { address: "93.184.216.34", family: 4 },
+    ]);
     return {
-        ...dns,
-        lookup: vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]),
+        ...actual,
+        default: {
+            ...((actual as any).default ?? {}),
+            lookup: lookupMock,
+        },
+        lookup: lookupMock,
     };
 });
 
@@ -71,7 +78,7 @@ async function createDiscoveryFixture(t: ReturnType<typeof convexTest>) {
         });
         await ctx.db.insert("researchPlans", {
             runId,
-            version: 1,
+            version: 2,
             coveragePreset: "balanced",
             queries: [
                 {

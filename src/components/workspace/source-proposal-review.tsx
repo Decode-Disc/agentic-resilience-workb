@@ -432,7 +432,7 @@ export function SourceProposalReview({
                                     size="lg"
                                     onClick={() => void onApprove()}
                                     disabled={!canApprove}
-                                    className="bg-approved">
+                                    className="approve-button uppercase">
                                     <Icon iconNode={CheckmarkCircle02Icon} />
                                     Approve source set
                                 </Button>

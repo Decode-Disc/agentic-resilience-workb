@@ -1,12 +1,23 @@
 import type { Id } from "@convex/_generated/dataModel";
+import { api } from "@convex/_generated/api";
+import "@convex/evidenceActions";
+import { lookup } from "node:dns/promises";
 import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
+import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
 import workflowTest from "../workflows/workflow-test-register.js";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 const originalE2eFixturesEnabled = process.env.E2E_FIXTURES_ENABLED;
+
+vi.mock("node:dns/promises", () => {
+    const lookup = vi
+        .fn()
+        .mockRejectedValue(new Error("Fixture must not resolve DNS"));
+    return { lookup, default: { lookup } };
+});
 
 const seedSourceReviewScenario = makeFunctionReference<
     "mutation",
@@ -36,6 +47,10 @@ const inspectSourceReviewScenario = makeFunctionReference<
 >("e2eFixtures:inspectSourceReviewScenario");
 
 afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
     if (originalE2eFixturesEnabled === undefined) {
         delete process.env.E2E_FIXTURES_ENABLED;
     } else {
@@ -65,7 +80,7 @@ async function createAdmittedVisitor(t: ReturnType<typeof convexTest>) {
             claimedByVisitorId: visitorId,
             claimedAt: 1,
         });
-        return { visitorId };
+        return { visitorId, userId };
     });
 }
 
@@ -93,6 +108,69 @@ test("rejects source review fixtures unless E2E mode is enabled", async () => {
             fixtureKey: "disabled",
         }),
     ).rejects.toThrow("E2E fixtures are disabled");
+});
+
+test("source approval starts real extraction with explicit fixture failures and no provider I/O", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
+    vi.stubEnv("EXA_API_KEY", "");
+    const fetchSpy = vi
+        .fn()
+        .mockRejectedValue(new Error("Fixture must not fetch"));
+    vi.stubGlobal("fetch", fetchSpy);
+    const t = convexTest(schema, modules);
+    workflowTest.register(t);
+    rateLimiterTest.register(t);
+    const { userId } = await createAdmittedVisitor(t);
+    const seeded = await t.mutation(seedSourceReviewScenario, {
+        slotKey: "e2e-analyst",
+        fixtureKey: "automatic-evidence-continuation",
+    });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    await t
+        .withIdentity({ subject: `${userId}|fixture-session` })
+        .mutation(api.sourceSelectionProposals.approveProposedCorpus, {
+            runId: seeded.runId,
+            corpusRevisionId: seeded.corpusRevisionId,
+            proposalId: seeded.proposalId,
+            proposalVersion: seeded.proposalVersion,
+            decisionKey: "approve-fixture-once",
+        });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const result = await t.query(inspectSourceReviewScenario, {
+        runId: seeded.runId,
+        fixtureKey: "automatic-evidence-continuation",
+    });
+    expect(result).toMatchObject({
+        lifecycleState: "extracting_evidence",
+        executionStatus: "failed",
+        revisionStatus: "approved",
+        providerCallCount: 0,
+    });
+    expect(lookup).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    await t.run(async (ctx) => {
+        const run = await ctx.db.get(seeded.runId);
+        expect(run).toMatchObject({
+            executionGeneration: 3,
+            workflowVersion: 2,
+        });
+        const frozen = await ctx.db
+            .query("evidenceSourceStatuses")
+            .withIndex("by_run_and_execution_generation", (q) =>
+                q.eq("runId", seeded.runId).eq("executionGeneration", 3),
+            )
+            .take(4);
+        expect(frozen).toHaveLength(3);
+        expect(
+            frozen.every(
+                (row) =>
+                    row.status === "failed" &&
+                    row.failureReason === "e2e_fixture_acquisition_unavailable",
+            ),
+        ).toBe(true);
+        expect(await ctx.db.query("sourceVersions").take(1)).toEqual([]);
+    });
 });
 
 test("seeds an owned source review checkpoint through production projections", async () => {

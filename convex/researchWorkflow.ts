@@ -133,20 +133,35 @@ export const run = workflow
         });
         const approval = await step.awaitEvent(corpusRevisionApproved);
         executionGeneration = approval.executionGeneration;
-        await step.runMutation(internal.sources.verifyApprovedHandoff, {
-            runId: args.runId,
-            corpusRevisionId: approval.corpusRevisionId,
-            expectedExecutionGeneration: executionGeneration,
-        });
-        await step.runMutation(internal.researchRuns.transition, {
-            runId: args.runId,
-            expectedExecutionGeneration: executionGeneration,
-            lifecycleState: "corpus_approved",
-            executionStatus: "idle",
-            stepKey: "source_review",
-        });
+        await step.runMutation(
+            internal.evidenceExecution.completeSourceReview,
+            {
+                runId: args.runId,
+                corpusRevisionId: approval.corpusRevisionId,
+                decisionId: approval.decisionId,
+                expectedExecutionGeneration: executionGeneration,
+            },
+        );
         return null;
     });
+
+export const clearActiveWorkflowHandleOnSuccess = internalMutation({
+    args: {
+        runId: v.id("researchRuns"),
+        workflowId: vWorkflowId,
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const run = await ctx.db.get(args.runId);
+        if (run?.workflowId === args.workflowId) {
+            await ctx.db.patch(run._id, {
+                workflowId: undefined,
+                updatedAt: Date.now(),
+            });
+        }
+        return null;
+    },
+});
 
 export const onComplete = internalMutation({
     args: {
@@ -157,6 +172,10 @@ export const onComplete = internalMutation({
     returns: v.null(),
     handler: async (ctx, args) => {
         if (args.result.kind === "success") {
+            await ctx.runMutation(
+                internal.researchWorkflow.clearActiveWorkflowHandleOnSuccess,
+                { runId: args.context.runId, workflowId: args.workflowId },
+            );
             return null;
         }
         const run = await ctx.db.get(args.context.runId);

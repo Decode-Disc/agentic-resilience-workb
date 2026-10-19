@@ -260,7 +260,7 @@ test("persists an actionable failure when Exa is not configured", async () => {
         });
         await ctx.db.insert("researchPlans", {
             runId,
-            version: 1,
+            version: 2,
             coveragePreset: "balanced",
             queries: [],
             createdAt: 1,
@@ -319,7 +319,7 @@ test("stops discovery before the next provider call when the dossier is full", a
         });
         await ctx.db.insert("researchPlans", {
             runId,
-            version: 1,
+            version: 2,
             coveragePreset: "balanced",
             queries: [
                 {
@@ -391,7 +391,7 @@ test("prioritizes material SEC filings over recent ownership and equity forms", 
         });
         await ctx.db.insert("researchPlans", {
             runId,
-            version: 1,
+            version: 2,
             coveragePreset: "balanced",
             queries: [],
             createdAt: 1,
@@ -462,7 +462,7 @@ test("admits relevant specialized SEC forms only for an explicit research angle"
         await ctx.db.patch(runId, { activeCorpusRevisionId: corpusRevisionId });
         await ctx.db.insert("researchPlans", {
             runId,
-            version: 1,
+            version: 2,
             coveragePreset: "balanced",
             queries: [],
             createdAt: 1,

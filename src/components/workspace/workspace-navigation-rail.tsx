@@ -64,6 +64,7 @@ const lifecycleOrder: ReadonlyArray<LifecycleState> = [
     "awaiting_source_review",
     "corpus_approved",
     "extracting_evidence",
+    "evidence_ready",
     "assessing_dimensions",
     "awaiting_assessment_review",
     "completed",
@@ -75,7 +76,7 @@ function isUnlocked(section: WorkspaceSection, lifecycle: LifecycleState) {
     }
     const index = lifecycleOrder.indexOf(lifecycle);
     if (section === "evidence") {
-        return index >= lifecycleOrder.indexOf("extracting_evidence");
+        return index >= lifecycleOrder.indexOf("evidence_ready");
     }
     if (section === "assessment") {
         return index >= lifecycleOrder.indexOf("assessing_dimensions");
@@ -88,7 +89,7 @@ function isUnlocked(section: WorkspaceSection, lifecycle: LifecycleState) {
 
 function prerequisite(section: WorkspaceSection) {
     if (section === "evidence") {
-        return "Review and approve the source set first.";
+        return "Wait for claim extraction to finish building the evidence set.";
     }
     if (section === "assessment") {
         return "Review and approve the evidence first.";
@@ -229,10 +230,7 @@ export function WorkspaceNavigationRail({
                         aria-expanded={!collapsed}
                         onClick={toggleCollapsed}
                         title={toggleLabel}>
-                        <Icon
-                            iconNode={ToggleIcon}
-                            size={isMobile ? 14 : 16}
-                        />
+                        <Icon iconNode={ToggleIcon} size={isMobile ? 14 : 16} />
                     </Button>
                 </div>
 

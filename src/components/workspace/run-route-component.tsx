@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EvidenceSufficiencyReview } from "@/components/workspace/evidence-sufficiency-review";
+import { EvidenceMatrix } from "@/components/workspace/evidence-matrix";
 import { LiveSourceReview } from "@/components/workspace/live-source-review";
 import { RunProgress } from "@/components/workspace/run-progress";
 import {
@@ -96,9 +97,8 @@ export function RunRouteComponent({
     );
     const sourceMode =
         section === "sources" &&
-        ["awaiting_source_review", "corpus_approved"].includes(
-            run.lifecycleState,
-        ) &&
+        (run.lifecycleState === "awaiting_source_review" ||
+            run.corpusRevisionStatus === "approved") &&
         corpusRevisionId !== undefined;
 
     async function handleAddManualUrl(url: string) {
@@ -129,7 +129,8 @@ export function RunRouteComponent({
                 </h1>
             </header>
             <div className="grid items-start gap-4 grid-cols-[3.25rem_minmax(0,1fr)] md:grid-cols-[4.25rem_minmax(0,1fr)]">
-                <aside className={`sticky top-20 ${uiLayerClasses.navigationRail} w-13 md:w-17 shrink-0`}>
+                <aside
+                    className={`sticky top-20 ${uiLayerClasses.navigationRail} w-13 md:w-17 shrink-0`}>
                     <WorkspaceNavigationRail
                         runId={runId}
                         section={section}
@@ -173,6 +174,9 @@ export function RunRouteComponent({
                         <LiveSourceReview
                             runId={runId}
                             corpusRevisionId={corpusRevisionId}
+                            canStartNewRevision={
+                                run.canStartNewCorpusRevision === true
+                            }
                             onDecide={async (sourceId, nextDecision) => {
                                 setError(null);
                                 try {
@@ -203,6 +207,8 @@ export function RunRouteComponent({
                                     : "Sources will appear here when discovery is ready."}
                             </p>
                         </div>
+                    ) : section === "evidence" ? (
+                        <EvidenceMatrix runId={runId} />
                     ) : (
                         <div className="surface-panel rounded-xl p-6">
                             <h2 className="text-lg font-medium capitalize">

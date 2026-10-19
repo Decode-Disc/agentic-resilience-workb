@@ -2,11 +2,11 @@
 
 ## Status
 
-Validated design. Refined for Roadmap Phases 4–8 on 2026-07-27, deterministic source-proposal review on 2026-08-07, and ephemeral visual preview on 2026-08-09.
+Validated design. Refined for Roadmap Phases 4–8 on 2026-07-27, deterministic source-proposal review on 2026-08-07, ephemeral visual preview on 2026-08-09, and decision-anchored Phase 5 evidence workflow on 2026-08-15.
 
 ## Date
 
-2026-07-20; revised 2026-07-27, 2026-08-07, and 2026-08-09
+2026-07-20; revised 2026-07-27, 2026-08-07, 2026-08-09, and 2026-08-15
 
 ## Purpose
 
@@ -213,7 +213,7 @@ Direction:  Declining, Stable, or Improving over three years
 Position meanings:
 
 | Score | Meaning |
-|---:|---|
+| ---: | --- |
 | -2 | Strongly exposed |
 | -1 | Exposed |
 | 0 | Mixed or unclear |
@@ -297,6 +297,7 @@ draft
 → awaiting_source_review
 → corpus_approved
 → extracting_evidence
+→ evidence_ready
 → assessing_dimensions
 → awaiting_assessment_review
 → completed
@@ -304,9 +305,13 @@ draft
 
 `completionOutcome` is `completed_assessment` or `insufficient_public_evidence`. A later explicit corpus revision may start a new workflow execution generation for the same dossier without erasing the previous completed revision.
 
-`corpus_approved` is an honest vertical-slice handoff. The approved revision is immutable and the Phase 4 execution may end with `executionStatus = idle` without claiming that evidence extraction has started. A later workflow version resumes from that persisted state.
+`corpus_approved` is an honest vertical-slice handoff. The approved revision is immutable. New approvals automatically continue through an atomic server handoff into the separate Phase 5 workflow on the same Convex Workflow engine. The shared protected start implementation freezes effective accepted `SourceDecision` heads, claims the execution slot once, and transitions to `extracting_evidence + running`. Historical idle approved dossiers retain the owner-authorized start boundary. Sources remain inspectable read-only during and after preparation. See the 2026-10-19 amendment to ADR-023.
 
-Execution status is tracked separately as `idle`, `running`, `paused`, `failed`, `cancelled`, or `completed`; a pause identifies the pending human checkpoint. Operational `WorkflowStep`, `AuditEvent`, and `CheckpointDecision` records support this lifecycle without becoming analytical artifacts.
+`evidence_ready` is a strong handoff between Phase 5 and Phase 6. It requires every frozen source branch to be terminal, at least one structurally valid reproducible passage, a terminal claim pipeline, and at least one structurally valid claim visible in the matrix. Individual sources may have failed, and policy outcomes may remain `needs_review` or `blocked`; those limitations remain visible without preventing the matrix from being ready. When a live dossier has valid retrieved passages but the deterministic claim adapter is not authorized for their hashes, the run pauses at `extracting_evidence + paused + claim_generation_unavailable` without fabricating claims, `Unknown`, or Phase 6 access. See ADR-023.
+
+The run stores the active workflow ID only while a workflow is running; Phase 4 `onComplete` success compare-and-clears the stored ID when it still matches the completed handle, so a newer execution cannot be erased by a late completion.
+
+Execution status is tracked separately as `idle`, `running`, `paused`, `failed`, `cancelled`, or `completed`; a pause identifies the pending human checkpoint or the `claim_generation_unavailable` technical stop. Operational `WorkflowStep`, `AuditEvent`, and `CheckpointDecision` records support this lifecycle without becoming analytical artifacts.
 
 ## Technical Architecture
 
@@ -544,3 +549,4 @@ The MVP is complete when an invited analyst can:
 - [ADR-018: Use an adaptive source selection policy](../decisions/018-use-adaptive-source-selection-policy.md)
 - [ADR-021: Separate source provenance from automatic role eligibility](../decisions/021-separate-source-provenance-from-automatic-role-eligibility.md)
 - [ADR-022: Persist company linkage basis for source recommendations](../decisions/022-persist-company-linkage-basis-for-source-recommendations.md)
+- [ADR-023: Use a decision-anchored Phase 5 evidence workflow](../decisions/023-use-decision-anchored-phase-5-evidence-workflow.md)
