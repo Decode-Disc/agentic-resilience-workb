@@ -4,42 +4,49 @@ import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-    resolve: {
-        tsconfigPaths: true,
+  resolve: {
+    tsconfigPaths: true,
+  },
+  plugins: [tailwindcss(), tanstackStart(), viteReact()],
+  server: {
+    watch: {
+      ignored: [
+        "**/.agents/**",
+        "**/.ai/**",
+        "**/.codex/**",
+        "**/.pi/**",
+        "**/.github/**",
+        "**/context/**",
+        "**/docs/**",
+        "**/src/__tests__/**",
+        "**/.missions/**",
+        "**/artifacts/**",
+        "**/.impeccable/**",
+        "**/.fallow/**",
+        "**/.superpowers/**",
+        "**/plans/**",
+        "**/pi-plans/**",
+      ],
     },
-    plugins: [tailwindcss(), tanstackStart(), viteReact()],
-    server: {
-        watch: {
-            ignored: [
-                "**/.agents/**",
-                "**/.ai/**",
-                "**/.codex/**",
-                "**/.pi/**",
-                "**/.github/**",
-                "**/context/**",
-                "**/docs/**",
-                "**/src/__tests__/**",
-            ],
-        },
-    },
-    build: {
-        rolldownOptions: {
-            output: {
-                codeSplitting: {
-                    groups: [
-                        {
-                            name: "react-vendor",
-                            test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/,
-                            priority: 20,
-                        },
-                        {
-                            name: "base-ui",
-                            test: /node_modules[\\/]@base-ui[\\/]/,
-                            priority: 15,
-                        },
-                    ],
-                },
+  },
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: "react-vendor",
+              test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+              priority: 20,
             },
+            {
+              name: "base-ui",
+              test: /node_modules[\\/]@base-ui[\\/]/,
+              priority: 15,
+            },
+          ],
         },
+      },
     },
+  },
 });

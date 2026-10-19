@@ -91,22 +91,8 @@
                             "options": {
                                 "patterns": [
                                     {
-                                        "group": [
-                                            "../*",
-                                            "../../*",
-                                            "../../../*",
-                                            "../../../../*"
-                                        ],
-                                        "message": "Use '@/' alias."
-                                    },
-                                    {
-                                        "group": [
-                                            "../convex/*",
-                                            "../../convex/*",
-                                            "../../../convex/*",
-                                            "../../../../convex/*"
-                                        ],
-                                        "message": "Use '@convex/' alias."
+                                        "group": ["../**"],
+                                        "message": "Use the '@/...' or '@convex/...' alias instead of relative parent imports ('../...')."
                                     }
                                 ]
                             }
@@ -125,12 +111,7 @@
                             "options": {
                                 "patterns": [
                                     {
-                                        "group": [
-                                            "../*",
-                                            "../../*",
-                                            "../../../*",
-                                            "../../../../*"
-                                        ],
+                                        "group": ["../**", "!../_generated/**"],
                                         "message": "Use '@convex/' alias."
                                     }
                                 ]
@@ -146,6 +127,9 @@
                 "rules": {
                     "suspicious": {
                         "noExplicitAny": "off"
+                    },
+                    "style": {
+                        "noRestrictedImports": "off"
                     }
                 }
             }
