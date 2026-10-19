@@ -7,7 +7,7 @@ import {
     LinkSquare01Icon,
     Loading02Icon,
 } from "@hugeicons/core-free-icons";
-import { type ReactElement, useState } from "react";
+import { type ComponentProps, type ReactElement, useState } from "react";
 
 import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
@@ -68,6 +68,7 @@ export interface AddSourceDialogProps {
     onUrlsChange?: (urls: Array<string>) => void;
     /** Optional direct callback for adding a single source URL to a live run. */
     onAdd?: (url: string) => void | Promise<void>;
+    finalFocus?: ComponentProps<typeof DialogContent>["finalFocus"];
     className?: string;
 }
 
@@ -86,6 +87,7 @@ export function AddSourceDialog({
     urls,
     onUrlsChange,
     onAdd,
+    finalFocus,
 }: AddSourceDialogProps) {
     const isControlled = openProp !== undefined;
     const [internalOpen, setInternalOpen] = useState(false);
@@ -144,7 +146,7 @@ export function AddSourceDialog({
     };
 
     const content = (
-        <DialogContent>
+        <DialogContent finalFocus={finalFocus}>
             <DialogHeader>
                 <DialogTitle>Add public sources</DialogTitle>
                 <DialogDescription>

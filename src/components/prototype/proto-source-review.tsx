@@ -6,7 +6,7 @@ import { type ComponentProps, useMemo, useState } from "react";
 import { SourceProposalReview } from "@/components/workspace/source-proposal-review";
 
 type ProposalProps = ComponentProps<typeof SourceProposalReview>;
-type ProposalSource = ProposalProps["proposalItems"][number];
+type ProposalSource = ProposalProps["adjustmentSets"]["included"][number];
 type Decision = FunctionArgs<typeof api.sources.decide>["decision"];
 
 const FIXTURE_SOURCES: Array<ProposalSource> = [
@@ -225,9 +225,6 @@ export function ProtoSourceReview() {
                     effectiveIncludedCount: included.length,
                     revisionStatus: approved ? "approved" : "draft",
                 }}
-                proposalItems={sources.filter(
-                    ({ disposition: value }) => value === disposition,
-                )}
                 disposition={disposition}
                 onDispositionChange={setDisposition}
                 adjustmentSets={{ included, available }}

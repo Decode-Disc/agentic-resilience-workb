@@ -39,6 +39,8 @@ import {
 } from "@/lib/presentation/research-copy";
 import { cn } from "@/lib/utils";
 
+export const SOURCE_REVIEW_PAGE_SIZE = 12;
+
 type ReviewSourceResult = FunctionReturnType<
     typeof api.sources.listForReviewPage
 >["page"][number];
@@ -100,7 +102,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
     selectedId?: Id<"sources"> | null;
     onSelect?: (sourceId: Id<"sources">) => void;
     enableDialogPreview?: boolean;
-        runId?: Id<"researchRuns">;
+    runId?: Id<"researchRuns">;
     reviewStatus: "draft" | "approved";
     onDecide?: (
         sourceId: Id<"sources">,
@@ -123,6 +125,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
     listClassName?: string;
 }) {
     const shouldReduceMotion = useReducedMotion();
+    const [decisionError, setDecisionError] = useState<string | null>(null);
     const [previewSource, setPreviewSource] = useState<TSource | null>(null);
     const loadedCount =
         items.length > 0 ? (
@@ -149,6 +152,11 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                 </div>
             </CardHeader>
             <CardContent className="min-h-0 overflow-hidden px-4">
+                {decisionError ? (
+                    <p role="alert" className="mb-3 text-sm text-destructive">
+                        {decisionError}
+                    </p>
+                ) : null}
                 <div data-slot="source-master-list" className="min-w-0 w-full">
                     <InfiniteCollectionViewport
                         hasMore={hasMore}
@@ -174,12 +182,12 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                 </EmptyHeader>
                             </Empty>
                         ) : (
-                                    <ul
-                                        className={cn(
-                                            !listClassName?.includes("grid") &&
-                                            "space-y-5",
-                                            listClassName,
-                                        )}>
+                            <ul
+                                className={cn(
+                                    !listClassName?.includes("grid") &&
+                                        "space-y-5",
+                                    listClassName,
+                                )}>
                                 {items.map((source, index) => {
                                     const isActive =
                                         selectedId === source.sourceId;
@@ -227,7 +235,7 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                           }
                                         : {};
                                     const rowActionClassName =
-                                        "-mx-3 -mb-3 mt-3 flex flex-wrap gap-1 border-t border-border/60 bg-muted/20 group-hover/source-row:bg-muted/70 p-1";
+                                        "-mx-3 -mb-3 mt-3 flex flex-wrap items-center gap-3 border-t border-border/60 bg-muted/20 group-hover/source-row:bg-muted/70 p-3";
                                     const canMove =
                                         reviewStatus === "draft" &&
                                         itemWrapper !== undefined;
@@ -350,7 +358,9 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                                                         size="xs"
                                                                         variant="outline"
                                                                         disabled={
-                                                                            reviewStatus === "approved" || isSelected
+                                                                            reviewStatus ===
+                                                                                "approved" ||
+                                                                            isSelected
                                                                         }
                                                                         aria-pressed={
                                                                             isSelected
@@ -368,12 +378,26 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                                                                   )
                                                                                 : undefined
                                                                         }
-                                                                        onClick={() =>
-                                                                            void onDecide(
-                                                                                source.sourceId,
-                                                                                definition.decision,
-                                                                            )
-                                                                        }>
+                                                                        onClick={(
+                                                                            event,
+                                                                        ) => {
+                                                                            event.stopPropagation();
+                                                                            setDecisionError(
+                                                                                null,
+                                                                            );
+                                                                            void Promise.resolve(
+                                                                                onDecide(
+                                                                                    source.sourceId,
+                                                                                    definition.decision,
+                                                                                ),
+                                                                            ).catch(
+                                                                                () => {
+                                                                                    setDecisionError(
+                                                                                        "We couldn't save that source decision. Try again.",
+                                                                                    );
+                                                                                },
+                                                                            );
+                                                                        }}>
                                                                         <Icon
                                                                             iconNode={
                                                                                 definition.icon
@@ -397,9 +421,9 @@ export function SourceMasterList<TSource extends SourceMasterListItem>({
                                     return itemWrapper ? (
                                         itemWrapper(source, sourceItem)
                                     ) : (
-                                            <li
-                                                key={source.sourceId}
-                                                className="w-full min-w-0">
+                                        <li
+                                            key={source.sourceId}
+                                            className="w-full min-w-0">
                                             {sourceItem}
                                         </li>
                                     );

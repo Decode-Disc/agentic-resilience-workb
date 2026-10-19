@@ -1,11 +1,21 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
+import { toast } from "sonner";
 import { expect, test, vi } from "vitest";
 
 vi.mock("@/hooks/use-source-preview", () => ({
     useSourcePreview: () => ({ status: "idle" }),
 }));
 
-import { sourceDecisionForKanbanMove } from "@/components/workspace/source-proposal-adjustment-board";
+import {
+    SourceAdjustmentActions,
+    sourceDecisionForKanbanMove,
+} from "@/components/workspace/source-proposal-adjustment-board";
 import { SourceProposalReview } from "@/components/workspace/source-proposal-review";
 
 const recommended = {
@@ -102,7 +112,6 @@ test("presents a summary-first proposal with only the three proposal tabs", () =
             runId={"run-1" as never}
             corpusRevisionId={"revision-1" as never}
             summary={summary as never}
-            proposalItems={[recommended] as never}
             disposition="recommended"
             onDispositionChange={vi.fn()}
             adjustmentSets={
@@ -149,7 +158,6 @@ test("labels metadata-linked recommendations without hiding coverage gaps", () =
             runId={"run-1" as never}
             corpusRevisionId={"revision-1" as never}
             summary={summary as never}
-            proposalItems={[metadataLinked] as never}
             disposition="recommended"
             onDispositionChange={vi.fn()}
             adjustmentSets={
@@ -183,7 +191,6 @@ test("requires an outdated draft to be rebuilt before approval", () => {
             runId={"run-1" as never}
             corpusRevisionId={"revision-1" as never}
             summary={{ ...summary, effectiveStatus: "outdated" } as never}
-            proposalItems={[recommended] as never}
             disposition="recommended"
             onDispositionChange={vi.fn()}
             adjustmentSets={{ included: [recommended], available: [] } as never}
@@ -221,7 +228,6 @@ test("keeps a partial rebuild visible with analyst-readable coverage consequence
                     ],
                 } as never
             }
-            proposalItems={[recommended] as never}
             disposition="recommended"
             onDispositionChange={vi.fn()}
             adjustmentSets={{ included: [recommended], available: [] } as never}
@@ -256,7 +262,6 @@ test("explains the purpose of the proposal actions in tooltips", async () => {
             runId={"run-1" as never}
             corpusRevisionId={"revision-1" as never}
             summary={summary as never}
-            proposalItems={[recommended] as never}
             disposition="recommended"
             onDispositionChange={vi.fn()}
             adjustmentSets={
@@ -304,7 +309,6 @@ test("groups adjustment choices without showing an inspection filter", () => {
             runId={"run-1" as never}
             corpusRevisionId={"revision-1" as never}
             summary={summary as never}
-            proposalItems={[recommended] as never}
             disposition="recommended"
             onDispositionChange={vi.fn()}
             adjustmentSets={
@@ -347,7 +351,6 @@ test("uses the shared kanban interaction with accessible source handles", () => 
             runId={"run-1" as never}
             corpusRevisionId={"revision-1" as never}
             summary={summary as never}
-            proposalItems={[recommended] as never}
             disposition="recommended"
             onDispositionChange={vi.fn()}
             adjustmentSets={
@@ -391,7 +394,6 @@ test("lets the analyst reset an explicit override to the proposal", () => {
             runId={"run-1" as never}
             corpusRevisionId={"revision-1" as never}
             summary={summary as never}
-            proposalItems={[overridden] as never}
             disposition="recommended"
             onDispositionChange={vi.fn()}
             adjustmentSets={
@@ -406,8 +408,10 @@ test("lets the analyst reset an explicit override to the proposal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Adjust proposal" }));
     fireEvent.click(
-        screen.getByRole("button", {
-            name: /Reset Annual report to proposal/i,
+        within(
+            screen.getByRole("region", { name: "Adjust source proposal" }),
+        ).getByRole("button", {
+            name: /Use original recommendation for Annual report/i,
         }),
     );
     expect(onDecide).toHaveBeenCalledWith("source-recommended", "pending");
@@ -420,7 +424,6 @@ test("requires a stale proposal to be refreshed before approval", () => {
             runId={"run-1" as never}
             corpusRevisionId={"revision-1" as never}
             summary={{ ...summary, effectiveStatus: "stale" } as never}
-            proposalItems={[recommended] as never}
             disposition="recommended"
             onDispositionChange={vi.fn()}
             adjustmentSets={
@@ -451,7 +454,6 @@ test("renders approved state without an approve button", () => {
             runId={"run-1" as never}
             corpusRevisionId={"revision-1" as never}
             summary={{ ...summary, revisionStatus: "approved" } as never}
-            proposalItems={[recommended] as never}
             disposition="recommended"
             onDispositionChange={vi.fn()}
             adjustmentSets={{ included: [recommended], available: [] } as never}
@@ -468,4 +470,488 @@ test("renders approved state without an approve button", () => {
     expect(
         screen.queryByRole("button", { name: "Approve source set" }),
     ).toBeNull();
+});
+
+function overviewProps(
+    overrides: Partial<Parameters<typeof SourceProposalReview>[0]> = {},
+): Parameters<typeof SourceProposalReview>[0] {
+    return {
+        runId: "run-1" as never,
+        corpusRevisionId: "revision-1" as never,
+        summary: summary as never,
+        disposition: "recommended",
+        onDispositionChange: vi.fn(),
+        adjustmentSets: {
+            included: [recommended],
+            available: [alternative],
+        } as never,
+        inspectionReview: inspectionReview as never,
+        onDecide: vi.fn(),
+        onApprove: vi.fn(),
+        onRecompute: vi.fn(),
+        ...overrides,
+    };
+}
+
+test("moves a recommended source to alternatives directly from its overview card", async () => {
+    const onDecide = vi.fn();
+    const props = overviewProps({ onDecide });
+    const view = render(<SourceProposalReview {...props} />);
+    fireEvent.click(
+        screen.getByRole("button", {
+            name: "Move Annual report to alternatives",
+        }),
+    );
+    await waitFor(() =>
+        expect(onDecide).toHaveBeenCalledWith("source-recommended", "rejected"),
+    );
+    const updated = {
+        included: [],
+        available: [
+            { ...recommended, decision: "rejected", included: false },
+            alternative,
+        ],
+    };
+    view.rerender(
+        <SourceProposalReview {...props} adjustmentSets={updated as never} />,
+    );
+    expect(screen.getByRole("tab", { name: /Recommended.*0/i })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Alternatives.*2/i })).toBeTruthy();
+    expect(screen.queryByText("Annual report")).toBeNull();
+    view.rerender(
+        <SourceProposalReview
+            {...props}
+            adjustmentSets={updated as never}
+            disposition="alternative"
+        />,
+    );
+    expect(screen.getByText("Annual report")).toBeTruthy();
+    expect(screen.getByText(/Analyst override: Rejected/i)).toBeTruthy();
+});
+
+test("includes an alternative from its overview card without changing its original recommendation", async () => {
+    const onDecide = vi.fn();
+    const props = overviewProps({ onDecide, disposition: "alternative" });
+    const view = render(<SourceProposalReview {...props} />);
+    fireEvent.click(
+        screen.getByRole("button", {
+            name: "Include Independent analysis in source set",
+        }),
+    );
+    await waitFor(() =>
+        expect(onDecide).toHaveBeenCalledWith("source-alternative", "accepted"),
+    );
+    const updated = {
+        included: [
+            recommended,
+            { ...alternative, decision: "accepted", included: true },
+        ],
+        available: [],
+    };
+    view.rerender(
+        <SourceProposalReview
+            {...props}
+            adjustmentSets={updated as never}
+            disposition="recommended"
+        />,
+    );
+    expect(screen.getByRole("tab", { name: /Recommended.*2/i })).toBeTruthy();
+    expect(
+        screen.getByRole("button", {
+            name: "Open Independent analysis for review",
+        }),
+    ).toBeTruthy();
+    expect(screen.getByText(/Analyst override: Accepted/i)).toBeTruthy();
+});
+
+test("adds a public source directly from the overview with the existing URL validation", async () => {
+    const onAddManualUrl = vi.fn();
+    render(<SourceProposalReview {...overviewProps({ onAddManualUrl })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Add source link" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Public source link"), {
+        target: { value: "http://example.com/report" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+    expect(onAddManualUrl).not.toHaveBeenCalled();
+    expect(
+        await within(dialog).findByText(/beginning with https/i),
+    ).toBeTruthy();
+    fireEvent.change(within(dialog).getByLabelText("Public source link"), {
+        target: { value: "https://example.com/report" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+    await waitFor(() =>
+        expect(onAddManualUrl).toHaveBeenCalledWith(
+            "https://example.com/report",
+        ),
+    );
+    expect(
+        await within(dialog).findByText("Source added for your review."),
+    ).toBeTruthy();
+});
+
+test("keeps overview editing controls unavailable after approval", () => {
+    render(
+        <SourceProposalReview
+            {...overviewProps({
+                summary: { ...summary, revisionStatus: "approved" } as never,
+                onAddManualUrl: vi.fn(),
+            })}
+        />,
+    );
+    expect(
+        screen.queryByRole("button", { name: "Add source link" }),
+    ).toBeNull();
+    expect(
+        screen.queryByRole("button", {
+            name: "Move Annual report to alternatives",
+        }),
+    ).toBeNull();
+});
+
+test("saves a card decision once and offers undo without opening its preview", async () => {
+    let finish!: () => void;
+    const onDecide = vi
+        .fn()
+        .mockImplementationOnce(
+            () =>
+                new Promise<void>((resolve) => {
+                    finish = resolve;
+                }),
+        )
+        .mockResolvedValue(undefined);
+    const notification = vi.spyOn(toast, "success");
+    render(<SourceProposalReview {...overviewProps({ onDecide })} />);
+    fireEvent.click(
+        screen.getByRole("button", {
+            name: "Move Annual report to alternatives",
+        }),
+    );
+    expect(
+        screen
+            .getByRole("button", { name: "Move Annual report to alternatives" })
+            .hasAttribute("disabled"),
+    ).toBe(true);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(notification).not.toHaveBeenCalled();
+    finish();
+    await waitFor(() => expect(notification).toHaveBeenCalledOnce());
+    const action = notification.mock.calls[0]?.[1]?.action;
+    expect(action).toMatchObject({
+        label: "Undo",
+        onClick: expect.any(Function),
+    });
+    if (action && typeof action === "object" && "onClick" in action) {
+        action.onClick({} as never);
+    }
+    await waitFor(() =>
+        expect(onDecide).toHaveBeenLastCalledWith(
+            "source-recommended",
+            "pending",
+        ),
+    );
+    notification.mockRestore();
+});
+
+test("keeps a failed source move actionable and never announces success", async () => {
+    const notification = vi.spyOn(toast, "success");
+    const onDecide = vi
+        .fn()
+        .mockRejectedValue(new Error("internal_provider_failure"));
+    render(<SourceProposalReview {...overviewProps({ onDecide })} />);
+    fireEvent.click(
+        screen.getByRole("button", {
+            name: "Move Annual report to alternatives",
+        }),
+    );
+    expect(
+        (
+            await screen.findByText(
+                "We couldn't save that source decision. Try again.",
+            )
+        ).getAttribute("role"),
+    ).toBe("alert");
+    expect(screen.queryByText("internal_provider_failure")).toBeNull();
+    expect(notification).not.toHaveBeenCalled();
+    expect(
+        screen
+            .getByRole("button", { name: "Move Annual report to alternatives" })
+            .hasAttribute("disabled"),
+    ).toBe(false);
+    notification.mockRestore();
+});
+
+test("keeps undecided attention items separate and preserves their warning when included", () => {
+    const attention = {
+        ...alternative,
+        disposition: "needs_attention",
+        title: "Company linkage needs review",
+    };
+    const props = overviewProps({
+        disposition: "needs_attention",
+        adjustmentSets: {
+            included: [recommended],
+            available: [attention],
+        } as never,
+    });
+    const view = render(<SourceProposalReview {...props} />);
+    expect(
+        screen.getByRole("tab", { name: /Needs attention.*1/i }),
+    ).toBeTruthy();
+    expect(
+        screen.getByRole("button", {
+            name: "Include Company linkage needs review in source set",
+        }),
+    ).toBeTruthy();
+    view.rerender(
+        <SourceProposalReview
+            {...props}
+            disposition="recommended"
+            adjustmentSets={
+                {
+                    included: [
+                        recommended,
+                        { ...attention, decision: "accepted", included: true },
+                    ],
+                    available: [],
+                } as never
+            }
+        />,
+    );
+    expect(
+        screen.getByRole("tab", { name: /Needs attention.*0/i }),
+    ).toBeTruthy();
+    expect(
+        screen.getByText("Needs attention", {
+            selector: '[data-slot="badge"]',
+        }),
+    ).toBeTruthy();
+});
+
+test("keeps incremental loading and finds removed sources beyond the first page", () => {
+    const scrollHeight = vi
+        .spyOn(Element.prototype, "scrollHeight", "get")
+        .mockReturnValue(1000);
+    const clientHeight = vi
+        .spyOn(Element.prototype, "clientHeight", "get")
+        .mockReturnValue(300);
+    try {
+        const sources = Array.from({ length: 13 }, (_, index) => ({
+            ...recommended,
+            sourceId: `source-${index}`,
+            title: `Report ${index + 1}`,
+            canonicalUrl: `https://example.com/report-${index}`,
+            rank: index,
+        }));
+        const props = overviewProps({
+            adjustmentSets: { included: sources, available: [] } as never,
+        });
+        const view = render(<SourceProposalReview {...props} />);
+        expect(
+            screen.getByRole("tab", { name: /Recommended.*13/i }),
+        ).toBeTruthy();
+        expect(
+            screen.queryByRole("button", { name: "Open Report 13 for review" }),
+        ).toBeNull();
+        fireEvent.click(
+            screen.getByRole("button", { name: "Load more sources" }),
+        );
+        expect(
+            screen.getByRole("button", { name: "Open Report 13 for review" }),
+        ).toBeTruthy();
+        const removed = {
+            ...sources[12],
+            decision: "rejected",
+            included: false,
+        };
+        view.rerender(
+            <SourceProposalReview
+                {...props}
+                disposition="alternative"
+                adjustmentSets={
+                    {
+                        included: sources.slice(0, 12),
+                        available: [removed],
+                    } as never
+                }
+            />,
+        );
+        expect(
+            screen.getByRole("tab", { name: /Alternatives.*1/i }),
+        ).toBeTruthy();
+        expect(
+            screen.getByRole("button", { name: "Open Report 13 for review" }),
+        ).toBeTruthy();
+    } finally {
+        scrollHeight.mockRestore();
+        clientHeight.mockRestore();
+    }
+});
+
+test.each([
+    [
+        "recommended",
+        "Originally recommended. This will include the source and remove your override.",
+    ],
+    [
+        "alternative",
+        "Originally an alternative. This will exclude the source and remove your override.",
+    ],
+    [
+        "needs_attention",
+        "Originally flagged for review. This will exclude the source and return it to Needs attention.",
+    ],
+] as const)("explains restoring the original %s recommendation before saving it", async (disposition, description) => {
+    const onDecide = vi.fn();
+    render(
+        <SourceAdjustmentActions
+            source={
+                {
+                    ...alternative,
+                    disposition,
+                    decision: "accepted",
+                    included: true,
+                } as never
+            }
+            disabled={false}
+            onDecide={onDecide}
+            context="overview"
+        />,
+    );
+    const restore = screen.getByRole("button", {
+        name: "Use original recommendation for Independent analysis",
+    });
+    expect(screen.getByText(description).id).toBe(
+        restore.getAttribute("aria-describedby"),
+    );
+    expect(screen.queryByText("Reset to proposal")).toBeNull();
+    fireEvent.click(restore);
+    await waitFor(() =>
+        expect(onDecide).toHaveBeenCalledExactlyOnceWith(
+            "source-alternative",
+            "pending",
+        ),
+    );
+});
+
+function mobileViewport() {
+    return vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+        matches: query === "(width < 48rem)",
+        media: query,
+        onchange: null,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        dispatchEvent: () => false,
+    }));
+}
+
+test("opens mobile source actions in a dismissible popover while keeping approval and source moves visible", async () => {
+    const viewport = mobileViewport();
+    try {
+        render(
+            <SourceProposalReview
+                {...overviewProps({ onAddManualUrl: vi.fn() })}
+            />,
+        );
+        const trigger = screen.getByRole("button", { name: "Source actions" });
+        expect(
+            screen.queryByRole("button", { name: "Add source link" }),
+        ).toBeNull();
+        expect(
+            screen.getByRole("button", { name: "Approve source set" }),
+        ).toBeTruthy();
+        expect(
+            screen.getByRole("button", {
+                name: "Move Annual report to alternatives",
+            }),
+        ).toBeTruthy();
+        fireEvent.click(trigger);
+        const popover = await screen.findByRole("dialog", {
+            name: "Source actions",
+        });
+        expect(
+            within(popover).getByRole("button", { name: "Add source link" }),
+        ).toBeTruthy();
+        expect(
+            within(popover).getByRole("button", { name: "Adjust proposal" }),
+        ).toBeTruthy();
+        expect(
+            within(popover).getByRole("button", {
+                name: "Inspect all candidates",
+            }),
+        ).toBeTruthy();
+        fireEvent.keyDown(popover, { key: "Escape" });
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+        await waitFor(() => expect(document.activeElement).toBe(trigger));
+    } finally {
+        viewport.mockRestore();
+    }
+});
+
+test("keeps the mobile source dialog open after its popover closes and returns focus to Source actions", async () => {
+    const viewport = mobileViewport();
+    const onAddManualUrl = vi.fn();
+    try {
+        render(<SourceProposalReview {...overviewProps({ onAddManualUrl })} />);
+        const trigger = screen.getByRole("button", { name: "Source actions" });
+        fireEvent.click(trigger);
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Add source link" }),
+        );
+        const dialog = await screen.findByRole("dialog", {
+            name: "Add public sources",
+        });
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("dialog", { name: "Source actions" }),
+            ).toBeNull(),
+        );
+        fireEvent.change(within(dialog).getByLabelText("Public source link"), {
+            target: { value: "https://example.com/mobile-report" },
+        });
+        fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+        await within(dialog).findByText("Source added for your review.");
+        expect(onAddManualUrl).toHaveBeenCalledExactlyOnceWith(
+            "https://example.com/mobile-report",
+        );
+        fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+        await waitFor(() => expect(document.activeElement).toBe(trigger));
+    } finally {
+        viewport.mockRestore();
+    }
+});
+
+test.each([
+    ["Adjust proposal", "Adjust source proposal"],
+    ["Inspect all candidates", "Inspect all source candidates"],
+])("opens %s from mobile actions and returns to a closed popover", async (action, region) => {
+    const viewport = mobileViewport();
+    try {
+        render(<SourceProposalReview {...overviewProps()} />);
+        fireEvent.click(screen.getByRole("button", { name: "Source actions" }));
+        fireEvent.click(await screen.findByRole("button", { name: action }));
+        expect(
+            await screen.findByRole("region", { name: region }),
+        ).toBeTruthy();
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("dialog", { name: "Source actions" }),
+            ).toBeNull(),
+        );
+        fireEvent.click(
+            screen.getByRole("button", { name: /Back to proposal/i }),
+        );
+        expect(
+            await screen.findByRole("button", { name: "Source actions" }),
+        ).toBeTruthy();
+        expect(
+            screen.queryByRole("dialog", { name: "Source actions" }),
+        ).toBeNull();
+    } finally {
+        viewport.mockRestore();
+    }
 });

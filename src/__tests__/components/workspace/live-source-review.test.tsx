@@ -1,3 +1,4 @@
+import { getFunctionName } from "convex/server";
 import { api } from "@convex/_generated/api";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
@@ -158,7 +159,7 @@ test("keeps proposal summary, source list, and detail geometry while loading", (
     expect(screen.getByLabelText("Loading source detail")).toBeTruthy();
 });
 
-test("queries proposal dispositions and approves the exact visible version", async () => {
+test("shows current source groups and approves the exact visible version", async () => {
     const currentProposal = {
         proposalId: "proposal-1",
         version: 2,
@@ -176,7 +177,19 @@ test("queries proposal dispositions and approves the exact visible version", asy
         effectiveIncludedCount: 1,
         revisionStatus: "draft",
     };
-    const adjustmentSets = { included: [proposalSource], available: [] };
+    const adjustmentSets = {
+        included: [proposalSource],
+        available: [
+            {
+                ...proposalSource,
+                sourceId: "source-alternative",
+                title: "Independent analysis",
+                canonicalUrl: "https://example.com/analysis",
+                disposition: "alternative",
+                included: false,
+            },
+        ],
+    };
     const reviewSummary = {
         revision: 1,
         status: "draft",
@@ -244,18 +257,11 @@ test("queries proposal dispositions and approves the exact visible version", asy
     );
 
     fireEvent.click(screen.getByRole("tab", { name: /Alternatives.*1/i }));
-    await waitFor(() =>
-        expect(
-            convexReactHarness.module.usePaginatedQuery,
-        ).toHaveBeenCalledWith(
-            expect.anything(),
-            expect.objectContaining({
-                disposition: "alternative",
-                proposalId: "proposal-1",
-            }),
-            { initialNumItems: 12 },
-        ),
-    );
+    expect(
+        screen.getByRole("button", {
+            name: "Open Independent analysis for review",
+        }),
+    ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Approve source set" }));
     await waitFor(() =>
@@ -416,11 +422,14 @@ test("shows an approved legacy source set without querying missing proposal item
         screen.queryByRole("button", { name: "Approve source set" }),
     ).toBeNull();
     expect(ensureCurrent).not.toHaveBeenCalled();
-    expect(convexReactHarness.module.usePaginatedQuery).toHaveBeenCalledWith(
-        expect.anything(),
-        "skip",
-        { initialNumItems: 12 },
-    );
+    expect(
+        convexReactHarness.module.useQuery.mock.calls.some(
+            ([reference, args]) =>
+                getFunctionName(reference) ===
+                    "sourceSelectionProposals:getAdjustmentSets" &&
+                args === "skip",
+        ),
+    ).toBe(true);
 });
 
 test("repairs an authorized legacy draft before loading proposal items", async () => {
@@ -472,9 +481,12 @@ test("repairs an authorized legacy draft before loading proposal items", async (
             corpusRevisionId: "revision-draft",
         }),
     );
-    expect(convexReactHarness.module.usePaginatedQuery).toHaveBeenCalledWith(
-        expect.anything(),
-        "skip",
-        { initialNumItems: 12 },
-    );
+    expect(
+        convexReactHarness.module.useQuery.mock.calls.some(
+            ([reference, args]) =>
+                getFunctionName(reference) ===
+                    "sourceSelectionProposals:getAdjustmentSets" &&
+                args === "skip",
+        ),
+    ).toBe(true);
 });

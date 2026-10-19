@@ -14,13 +14,12 @@ import Icon from "@/components/icon";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SOURCE_REVIEW_PAGE_SIZE } from "@/components/workspace/source-master-list";
 import { SourceProposalReview } from "@/components/workspace/source-proposal-review";
 import {
     type SourceFilter,
     SourceReview,
 } from "@/components/workspace/source-review";
-
-const SOURCE_REVIEW_PAGE_SIZE = 12;
 
 type LiveSourceReviewProps = {
     runId: Id<"researchRuns">;
@@ -77,7 +76,6 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
             <SourceReviewQueryBridge
                 runId={runId}
                 corpusRevisionId={corpusRevisionId}
-                disposition={disposition}
                 inspectionFilter={inspectionFilter}
                 selectedId={selectedId}
                 setQueries={setQueries}
@@ -120,8 +118,7 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
         );
     }
 
-    const { adjustmentSets, proposalPage, inspectionPage, selectedSource } =
-        queries;
+    const { adjustmentSets, inspectionPage, selectedSource } = queries;
 
     if (proposal === undefined || inspectionSummary === undefined) {
         return (
@@ -266,7 +263,6 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
                     runId={runId}
                     corpusRevisionId={corpusRevisionId}
                     summary={proposal}
-                    proposalItems={proposalPage.results}
                     disposition={disposition}
                     onDispositionChange={setDisposition}
                     adjustmentSets={adjustmentSets}
@@ -329,16 +325,6 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
                         }
                     }}
                     onAddManualUrl={onAddManualUrl}
-                    proposalHasMore={proposalPage.status === "CanLoadMore"}
-                    proposalIsLoadingMore={
-                        proposalPage.status === "LoadingMore"
-                    }
-                    proposalIsLoadingInitial={
-                        proposalPage.status === "LoadingFirstPage"
-                    }
-                    onLoadMoreProposal={() =>
-                        proposalPage.loadMore(SOURCE_REVIEW_PAGE_SIZE)
-                    }
                     inspectionFilter={inspectionFilter}
                     onInspectionFilterChange={(nextFilter) => {
                         setInspectionFilter(nextFilter);
@@ -370,11 +356,9 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
 function useSourceReviewQueries({
     runId,
     corpusRevisionId,
-    disposition,
     inspectionFilter,
     selectedId,
 }: Pick<LiveSourceReviewProps, "runId" | "corpusRevisionId"> & {
-    disposition: "recommended" | "needs_attention" | "alternative";
     inspectionFilter: SourceFilter;
     selectedId: Id<"sources"> | null;
 }) {
@@ -391,18 +375,6 @@ function useSourceReviewQueries({
         runId,
         corpusRevisionId,
     });
-    const proposalPage = usePaginatedQuery(
-        api.sourceSelectionProposals.listItemsPage,
-        hasProposal
-            ? {
-                  runId,
-                  corpusRevisionId,
-                  proposalId: proposal.proposalId,
-                  disposition,
-              }
-            : "skip",
-        { initialNumItems: SOURCE_REVIEW_PAGE_SIZE },
-    );
     const inspectionPage = usePaginatedQuery(
         api.sources.listForReviewPage,
         { runId, corpusRevisionId, filter: inspectionFilter },
@@ -417,7 +389,6 @@ function useSourceReviewQueries({
         proposal,
         adjustmentSets,
         inspectionSummary,
-        proposalPage,
         inspectionPage,
         selectedSource,
     };
@@ -439,9 +410,6 @@ function SourceReviewQueryBridge({
             current.proposal === queries.proposal &&
             current.adjustmentSets === queries.adjustmentSets &&
             current.inspectionSummary === queries.inspectionSummary &&
-            current.proposalPage.results === queries.proposalPage.results &&
-            current.proposalPage.status === queries.proposalPage.status &&
-            current.proposalPage.loadMore === queries.proposalPage.loadMore &&
             current.inspectionPage.results === queries.inspectionPage.results &&
             current.inspectionPage.status === queries.inspectionPage.status &&
             current.inspectionPage.loadMore ===

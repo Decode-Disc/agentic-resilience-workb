@@ -14,6 +14,7 @@ const { invalidate, responsive } = vi.hoisted(() => ({
 
 vi.mock("@/hooks/use-responsive", () => ({
     useResponsive: () => responsive,
+    useMediaQuery: () => responsive.isMobile,
 }));
 
 vi.mock("@/hooks/use-source-preview", () => ({
@@ -55,10 +56,76 @@ import { Route as RunRoute } from "@/routes/workspace/_protected/$runId";
 
 afterEach(() => {
     window.localStorage.clear();
+    responsive.isMobile = false;
+    responsive.isTabletOrBelow = false;
+    responsive.isDesktop = true;
+    vi.restoreAllMocks();
 });
 
 describe("WorkspaceNavigationRail collapse behavior", () => {
     const STORAGE_KEY = "evidence-workbench.nav-rail.collapsed.v1";
+
+    it.each([
+        768, 1024, 1440,
+    ])("starts expanded without a saved choice at %ipx", (width) => {
+        vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+            matches: query.includes("48rem") ? width < 768 : width <= 1024,
+            media: query,
+            onchange: null,
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+        }));
+        render(
+            <WorkspaceNavigationRail
+                runId={"run-1" as never}
+                section="sources"
+                lifecycleState="awaiting_source_review"
+            />,
+        );
+        expect(
+            screen.getByRole("button", { name: "Collapse navigation" }),
+        ).toBeTruthy();
+        fireEvent.click(screen.getByRole("link", { name: "Sources" }));
+        expect(
+            screen.getByRole("button", { name: "Collapse navigation" }),
+        ).toBeTruthy();
+    });
+
+    it("starts collapsed on mobile and collapses again after selecting a section", () => {
+        responsive.isMobile = true;
+        responsive.isTabletOrBelow = true;
+        responsive.isDesktop = false;
+        vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+            matches: query.includes("48rem") || query.includes("64rem"),
+            media: query,
+            onchange: null,
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+        }));
+        render(
+            <WorkspaceNavigationRail
+                runId={"run-1" as never}
+                section="sources"
+                lifecycleState="awaiting_source_review"
+            />,
+        );
+        const toggle = screen.getByRole("button", {
+            name: "Expand navigation",
+        });
+        expect(toggle.querySelector("svg")?.style.width).toBe("14px");
+        fireEvent.click(toggle);
+        fireEvent.click(screen.getByRole("link", { name: "Sources" }));
+        expect(
+            screen.getByRole("button", { name: "Expand navigation" }),
+        ).toBeTruthy();
+        expect(window.localStorage.getItem(STORAGE_KEY)).toBe("false");
+    });
 
     it("renders a collapse toggle and starts expanded with visible labels", () => {
         render(

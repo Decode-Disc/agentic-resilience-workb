@@ -2,9 +2,15 @@
 
 import type { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { DragDropHorizontalIcon } from "@hugeicons/core-free-icons";
+import {
+    ArrowRight01Icon,
+    DragDropHorizontalIcon,
+    PlusSignIcon,
+    Undo02Icon,
+} from "@hugeicons/core-free-icons";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
-import type { ReactNode } from "react";
+import { type ReactNode, useId, useState } from "react";
+import { toast } from "sonner";
 
 import { FaviconAvatar } from "@/components/favicon-avatar";
 import Icon from "@/components/icon";
@@ -61,7 +67,7 @@ export function SourceProposalAdjustmentBoard({
     annotation,
 }: {
     adjustmentSets: AdjustmentSets;
-        runId?: Id<"researchRuns">;
+    runId?: Id<"researchRuns">;
     reviewStatus: "draft" | "approved";
     onDecide: (
         sourceId: Id<"sources">,
@@ -90,7 +96,11 @@ export function SourceProposalAdjustmentBoard({
         if (!decision) {
             return;
         }
-        void onDecide(event.active.id as Id<"sources">, decision);
+        void Promise.resolve(
+            onDecide(event.active.id as Id<"sources">, decision),
+        ).catch(() =>
+            toast.error("We couldn't save that source decision. Try again."),
+        );
     };
 
     const renderSourceItem = (source: ProposalSource, item: ReactNode) => (
@@ -138,7 +148,6 @@ export function SourceProposalAdjustmentBoard({
                         rowAction={(source) => (
                             <SourceAdjustmentActions
                                 source={source}
-                                column="included"
                                 disabled={actionDisabled}
                                 onDecide={onDecide}
                             />
@@ -166,7 +175,6 @@ export function SourceProposalAdjustmentBoard({
                         rowAction={(source) => (
                             <SourceAdjustmentActions
                                 source={source}
-                                column="available"
                                 disabled={actionDisabled}
                                 onDecide={onDecide}
                             />
@@ -201,7 +209,7 @@ function ProposalAdjustmentColumn({
 }: {
     column: AdjustmentColumn;
     title: string;
-        badgeValue: number;
+    badgeValue: number;
     children: ReactNode;
 }) {
     return (
@@ -250,53 +258,127 @@ function SourceDragOverlay({ source }: { source: ProposalSource }) {
     );
 }
 
-function SourceAdjustmentActions({
+export function SourceAdjustmentActions({
     source,
-    column,
     disabled,
     onDecide,
+    context = "adjustment",
 }: {
     source: ProposalSource;
-    column: AdjustmentColumn;
     disabled: boolean;
     onDecide: (
         sourceId: Id<"sources">,
         decision: SourceDecision,
     ) => void | Promise<void>;
+    context?: "adjustment" | "overview";
 }) {
-    const isIncluded = column === "included";
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const isIncluded = source.included;
+    const restoreDescriptionId = useId();
+    const restoreDescriptions = {
+        recommended:
+            "Originally recommended. This will include the source and remove your override.",
+        alternative:
+            "Originally an alternative. This will exclude the source and remove your override.",
+        needs_attention:
+            "Originally flagged for review. This will exclude the source and return it to Needs attention.",
+    };
+    const actionLabels = {
+        adjustment: {
+            include: {
+                text: "Include",
+                description: `Include ${source.title}`,
+            },
+            remove: {
+                text: "Remove",
+                description: `Remove ${source.title} from proposal`,
+            },
+        },
+        overview: {
+            include: {
+                text: "Include in source set",
+                description: `Include ${source.title} in source set`,
+            },
+            remove: {
+                text: "Move to alternatives",
+                description: `Move ${source.title} to alternatives`,
+            },
+        },
+    };
+    const actionLabel =
+        actionLabels[context][isIncluded ? "remove" : "include"];
+
+    async function save(decision: SourceDecision) {
+        setSaving(true);
+        setError(null);
+        try {
+            await onDecide(source.sourceId, decision);
+            toast.success("Source set updated", {
+                action: {
+                    label: "Undo",
+                    onClick: () => {
+                        void Promise.resolve(
+                            onDecide(source.sourceId, source.decision),
+                        ).catch(() => {
+                            toast.error(
+                                "We couldn't undo that source decision. Try again.",
+                            );
+                        });
+                    },
+                },
+            });
+        } catch {
+            setError("We couldn't save that source decision. Try again.");
+        } finally {
+            setSaving(false);
+        }
+    }
 
     return (
         <>
             <Button
                 type="button"
-                size="xs"
-                variant="outline"
-                disabled={disabled}
-                aria-label={
-                    isIncluded
-                        ? `Remove ${source.title} from proposal`
-                        : `Include ${source.title}`
-                }
-                className={isIncluded ? "text-danger" : "text-info"}
-                onClick={() =>
-                    void onDecide(
-                        source.sourceId,
-                        isIncluded ? "rejected" : "accepted",
-                    )
-                }>
-                {isIncluded ? "Remove" : "Include"}
+                size="sm"
+                variant="secondary"
+                disabled={disabled || saving}
+                aria-label={actionLabel.description}
+                className="min-h-11 w-full text-sm sm:min-h-9 sm:w-auto"
+                onClick={(event) => {
+                    event.stopPropagation();
+                    void save(isIncluded ? "rejected" : "accepted");
+                }}>
+                <Icon iconNode={isIncluded ? ArrowRight01Icon : PlusSignIcon} />
+                {saving ? "Saving…" : actionLabel.text}
             </Button>
             {source.decision !== "pending" ? (
-                <Button
-                    type="button"
-                    size="xs"
-                    variant="ghost"
-                    disabled={disabled}
-                    aria-label={`Reset ${source.title} to proposal`}
-                    onClick={() => void onDecide(source.sourceId, "pending")}>
-                    Reset to proposal
-                </Button>
+                <div className="flex w-full flex-col items-start gap-2 border-t border-border/60 pt-3">
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-auto min-h-11 w-full gap-2 whitespace-normal py-2 text-sm sm:min-h-9 sm:w-auto"
+                        disabled={disabled || saving}
+                        aria-label={`Use original recommendation for ${source.title}`}
+                        aria-describedby={restoreDescriptionId}
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            void save("pending");
+                        }}>
+                        <Icon iconNode={Undo02Icon} />
+                        Use original recommendation
+                    </Button>
+                    <p
+                        id={restoreDescriptionId}
+                        className="text-xs text-muted-foreground">
+                        {restoreDescriptions[source.disposition]}
+                    </p>
+                </div>
+            ) : null}
+            {error ? (
+                <p role="alert" className="w-full text-xs text-destructive">
+                    {error}
+                </p>
             ) : null}
         </>
     );
