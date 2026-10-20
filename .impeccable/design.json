@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-20T01:18:02.783918+00:00",
+  "generatedAt": "2026-10-20T00:00:00.000Z",
   "title": "Design System: Agentic Resilience Evidence Workbench",
   "extensions": {
     "colorMeta": {
@@ -76,7 +76,7 @@
       },
       "card-foreground": {
         "role": "neutral",
-        "displayName": "Card Foreground",
+        "displayName": "card foreground",
         "tonalRamp": [
           "oklch(0.15 0.0092 308)",
           "oklch(0.25 0.0092 308)",
@@ -146,7 +146,7 @@
       },
       "secondary-foreground": {
         "role": "neutral",
-        "displayName": "Secondary Foreground",
+        "displayName": "secondary foreground",
         "tonalRamp": [
           "oklch(0.15 0.0092 308)",
           "oklch(0.25 0.0092 308)",
@@ -174,7 +174,7 @@
       },
       "accent-foreground": {
         "role": "secondary",
-        "displayName": "Accent Foreground",
+        "displayName": "accent foreground",
         "tonalRamp": [
           "oklch(0.15 0.2019 300.7)",
           "oklch(0.25 0.2019 300.7)",
@@ -216,7 +216,7 @@
       },
       "ring": {
         "role": "secondary",
-        "displayName": "Focus Violet",
+        "displayName": "ring",
         "tonalRamp": [
           "oklch(0.15 0.2019 300.7)",
           "oklch(0.25 0.2019 300.7)",
@@ -272,7 +272,7 @@
       },
       "approved-foreground": {
         "role": "tertiary",
-        "displayName": "Approved Foreground",
+        "displayName": "approved foreground",
         "tonalRamp": [
           "oklch(0.15 0.002 308)",
           "oklch(0.25 0.002 308)",
@@ -286,7 +286,7 @@
       },
       "evidence-fact": {
         "role": "secondary",
-        "displayName": "Fact Blue",
+        "displayName": "evidence fact",
         "tonalRamp": [
           "oklch(0.15 0.1016 258.76)",
           "oklch(0.25 0.1016 258.76)",
@@ -300,7 +300,7 @@
       },
       "evidence-inference": {
         "role": "secondary",
-        "displayName": "Inference Violet",
+        "displayName": "evidence inference",
         "tonalRamp": [
           "oklch(0.15 0.2019 300.7)",
           "oklch(0.25 0.2019 300.7)",
@@ -314,7 +314,7 @@
       },
       "evidence-hypothesis": {
         "role": "secondary",
-        "displayName": "Hypothesis Amber",
+        "displayName": "evidence hypothesis",
         "tonalRamp": [
           "oklch(0.15 0.1022 70.64)",
           "oklch(0.25 0.1022 70.64)",
@@ -328,7 +328,7 @@
       },
       "evidence-unknown": {
         "role": "secondary",
-        "displayName": "Unknown Neutral",
+        "displayName": "evidence unknown",
         "tonalRamp": [
           "oklch(0.15 0.0126 308)",
           "oklch(0.25 0.0126 308)",
@@ -342,7 +342,7 @@
       },
       "counter-evidence": {
         "role": "secondary",
-        "displayName": "Counter-evidence Rose",
+        "displayName": "counter evidence",
         "tonalRamp": [
           "oklch(0.15 0.2009 356.87)",
           "oklch(0.25 0.2009 356.87)",
@@ -356,7 +356,7 @@
       },
       "review": {
         "role": "secondary",
-        "displayName": "Review Amber",
+        "displayName": "review",
         "tonalRamp": [
           "oklch(0.15 0.189 84.429)",
           "oklch(0.25 0.189 84.429)",
@@ -370,7 +370,7 @@
       },
       "sidebar-accent": {
         "role": "tertiary",
-        "displayName": "Sidebar Accent",
+        "displayName": "sidebar accent",
         "tonalRamp": [
           "oklch(0.15 0.011 157.84)",
           "oklch(0.25 0.011 157.84)",
@@ -384,7 +384,7 @@
       },
       "sidebar-accent-foreground": {
         "role": "tertiary",
-        "displayName": "Sidebar Accent Foreground",
+        "displayName": "sidebar accent foreground",
         "tonalRamp": [
           "oklch(0.15 0.055 190)",
           "oklch(0.25 0.055 190)",
@@ -398,7 +398,7 @@
       },
       "destructive": {
         "role": "secondary",
-        "displayName": "Destructive Red",
+        "displayName": "destructive",
         "tonalRamp": [
           "oklch(0.15 0.245 27.325)",
           "oklch(0.25 0.245 27.325)",
@@ -482,7 +482,7 @@
       },
       "dark-card-foreground": {
         "role": "neutral",
-        "displayName": "Dark · Card Foreground",
+        "displayName": "Dark · card foreground",
         "tonalRamp": [
           "oklch(0.15 0.0042 308)",
           "oklch(0.25 0.0042 308)",
@@ -552,7 +552,7 @@
       },
       "dark-secondary-foreground": {
         "role": "neutral",
-        "displayName": "Dark · Secondary Foreground",
+        "displayName": "Dark · secondary foreground",
         "tonalRamp": [
           "oklch(0.15 0.0084 308)",
           "oklch(0.25 0.0084 308)",
@@ -580,7 +580,7 @@
       },
       "dark-accent-foreground": {
         "role": "secondary",
-        "displayName": "Dark · Accent Foreground",
+        "displayName": "Dark · accent foreground",
         "tonalRamp": [
           "oklch(0.15 0.035 186.7)",
           "oklch(0.25 0.035 186.7)",
@@ -622,7 +622,7 @@
       },
       "dark-ring": {
         "role": "secondary",
-        "displayName": "Dark · Focus Violet",
+        "displayName": "Dark · ring",
         "tonalRamp": [
           "oklch(0.15 0.146 308.49)",
           "oklch(0.25 0.146 308.49)",
@@ -678,7 +678,7 @@
       },
       "dark-approved-foreground": {
         "role": "tertiary",
-        "displayName": "Dark · Approved Foreground",
+        "displayName": "Dark · approved foreground",
         "tonalRamp": [
           "oklch(0.15 0.002 308)",
           "oklch(0.25 0.002 308)",
@@ -692,7 +692,7 @@
       },
       "dark-evidence-fact": {
         "role": "secondary",
-        "displayName": "Dark · Fact Blue",
+        "displayName": "Dark · evidence fact",
         "tonalRamp": [
           "oklch(0.15 0.105 258.76)",
           "oklch(0.25 0.105 258.76)",
@@ -706,7 +706,7 @@
       },
       "dark-evidence-inference": {
         "role": "secondary",
-        "displayName": "Dark · Inference Violet",
+        "displayName": "Dark · evidence inference",
         "tonalRamp": [
           "oklch(0.15 0.146 308.49)",
           "oklch(0.25 0.146 308.49)",
@@ -720,7 +720,7 @@
       },
       "dark-evidence-hypothesis": {
         "role": "secondary",
-        "displayName": "Dark · Hypothesis Amber",
+        "displayName": "Dark · evidence hypothesis",
         "tonalRamp": [
           "oklch(0.15 0.12 70.64)",
           "oklch(0.25 0.12 70.64)",
@@ -734,7 +734,7 @@
       },
       "dark-evidence-unknown": {
         "role": "secondary",
-        "displayName": "Dark · Unknown Neutral",
+        "displayName": "Dark · evidence unknown",
         "tonalRamp": [
           "oklch(0.15 0.0124 308)",
           "oklch(0.25 0.0124 308)",
@@ -748,7 +748,7 @@
       },
       "dark-counter-evidence": {
         "role": "secondary",
-        "displayName": "Dark · Counter-evidence Rose",
+        "displayName": "Dark · counter evidence",
         "tonalRamp": [
           "oklch(0.15 0.16 356.87)",
           "oklch(0.25 0.16 356.87)",
@@ -762,7 +762,7 @@
       },
       "dark-review": {
         "role": "secondary",
-        "displayName": "Dark · Review Amber",
+        "displayName": "Dark · review",
         "tonalRamp": [
           "oklch(0.15 0.12 70.64)",
           "oklch(0.25 0.12 70.64)",
@@ -776,7 +776,7 @@
       },
       "dark-sidebar-accent": {
         "role": "tertiary",
-        "displayName": "Dark · Sidebar Accent",
+        "displayName": "Dark · sidebar accent",
         "tonalRamp": [
           "oklch(0.15 0.01224 137.14)",
           "oklch(0.25 0.01224 137.14)",
@@ -790,7 +790,7 @@
       },
       "dark-sidebar-accent-foreground": {
         "role": "tertiary",
-        "displayName": "Dark · Sidebar Accent Foreground",
+        "displayName": "Dark · sidebar accent foreground",
         "tonalRamp": [
           "oklch(0.15 0.035 186.7)",
           "oklch(0.25 0.035 186.7)",
@@ -804,7 +804,7 @@
       },
       "dark-destructive": {
         "role": "secondary",
-        "displayName": "Dark · Destructive Red",
+        "displayName": "Dark · destructive",
         "tonalRamp": [
           "oklch(0.15 0.191 22.216)",
           "oklch(0.25 0.191 22.216)",
@@ -819,76 +819,76 @@
     },
     "typographyMeta": {
       "display": {
-        "displayName": "Display",
-        "purpose": "Responsive shared display utility."
+        "displayName": "display",
+        "purpose": "the shared responsive display utility progresses from display through display-sm to display-md; it uses semibold weight and tight tracking."
       },
       "display-sm": {
-        "displayName": "Display Sm",
-        "purpose": "Responsive shared display utility."
+        "displayName": "display sm",
+        "purpose": "the shared responsive display utility progresses from display through display-sm to display-md; it uses semibold weight and tight tracking."
       },
       "display-md": {
-        "displayName": "Display Md",
-        "purpose": "Responsive shared display utility."
+        "displayName": "display md",
+        "purpose": "the shared responsive display utility progresses from display through display-sm to display-md; it uses semibold weight and tight tracking."
       },
       "title": {
-        "displayName": "Title",
-        "purpose": "Shared section heading."
+        "displayName": "title",
+        "purpose": "the shared section treatment uses the title role. Standard card titles use their component's medium-weight treatment rather than inheriting a display style."
       },
       "body": {
-        "displayName": "Body",
-        "purpose": "Reading and interface text."
+        "displayName": "body",
+        "purpose": "body is the default reading scale. body-sm supports compact cards, descriptions and source details."
       },
       "body-sm": {
-        "displayName": "Body Sm",
-        "purpose": "Reading and interface text."
+        "displayName": "body sm",
+        "purpose": "body is the default reading scale. body-sm supports compact cards, descriptions and source details."
       },
       "label": {
-        "displayName": "Label",
-        "purpose": "Compact uppercase monospaced metadata."
+        "displayName": "label",
+        "purpose": "label is the compact monospaced uppercase metadata treatment. Use ordinary sentence case for reading text and controls unless the established consumer requires otherwise."
       }
     },
     "shadows": [
       {
         "name": "surface-shadow-soft",
         "value": "inset 0 1px 0 oklch(1 0 0 / 82%), 0 1px 2px oklch(0.18 0.009 308 / 5%), 0 12px 32px -24px oklch(0.2 0.01 308 / 24%)",
-        "purpose": "Shared panel depth and inset highlight."
+        "purpose": "Theme-owned surface depth."
       },
       {
         "name": "surface-shadow-floating",
         "value": "inset 0 1px 0 oklch(1 0 0 / 90%), inset 0 0 0 1px oklch(1 0 0 / 20%), 0 6px 16px -12px oklch(0.2 0.01 308 / 16%), 0 32px 64px -40px oklch(0.2 0.015 308 / 30%)",
-        "purpose": "Elevated surface depth, highlight and inner rim."
+        "purpose": "Theme-owned surface depth."
       },
       {
         "name": "dark-surface-shadow-soft",
         "value": "inset 0 1px 0 oklch(1 0 0 / 9%), 0 1px 2px oklch(0 0 0 / 24%), 0 12px 32px -24px oklch(0 0 0 / 55%)",
-        "purpose": "Shared panel depth and inset highlight."
+        "purpose": "Theme-owned surface depth."
       },
       {
         "name": "dark-surface-shadow-floating",
         "value": "inset 0 1px 0 oklch(1 0 0 / 12%), inset 0 0 0 1px oklch(1 0 0 / 5%), 0 6px 16px -12px oklch(0 0 0 / 40%), 0 32px 64px -40px oklch(0 0 0 / 62%)",
-        "purpose": "Elevated surface depth, highlight and inner rim."
+        "purpose": "Theme-owned surface depth."
       }
     ],
     "motion": [
       {
         "name": "organic-curve",
         "value": "cubic-bezier(0.32, 0.72, 0, 1)",
-        "purpose": "Existing landing and glass motion curve; not a universal preset override."
+        "purpose": "Existing glass transition curve."
       },
       {
         "name": "glass-transition",
         "value": "400ms",
-        "purpose": "Existing glass hover, press and dimension transition."
+        "purpose": "Existing glass transition duration."
       },
       {
         "name": "motion-preset-curve",
         "value": "cubic-bezier(0.26, 0.02, 0.23, 0.94)",
-        "purpose": "Existing shared MotionAnimatePresence default preset."
+        "purpose": "Existing shared motion preset curve."
       },
       {
         "name": "rail-selection-spring",
         "value": "stiffness: 380; damping: 30",
-        "purpose": "Existing current-section rail indicator; disabled for reduced motion."
+        "purpose": "Existing rail selection indicator."
       }
     ],
     "breakpoints": [
@@ -1006,14 +1006,13 @@
   ],
   "narrative": {
     "northStar": "The Evidence Workbench",
-    "overview": "Understated, modern and precise is the intended standard. The current interface does not yet meet the required level of restraint, usability or ease of learning. This record captures its existing visual vocabulary while making that gap explicit. A near-neutral canvas, Geist reading text and compact monospaced metadata provide the foundation for clearer evidence, source references and analyst decisions.\n\nDepth comes from readable layering, discreet structural shadows and selective glass. Controls are crisp, precise and restrained. Qatalog informs the neutral foundation and hairline separation, the Volvo EX30 concept informs frosted focal surfaces, and Decoding Discontinuity informs the existing violet and green recognition signals. The institutional research audience remains the context for these choices.\n\nFuture refinement should make the workflow calmer, easier to understand and less demanding to operate. The system should prepare and organize work proactively, resolve routine steps autonomously and request analyst attention for exceptions or material judgments. Use clear defaults, progressive disclosure and grouped review instead of repeated confirmation of every item or internal step. This direction preserves the mandatory corpus approval and final analyst authority defined in the product contract. It is an improvement objective, not a claim that the current interface already achieves it.",
+    "overview": "The visual direction is understated, modern and precise. A near-neutral canvas, Geist reading text and compact monospaced metadata provide the foundation for clear evidence, source references and analyst decisions. The product brief is in [PRODUCT.md](PRODUCT.md). UX development instructions are in [AGENTS.md](AGENTS.md#analyst-experience-direction).\n\nDepth comes from readable layering, discreet structural shadows and selective glass. Controls are crisp, precise and restrained. Qatalog informs the neutral foundation and hairline separation, the Volvo EX30 concept informs frosted focal surfaces, and Decoding Discontinuity informs the existing violet and green recognition signals. The institutional research audience remains the context for these choices.",
     "keyCharacteristics": [
       "Near-neutral reading surfaces with selective recognition accents.",
       "A shared sans-serif family with compact monospaced metadata.",
       "Hairline separation, rounded containers and deliberate surface hierarchy.",
       "Evidence meaning expressed with labels as well as color.",
-      "Responsive workspaces that preserve access to context and sources.",
-      "Progressive simplification through proactive preparation and review by exception."
+      "Responsive workspaces that preserve access to context and sources."
     ],
     "rules": [
       {
@@ -1033,20 +1032,19 @@
       }
     ],
     "dos": [
-      "Do keep runtime values in the active theme and shared component owners. Regenerate these documentation snapshots when those owners change.",
+      "Do keep runtime values in the active theme and shared component owners. Use semantic surface, text and border utilities and shared component variants. Regenerate the documentation exports when their sources change.",
       "Do use semantic colors and readable labels for claim classifications, review and approval.",
       "Do preserve existing responsive geometry, source controls, focus states and loading silhouettes during refinement.",
       "Do keep the evidence surface visually central and use glass for selective layers.",
-      "Do verify both themes and narrow layouts when changing shared styles.",
-      "Do reduce routine decisions and repeated review through proactive preparation, clear defaults and grouped exception review while preserving mandatory evidence checkpoints."
+      "Do verify both themes and narrow layouts when changing shared styles."
     ],
     "donts": [
       "Don't turn brand violet into the default primary action color or use evidence colors as decoration.",
+      "Don't reintroduce generic SaaS dashboard or starter-kit visual patterns in place of the established research interface.",
       "Don't promote a landing-specific spotlight, grid, orbit, shader or texture into a universal workspace requirement.",
-      "Don't create a parallel palette, radius scale or component implementation from these previews.",
+      "Don't create a parallel palette, radius scale or component implementation from these previews, bypass the base-luma component contract, or add page-specific BEM stylesheets.",
       "Don't remove useful controls or recompose an existing surface under the name of integration or refinement.",
-      "Don't claim contrast compliance, protected-workflow acceptance or complete reduced-motion coverage from this documentation pass.",
-      "Don't make the analyst manage internal workflow steps or validate every item when the system can safely prepare, organize or resolve the work."
+      "Don't claim contrast compliance, protected-workflow acceptance or complete reduced-motion coverage from this documentation pass."
     ]
   }
 }

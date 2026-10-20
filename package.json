@@ -36,7 +36,9 @@
         "lint": "biome lint . && node --experimental-strip-types scripts/check-imports.ts",
         "format": "biome format --write .",
         "format:check": "biome format .",
-        "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build"
+        "check": "pnpm design:check && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build",
+        "design:sync": "node --experimental-strip-types scripts/sync-design-context.ts",
+        "design:check": "pnpm design:sync --check"
     },
     "dependencies": {
         "@auth/core": "0.41.2",

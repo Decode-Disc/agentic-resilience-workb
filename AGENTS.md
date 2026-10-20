@@ -14,11 +14,15 @@ The repository separates agent conduct, product context, technical contracts, an
 
 - `AGENTS.md` defines how agents work in the project and the non-negotiable guardrails they must preserve.
 - `context/PROJECT.md` defines why the product exists, whom it serves, and what it must demonstrate.
+- `PRODUCT.md` is the directly maintained product brief used by Impeccable for users, workflows, capabilities, and constraints. It references the detailed product contract below.
+- `DESIGN.md` owns visual guidance and component documentation. Runtime tokens and shared components own executed values and behavior; `.impeccable/design.json` is a generated export.
 - `context/TECH.md` consolidates the active technical architecture, implementation contracts, and verification expectations.
 - `docs/product-architecture/2026-07-20-agentic-resilience-evidence-workbench-design.md` defines the complete product design and MVP acceptance contract.
 - Accepted records in `docs/decisions/` explain the rationale and trade-offs behind individual architectural decisions.
 
-Read `context/PROJECT.md` in full before planning, coding, installing dependencies, or changing architecture.
+Read `PRODUCT.md` before product planning or implementation. Consult `context/PROJECT.md` when the task requires deeper context about the candidature, discontinuity, or economic orchestration.
+
+Before UI/UX planning or implementation, read the relevant sections of `DESIGN.md`. Apply the Analyst Experience Direction below.
 
 Read `context/TECH.md` before:
 
@@ -151,6 +155,13 @@ Protect every exposed server operation with the authorization, validation, idemp
 
 These rules govern the React + TanStack Start + Convex + shadcn/ui (`base-luma` style, `hugeicons` library) layer of the prototype. They are enforced by Biome where the rule is statically detectable; the rest is review-time.
 
+### Analyst Experience Direction
+
+- The current interface does not yet meet the intended standard for restraint, ergonomics or ease of learning. Within authorized UX changes, progressively make the workflow calmer, easier to understand and less demanding of the analyst's attention.
+- Use clear defaults, progressive disclosure and an obvious next action. Keep secondary detail accessible without making it compete with the current task. Each control, confirmation or review step must serve an analyst decision or a documented invariant.
+- Let the system prepare and organize work proactively, resolve routine steps autonomously within the evidence rules, and advance work that does not require analyst judgment. Do not make the analyst coordinate internal execution or confirm every internal step.
+- Request human review for required checkpoints, material decisions and unresolved exceptions. Group related review where appropriate while preserving the mandatory corpus approval, individually audited decisions and final analyst authority defined by the product contract. These principles do not authorize changing those requirements or redesigning an unrelated surface.
+
 ### User-facing product copy
 
 - Technical requirements, implementation plans, ADRs, and backend terminology are internal product truth, not ready-made interface copy. Translate them into the minimum information the user needs to understand what happened, why it matters, and what to do next.
@@ -162,19 +173,10 @@ These rules govern the React + TanStack Start + Convex + shadcn/ui (`base-luma` 
 
 ### Key principles
 
-- **Design system continuity:** Do not reintroduce starter-kit visual patterns, generic SaaS dashboard defaults, or one-off styling that bypasses the `base-luma` shadcn contract. The theme file `src/assets/styles/themes/evidence-workbench.css` is the single source of truth for color, radius, and elevation tokens. Prefer shared surface utilities (`surface-panel`, `surface-floating`, `text-micro`, `text-display`) and `LiquidGlassCard` / `GridCard` over local styling.
+- **Design system continuity:** Follow `DESIGN.md` for visual rules and style ownership. Reuse the existing shared primitives and component variants.
 - **Navigation & URLs:** Never use hardcoded URLs. Route through TanStack Router's typed navigation (`<Link>`, `useNavigate`, `redirect`) and Convex HttpApi routes.
 - **Type Safety (single source of truth):** Never manually define TypeScript interfaces or DTOs for Convex data. Use generated Convex types from `@convex/_generated/api` and `@convex/_generated/dataModel`.
 - **Domain logic boundary:** Keep domain rules, claim classification, and evidence policy out of React UI components and TanStack Start server functions. Convex remains the state and policy owner.
-- **High-end, institutional, differentiating visual design:**
-  - The workbench targets an institutional research audience. The UI must read as institutional-grade (sober, rigorous, trustworthy, modern) like a high-end research terminal, not a generic SaaS dashboard.
-  - **Visual direction (three blended references in `inspirations/`):** Qatalog (near-neutral canvas, hairline borders, negative space, typographic restraint), Volvo EX30 liquid-glass concept (frosted translucent surfaces with inset top highlight and 1px inner rim), and Decoding Discontinuity (purple and green as the sole chromatic signals).
-  - **Color discipline:** Canvas and text live on near-neutral axis. `--primary` is institutional ink, never purple. `--brand-purple` is a recognition accent used in small deliberate moments (`text-micro text-brand-purple`, `--ring`, `::selection`, nav-trigger hover, orbital ring tint). `--brand-green` / `--approved` signals positive approval. Evidence tokens (`--evidence-fact`, `--evidence-inference`, `--evidence-hypothesis`, `--evidence-unknown`, `--counter-evidence`, `--review`) are reserved strictly for claims and badges.
-  - **Surface & elevation:** Two shadow tiers only: `--surface-shadow-soft` (cards, panels) and `--surface-shadow-floating` (header, popovers, focal glass cards). Hairline borders (`border-border/60`–`/70`) are the primary separator. Consult `docs/design-systems/2026-07-24-evidence-workbench-design-system.md` for full token tables.
-- **Motion design as a differentiator:**
-  - Use motion to clarify causality and reinforce the evidence flow: stream tokens into place, reveal evidence as approved, cascade claims into the matrix. Animation must make the workflow legible, never theatrical.
-  - Prefer `motion/react` for layout transitions and shared-element choreography; reach for GSAP only when Motion is genuinely insufficient (e.g. scroll-pinned timelines).
-  - Animation principles: organic curves (`cubic-bezier(0.32, 0.72, 0, 1)`), staggered reveals, respect `prefers-reduced-motion`, substance over spectacle. Never simulate progress or animate hidden chain-of-thought (Product Invariant 13).
 
 ### Import paths
 
