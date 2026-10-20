@@ -240,7 +240,7 @@ Depth comes from readable layering, discreet structural shadows and selective gl
 
 Captured from the working tree on 2026-10-20. Runtime values remain owned by the [active theme](src/assets/styles/themes/evidence-workbench.css), its [base preset](src/assets/styles/base-preset.css), the [global stylesheet](src/styles.css), and shared components. This file is a portable documentation snapshot in the [DESIGN.md format](https://raw.githubusercontent.com/google-labs-code/design.md/main/docs/spec.md). Agent conduct remains in [AGENTS.md](AGENTS.md), and functional implementation contracts remain in [context/TECH.md](context/TECH.md). The earlier design-system reference now forwards here.
 
-Run `pnpm docs:sync` to refresh CSS-derived frontmatter values and export `.impeccable/design.json`. Run `pnpm docs:check` to detect design-documentation drift without writing. The frontmatter uses JSON syntax within YAML delimiters so the generator needs no additional parser dependency. Static preview definitions in Components are documentation examples, while production markup and behavior remain owned by the shared components.
+Run `pnpm design:sync` to refresh CSS-derived frontmatter values and export `.impeccable/design.json`. Run `pnpm design:check` to detect design-documentation drift without writing. The frontmatter uses JSON syntax within YAML delimiters so the generator needs no additional parser dependency. Static preview definitions in Components are documentation examples, while production markup and behavior remain owned by the shared components.
 
 The frontmatter records light-theme primitives and explicit `dark-` counterparts. Runtime `.dark` overrides remain authoritative. The companion `.impeccable/design.json` contains extension metadata and isolated static component previews, not production implementations. Its synthesized tonal strips are palette illustrations, not additional application tokens.
 
@@ -373,7 +373,7 @@ Reduced-motion behavior exists in the shared motion utility and production rail,
 
 ### Static preview definitions
 
-These isolated HTML/CSS examples preserve the existing Impeccable previews. Edit them here when a documented component sample changes, then run `pnpm docs:sync`. They contain no product or workflow policy and do not implement application behavior. The exported copies in `design.json` must not be edited independently.
+These isolated HTML/CSS examples preserve the existing Impeccable previews. Edit them here when a documented component sample changes, then run `pnpm design:sync`. They contain no product or workflow policy and do not implement application behavior. The exported copies in `design.json` must not be edited independently.
 
 <details>
 <summary>Component samples for the Impeccable panel</summary>
