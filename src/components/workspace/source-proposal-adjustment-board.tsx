@@ -5,11 +5,12 @@ import type { Id } from "@convex/_generated/dataModel";
 import {
     ArrowRight01Icon,
     DragDropHorizontalIcon,
+    InformationCircleIcon,
     PlusSignIcon,
     Undo02Icon,
 } from "@hugeicons/core-free-icons";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
 import { FaviconAvatar } from "@/components/favicon-avatar";
@@ -26,6 +27,13 @@ import {
     type KanbanMoveEvent,
     KanbanOverlay,
 } from "@/components/ui/kanban";
+import {
+    Popover,
+    PopoverContent,
+    PopoverDescription,
+    PopoverTitle,
+    PopoverTrigger,
+} from "@/components/ui/popover";
 import { SourceMasterList } from "@/components/workspace/source-master-list";
 import {
     sourceCategoryLabel,
@@ -275,7 +283,6 @@ export function SourceAdjustmentActions({
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const isIncluded = source.included;
-    const restoreDescriptionId = useId();
     const restoreDescriptions = {
         recommended:
             "Originally recommended. This will include the source and remove your override.",
@@ -343,7 +350,7 @@ export function SourceAdjustmentActions({
                 variant="secondary"
                 disabled={disabled || saving}
                 aria-label={actionLabel.description}
-                className="min-h-11 w-full text-sm sm:min-h-9 sm:w-auto"
+                className="min-h-11 text-sm sm:min-h-9"
                 onClick={(event) => {
                     event.stopPropagation();
                     void save(isIncluded ? "rejected" : "accepted");
@@ -352,15 +359,14 @@ export function SourceAdjustmentActions({
                 {saving ? "Saving…" : actionLabel.text}
             </Button>
             {source.decision !== "pending" ? (
-                <div className="flex w-full flex-col items-start gap-2 border-t border-border/60 pt-3">
+                <div className="flex min-w-0 max-w-full items-center">
                     <Button
                         type="button"
                         size="sm"
-                        variant="outline"
-                        className="h-auto min-h-11 w-full gap-2 whitespace-normal py-2 text-sm sm:min-h-9 sm:w-auto"
+                        variant="ghost"
+                        className="h-auto min-h-11 min-w-0 shrink gap-2 whitespace-normal px-2 py-2 text-sm text-muted-foreground sm:min-h-9"
                         disabled={disabled || saving}
                         aria-label={`Use original recommendation for ${source.title}`}
-                        aria-describedby={restoreDescriptionId}
                         onClick={(event) => {
                             event.stopPropagation();
                             void save("pending");
@@ -368,11 +374,33 @@ export function SourceAdjustmentActions({
                         <Icon iconNode={Undo02Icon} />
                         Use original recommendation
                     </Button>
-                    <p
-                        id={restoreDescriptionId}
-                        className="text-xs text-muted-foreground">
-                        {restoreDescriptions[source.disposition]}
-                    </p>
+                    <Popover>
+                        <PopoverTrigger
+                            render={
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="size-11 text-muted-foreground sm:size-9"
+                                    aria-label={`About the original recommendation for ${source.title}`}
+                                    onClick={(event) => event.stopPropagation()}
+                                />
+                            }>
+                            <Icon iconNode={InformationCircleIcon} />
+                        </PopoverTrigger>
+                        <PopoverContent
+                            side="top"
+                            align="end"
+                            className="max-w-[calc(100vw-2rem)] gap-2"
+                            onClick={(event) => event.stopPropagation()}>
+                            <PopoverTitle className="text-sm">
+                                Original recommendation
+                            </PopoverTitle>
+                            <PopoverDescription>
+                                {restoreDescriptions[source.disposition]}
+                            </PopoverDescription>
+                        </PopoverContent>
+                    </Popover>
                 </div>
             ) : null}
             {error ? (

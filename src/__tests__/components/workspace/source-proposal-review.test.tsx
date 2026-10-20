@@ -3,6 +3,7 @@ import {
     render,
     screen,
     waitFor,
+    waitForElementToBeRemoved,
     within,
 } from "@testing-library/react";
 import { toast } from "sonner";
@@ -802,7 +803,7 @@ test.each([
         "needs_attention",
         "Originally flagged for review. This will exclude the source and return it to Needs attention.",
     ],
-] as const)("explains restoring the original %s recommendation before saving it", async (disposition, description) => {
+] as const)("reveals the original %s recommendation on demand without changing the source", async (disposition, description) => {
     const onDecide = vi.fn();
     render(
         <SourceAdjustmentActions
@@ -822,10 +823,19 @@ test.each([
     const restore = screen.getByRole("button", {
         name: "Use original recommendation for Independent analysis",
     });
-    expect(screen.getByText(description).id).toBe(
-        restore.getAttribute("aria-describedby"),
+    expect(screen.queryByText(description)).toBeNull();
+    fireEvent.click(
+        screen.getByRole("button", {
+            name: "About the original recommendation for Independent analysis",
+        }),
     );
-    expect(screen.queryByText("Reset to proposal")).toBeNull();
+    const explanation = await screen.findByRole("dialog", {
+        name: "Original recommendation",
+    });
+    expect(within(explanation).getByText(description)).toBeTruthy();
+    expect(onDecide).not.toHaveBeenCalled();
+    fireEvent.keyDown(explanation, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     fireEvent.click(restore);
     await waitFor(() =>
         expect(onDecide).toHaveBeenCalledExactlyOnceWith(
@@ -933,15 +943,12 @@ test.each([
     try {
         render(<SourceProposalReview {...overviewProps()} />);
         fireEvent.click(screen.getByRole("button", { name: "Source actions" }));
-        fireEvent.click(await screen.findByRole("button", { name: action }));
-        expect(
-            await screen.findByRole("region", { name: region }),
-        ).toBeTruthy();
-        await waitFor(() =>
-            expect(
-                screen.queryByRole("dialog", { name: "Source actions" }),
-            ).toBeNull(),
-        );
+        const actions = await screen.findByRole("dialog", {
+            name: "Source actions",
+        });
+        fireEvent.click(within(actions).getByRole("button", { name: action }));
+        await waitForElementToBeRemoved(actions);
+        expect(screen.getByRole("region", { name: region })).toBeTruthy();
         fireEvent.click(
             screen.getByRole("button", { name: /Back to proposal/i }),
         );
