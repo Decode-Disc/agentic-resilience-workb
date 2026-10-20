@@ -14,6 +14,7 @@ import type { MutationCtx } from "./_generated/server";
 import { ASSESSMENT_DIMENSION_KEYS } from "./domain/researchPlan";
 import { computePassageKey, sha256Hex } from "./domain/sourcePassages";
 import { buildCccShowcaseManifest } from "./fixtures/cccShowcase";
+import { sourceCandidateLimit } from "./resourceLimits";
 import { corpusRevisionApproved, workflow } from "./workflow";
 
 export const sourceReviewWorkflow = workflow
@@ -92,6 +93,7 @@ export const seedSourceReviewScenario = internalMutation({
     args: {
         slotKey: v.string(),
         fixtureKey: v.string(),
+        recoveryScenario: v.optional(v.boolean()),
     },
     returns: v.object({
         runId: v.id("researchRuns"),
@@ -157,7 +159,12 @@ export const seedSourceReviewScenario = internalMutation({
                     query.eq("runId", existingRun._id),
                 )
                 .collect();
-            if (revision && proposal && sources.length === 3) {
+            if (
+                revision &&
+                proposal &&
+                sources.length ===
+                    (args.recoveryScenario ? sourceCandidateLimit() : 3)
+            ) {
                 return {
                     runId: existingRun._id,
                     corpusRevisionId: revision._id,
@@ -231,6 +238,25 @@ export const seedSourceReviewScenario = internalMutation({
                 category: "counter_evidence",
             },
         ];
+        if (args.recoveryScenario) {
+            sourceInputs[0] = {
+                canonicalUrl: "https://example.com/docs/platform.html",
+                title: "Official product documentation",
+                origin: "exa",
+                category: "official_product",
+            };
+            for (
+                let index = sourceInputs.length;
+                index < sourceCandidateLimit();
+                index += 1
+            )
+                sourceInputs.push({
+                    canonicalUrl: `https://example.com/e2e/reference-${index}`,
+                    title: `Fixture reference ${index}`,
+                    origin: "exa",
+                    category: "official_product",
+                });
+        }
         const sourceIds = [];
         for (const [index, source] of sourceInputs.entries()) {
             const sourceId = await ctx.db.insert("sources", {
@@ -251,6 +277,11 @@ export const seedSourceReviewScenario = internalMutation({
             internal.sourceSelectionProposals.generateForRun,
             { runId, expectedExecutionGeneration: 1 },
         );
+        if (args.recoveryScenario)
+            await ctx.db.patch(proposal.proposalId, {
+                rebuildOutcome: "partial",
+                failedDiscoveryFamilies: ["official_product"],
+            });
         const workflowId = await workflow.start(
             ctx,
             internal.e2eFixtures.sourceReviewWorkflow,

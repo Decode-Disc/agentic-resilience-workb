@@ -6,6 +6,25 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
+test("sends a metadata-only search using the HTTP request contract", async () => {
+    const fetch = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(Response.json({ results: [] }));
+    await fetchExaSearch("fixture-key", "ServiceNow pricing", {
+        type: "auto",
+        numResults: 4,
+        contents: false,
+        includeDomains: ["servicenow.com"],
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({
+        query: "ServiceNow pricing",
+        type: "auto",
+        numResults: 4,
+        includeDomains: ["servicenow.com"],
+    });
+});
+
 test("aborts the underlying web search before a retry can begin", async () => {
     vi.useFakeTimers();
     let activeRequests = 0;

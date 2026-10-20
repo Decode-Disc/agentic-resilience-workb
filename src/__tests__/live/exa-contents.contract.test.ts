@@ -65,9 +65,6 @@ test("retrieves and normalizes one frozen CCC public page through the production
                                 },
                             }
                           : {}),
-                    ...(options?.filterEmptyResults !== undefined
-                        ? { filterEmptyResults: options.filterEmptyResults }
-                        : {}),
                 },
                 requestOptions,
             )) as {
@@ -121,6 +118,7 @@ test("retrieves and normalizes one frozen CCC public page through the production
         expect(sdkCalls).toBeGreaterThanOrEqual(1);
         expect(sdkCalls).toBeLessThanOrEqual(MAX_EXA_CONTENTS_ATTEMPTS);
         expect(requestedMaxCharacters).toBeDefined();
+        expect(requestedMaxCharacters ?? 0).toBeLessThanOrEqual(1_000_000);
         expect(requestedMaxCharacters ?? 0).toBeLessThanOrEqual(
             Math.floor(MAX_APPROVED_SOURCE_BYTES / 4),
         );

@@ -1,7 +1,14 @@
 import { getFunctionName } from "convex/server";
 import { api } from "@convex/_generated/api";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, expect, test, vi } from "vitest";
+import {
+    act,
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 const {
     approve,
@@ -10,6 +17,7 @@ const {
     rebuild,
     startNewRevision,
     renderPreview,
+    recover,
 } = vi.hoisted(() => ({
     approve: vi.fn(),
     recompute: vi.fn(),
@@ -17,6 +25,7 @@ const {
     rebuild: vi.fn(),
     startNewRevision: vi.fn(),
     renderPreview: vi.fn(),
+    recover: vi.fn(),
 }));
 
 vi.mock("convex/react", async () => {
@@ -57,6 +66,7 @@ beforeEach(() => {
     rebuild.mockReset();
     startNewRevision.mockReset();
     renderPreview.mockReset();
+    recover.mockReset();
     convexReactHarness
         .mutation(api.sourceSelectionProposals.approveProposedCorpus)
         .uses(approve);
@@ -73,11 +83,130 @@ beforeEach(() => {
         .action(api.sourceSelectionProposalActions.rebuild)
         .uses(rebuild);
     convexReactHarness
+        .action(api.sourceSelectionProposalActions.recoverDiscovery)
+        .uses(recover);
+    convexReactHarness
         .action(api.browserPreview.renderPreview)
         .uses(renderPreview);
     convexReactHarness
         .query(api.browserPreviewInternals.getPreview)
         .returns(undefined);
+});
+
+afterEach(() => vi.useRealTimers());
+
+function recoveryReview(recovery?: unknown) {
+    convexReactHarness.query(api.sourceSelectionProposals.getCurrent).returns({
+        proposalId: "proposal-1",
+        version: 1,
+        status: "ready",
+        effectiveStatus: "ready",
+        revisionStatus: "draft",
+        recommendedTarget: 12,
+        recommendationCeiling: 24,
+        effectiveIncludedCount: 1,
+        counts: { recommended: 1, needsAttention: 0, alternative: 0 },
+        gaps: [],
+        coverageGaps: ["official_product_platform"],
+        coverageRequirements: [
+            {
+                role: "official_product_platform",
+                covered: false,
+                candidateIds: [],
+            },
+        ],
+        rebuildOutcome: "partial",
+        failedDiscoveryFamilies: ["official_product"],
+        recovery,
+    });
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getAdjustmentSets)
+        .returns({ included: [proposalSource], available: [] });
+    convexReactHarness.query(api.sources.getReviewSummary).returns({
+        revision: 1,
+        status: "draft",
+        counts: { accepted: 0, pending: 1, rejected: 0 },
+        total: 1,
+        candidateLimit: 48,
+    });
+    convexReactHarness.query(api.sources.getReviewSource).returns(undefined);
+    convexReactHarness.paginatedQuery(api.sources.listForReviewPage).returns({
+        results: [proposalSource],
+        status: "Exhausted",
+        loadMore: vi.fn(),
+    });
+    return render(
+        <LiveSourceReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            onDecide={vi.fn()}
+        />,
+    );
+}
+
+test("renders a rejected search at its coverage action without redirecting or hiding the result", async () => {
+    recover.mockResolvedValue({
+        proposalId: "proposal-1",
+        version: 1,
+        outcome: "blocked",
+        reason: "request_rejected",
+        failedDiscoveryFamilies: ["official_product"],
+    });
+    recoveryReview();
+    fireEvent.click(
+        screen.getByRole("button", {
+            name: "Review coverage: Product or platform documentation",
+        }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+        name: "Product or platform documentation",
+    });
+    fireEvent.click(
+        within(dialog).getByRole("button", {
+            name: "Search sources for Product or platform documentation",
+        }),
+    );
+    await waitFor(() =>
+        expect(within(dialog).getByRole("alert").textContent).toContain(
+            "The search request was rejected.",
+        ),
+    );
+    expect(recover).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+            target: { kind: "coverage", role: "official_product_platform" },
+        }),
+    );
+    expect(dialog.textContent).not.toMatch(
+        /temporarily|HTTP|request_rejected|EXA_API_KEY/,
+    );
+});
+
+test("counts down the persisted cooldown and enables retry only after it expires", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-20T00:00:00Z"));
+    recoveryReview({
+        status: "blocked",
+        target: { kind: "failed_discovery" },
+        reason: "unavailable",
+        leaseExpiresAt: Date.now() + 15_000,
+    });
+    const retry = screen.getByRole("button", { name: "Retry in 15s" });
+    expect(retry).toHaveProperty("disabled", true);
+    fireEvent.click(retry);
+    expect(recover).not.toHaveBeenCalled();
+    await act(async () => {
+        vi.advanceTimersByTime(1000);
+    });
+    expect(screen.getByRole("button", { name: "Retry in 14s" })).toHaveProperty(
+        "disabled",
+        true,
+    );
+    await act(async () => {
+        vi.advanceTimersByTime(14_000);
+    });
+    expect(
+        screen.getByRole("button", { name: "Retry searches" }),
+    ).toHaveProperty("disabled", false);
 });
 
 test("retries source review queries after a load failure", () => {

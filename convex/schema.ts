@@ -8,6 +8,10 @@ import {
     claimDimensionLinkOriginValidator,
     evidenceRelationValidator,
 } from "./domain/claims";
+import {
+    recoveryReasonValidator,
+    recoveryTargetValidator,
+} from "./domain/sourceDiscoveryRecovery";
 import { assessmentDimensionKeyValidator } from "./domain/researchPlan";
 import { showcaseClaimOutputValidator } from "./domain/showcaseManifest";
 import { sourceLocatorValidator } from "./domain/sourcePassages";
@@ -302,6 +306,10 @@ export default defineSchema({
         policyVersion: v.string(),
         operationKey: v.string(),
         cycle: v.optional(v.number()),
+        requestId: v.optional(v.string()),
+        target: v.optional(recoveryTargetValidator),
+        reason: v.optional(recoveryReasonValidator),
+        insertedCount: v.optional(v.number()),
         status: v.union(
             v.literal("started"),
             v.literal("complete"),
@@ -324,7 +332,14 @@ export default defineSchema({
         leaseExpiresAt: v.number(),
         createdAt: v.number(),
         completedAt: v.optional(v.number()),
-    }).index("by_operation_key", ["operationKey"]),
+    })
+        .index("by_operation_key", ["operationKey"])
+        .index("by_revision_and_status_and_lease", [
+            "corpusRevisionId",
+            "status",
+            "leaseExpiresAt",
+        ])
+        .index("by_revision_and_created_at", ["corpusRevisionId", "createdAt"]),
     sourceSelectionProposalItems: defineTable({
         runId: v.id("researchRuns"),
         corpusRevisionId: v.id("corpusRevisions"),
@@ -690,6 +705,7 @@ export default defineSchema({
         usage: v.optional(v.any()),
         reportedCost: v.optional(v.number()),
         errorCode: v.optional(v.string()),
+        retryable: v.optional(v.boolean()),
         leaseExpiresAt: v.optional(v.number()),
         createdAt: v.number(),
         completedAt: v.optional(v.number()),

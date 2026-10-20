@@ -28,7 +28,13 @@ class ResizeObserverMock {
     disconnect() {}
 }
 
-function TestConsumer({ onSuccess }: { onSuccess?: () => void }) {
+function TestConsumer({
+    onSuccess,
+    onCancel,
+}: {
+    onSuccess?: () => void;
+    onCancel?: () => void;
+}) {
     const { openInvitationDrawer, isOpen } = useInvitationAccess();
     return (
         <div>
@@ -37,7 +43,7 @@ function TestConsumer({ onSuccess }: { onSuccess?: () => void }) {
             </span>
             <button
                 type="button"
-                onClick={() => openInvitationDrawer({ onSuccess })}>
+                onClick={() => openInvitationDrawer({ onSuccess, onCancel })}>
                 Open Access Drawer
             </button>
         </div>
@@ -63,8 +69,9 @@ describe("InvitationAccessContext", () => {
         vi.unstubAllGlobals();
     });
 
-    test("opens drawer and handles admission via context provider", async () => {
+    test("successful admission closes the drawer without invoking cancellation", async () => {
         const onSuccess = vi.fn();
+        const onCancel = vi.fn();
         claimInvitation.mockResolvedValue({
             visitorId: "visitor-1",
             role: "analyst",
@@ -72,7 +79,7 @@ describe("InvitationAccessContext", () => {
 
         render(
             <InvitationAccessProvider>
-                <TestConsumer onSuccess={onSuccess} />
+                <TestConsumer onSuccess={onSuccess} onCancel={onCancel} />
             </InvitationAccessProvider>,
         );
 
@@ -99,5 +106,29 @@ describe("InvitationAccessContext", () => {
         );
         expect(onSuccess).toHaveBeenCalled();
         expect(screen.getByTestId("drawer-status").textContent).toBe("Closed");
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("form", { name: /Workspace access/i }),
+            ).toBeNull(),
+        );
+        expect(onSuccess).toHaveBeenCalledOnce();
+        expect(onCancel).not.toHaveBeenCalled();
+    });
+
+    test("explicit cancellation still invokes the cancellation callback once", async () => {
+        const onCancel = vi.fn();
+        const onSuccess = vi.fn();
+        render(
+            <InvitationAccessProvider>
+                <TestConsumer onSuccess={onSuccess} onCancel={onCancel} />
+            </InvitationAccessProvider>,
+        );
+        fireEvent.click(
+            screen.getByRole("button", { name: /Open Access Drawer/i }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+        await waitFor(() => expect(onCancel).toHaveBeenCalledOnce());
+        expect(onSuccess).not.toHaveBeenCalled();
+        expect(claimInvitation).not.toHaveBeenCalled();
     });
 });

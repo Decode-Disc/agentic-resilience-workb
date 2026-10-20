@@ -16,12 +16,12 @@ import {
 } from "@convex/resourceLimits";
 import { expect, test } from "vitest";
 
-// Frozen CCC Intelligent Solutions source identity, identical to the default
-// scenario in src/__tests__/convex/evidence/sec-provenance-tracer.test.ts.
+// Verified against SEC submissions for this CIK: the 2023 annual report filed
+// on 2024-02-28. Offline workflow fixtures may use synthetic accession numbers.
 const FROZEN_CCC_CIK = "1818201";
-const FROZEN_CCC_ACCESSION = "0001818201-24-000010";
+const FROZEN_CCC_ACCESSION = "0000950170-24-022253";
 const FROZEN_CCC_PRIMARY_DOCUMENT = "cccs-20231231.htm";
-const FROZEN_SEC_ARCHIVES_URL = `https://www.sec.gov/Archives/edgar/data/${FROZEN_CCC_CIK}/000181820124000010/${FROZEN_CCC_PRIMARY_DOCUMENT}`;
+const FROZEN_SEC_ARCHIVES_URL = `https://www.sec.gov/Archives/edgar/data/${FROZEN_CCC_CIK}/${FROZEN_CCC_ACCESSION.replaceAll("-", "")}/${FROZEN_CCC_PRIMARY_DOCUMENT}`;
 
 // Mirror of the production retry bound in convex/integrations/sec.ts
 // (MAX_SEC_ATTEMPTS = 2).
@@ -90,7 +90,7 @@ test("retrieves and normalizes one frozen CCC SEC filing through the production 
         const url = new URL(requestedUrl ?? "");
         expect(url.hostname).toBe("www.sec.gov");
         expect(url.pathname).toBe(
-            `/Archives/edgar/data/${FROZEN_CCC_CIK}/000181820124000010/${FROZEN_CCC_PRIMARY_DOCUMENT}`,
+            "/Archives/edgar/data/1818201/000095017024022253/cccs-20231231.htm",
         );
 
         const firstPassage = result.passages?.[0];
@@ -128,6 +128,9 @@ test("retrieves and normalizes one frozen CCC SEC filing through the production 
             ...(result.status === "failed"
                 ? {
                       externalLimitation: result.errorCode ?? "unknown",
+                      httpStatus: /SEC request failed with (\d{3})/.exec(
+                          result.failureReason ?? "",
+                      )?.[1],
                   }
                 : {}),
         }),

@@ -1,3 +1,4 @@
+import "@convex/evidenceActions";
 /// <reference types="vite/client" />
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
@@ -285,11 +286,12 @@ describe("SEC HTML Provenance Tracer", () => {
         vi.useRealTimers();
         vi.unstubAllGlobals();
         vi.restoreAllMocks();
+        vi.unstubAllEnvs();
     });
     beforeEach(() => {
         vi.useFakeTimers();
-        process.env.COMPANY_SEARCH_RESULT_LIMIT = "40";
-        process.env.SEC_USER_AGENT = "Evidence Workbench test@example.com";
+        vi.stubEnv("COMPANY_SEARCH_RESULT_LIMIT", "40");
+        vi.stubEnv("SEC_USER_AGENT", "Evidence Workbench test@example.com");
     });
 
     test("returns frozen discovery metadata and acquisition limitations", async () => {
@@ -1204,8 +1206,7 @@ describe("SEC HTML Provenance Tracer", () => {
     });
 
     test("timeout retries up to 2 attempts then marks source status failed", async () => {
-        vi.useRealTimers();
-        process.env.SEC_TIMEOUT_MS = "10";
+        vi.stubEnv("SEC_TIMEOUT_MS", "10");
         const t = convexTest(schema, modules);
         workflowTest.register(t);
         rateLimiterTest.register(t);
@@ -1227,16 +1228,8 @@ describe("SEC HTML Provenance Tracer", () => {
         });
 
         const secSource = getRequiredSource(scenario, 0);
-        const actionResult = await t.action(retrieveAndNormalizeSecSource, {
-            runId: scenario.runId,
-            corpusRevisionId: scenario.corpusRevisionId,
-            sourceId: secSource.sourceId,
-            acceptedDecisionId: secSource.lastDecisionId,
-            executionGeneration: startResult.executionGeneration,
-        });
-
-        expect(actionResult.status).toBe("failed");
-        expect(actionResult.failureReason).toContain("application timeout");
+        await t.finishAllScheduledFunctions(vi.runAllTimers);
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
 
         const statusDoc = await t.run(async (ctx) => {
             return await ctx.db
@@ -1253,6 +1246,7 @@ describe("SEC HTML Provenance Tracer", () => {
                 .unique();
         });
         expect(statusDoc?.status).toBe("failed");
+        expect(statusDoc?.failureReason).toContain("application timeout");
     });
 
     test("oversize filing exceeds 16 MiB limit and marks source failed", async () => {

@@ -238,14 +238,8 @@ test("keeps a partial rebuild visible with analyst-readable coverage consequence
         />,
     );
 
-    expect(
-        screen.getByText("Some source discovery was unavailable"),
-    ).toBeTruthy();
-    expect(
-        screen.getByText(
-            /proposal uses the reliable sources that were available/i,
-        ),
-    ).toBeTruthy();
+    expect(screen.getByText("Some searches failed")).toBeTruthy();
+    expect(screen.getByText(/we kept the sources already found/i)).toBeTruthy();
     expect(screen.getByText("Investor relations")).toBeTruthy();
     expect(screen.getByText("Official product")).toBeTruthy();
     expect(
@@ -470,6 +464,12 @@ test("renders approved state without an approve button", () => {
     expect(
         screen.queryByRole("button", { name: "Approve source set" }),
     ).toBeNull();
+    expect(
+        screen.queryByRole("button", { name: /^Review coverage:/ }),
+    ).toBeNull();
+    expect(
+        screen.getByText("First independent counter-evidence source"),
+    ).toBeTruthy();
 });
 
 function overviewProps(
@@ -954,4 +954,251 @@ test.each([
     } finally {
         viewport.mockRestore();
     }
+});
+
+test("keeps coverage actions behind each gap while failed searches have one retry", async () => {
+    const onRecoverDiscovery = vi.fn();
+    render(
+        <SourceProposalReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            summary={
+                {
+                    ...summary,
+                    rebuildOutcome: "partial",
+                    failedDiscoveryFamilies: ["official_product"],
+                    coverageRequirements: [
+                        {
+                            role: "counter_evidence_primary",
+                            covered: false,
+                            candidateIds: [alternative.sourceId],
+                        },
+                    ],
+                } as never
+            }
+            disposition="recommended"
+            onDispositionChange={vi.fn()}
+            adjustmentSets={
+                { included: [recommended], available: [alternative] } as never
+            }
+            inspectionReview={inspectionReview as never}
+            onDecide={vi.fn()}
+            onApprove={vi.fn()}
+            onRecompute={vi.fn()}
+            onRecoverDiscovery={onRecoverDiscovery}
+        />,
+    );
+    expect(screen.getByText("Some searches failed")).toBeTruthy();
+    const coverageWarning = screen
+        .getByText("Source coverage needs review")
+        .closest('[role="alert"]');
+    if (!coverageWarning) throw new Error("Expected coverage warning");
+    const gaps = within(coverageWarning as HTMLElement);
+    fireEvent.click(screen.getByRole("button", { name: "Retry searches" }));
+    expect(onRecoverDiscovery).toHaveBeenLastCalledWith({
+        kind: "failed_discovery",
+    });
+    expect(
+        gaps.queryByRole("button", { name: /^Search sources for/ }),
+    ).toBeNull();
+    expect(
+        gaps.queryByRole("button", { name: /^Review candidates for/ }),
+    ).toBeNull();
+    const gap = gaps.getByRole("button", {
+        name: "Review coverage: First independent counter-evidence source",
+    });
+    fireEvent.click(gap);
+    const coverage = await screen.findByRole("dialog", {
+        name: "First independent counter-evidence source",
+    });
+    fireEvent.click(
+        within(coverage).getByRole("button", {
+            name: "Search sources for First independent counter-evidence source",
+        }),
+    );
+    expect(onRecoverDiscovery).toHaveBeenLastCalledWith({
+        kind: "coverage",
+        role: "counter_evidence_primary",
+    });
+    expect(
+        screen.getByRole("region", { name: "Proposed source set" }).textContent,
+    ).not.toMatch(
+        /official_product|counter_evidence_primary|sourceSelectionProposals|EXA_API_KEY/,
+    );
+    expect(
+        screen.getByRole("dialog", {
+            name: "First independent counter-evidence source",
+        }),
+    ).toBeTruthy();
+    fireEvent.click(
+        screen.getByRole("button", {
+            name: "Review candidates for First independent counter-evidence source",
+        }),
+    );
+    expect(
+        screen.getByRole("heading", { name: "Review matching candidates" }),
+    ).toBeTruthy();
+    expect(screen.getByText("1 potential match")).toBeTruthy();
+    expect(screen.queryByText(/^Reviewing coverage:/)).toBeNull();
+    expect(
+        screen.queryByRole("button", { name: "Independent analysis" }),
+    ).toBeNull();
+    const inspector = within(
+        screen.getByRole("region", { name: "Inspect all source candidates" }),
+    );
+    expect(
+        inspector.queryByRole("button", {
+            name: "Open Annual report for review",
+        }),
+    ).toBeNull();
+    expect(
+        inspector.getByRole("button", {
+            name: "Open Independent analysis for review",
+        }),
+    ).toBeTruthy();
+    expect(
+        screen.getByRole("button", { name: "Show all candidates" }),
+    ).toBeTruthy();
+});
+
+test("shows pending search feedback and blocks repeated search activation", () => {
+    const onRecoverDiscovery = vi.fn();
+    render(
+        <SourceProposalReview
+            {...overviewProps({
+                isRecovering: true,
+                summary: {
+                    ...summary,
+                    rebuildOutcome: "partial",
+                    failedDiscoveryFamilies: ["official_product"],
+                } as never,
+                onRecoverDiscovery,
+            })}
+        />,
+    );
+    const pending = screen.getByRole("button", { name: "Searching…" });
+    expect(pending).toHaveProperty("disabled", true);
+    expect(pending.getAttribute("aria-busy")).toBe("true");
+    fireEvent.click(pending);
+    expect(onRecoverDiscovery).not.toHaveBeenCalled();
+    expect(
+        screen.getByRole("button", { name: "Approve source set" }),
+    ).toHaveProperty("disabled", true);
+});
+
+test("keeps a failed coverage search visible beside its disabled countdown action", async () => {
+    const onRecoverDiscovery = vi.fn();
+    render(
+        <SourceProposalReview
+            {...overviewProps({
+                onRecoverDiscovery,
+                recovery: {
+                    target: {
+                        kind: "coverage",
+                        role: "counter_evidence_primary",
+                    },
+                    retryAfterSeconds: 12,
+                    feedback: {
+                        status: "danger",
+                        title: "Search could not be completed",
+                        description:
+                            "The search request was rejected. Add a source link or review existing candidates. Your source decisions are unchanged.",
+                    },
+                },
+            } as never)}
+        />,
+    );
+    fireEvent.click(
+        screen.getByRole("button", {
+            name: "Review coverage: First independent counter-evidence source",
+        }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+        name: "First independent counter-evidence source",
+    });
+    expect(within(dialog).getByRole("alert").textContent).toContain(
+        "Search could not be completed",
+    );
+    const retry = within(dialog).getByRole("button", { name: /Retry in 12s/ });
+    expect(retry).toHaveProperty("disabled", true);
+    fireEvent.click(retry);
+    expect(onRecoverDiscovery).not.toHaveBeenCalled();
+    expect(dialog.textContent).not.toMatch(
+        /HTTP|EXA_API_KEY|request_rejected|sourceSelectionProposalActions/,
+    );
+});
+
+test("distinguishes no coverage matches from an empty dossier and can restore the full list", async () => {
+    render(
+        <SourceProposalReview
+            {...overviewProps({
+                summary: {
+                    ...summary,
+                    coverageRequirements: [
+                        {
+                            role: "counter_evidence_primary",
+                            covered: false,
+                            candidateIds: [],
+                        },
+                    ],
+                } as never,
+            })}
+        />,
+    );
+    fireEvent.click(
+        screen.getByRole("button", {
+            name: "Review coverage: First independent counter-evidence source",
+        }),
+    );
+    fireEvent.click(
+        await screen.findByRole("button", {
+            name: "Review candidates for First independent counter-evidence source",
+        }),
+    );
+    expect(screen.getByText("No matching candidates")).toBeTruthy();
+    expect(
+        screen.queryByText("No public sources were found.", { exact: false }),
+    ).toBeNull();
+    fireEvent.click(
+        screen.getByRole("button", { name: "Show all candidates" }),
+    );
+    const inspector = within(
+        screen.getByRole("region", { name: "Inspect all source candidates" }),
+    );
+    expect(
+        inspector.getByRole("button", {
+            name: "Open Annual report for review",
+        }),
+    ).toBeTruthy();
+});
+
+test("keeps the search result visible when its resolved coverage control disappears", () => {
+    render(
+        <SourceProposalReview
+            {...overviewProps({
+                summary: {
+                    ...summary,
+                    coverageGaps: [],
+                    failedDiscoveryFamilies: [],
+                    rebuildOutcome: "complete",
+                } as never,
+                onRecoverDiscovery: vi.fn(),
+                recovery: {
+                    target: {
+                        kind: "coverage",
+                        role: "counter_evidence_primary",
+                    },
+                    retryAfterSeconds: 0,
+                    feedback: {
+                        status: "success",
+                        title: "Search completed",
+                        description:
+                            "Review the updated proposal and any remaining coverage needs before approval.",
+                    },
+                },
+            })}
+        />,
+    );
+    expect(screen.getByRole("alert").textContent).toContain("Search completed");
+    expect(screen.queryByRole("button", { name: "Retry searches" })).toBeNull();
 });

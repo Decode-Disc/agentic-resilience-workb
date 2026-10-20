@@ -58,17 +58,13 @@ export async function admitAnalyst(page: Page): Promise<void> {
     await expect(accessCodeInput).toBeVisible({ timeout: 30_000 });
     await accessCodeInput.fill(invitation.code);
     await page.getByRole("button", { name: "Continue" }).click();
-    // Admission lands on the workspace start page: the analyst destination for
-    // a fresh session is the research launch surface, not the dossiers list.
-    await expect(
-        page.getByRole("heading", { name: "Start a research dossier" }),
-    ).toBeVisible();
+    await expect(page).toHaveURL(/\/workspace\/dossiers$/);
 }
 
-export function seedSourceReview(fixtureKey: string): SeededSourceReview {
+export function seedSourceReview(fixtureKey: string, recoveryScenario = false): SeededSourceReview {
     return runConvexJson<SeededSourceReview>(
         "e2eFixtures:seedSourceReviewScenario",
-        { slotKey: invitation.slotKey, fixtureKey },
+        { slotKey: invitation.slotKey, fixtureKey, ...(recoveryScenario ? { recoveryScenario: true } : {}) },
     );
 }
 

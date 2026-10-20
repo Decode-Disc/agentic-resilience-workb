@@ -1,6 +1,6 @@
-import { dimensionLabel as domainDimensionLabel } from "@convex/domain/researchPlan";
 import type { api } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
+import { dimensionLabel as domainDimensionLabel } from "@convex/domain/researchPlan";
 
 type RunProjection = NonNullable<
     FunctionReturnType<typeof api.researchRuns.getMine>
@@ -172,6 +172,8 @@ const eventLabels = {
     evidence_sufficiency_evaluated: "Evidence coverage checked",
     research_plan_created: "Research focus prepared",
     source_discovery_progress: "Public sources reviewed",
+    source_recovery_started: "Searching for additional sources",
+    source_recovery_completed: "Source search finished",
     corpus_revision_approved: "Source set approved",
     corpus_revision_started: "New source revision started",
     evidence_source_progress: "Evidence source reviewed",
@@ -537,4 +539,77 @@ export function providerOperationLabel(operation: string): string {
 
 export function providerErrorLabel(errorCode: string): string {
     return providerErrorLabels[errorCode] ?? "Provider attempt needs review";
+}
+
+/** Describes recovery consequences without exposing transport or workflow diagnostics. */
+export function sourceRecoveryFeedback(
+    result: Pick<
+        FunctionReturnType<
+            typeof api.sourceSelectionProposalActions.recoverDiscovery
+        >,
+        "reason" | "outcome"
+    >,
+): {
+    status: "default" | "success" | "warning" | "danger";
+    title: string;
+    description: string;
+} {
+    switch (result.reason) {
+        case "capacity_reached":
+            return {
+                status: "warning",
+                title: "Source limit reached",
+                description:
+                    "Review existing candidates or approve with the remaining coverage limitations.",
+            };
+        case "cooldown":
+            return {
+                status: "default",
+                title: "Search will be available shortly",
+                description:
+                    "Your sources and decisions are unchanged. You can retry when the countdown ends.",
+            };
+        case "in_progress":
+            return {
+                status: "default",
+                title: "Searching sources…",
+                description:
+                    "Your existing sources remain available while this search finishes.",
+            };
+        case "no_new_candidates":
+            return {
+                status: "default",
+                title: "No new sources found",
+                description:
+                    "Review existing candidates or add a source link. Coverage needs may remain.",
+            };
+        case "request_rejected":
+            return {
+                status: "danger",
+                title: "Search could not be completed",
+                description:
+                    "The search request was rejected. Add a source link or review existing candidates. Your source decisions are unchanged.",
+            };
+        case "unavailable":
+            return {
+                status: "danger",
+                title: "Search unavailable",
+                description:
+                    "Your sources and decisions are unchanged. Retry when available, review existing candidates, or add a source link.",
+            };
+        default:
+            return result.outcome === "partial"
+                ? {
+                      status: "warning",
+                      title: "Some searches still need attention",
+                      description:
+                          "Review the updated proposal and remaining coverage needs, or add a source link.",
+                  }
+                : {
+                      status: "success",
+                      title: "Search completed",
+                      description:
+                          "Review the updated proposal and any remaining coverage needs before approval.",
+                  };
+    }
 }

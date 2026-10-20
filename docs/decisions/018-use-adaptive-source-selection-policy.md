@@ -39,3 +39,14 @@ Treat v1 draft proposals as `outdated`, block their approval server-side, and ex
 ## Supersession
 
 This ADR supersedes only ADR-017's ranking, classification, fixed default target, and composition rules. ADR-017 remains authoritative for the human checkpoint, immutable proposal history, append-only analyst authority, grouped approval, and source-review interaction model.
+
+
+## Amendment: actionable discovery recovery and current coverage, 2026-10-19
+
+Draft source review distinguishes incomplete discovery from unconfirmed source requirements. The first offers an explicit retry of failed discovery families. Each unconfirmed requirement offers a bounded targeted metadata search and contextual inspection of existing candidates. The existing public-HTTPS intake dialog remains available from the proposal toolbar and inspector. Searches never retrieve document content before corpus approval.
+
+Recovery extends the existing proposal-rebuild lease and persistence mechanism. A request binds the owner, run, execution generation, corpus revision, expected proposal, policy, request identifier, and target. Only one recovery may be active per draft revision. Terminal request replay never dispatches another external call. An expired in-progress request becomes unavailable when replayed; a new explicit request is needed to search again. Legacy outdated-policy rebuilds retain their existing retry-cycle contract. Approval, cancellation, generation changes, lease expiry, and superseding proposals fence both dispatch and persistence. Successful recovery creates an immutable proposal while retaining candidates and append-only analyst decisions. Refreshing recommendations alone preserves unresolved discovery warnings.
+
+Coverage shown during review is derived from effective inclusion and immutable candidate eligibility, with the existing duplicate and independent-publisher rules. The stored proposal remains the historical system recommendation. Analyst-added links, discovery-metadata linkage, titles, and manual inclusion do not create automatic eligibility. Review explains that distinction and approval remains possible with limitations visible. Historical items without eligibility metadata remain unconfirmed. No new analyst coverage override is introduced.
+
+Searches retain the configured candidate capacity, at most four web results per query, two total attempts, abortable ten-second transport deadlines, and the existing paid-work switch. Automatic retries apply only to transient transport or HTTP failures. Blocked explicit requests share the existing fifteen-second cooldown. Provider telemetry retains sanitized status codes and retryability without raw response bodies or credentials. Recovery start and completion emit persisted run events. Capacity, unavailable discovery, and no new candidates are explicit outcomes rather than empty successful coverage.

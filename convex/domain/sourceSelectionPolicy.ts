@@ -341,7 +341,9 @@ const AUTHORITY_PRIORITY: Record<SourceAuthorityTier, number> = {
     unverified: 6,
 };
 
-const FAMILY_BY_ROLE: Record<SourceCoverageRole, SourceFamily> = {
+export const FAMILY_BY_ROLE: Readonly<
+    Record<SourceCoverageRole, SourceFamily>
+> = {
     regulatory_annual: "regulatory",
     regulatory_interim: "regulatory",
     regulatory_material_event: "regulatory",
@@ -1393,9 +1395,12 @@ function candidateCapReached(
 }
 
 function roleMatches(
-    candidate: ClassifiedCandidate,
+    candidate: Pick<
+        ClassifiedCandidate,
+        "eligibleCoverageRoles" | "host" | "sourceFamily"
+    >,
     role: SourceCoverageRole,
-    selected: ReadonlyArray<ClassifiedCandidate>,
+    selected: ReadonlyArray<Pick<ClassifiedCandidate, "host" | "sourceFamily">>,
 ): boolean {
     if (!candidate.eligibleCoverageRoles.includes(role)) {
         return false;
@@ -1416,6 +1421,53 @@ function roleMatches(
         );
     }
     return true;
+}
+
+/** Projects current inclusion without changing immutable recommendation metadata. */
+export function evaluateSourceCoverage<SourceId extends string>(
+    preset: CoveragePreset,
+    candidates: ReadonlyArray<{
+        sourceId: SourceId;
+        canonicalUrl: string;
+        sourceFamily: SourceSelectionProposalResult["items"][number]["sourceFamily"];
+        eligibleCoverageRoles: Array<SourceCoverageRole>;
+        declaredCoverageRoles: Array<SourceCoverageRole>;
+        duplicateOfSourceId?: string;
+        included: boolean;
+    }>,
+) {
+    const selected: Array<(typeof candidates)[number] & { host: string }> = [];
+    return requiredRoles(preset).map((role) => {
+        const relevant = candidates.filter(
+            (candidate) =>
+                candidate.eligibleCoverageRoles.includes(role) ||
+                candidate.declaredCoverageRoles.includes(role) ||
+                candidate.sourceFamily === FAMILY_BY_ROLE[role],
+        );
+        const best = candidates.find(
+            (candidate) =>
+                candidate.included &&
+                !candidate.duplicateOfSourceId &&
+                !selected.some(
+                    (existing) => existing.sourceId === candidate.sourceId,
+                ) &&
+                roleMatches(
+                    {
+                        ...candidate,
+                        host: normalizedHost(candidate.canonicalUrl),
+                    },
+                    role,
+                    selected,
+                ),
+        );
+        if (best)
+            selected.push({ ...best, host: normalizedHost(best.canonicalUrl) });
+        return {
+            role,
+            covered: Boolean(best),
+            candidateIds: relevant.map((candidate) => candidate.sourceId),
+        };
+    });
 }
 
 function familyCap(

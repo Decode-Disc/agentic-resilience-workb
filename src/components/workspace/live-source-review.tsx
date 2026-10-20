@@ -9,13 +9,18 @@ import {
     usePaginatedQuery,
     useQuery,
 } from "convex/react";
+import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 import Icon from "@/components/icon";
+import { sourceRecoveryFeedback } from "@/lib/presentation/research-copy";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SOURCE_REVIEW_PAGE_SIZE } from "@/components/workspace/source-master-list";
-import { SourceProposalReview } from "@/components/workspace/source-proposal-review";
+import {
+    SourceProposalReview,
+    type SourceReviewNavigation,
+} from "@/components/workspace/source-proposal-review";
 import {
     type SourceFilter,
     SourceReview,
@@ -25,11 +30,28 @@ type LiveSourceReviewProps = {
     runId: Id<"researchRuns">;
     corpusRevisionId: Id<"corpusRevisions">;
     canStartNewRevision?: boolean;
+    sourceReviewNavigation?: SourceReviewNavigation;
+    onSourceReviewNavigate?: (destination: SourceReviewNavigation) => void;
     onDecide: Parameters<typeof SourceProposalReview>[0]["onDecide"];
     onAddManualUrl?: Parameters<
         typeof SourceProposalReview
     >[0]["onAddManualUrl"];
 };
+
+type RecoveryAttempt = {
+    target: FunctionArgs<
+        typeof api.sourceSelectionProposalActions.recoverDiscovery
+    >["target"];
+} & (
+    | { status: "running" }
+    | { status: "failed" }
+    | {
+          status: "finished";
+          result: FunctionReturnType<
+              typeof api.sourceSelectionProposalActions.recoverDiscovery
+          >;
+      }
+);
 
 export function LiveSourceReview(props: LiveSourceReviewProps) {
     const {
@@ -38,6 +60,8 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
         onDecide,
         onAddManualUrl,
         canStartNewRevision = false,
+        sourceReviewNavigation,
+        onSourceReviewNavigate,
     } = props;
     const [disposition, setDisposition] = useState<
         "recommended" | "needs_attention" | "alternative"
@@ -47,6 +71,9 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
     const [selectedId, setSelectedId] = useState<Id<"sources"> | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
     const [isRebuilding, setIsRebuilding] = useState(false);
+    const [recoveryAttempt, setRecoveryAttempt] =
+        useState<RecoveryAttempt | null>(null);
+    const [clock, setClock] = useState(Date.now);
     const [repairStatus, setRepairStatus] = useState<
         "idle" | "loading" | "complete" | "failed"
     >("idle");
@@ -58,6 +85,9 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
     );
     const recomputeProposal = useMutation(
         api.sourceSelectionProposals.recompute,
+    );
+    const recoverDiscovery = useAction(
+        api.sourceSelectionProposalActions.recoverDiscovery,
     );
     const rebuildProposal = useAction(
         api.sourceSelectionProposalActions.rebuild,
@@ -85,6 +115,48 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
 
     const proposal = queries?.proposal;
     const inspectionSummary = queries?.inspectionSummary;
+    const recovery = proposal?.recovery;
+    const recovering =
+        recovery?.status === "started" && recovery.leaseExpiresAt > clock;
+    const recoveryLeaseExpiresAt = recovery?.leaseExpiresAt;
+    const recoveryPending = recoveryAttempt?.status === "running";
+    const retryAfterSeconds =
+        recovery?.status === "blocked"
+            ? Math.max(0, Math.ceil((recovery.leaseExpiresAt - clock) / 1000))
+            : 0;
+    const recoveryTarget = recoveryAttempt?.target ?? recovery?.target;
+    const feedback =
+        recoveryAttempt?.status === "finished"
+            ? sourceRecoveryFeedback(recoveryAttempt.result)
+            : recoveryAttempt?.status === "failed"
+              ? sourceRecoveryFeedback({
+                    outcome: "blocked",
+                    reason: "unavailable",
+                })
+              : !recoveryPending && recovery?.status === "blocked"
+                ? sourceRecoveryFeedback({
+                      outcome: "blocked",
+                      reason: recovery.reason,
+                  })
+                : null;
+    useEffect(() => {
+        if (!recoveryLeaseExpiresAt || recoveryLeaseExpiresAt <= Date.now())
+            return;
+        if (recovery?.status === "blocked") {
+            setClock(Date.now());
+            const timer = setInterval(() => {
+                const now = Date.now();
+                setClock(now);
+                if (now >= recoveryLeaseExpiresAt) clearInterval(timer);
+            }, 1000);
+            return () => clearInterval(timer);
+        }
+        const timer = setTimeout(
+            () => setClock(Date.now()),
+            recoveryLeaseExpiresAt - Date.now() + 25,
+        );
+        return () => clearTimeout(timer);
+    }, [recoveryLeaseExpiresAt, recovery?.status]);
 
     useEffect(() => {
         if (
@@ -260,6 +332,8 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
                     />
                 ) : null}
                 <SourceProposalReview
+                    sourceReviewNavigation={sourceReviewNavigation}
+                    onSourceReviewNavigate={onSourceReviewNavigate}
                     runId={runId}
                     corpusRevisionId={corpusRevisionId}
                     summary={proposal}
@@ -299,6 +373,44 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
                             setActionError(
                                 "We couldn't refresh the source proposal. Try again.",
                             );
+                        }
+                    }}
+                    isRecovering={recoveryPending || recovering}
+                    recovery={
+                        recoveryTarget
+                            ? {
+                                  target: recoveryTarget,
+                                  feedback,
+                                  retryAfterSeconds,
+                              }
+                            : undefined
+                    }
+                    onRecoverDiscovery={async (target) => {
+                        if (
+                            recoveryPending ||
+                            recovering ||
+                            retryAfterSeconds > 0
+                        )
+                            return;
+                        setActionError(null);
+                        setRecoveryAttempt({ target, status: "running" });
+                        try {
+                            const result = await recoverDiscovery({
+                                runId,
+                                corpusRevisionId,
+                                expectedProposalId: proposal.proposalId,
+                                requestId: crypto.randomUUID(),
+                                target,
+                            });
+                            setRecoveryAttempt({
+                                target,
+                                status: "finished",
+                                result,
+                            });
+                        } catch {
+                            setRecoveryAttempt({ target, status: "failed" });
+                        } finally {
+                            setClock(Date.now());
                         }
                     }}
                     isRebuilding={isRebuilding}

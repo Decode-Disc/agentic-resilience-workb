@@ -60,7 +60,6 @@ export function InvitationAccessDrawer({
             const admission = await claimInvitation({ code: normalizedCode });
             await onAdmitted(admission);
             setCode("");
-            onOpenChange(false);
         } catch (caughtError) {
             setError(accessCodeErrorMessage(caughtError));
         } finally {

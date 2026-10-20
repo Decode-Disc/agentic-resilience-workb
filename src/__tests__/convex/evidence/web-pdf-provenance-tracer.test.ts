@@ -659,7 +659,7 @@ describe("Phase 5 Exa and Safe Public PDF Provenance Tracers", () => {
             expect(exaGetContents).toHaveBeenCalledWith(
                 ["https://analyst-notes.example.com/ccc-insurance-cloud"],
                 expect.objectContaining({
-                    filterEmptyResults: false,
+                    text: { maxCharacters: 1_000_000 },
                 }),
             );
 

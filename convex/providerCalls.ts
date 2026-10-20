@@ -104,6 +104,7 @@ export const recordAttempt = internalMutation({
         usage: v.optional(v.any()),
         reportedCost: v.optional(v.number()),
         errorCode: v.optional(v.string()),
+        retryable: v.optional(v.boolean()),
     },
     returns: v.object({
         providerCallId: v.id("providerCalls"),
@@ -296,6 +297,7 @@ export const recordAttempt = internalMutation({
             usage: args.usage,
             reportedCost: args.reportedCost,
             errorCode: args.errorCode,
+            retryable: args.retryable,
             completedAt: now,
         });
         return {

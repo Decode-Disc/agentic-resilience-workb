@@ -78,6 +78,9 @@ beforeEach(() => {
         .action(api.sourceSelectionProposalActions.rebuild)
         .uses(rebuild);
     convexReactHarness
+        .action(api.sourceSelectionProposalActions.recoverDiscovery)
+        .uses(vi.fn());
+    convexReactHarness
         .action(api.browserPreview.renderPreview)
         .uses(renderPreview);
     convexReactHarness

@@ -81,6 +81,7 @@ export function SourceReview({
     isLoadingInitial = false,
     onLoadMore = () => undefined,
     showApprovalAction = true,
+    emptyState,
 }: {
     runId: Id<"researchRuns">;
     corpusRevisionId: Id<"corpusRevisions">;
@@ -101,6 +102,7 @@ export function SourceReview({
     isLoadingInitial?: boolean;
     onLoadMore?: () => void;
     showApprovalAction?: boolean;
+    emptyState?: { title: string; description: string };
 }) {
     const total =
         review.total ??
@@ -177,10 +179,12 @@ export function SourceReview({
             <section className="space-y-5">
                 <Empty>
                     <EmptyHeader>
-                        <EmptyTitle>No candidate sources</EmptyTitle>
+                        <EmptyTitle>
+                            {emptyState?.title ?? "No candidate sources"}
+                        </EmptyTitle>
                         <EmptyDescription>
-                            No public sources were found. Add a public link or
-                            review whether the available evidence is enough.
+                            {emptyState?.description ??
+                                "No public sources were found. Add a public link or review whether the available evidence is enough."}
                         </EmptyDescription>
                     </EmptyHeader>
                 </Empty>
@@ -217,7 +221,7 @@ export function SourceReview({
     const masterList = (
         <SourceMasterList
             heading="Candidate sources"
-            description="Review the full source candidate set."
+            description="Inspect source provenance and review decisions."
             runId={runId}
             items={visibleSources}
             total={filterTotal}
@@ -250,7 +254,9 @@ export function SourceReview({
     );
 
     return (
-        <section aria-label={`Source set ${review.revision}`} className="flex flex-col gap-4">
+        <section
+            aria-label={`Source set ${review.revision}`}
+            className="flex flex-col gap-4">
             <SourceReviewToolbar
                 review={{ ...review, total, candidateLimit }}
                 onApprove={onApprove}
@@ -290,7 +296,10 @@ export function SourceReview({
                                 className="h-full"
                                 wrapperClassName="h-full">
                                 {selected ? (
-                                        <SourceContextPanel source={selected} runId={runId} />
+                                    <SourceContextPanel
+                                        source={selected}
+                                        runId={runId}
+                                    />
                                 ) : (
                                     <div className="surface-panel flex h-full min-h-64 items-center justify-center rounded-2xl text-sm text-muted-foreground">
                                         Select a source to review its preview
@@ -317,7 +326,10 @@ export function SourceReview({
                         </DrawerHeader>
                         <div className="min-h-0 overflow-y-auto p-4">
                             {selected ? (
-                                <SourceContextPanel source={selected} runId={runId} />
+                                <SourceContextPanel
+                                    source={selected}
+                                    runId={runId}
+                                />
                             ) : null}
                         </div>
                     </DrawerContent>

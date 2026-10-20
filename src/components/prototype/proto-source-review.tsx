@@ -205,6 +205,8 @@ export function ProtoSourceReview() {
                     recommendationCeiling: 12,
                     rebuildOutcome: undefined,
                     failedDiscoveryFamilies: [],
+                    coverageRequirements: [],
+                    recovery: null,
                     coverageGaps: [
                         "official_product_platform",
                         "official_commercial_pricing",

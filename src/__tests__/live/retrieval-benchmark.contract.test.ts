@@ -112,7 +112,6 @@ test(
                     if (provider === "exa") {
                         const response = await withTimeout(
                             exa.getContents([source.url], {
-                                filterEmptyResults: false,
                                 maxAgeHours: EXA_MAX_AGE_HOURS,
                                 text: true,
                             }),

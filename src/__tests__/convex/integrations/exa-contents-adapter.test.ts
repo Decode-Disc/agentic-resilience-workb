@@ -39,8 +39,7 @@ describe("Exa Contents Adapter", () => {
         expect(getContents).toHaveBeenCalledWith(
             ["https://example.com/article"],
             expect.objectContaining({
-                text: { maxCharacters: 4 * 1024 * 1024 },
-                filterEmptyResults: false,
+                text: { maxCharacters: 1_000_000 },
             }),
             expect.objectContaining({ signal: expect.any(AbortSignal) }),
         );
@@ -71,14 +70,14 @@ describe("Exa Contents Adapter", () => {
             expect.objectContaining({ signal: expect.any(AbortSignal) }),
         );
 
-        // Higher bound is clamped to floor(MAX_APPROVED_SOURCE_BYTES / 4) = 4 MiB
+        // The provider's character cap is lower than the application's byte cap.
         await adapter.retrieveText("https://example.com/bound", {
             maxCharacters: 50_000_000,
         });
         expect(getContents).toHaveBeenLastCalledWith(
             ["https://example.com/bound"],
             expect.objectContaining({
-                text: { maxCharacters: 4 * 1024 * 1024 },
+                text: { maxCharacters: 1_000_000 },
             }),
             expect.objectContaining({ signal: expect.any(AbortSignal) }),
         );

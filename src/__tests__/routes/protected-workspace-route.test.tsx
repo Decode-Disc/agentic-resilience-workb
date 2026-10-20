@@ -102,10 +102,16 @@ describe("ProtectedWorkspaceRoute", () => {
         );
 
         await waitFor(() =>
-            expect(navigate).toHaveBeenCalledWith({
+            expect(navigate).toHaveBeenLastCalledWith({
                 to: "/workspace/dossiers",
             }),
         );
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("form", { name: /Workspace access/i }),
+            ).toBeNull(),
+        );
+        expect(navigate).not.toHaveBeenCalledWith({ to: "/workspace/start" });
     });
 
     test("retries anonymous session preparation", () => {

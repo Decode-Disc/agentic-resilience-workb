@@ -550,3 +550,10 @@ The MVP is complete when an invited analyst can:
 - [ADR-021: Separate source provenance from automatic role eligibility](../decisions/021-separate-source-provenance-from-automatic-role-eligibility.md)
 - [ADR-022: Persist company linkage basis for source recommendations](../decisions/022-persist-company-linkage-basis-for-source-recommendations.md)
 - [ADR-023: Use a decision-anchored Phase 5 evidence workflow](../decisions/023-use-decision-anchored-phase-5-evidence-workflow.md)
+
+
+## Source review recovery clarification, 2026-10-19
+
+The source proposal distinguishes failed searches from unconfirmed source requirements. Failed searches retain previously found candidates and offer Retry failed searches. Unconfirmed requirements explain that the included sources have not established coverage and offer Review candidates and Search sources. Review uses the existing candidate inspector with requirement context. The existing Add source link action opens the same HTTPS intake dialog on desktop and through Source actions on mobile. Searches are explicit, bounded, metadata-only, and subject to the normal authorization and resource controls.
+
+Coverage feedback follows current inclusion, removal, undo, and proposal refresh without rewriting the immutable recommendation. Adding a link or including an unverified candidate does not establish automatic coverage. Empty discovery results, unavailable searches, and source-capacity limits provide a consequence and next action. Approval remains available with unresolved coverage limitations once the existing approval conditions are satisfied and no recovery is active. Approved source sets remain read-only and preserve their limitations.

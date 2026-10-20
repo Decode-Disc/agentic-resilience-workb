@@ -76,7 +76,7 @@ Outcome: an analyst can start a real company investigation and approve a propose
 
 Outcome: approved sources become inspectable, precisely cited evidence rather than an unsupported narrative.
 
-- [ ] Retrieve approved SEC filings and Exa Contents sources with visible partial failures.
+- [x] Retrieve approved SEC filings and Exa Contents sources with visible partial failures.
 - [x] Normalize approved sources deterministically; page-aware PDF normalization uses deterministic fixture adapters until real Unstructured is authorized in Phase 8.
 - [x] Create stable, reproducible source passages and locators.
 - [x] Extract typed atomic `Fact`, `Inference`, `Hypothesis`, and `Unknown` claim proposals through a hash-gated deterministic showcase adapter.
@@ -88,7 +88,7 @@ Outcome: approved sources become inspectable, precisely cited evidence rather th
 - [x] End successful Phase 5 work at the `evidence_ready + idle` handoff.
 - [x] Preserve arbitrary live retrieval provenance but pause honestly at `claim_generation_unavailable` without fabricated claims or Phase 6 unlock.
 
-Note: Phase 5 implementation and deterministic/local certification are complete (2026-08-22, see `docs/verification/2026-08-15-phase-5-evidence-matrix-provenance.md`), while real SEC/Exa provider certification remains deferred pending explicit authorization. Real Unstructured and real model-provider work remain Phase 8.
+Note: Phase 5 deterministic/local certification is recorded in `docs/verification/2026-08-15-phase-5-evidence-matrix-provenance.md`. Both real SEC and Exa Contents retrieval contracts passed on 2026-10-20 after repairing the live filing identity and request contract. The earlier failures remain recorded in `docs/verification/2026-10-19-source-discovery-recovery.md`; current live and browser evidence is in `docs/verification/2026-10-20-source-recovery-contract-repairs.md`. Real Unstructured and real model-provider work remain Phase 8.
 
 ## Phase 6 — Dimension Assessment and Human Review
 

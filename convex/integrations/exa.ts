@@ -13,7 +13,6 @@ export type ExaContentsClient = {
         urls: string[],
         options?: {
             text?: { maxCharacters?: number } | true;
-            filterEmptyResults?: boolean;
         },
         requestOptions?: { signal: AbortSignal },
     ): Promise<{
@@ -158,6 +157,7 @@ async function withAbortableTimeout<T>(
 }
 
 export const MAX_EXA_CONTENTS_ATTEMPTS = 2;
+const MAX_EXA_TEXT_CHARACTERS = 1_000_000;
 export const DEFAULT_EXA_CONTENTS_TIMEOUT_MS = 120_000;
 
 export function createExaContentsAdapter(
@@ -205,8 +205,9 @@ export function createExaContentsAdapter(
                 }
 
                 try {
-                    const defaultMaxCharacters = Math.floor(
-                        MAX_APPROVED_SOURCE_BYTES / 4,
+                    const defaultMaxCharacters = Math.min(
+                        MAX_EXA_TEXT_CHARACTERS,
+                        Math.floor(MAX_APPROVED_SOURCE_BYTES / 4),
                     );
                     const maxCharacters =
                         typeof options.maxCharacters === "number"
@@ -221,7 +222,6 @@ export function createExaContentsAdapter(
                                 [canonicalUrl],
                                 {
                                     text: { maxCharacters },
-                                    filterEmptyResults: false,
                                 },
                                 { signal },
                             ),

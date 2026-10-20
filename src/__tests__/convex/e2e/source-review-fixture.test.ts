@@ -1,6 +1,7 @@
 import type { Id } from "@convex/_generated/dataModel";
 import { api } from "@convex/_generated/api";
 import "@convex/evidenceActions";
+import "@convex/sourceSelectionProposalActions";
 import { lookup } from "node:dns/promises";
 import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
@@ -21,7 +22,7 @@ vi.mock("node:dns/promises", () => {
 
 const seedSourceReviewScenario = makeFunctionReference<
     "mutation",
-    { slotKey: string; fixtureKey: string },
+    { slotKey: string; fixtureKey: string; recoveryScenario?: boolean },
     {
         runId: Id<"researchRuns">;
         corpusRevisionId: Id<"corpusRevisions">;
@@ -284,4 +285,54 @@ test("seeds an owned source review checkpoint through production projections", a
         ],
         providerCallCount: 0,
     });
+});
+
+test("source recovery fixture exercises capacity and reactive coverage without provider I/O", async () => {
+    process.env.E2E_FIXTURES_ENABLED = "true";
+    vi.stubEnv("SOURCE_CANDIDATE_LIMIT", "3");
+    const t = convexTest(schema, modules);
+    workflowTest.register(t);
+    rateLimiterTest.register(t);
+    const { userId } = await createAdmittedVisitor(t);
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const seeded = await t.mutation(seedSourceReviewScenario, {
+        slotKey: "e2e-analyst",
+        fixtureKey: "recovery-capacity",
+        recoveryScenario: true,
+    });
+    expect(seeded.sourceIds).toHaveLength(3);
+    const owner = t.withIdentity({ subject: `${userId}|fixture-session` });
+    const args = {
+        runId: seeded.runId,
+        corpusRevisionId: seeded.corpusRevisionId,
+    };
+    const current = await owner.query(
+        api.sourceSelectionProposals.getCurrent,
+        args,
+    );
+    expect(current).toMatchObject({
+        rebuildOutcome: "partial",
+        failedDiscoveryFamilies: ["official_product"],
+    });
+    expect(current?.coverageGaps).not.toContain("official_product_platform");
+    expect(
+        await owner.action(
+            api.sourceSelectionProposalActions.recoverDiscovery,
+            {
+                ...args,
+                expectedProposalId: seeded.proposalId,
+                requestId: "capacity-fixture",
+                target: { kind: "failed_discovery" },
+            },
+        ),
+    ).toMatchObject({ reason: "capacity_reached" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(
+        (
+            await t.query(inspectSourceReviewScenario, {
+                runId: seeded.runId,
+                fixtureKey: "recovery-capacity",
+            })
+        ).providerCallCount,
+    ).toBe(0);
 });

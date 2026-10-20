@@ -19,11 +19,18 @@ import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
 import { claimPausedRunExecution } from "./domain/executionClaim";
 import { purgePreviewCacheForSource } from "./domain/previewCache";
 import { canStartNewCorpusRevision } from "./domain/transitions";
-import { buildResearchPlan } from "./domain/researchPlan";
+import {
+    coverageRoleValidator,
+    discoveryFamilyValidator,
+    recoveryReasonValidator,
+    recoveryTargetValidator,
+    recoverySearchPlan,
+} from "./domain/sourceDiscoveryRecovery";
 import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
 import {
     buildSourceSelectionProposal,
+    evaluateSourceCoverage,
     SOURCE_PUBLISHER_REGISTRY_VERSION,
     SOURCE_SELECTION_POLICY_VERSION,
 } from "./domain/sourceSelectionPolicy";
@@ -32,6 +39,7 @@ import {
     sourceRecommendedTarget,
 } from "./resourceLimits";
 import { corpusRevisionApproved, workflow } from "./workflow";
+import schema from "./schema";
 
 type ProposalContext = {
     run: Doc<"researchRuns">;
@@ -54,16 +62,6 @@ const sourceFamilyValidator = v.union(
     v.literal("independent_analysis"),
     v.literal("unrecognized"),
     v.literal("analyst_supplied"),
-);
-
-const discoveryFamilyValidator = v.union(
-    v.literal("regulatory"),
-    v.literal("investor_relations"),
-    v.literal("official_product"),
-    v.literal("official_commercial"),
-    v.literal("counter_evidence"),
-    v.literal("official_security"),
-    v.literal("independent_analysis"),
 );
 
 const rebuildOutcomeValidator = v.union(
@@ -91,24 +89,6 @@ const reasonCodeValidator = v.union(
     v.literal("no_new_coverage"),
     v.literal("recommendation_ceiling_reached"),
     v.literal("integrity_conflict"),
-);
-
-const coverageRoleValidator = v.union(
-    v.literal("regulatory_annual"),
-    v.literal("regulatory_interim"),
-    v.literal("regulatory_material_event"),
-    v.literal("investor_results"),
-    v.literal("investor_presentation"),
-    v.literal("official_product_platform"),
-    v.literal("official_product_integration"),
-    v.literal("official_commercial_pricing"),
-    v.literal("official_commercial_terms"),
-    v.literal("counter_evidence_primary"),
-    v.literal("counter_evidence_secondary"),
-    v.literal("official_security_architecture"),
-    v.literal("official_security_trust"),
-    v.literal("independent_analysis_primary"),
-    v.literal("independent_analysis_secondary"),
 );
 
 const documentKindValidator = v.union(
@@ -372,7 +352,7 @@ function isIncluded(
 }
 
 async function hydrateProposalItem(
-    ctx: QueryCtx,
+    ctx: QueryCtx | MutationCtx,
     item: Doc<"sourceSelectionProposalItems">,
 ) {
     const source = await ctx.db.get(item.sourceId);
@@ -413,6 +393,26 @@ async function hydrateProposalItem(
     };
 }
 
+async function recordRecoveryProgress(
+    ctx: MutationCtx,
+    run: Doc<"researchRuns">,
+    type: "source_recovery_started" | "source_recovery_completed",
+) {
+    const sequence = run.nextEventSequence + 1;
+    await ctx.db.patch(run._id, {
+        nextEventSequence: sequence,
+        updatedAt: Date.now(),
+    });
+    await ctx.db.insert("runEvents", {
+        runId: run._id,
+        sequence,
+        type,
+        lifecycleState: run.lifecycleState,
+        executionStatus: run.executionStatus,
+        occurredAt: Date.now(),
+    });
+}
+
 export async function createSourceSelectionProposal(
     ctx: MutationCtx,
     {
@@ -440,6 +440,17 @@ export async function createSourceSelectionProposal(
 }> {
     if (!run.coveragePreset) {
         throw new Error("Research run has no coverage preset");
+    }
+    if (!rebuild && revision.sourceSelectionProposalId) {
+        const previous = await ctx.db.get(revision.sourceSelectionProposalId);
+        if (
+            previous?.rebuildOutcome === "partial" ||
+            previous?.rebuildOutcome === "complete"
+        )
+            rebuild = {
+                outcome: previous.rebuildOutcome,
+                failedDiscoveryFamilies: previous.failedDiscoveryFamilies ?? [],
+            };
     }
     const candidates = await readProposalCandidates(ctx, run._id);
     const recommendationCeiling = sourceRecommendedTarget();
@@ -589,6 +600,21 @@ export const generateForRun = internalMutation({
     },
 });
 
+async function readProposalSources(
+    ctx: QueryCtx | MutationCtx,
+    proposal: Doc<"sourceSelectionProposals">,
+) {
+    const items = await ctx.db
+        .query("sourceSelectionProposalItems")
+        .withIndex("by_proposal_and_rank_and_source", (q) =>
+            q.eq("proposalId", proposal._id),
+        )
+        .take(sourceCandidateLimit() + 1);
+    if (items.length > sourceCandidateLimit())
+        throw new Error("Source selection proposal exceeds its limit");
+    return Promise.all(items.map((item) => hydrateProposalItem(ctx, item)));
+}
+
 export const getCurrent = query({
     args: {
         runId: v.id("researchRuns"),
@@ -610,6 +636,13 @@ export const getCurrent = query({
             rebuildOutcome: v.optional(rebuildOutcomeValidator),
             failedDiscoveryFamilies: v.array(discoveryFamilyValidator),
             coverageGaps: v.array(coverageRoleValidator),
+            coverageRequirements: v.array(
+                v.object({
+                    role: coverageRoleValidator,
+                    covered: v.boolean(),
+                    candidateIds: v.array(v.id("sources")),
+                }),
+            ),
             counts: v.object({
                 recommended: v.number(),
                 needsAttention: v.number(),
@@ -626,6 +659,19 @@ export const getCurrent = query({
                     v.literal("independent_analysis"),
                 ),
             ),
+            recovery: v.union(
+                v.null(),
+                schema
+                    .doc("sourceSelectionProposalRebuilds")
+                    .pick(
+                        "status",
+                        "requestId",
+                        "target",
+                        "reason",
+                        "leaseExpiresAt",
+                        "completedAt",
+                    ),
+            ),
             effectiveIncludedCount: v.number(),
             revisionStatus: v.union(v.literal("draft"), v.literal("approved")),
         }),
@@ -638,16 +684,29 @@ export const getCurrent = query({
             return null;
         }
         const { run, revision } = context;
-        const items = await ctx.db
-            .query("sourceSelectionProposalItems")
-            .withIndex("by_proposal_and_rank_and_source", (query) =>
-                query.eq("proposalId", proposal._id),
-            )
-            .take(sourceCandidateLimit() + 1);
-        const hydrated = await Promise.all(
-            items.map((item) => hydrateProposalItem(ctx, item)),
-        );
+        const hydrated = await readProposalSources(ctx, proposal);
         const fingerprint = await currentFingerprint(ctx, run);
+        const coverageRequirements = evaluateSourceCoverage(
+            proposal.coveragePreset,
+            hydrated,
+        );
+        const latestRecovery = await ctx.db
+            .query("sourceSelectionProposalRebuilds")
+            .withIndex("by_revision_and_created_at", (q) =>
+                q.eq("corpusRevisionId", revision._id),
+            )
+            .order("desc")
+            .first();
+        const recovery = latestRecovery?.requestId
+            ? {
+                  status: latestRecovery.status,
+                  requestId: latestRecovery.requestId,
+                  target: latestRecovery.target,
+                  reason: latestRecovery.reason,
+                  leaseExpiresAt: latestRecovery.leaseExpiresAt,
+                  completedAt: latestRecovery.completedAt,
+              }
+            : null;
         return {
             proposalId: proposal._id,
             version: proposal.version,
@@ -665,7 +724,11 @@ export const getCurrent = query({
                 proposal.recommendationCeiling ?? proposal.recommendedTarget,
             rebuildOutcome: proposal.rebuildOutcome,
             failedDiscoveryFamilies: proposal.failedDiscoveryFamilies ?? [],
-            coverageGaps: proposal.coverageGaps ?? [],
+            coverageGaps: coverageRequirements
+                .filter((item) => !item.covered)
+                .map((item) => item.role),
+            coverageRequirements,
+            recovery,
             counts: proposal.counts,
             gaps: proposal.gaps,
             effectiveIncludedCount: hydrated.filter(({ included }) => included)
@@ -732,15 +795,7 @@ export const getAdjustmentSets = query({
         if (!proposal) {
             throw new Error("Source selection proposal is unavailable");
         }
-        const items = await ctx.db
-            .query("sourceSelectionProposalItems")
-            .withIndex("by_proposal_and_rank_and_source", (query) =>
-                query.eq("proposalId", proposal._id),
-            )
-            .take(sourceCandidateLimit() + 1);
-        const hydrated = await Promise.all(
-            items.map((item) => hydrateProposalItem(ctx, item)),
-        );
+        const hydrated = await readProposalSources(ctx, proposal);
         return {
             included: hydrated.filter(({ included }) => included),
             available: hydrated.filter(({ included }) => !included),
@@ -834,6 +889,12 @@ export const recompute = mutation({
 export const claimRebuild = internalMutation({
     args: {
         authUserId: v.id("users"),
+        recovery: v.optional(
+            v.object({
+                requestId: v.string(),
+                target: recoveryTargetValidator,
+            }),
+        ),
         runId: v.id("researchRuns"),
         corpusRevisionId: v.id("corpusRevisions"),
         expectedProposalId: v.id("sourceSelectionProposals"),
@@ -853,6 +914,8 @@ export const claimRebuild = internalMutation({
             }),
             queries: v.array(rebuildPlanQueryValidator),
             remainingCapacity: v.number(),
+            families: v.array(discoveryFamilyValidator),
+            initialFailedFamilies: v.array(discoveryFamilyValidator),
         }),
         v.object({
             shouldExecute: v.literal(false),
@@ -860,6 +923,7 @@ export const claimRebuild = internalMutation({
             version: v.number(),
             outcome: rebuildOutcomeValidator,
             failedDiscoveryFamilies: v.array(discoveryFamilyValidator),
+            reason: v.optional(recoveryReasonValidator),
         }),
     ),
     handler: async (ctx, args) => {
@@ -881,7 +945,13 @@ export const claimRebuild = internalMutation({
         ) {
             throw new Error("Unauthorized");
         }
-        const operationKey = `run:${args.runId}:generation:${run.executionGeneration}:corpus:${args.corpusRevisionId}:proposal:${args.expectedProposalId}:policy:${SOURCE_SELECTION_POLICY_VERSION}`;
+        const recovery = args.recovery;
+        if (
+            recovery &&
+            (!recovery.requestId.trim() || recovery.requestId.length > 128)
+        )
+            throw new Error("Invalid recovery request");
+        const operationKey = `run:${args.runId}:generation:${run.executionGeneration}:corpus:${args.corpusRevisionId}:proposal:${args.expectedProposalId}:policy:${SOURCE_SELECTION_POLICY_VERSION}${recovery ? `:request:${recovery.requestId}` : ""}`;
         const existing = await ctx.db
             .query("sourceSelectionProposalRebuilds")
             .withIndex("by_operation_key", (query) =>
@@ -890,6 +960,49 @@ export const claimRebuild = internalMutation({
             .unique();
         const now = Date.now();
         if (existing) {
+            if (
+                recovery &&
+                (existing.target?.kind !== recovery.target.kind ||
+                    (recovery.target.kind === "coverage" &&
+                        (existing.target?.kind !== "coverage" ||
+                            existing.target.role !== recovery.target.role)))
+            )
+                throw new Error(
+                    "Recovery request was reused for a different target",
+                );
+            if (
+                recovery &&
+                existing.status === "started" &&
+                existing.leaseExpiresAt <= now
+            ) {
+                await ctx.db.patch(existing._id, {
+                    status: "blocked",
+                    reason: "unavailable",
+                    completedAt: now,
+                });
+                await recordRecoveryProgress(
+                    ctx,
+                    run,
+                    "source_recovery_completed",
+                );
+                return {
+                    shouldExecute: false as const,
+                    proposalId: proposal._id,
+                    version: proposal.version,
+                    outcome: "blocked" as const,
+                    failedDiscoveryFamilies: existing.failedDiscoveryFamilies,
+                    reason: "unavailable" as const,
+                };
+            }
+            if (recovery && existing.status === "blocked")
+                return {
+                    shouldExecute: false as const,
+                    proposalId: proposal._id,
+                    version: proposal.version,
+                    outcome: "blocked" as const,
+                    failedDiscoveryFamilies: existing.failedDiscoveryFamilies,
+                    reason: existing.reason ?? ("unavailable" as const),
+                };
             if (
                 (existing.status === "complete" ||
                     existing.status === "partial") &&
@@ -902,6 +1015,7 @@ export const claimRebuild = internalMutation({
                     version: existing.proposalVersion,
                     outcome: existing.status,
                     failedDiscoveryFamilies: existing.failedDiscoveryFamilies,
+                    reason: existing.reason,
                 };
             }
             if (
@@ -914,6 +1028,7 @@ export const claimRebuild = internalMutation({
                     version: proposal.version,
                     outcome: "blocked" as const,
                     failedDiscoveryFamilies: [],
+                    reason: "in_progress" as const,
                 };
             }
             if (
@@ -926,6 +1041,7 @@ export const claimRebuild = internalMutation({
                     version: proposal.version,
                     outcome: "blocked" as const,
                     failedDiscoveryFamilies: existing.failedDiscoveryFamilies,
+                    reason: "cooldown" as const,
                 };
             }
         }
@@ -939,7 +1055,11 @@ export const claimRebuild = internalMutation({
             !currentProposal ||
             currentProposal._id !== args.expectedProposalId ||
             currentProposal.corpusRevisionId !== revision._id ||
-            currentProposal.policyVersion === SOURCE_SELECTION_POLICY_VERSION ||
+            (recovery
+                ? currentProposal.policyVersion !==
+                  SOURCE_SELECTION_POLICY_VERSION
+                : currentProposal.policyVersion ===
+                  SOURCE_SELECTION_POLICY_VERSION) ||
             run.lifecycleState !== "awaiting_source_review" ||
             run.executionStatus !== "paused" ||
             run.pauseReason !== "source_review" ||
@@ -947,11 +1067,85 @@ export const claimRebuild = internalMutation({
         ) {
             throw new Error("Source selection proposal cannot be rebuilt");
         }
+        const active = await ctx.db
+            .query("sourceSelectionProposalRebuilds")
+            .withIndex("by_revision_and_status_and_lease", (q) =>
+                q
+                    .eq("corpusRevisionId", revision._id)
+                    .eq("status", "started")
+                    .gt("leaseExpiresAt", now),
+            )
+            .first();
+        if (active)
+            return {
+                shouldExecute: false as const,
+                proposalId: proposal._id,
+                version: proposal.version,
+                outcome: "blocked" as const,
+                failedDiscoveryFamilies: proposal.failedDiscoveryFamilies ?? [],
+                reason: "in_progress" as const,
+            };
+        const latest = await ctx.db
+            .query("sourceSelectionProposalRebuilds")
+            .withIndex("by_revision_and_created_at", (q) =>
+                q.eq("corpusRevisionId", revision._id),
+            )
+            .order("desc")
+            .first();
+        if (
+            recovery &&
+            latest?.status === "blocked" &&
+            latest.leaseExpiresAt > now
+        )
+            return {
+                shouldExecute: false as const,
+                proposalId: proposal._id,
+                version: proposal.version,
+                outcome: "blocked" as const,
+                failedDiscoveryFamilies: proposal.failedDiscoveryFamilies ?? [],
+                reason: "cooldown" as const,
+            };
+        if (
+            recovery &&
+            (await currentFingerprint(ctx, run)) !==
+                proposal.candidateFingerprint
+        )
+            throw new Error(
+                "Source proposal changed; refresh before searching",
+            );
         const company = await readSelectionCompany(ctx, run);
         if (!company) {
             throw new Error("Confirmed company was not found");
         }
         const capacity = await readSourceCandidateCapacity(ctx.db, run._id);
+        const failedFamilies = proposal.failedDiscoveryFamilies ?? [];
+        if (recovery?.target.kind === "coverage") {
+            const items = evaluateSourceCoverage(
+                proposal.coveragePreset,
+                await readProposalSources(ctx, proposal),
+            );
+            const role = recovery.target.role;
+            if (!items.some((item) => item.role === role && !item.covered))
+                throw new Error("Coverage requirement is no longer missing");
+        }
+        const plan = recoverySearchPlan({
+            company,
+            coveragePreset: run.coveragePreset,
+            researchAngle: run.researchAngle,
+            target: recovery?.target,
+            failedFamilies,
+        });
+        if (recovery && capacity.remaining === 0)
+            return {
+                shouldExecute: false as const,
+                proposalId: proposal._id,
+                version: proposal.version,
+                outcome: "blocked" as const,
+                failedDiscoveryFamilies: failedFamilies,
+                reason: "capacity_reached" as const,
+            };
+        if (recovery && plan.families.length === 0)
+            throw new Error("No failed discovery remains");
         const cycle = existing ? (existing.cycle ?? 1) + 1 : 1;
         const rebuildId = existing
             ? existing._id
@@ -963,6 +1157,8 @@ export const claimRebuild = internalMutation({
                   policyVersion: SOURCE_SELECTION_POLICY_VERSION,
                   operationKey,
                   cycle,
+                  requestId: recovery?.requestId,
+                  target: recovery?.target,
                   status: "started",
                   failedDiscoveryFamilies: [],
                   leaseExpiresAt: now + 5 * 60_000,
@@ -977,6 +1173,8 @@ export const claimRebuild = internalMutation({
                 completedAt: undefined,
             });
         }
+        if (recovery)
+            await recordRecoveryProgress(ctx, run, "source_recovery_started");
         return {
             shouldExecute: true as const,
             rebuildId,
@@ -989,11 +1187,16 @@ export const claimRebuild = internalMutation({
                 websiteUrl: company.websiteUrl,
                 investorRelationsUrl: company.investorRelationsUrl,
             },
-            queries: buildResearchPlan({
-                company,
-                coveragePreset: run.coveragePreset,
-                researchAngle: run.researchAngle,
-            }).queries,
+            queries: plan.queries,
+            families: plan.families,
+            initialFailedFamilies:
+                recovery?.target.kind === "failed_discovery"
+                    ? failedFamilies.filter(
+                          (family) => !plan.families.includes(family),
+                      )
+                    : recovery
+                      ? failedFamilies
+                      : [],
             remainingCapacity: capacity.remaining,
         };
     },
@@ -1068,6 +1271,7 @@ export const persistRebuildCandidates = internalMutation({
             rebuild.corpusRevisionId !== args.corpusRevisionId ||
             rebuild.expectedProposalId !== args.expectedProposalId ||
             rebuild.executionGeneration !== args.executionGeneration ||
+            rebuild.leaseExpiresAt <= Date.now() ||
             !run ||
             run.executionGeneration !== args.executionGeneration ||
             run.executionStatus !== "paused" ||
@@ -1170,6 +1374,10 @@ export const finishRebuild = internalMutation({
         expectedProposalId: v.id("sourceSelectionProposals"),
         executionGeneration: v.number(),
         outcome: rebuildOutcomeValidator,
+        insertedCount: v.optional(v.number()),
+        blockedReason: v.optional(
+            v.union(v.literal("request_rejected"), v.literal("unavailable")),
+        ),
         failedDiscoveryFamilies: v.array(discoveryFamilyValidator),
     },
     returns: v.object({
@@ -1177,6 +1385,7 @@ export const finishRebuild = internalMutation({
         version: v.number(),
         outcome: rebuildOutcomeValidator,
         failedDiscoveryFamilies: v.array(discoveryFamilyValidator),
+        reason: v.optional(recoveryReasonValidator),
     }),
     handler: async (ctx, args) => {
         const rebuild = await ctx.db.get(args.rebuildId);
@@ -1189,6 +1398,7 @@ export const finishRebuild = internalMutation({
             rebuild.corpusRevisionId !== args.corpusRevisionId ||
             rebuild.expectedProposalId !== args.expectedProposalId ||
             rebuild.executionGeneration !== args.executionGeneration ||
+            rebuild.leaseExpiresAt <= Date.now() ||
             !run ||
             run.executionGeneration !== args.executionGeneration ||
             run.executionStatus !== "paused" ||
@@ -1207,10 +1417,14 @@ export const finishRebuild = internalMutation({
         if (current._id !== args.expectedProposalId) {
             throw new Error("Source proposal rebuild was superseded");
         }
+        if (rebuild.requestId)
+            await recordRecoveryProgress(ctx, run, "source_recovery_completed");
         const now = Date.now();
         if (args.outcome === "blocked") {
+            const reason = args.blockedReason ?? "unavailable";
             await ctx.db.patch(rebuild._id, {
                 status: "blocked",
+                reason,
                 failedDiscoveryFamilies: args.failedDiscoveryFamilies,
                 leaseExpiresAt: now + 15_000,
                 completedAt: now,
@@ -1219,6 +1433,7 @@ export const finishRebuild = internalMutation({
                 proposalId: current._id,
                 version: current.version,
                 outcome: "blocked" as const,
+                reason,
                 failedDiscoveryFamilies: args.failedDiscoveryFamilies,
             };
         }
@@ -1232,6 +1447,11 @@ export const finishRebuild = internalMutation({
         });
         await ctx.db.patch(rebuild._id, {
             status: args.outcome,
+            insertedCount: args.insertedCount,
+            reason:
+                rebuild.requestId && args.insertedCount === 0
+                    ? "no_new_candidates"
+                    : undefined,
             failedDiscoveryFamilies: args.failedDiscoveryFamilies,
             proposalId: proposal.proposalId,
             proposalVersion: proposal.version,
@@ -1241,6 +1461,10 @@ export const finishRebuild = internalMutation({
             proposalId: proposal.proposalId,
             version: proposal.version,
             outcome: args.outcome,
+            reason:
+                rebuild.requestId && args.insertedCount === 0
+                    ? ("no_new_candidates" as const)
+                    : undefined,
             failedDiscoveryFamilies: args.failedDiscoveryFamilies,
         };
     },
@@ -1320,6 +1544,18 @@ export const approveProposedCorpus = mutation({
         if (items.length > sourceCandidateLimit()) {
             throw new Error("Source selection proposal exceeds its limit");
         }
+        if (
+            await ctx.db
+                .query("sourceSelectionProposalRebuilds")
+                .withIndex("by_revision_and_status_and_lease", (q) =>
+                    q
+                        .eq("corpusRevisionId", revision._id)
+                        .eq("status", "started")
+                        .gt("leaseExpiresAt", Date.now()),
+                )
+                .first()
+        )
+            throw new Error("Source discovery is still active");
         const now = Date.now();
         let acceptedCount = 0;
         for (const item of items) {
