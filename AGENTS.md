@@ -128,6 +128,9 @@ Keep domain rules out of UI components. Keep provider-specific types and model n
 
 ### Implementation Planning and Scope Fidelity
 
+- The AI harness's native planning mode is the default for ordinary planning, task decomposition, sequencing, and implementation discussion, including work with multiple steps.
+- Treat `writing-plans` and the project `implementation-plan` skill as opt-in workflows. Invoke either skill only when the user explicitly names or requests that skill; never trigger them merely because a task is complex, spans multiple files, crosses runtimes, or asks for a plan.
+- When the user explicitly invokes `implementation-plan`, apply it after the principal `writing-plans` skill because it adds this repository's product, UI-preservation, provider-safety, and verification contracts. Invoking `writing-plans` alone does not implicitly invoke the project overlay.
 - Planning and implementation are separate authorizations. A request to diagnose, brainstorm, review, or revise a plan does not authorize production code, dependency, schema, environment, deployment, or data changes.
 - Before planning changes to an existing feature, reconstruct the current behavior from the working tree, routes, tests, browser state, and history. Classify each affected surface or contract as `preserve`, `modify`, `replace`, or `remove`, and provide evidence for every item not marked `preserve`.
 - Words such as `connect`, `integrate`, `refactor`, `reuse`, or `make real` do not authorize a redesign, structural rewrite, deletion of an affordance, or replacement of an established interaction. Material product or visual changes require an explicit user decision before they enter a plan.
