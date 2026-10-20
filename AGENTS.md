@@ -37,7 +37,7 @@ Do not rewrite product requirements as part of implementation. Material changes 
 
 - Keep the application, source code, schemas, fixtures, tests, UI copy, and documentation in English, even if the user communicates in French.
 - Prefer the smallest coherent implementation that proves the product thesis; never build speculative abstractions, theatrical agent swarms, or features outside the MVP.
-- Route to appropriate specialist skills: `ai-sdk` for AI SDK integrations, Convex skills (`convex`, `convex-expert`, `convex-design`, `convex-test`) for backend logic and schemas, `frontend-ui-engineering`, `tailwind-design-system`, and `shadcn` for UI engineering, and `motion-react` for motion design.
+- Route to appropriate specialist skills: `ai-sdk` for AI SDK integrations, Convex skills (`convex`, `convex-expert`, `convex-design`, `convex-test`, etc...) for backend logic and schemas, `impeccable` `frontend-ui-engineering`, `better-ux-flow`, and `shadcn` for UI engineering, and `motion-react` for motion design.
 
 ## Candidature Priority and Proportionality
 
