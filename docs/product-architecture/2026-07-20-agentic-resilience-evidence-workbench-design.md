@@ -2,7 +2,7 @@
 
 ## Status
 
-Validated design. Refined for Roadmap Phases 4–8 on 2026-07-27, deterministic source-proposal review on 2026-08-07, ephemeral visual preview on 2026-08-09, and decision-anchored Phase 5 evidence workflow on 2026-08-15.
+Validated design. Refined for Roadmap Phases 4–8 on 2026-07-27, deterministic source-proposal review on 2026-08-07, ephemeral visual preview on 2026-08-09, and decision-anchored Phase 5 evidence workflow on 2026-08-15. Reconciled on 2026-10-22 with ADR-024 pre-approval content preparation, ADR-025 scoped retrieval and the recorded evaluation limits. This product contract does not certify implementation or activation; see the [recorded delivery state](../ROADMAP.md#recorded-delivery-state-2026-10-22).
 
 ## Date
 
@@ -65,13 +65,15 @@ The system creates a research plan tailored to the company and searches by sourc
 
 ### 3. Mandatory source checkpoint
 
-The workflow stops after discovery and creates a versioned `SourceSelectionProposal` for the active draft corpus revision. The deterministic metadata-only policy recommends a balanced, bounded source set without an additional model call. No retrieval, evidence extraction, or assessment starts before explicit analyst approval.
+The workflow reads and qualifies bounded public candidates after discovery, inspecting existing alternatives before one finite supplement. It creates a versioned `SourceSelectionProposal` backed by immutable captured content. Deterministic selection consumes typed, passage-anchored qualification without promoting provenance or asserting that document claims are true. Explicit analyst approval remains mandatory before analytical source versions, passages, claims or assessments. ADR-024 defines the exact preparation boundary and amends earlier metadata-only clauses.
 
-The policy first removes exact duplicates and identifies metadata-proven superseding versions, then preserves analyst-supplied sources, covers preset-specific document roles, and adds only candidates that contribute a new document type, normalized period, material event, qualified independent producer, or research-angle match. A missing role remains a visible gap; the system never recommends a low-value source merely to fill a slot.
+This stage prepares enough useful, inspectable material for subsequent analysis at bounded cost. It need not resolve every research question or make every selection judgment correctly. Preserve useful imperfect sources with attribution, restrictions and visible gaps. An unavailable read, low rank or incomplete qualification does not establish that a source is irrelevant. Retaining a source, covering a documentary need and verifying a factual assertion are distinct outcomes.
+
+The policy first removes exact duplicates and identifies demonstrated duplicate artifacts, then preserves analyst-supplied sources, evaluates inspected content, covers preset-specific document roles, and adds only candidates that contribute a new document type, normalized period, material event, qualified independent producer, or research-angle match. A missing role remains a visible gap; the system never recommends a low-value source merely to fill a slot.
 
 The server-owned `SOURCE_RECOMMENDATION_CEILING` defaults to half of `SOURCE_CANDIDATE_LIMIT`, rounded up, remains configurable, and cannot exceed the candidate limit. It is a circuit breaker rather than a quota: the adaptive policy stops when no candidate adds a distinct document role, period, event, qualified independent producer, or research-angle contribution. Proposal items are `recommended`, `needs_attention`, or `alternative`; `needs_attention` is reserved for rare identity or provenance conflicts.
 
-Each proposal item records the basis used to link it to the selected company. Structural linkage comes from confirmed CIK, official company domains, or the approved decoded-path checks. A candidate on a declared institutional publisher or shared IR host may instead use `discovery_metadata` linkage when its discovery title contains the complete normalized legal name or an exact confirmed domain alias of at least five characters. That bounded signal may place the candidate in `Recommended`, but it cannot establish document kind, duplicate identity, claim evidence, or automatic coverage. The item preserves registry-declared roles separately from candidate-specific eligible roles, and every non-structural discovered candidate leaves eligible roles empty so coverage gaps remain visible.
+Each proposal item records the basis used to link it to the selected company. Structural linkage comes from confirmed CIK, official company domains, or the approved decoded-path checks. A candidate on a declared institutional publisher or shared IR host may instead use `discovery_metadata` linkage when its discovery title contains the complete normalized legal name or an exact confirmed domain alias of at least five characters. That bounded signal may place the candidate in `Recommended`, but it cannot establish document kind, duplicate identity, claim evidence, or automatic coverage. The item preserves registry-declared roles separately from candidate-specific eligible roles. Under ADR-024, anchored inspected content can establish candidate relevance and purpose; discovery metadata alone cannot. Authority remains provenance-based. Each documentary need distinguishes suitable documents, useful contributions with limitations and a need not established, including unavailable reading and analyst exclusion. Two domains do not establish independent corroboration.
 
 The default source-checkpoint surface summarizes the proposed corpus, source-family coverage, visible gaps, exceptions, and analyst adjustments. `DiscreteTabs` switches among `Recommended`, `Needs attention`, and `Alternatives`. The analyst may approve the proposal without opening every source, adjust it through separate `Included` and `Available` working sets, inspect every candidate in the preserved master-detail view, or add public HTTPS URLs.
 
@@ -79,11 +81,13 @@ The Start composer validates an attached public HTTPS reference immediately and 
 
 System recommendations never become human decisions by themselves. Analyst adjustments use append-only source decisions. `Approve proposed corpus` atomically preserves those overrides, writes an individual accepted decision for every still-pending recommended source, leaves all other candidates pending, approves the corpus revision, and resumes the workflow. A changed candidate set makes the proposal stale and requires recomputation without overwriting analyst decisions. A draft created by an older policy displays `Improved proposal method available`, blocks approval, and requires an explicit rebuild that preserves analyst decisions; approved corpora remain unchanged. A rebuild that refreshes only part of discovery creates a reviewable proposal with the affected source families and coverage consequence visible before approval. A blocked rebuild keeps the outdated draft in place and tells the analyst that the existing draft and decisions are unchanged.
 
-An approved `CorpusRevision` contains accepted sources only. Pending sources remain visible but cannot contribute downstream. Accepting one later creates `CorpusRevision N+1` and reopens the source checkpoint rather than mutating an existing result. Local file and PDF upload is outside the MVP; an approved public PDF URL may still be normalized after approval.
+An editable draft `CorpusRevision` may receive several source additions or decisions without a new revision for each URL. An approved revision contains accepted sources only and is immutable. Changing its membership creates a new draft and reopens the source checkpoint; several changes may be grouped before approval. Pending sources remain visible and may receive bounded preparation, but cannot contribute analytical evidence. Unchanged captures may be reused under their identity and version rules; complete incremental downstream recomputation is not established by this contract. Local file and PDF upload is outside the MVP. Public PDFs use bounded Exa text for preparation and exact captured-text materialization after approval, with no invented page locators. Page-aware PDF parsing remains deferred.
+
+Useful arguments from imperfect publications retain attribution and enforceable restrictions. An argument depending on an identified false premise is excluded for that use. Unverified arguments remain hypotheses, and contextual or opposing citations cannot inflate factual authority or corroboration. Preparation is capped at the initial 48 candidates plus one supplement of at most 3 searches and 12 additions, with a 60-candidate historical ceiling and unchanged 24-source automatic recommendation ceiling. See ADR-024 for input, attempt and deadline limits.
 
 ### 4. Evidence matrix
 
-Approved documents are normalized into precisely locatable passages. The system derives atomic claims and classifies each as:
+For prepared dossiers, approval pins the inspected captures and qualification references. Analytical source versions reuse those exact normalized bytes after hash, locator and accepted-source validation. Missing or corrupt captures fail explicitly rather than silently substituting a fresh download. Legacy approved corpora without captures retain their acquisition path. The system derives atomic claims from precisely locatable approved passages and classifies each as:
 
 - `Fact`: explicitly established by a source.
 - `Inference`: a reasoned conclusion derived from cited facts.
@@ -91,6 +95,8 @@ Approved documents are normalized into precisely locatable passages. The system 
 - `Unknown`: a material question without sufficient evidence.
 
 Each claim links to exact source passages. One canonical claim may inform several dimensions; claim approval and dimension-link decisions remain separate.
+
+Retained captures, search candidates, selected model context and analytical passages have different limits and purposes. Later claim extraction, counter-evidence search, policy checks and analyst review refine the dossier, but only from material those stages can actually access. Preservation of a full capture does not alone establish downstream retrieval of an unselected passage. That handoff remains an explicit verification item in the roadmap, alongside the unfinished general live claim pipeline.
 
 The default review is exception-driven. Typed AI tasks propose complete claim packages, while application-owned deterministic policies validate provenance, coverage, corroboration, and rule outcomes. The analyst may approve a reviewed group in one action; the server still persists individual append-only decisions. A correction produces a cited replacement claim and visible diff instead of mutating the original.
 
@@ -155,6 +161,7 @@ SourceSelectionProposal
 SourceSelectionProposalItem
 SourceDecision
 CorpusRevision
+SourceCapture
 SourceVersion
 SourcePassage
 Claim
@@ -264,10 +271,12 @@ Preflight-resolve company
 → Await evidence decision when insufficient
 → Build research plan
 → Discover sources in parallel
+→ Capture, normalize and qualify bounded public candidates
+→ Compare scoped contributions and inspect one finite supplement when needed
 → Persist proposed CorpusRevision and SourceSelectionProposal
 → Await corpus-revision approval
-→ Retrieve and normalize approved sources
-→ Extract passages and atomic claims
+→ Materialize exact approved captures (retrieve legacy approved sources without captures)
+→ Extract analytical passages and atomic claims
 → Validate typed results and run targeted semantic checks
 → Search for counter-evidence within the approved corpus
 → Propose dimension assessments
@@ -375,7 +384,7 @@ Every provider call records:
 
 Provider selection remains automatic. Provider details are inspectable in run details but are not exposed as a primary user control.
 
-The application owns routing, bounded retry, and fallback. OpenRouter uses `@openrouter/ai-sdk-provider`; private CLIProxyAPI transport uses `@ai-sdk/openai-compatible`. SEC uses direct HTTP. Exa discovery uses metadata-only search before approval and `getContents` only after approval. The current Unstructured Pipeline Jobs API uses a bounded direct-HTTP adapter rather than the JavaScript client for the legacy Partition endpoint.
+The application owns routing, bounded retry, and fallback. OpenRouter uses `@openrouter/ai-sdk-provider`; private CLIProxyAPI transport uses `@ai-sdk/openai-compatible`. SEC uses direct HTTP. Exa discovery uses metadata-only search. Exa Contents retrieval is permitted for eligible candidates under ADR-024 preparation authority and for legacy approved sources without captures. Approval reuses the exact prepared content. Optional hosted embeddings under ADR-025 support retrieval without a local embedding model or another persistence owner. The planned page-aware PDF adapter uses the Unstructured Pipeline Jobs HTTP API; real integration remains deferred.
 
 Each configured task declares its primary provider and optional fallback. Provider-internal routing may preserve the same configured model under explicit parameter and privacy constraints, but it may not silently change the application-selected task or model. Every retry and fallback attempt is a separate `ProviderCall`.
 
@@ -428,9 +437,11 @@ The recording must not present cached or precomputed output as live work.
 
 ## Evaluation Strategy
 
-CCC Intelligent Solutions is curated first under its accepted bounded showcase scope. Expected claims, known contradictions, and deliberately unresolved questions are defined only after manual corpus approval. That same curated dossier then becomes the first regression corpus; a parallel "golden" CCC dossier is not created.
+CCC Intelligent Solutions remains the primary curated showcase under its accepted bounded scope. Expected claims, known contradictions, and deliberately unresolved questions for that showcase are defined after manual corpus approval. Reuse that dossier for analytical regression instead of creating a parallel "golden" CCC dossier.
 
-Small deterministic fixtures isolate policy rules such as rejected-source exclusion, locator validity, contradiction handling, duplicate detection, and coverage thresholds. ServiceNow or another company is added only if the CCC vertical slice reveals a measured evaluation gap.
+Small deterministic fixtures isolate policy rules such as rejected-source exclusion, locator validity, contradiction handling, duplicate detection, and coverage thresholds. Evaluate source preparation across multiple companies, source families and dossier types independently of showcase curation. Broad research, targeted questions, supplied references and uncertain arguments exercise different needs without requiring several completed showcase dossiers.
+
+Judge preparation by useful retained material, visible limitations, exact provenance, bounded cost and the analyst's ability to continue. It is not required to answer all questions or reproduce one evaluator-selected passage. Distinguish source inclusion, exact-reference retention, equivalent useful evidence, displayed qualification and later analytical correctness. The [Snowflake interpretation correction](../verification/2026-10-21-evidence-retrieval-repair.md#interpretation-correction-2026-10-22) shows why reference-location scores alone cannot select a retrieval architecture. Existing multi-company replays remain illustrative, historically observed and investigator-adjudicated. New quality thresholds and a definitive technology choice require an explicit decision rather than retrospective adjustment of the reference.
 
 Evaluation dimensions:
 
@@ -547,9 +558,13 @@ The MVP is complete when an invited analyst can:
 - [ADR-016: Centralize manual source intake with expiring preparations](../decisions/016-centralize-manual-source-intake-with-expiring-preparations.md)
 - [ADR-017: Use deterministic source selection proposals](../decisions/017-use-deterministic-source-selection-proposals.md)
 - [ADR-018: Use an adaptive source selection policy](../decisions/018-use-adaptive-source-selection-policy.md)
+- [ADR-019: Ephemeral visual preview of candidate sources](../decisions/019-ephemeral-visual-preview-candidate-sources.md)
+- [ADR-020: Historical counter-evidence selection (superseded)](../decisions/020-admit-inspectable-counter-evidence-without-publisher-whitelist.md)
 - [ADR-021: Separate source provenance from automatic role eligibility](../decisions/021-separate-source-provenance-from-automatic-role-eligibility.md)
 - [ADR-022: Persist company linkage basis for source recommendations](../decisions/022-persist-company-linkage-basis-for-source-recommendations.md)
 - [ADR-023: Use a decision-anchored Phase 5 evidence workflow](../decisions/023-use-decision-anchored-phase-5-evidence-workflow.md)
+- [ADR-024: Qualify source content before corpus approval](../decisions/024-qualify-source-content-before-corpus-approval.md)
+- [ADR-025: Use versioned, scoped evidence retrieval](../decisions/025-use-versioned-scoped-evidence-retrieval.md)
 
 
 ## Source review recovery clarification, 2026-10-19

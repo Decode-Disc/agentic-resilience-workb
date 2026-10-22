@@ -2,7 +2,7 @@
 
 ## Status
 
-Validated on 2026-08-15. This document defines the design decision only; production implementation remains separately authorized.
+Historical design validated on 2026-08-15 and represented by [ADR-022](../decisions/022-persist-company-linkage-basis-for-source-recommendations.md). [ADR-024](../decisions/024-qualify-source-content-before-corpus-approval.md) later permits anchored inspected content to establish relevance and purpose before approval without promoting provenance authority. The metadata-only rules and code observations below describe the original scope; they do not prohibit the later preparation path. Preserve the rationale and use [technical context](../../context/TECH.md#source-proposals-and-metadata-compatibility) for the consolidated contract. This record does not authorize new implementation or provider calls.
 
 ## Problem
 

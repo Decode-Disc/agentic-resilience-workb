@@ -72,7 +72,7 @@ Later stages remain required for the completed MVP, but must not prevent earlier
 These rules are non-negotiable:
 
 1. The evidence matrix is the primary artifact. Architecture maps and briefs are derived views.
-2. Source discovery and evidence extraction are separated by a mandatory, durable human approval checkpoint.
+2. Source discovery and analytical evidence extraction are separated by a mandatory, durable human approval checkpoint. ADR-024 permits bounded pre-approval source reading and qualification as preparation only; analytical source versions, passages and claims still require accepted sources in the approved corpus.
 3. Claims are atomic and classified as `Fact`, `Inference`, `Hypothesis`, or `Unknown`.
 4. Every material claim references one or more precisely locatable source passages.
 5. Rejected sources cannot contribute to claims, assessments, maps, or briefs.

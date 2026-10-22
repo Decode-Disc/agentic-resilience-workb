@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted. The screenshot-only contract remains in force. [ADR-024](024-qualify-source-content-before-corpus-approval.md) supersedes the historical blanket prohibition on pre-approval documentary retrieval. A transient visual preview remains separate from an immutable documentary capture and cannot become analytical evidence. The [2026-10-22 verification](../verification/2026-10-22-source-review-corrections.md) records cache authorization and network-boundary corrections; it does not certify remote deployment.
 
 ## Date
 
@@ -12,13 +12,13 @@ Accepted
 
 The source checkpoint requires an analyst to approve a proposed corpus of candidates. Each candidate provides metadata — title, URL, authority tier, document kind, date, and a selection reason — but the analyst cannot see what the page looks like without opening the URL in a separate browser tab.
 
-An embedded preview would let the analyst visually inspect a candidate before deciding to accept or reject it. However, loading a page inside the workbench introduces a material boundary question: the system forbids source content retrieval, normalization, and evidence extraction before corpus approval. A visual preview must respect that boundary without weakening it.
+An embedded preview lets the analyst visually inspect a candidate before deciding to accept or reject it. At the time of this decision, the system prohibited documentary retrieval, normalization and evidence extraction before corpus approval. ADR-024 later permitted bounded documentary preparation through a separate capture workflow. The visual preview still confers no documentary or analytical authority.
 
 The handoff in `tmp/playwright-browser-preview-handoff-2026-08-05.md` captures the design intent and constraints for this feature.
 
 ## Decision
 
-Authorize ephemeral visual rendering of a candidate public HTTPS URL as a narrow exception to the pre-approval retrieval boundary.
+Authorize ephemeral visual rendering of a candidate public HTTPS URL through the isolated preview boundary. This was originally a narrow exception to the pre-approval retrieval prohibition; it remains distinct from the documentary preparation subsequently authorized by ADR-024.
 
 A preview is a **visual screenshot only**. It is not source retrieval, content normalization, structured extraction, or evidence. The preview service must never return scraped HTML, text, OCR output, or any form of machine-readable page content. A preview cannot contribute to a corpus, claim, assessment, map, or brief.
 

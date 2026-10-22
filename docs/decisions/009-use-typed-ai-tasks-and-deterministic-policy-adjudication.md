@@ -2,6 +2,8 @@
 
 ## Status
 
+Amended on 2026-10-20 by [ADR-024](024-qualify-source-content-before-corpus-approval.md). Its explicitly listed preparation, qualification and evidence-use clauses supersede the corresponding historical clauses below; all other decisions remain in force.
+
 Accepted
 
 ## Date

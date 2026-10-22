@@ -1,5 +1,7 @@
 # Phase 5 Evidence Matrix and Provenance Implementation Plan
 
+**Historical scope and continuation, 2026-10-22:** preserve this plan and its [deterministic/local verification](../../verification/2026-08-15-phase-5-evidence-matrix-provenance.md). ADR-023's later amendment enables automatic approval handoff; [ADR-024](../../decisions/024-qualify-source-content-before-corpus-approval.md) moves new-dossier acquisition into preparation and reuses the inspected captures afterward; [ADR-025](../../decisions/025-use-versioned-scoped-evidence-retrieval.md) separates search candidates from materialized analytical passages. These replace corresponding older clauses below. The [roadmap](../../ROADMAP.md#recorded-delivery-state-2026-10-22) distinguishes implemented, verified and unfinished work. Archived task and subagent instructions are not a new execution, delegation or provider grant.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` after explicit implementation authorization. Before execution, read `writing-plans`, the project `implementation-plan` overlay, `tdd`, `vitest`, `convex`, `convex-expert`, `frontend-ui-engineering`, `playwright-best-practices`, and `chrome-devtools-axi`. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Turn only the effective analyst-accepted sources of an approved corpus into immutable, precisely locatable evidence; render a read-only claims-first Evidence Matrix; and finish the curated showcase path at the strong `evidence_ready + idle` handoff without fabricating claims for arbitrary live dossiers.
@@ -39,7 +41,7 @@
 - **Status:** Ready for Task 1 documentation execution; Tasks 2–10 are blocked until the new ADR and aligned authoritative documents are reviewed and accepted.
 - **Closure status (2026-08-22):** Tasks 1–10 all complete; deterministic/local Phase 5 certification passed; live SEC/Exa provider certification deferred pending explicit authorization. See `docs/verification/2026-08-15-phase-5-evidence-matrix-provenance.md`.
 - **Revision date:** 2026-08-15.
-- **Design input:** `docs/plans/2026-08-15-phase-5-evidence-matrix-provenance-design.md`, validated by the user on 2026-08-15 but explicitly design-only.
+- **Design input:** `docs/designs/2026-08-15-phase-5-evidence-matrix-provenance-design.md`, validated by the user on 2026-08-15 but explicitly design-only.
 - **Additional contract accepted on 2026-08-15:** persist immutable versioned `ResearchPlanQuestion` records; `Unknown` references those records; question coverage remains derived.
 - **Current worktree:** only `context/TECH.md` and ADR-017 are modified by the user. `git diff --check` passes.
 - **Current automated baseline:** `pnpm typecheck` passes and `pnpm lint` passes. The complete suite has 519 tests: 509 pass and 10 fail across three pre-existing UI suites because `SourceBrowserView` reaches `useAction` without a `ConvexProvider` and jsdom lacks `window.scrollTo`. `pnpm format:check` reports 19 pre-existing formatting errors. These failures are baseline debt, not Phase 5 acceptance evidence.
@@ -68,7 +70,7 @@ Read these sources before executing any task, in this precedence order:
 4. `docs/product-architecture/2026-07-20-agentic-resilience-evidence-workbench-design.md` — complete MVP journey and evidence model; its lifecycle currently lacks `evidence_ready`.
 5. Accepted ADRs: `002-convex-reactive-persistence-and-workflows.md`, `004-use-sec-exa-and-unstructured-for-source-acquisition.md`, `008-use-versioned-research-revisions-and-exception-driven-review.md`, `009-use-typed-ai-tasks-and-deterministic-policy-adjudication.md`, `010-keep-provider-routing-retries-and-fallback-application-controlled.md`, `011-restrict-manual-source-intake-to-public-https-urls.md`, `014-use-reusable-access-codes-for-stable-visitors.md`, and ADR-017 through ADR-022.
 6. `docs/ROADMAP.md` — current delivery ordering; it still places the real SEC/Exa/Unstructured adapter work in Phase 8.
-7. `docs/plans/2026-08-15-phase-5-evidence-matrix-provenance-design.md` — validated design input, not authority until Task 1 completes.
+7. `docs/designs/2026-08-15-phase-5-evidence-matrix-provenance-design.md` — validated design input, not authority until Task 1 completes.
 
 Task 1 must resolve these verified conflicts rather than selecting an interpretation silently:
 
@@ -279,7 +281,7 @@ Tasks 4 and 5 may be developed in parallel only after Task 3 is reviewed because
 - Modify: `docs/product-architecture/2026-07-20-agentic-resilience-evidence-workbench-design.md`
 - Modify carefully: `context/TECH.md`
 - Modify: `docs/ROADMAP.md`
-- Modify: `docs/plans/2026-08-15-phase-5-evidence-matrix-provenance-design.md`
+- Modify: `docs/designs/2026-08-15-phase-5-evidence-matrix-provenance-design.md`
 - Preserve carefully: `docs/decisions/017-use-deterministic-source-selection-proposals.md`
 
 **Directions:** ADR-023 must accept the separate workflow definition on the existing engine, effective-head freeze, active-only `workflowId`, `evidence_ready`, exact unavailable pause/retry tuple, immutable `ResearchPlanQuestion`, provenance/claim/policy records, upload lease/cleanup, real SEC/Exa retrieval, deferred real Unstructured/model provider, and visible hybrid showcase/live boundary. It must define `MAX_APPROVED_SOURCE_BYTES = 16 MiB`, `MAX_NORMALIZED_ARTIFACT_BYTES = 16 MiB`, `MAX_PDF_PAGES = 400`, `MAX_PASSAGES_PER_SOURCE = 512`, `MAX_QUOTATION_CHARS = 4,000`, `MAX_REDIRECTS = 5`, two total attempts, SEC/direct HTTP timeout 10 seconds, Exa Contents outer timeout 120 seconds, and actual accepted-source count capped by the existing 48-source candidate ceiling. If the accepted ADR changes any number, revise every later test and table in this plan before production code.
@@ -300,7 +302,7 @@ Expected: no accepted ADR defines the new state/question contract, lifecycle aut
 **GREEN:** Write ADR-023 and align the four authority documents. Update the design status to reference the accepted ADR and include `ResearchPlanQuestion`. In ROADMAP, move only approved-source SEC/Exa retrieval into Phase 5, retain real Unstructured/model integration in Phase 8, and keep showcase labelling in Phase 9 while allowing the curated Phase 5 dossier to demonstrate the matrix.
 
 ```bash
-rg -n 'ADR-023|evidence_ready|claim_generation_unavailable|ResearchPlanQuestion' context/TECH.md docs/product-architecture docs/ROADMAP.md docs/decisions/023-*.md docs/plans/2026-08-15-phase-5-evidence-matrix-provenance-design.md
+rg -n 'ADR-023|evidence_ready|claim_generation_unavailable|ResearchPlanQuestion' context/TECH.md docs/product-architecture docs/ROADMAP.md docs/decisions/023-*.md docs/designs/2026-08-15-phase-5-evidence-matrix-provenance-design.md
 git diff --check
 git diff -- context/TECH.md docs/decisions/017-use-deterministic-source-selection-proposals.md
 ```

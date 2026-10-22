@@ -1,0 +1,158 @@
+[
+  {
+    "report": "/tmp/evidence-retrieval-repair-20261021/replay-32768.json",
+    "sha256": "56a98dfc8d13c7f963bf45b6ed27d124a4868f322f7dfc7db80002378c2b9f61",
+    "budgetBytes": 32768,
+    "summary": [
+      {
+        "mode": "lexical",
+        "comparable": {
+          "retained": 10,
+          "total": 12
+        },
+        "contextOnly": {
+          "retained": 5,
+          "total": 8
+        },
+        "unresolvedConditions": 12,
+        "medianInputBytes": 32525,
+        "maximumInputBytes": 32765,
+        "historicalComplete": 21
+      },
+      {
+        "mode": "hybrid",
+        "comparable": {
+          "retained": 10,
+          "total": 12
+        },
+        "contextOnly": {
+          "retained": 2,
+          "total": 8
+        },
+        "unresolvedConditions": 12,
+        "medianInputBytes": 32570,
+        "maximumInputBytes": 32767,
+        "historicalComplete": 16
+      }
+    ],
+    "inferenceCalls": 0,
+    "provenanceFailures": 0
+  },
+  {
+    "report": "/tmp/evidence-retrieval-repair-20261021/replay-49152.json",
+    "sha256": "d03ce9543d99fa8adf14fad864587453288459d02048f0b1256873e120d467d6",
+    "budgetBytes": 49152,
+    "summary": [
+      {
+        "mode": "lexical",
+        "comparable": {
+          "retained": 10,
+          "total": 12
+        },
+        "contextOnly": {
+          "retained": 5,
+          "total": 8
+        },
+        "unresolvedConditions": 12,
+        "medianInputBytes": 48946,
+        "maximumInputBytes": 49133,
+        "historicalComplete": 22
+      },
+      {
+        "mode": "hybrid",
+        "comparable": {
+          "retained": 10,
+          "total": 12
+        },
+        "contextOnly": {
+          "retained": 3,
+          "total": 8
+        },
+        "unresolvedConditions": 12,
+        "medianInputBytes": 48881,
+        "maximumInputBytes": 49150,
+        "historicalComplete": 20
+      }
+    ],
+    "inferenceCalls": 0,
+    "provenanceFailures": 0
+  },
+  {
+    "report": "/tmp/evidence-retrieval-repair-20261021/replay-65536.json",
+    "sha256": "d6b002bca2724cb5e0b2d377092fbc1127b8e050b79f360a0c10e51b42e231e8",
+    "budgetBytes": 65536,
+    "summary": [
+      {
+        "mode": "lexical",
+        "comparable": {
+          "retained": 10,
+          "total": 12
+        },
+        "contextOnly": {
+          "retained": 5,
+          "total": 8
+        },
+        "unresolvedConditions": 12,
+        "medianInputBytes": 65360,
+        "maximumInputBytes": 65523,
+        "historicalComplete": 24
+      },
+      {
+        "mode": "hybrid",
+        "comparable": {
+          "retained": 10,
+          "total": 12
+        },
+        "contextOnly": {
+          "retained": 5,
+          "total": 8
+        },
+        "unresolvedConditions": 12,
+        "medianInputBytes": 65304,
+        "maximumInputBytes": 65526,
+        "historicalComplete": 22
+      }
+    ],
+    "inferenceCalls": 0,
+    "provenanceFailures": 0
+  },
+  {
+    "report": "/tmp/evidence-retrieval-repair-20261021/replay-first.json",
+    "sha256": "99a9a25e67157eaf9ea88ad7c45dc913d1ec3092f29bb64a852c17a1df936c40",
+    "budgetBytes": 131072,
+    "summary": [
+      {
+        "mode": "lexical",
+        "comparable": {
+          "retained": 10,
+          "total": 12
+        },
+        "contextOnly": {
+          "retained": 6,
+          "total": 8
+        },
+        "unresolvedConditions": 12,
+        "medianInputBytes": 118624,
+        "maximumInputBytes": 131045,
+        "historicalComplete": 27
+      },
+      {
+        "mode": "hybrid",
+        "comparable": {
+          "retained": 10,
+          "total": 12
+        },
+        "contextOnly": {
+          "retained": 5,
+          "total": 8
+        },
+        "unresolvedConditions": 12,
+        "medianInputBytes": 113280,
+        "maximumInputBytes": 131020,
+        "historicalComplete": 25
+      }
+    ],
+    "inferenceCalls": 0,
+    "provenanceFailures": 0
+  }
+]

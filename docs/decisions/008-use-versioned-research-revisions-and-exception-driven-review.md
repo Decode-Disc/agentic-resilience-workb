@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted. Clarified on 2026-10-22: a draft can receive multiple changes before approval. [ADR-024](024-qualify-source-content-before-corpus-approval.md) amends the prohibition on reading candidate content before approval; approved-corpus immutability and analytical-use restrictions remain in force.
 
 ## Date
 
@@ -34,6 +34,7 @@ Use explicit, append-only revisions and decisions.
 ### Corpus revisions
 
 - Persist a `CorpusRevision` for every proposed corpus.
+- Keep additions and source decisions within the same editable draft until approval. A new URL does not require a separate revision while that draft remains active.
 - Persist an individual source decision as `accepted`, `rejected`, or `pending`.
 - An approved corpus revision contains only its accepted sources. Pending and
   rejected sources cannot contribute to passages, claims, assessments, maps, or
@@ -41,11 +42,9 @@ Use explicit, append-only revisions and decisions.
 - An analyst may approve a revision with pending sources after the interface
   displays accepted, rejected, and pending counts and the exclusion
   consequences.
-- Accepting a pending source later creates `CorpusRevision N+1` and reopens the
-  durable source checkpoint. It never mutates revision N.
-- External counter-evidence leads follow the same rule: they remain visible but
-  cannot be retrieved or used until an analyst explicitly creates and approves
-  a new corpus revision.
+- Changing membership after approval creates a new draft `CorpusRevision N+1` and reopens the durable source checkpoint. Several changes may be grouped in that draft; none mutates approved revision N.
+- External counter-evidence leads follow the same analytical-use rule. Eligible pending candidates may receive bounded capture and qualification under ADR-024 before approval, but cannot support analytical passages, claims or derived outputs until accepted in an approved revision.
+- Reuse unchanged captures and exact-input qualifications where their identity and version contracts permit. A new revision does not by itself require redownloading every source. This does not promise complete incremental recomputation of all downstream artifacts.
 
 ### Claim and dimension decisions
 
@@ -91,12 +90,12 @@ as a gap, `Hypothesis`, or `Unknown`; it never invents a citation.
   subset is already sufficient.
 - Rejected: pending is an explicit, visible exclusion state.
 
-### Mutate the current corpus when a source is added
+### Mutate an approved corpus when a source is added
 
 - Pros: simpler current-state queries.
 - Cons: destroys reproducibility for passages, claims, assessments, and derived
   outputs.
-- Rejected: later additions create a new revision.
+- Rejected for approved corpora: membership changes create a new draft revision. Additions within an existing editable draft remain permitted.
 
 ### Require manual structured claim authoring
 

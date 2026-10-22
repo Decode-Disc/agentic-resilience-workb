@@ -4,7 +4,7 @@
 
 This living checklist sequences the smallest coherent vertical slices needed to build the Agentic Resilience Evidence Workbench prototype.
 
-Each phase should be brainstormed, planned, and implemented in a separate session or in subagent-driven-development. A phase is complete only when its exit checklist is satisfied without weakening the product invariants in `AGENTS.md`, `context/PROJECT.md`, or `context/TECH.md`.
+Plan and implement bounded vertical slices under the current authorization and delegation rules in `AGENTS.md`. A checked item records delivery within its stated verification boundary; it does not imply activation, remote deployment or completion of the entire phase. Preserve the product invariants in `AGENTS.md`, `context/PROJECT.md`, and `context/TECH.md`.
 
 ## Working Rules
 
@@ -14,6 +14,21 @@ Each phase should be brainstormed, planned, and implemented in a separate sessio
 - Use deterministic adapters and fixtures in default tests; keep paid or nondeterministic checks explicit and bounded.
 - Keep the evidence matrix primary. Treat the architecture map and brief as derived views.
 - Keep CCC Intelligent Solutions configurable and clearly label curated or precomputed showcase data.
+
+## Recorded delivery state, 2026-10-22
+
+The phase responsibilities below include the accepted pre-approval preparation boundary in [ADR-024](decisions/024-qualify-source-content-before-corpus-approval.md) and scoped retrieval in [ADR-025](decisions/025-use-versioned-scoped-evidence-retrieval.md). Implementation, local verification, provider experiments and runtime activation are separate facts. This documentation reconciliation does not recheck or change runtime configuration.
+
+| Capability | Implementation and recorded evidence | Remaining boundary |
+| --- | --- | --- |
+| Company resolution, discovery and corpus review | Implemented; [live retrieval and protected review checks](verification/2026-10-20-source-recovery-contract-repairs.md) are recorded. | Historical checks establish the tested slice and date, not every future source. |
+| Candidate capture, qualification and targeted comparison | Implemented with immutable preparation artifacts; [grouped provider experiments](verification/2026-10-21-source-quality-second-batch.md) retain schema and semantic failures. | General preparation activation and useful fresh end-to-end behavior are not accepted by these reports. |
+| Structured lexical and optional hosted-embedding retrieval | Implemented; native comparison, [retention replay and interpretation correction](verification/2026-10-21-evidence-retrieval-repair.md), and scope regressions are recorded. | No definitive retrieval winner or dynamic-source robustness is established. |
+| Source adjustment, revision approval and capture materialization | Protected local and illustrative checks are recorded in the [source-review corrections](verification/2026-10-22-source-review-corrections.md). | Captured bytes and pinned references do not prove every unselected passage is reachable by later analytical work. The remote preview-service correction is not deployed. |
+| Analytical claims and Evidence Matrix | The hash-gated deterministic showcase path is implemented. | Arbitrary live dossiers pause at `claim_generation_unavailable`; real analytical generation and verification remain unfinished. |
+| Dimension review, derived map and brief | Required later slices. | No completed live invitation-to-brief journey is certified. |
+
+The immediate evidence-quality work is to identify useful material lost at actual stage boundaries across several companies and dossier types, while accepting explicit uncertainty. The historical 32 conditions are not a product completion target. Audit source retention, capture identity, selected context and later analytical availability separately. The 600-character comparison explanation limit remains an open, deferred issue after that evidence-preservation work. No new experiment, model replacement or activation follows from this roadmap update.
 
 ## Phase 0 — Application Foundation
 
@@ -53,17 +68,21 @@ Outcome: a deterministic research run can progress, pause, resume, fail, retry, 
 - [x] Add the durable source-approval and analyst-review checkpoints.
 - [x] Verify resumption, bounded retries, cancellation, and idempotency with deterministic adapters.
 
-## Phase 4 — Company and Corpus Discovery
+## Phase 4 — Company Discovery and Corpus Preparation
 
-Outcome: an analyst can start a real company investigation and approve a proposed source corpus.
+Outcome: an analyst can review a useful proposed source set backed by inspected content, visible limitations and exact capture provenance, then approve the corpus. Preparation need not settle every analytical question.
 
 - [x] Preflight-resolve, confirm, reserve, and authoritatively revalidate a supported US-listed technology company.
 - [x] Pause on insufficient public evidence with HTTPS URL addition, explicit completion, or justified force-continuation paths.
 - [x] Build and persist a company-specific research plan with one of the approved source-coverage presets.
 - [x] Discover and rank proposed SEC and web sources with visible, persisted progress.
+- [x] Implement bounded capture, normalization, qualification and targeted comparison before approval under preparation authority; inspect existing alternatives before one finite supplement.
+- [x] Preserve exact captures, qualification references, restricted uses, unavailable-reading outcomes and analyst-supplied references without granting factual authority.
+- [x] Implement structured retrieval and optional hosted embeddings within the accepted resource limits, with explicit lexical degradation and no local embedding model.
 - [x] Approve a versioned corpus containing accepted sources while preserving rejected and pending candidates.
-- [x] End the Phase 4 execution honestly at the persisted `corpus_approved` handoff.
-- [x] Enforce one running workflow per visitor and prevent extraction before explicit corpus-revision approval.
+- [x] Persist corpus approval and atomically hand accepted sources to the Phase 5 workflow. Preserve the protected start path for historical idle approved dossiers.
+- [x] Enforce one running workflow per visitor and prevent analytical source versions, analytical passages and claims before explicit corpus-revision approval.
+- [ ] Establish the remaining preparation acceptance evidence using useful source content, visible omissions and protected handoff, without requiring exhaustive answers or perfect source selection.
 
 ### Demonstration Checkpoint A — Honest Live Run
 
@@ -72,12 +91,15 @@ Outcome: an analyst can start a real company investigation and approve a propose
 - [x] Stop at the explicit corpus-approval checkpoint.
 - [x] Confirm that no cached or precomputed work is presented as live.
 
+These historical discovery checks do not certify activation of the subsequently added content-preparation workflow.
+
 ## Phase 5 — Evidence Matrix and Provenance
 
 Outcome: approved sources become inspectable, precisely cited evidence rather than an unsupported narrative.
 
-- [x] Retrieve approved SEC filings and Exa Contents sources with visible partial failures.
-- [x] Normalize approved sources deterministically; page-aware PDF normalization uses deterministic fixture adapters until real Unstructured is authorized in Phase 8.
+- [x] Materialize the exact inspected captures selected by corpus approval, validating stored content and pinned references; missing or corrupt captures fail explicitly without silent replacement retrieval.
+- [x] Retain real SEC and Exa Contents retrieval for legacy approved sources without preparation captures, with visible partial failures.
+- [x] Reuse captured normalized text for prepared sources. Page-aware PDF normalization remains a deterministic fixture contract until real Unstructured is integrated in Phase 8.
 - [x] Create stable, reproducible source passages and locators.
 - [x] Extract typed atomic `Fact`, `Inference`, `Hypothesis`, and `Unknown` claim proposals through a hash-gated deterministic showcase adapter.
 - [x] Apply non-overridable structural validation and versioned deterministic policy evaluation.
@@ -88,7 +110,9 @@ Outcome: approved sources become inspectable, precisely cited evidence rather th
 - [x] End successful Phase 5 work at the `evidence_ready + idle` handoff.
 - [x] Preserve arbitrary live retrieval provenance but pause honestly at `claim_generation_unavailable` without fabricated claims or Phase 6 unlock.
 
-Note: Phase 5 deterministic/local certification is recorded in `docs/verification/2026-08-15-phase-5-evidence-matrix-provenance.md`. Both real SEC and Exa Contents retrieval contracts passed on 2026-10-20 after repairing the live filing identity and request contract. The earlier failures remain recorded in `docs/verification/2026-10-19-source-discovery-recovery.md`; current live and browser evidence is in `docs/verification/2026-10-20-source-recovery-contract-repairs.md`. Real Unstructured and real model-provider work remain Phase 8.
+Note: [Phase 5 deterministic/local certification](verification/2026-08-15-phase-5-evidence-matrix-provenance.md) and [real SEC/Exa retrieval checks](verification/2026-10-20-source-recovery-contract-repairs.md) are dated evidence. Earlier failures remain recorded. Real Unstructured, general live claim generation and semantic-verifier integration remain Phase 8 work. Preparation already has separate real model adapters and bounded experiments. Later analytical stages are not yet an available recovery mechanism for every preparation omission.
+
+- [ ] Verify the handoff for useful content beyond the initial selection: retain the source and capture, approve it, locate the needed passage and produce a reproducible downstream citation through the actual supported path. Do not infer this from capture storage alone or raise the 512-passage materialization limit without a separate justified change.
 
 ## Phase 6 — Dimension Assessment and Human Review
 
@@ -119,8 +143,8 @@ Outcome: validated evidence produces useful secondary views without introducing 
 
 Outcome: the deterministic workflow can use real services safely through provider-independent boundaries.
 
-- [ ] Implement capability-based model routing and configuration-driven model selection.
-- [ ] Add direct AI SDK adapters for OpenRouter and the approved Codex subscription transport.
+- [x] Implement the bounded OpenRouter preparation adapters, configuration-owned qualification/comparison routes, output validation, application-owned fallback and telemetry under ADR-024.
+- [ ] Complete capability-based routing for remaining analytical tasks and the approved Codex subscription transport.
 - [ ] Add the real Unstructured Pipeline Jobs HTTP adapter for page-aware PDF normalization.
 - [ ] Integrate real model-provider claim generation, semantic verification, and fallback routing.
 - [ ] Keep retries and explicit fallback application-controlled and fully audited.
@@ -130,7 +154,7 @@ Outcome: the deterministic workflow can use real services safely through provide
 - [ ] Add the minimal admin operations surface for runs, checkpoints, provider calls, quota restoration, and paid-work shutdown.
 - [ ] Verify partial failures and late results cannot corrupt or advance cancelled runs.
 
-Approved-source SEC HTTP and Exa Contents retrieval has moved to Phase 5 under ADR-023. Phase 8 retains the real Unstructured adapter, real model-provider routing, and the remaining operational guards.
+Source acquisition now belongs to pre-approval preparation for new prepared dossiers, with post-approval retrieval retained for legacy corpora. Phase 8 completes real analytical model integration, page-aware PDF normalization and the remaining operational guards. Existing preparation adapters and experiments do not establish acceptance of those future tasks. The unchecked cross-cutting items above concern the remaining analytical workflow, even where preparation already implements equivalent safeguards.
 
 ## Phase 9 — CCC Showcase and Evaluation
 
@@ -146,7 +170,8 @@ Outcome: one carefully curated dossier demonstrates original, contested, and mea
 - [ ] Record duration, available provider usage or cost, and analyst corrections.
 - [ ] Label the completed dossier and all fixtures as curated or precomputed.
 - [ ] Allow the curated Phase 5 dossier to demonstrate the read-only Evidence Matrix while keeping showcase labelling in Phase 9.
-- [ ] Add another evaluation company only if it closes a measured gap.
+- [ ] Evaluate source preparation across several companies, source families and dossier types, separately from the curated showcase. Include broad research, targeted questions, supplied references and uncertain arguments without requiring multiple completed showcase dossiers.
+- [ ] Distinguish exact-reference retention, useful equivalent evidence, displayed qualification and downstream answer quality. Report corpus reuse, reference authorship, known controls and unverified transfer explicitly.
 
 ### Demonstration Checkpoint B — Completed Showcase
 

@@ -1,0 +1,1704 @@
+{
+  "basis": "Recorded public captures and exact historical qualifications. No live discovery or new model output.",
+  "independentGroundTruth": false,
+  "newInferenceCalls": 0,
+  "originalManifestSha256": "840f7b6d023fb2b25f32b55dec4dc9b2b20751a917b8e46779e8418c51b0c8b3",
+  "newInferenceCostUsd": 0,
+  "historicalModel": "deepseek/deepseek-v4.1-flash",
+  "scenarios": [
+    {
+      "id": "adobe-overview",
+      "companyId": "adobe",
+      "kind": "overview",
+      "researchAngle": "",
+      "analystNeeds": [
+        "Understand the product portfolio and reported business context.",
+        "Locate an external perspective without treating it as verified fact."
+      ],
+      "knownLimit": "The annual qualification failed in the recorded run. Do not replace it with another model result.",
+      "initialProposal": [
+        {
+          "url": "https://www.adobe.com/products/firefly.html",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "required_coverage_role"
+          ]
+        },
+        {
+          "url": "https://developer.adobe.com/firefly-services/docs/firefly-api/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "required_coverage_role"
+          ]
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/796343/000079634326000156/adbe-20260828.htm",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://www.adobe.com/legal/terms-linkfree.html",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://drillr.ai/research/adbe-adobe-thesis-2026-firefly-premium-tier-tests-ai-monetization-against-genai",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://techcrunch.com/2026/06/18/adobe-adds-its-ai-assistant-to-premiere-illustrator-and-indesign/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/796343/000079634326000003/adbe-20251128.htm",
+          "disposition": "alternative",
+          "reasonCodes": [
+            "company_identity_unverified"
+          ]
+        },
+        {
+          "url": "https://stratechery.com/company/adobe/",
+          "disposition": "alternative",
+          "reasonCodes": [
+            "search_or_index"
+          ]
+        }
+      ],
+      "captures": [
+        {
+          "id": "adobe-annual",
+          "contentHash": "b9fd796b7f97ca660fc11cdf9916351cb396f961aaf63c13c824720424628147",
+          "inputHash": "05df62a8533b828878b063652beb0e76dd64697d8fb84f5fbbf3ed4e92c3f9d6",
+          "qualificationStatus": "invalid",
+          "failure": "schema_invalid"
+        },
+        {
+          "id": "adobe-quarterly",
+          "contentHash": "a042f1d35200163ec9019e46b1bb5689f5a72aeeeb5b3bce5c2304f1eebc6e88",
+          "inputHash": "75f49474e101462dfb05863664ea13f2449015417ee7b0a6711fb80f98b9e65e",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "adobe-product",
+          "contentHash": "83b74f249bda17936ea25144e2f722f4fc29620ad402a97b9291e03ef35cfa7e",
+          "inputHash": "bce76f16d588cdf1644ec76bd5757ec848edf263a985b81fbc4de37715de1ce3",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "adobe-integration",
+          "contentHash": "128e24bbb96e3fb8d949f20d9626c0bd5bba3e5d8aeb4958cad845d2fcd5accd",
+          "inputHash": "971aac018c07f3113b622fe87b084069f6d9614f3684c23aa097d624824f5377",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "adobe-terms",
+          "contentHash": "6e8f8e96dd4b3ebaf7e39d19d79bb1580cbc1d2d62023457cd70a3e4c78cb273",
+          "inputHash": "6783831964c4a2af87170ca3a8ed5decfae1ecf637c9f7d3f158d658ab57bd51",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "adobe-analysis",
+          "contentHash": "23b86416417669988fce4348a34ef7ddf9337c53fe619b52d5f5ec4f17bfea69",
+          "inputHash": "cb388eb97b9f78c3ca2a44e440f5449105f606cc626adcfddb91d435c18cff45",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "adobe-news",
+          "contentHash": "faaede9720ded6489d6749d8544207bee271925ae0e651504d3eafed6b324067",
+          "inputHash": "a6b083c99a9d865e14eaa7781b771fb6b5182f9dedbe44d9430bdd07a843b960",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "adobe-distractor",
+          "contentHash": "695c6fe018cca796151db470c69bee3e6f323d279a26cde55c9da91127536688",
+          "inputHash": "dd930469c6a64d3fb7489f1c52d5fbccc5589cbbe693c8f4191bc54097c16f8d",
+          "qualificationStatus": "valid",
+          "failure": null
+        }
+      ],
+      "browser": [
+        {
+          "viewport": "mobile",
+          "elapsedMs": 18940,
+          "readingSource": "https://www.sec.gov/Archives/edgar/data/796343/000079634326000156/adbe-20260828.htm",
+          "revisionStatus": "approved",
+          "decisions": [
+            {
+              "decision": "pending",
+              "title": "adbe-20251128"
+            },
+            {
+              "decision": "accepted",
+              "title": "adbe-20260828"
+            },
+            {
+              "decision": "accepted",
+              "title": "Adobe Firefly - Free Generative AI for Creatives"
+            },
+            {
+              "decision": "accepted",
+              "title": "Overview - Adobe Firefly API"
+            },
+            {
+              "decision": "accepted",
+              "title": "Adobe General Terms of Use | Adobe Legal"
+            },
+            {
+              "decision": "accepted",
+              "title": "[ADBE] Adobe Thesis 2026: Firefly Premium Tier Tests AI Monetization Against GenAI Competition | drillr Research"
+            },
+            {
+              "decision": "accepted",
+              "title": "Adobe adds its AI assistant to Premiere, Illustrator, and InDesign | TechCrunch"
+            },
+            {
+              "decision": "rejected",
+              "title": "Adobe &#8211; Stratechery by Ben Thompson"
+            }
+          ],
+          "providerCalls": 0,
+          "coverageOverflow": false
+        },
+        {
+          "viewport": "desktop",
+          "elapsedMs": 19206,
+          "readingSource": "https://www.sec.gov/Archives/edgar/data/796343/000079634326000156/adbe-20260828.htm",
+          "revisionStatus": "approved",
+          "decisions": [
+            {
+              "decision": "pending",
+              "title": "adbe-20251128"
+            },
+            {
+              "decision": "accepted",
+              "title": "adbe-20260828"
+            },
+            {
+              "decision": "accepted",
+              "title": "Adobe Firefly - Free Generative AI for Creatives"
+            },
+            {
+              "decision": "accepted",
+              "title": "Overview - Adobe Firefly API"
+            },
+            {
+              "decision": "accepted",
+              "title": "Adobe General Terms of Use | Adobe Legal"
+            },
+            {
+              "decision": "accepted",
+              "title": "[ADBE] Adobe Thesis 2026: Firefly Premium Tier Tests AI Monetization Against GenAI Competition | drillr Research"
+            },
+            {
+              "decision": "accepted",
+              "title": "Adobe adds its AI assistant to Premiere, Illustrator, and InDesign | TechCrunch"
+            },
+            {
+              "decision": "rejected",
+              "title": "Adobe &#8211; Stratechery by Ben Thompson"
+            }
+          ],
+          "providerCalls": 0,
+          "coverageOverflow": false
+        }
+      ]
+    },
+    {
+      "id": "crowdstrike-overview",
+      "companyId": "crowdstrike",
+      "kind": "overview",
+      "researchAngle": "",
+      "analystNeeds": [
+        "Locate business and platform descriptions.",
+        "Inspect the disclosed incident and its limits."
+      ],
+      "knownLimit": "A single incident does not establish a general architectural conclusion.",
+      "initialProposal": [
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1535527/000153552726000010/crwd-20260131.htm",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1535527/000153552726000031/crwd-20260731.htm",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://www.crowdstrike.com/en-us/legal/terms-conditions/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://www.crowdstrike.com/en-us/platform/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://github.com/CrowdStrike/falconpy",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://siliconangle.com/2026/08/29/crowdstrikes-post-mythos-surge-moat-momentum-and-the-blast-radius-test/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://techcrunch.com/2024/07/19/what-we-know-about-crowdstrikes-update-fail-thats-causing-global-outages-and-travel-chaos/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://ir.crowdstrike.com/results-filings/sec-filings",
+          "disposition": "alternative",
+          "reasonCodes": [
+            "search_or_index"
+          ]
+        }
+      ],
+      "captures": [
+        {
+          "id": "crowdstrike-annual",
+          "contentHash": "e341970638b90f8462e97b9a5c907c44f407c32899996d8483568ec4b9bf37dc",
+          "inputHash": "edb670f9d891a902d9fd9015c41196df7fb1d19d890e96f975f0cffb4e50d894",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "crowdstrike-quarterly",
+          "contentHash": "a341d15cc850574ae9c9731b14632aad7747e20ad062346ef230fe6348f1385f",
+          "inputHash": "3cbcc157c68887efea74c0c2847685917012d76288e99ec3c5c256adcdb9c112",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "crowdstrike-product",
+          "contentHash": "9d93d0d8aaa6f61d78e32ea89dbdee613f9456b3c70bc8bc6bdcfcac08818f57",
+          "inputHash": "c0b4dd07f935740be25c62707d71896054fd25edd8e34ed075a587992f07391f",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "crowdstrike-integration",
+          "contentHash": "91e10567f3549ae19eb3e584f41388f2f58c4bee025c50abb70159c4998fed0d",
+          "inputHash": "9686fea0a1d9f5e98c0c1267f3c2537f60b50535dba92e0183dc57de7661e776",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "crowdstrike-terms",
+          "contentHash": "e0331ca03b50a3fd1be7264a50a31e801e3282461508905ede543cd1aba898a5",
+          "inputHash": "c0018829f02a4be32bcc5922a68becec18384ba0d1a6e31351b688d6545df27f",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "crowdstrike-analysis",
+          "contentHash": "262842cd4ff4f7e11564b9db1b1707be5b51ee292fe2276e70ac6f12bd380ef7",
+          "inputHash": "1fafc6a8cf9be686fa2f095926ff03570cec4727b122f0f721b1c6bf2d9729a4",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "crowdstrike-news",
+          "contentHash": "343920a34a0d79771418dbf2fac6192b80e03f43f5018cdea35c4e2eaac10adc",
+          "inputHash": "ff101e6a45f1d7d2d710db6b3c44b1ddb894dfc449c122c064a52e26fc228efe",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "crowdstrike-distractor",
+          "contentHash": "a374aa3aa27f01fe393896eab7279aa1b2bb2511d43f27581aabd41adea80691",
+          "inputHash": "a5c58feced402a3d2e8958631ef98f0924d438544016cdbbc7241c4c6c8dc830",
+          "qualificationStatus": "valid",
+          "failure": null
+        }
+      ],
+      "browser": [
+        {
+          "viewport": "desktop",
+          "elapsedMs": 16738,
+          "readingSource": "https://www.sec.gov/Archives/edgar/data/1535527/000153552726000031/crwd-20260731.htm",
+          "revisionStatus": "approved",
+          "decisions": [
+            {
+              "decision": "accepted",
+              "title": "crwd-20260131"
+            },
+            {
+              "decision": "accepted",
+              "title": "crwd-20260731"
+            },
+            {
+              "decision": "accepted",
+              "title": "The CrowdStrike Falcon® Platform | Unified Agentic Security"
+            },
+            {
+              "decision": "accepted",
+              "title": "GitHub - CrowdStrike/falconpy: The CrowdStrike Falcon SDK for Python · GitHub"
+            },
+            {
+              "decision": "accepted",
+              "title": "Terms and Conditions | CrowdStrike"
+            },
+            {
+              "decision": "accepted",
+              "title": "CrowdStrike’s post-Mythos surge: Moat, momentum and the blast-radius test - SiliconANGLE"
+            },
+            {
+              "decision": "accepted",
+              "title": "What we know about CrowdStrike&#039;s update fail that&#039;s causing global outages and travel chaos | TechCrunch"
+            },
+            {
+              "decision": "rejected",
+              "title": "SEC Filings | CrowdStrike Holdings, Inc."
+            }
+          ],
+          "providerCalls": 0,
+          "coverageOverflow": false
+        }
+      ]
+    },
+    {
+      "id": "nvidia-architecture",
+      "companyId": "nvidia",
+      "kind": "targeted",
+      "researchAngle": "How do compute, networking and software integrate in the platform?",
+      "analystNeeds": [
+        "Find technical descriptions of platform integration.",
+        "Distinguish advertised capabilities from demonstrated operational control."
+      ],
+      "knownLimit": "Product descriptions establish the stated offering, not customer outcomes.",
+      "initialProposal": [
+        {
+          "url": "https://www.nvidia.com/en-us/ai/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "required_coverage_role"
+          ]
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/nvda-20260726.htm",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://siliconangle.com/2026/07/16/nvidias-ai-networking-moat-real-lock-debate-continues/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://www.tomshardware.com/pc-components/gpus/nvidia-details-rubin-architectural-optimizations-for-inference-improvements-target-better-performance-and-efficiency-from-the-gpu-to-the-rack",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://raw.githubusercontent.com/NVIDIA/nim-deploy/main/README.md",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://nvidianews.nvidia.com/news",
+          "disposition": "alternative",
+          "reasonCodes": [
+            "search_or_index"
+          ]
+        }
+      ],
+      "captures": [
+        {
+          "id": "nvidia-annual",
+          "contentHash": "194970e58b71a169c90fac9b522152c5c3fadee4ffca8c7cadca73b6884b12fd",
+          "inputHash": "d330ec23735f66ff2836147ce8d1b5503ce5c0e03c7ffa7c97bff754bb5ced62",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "nvidia-quarterly",
+          "contentHash": "e5f3e9febb58d2ca4b805412ef3e22c5b633bf8e0c9f30ee23d6190918b1cb00",
+          "inputHash": "2234a74f38fe9b64c62090008d92d4ebea87ec73c010d59eaa10f58de56bb59b",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "nvidia-product",
+          "contentHash": "53e0abc9785bcac37c6953d9971e2682362fa59d9c3eca589fa88e342d916358",
+          "inputHash": "533436ee288061946d227530eb82fd61cb5075e3cb8e9804b4c716fdd2f9a6af",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "nvidia-integration",
+          "contentHash": "05150e7b1ba28f431f26c2d327fc86c6a2351e25771b49338e40ae3d491dd8a5",
+          "inputHash": "e4533de37df890663e7889c2e220352757459883f57dbd9c7e9b7cde0b0f7824",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "nvidia-terms",
+          "contentHash": "91b7aad60eec141a25f2007e8ab8109e2a3b3410d9e45142a692ea9d3460b12f",
+          "inputHash": "5d43ea21b4e31b93a72dad358a2ab6b2efeec6b82077ded438fd603e13d58216",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "nvidia-analysis",
+          "contentHash": "fd8a1e6388e98545068033d48e9ece116c58f6d591be8864aca45406259472d6",
+          "inputHash": "17d8945a43156d00f53d78d2dcdfb09551e4e15e071cf368d1eb840784ca6597",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "nvidia-news",
+          "contentHash": "f0ce053e71ca3370cbc73a666044f45ce435d2e55f16522a394a9298b085f40e",
+          "inputHash": "2c07914b24377bc26b81819078ec12aae755eea3e3b7c2223cbdffea1077e921",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "nvidia-distractor",
+          "contentHash": "b6b6a8afbcdebf8644affdaea81dce41156cb83719d50337e6ddf5845614a015",
+          "inputHash": "475aa26e0c795383fb988ccadb68e80859ad88975f62f69e9d2191c152e0749d",
+          "qualificationStatus": "valid",
+          "failure": null
+        }
+      ],
+      "browser": [
+        {
+          "viewport": "mobile",
+          "elapsedMs": 15551,
+          "readingSource": "https://raw.githubusercontent.com/NVIDIA/nim-deploy/main/README.md",
+          "revisionStatus": "approved",
+          "decisions": [
+            {
+              "decision": "accepted",
+              "title": "nvda-20260125"
+            },
+            {
+              "decision": "accepted",
+              "title": "nvda-20260726"
+            },
+            {
+              "decision": "accepted",
+              "title": "AI Agents: Built to Reason, Plan, Act | NVIDIA"
+            },
+            {
+              "decision": "accepted",
+              "title": "> [!IMPORTANT]"
+            },
+            {
+              "decision": "accepted",
+              "title": "NVIDIA Agreements | Enterprise Software | NVIDIA Software License Agreement"
+            },
+            {
+              "decision": "accepted",
+              "title": "Nvidia’s AI networking moat is real – but the lock-in debate continues - SiliconANGLE"
+            },
+            {
+              "decision": "accepted",
+              "title": "Nvidia details Rubin architectural optimizations for inference &ndash; improvements target better performance and efficiency from the GPU to the rack | Tom's Hardware"
+            },
+            {
+              "decision": "rejected",
+              "title": "News Archive | NVIDIA Newsroom"
+            }
+          ],
+          "providerCalls": 0,
+          "coverageOverflow": false
+        },
+        {
+          "viewport": "desktop",
+          "elapsedMs": 16887,
+          "readingSource": "https://raw.githubusercontent.com/NVIDIA/nim-deploy/main/README.md",
+          "revisionStatus": "approved",
+          "decisions": [
+            {
+              "decision": "accepted",
+              "title": "nvda-20260125"
+            },
+            {
+              "decision": "accepted",
+              "title": "nvda-20260726"
+            },
+            {
+              "decision": "accepted",
+              "title": "AI Agents: Built to Reason, Plan, Act | NVIDIA"
+            },
+            {
+              "decision": "accepted",
+              "title": "> [!IMPORTANT]"
+            },
+            {
+              "decision": "accepted",
+              "title": "NVIDIA Agreements | Enterprise Software | NVIDIA Software License Agreement"
+            },
+            {
+              "decision": "accepted",
+              "title": "Nvidia’s AI networking moat is real – but the lock-in debate continues - SiliconANGLE"
+            },
+            {
+              "decision": "accepted",
+              "title": "Nvidia details Rubin architectural optimizations for inference &ndash; improvements target better performance and efficiency from the GPU to the rack | Tom's Hardware"
+            },
+            {
+              "decision": "rejected",
+              "title": "News Archive | NVIDIA Newsroom"
+            }
+          ],
+          "providerCalls": 0,
+          "coverageOverflow": false
+        }
+      ]
+    },
+    {
+      "id": "snowflake-architecture",
+      "companyId": "snowflake",
+      "kind": "targeted",
+      "researchAngle": "How are storage, compute, services and integrations connected?",
+      "analystNeeds": [
+        "Locate architectural layers and integration documentation.",
+        "Separate current architecture from forecasts about future agent workflows."
+      ],
+      "knownLimit": "Documentation cannot verify future adoption or economic outcomes.",
+      "initialProposal": [
+        {
+          "url": "https://docs.snowflake.com/en/user-guide/intro-key-concepts",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "required_coverage_role"
+          ]
+        },
+        {
+          "url": "https://docs.snowflake.com/en/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "required_coverage_role"
+          ]
+        },
+        {
+          "url": "https://www.snowflake.com/en/legal/terms-of-service/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "required_coverage_role"
+          ]
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1640147/000164014726000008/snow-20260131.htm",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1640147/000164014726000037/snow-20260731.htm",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://siliconangle.com/2026/06/07/snowflake-databricks-model-makers-battle-agentic-client-ai-back-end/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://docs.snowflake.com/en/developer-guide/sql-api/index",
+          "disposition": "alternative",
+          "reasonCodes": [
+            "no_new_coverage"
+          ]
+        },
+        {
+          "url": "https://siliconangle.com/2026/09/02/snowflake-knocks-it-out-the-park-with-a-stellar-earnings-and-revenue-beat/",
+          "disposition": "alternative",
+          "reasonCodes": [
+            "no_new_coverage"
+          ]
+        }
+      ],
+      "captures": [
+        {
+          "id": "snowflake-annual",
+          "contentHash": "7fbf733499640f22c2cfdf75c4267e7546339d18477510d53cc7083d3c6c09d2",
+          "inputHash": "71cd98430073402e2162ff74b2378a63177683cf08cf044459304e55b8edc908",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "snowflake-quarterly",
+          "contentHash": "9c8d59ab61dd69ac69d1f8cef1aa3b13524afea433646d2d878cc2f7c28cb1e4",
+          "inputHash": "0c3a5a81915f045b8763445f47b4a1dce04c0eeb64f61f8f9f3f050ad85b1ebe",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "snowflake-product",
+          "contentHash": "bfd5a25e0038290ccd3c0b65d8556eb5027e1872e363bb7c0aa8548a2c970a07",
+          "inputHash": "20ee52de83d179a44774ee339829d5d9a092864228e1ca0050bd2f2cb57302fa",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "snowflake-integration",
+          "contentHash": "314a1f2350081e38272298145db28742e7e3c9844b8c373463de6ed8a467cc1f",
+          "inputHash": "164a10c9f578295164302890cb6cfc56c9e2a7e81b724a29e4773326ed570e22",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "snowflake-terms",
+          "contentHash": "a47df90ef46f7e8ff12f759e632ed4349166baa29fbde81dc53fe8640df6e4bc",
+          "inputHash": "965d13630d6094c417da4948b1eb56710fe981496df80174f371b5b37acb77f6",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "snowflake-analysis",
+          "contentHash": "c58be086ad1cfb34082be39beb031a52793478f7059000fd323fb675043e9aec",
+          "inputHash": "efa6a449203db8eb772ef37466ad548a0fc0b2cf5edcb2d79d9a20aa180a4aef",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "snowflake-news",
+          "contentHash": "c328c8cb13ddfae50b9a740748c6d386f2eedb24a6d446b2e90605895da64187",
+          "inputHash": "88fe2f83c9390de969b5eb31a7783a52a9e8b5af7976f6c1a0fd5a4ced94fc7e",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "snowflake-distractor",
+          "contentHash": "c366fb6323ab9cea31e65f357d1fec818bf8e7b1bd14258ef8aacf584b5494f7",
+          "inputHash": "36e2f42620c8e5fac4cf3d63d3f7b7bdc342f289e785b93a70d8994eaf01ccee",
+          "qualificationStatus": "valid",
+          "failure": null
+        }
+      ],
+      "browser": [
+        {
+          "viewport": "desktop",
+          "elapsedMs": 16867,
+          "readingSource": "https://docs.snowflake.com/en/developer-guide/sql-api/index",
+          "revisionStatus": "approved",
+          "decisions": [
+            {
+              "decision": "pending",
+              "title": "Snowflake knocks it out the park with a stellar earnings and revenue beat - SiliconANGLE"
+            },
+            {
+              "decision": "accepted",
+              "title": "snow-20260131"
+            },
+            {
+              "decision": "accepted",
+              "title": "snow-20260731"
+            },
+            {
+              "decision": "accepted",
+              "title": "Snowflake key concepts and architecture | Snowflake Documentation"
+            },
+            {
+              "decision": "accepted",
+              "title": "Snowflake SQL API | Snowflake Documentation"
+            },
+            {
+              "decision": "accepted",
+              "title": "Snowflake Terms of Service"
+            },
+            {
+              "decision": "accepted",
+              "title": "Snowflake, Databricks and the model makers: The battle for the agentic client and AI back end - SiliconANGLE"
+            },
+            {
+              "decision": "rejected",
+              "title": "Snowflake Documentation"
+            }
+          ],
+          "providerCalls": 0,
+          "coverageOverflow": false
+        }
+      ]
+    },
+    {
+      "id": "adobe-terms",
+      "companyId": "adobe",
+      "kind": "supplied_reference",
+      "researchAngle": "What do the supplied terms establish about commercial use and obligations?",
+      "analystNeeds": [
+        "Keep the supplied terms accessible for review.",
+        "Identify the scope of the agreement and unsupported claims about indemnification."
+      ],
+      "knownLimit": "General terms do not prove Firefly-specific indemnification.",
+      "initialProposal": [
+        {
+          "url": "https://www.adobe.com/legal/terms-linkfree.html",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "added_by_analyst"
+          ]
+        },
+        {
+          "url": "https://www.adobe.com/products/firefly.html",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "required_coverage_role"
+          ]
+        },
+        {
+          "url": "https://developer.adobe.com/firefly-services/docs/firefly-api/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "required_coverage_role"
+          ]
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/796343/000079634326000156/adbe-20260828.htm",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://techcrunch.com/2026/06/18/adobe-adds-its-ai-assistant-to-premiere-illustrator-and-indesign/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://drillr.ai/research/adbe-adobe-thesis-2026-firefly-premium-tier-tests-ai-monetization-against-genai",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/796343/000079634326000003/adbe-20251128.htm",
+          "disposition": "alternative",
+          "reasonCodes": [
+            "company_identity_unverified"
+          ]
+        },
+        {
+          "url": "https://stratechery.com/company/adobe/",
+          "disposition": "alternative",
+          "reasonCodes": [
+            "search_or_index"
+          ]
+        }
+      ],
+      "captures": [
+        {
+          "id": "adobe-annual",
+          "contentHash": "b9fd796b7f97ca660fc11cdf9916351cb396f961aaf63c13c824720424628147",
+          "inputHash": "05df62a8533b828878b063652beb0e76dd64697d8fb84f5fbbf3ed4e92c3f9d6",
+          "qualificationStatus": "invalid",
+          "failure": "schema_invalid"
+        },
+        {
+          "id": "adobe-quarterly",
+          "contentHash": "a042f1d35200163ec9019e46b1bb5689f5a72aeeeb5b3bce5c2304f1eebc6e88",
+          "inputHash": "75f49474e101462dfb05863664ea13f2449015417ee7b0a6711fb80f98b9e65e",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "adobe-product",
+          "contentHash": "83b74f249bda17936ea25144e2f722f4fc29620ad402a97b9291e03ef35cfa7e",
+          "inputHash": "bce76f16d588cdf1644ec76bd5757ec848edf263a985b81fbc4de37715de1ce3",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "adobe-integration",
+          "contentHash": "128e24bbb96e3fb8d949f20d9626c0bd5bba3e5d8aeb4958cad845d2fcd5accd",
+          "inputHash": "971aac018c07f3113b622fe87b084069f6d9614f3684c23aa097d624824f5377",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "adobe-terms",
+          "contentHash": "6e8f8e96dd4b3ebaf7e39d19d79bb1580cbc1d2d62023457cd70a3e4c78cb273",
+          "inputHash": "6783831964c4a2af87170ca3a8ed5decfae1ecf637c9f7d3f158d658ab57bd51",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "adobe-analysis",
+          "contentHash": "23b86416417669988fce4348a34ef7ddf9337c53fe619b52d5f5ec4f17bfea69",
+          "inputHash": "cb388eb97b9f78c3ca2a44e440f5449105f606cc626adcfddb91d435c18cff45",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "adobe-news",
+          "contentHash": "faaede9720ded6489d6749d8544207bee271925ae0e651504d3eafed6b324067",
+          "inputHash": "a6b083c99a9d865e14eaa7781b771fb6b5182f9dedbe44d9430bdd07a843b960",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "adobe-distractor",
+          "contentHash": "695c6fe018cca796151db470c69bee3e6f323d279a26cde55c9da91127536688",
+          "inputHash": "dd930469c6a64d3fb7489f1c52d5fbccc5589cbbe693c8f4191bc54097c16f8d",
+          "qualificationStatus": "valid",
+          "failure": null
+        }
+      ],
+      "browser": [
+        {
+          "viewport": "desktop",
+          "elapsedMs": 16271,
+          "readingSource": "https://www.adobe.com/legal/terms-linkfree.html",
+          "revisionStatus": "approved",
+          "decisions": [
+            {
+              "decision": "pending",
+              "title": "adbe-20251128"
+            },
+            {
+              "decision": "accepted",
+              "title": "adbe-20260828"
+            },
+            {
+              "decision": "accepted",
+              "title": "Adobe Firefly - Free Generative AI for Creatives"
+            },
+            {
+              "decision": "accepted",
+              "title": "Overview - Adobe Firefly API"
+            },
+            {
+              "decision": "accepted",
+              "title": "Adobe General Terms of Use | Adobe Legal"
+            },
+            {
+              "decision": "accepted",
+              "title": "[ADBE] Adobe Thesis 2026: Firefly Premium Tier Tests AI Monetization Against GenAI Competition | drillr Research"
+            },
+            {
+              "decision": "accepted",
+              "title": "Adobe adds its AI assistant to Premiere, Illustrator, and InDesign | TechCrunch"
+            },
+            {
+              "decision": "rejected",
+              "title": "Adobe &#8211; Stratechery by Ben Thompson"
+            }
+          ],
+          "providerCalls": 0,
+          "coverageOverflow": false
+        }
+      ]
+    },
+    {
+      "id": "snowflake-quarter",
+      "companyId": "snowflake",
+      "kind": "supplied_reference",
+      "researchAngle": "What revenue and comparison period does the supplied quarterly report establish?",
+      "analystNeeds": [
+        "Keep the supplied quarterly filing accessible.",
+        "Inspect reporting dates, units and comparative values together."
+      ],
+      "knownLimit": "The historical retrieval missed the expected quarterly revenue table.",
+      "initialProposal": [
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1640147/000164014726000037/snow-20260731.htm",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "added_by_analyst"
+          ]
+        },
+        {
+          "url": "https://docs.snowflake.com/en/user-guide/intro-key-concepts",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "required_coverage_role"
+          ]
+        },
+        {
+          "url": "https://docs.snowflake.com/en/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "required_coverage_role"
+          ]
+        },
+        {
+          "url": "https://www.snowflake.com/en/legal/terms-of-service/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "required_coverage_role"
+          ]
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1640147/000164014726000008/snow-20260131.htm",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://siliconangle.com/2026/09/02/snowflake-knocks-it-out-the-park-with-a-stellar-earnings-and-revenue-beat/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://docs.snowflake.com/en/developer-guide/sql-api/index",
+          "disposition": "alternative",
+          "reasonCodes": [
+            "no_new_coverage"
+          ]
+        },
+        {
+          "url": "https://siliconangle.com/2026/06/07/snowflake-databricks-model-makers-battle-agentic-client-ai-back-end/",
+          "disposition": "alternative",
+          "reasonCodes": [
+            "no_new_coverage"
+          ]
+        }
+      ],
+      "captures": [
+        {
+          "id": "snowflake-annual",
+          "contentHash": "7fbf733499640f22c2cfdf75c4267e7546339d18477510d53cc7083d3c6c09d2",
+          "inputHash": "71cd98430073402e2162ff74b2378a63177683cf08cf044459304e55b8edc908",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "snowflake-quarterly",
+          "contentHash": "9c8d59ab61dd69ac69d1f8cef1aa3b13524afea433646d2d878cc2f7c28cb1e4",
+          "inputHash": "0c3a5a81915f045b8763445f47b4a1dce04c0eeb64f61f8f9f3f050ad85b1ebe",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "snowflake-product",
+          "contentHash": "bfd5a25e0038290ccd3c0b65d8556eb5027e1872e363bb7c0aa8548a2c970a07",
+          "inputHash": "20ee52de83d179a44774ee339829d5d9a092864228e1ca0050bd2f2cb57302fa",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "snowflake-integration",
+          "contentHash": "314a1f2350081e38272298145db28742e7e3c9844b8c373463de6ed8a467cc1f",
+          "inputHash": "164a10c9f578295164302890cb6cfc56c9e2a7e81b724a29e4773326ed570e22",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "snowflake-terms",
+          "contentHash": "a47df90ef46f7e8ff12f759e632ed4349166baa29fbde81dc53fe8640df6e4bc",
+          "inputHash": "965d13630d6094c417da4948b1eb56710fe981496df80174f371b5b37acb77f6",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "snowflake-analysis",
+          "contentHash": "c58be086ad1cfb34082be39beb031a52793478f7059000fd323fb675043e9aec",
+          "inputHash": "efa6a449203db8eb772ef37466ad548a0fc0b2cf5edcb2d79d9a20aa180a4aef",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "snowflake-news",
+          "contentHash": "c328c8cb13ddfae50b9a740748c6d386f2eedb24a6d446b2e90605895da64187",
+          "inputHash": "88fe2f83c9390de969b5eb31a7783a52a9e8b5af7976f6c1a0fd5a4ced94fc7e",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "snowflake-distractor",
+          "contentHash": "c366fb6323ab9cea31e65f357d1fec818bf8e7b1bd14258ef8aacf584b5494f7",
+          "inputHash": "36e2f42620c8e5fac4cf3d63d3f7b7bdc342f289e785b93a70d8994eaf01ccee",
+          "qualificationStatus": "valid",
+          "failure": null
+        }
+      ],
+      "browser": [
+        {
+          "viewport": "mobile",
+          "elapsedMs": 16384,
+          "readingSource": "https://www.sec.gov/Archives/edgar/data/1640147/000164014726000037/snow-20260731.htm",
+          "revisionStatus": "approved",
+          "decisions": [
+            {
+              "decision": "pending",
+              "title": "Snowflake SQL API | Snowflake Documentation"
+            },
+            {
+              "decision": "pending",
+              "title": "Snowflake, Databricks and the model makers: The battle for the agentic client and AI back end - SiliconANGLE"
+            },
+            {
+              "decision": "accepted",
+              "title": "snow-20260131"
+            },
+            {
+              "decision": "accepted",
+              "title": "snow-20260731"
+            },
+            {
+              "decision": "accepted",
+              "title": "Snowflake key concepts and architecture | Snowflake Documentation"
+            },
+            {
+              "decision": "accepted",
+              "title": "Snowflake Terms of Service"
+            },
+            {
+              "decision": "accepted",
+              "title": "Snowflake knocks it out the park with a stellar earnings and revenue beat - SiliconANGLE"
+            },
+            {
+              "decision": "rejected",
+              "title": "Snowflake Documentation"
+            }
+          ],
+          "providerCalls": 0,
+          "coverageOverflow": false
+        },
+        {
+          "viewport": "desktop",
+          "elapsedMs": 16738,
+          "readingSource": "https://www.sec.gov/Archives/edgar/data/1640147/000164014726000037/snow-20260731.htm",
+          "revisionStatus": "approved",
+          "decisions": [
+            {
+              "decision": "pending",
+              "title": "Snowflake SQL API | Snowflake Documentation"
+            },
+            {
+              "decision": "pending",
+              "title": "Snowflake, Databricks and the model makers: The battle for the agentic client and AI back end - SiliconANGLE"
+            },
+            {
+              "decision": "accepted",
+              "title": "snow-20260131"
+            },
+            {
+              "decision": "accepted",
+              "title": "snow-20260731"
+            },
+            {
+              "decision": "accepted",
+              "title": "Snowflake key concepts and architecture | Snowflake Documentation"
+            },
+            {
+              "decision": "accepted",
+              "title": "Snowflake Terms of Service"
+            },
+            {
+              "decision": "accepted",
+              "title": "Snowflake knocks it out the park with a stellar earnings and revenue beat - SiliconANGLE"
+            },
+            {
+              "decision": "rejected",
+              "title": "Snowflake Documentation"
+            }
+          ],
+          "providerCalls": 0,
+          "coverageOverflow": false
+        }
+      ]
+    },
+    {
+      "id": "nvidia-uncertainty",
+      "companyId": "nvidia",
+      "kind": "uncertain",
+      "researchAngle": "What evidence supports or limits the argument that platform integration creates switching costs?",
+      "analystNeeds": [
+        "Retain the external argument with attribution.",
+        "Inspect relevant licensing context and disclose the missing causal evidence."
+      ],
+      "knownLimit": "Licensing clauses and integration descriptions do not by themselves establish switching costs.",
+      "initialProposal": [
+        {
+          "url": "https://www.nvidia.com/en-us/ai/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "required_coverage_role"
+          ]
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/nvda-20260726.htm",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://siliconangle.com/2026/07/16/nvidias-ai-networking-moat-real-lock-debate-continues/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://www.tomshardware.com/pc-components/gpus/nvidia-details-rubin-architectural-optimizations-for-inference-improvements-target-better-performance-and-efficiency-from-the-gpu-to-the-rack",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://raw.githubusercontent.com/NVIDIA/nim-deploy/main/README.md",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://nvidianews.nvidia.com/news",
+          "disposition": "alternative",
+          "reasonCodes": [
+            "search_or_index"
+          ]
+        }
+      ],
+      "captures": [
+        {
+          "id": "nvidia-annual",
+          "contentHash": "194970e58b71a169c90fac9b522152c5c3fadee4ffca8c7cadca73b6884b12fd",
+          "inputHash": "d330ec23735f66ff2836147ce8d1b5503ce5c0e03c7ffa7c97bff754bb5ced62",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "nvidia-quarterly",
+          "contentHash": "e5f3e9febb58d2ca4b805412ef3e22c5b633bf8e0c9f30ee23d6190918b1cb00",
+          "inputHash": "2234a74f38fe9b64c62090008d92d4ebea87ec73c010d59eaa10f58de56bb59b",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "nvidia-product",
+          "contentHash": "53e0abc9785bcac37c6953d9971e2682362fa59d9c3eca589fa88e342d916358",
+          "inputHash": "533436ee288061946d227530eb82fd61cb5075e3cb8e9804b4c716fdd2f9a6af",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "nvidia-integration",
+          "contentHash": "05150e7b1ba28f431f26c2d327fc86c6a2351e25771b49338e40ae3d491dd8a5",
+          "inputHash": "e4533de37df890663e7889c2e220352757459883f57dbd9c7e9b7cde0b0f7824",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "nvidia-terms",
+          "contentHash": "91b7aad60eec141a25f2007e8ab8109e2a3b3410d9e45142a692ea9d3460b12f",
+          "inputHash": "5d43ea21b4e31b93a72dad358a2ab6b2efeec6b82077ded438fd603e13d58216",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "nvidia-analysis",
+          "contentHash": "fd8a1e6388e98545068033d48e9ece116c58f6d591be8864aca45406259472d6",
+          "inputHash": "17d8945a43156d00f53d78d2dcdfb09551e4e15e071cf368d1eb840784ca6597",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "nvidia-news",
+          "contentHash": "f0ce053e71ca3370cbc73a666044f45ce435d2e55f16522a394a9298b085f40e",
+          "inputHash": "2c07914b24377bc26b81819078ec12aae755eea3e3b7c2223cbdffea1077e921",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "nvidia-distractor",
+          "contentHash": "b6b6a8afbcdebf8644affdaea81dce41156cb83719d50337e6ddf5845614a015",
+          "inputHash": "475aa26e0c795383fb988ccadb68e80859ad88975f62f69e9d2191c152e0749d",
+          "qualificationStatus": "valid",
+          "failure": null
+        }
+      ],
+      "browser": [
+        {
+          "viewport": "desktop",
+          "elapsedMs": 18136,
+          "readingSource": "https://siliconangle.com/2026/07/16/nvidias-ai-networking-moat-real-lock-debate-continues/",
+          "revisionStatus": "approved",
+          "decisions": [
+            {
+              "decision": "accepted",
+              "title": "nvda-20260125"
+            },
+            {
+              "decision": "accepted",
+              "title": "nvda-20260726"
+            },
+            {
+              "decision": "accepted",
+              "title": "AI Agents: Built to Reason, Plan, Act | NVIDIA"
+            },
+            {
+              "decision": "accepted",
+              "title": "> [!IMPORTANT]"
+            },
+            {
+              "decision": "accepted",
+              "title": "NVIDIA Agreements | Enterprise Software | NVIDIA Software License Agreement"
+            },
+            {
+              "decision": "accepted",
+              "title": "Nvidia’s AI networking moat is real – but the lock-in debate continues - SiliconANGLE"
+            },
+            {
+              "decision": "accepted",
+              "title": "Nvidia details Rubin architectural optimizations for inference &ndash; improvements target better performance and efficiency from the GPU to the rack | Tom's Hardware"
+            },
+            {
+              "decision": "rejected",
+              "title": "News Archive | NVIDIA Newsroom"
+            }
+          ],
+          "providerCalls": 0,
+          "coverageOverflow": false
+        }
+      ]
+    },
+    {
+      "id": "crowdstrike-uncertainty",
+      "companyId": "crowdstrike",
+      "kind": "uncertain",
+      "researchAngle": "What evidence supports the claim that platform consolidation increases AI operational authority?",
+      "analystNeeds": [
+        "Retain useful analysis and incident context.",
+        "Identify what remains unproven about delegated AI authority."
+      ],
+      "knownLimit": "File-processing terms and a software incident do not establish AI delegation.",
+      "initialProposal": [
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1535527/000153552726000010/crwd-20260131.htm",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://www.sec.gov/Archives/edgar/data/1535527/000153552726000031/crwd-20260731.htm",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://www.crowdstrike.com/en-us/platform/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://www.crowdstrike.com/en-us/legal/terms-conditions/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://techcrunch.com/2024/07/19/what-we-know-about-crowdstrikes-update-fail-thats-causing-global-outages-and-travel-chaos/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://github.com/CrowdStrike/falconpy",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://siliconangle.com/2026/08/29/crowdstrikes-post-mythos-surge-moat-momentum-and-the-blast-radius-test/",
+          "disposition": "recommended",
+          "reasonCodes": [
+            "additional_coverage"
+          ]
+        },
+        {
+          "url": "https://ir.crowdstrike.com/results-filings/sec-filings",
+          "disposition": "alternative",
+          "reasonCodes": [
+            "search_or_index"
+          ]
+        }
+      ],
+      "captures": [
+        {
+          "id": "crowdstrike-annual",
+          "contentHash": "e341970638b90f8462e97b9a5c907c44f407c32899996d8483568ec4b9bf37dc",
+          "inputHash": "edb670f9d891a902d9fd9015c41196df7fb1d19d890e96f975f0cffb4e50d894",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "crowdstrike-quarterly",
+          "contentHash": "a341d15cc850574ae9c9731b14632aad7747e20ad062346ef230fe6348f1385f",
+          "inputHash": "3cbcc157c68887efea74c0c2847685917012d76288e99ec3c5c256adcdb9c112",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "crowdstrike-product",
+          "contentHash": "9d93d0d8aaa6f61d78e32ea89dbdee613f9456b3c70bc8bc6bdcfcac08818f57",
+          "inputHash": "c0b4dd07f935740be25c62707d71896054fd25edd8e34ed075a587992f07391f",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "crowdstrike-integration",
+          "contentHash": "91e10567f3549ae19eb3e584f41388f2f58c4bee025c50abb70159c4998fed0d",
+          "inputHash": "9686fea0a1d9f5e98c0c1267f3c2537f60b50535dba92e0183dc57de7661e776",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "crowdstrike-terms",
+          "contentHash": "e0331ca03b50a3fd1be7264a50a31e801e3282461508905ede543cd1aba898a5",
+          "inputHash": "c0018829f02a4be32bcc5922a68becec18384ba0d1a6e31351b688d6545df27f",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "crowdstrike-analysis",
+          "contentHash": "262842cd4ff4f7e11564b9db1b1707be5b51ee292fe2276e70ac6f12bd380ef7",
+          "inputHash": "1fafc6a8cf9be686fa2f095926ff03570cec4727b122f0f721b1c6bf2d9729a4",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "crowdstrike-news",
+          "contentHash": "343920a34a0d79771418dbf2fac6192b80e03f43f5018cdea35c4e2eaac10adc",
+          "inputHash": "ff101e6a45f1d7d2d710db6b3c44b1ddb894dfc449c122c064a52e26fc228efe",
+          "qualificationStatus": "valid",
+          "failure": null
+        },
+        {
+          "id": "crowdstrike-distractor",
+          "contentHash": "a374aa3aa27f01fe393896eab7279aa1b2bb2511d43f27581aabd41adea80691",
+          "inputHash": "a5c58feced402a3d2e8958631ef98f0924d438544016cdbbc7241c4c6c8dc830",
+          "qualificationStatus": "valid",
+          "failure": null
+        }
+      ],
+      "browser": [
+        {
+          "viewport": "desktop",
+          "elapsedMs": 17611,
+          "readingSource": "https://siliconangle.com/2026/08/29/crowdstrikes-post-mythos-surge-moat-momentum-and-the-blast-radius-test/",
+          "revisionStatus": "approved",
+          "decisions": [
+            {
+              "decision": "accepted",
+              "title": "crwd-20260131"
+            },
+            {
+              "decision": "accepted",
+              "title": "crwd-20260731"
+            },
+            {
+              "decision": "accepted",
+              "title": "The CrowdStrike Falcon® Platform | Unified Agentic Security"
+            },
+            {
+              "decision": "accepted",
+              "title": "GitHub - CrowdStrike/falconpy: The CrowdStrike Falcon SDK for Python · GitHub"
+            },
+            {
+              "decision": "accepted",
+              "title": "Terms and Conditions | CrowdStrike"
+            },
+            {
+              "decision": "accepted",
+              "title": "CrowdStrike’s post-Mythos surge: Moat, momentum and the blast-radius test - SiliconANGLE"
+            },
+            {
+              "decision": "accepted",
+              "title": "What we know about CrowdStrike&#039;s update fail that&#039;s causing global outages and travel chaos | TechCrunch"
+            },
+            {
+              "decision": "rejected",
+              "title": "SEC Filings | CrowdStrike Holdings, Inc."
+            }
+          ],
+          "providerCalls": 0,
+          "coverageOverflow": false
+        },
+        {
+          "viewport": "mobile",
+          "elapsedMs": 16766,
+          "readingSource": "https://siliconangle.com/2026/08/29/crowdstrikes-post-mythos-surge-moat-momentum-and-the-blast-radius-test/",
+          "revisionStatus": "approved",
+          "decisions": [
+            {
+              "decision": "accepted",
+              "title": "crwd-20260131"
+            },
+            {
+              "decision": "accepted",
+              "title": "crwd-20260731"
+            },
+            {
+              "decision": "accepted",
+              "title": "The CrowdStrike Falcon® Platform | Unified Agentic Security"
+            },
+            {
+              "decision": "accepted",
+              "title": "GitHub - CrowdStrike/falconpy: The CrowdStrike Falcon SDK for Python · GitHub"
+            },
+            {
+              "decision": "accepted",
+              "title": "Terms and Conditions | CrowdStrike"
+            },
+            {
+              "decision": "accepted",
+              "title": "CrowdStrike’s post-Mythos surge: Moat, momentum and the blast-radius test - SiliconANGLE"
+            },
+            {
+              "decision": "accepted",
+              "title": "What we know about CrowdStrike&#039;s update fail that&#039;s causing global outages and travel chaos | TechCrunch"
+            },
+            {
+              "decision": "rejected",
+              "title": "SEC Filings | CrowdStrike Holdings, Inc."
+            }
+          ],
+          "providerCalls": 0,
+          "coverageOverflow": false
+        }
+      ]
+    }
+  ],
+  "browserTiming": {
+    "scope": "Automated local journey, includes persistence queries. Not human time saved.",
+    "minimumMs": 15551,
+    "medianMs": 16816.5,
+    "maximumMs": 19206
+  },
+  "codeSha256": {
+    "convex/domain/sourceSelectionPolicy.ts": "5ba8408afa9085b914226816b51a06ed039e79f8a9b521e03336d9bc5fa74530",
+    "convex/sourceSelectionProposals.ts": "b2fb7c9c4dcf50e723b596f92004c029fe7476d86a397939419062bd625b8ee5",
+    "convex/domain/sourceQualification.ts": "35bc5ec1ac77581a365b402c29e8920ca7308cb60614fe06e996ffce4829329c",
+    "convex/domain/sourceComparison.ts": "df233d769551eb7be6f5c555486f60d375c92b186793678d7d4f0172f8b3c1d8",
+    "convex/e2eFixtures.ts": "daa217a1193bb8caae49c4e43ab7bbeb383c674d1a23bc532dd445541d59dcc9",
+    "src/components/workspace/source-proposal-review.tsx": "68e5c174b38f88f4503aaaa4e162aed1aee29c2356234f4c5e618cc34f837ec9",
+    "scripts/evaluations/source-selection/source-utility.ts": "c1fb521f704151e7c28b5858126039907f430f6ac83408122aca3dce437ccbc3",
+    "e2e/source-utility.spec.ts": "16a4de91358a458696816b3b244a66722715d797f11b6653cdc0f2373f8ba8ae"
+  },
+  "postflight": [
+    {
+      "scenario": "adobe-overview",
+      "viewport": "desktop",
+      "revisionStatus": "approved",
+      "providerCalls": 0
+    },
+    {
+      "scenario": "adobe-overview",
+      "viewport": "mobile",
+      "revisionStatus": "approved",
+      "providerCalls": 0
+    },
+    {
+      "scenario": "crowdstrike-overview",
+      "viewport": "desktop",
+      "revisionStatus": "approved",
+      "providerCalls": 0
+    },
+    {
+      "scenario": "nvidia-architecture",
+      "viewport": "desktop",
+      "revisionStatus": "approved",
+      "providerCalls": 0
+    },
+    {
+      "scenario": "nvidia-architecture",
+      "viewport": "mobile",
+      "revisionStatus": "approved",
+      "providerCalls": 0
+    },
+    {
+      "scenario": "snowflake-architecture",
+      "viewport": "desktop",
+      "revisionStatus": "approved",
+      "providerCalls": 0
+    },
+    {
+      "scenario": "adobe-terms",
+      "viewport": "desktop",
+      "revisionStatus": "approved",
+      "providerCalls": 0
+    },
+    {
+      "scenario": "snowflake-quarter",
+      "viewport": "desktop",
+      "revisionStatus": "approved",
+      "providerCalls": 0
+    },
+    {
+      "scenario": "snowflake-quarter",
+      "viewport": "mobile",
+      "revisionStatus": "approved",
+      "providerCalls": 0
+    },
+    {
+      "scenario": "nvidia-uncertainty",
+      "viewport": "desktop",
+      "revisionStatus": "approved",
+      "providerCalls": 0
+    },
+    {
+      "scenario": "crowdstrike-uncertainty",
+      "viewport": "desktop",
+      "revisionStatus": "approved",
+      "providerCalls": 0
+    },
+    {
+      "scenario": "crowdstrike-uncertainty",
+      "viewport": "mobile",
+      "revisionStatus": "approved",
+      "providerCalls": 0
+    }
+  ],
+  "scopeAudit": {
+    "originalFileCount": 1689,
+    "changed": [
+      "context/TECH.md",
+      "convex/domain/sourceSelectionPolicy.ts",
+      "convex/e2eFixtures.ts",
+      "convex/sourceSelectionProposals.ts",
+      "src/__tests__/convex/e2e/source-review-fixture.test.ts",
+      "src/__tests__/convex/sources/source-selection-policy-v2.test.ts",
+      "src/__tests__/convex/sources/source-selection-proposals.test.ts",
+      "src/components/workspace/source-proposal-review.tsx"
+    ],
+    "added": [
+      "docs/verification/2026-10-21-source-utility.md",
+      "docs/verification/source-utility-20261021/mobile-coverage-after.png",
+      "docs/verification/source-utility-20261021/mobile-coverage-before.png",
+      "docs/verification/source-utility-20261021/results.json",
+      "docs/verification/source-utility-20261021/snowflake-reading-desktop.png",
+      "e2e/source-utility.spec.ts",
+      "playwright.utility.config.ts",
+      "scripts/evaluations/source-selection/fixtures/cross-company-20261020/utility-scenarios.json",
+      "scripts/evaluations/source-selection/source-utility.ts",
+      "src/__tests__/convex/sources/source-selection-identity.test.ts"
+    ],
+    "deleted": [],
+    "preservedChecks": {
+      "AGENTS.md": true,
+      "PRODUCT.md": true,
+      "package.json": true,
+      "pnpm-lock.yaml": true,
+      "src/lib/workspace/og-image.ts": true,
+      "src/components/workbench-shell/analyzed-company-list.tsx": true,
+      "convex/domain/sourceComparison.ts": true,
+      "convex/domain/sourceRetrievalPolicy.ts": true
+    }
+  },
+  "differentRecordIdentityChecks": [
+    {
+      "scenario": "adobe-overview",
+      "sameRankedDocuments": true
+    },
+    {
+      "scenario": "nvidia-architecture",
+      "sameRankedDocuments": true
+    },
+    {
+      "scenario": "snowflake-quarter",
+      "sameRankedDocuments": true
+    },
+    {
+      "scenario": "crowdstrike-uncertainty",
+      "sameRankedDocuments": true
+    }
+  ],
+  "verification": {
+    "unitTestFiles": 144,
+    "unitTestsPassed": 1137,
+    "browserChecksPassed": 14,
+    "postCompatibilityReadOnlyBrowserChecksPassed": 2,
+    "typecheck": "passed",
+    "build": "passed",
+    "scopedLintAndFormat": "passed",
+    "globalCheck": "blocked by unchanged noArrayIndexKey in analyzed-company-list.tsx:114",
+    "globalFormat": "20 unchanged out-of-scope errors",
+    "localFixtureFlag": "removed",
+    "remoteDeployments": 0,
+    "commits": 0
+  }
+}

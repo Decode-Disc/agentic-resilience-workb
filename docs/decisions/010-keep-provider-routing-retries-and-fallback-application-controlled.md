@@ -2,6 +2,8 @@
 
 ## Status
 
+Amended on 2026-10-20 by [ADR-024](024-qualify-source-content-before-corpus-approval.md). Its explicitly listed preparation, qualification and evidence-use clauses supersede the corresponding historical clauses below; all other decisions remain in force.
+
 Accepted
 
 ## Date
@@ -111,3 +113,7 @@ authority.
   SDK performs transport.
 - Provider package versions are pinned when installed and verified against
   current primary documentation during each implementation slice.
+
+## Retrieval amendment (2026-10-21)
+
+[ADR-025](025-use-versioned-scoped-evidence-retrieval.md) adds versioned structured candidates, scoped native retrieval and a bounded optional embedding provider. It distinguishes whole-capture search candidates from the unchanged 512 approved-passage materialization ceiling, and introduces a cumulative conservative input-byte allowance for embeddings rather than a money settlement ledger. Historical preparation identities and human corpus approval remain unchanged. Local activation remains conditional on the recorded evaluation and verification gates.

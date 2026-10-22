@@ -1,0 +1,53 @@
+{
+  "lexical": {
+    "retrievedComplete": 27,
+    "selectedComplete": 17,
+    "noFullCandidate": [
+      "adobe-unresolved:distractors",
+      "snowflake-numeric:focused",
+      "snowflake-numeric:distractors",
+      "snowflake-forecast:focused",
+      "snowflake-forecast:distractors"
+    ],
+    "lostAfterRetrieval": [
+      "adobe-unresolved:focused",
+      "nvidia-numeric:focused",
+      "nvidia-numeric:distractors",
+      "nvidia-forecast:focused",
+      "nvidia-forecast:distractors",
+      "nvidia-unresolved:distractors",
+      "crowdstrike-forecast:focused",
+      "crowdstrike-forecast:distractors",
+      "crowdstrike-unresolved:focused",
+      "crowdstrike-unresolved:distractors"
+    ]
+  },
+  "hybrid": {
+    "retrievedComplete": 25,
+    "selectedComplete": 12,
+    "noFullCandidate": [
+      "adobe-unresolved:distractors",
+      "nvidia-unresolved:distractors",
+      "snowflake-numeric:focused",
+      "snowflake-numeric:distractors",
+      "snowflake-forecast:focused",
+      "snowflake-forecast:distractors",
+      "crowdstrike-unresolved:distractors"
+    ],
+    "lostAfterRetrieval": [
+      "adobe-numeric:focused",
+      "adobe-numeric:distractors",
+      "adobe-capability:focused",
+      "adobe-capability:distractors",
+      "adobe-unresolved:focused",
+      "nvidia-numeric:focused",
+      "nvidia-numeric:distractors",
+      "nvidia-capability:focused",
+      "nvidia-capability:distractors",
+      "nvidia-unresolved:focused",
+      "crowdstrike-forecast:focused",
+      "crowdstrike-forecast:distractors",
+      "crowdstrike-unresolved:focused"
+    ]
+  }
+}

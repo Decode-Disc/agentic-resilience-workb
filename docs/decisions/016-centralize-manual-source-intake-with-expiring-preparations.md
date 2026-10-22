@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted. [ADR-024](024-qualify-source-content-before-corpus-approval.md) amends the historical blanket prohibition on pre-approval content retrieval. Intake receipts remain expiring metadata records; bounded documentary capture and qualification belong to the later dossier-preparation workflow. The public intake owner and authorization rules remain unchanged.
 
 ## Date
 
@@ -17,9 +17,7 @@ a candidate immediately. The two paths duplicate retry and persistence logic,
 and the UI cannot distinguish validation, transport, capacity, authorization,
 or lifecycle failures reliably.
 
-The product must continue to allow references before company selection, keep
-Convex as the state owner, preserve the mandatory corpus checkpoint, and avoid
-retrieving or storing source content before analyst approval.
+At the time of this decision, the product prohibited storing source content before corpus approval. ADR-024 later authorized bounded dossier preparation. The intake boundary still allows references before company selection, keeps Convex as the state owner and preserves the mandatory checkpoint before analytical evidence use.
 
 ## Decision
 

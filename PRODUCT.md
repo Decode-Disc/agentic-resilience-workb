@@ -32,7 +32,7 @@ A technical harness makes model intelligence operational. Economic orchestration
 
 ## Operating Context
 
-The analyst selects and confirms a public company, optionally supplies a research angle and public HTTPS references, reviews discovered sources, approves the corpus, inspects precisely cited claims, and reviews proposed assessments by dimension. The completed product derives its map and brief from validated evidence. These are product requirements, not a claim that the entire journey has already been delivered or verified.
+The analyst selects and confirms a public company and optionally supplies a research angle and public HTTPS references. The system discovers sources, captures and qualifies bounded content, and prepares useful passages and visible limitations for corpus review. The analyst approves the source set before those captures become analytical evidence, then inspects precisely cited claims and reviews proposed assessments by dimension. The completed product derives its map and brief from validated evidence. These are product requirements, not a claim that the entire journey has already been delivered or verified.
 
 Company search and preflight are available before workspace admission. Research dossiers and administration require the appropriate access. Durable access lets an admitted analyst return to their dossiers and decisions.
 
@@ -40,7 +40,8 @@ The demonstration combines a clearly labelled curated dossier with genuinely liv
 
 ## Capabilities and Constraints
 
-- Source discovery and evidence extraction are separated by a mandatory, durable human approval checkpoint. Only accepted sources in the approved corpus may contribute downstream. Rejected and pending sources cannot support conclusions.
+- The system may read and qualify bounded public candidate content to prepare source selection before approval. A mandatory, durable corpus checkpoint still separates preparation from analytical extraction. Only accepted sources in the approved corpus may contribute downstream. Rejected and pending sources cannot support conclusions. Useful unverified arguments retain attribution and restricted use. See ADR-024.
+- Preparation should preserve enough useful, inspectable material for subsequent analysis at bounded cost. It is not expected to answer every research question or make every source-selection judgment correctly. Retaining a useful source with explicit limitations is preferable to discarding it solely because reading or verification is incomplete. Later stages refine claims and evidence, but cannot be assumed to recover content that their actual inputs or retrieval path cannot access.
 - Claims are atomic and classified as `Fact`, `Inference`, `Hypothesis`, or `Unknown`. Every material claim references precisely locatable source passages. Supporting evidence, counter-evidence, and critical unknowns remain inspectable before dimension review.
 - Each assessment dimension has separate position, evidence-based confidence, and three-year direction outputs. There is no aggregate resilience score or investment recommendation. Weak evidence may remain mixed, hypothetical, unknown, or insufficient.
 - Analyst decisions and justified overrides are append-only and audited. Retries and later model output cannot overwrite them. Briefs use only analyst-approved claims. Map entities and relationships require validated supporting claims.

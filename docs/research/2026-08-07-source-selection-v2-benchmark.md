@@ -2,7 +2,7 @@
 
 ## Status
 
-Offline fixture completed; live acquisition awaiting explicit provider opt-in and manual scoring.
+Historical metadata-policy v2 benchmark. At this checkpoint, the offline fixture was complete and live acquisition awaited explicit provider opt-in and manual scoring. The thresholds and source-role labels below belong to that policy and corpus; they are not current acceptance criteria for content-based preparation. [ADR-024](../decisions/024-qualify-source-content-before-corpus-approval.md), [ADR-025](../decisions/025-use-versioned-scoped-evidence-retrieval.md) and the [recorded evaluation state](../../scripts/evaluations/source-selection/README.md#recorded-evaluation-state-2026-10-22) describe later work and its limits. Preserve the original benchmark without treating its command as authorization for a new live run.
 
 ## Objective
 

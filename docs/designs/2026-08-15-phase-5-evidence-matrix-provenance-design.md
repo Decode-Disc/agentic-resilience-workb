@@ -2,7 +2,7 @@
 
 ## Status
 
-Validated on 2026-08-15. Accepted as authoritative through ADR-023 on 2026-08-15. Production implementation remains separately authorized; the lifecycle, records, workflow ownership, provider deferral, numeric safety limits, and hybrid showcase/live boundary defined here are now the accepted authority.
+Historical design validated on 2026-08-15 and accepted through [ADR-023](../decisions/023-use-decision-anchored-phase-5-evidence-workflow.md). Its unchanged contracts remain authoritative. ADR-023's later handoff amendment, [ADR-024](../decisions/024-qualify-source-content-before-corpus-approval.md) and [ADR-025](../decisions/025-use-versioned-scoped-evidence-retrieval.md) replace the idle-only handoff, post-approval-only acquisition and original retrieval assumptions where explicitly stated. The problem and code observations below describe the design-time baseline, not today's implementation. See the [roadmap](../ROADMAP.md#recorded-delivery-state-2026-10-22) for recorded delivery and remaining activation limits. This record grants no new execution or provider authority.
 
 ## Problem
 
@@ -12,7 +12,7 @@ Phase 5 must turn only analyst-accepted sources into inspectable evidence withou
 
 The design must therefore prove two distinct capabilities: real post-approval retrieval and provenance for accepted live sources, and a complete claims-first Evidence Matrix for a clearly labelled showcase corpus. It must never present prefabricated claims as live analysis or convert a missing technical capability into an analytical `Unknown`.
 
-## Current Evidence
+## Evidence at Design Time
 
 ### Verified
 

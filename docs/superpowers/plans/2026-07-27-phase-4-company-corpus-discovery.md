@@ -1,5 +1,7 @@
 # Phase 4 Company and Corpus Discovery Implementation Plan
 
+**Historical scope and continuation, 2026-10-22:** this is the original discovery implementation plan, with its [dated closure](../../verification/2026-08-06-phase-4-closure.md). [ADR-024](../../decisions/024-qualify-source-content-before-corpus-approval.md) later adds captured-content preparation before approval, and ADR-023 amends the automatic evidence handoff. Use the [current roadmap](../../ROADMAP.md#recorded-delivery-state-2026-10-22) for remaining work. The instructions and checkboxes below preserve that execution record; they are not fresh implementation, delegation or provider authorization.
+
 > **Plan status:** Reconciled on 2026-08-05 with the current Phase 4
 > implementation attempt, ADR-012 through ADR-014, and the implementation
 > post-mortem. Checkboxes describe the required corrective execution sequence;

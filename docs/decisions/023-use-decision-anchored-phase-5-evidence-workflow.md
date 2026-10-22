@@ -2,6 +2,8 @@
 
 ## Status
 
+Amended on 2026-10-20 by [ADR-024](024-qualify-source-content-before-corpus-approval.md). Its explicitly listed preparation, qualification and evidence-use clauses supersede the corresponding historical clauses below; all other decisions remain in force.
+
 Accepted
 
 ## Date
@@ -16,7 +18,7 @@ Phase 5 must turn only analyst-accepted sources into inspectable evidence withou
 
 The design must therefore prove two distinct capabilities: real post-approval retrieval and provenance for accepted live sources, and a complete claims-first Evidence Matrix for a clearly labelled showcase corpus. It must never present prefabricated claims as live analysis or convert a missing technical capability into an analytical `Unknown`.
 
-The validated Phase 5 design (`docs/plans/2026-08-15-phase-5-evidence-matrix-provenance-design.md`) defines the complete lifecycle, domain model, retrieval contract, claim generation boundary, and demonstration protocol. This ADR makes that design authoritative before any production code changes.
+The validated Phase 5 design (`docs/designs/2026-08-15-phase-5-evidence-matrix-provenance-design.md`) defines the complete lifecycle, domain model, retrieval contract, claim generation boundary, and demonstration protocol. This ADR makes that design authoritative before any production code changes.
 
 ADR-004 establishes SEC, Exa, and Unstructured as the source-acquisition providers and separates discovery from post-approval retrieval and normalization. ADR-009 establishes typed AI tasks and deterministic policy adjudication. ADR-010 keeps provider routing, retries, and fallback application-controlled. ADR-017 through ADR-022 own source-selection proposal composition, authority classification, company linkage, and the durable corpus-approval checkpoint. This ADR consumes their accepted corpus boundary; it does not rewrite how proposals are composed or how providers are routed.
 
@@ -154,3 +156,7 @@ Exa Contents continues to use the installed SDK's `getContents` validation and p
 ## Supersession
 
 This ADR does not supersede any prior ADR. It establishes the Phase 5 evidence workflow authority that consumes the accepted corpus boundary from ADR-017 through ADR-022 and the provider boundaries from ADR-004, ADR-009, and ADR-010.
+
+## Retrieval amendment (2026-10-21)
+
+[ADR-025](025-use-versioned-scoped-evidence-retrieval.md) adds versioned structured candidates, scoped native retrieval and a bounded optional embedding provider. It distinguishes whole-capture search candidates from the unchanged 512 approved-passage materialization ceiling, and introduces a cumulative conservative input-byte allowance for embeddings rather than a money settlement ledger. Historical preparation identities and human corpus approval remain unchanged. Local activation remains conditional on the recorded evaluation and verification gates.

@@ -1,5 +1,7 @@
 # Centralized Manual Source Intake Implementation Plan
 
+**Historical scope and continuation, 2026-10-22:** this plan's metadata-only intake boundary remains distinct from the dossier preparation later authorized by [ADR-024](../../decisions/024-qualify-source-content-before-corpus-approval.md). Its blanket pre-approval-content prohibition does not govern that later capture workflow. Preserve the [original verification](../../verification/2026-08-06-centralized-manual-source-intake.md) and use the [current roadmap](../../ROADMAP.md#recorded-delivery-state-2026-10-22) for delivery limits. Archived steps and reviewer instructions do not grant new execution or delegation authority.
+
 > **For agentic workers:** Implement this plan task-by-task with strict RED -> GREEN -> REFACTOR cycles and reviewer checkpoints between tasks.
 
 **Goal:** Make every analyst-added public URL pass through one authoritative Convex intake workflow that validates immediately, persists atomically, and returns safe actionable errors.

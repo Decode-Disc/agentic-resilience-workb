@@ -8,6 +8,8 @@ This document consolidates the active technical contract for the Agentic Resilie
 
 If this document conflicts with an accepted ADR, the product design, or `AGENTS.md`, stop and surface the conflict.
 
+Delivery and activation evidence is indexed in the [roadmap's recorded delivery state](../docs/ROADMAP.md#recorded-delivery-state-2026-10-22). Contracts below describe the accepted behavior, including implemented preparation and still-unfinished analytical stages. Dated tests and provider experiments are not a claim of current runtime activation or completed live analysis.
+
 ## Current Technical Posture
 
 - Use TanStack Start rather than Next.js.
@@ -72,6 +74,7 @@ The completed design contains these explicit concepts:
 - `SourceSelectionProposalItem`
 - `SourceDecision`
 - `CorpusRevision`
+- `SourceCapture`
 - `SourceVersion`
 - `SourcePassage`
 - `Claim`
@@ -123,9 +126,11 @@ Search a bounded company-candidate set
 → Await evidence decision when insufficient
 → Build research plan
 → Discover sources in parallel
+→ Capture and qualify public candidates under preparation authority
+→ Inspect one bounded supplement when documentary needs remain
 → Persist proposed CorpusRevision and SourceSelectionProposal
 → Await explicit corpus-revision approval
-→ Retrieve and normalize approved sources
+→ Materialize exact inspected captures for approved sources (legacy approved corpora retain retrieval)
 → Extract passages and atomic claims
 → Run structural validation and targeted semantic verification
 → Search for counter-evidence inside the approved corpus
@@ -192,6 +197,8 @@ A valid retry atomically claims the slot, advances the generation, starts a new
 Phase 5 workflow, and schedules only incomplete claim and policy steps. See
 ADR-023.
 
+Pre-approval preparation rolls out behind `SOURCE_QUALIFICATION_ENABLED`, disabled unless its value is `true`. The main workflow snapshots that setting into an optional `prepareSources` argument when started. Existing workflows without the argument retain their original discovery-to-review sequence. Public preparation starts reject while disabled. Activation requires the bounded model and protected-journey gates in the implementation plan.
+
 Enforce transitions server-side. A client must not bypass checkpoints or directly mark workflow stages complete.
 
 Track execution separately from the analytical lifecycle with `idle`, `running`, `paused`, `failed`, `cancelled`, and `completed`. A paused run records whether it awaits source review, assessment review, or `claim_generation_unavailable`. This separation keeps failure and cancellation from inventing analytical stages.
@@ -208,11 +215,65 @@ Persisted `RunEvent` records are the only source of UI progress.
 
 ## Evidence Acquisition and Provenance
 
-Source discovery and evidence extraction are separate phases. The durable
-corpus-revision approval event is mandatory before retrieval and extraction
-proceed.
+### Pre-approval source qualification
+
+[ADR-024](../docs/decisions/024-qualify-source-content-before-corpus-approval.md) permits bounded retrieval, normalization and qualification before corpus approval. New prepared drafts use immutable captures and qualification references. Legacy approved corpora without those captures retain their recorded post-approval acquisition path. No title, model confidence, domain count or inclusion decision establishes truth or promotes provenance authority.
+
+The preparation objective is enough useful, inspectable material for subsequent analysis at bounded cost. Preserve useful imperfect sources with explicit limitations rather than requiring every source or question to be fully verified here. A low rank, unavailable reading, incomplete context or failed model response must not be described as proof that relevant material does not exist. Keep source inclusion, documentary coverage, permitted passage use and factual support distinct.
+
+Inspect existing non-rejected candidates, including alternatives, before one dossier-wide supplement capped at three searches, four additions per search and twelve additions total. Preserve the initial discovery ceiling of 48, recommendation ceiling of 24 and all history under a separate historical ceiling of 60. Resume cannot reset the supplement. Documentary availability is available, limited or not established with a precise reason. Partial/unavailable reading never proves irrelevance.
+
+A canonical typed qualification groups document purpose, company relationship, period, forecasts, attributed arguments, asserted facts and observed outcomes with reproducible passage references. Keep source authority deterministic. Useful imperfect sources have enforced passage-use restrictions. Supporting factual authority/corroboration excludes contextual, opposing and restricted argument citations. Required factual verification that is unavailable remains blocked or unknown.
+
+Capture the exact normalized representation in Convex storage before qualification and pin its immutable hash/reference on the proposal. After approval, materialize the same artifact with required accepted-decision authority. Missing/corrupt captures never silently fetch replacement bytes. Cleanup protects both captures and analytical versions. Public PDF qualification uses Exa text with representation-relative locators; page-aware parsing remains deferred.
+
+Capture identity includes the source, requested/resolved URL, retrieval time, stored representation, content hash and retrieval/normalization versions. Passage references bind offsets and quotations to that representation. Whole-capture storage, derived search candidates, model-selected context and approved analytical passages are separate artifacts. The 512-passage materialization ceiling does not delete the retained capture, but storage alone does not prove that later analytical work can retrieve every unselected passage. Pinned qualification references are preserved or materialization fails explicitly. End-to-end use of additional relevant content through the later analytical path remains a verification gap, not an assumed recovery guarantee.
+
+Limits: existing 16 MiB acquisition/artifact bounds, 128 KiB serialized qualification input including instructions, context and the JSON response schema, 6,144 output tokens, 60-second model attempts, at most primary plus one technical fallback, two concurrent source operations, 15-minute persisted preparation deadline, at most 48 initial candidates, 60 retained candidates after supplementation and 120 model attempts. Resume preserves the original deadline. A genuinely new manual source has its own 15-minute window restricted to that new content, without rereading older documents, resetting dossier-wide limits or starting another supplement. Resume of that manual operation preserves its deadline. New links retained while another dossier runs are grouped as new-content-only work; their reading window starts when the execution slot is claimed. The source-intake request identity is independent of execution generation, and authenticated replay lookup precedes the paused-state requirement so a successful response remains replayable after automatic preparation starts. SDK/workflow automatic model retries are disabled. The shared passage extractor and qualification input give descriptive prose, tables and examples priority over short navigation when the reading allowance is full. This formatting priority does not qualify evidence. Original paragraph identities and offsets are preserved. Input omissions and partial reading are persisted. Existing immutable captures and qualifications are reused when their logical inputs and versions match.
+
+Server configuration selects DeepSeek V4 Flash 0731 via Reka and MiMo V2.6 Flash via DeepInfra FP8. Require structured outputs, application-owned fallback and route ceilings of $0.15/M input and $0.60/M output. Valid uncertainty, missing configuration, disabled paid work, cancellation and account billing errors never trigger another model. Telemetry records authority, hashes, versions, resolved route, usage and typed outcomes without secrets or reasoning.
+
+Preparation extends the existing workflow engine and rebuild operation owner. Preserve a legacy main workflow waiting for approval and store its preparation handle separately. Resume claims the execution slot atomically; pre-I/O and pre-persistence fences include run, workflow version, generation, revision, preparation/step and attempt. Cancel active handles and reject late results. Preserve grouped approval and all existing review affordances. Legacy upgrades require explicit refresh/rebuild rather than paid work on page render.
+
+Source preparation and analytical evidence extraction are separate phases. ADR-024 permits bounded candidate retrieval and qualification before approval. The durable corpus-revision approval event remains mandatory before materializing analytical source versions/passages and extracting claims. Preparation captures confer no analytical authority.
 
 Follow the source priority order in the product design and the acquisition boundaries in ADR-004. Source relevance is an estimate, not a truth score. Establish support at claim level through exact provenance, corroboration, and counter-evidence.
+
+### Homogeneous source contributions
+
+Source qualification protocol 3 keeps one grouped call and the existing fifteen-finding overall envelope. Each documentary role is absent or has at most two homogeneous contributions, each with its own kind, period, dependency and up to three exact inspected references. Mixed or uncertain content is explicit and restricted from factual support. The selected-source query projects per-finding usage from the same policy used by claim creation and policy evaluation. Role availability remains a documentary summary, never passage-level factual verification. Attributed hypotheses select the intended contribution when a role is ambiguous and remain constructed from approved records. Immutable protocol-2 captures and approved pins stay readable, while cached responses retain their exact old input identities. New model success requires evaluation of the actual changed input/schema, not synthetic annotation of saved outputs.
+
+### Targeted comparison contract
+
+For new versioned preparations, group otherwise eligible attributed arguments and forecasts from one capture and compare them with relevant primary passages already captured for the dossier. The same-run primary source must remain eligible under the active revision's decisions and existing authority policy. Older captures may be supporting context for new manual content without reopening their retrieval or qualification. Bound selection to sixty candidate metadata records, eight primary captures, sixteen MiB per capture, thirty-two MiB aggregate storage reads, six primary passages per finding plus structural context, sixty-four primary passages per task and the existing full 128-KiB serialized request envelope. Retrieval ranking is a heuristic, never an agreement verdict. Record input omissions and completeness.
+
+Keep raw qualifications and comparison results distinct. Persist comparison provenance and exact target/primary capture, hash, quotation and span pins through existing task results. Require comparable primary references for no conflict observed, scoped only to the selected passages. Possible conflict and inconclusive outcomes remain inspectable and restrict affected automatic arguments, without asserting a proven error or disproved thesis. Match applicable issues across later qualifications by target capture/hash and overlapping span. New positive output cannot silently clear earlier issues. Pin comparison status and applicable issue history in proposal items, fingerprints and approval. Apply one shared finding-use rule to selection, source reading and actual hypothesis/citation validation. Missing or stale checks never grant new attributed-hypothesis permission. Preserve independent useful contributions and historical documentary use.
+
+Use existing model routes, response/time limits, shared 120-attempt dossier reservation, technical fallback, telemetry and execution fences. Comparison uses the existing preparation model routes and workflow owner. Optional non-generative retrieval is separately governed by ADR-025; no per-need human confirmation is introduced. New preparation snapshots opt into comparison steps; legacy workflow journals without the snapshot retain their sequence. Complete the current round's pending capture/qualification batches before comparisons so later primary captures can inform earlier contributions, then evaluate supplementation or final publication. Supplemental captures enter that same ordering before final coverage evaluation. Comparisons retain two-operation concurrency and exact-input caching within the existing authority and allowance.
+
+The comparison request uses deterministic compact primary reference aliases, resolved only against the exact prepared input. Every alias retains full source, capture, content hash, passage and span provenance in that input and in persisted materialized results. This avoids repeated long identifiers in bounded model output. Alias changes alter exact input/cache identity without rewriting historical results or relaxing reference validation.
+
+All primary passages included in an exact grouped comparison request are available for citation by every contribution in that request. The per-finding lexical shortlist is a retrieval suggestion, not a second evidence authority boundary. Schema and materialization share this full supplied set while retaining the same per-result citation bound, target spans, capture eligibility and rejection of foreign or omitted keys. Historical outputs retain their exact request identities. Technical citation validity does not establish semantic agreement or permit activation by itself.
+
+The comparison response currently requires a non-empty explanation of at most 600 characters. The [second-batch report](../docs/verification/2026-10-21-source-quality-second-batch.md) records the resulting output rejections. Changing this contract is deferred until the evidence-preservation investigation is addressed; no larger limit or output-repair call is accepted here. Dated comparison results and failures remain in the [live evaluation report](../docs/verification/2026-10-20-source-comparison-live-evaluation.md).
+
+### Scoped capture retrieval
+
+[ADR-025](../docs/decisions/025-use-versioned-scoped-evidence-retrieval.md) owns the accepted retrieval change. New preparation snapshots may specify `structured-v1` and a lexical or hybrid retrieval mode. Absent configuration retains the historical preparation path. Derived `sourceSearchCaptures`, `sourceSearchPassages` and `sourceEmbeddingCache` records are preparation artifacts. Native full-text search and a 1024-dimensional vector index remain in Convex. Search scope binds the active run, corpus revision, capture hash and policy. The embedding cache binds exact searchable text and an opaque profile version. Parsing is bounded to 100,000 blocks and 20,000 searchable units per capture, with an explicit unavailable outcome before index writes if expansion exceeds these limits. Approval materialization prioritizes all qualification references and adjacent context, failing explicitly when they cannot fit.
+
+The optional provider adapter calls Workers AI directly, with at most 32 inputs, two active embedding attempts per dossier, a 30-second timeout, no redirects or automatic retry, no input truncation, and a 1 MiB response bound. A cumulative 833,333 submitted-byte ceiling conservatively bounds the dossier embedding allowance at USD 0.01 under the verified USD 0.012 per million token ceiling, assuming one token per UTF-8 byte. Unknown outcomes retain their allowance. The separate frozen evaluation ceiling is USD 0.10. Missing configuration or partial embeddings produce lexical retrieval with requested/effective modes and an explicit degradation reason. These diagnostics remain internal.
+
+`SOURCE_RETRIEVAL_MODE` is optional and accepts `lexical` or `hybrid`. `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_TOKEN` are optional action-side configuration for uncached embeddings and must use secure deployment environment channels. No new subscription, Worker, Vectorize index, local embedding model or remote deployment is required. New preparations alone receive the snapshot. Existing running preparations are not reinterpreted.
+
+Evaluation commands and their offline versus backend/provider effects are documented in the [evaluation README](../scripts/evaluations/source-selection/README.md). Internal local-only fixtures require both the E2E fixture flag and a loopback deployment URL. They reuse admitted fixture visitors and do not create invitations or reserve production analyses.
+
+Retrieval applies capture eligibility before native limits. Lexical searches read at most 64 hits for one capture per query transaction, then combine capture rankings through the existing reciprocal-rank fusion and retain 64 hits per research query. Vector search filters by a composite run/revision/retrieval-version/profile/capture key before its top 256. Hydration still rechecks eligibility. Existing vectors with the former scope key explicitly degrade to lexical until reindexing relinks their exact-text cache entries. This does not change embedding models or authorize provider calls. Historical prepared inputs and recorded outcomes are not rewritten.
+
+### Comparison context retention
+
+For versioned retrieval inputs, per-finding six-passage priority lists and up to two structural context passages remain suggestions rather than a hard limit on the shared evidence set. The comparison preparer promotes a covering quotation at the best rank of its contained units, then fills spare context with other retrieved passages while respecting a 32-KiB serialized expansion budget. This includes response-schema bytes. Existing priority context is not removed to satisfy this softer expansion budget. The hard bounds remain 64 passages and 128 KiB, with at most eight output citations per finding. Unversioned selection is unchanged. Exact prepared input still owns cache identity and provenance.
+
+### Source proposals and metadata compatibility
 
 Represent source-scope choice as one of three bounded presets: `balanced`,
 `first_party_depth`, or `independent_scrutiny`. Presets alter query priority and
@@ -221,11 +282,15 @@ provenance enforcement, or counter-evidence handling.
 
 After discovery, create one immutable, versioned `SourceSelectionProposal` for the active draft corpus revision and immutable `SourceSelectionProposalItem` records for its candidates. Store the policy version, adaptive recommendation ceiling, candidate-input fingerprint, status, and per-source disposition, rank, and reason codes. Proposal states are `recommended`, `needs_attention`, and `alternative`; they are system recommendations, not analyst decisions.
 
-From `source-selection-v5`, each immutable item also persists `companyLinkageBasis`, `declaredCoverageRoles`, and `eligibleCoverageRoles`. Company linkage is `structural`, `discovery_metadata`, `unverified`, or `not_evaluated`. `structural` preserves the existing CIK, official-domain, decoded-path domain-alias, and complete legal-name path checks. `discovery_metadata` is limited to declared institutional publishers and shared IR hosts whose discovery title contains either the complete normalized legal-name sequence or the exact confirmed website-domain alias as a token of at least five characters. It may support a recommendation contribution, but it never establishes structural identity, document kind, duplicate identity, evidence, or automatic coverage. `declaredCoverageRoles` records registry capability; `eligibleCoverageRoles` records candidate-specific automatic eligibility, and every non-structural discovered candidate has an empty eligible-role list. Analyst-supplied and historical items use `not_evaluated` rather than inventing a linkage proof. See ADR-022.
+The following v5/v6 metadata rules describe legacy proposals and metadata-only qualification, not a prohibition on ADR-024 content inspection. From `source-selection-v5`, each immutable item persists `companyLinkageBasis`, `declaredCoverageRoles`, and `eligibleCoverageRoles`. Its metadata linkage values are `structural`, `discovery_metadata`, `unverified`, or `not_evaluated`. `structural` preserves the existing CIK, official-domain, decoded-path domain-alias, and complete legal-name path checks. `discovery_metadata` is limited to declared institutional publishers and shared IR hosts whose discovery title contains either the complete normalized legal-name sequence or the exact confirmed website-domain alias as a token of at least five characters. It may support a recommendation contribution, but it never establishes structural identity, document kind, duplicate identity, evidence, or automatic coverage. `declaredCoverageRoles` records registry capability; `eligibleCoverageRoles` records candidate-specific automatic eligibility, and every non-structural discovered candidate in this metadata-only path has an empty eligible-role list. Analyst-supplied and historical items use `not_evaluated` rather than inventing a linkage proof. See ADR-022. Prepared content can establish relevance and purpose under ADR-024 without promoting publisher authority.
 
 Build the proposal without a model call. `source-selection-v5` treats search category as discovery intent only and classifies each candidate through the versioned authority-capability registry, structured SEC form and accession, confirmed CIK and company identity, authority-compatible URL structure, normalized period or event identity, confirmed company domain, date, coverage preset and research angle. Each candidate persists declared and candidate-eligible coverage roles; only an eligible role can be filled automatically. Shared IR hosts first use the existing exact website-domain label or complete normalized legal-name sequence in the decoded path for structural linkage; bounded discovery-title metadata may create only the separate `discovery_metadata` linkage defined in ADR-022. Company linkage never comes from query parameters, partial tokens, generic legal-name words, or ticker-only matches. Institutional publishers have only their declared independent or news capabilities, and qualified partners cannot satisfy first-party roles or be automatically selected without an eligible role. A company-matched unverified counter-evidence lead remains an inspectable manual-review alternative with no automatic roles, and reseller terms are corroborative manual-review material rather than canonical commercial terms. Titles never prove structural company identity, document type, role eligibility, duplicate identity, or a coverage contribution. Automatic document classification uses explicit decoded URL-path tokens and approved path sequences, never arbitrary URL substrings. Remove canonical and metadata-proven duplicates only when stable identity exists, preserve analyst-supplied sources, cover preset document roles, then add only candidates with a distinct coverage or metadata-triage contribution. Limit annual and interim series to two periods, material events to three, each official family to four contributions, and independent producers to four or six under `independent_scrutiny`. Missing roles remain visible gaps; indexes, Community content, aggregators, low-information documents and unverified publishers remain inspectable alternatives. The discovery recommendation ceiling defaults to half the candidate limit, rounded up, and counts only discovered recommendations; it is a circuit breaker rather than a fill target.
 
 From `source-selection-v6`, immutable proposal items persist metadata-only triage in `recommendationContributions`, separately from `coverageContributions`. Every `discovery_metadata` candidate has empty coverage contributions and empty eligible coverage roles; its recommendation contribution may compose the proposed corpus but cannot establish family coverage, automatic role satisfaction, duplicate identity, evidence, or document classification. Historical items hydrate `recommendationContributions: []` rather than being reinterpreted, and draft proposals from earlier policies require the existing explicit rebuild path.
+
+Policy `source-selection-v12` preserves valid analyst references as default recommendations when inspection is unavailable, without granting documentary coverage or factual authority. Qualified periodic documents retain reporting-period novelty under the existing series limits. One included document can satisfy multiple explicitly qualified ordinary roles. Independent-perspective roles still require distinct producers. Passage-local caveats restrict the referenced contributions and explicit dependencies; unlocated caveats remain global. Draft v10 and v11 proposals use the existing local refresh operation to create a v12 proposal from saved candidates and qualifications, without discovery, provider calls or rewriting analyst decisions. Earlier policy migrations retain their existing behavior.
+
+Source ordering preserves authority, provider order, recency and research-angle precedence, then uses canonical URL identity before database identity to break otherwise equal ranks. Recreating identical source records must not change which distinct documents are recommended merely because their database IDs changed. The [source-review correction report](../docs/verification/2026-10-22-source-review-corrections.md) records the tested boundaries and remaining limits.
 
 Recommend every valid analyst-supplied source by default with the visible reason `Added by analyst`. Analyst-supplied sources are included before and outside the discovery recommendation ceiling; the ceiling counts only discovered recommendations. Manual removal remains possible before approval. `needs_attention` is non-blocking; only no accepted source, stale proposal state, failed integrity checks, or failed authorization blocks approval.
 
@@ -240,10 +305,9 @@ source, such as page and bounding text for a public PDF or URL plus anchored
 text or section for a web document. Reject passages that cannot be located
 reproducibly.
 
-An approved `CorpusRevision` includes accepted sources only. A candidate may
-remain `pending`, but it is excluded from all downstream work. Accepting a
-pending source or an external counter-evidence lead later creates a new corpus
-revision and another durable checkpoint.
+An editable draft `CorpusRevision` can receive multiple source additions and decisions without creating a revision for each URL. An approved revision is immutable and includes accepted sources only. Changing that approved membership requires a new draft revision and another durable approval checkpoint; several changes may be grouped in that draft. Pending and rejected sources cannot supply analytical outputs. Bounded preparation of an eligible pending source is allowed under ADR-024 before approval. Unchanged captures and exact-input qualifications may be reused under their existing cache rules; this does not establish a complete incremental recomputation contract for downstream claims, assessments or briefs.
+
+Creating a corpus revision builds its initial proposal from the persisted run pointing to that new revision. A reopened legacy corpus without a waiting discovery workflow uses the existing evidence-execution handoff on approval. That owner freezes the accepted sources, claims execution and starts the existing workflow in the same transaction. The original revision and append-only decisions remain intact.
 
 `SourceDecision` remains the append-only authority for analyst choices.
 `sourceReviewItems` is a mutable, derived read model for one source and corpus
@@ -260,8 +324,7 @@ corpus decision flow. Authorize the caller and run before DNS or HTTP work.
 Validate every redirect destination and connect to the public address that was
 validated while preserving the original host for HTTP Host and TLS SNI; do not
 validate one DNS result and then permit an unrelated resolution for the actual
-connection. Local file and PDF upload is outside the MVP. Public PDFs reachable
-through an approved HTTPS URL remain supported after approval.
+connection. Local file and PDF upload is outside the MVP. Validated public PDF URLs support bounded captured-text preparation before approval and analytical materialization afterward; page-aware parsing remains deferred.
 
 All analyst URL entry uses one public Convex action. Before launch, the action
 returns a short-lived server-owned preparation receipt after URL validation and
@@ -276,12 +339,7 @@ backend errors.
 
 Preserve source retrieval and extraction failures as visible structured states. Failure of one source must not erase it or terminate unrelated retrieval work.
 
-Phase 5 approved-source retrieval uses real SEC direct HTTP for confirmed CIK
-and accession identity and real Exa Contents for approved general-web URLs.
-Real Unstructured page-aware PDF normalization and real model-provider claim
-generation remain Phase 8 deferrals under ADR-004, ADR-009, and ADR-010; Phase 5
-defines and tests the page-aware normalizer contract and the claim-generation
-task schema using deterministic fixture adapters. See ADR-023.
+Phase 5 materializes the exact approved captures for prepared dossiers. Legacy approved sources without capture pins use real SEC direct HTTP for confirmed CIK/accession identity and real Exa Contents for general-web URLs. Real Unstructured page-aware PDF normalization and general live model-provider claim generation remain Phase 8 deferrals; their Phase 5 contracts use deterministic fixture adapters. Preparation qualification and comparison have separate real provider adapters under ADR-024. See ADR-023 for the honest `claim_generation_unavailable` boundary.
 
 Phase 5 numeric safety limits: `MAX_APPROVED_SOURCE_BYTES = 16 MiB` (declared
 and decompressed), `MAX_NORMALIZED_ARTIFACT_BYTES = 16 MiB`, `MAX_PDF_PAGES =
@@ -290,7 +348,7 @@ and decompressed), `MAX_NORMALIZED_ARTIFACT_BYTES = 16 MiB`, `MAX_PDF_PAGES =
 10 seconds (abortable), Exa Contents outer timeout 120 seconds (abortable), and
 accepted-source count capped by the existing `SOURCE_CANDIDATE_LIMIT = 48`. The
 frozen fan-out count is the actual number of accepted sources, never the
-source-recommendation ceiling or an assumed target. See ADR-023.
+source-recommendation ceiling or an assumed target. ADR-024 extends the historical/frozen ceiling to 60 for prepared dossiers while initial discovery remains 48. See ADR-023.
 
 Treat retrieved documents and model output as untrusted input. Generated structured output must pass schema validation before persistence as usable evidence. Bound retries. If validation or evidentiary support remains inadequate, downgrade the result rather than laundering it into a fact.
 
@@ -354,7 +412,7 @@ Implement a provider-agnostic `ModelRouter`. Workflow code requests capabilities
 - `dimension-assessment`
 - `brief-generation`
 
-The Phase 4 deterministic `SourceSelectionProposal` does not call `source-relevance`. Keep that capability deferred unless measured metadata-policy failures justify a model-backed proposal under the normal provider-call, schema, retry, telemetry, and cost contracts.
+`SourceSelectionProposal` composition remains deterministic and does not call `source-relevance`. ADR-024 preparation uses separate typed qualification and targeted-comparison tasks whose inspected, validated outputs inform composition. Model results cannot own inclusion, provenance authority or analyst decisions. General analytical capabilities above remain distinct from those preparation integrations.
 
 Routing considers capability, quality, approximate cost, configured resource guards, availability, and prior failures. Model names are configuration data.
 
@@ -370,12 +428,7 @@ Use `ai` with `@openrouter/ai-sdk-provider` for OpenRouter. Use `ai` with
 `@ai-sdk/openai-compatible` only for the private CLIProxyAPI inference surface.
 Do not route OpenRouter through CLIProxyAPI.
 
-Use `exa-js` for source discovery with `contents: false`; call `getContents`
-only with URLs or search results belonging to an approved corpus revision.
-Query SEC EDGAR directly over HTTP with an identifying `User-Agent` and a
-shared aggregate request limiter below the SEC maximum. Use direct HTTP for the
-current Unstructured Pipeline Jobs API; the available JavaScript client targets
-the legacy Partition endpoint and is not an MVP dependency.
+Use metadata-only Exa search for discovery; the HTTP search request omits the `contents` field. Exa Contents may retrieve eligible candidate content under ADR-024 preparation authority, or retrieve legacy approved sources under ADR-023. Exact prepared captures are reused after approval instead of silently fetching replacement bytes. Query SEC EDGAR directly over HTTP with an identifying `User-Agent` and a shared aggregate request limiter below the SEC maximum. The selected Unstructured Pipeline Jobs integration is a direct-HTTP contract; the legacy Partition client is not an MVP dependency.
 
 The provider-SDK preference applies where a current SDK owns the selected API
 surface. SEC EDGAR is an intentional direct-HTTP institutional-source boundary,
@@ -503,6 +556,8 @@ Do not make chat the primary interface. Do not add automatic translation until t
 
 Security controls are required in proportion to the features actually exposed; they are not permission to build an unrelated enterprise security platform before the relevant slice exists.
 
+Preview cache reads require authenticated, active ownership and a claimed invitation bound to that visitor, just like rendering. Rendering rechecks eligibility before I/O, after receipt and atomically before cache persistence. The standalone preview service sends Chromium connections through a per-render authenticated loopback CONNECT proxy that connects only to a validated numeric public address. TLS remains end-to-end in Chromium. Redirect responses are paused and validated before continuation, including the five-hop limit. Subresources use the same egress boundary; service workers, WebSockets, downloads and non-GET browser requests are blocked. The proxy has a bounded lifetime, connection count and aggregate transfer limit. This service is separately packaged, so its URL policy remains independent of the Convex runtime; the dedicated browser gate must preserve parity for private-address ranges and redirect policy. See [the correction verification record](../docs/verification/2026-10-22-source-review-corrections.md) for executed checks, environment limitations and deployment status.
+
 ## Test and Verification Contract
 
 All production behavior changes follow the TDD policy in `AGENTS.md`. The detailed cycle is:
@@ -572,8 +627,8 @@ Cover at minimum:
 - configured research and provider-call guards;
 - valid and invalid workflow transitions;
 - workflow resumption, cancellation, retries, and idempotency;
-- mandatory source approval before extraction;
-- adaptive source-recommendation ceiling without forced filling or model calls;
+- mandatory source approval before analytical materialization and claim extraction, with bounded preparation separately authorized;
+- adaptive source-recommendation ceiling without forced filling; deterministic composition separate from model-backed preparation;
 - deterministic dynamic source-family coverage, proposal versioning, stale detection, and manual-source inclusion;
 - grouped proposal approval writing individual append-only source decisions atomically and idempotently;
 - exclusion of rejected sources everywhere downstream;
@@ -609,22 +664,14 @@ Build runnable vertical slices in this order unless measured evidence justifies 
 3. Implement access-code admission, stable visitor rebinding, and atomic
    analysis reservations.
 4. Implement a provider-independent workflow skeleton with persisted progress and durable checkpoints, using deterministic fake adapters in tests only.
-5. Build the Phase 4 vertical slice: bounded company-candidate search, explicit
-   CIK selection, preflight confirmation, reservation, authoritative CIK
-   revalidation, evidence-sufficiency checkpoint, research plan, real SEC and
-   Exa source discovery, HTTPS URL entry, deterministic `SourceSelectionProposal`, summary-first exception review, and atomic `CorpusRevision` approval.
-6. Build normalization, stable passages, typed claim tasks, structural
-   validation, versioned policy evaluation, claim evidence, and
-   counter-evidence handling.
+5. Build company selection, preflight, canonical revalidation, evidence sufficiency, research planning, SEC/Exa discovery and HTTPS intake. Prepare bounded captures, qualification, retrieval and targeted comparisons before deterministic source composition, summary-first review and atomic corpus approval.
+6. Materialize exact approved captures and pinned passages, retain legacy approved-source retrieval, then build typed analytical claims, structural validation, policy evaluation and counter-evidence handling. Keep the deterministic showcase boundary explicit until real analytical tasks are integrated.
 7. Build exception-driven grouped claim review, canonical claim and
    dimension-link decisions, per-dimension proposals, confidence inputs,
    atomic assessment decisions, overrides, and revision history.
 8. Build progressive architecture-map and approved-claims-only brief revisions
    with persisted contribution previews.
-9. Complete the remaining model and retrieval adapters, application-owned
-   routing and fallback, best-effort telemetry, admin operations, bounded
-   retries, and partial-failure behavior. This step does not defer the real SEC
-   and Exa boundaries required by the Phase 4 slice.
+9. Complete the remaining analytical model and page-aware PDF adapters, application-owned routing, telemetry, admin operations and partial-failure behavior. This step does not defer the discovery, acquisition, qualification/comparison or optional embedding adapters already required by preparation.
 10. Curate the CCC showcase corpus, then derive expected evaluation material
     after manual approval. Add deterministic policy fixtures.
 11. Verify the complete access-code-admission-to-brief journey and document
@@ -634,12 +681,11 @@ Do not postpone core invariants until a final hardening phase. Do not scaffold e
 
 ## Evaluation and Demo Verification
 
-Curate CCC first under its accepted showcase scope. Define expected claims,
-known contradictions, and deliberately unresolved questions only after manual
-corpus approval, then reuse that same dossier as the first regression corpus.
-Use small deterministic fixtures for isolated policy rules. Add ServiceNow or
-another company only when it closes a measured gap; do not make multiple
-completed dossiers an implementation prerequisite.
+Keep CCC as the primary curated showcase under its accepted scope. Define its expected claims, known contradictions and unresolved questions after manual corpus approval, then reuse that dossier for regression rather than creating a parallel golden dossier. Use small deterministic fixtures for isolated policy rules.
+
+Evaluate source preparation separately across multiple companies, source families and dossier types, including broad research, targeted questions, analyst-supplied references and uncertain arguments. This does not require multiple completed showcase dossiers. Historical four-company replays reuse observed captures and model outputs; they establish neither unfamiliar-company robustness nor fresh discovery or new-angle model quality.
+
+Separate exact-reference retention from useful equivalent evidence, displayed qualification and downstream analytical correctness. The [Snowflake correction](../docs/verification/2026-10-21-evidence-retrieval-repair.md#interpretation-correction-2026-10-22) demonstrates why a missing reference offset cannot alone establish missing useful evidence. Keep historical raw results immutable, record investigator authorship and unresolved judgments, and do not turn a count out of 32 conditions into the product objective or a definitive technology choice. Any revised selection threshold or activation decision requires explicit acceptance. Existing replay commands and their input prerequisites belong in the [evaluation README](../scripts/evaluations/source-selection/README.md).
 
 Measure citation validity, entailment, classification, contradiction retrieval, question coverage, unsupported-claim rate, duration, available provider usage or cost, and analyst corrections.
 
@@ -673,8 +719,13 @@ Never present cached, seeded, or precomputed output as live. Label showcase and 
 - ADR-016: centralized public-HTTPS manual source intake with expiring preparations.
 - ADR-017: deterministic source-selection proposals and grouped corpus approval, with ranking and fixed-target sections superseded by ADR-018.
 - ADR-018: adaptive authority- and document-aware source selection, outdated-draft rebuild, and recommendation ceiling.
+- ADR-019: transient visual preview, separate from documentary captures and analytical evidence.
+- ADR-020: historical counter-evidence selection decision, superseded by ADR-021.
 - ADR-021: source provenance and declared role capability separated from candidate-specific automatic role eligibility, as amended by ADR-022.
 - ADR-022: durable company-linkage basis and bounded discovery-metadata recommendations without automatic coverage eligibility.
 - ADR-023: decision-anchored Phase 5 evidence workflow, effective-head freeze, `evidence_ready`, `claim_generation_unavailable`, immutable `ResearchPlanQuestion`, provenance/claim/policy records, upload lease cleanup, real SEC/Exa approved-source retrieval, deferred real Unstructured/model generation, and hybrid showcase/live boundary.
+
+- ADR-024: bounded pre-approval content qualification, immutable captures, one finite discovery supplement, controlled inexpensive model routing and enforceable restricted evidence use.
+- ADR-025: versioned scoped retrieval, optional hosted embeddings, preservation of pinned passages, and bounded comparison context; exact-reference metrics do not settle useful-evidence quality.
 
 Read the corresponding record in `docs/decisions/` before revisiting any of these decisions.
