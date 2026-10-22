@@ -59,3 +59,11 @@ The new selection tests first failed on unsupported `--models`, then passed afte
 No project-wide check was repeated because the previous unrelated lint failure remains outside this tooling change. No browser validation or production-pipeline activation was performed. No reference labels, source excerpts, or common questions were tuned after results.
 
 The result does not justify preferring GLM as an evidence authority. Its candidate substitution is recorded as requested, while production model choice and the paused original goal remain separate.
+
+## Catalog configuration recorded on 2026-10-22
+
+These profile notes were moved from the evaluation README without new provider verification or inference. Model identifiers, catalog contents and reasoning settings describe the recorded conditions, not a current recommendation. Paths below are relative to `scripts/evaluations/source-selection/`.
+
+The current candidate list is data in `fixtures/cross-company-20261020/candidate-catalog-20261020.json`. It contains DeepSeek V4.1 Flash, GLM 5.3 Flash, Jev 1.14, Microsoft Decision 1, and DeepSeek V4.1 Flash 1017. GLM replaces MiMo in this current comparison list. Selecting one or several candidates does not require editing TypeScript or creating a replacement mapping.
+
+GLM 5.3 Flash's official metadata marks reasoning mandatory. Its current profile requests low effort, excludes reasoning content from responses, and caps total completion at 8,192 tokens. That condition differs from the previous generative profiles requesting reasoning disabled with a 1,024-token cap. The source snapshots, common questions, output schema, and temperature remain unchanged. Do not treat this as a comparison under identical reasoning settings.

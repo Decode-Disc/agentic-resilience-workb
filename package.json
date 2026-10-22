@@ -30,6 +30,7 @@
         "convex:check": "tsc --noEmit -p convex/tsconfig.json",
         "convex:sync": "node --experimental-strip-types scripts/sync-local-convex.ts",
         "invitations:generate": "node --experimental-strip-types scripts/generate-invitations.ts",
+        "evaluation:archive": "node --experimental-strip-types scripts/archive-evaluation.ts",
         "test": "TMPDIR=/tmp TEMP=/tmp TMP=/tmp vitest run",
         "test:watch": "TMPDIR=/tmp TEMP=/tmp TMP=/tmp vitest",
         "test:e2e": "playwright test",

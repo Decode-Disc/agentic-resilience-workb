@@ -113,3 +113,68 @@ The `pnpm exec` Biome invocation stalled and was interrupted. The same locally i
 The recorded main-run summary (`scripts/evaluations/source-selection/runs/2026-10-20-supported-config/summary.json`, local reference as of 2026-10-22; not included in checkpoint `c4f0d24`), journal (`scripts/evaluations/source-selection/runs/2026-10-20-supported-config/calls.jsonl`, local reference as of 2026-10-22; not included in checkpoint `c4f0d24`), manifest (`scripts/evaluations/source-selection/runs/2026-10-20-supported-config/manifest.json`, local reference as of 2026-10-22; not included in checkpoint `c4f0d24`), usage (`scripts/evaluations/source-selection/runs/2026-10-20-supported-config/usage-details.json`, local reference as of 2026-10-22; not included in checkpoint `c4f0d24`) and integrity record (`scripts/evaluations/source-selection/runs/2026-10-20-supported-config/integrity.json`, local reference as of 2026-10-22; not included in checkpoint `c4f0d24`) preserve the raw evidence and limits.
 
 Official references used for interface and catalogue verification: [TypeSafe models](https://docs.typesafe.ai/models), [TypeSafe System One](https://docs.typesafe.ai/api/system-one), [OpenRouter model catalogue](https://openrouter.ai/docs/guides/overview/models), [OpenRouter OpenAPI](https://openrouter.ai/openapi.json), [Microsoft Decision 1 announcement](https://commandline.microsoft.com/microsoft-decision-1-model-foundry/) and [OpenRouter reasoning parameters](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens). Vendor benchmark claims were not used as the scoring reference.
+
+## Historical runner usage preserved on 2026-10-22
+
+The following usage notes were moved from the evaluation README. They describe the original experiment and runner limits, not current permissions, model routing or a new verification run. The original report above is unchanged.
+
+
+This standalone, opt-in evaluation compares fixed-choice judgments on captured public ServiceNow documents. It does not read or modify Convex, change source approval, or integrate a provider into the application. It uses the project's Node runtime and standard library, with no added dependency.
+
+The later grouped qualification runner imports the real production modules and uses the installed AI SDK. Its reproducible commands, frozen judgments, historical failures, cost accounting and pending activation gate are recorded in [QUALIFICATION-EVALUATION.md](QUALIFICATION-EVALUATION.md).
+
+### Reference and inputs
+
+`fixtures/dataset.json` contains the frozen source captures, provenance hashes, question definitions and protocol. `fixtures/reference.json` contains the investigating assistant's expected answers, individual document analyses, exact evidence anchors and claim judgments. `REFERENCE.md` renders that reference for inspection. Labels were recorded before inference. They are investigator judgments, not independently adjudicated human ground truth. `SOURCE-AUDIT.md` preserves the earlier complete alternative-source audit, including its historical temporary-file references. `REPORT.md` interprets the measured comparison.
+
+The 19 documents were selected from a prior 48-candidate dossier audit to expose known selection problems. The 35 base requests contain 99 decisions across document classification, passage entailment and passage localization. Four cases are repeated and rerun with reversed option order. The five configured models therefore require 215 requests at most. There is one company, no random sample, no independent holdout and no approved confidence threshold. Localization uses constructed passage pools and does not measure full-document retrieval recall.
+
+The full captured text is supplied for document classification. Reference answers, investigator rationales and evidence annotations are never sent to providers. Questions distinguish a contract-management product from an actual agreement, relevant adverse mechanisms from overall sentiment, and an author's assertion from verified truth.
+
+### Offline commands
+
+Run from the repository root with Node 24:
+
+```sh
+node --experimental-strip-types scripts/evaluations/source-selection/compare.ts
+node --experimental-strip-types scripts/evaluations/source-selection/compare.ts --reference
+```
+
+The first command checks the frozen choices and displays the planned calls and conservative reservation. Neither command loads credentials or calls a provider. The sum of pessimistic reservations can exceed the total budget; each live request separately reserves its bound against actual spending, and dispatch stops when the next reservation cannot fit.
+
+### Catalog verification
+
+```sh
+node --experimental-strip-types scripts/evaluations/source-selection/catalog.ts /tmp/openrouter-catalog.json
+```
+
+This makes public catalog GETs only. The OpenRouter models skill was used for the initial comparison and provider inspection. Its default `/models` request omits decision models, so the catalog script also requests `output_modalities=decisions`, as documented in the [official model catalog guide](https://openrouter.ai/docs/guides/overview/models). Prices are per token in the raw API. Do not interpret the skill's rounded `$0.04` display as an exact `$0.040` tariff.
+
+### Paid execution
+
+Configure `TYPESAFE_API_KEY` and `OPENROUTER_API_KEY` in `.env.local` or the process environment. Never put keys in arguments, fixtures or reports. Verify current tariffs before a new live run. The initial tariff snapshot is `fixtures/catalog-2026-10-20.json`. Its rates and identifiers are historical evaluation configuration, not permanent product defaults.
+
+```sh
+# Five initial calls, one per model.
+node --experimental-strip-types scripts/evaluations/source-selection/compare.ts --live --run my-comparison --limit 5
+
+# Resume the same run; completed calls, including failures, are not repeated.
+node --experimental-strip-types scripts/evaluations/source-selection/compare.ts --live --run my-comparison
+
+# Recompute scores from saved responses, without network access.
+node --experimental-strip-types scripts/evaluations/source-selection/compare.ts --summarize --run 2026-10-20-supported-config
+```
+
+Use a new run name for an intentional later comparison. A run binds the dataset, reference, runner and tariff snapshot by SHA-256. Changed inputs cannot silently resume an existing run, and offline scoring rejects a changed dataset or reference. An incomplete journal entry represents a call of unknown outcome and blocks automatic repetition. There are no automatic retries or model fallbacks. Authentication, funding, rate-limit and initial smoke failures halt the affected model, including on resume. SIGINT/SIGTERM abort active requests and prevent further dispatch; an already-sent call may still have incurred a charge.
+
+The local budget is $1 of estimated or provider-reported inference charges, with two concurrent requests and a 45-second request timeout. Each dispatch reserves a pessimistic byte-based token bound, including repeated state for native multi-question requests. Unknown charges retain that reservation. OpenRouter reports cost when available; TypeSafe cost is calculated from returned usage and the frozen tariff. This is application-side accounting, not an account-level provider spending limit. Four additional source extractions consumed 47 Firecrawl credits, separately from inference. Earlier audit retrievals are excluded from that count.
+
+`runs/<name>/manifest.json` records inputs and request hashes. `calls.jsonl` records each started request and its terminal response, error, latency and cost basis. `summary.json` is regenerated from the reference and journal. Missing or invalid responses remain visible in the total denominator. Provider confidence is not analytical confidence.
+
+The two recorded historical runs are complete artifacts. Their original runner bytes are archived alongside their manifests. Subsequent improvements to the offline integrity check do not authorize resuming those runs under changed runner bytes. See `CONFIGURATION-NOTES.md` for the GLM configuration correction and the transfer of the initial probe's cost into the main run.
+
+### Boundaries
+
+Results test the tasks and captures supplied here. They do not establish general source reliability, editorial independence, factual truth, production robustness, analyst time savings, extraction fidelity or cross-company recall. The existing metadata selector receives different inputs and enforces authority constraints, so its outputs are not a directly comparable model-accuracy baseline.
+
+The original experiment did not change the approval contract. [ADR-024](../../../docs/decisions/024-qualify-source-content-before-corpus-approval.md) subsequently authorized bounded preparation before corpus approval. Implementation and activation still require their separate verification gates.

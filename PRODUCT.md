@@ -136,13 +136,13 @@ A showcase selection, existing interface, deterministic fixture or historical su
 
 ## Evaluation and Demonstration
 
-Demonstrate two clearly separated paths: a completed curated dossier showing the matrix, assessment, derived views and a material analyst decision or override; and a genuinely new company run showing live resolution, discovery, persisted progress and the corpus checkpoint. Freeze and display the showcase source cutoff date. Define expected claims, contradictions and unresolved questions after manual corpus approval, reusing that dossier for analytical regression rather than creating a competing golden dossier.
+Demonstrate two clearly separated paths: a completed curated dossier showing the matrix, assessment, derived views and a material analyst decision or override; and a genuinely new company run showing live resolution, discovery, persisted progress and the corpus checkpoint. Freeze and display the showcase source cutoff date. The approved showcase remains the reference dossier for analytical regression.
 
-Evaluate preparation separately across companies, source families and dossier types: broad research, targeted questions, supplied references and uncertain arguments. Small deterministic fixtures isolate policy rules without requiring multiple complete showcase dossiers. Judge useful retained material, visible omissions, exact provenance, bounded cost and ability to continue; neither perfect selection nor a count out of 32 historical conditions is the product objective.
+Evaluate preparation separately across different companies, source families and dossier types. Judge useful retained material, visible omissions, exact provenance, bounded cost and ability to continue the analytical workflow. Useful preparation does not require perfect selection or multiple completed showcase dossiers.
 
-Distinguish source inclusion, exact-reference retention, equivalent useful evidence, displayed qualification and downstream analytical correctness. Historical observed captures and investigator-adjudicated replays do not establish fresh-discovery or unfamiliar-company robustness. Preserve raw results, authorship, unresolved judgments and interpretation corrections. New acceptance thresholds or a definitive retrieval/model choice need an explicit decision, not retrospective reference adjustment.
+Claims of quality and robustness must remain within the demonstrated scope. Preserve inspectable evidence, the authorship of evaluation judgments, unresolved disagreements and interpretation corrections. New acceptance thresholds and definitive model or retrieval choices require an explicit decision.
 
-Measure citation validity, entailment, classification, contradiction retrieval, question coverage, unsupported-claim rate, elapsed time, available provider usage/cost and analyst corrections. The Methodology & Limitations page presents measured results only; detailed evidence can remain in dated reports. Open uncertainties include extraction and locator quality, whether the bounded CCC corpus can discriminate the competing interpretations, and the minimum evidence questions needed per dimension.
+Measure citation validity, entailment, classification, contradiction retrieval, question coverage, unsupported-claim rate, elapsed time, available provider usage/cost and analyst corrections. The Methodology & Limitations page presents measured results only; detailed observations belong in dated reports and remaining evaluation work in the roadmap.
 
 ## MVP Acceptance
 

@@ -155,6 +155,7 @@ Outcome: one carefully curated dossier demonstrates original, contested, and mea
 - [ ] Freeze the CCC source cutoff date and bounded workflow scope.
 - [ ] Curate and approve a corpus with suitable independent evidence.
 - [ ] Define expected claims, known contradictions, and deliberate unknowns after manual review.
+- [ ] Resolve open evaluation questions: extraction and locator quality, whether the bounded CCC corpus discriminates the competing interpretations, and the minimum evidence questions needed per dimension.
 - [ ] Reuse the curated CCC dossier as the first regression corpus instead of creating a parallel golden dossier.
 - [ ] Add small deterministic fixtures for isolated policy rules.
 - [ ] Include at least one material, justified analyst override.

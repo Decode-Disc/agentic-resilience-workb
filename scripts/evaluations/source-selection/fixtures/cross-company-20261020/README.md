@@ -112,3 +112,27 @@ The user subsequently requested replacing the old DeepSeek and Luna comparison c
 ## Current catalog and GLM screen
 
 The current candidate catalog is `candidate-catalog-20261020.json`, with GLM 5.3 Flash replacing MiMo. The CLI selects one, several, or all candidates through `--models`; `--list-models` displays the list. Models, routes, and optional reasoning/output settings are data rather than per-run source edits. See the root evaluation README for commands. Four GLM calls completed with schema-valid outputs and provider-reported cost USD 0.001102867344. GLM missed the Adobe discrepancy and flagged an unsupported CrowdStrike conflict. NVIDIA and Snowflake results were consistent with the supplied excerpts. Its mandatory low reasoning condition differs from previous reasoning-disabled runs. See `docs/verification/2026-10-20-glm53-source-quality-screen.md`.
+
+## Retained artifact snapshot, 2026-10-22
+
+This is the provenance and recovery record for the manual snapshot, including sibling historical experiments. Its archive layout uses repository-relative paths directly, unlike the newer archive command's `repository/` and `external/` layout.
+
+The snapshot `source-selection-20261022T120958Z.tar.gz` preserves all 395 files in `scripts/evaluations/source-selection/runs/`, this fixture's `runs/` and its `captures/`, totaling 176,602,178 uncompressed bytes. Its compressed size is 25,446,495 bytes. The [archive checksum](../../archives/20261022T120958Z/archive.sha256) verifies the bundle; the [file inventory and checksums](../../archives/20261022T120958Z/files.sha256) identify every repository-relative payload. Archive extraction and all file hashes were verified against the unchanged originals before adding the ignore rules. Failed attempts, raw responses, cost journals and historical code snapshots are preserved without reinterpretation.
+
+The archive is stored locally under `~/.local/share/agentic-resilience-workbench/evaluation-archives/`, outside this checkout and temporary directories. It has not been uploaded or backed up off this machine. A fresh clone needs this exact archive for checks consuming these captured inputs, including recorded-source browser scenarios. The separate inputs described in [saved retrieval replay](../../README.md#saved-retrieval-replay), including its temporary run directory, are not included in this snapshot. The default source-quality unit tests create temporary synthetic captures and do not require these archived directories. Restoring an archive does not authorize inference, live evaluation or replaying historical authorization files.
+
+From a fresh clone's repository root, obtain the archive from that local store and run the following. Set `archive_dir` to its actual location if the bundle has been transferred. Extraction refuses to overwrite existing files; use a separate checkout if historical artifact directories already exist.
+
+```sh
+repository="$(pwd)"
+checksums="$repository/scripts/evaluations/source-selection/archives/20261022T120958Z"
+archive_dir="$HOME/.local/share/agentic-resilience-workbench/evaluation-archives"
+(
+    set -eu
+    cd "$archive_dir"
+    sha256sum --check "$checksums/archive.sha256"
+    tar --extract --gzip --file source-selection-20261022T120958Z.tar.gz --directory "$repository" --keep-old-files --no-same-owner
+    cd "$repository"
+    sha256sum --check "$checksums/files.sha256"
+)
+```

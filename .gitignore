@@ -35,3 +35,8 @@ inspirations/
 tmp/
 
 skills-lock.json
+
+# Generated evaluation payloads, across studies; retain code and reference fixtures
+# Archive and restoration instructions: scripts/evaluations/source-selection/README.md
+/scripts/evaluations/**/runs/
+/scripts/evaluations/**/captures/
