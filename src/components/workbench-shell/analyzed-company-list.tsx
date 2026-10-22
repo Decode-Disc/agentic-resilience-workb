@@ -110,8 +110,8 @@ function AnalyzedCompanyListContent({
         aria-label="Loading research dossiers"
         aria-busy="true"
       >
-        {[...Array(3)].map((_, i) => (
-          <React.Fragment key={`skeleton-${i}`}>
+        {["first-dossier", "second-dossier", "third-dossier"].map((placeholder) => (
+          <React.Fragment key={placeholder}>
             <Skeleton className="h-8 w-44 rounded-sm" />
             <Separator orientation="vertical" className="mx-2 shrink-0" />
           </React.Fragment>
@@ -231,7 +231,8 @@ function AnalyzedCompanyListContent({
     >
       <div className="flex shrink-0 items-center gap-2">
         <DossiersButton />
-        {availableRuns.map((run, index) =>
+        <Separator orientation="vertical" className="mx-2 shrink-0" />
+        {availableRuns.map((run) =>
           run.company ? (
             <div key={run.runId} className="flex items-center gap-0.5">
               <Link
@@ -258,9 +259,6 @@ function AnalyzedCompanyListContent({
                   {`${run.company.legalName} (${run.company.ticker})`}
                 </span>
               </Link>
-              {index < availableRuns.length - 1 ? (
-                <Separator orientation="vertical" className="mx-2 shrink-0" />
-              ) : null}
             </div>
           ) : null,
         )}

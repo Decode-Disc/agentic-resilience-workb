@@ -19,6 +19,8 @@ The phase responsibilities below follow the current [source-preparation contract
 | Analytical claims and Evidence Matrix | The hash-gated deterministic showcase path is implemented. | Arbitrary live dossiers pause at `claim_generation_unavailable`; real analytical generation and verification remain unfinished. |
 | Dimension review, derived map and brief | Required later slices. | No completed live invitation-to-brief journey is certified. |
 
+Dossier navigation uses a single desktop divider and stable identities for its three loading slots. The original separator-count assertion is retained. Fifteen shell/navigation tests and focused Biome checks passed in the development working tree, with protected desktop/mobile checks preserving navigation geometry, links, keyboard interaction and reconnection. Those browser checks included other uncommitted development work. Local-only evidence is under `/tmp/workbench-navigation-fixes-4papzivd/`.
+
 The immediate evidence-quality work is to identify useful material lost at actual stage boundaries across several companies and dossier types, while accepting explicit uncertainty. The historical 32 conditions are not a product completion target. Audit source retention, capture identity, selected context and later analytical availability separately. The 600-character comparison explanation limit remains an open, deferred issue after that evidence-preservation work. No new experiment, model replacement or activation follows from this roadmap update.
 
 ## Phase 0 — Application Foundation

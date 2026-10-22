@@ -165,7 +165,11 @@ test("keeps the compact company menu on mobile", async () => {
 test("distinguishes loading from the empty state", () => {
     convexReactHarness.query(api.researchRuns.listMine).returns(undefined);
     const { rerender } = render(<AnalyzedCompanyList />);
-    expect(screen.getByLabelText(/Loading research dossiers/i)).toBeTruthy();
+    const loading = screen.getByRole("status", {
+        name: /Loading research dossiers/i,
+    });
+    expect(loading.getAttribute("aria-busy")).toBe("true");
+    expect(loading.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(3);
 
     convexReactHarness.query(api.researchRuns.listMine).returns([]);
     rerender(<AnalyzedCompanyList />);
