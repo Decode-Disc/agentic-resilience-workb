@@ -96,6 +96,10 @@ Keep domain rules out of UI components. Keep provider-specific types and model n
 - Documentation-only edits need link, structure and consistency checks, not a manufactured failing test. Run `pnpm docs:check`, and `pnpm design:check` when visual documentation is touched. Tooling/configuration requires executable before-and-after validation; generated outputs are verified through their owner rather than edited independently.
 - Do not run `pnpm run build` for each change. Use a build after substantial application changes, not routine documentation edits.
 
+`pnpm convex:check` only typechecks the backend. Keep validation independent from synchronization. `pnpm dev` or `pnpm convex:dev` owns the local backend lifecycle; use one development watcher and preserve its running service. After editing backend code, verify a successful watcher push after the edit and exercise the changed behavior through the relevant authorized check. A listening port or an unchanged function signature alone does not prove that the latest implementation was applied.
+
+For an explicitly intended manual push to an already running local backend, use `pnpm convex:sync --url http://127.0.0.1:<port>`. It requires matching project configuration and running instance identity before calling the installed publisher, preserves project environment files, and never starts or stops a backend. It may regenerate Convex types and update backend functions, schema and indexes. It is not part of routine validation or CI. Do not replace it with a second `convex dev --once`, silently select another port or deployment, or bypass the native duplicate-instance protection.
+
 ### Centralization and Shared Ownership
 
 - Decisions, semantic status, presentation tokens, validation, and policy must each have a single owner. When a concept appears on multiple surfaces, expose it through a focused shared helper, hook, or domain module at the owning boundary; never duplicate mapping or conditional logic.
