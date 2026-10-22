@@ -1,5 +1,7 @@
 # ADR-017: Use Deterministic Source Selection Proposals
 
+> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 ## Status
 
 Accepted; source-ranking and fixed-target sections superseded by ADR-018; analyst-source ceiling rule superseded by ADR-021. [ADR-024](024-qualify-source-content-before-corpus-approval.md) supersedes the metadata-only preparation and no-pre-approval-reading assumptions. Proposal composition remains deterministic, while bounded qualification and comparison may call models before composition. The rejected pre-approval-reading alternative below records the earlier rationale, not a current prohibition.

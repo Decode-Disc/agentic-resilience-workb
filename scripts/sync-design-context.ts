@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -238,9 +238,17 @@ const motionUtility = read("src/components/ui/motion-animate-presence.tsx");
 const glass = read("src/components/ui/liquid-glass.tsx");
 const rail = read("src/components/workspace/workspace-navigation-rail.tsx");
 const tailwind = read("node_modules/tailwindcss/theme.css");
+const sidecarPath = ".impeccable/design.json";
+const timestamp = existsSync(resolve(root, sidecarPath))
+    ? read(sidecarPath).match(/"generatedAt":\s*"([^"]+)"/)?.[1]
+    : null;
+const previousGeneratedAt =
+    typeof timestamp === "string" && Number.isFinite(Date.parse(timestamp))
+        ? timestamp
+        : null;
 const sidecar = {
     schemaVersion: 2,
-    generatedAt: `${match(body, /Captured from the working tree on (\d{4}-\d{2}-\d{2})/, "visual capture date")}T00:00:00.000Z`,
+    generatedAt: previousGeneratedAt,
     title: match(body, /^# (.+)$/m, "design title"),
     extensions: {
         colorMeta,
@@ -324,19 +332,34 @@ const sidecar = {
 
 const outputs = [
     ["DESIGN.md", `---\n${JSON.stringify(tokens, null, 2)}\n---\n${body}`],
-    [".impeccable/design.json", `${JSON.stringify(sidecar, null, 2)}\n`],
+    [sidecarPath, `${JSON.stringify(sidecar, null, 2)}\n`],
 ] as const;
 let stale = false;
 for (const [path, content] of outputs) {
     const destination = resolve(root, path);
+    // Impeccable compares file mtimes. Refresh them on sync, but keep check
+    // content-based so checkout order cannot create a false CI failure.
+    const refreshSidecar =
+        path === sidecarPath &&
+        (previousGeneratedAt === null ||
+            (!check &&
+                statSync(resolve(root, "DESIGN.md")).mtimeMs >
+                    statSync(destination).mtimeMs));
     if (
+        !refreshSidecar &&
         existsSync(destination) &&
         readFileSync(destination, "utf8") === content
     )
         continue;
     stale = true;
     if (check) console.error(`Out of date: ${path}. Run pnpm design:sync.`);
-    else writeFileSync(destination, content);
+    else {
+        const output =
+            path === sidecarPath
+                ? `${JSON.stringify({ ...sidecar, generatedAt: new Date().toISOString() }, null, 2)}\n`
+                : content;
+        writeFileSync(destination, output);
+    }
 }
 if (check && stale) process.exitCode = 1;
 else

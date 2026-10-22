@@ -1,8 +1,10 @@
 # ADR-024: Qualify Source Content Before Corpus Approval
 
+> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 ## Status
 
-Accepted for implementation. This record defines intended behavior; it is not an implementation acceptance report. See the [implementation plan](../superpowers/plans/2026-10-20-preapproval-source-qualification.md), [recorded delivery state](../ROADMAP.md#recorded-delivery-state-2026-10-22) and [source-review corrections](../verification/2026-10-22-source-review-corrections.md). The implementation and bounded experiments do not establish accepted general activation or completed live analytical work. Historical call allowances are not renewed by this document.
+Accepted for implementation. This record defines intended behavior; it is not an implementation acceptance report. See the implementation plan (historical checkpoint: `git show c4f0d24:docs/superpowers/plans/2026-10-20-preapproval-source-qualification.md`), [recorded delivery state](../ROADMAP.md#recorded-delivery-state-2026-10-22) and [source-review corrections](../verification/2026-10-22-source-review-corrections.md). The implementation and bounded experiments do not establish accepted general activation or completed live analytical work. Historical call allowances are not renewed by this document.
 
 ## Date
 
@@ -54,7 +56,7 @@ Keep raw qualification immutable and persist separate evidence-bound comparison 
 
 Apply restrictions by exact capture, content hash and overlapping passage span across qualification retries. A later positive result cannot silently remove an earlier applicable issue. A missing, stale, inconclusive or conflicted check cannot authorize a new automatic attributed hypothesis. Independent useful contributions remain eligible under their own restrictions. Pin applicable results and history in the immutable proposal and approval fingerprint. Rejecting or losing a primary evidence pin removes its authorizing effect. Legacy journal sequences and readable historical pins remain compatible, while absent checks do not confer new attributed-use permission.
 
-Use the same provider routes, shared 120-attempt dossier allowance, deadlines, validation, telemetry and execution fences. Do not add a general fact-checking engine or silently call a model when reading a page. The [targeted comparison plan](../superpowers/plans/2026-10-20-targeted-source-comparison.md) owns the exact retrieval, persistence and verification contracts. This acceptance authorizes bounded implementation under one worker's delegated scope. It does not resume the broader goal, activate runtime inference or authorize additional paid experiments.
+Use the same provider routes, shared 120-attempt dossier allowance, deadlines, validation, telemetry and execution fences. Do not add a general fact-checking engine or silently call a model when reading a page. The targeted comparison plan (historical checkpoint: `git show c4f0d24:docs/superpowers/plans/2026-10-20-targeted-source-comparison.md`) recorded the exact retrieval, persistence and verification contracts at that checkpoint. The original acceptance authorized bounded implementation under one worker's delegated scope. It does not resume the broader goal, activate runtime inference or authorize additional paid experiments.
 
 ### Application-controlled inexpensive model routing
 

@@ -36,7 +36,8 @@
         "lint": "biome lint . && node --experimental-strip-types scripts/check-imports.ts",
         "format": "biome format --write .",
         "format:check": "biome format .",
-        "check": "pnpm design:check && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build",
+        "check": "pnpm docs:check && pnpm design:check && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build",
+        "docs:check": "node --experimental-strip-types scripts/check-documentation.ts",
         "design:sync": "node --experimental-strip-types scripts/sync-design-context.ts",
         "design:check": "pnpm design:sync --check"
     },

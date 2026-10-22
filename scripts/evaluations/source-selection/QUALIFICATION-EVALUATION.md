@@ -1,5 +1,7 @@
 # Grouped source qualification evaluation
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../../../docs/ROADMAP.md); no historical budget or execution permission is renewed.
+
 ## Scope and acceptance state
 
 This is the historical nineteen-document ServiceNow grouped-evaluation guide. Its protocol checkpoints and allowances belong to those dated runs. Later [common-case](../../../docs/verification/2026-10-21-source-quality-first-batch.md) and [grouped cross-company](../../../docs/verification/2026-10-21-source-quality-second-batch.md) evaluations are indexed in the [main evaluation README](README.md#recorded-evaluation-state-2026-10-22). The [retrieval interpretation correction](../../../docs/verification/2026-10-21-evidence-retrieval-repair.md#interpretation-correction-2026-10-22) distinguishes exact-span scores from useful equivalent evidence. Preserve the results below without treating them as current generalization evidence, an application model change or a renewed provider grant.

@@ -1,8 +1,10 @@
 # Content-Based Source Qualification: Working Decisions
 
+> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 ## Status
 
-Four product decisions were explicitly accepted on 2026-10-20 during brainstorming. This historical record preserves those decisions and their rationale. At that checkpoint, technical design and implementation authorization were incomplete. The subsequent [ADR-024](../decisions/024-qualify-source-content-before-corpus-approval.md) and [implementation plan](../superpowers/plans/2026-10-20-preapproval-source-qualification.md) own the later accepted contract. See the [roadmap](../ROADMAP.md#recorded-delivery-state-2026-10-22) for delivery evidence and remaining limits. This working record is not an acceptance report or a new authorization.
+Four product decisions were explicitly accepted on 2026-10-20 during brainstorming. This historical record preserves those decisions and their rationale. At that checkpoint, technical design and implementation authorization were incomplete. The subsequent [ADR-024](../decisions/024-qualify-source-content-before-corpus-approval.md) and implementation plan (historical checkpoint: `git show c4f0d24:docs/superpowers/plans/2026-10-20-preapproval-source-qualification.md`) recorded the subsequently accepted contract. The current requirements are consolidated in [PRODUCT.md](../../PRODUCT.md) and [context/TECH.md](../../context/TECH.md). See the [roadmap](../ROADMAP.md#recorded-delivery-state-2026-10-22) for delivery evidence and remaining limits. This working record is not an acceptance report or a new authorization.
 
 The observations below describe the application and contracts at the brainstorming checkpoint. Their later reconciliation is recorded in ADR-024 and the current product and technical contracts. Do not reinterpret historical findings or model results as current acceptance, and do not use this working record to bypass authorization checks.
 

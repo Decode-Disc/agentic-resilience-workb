@@ -1,8 +1,10 @@
 # Evidence Retrieval: Working Decisions and Research
 
+> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 ## Subsequent implementation authority
 
-The user subsequently approved implementation of the retrieval comparison. [ADR-025](../decisions/025-use-versioned-scoped-evidence-retrieval.md) and the [implementation plan](../superpowers/plans/2026-10-21-evidence-retrieval.md) own that later decision and its validation gates. The discussion below records the earlier state of knowledge. It is retained as research history and does not imply that an unverified integration is deployed. The broader goal remains paused.
+The user subsequently approved implementation of the retrieval comparison. [ADR-025](../decisions/025-use-versioned-scoped-evidence-retrieval.md) and the implementation plan (historical checkpoint: `git show c4f0d24:docs/superpowers/plans/2026-10-21-evidence-retrieval.md`) own that later decision and its validation gates. The discussion below records the earlier state of knowledge. It is retained as research history and does not imply that an unverified integration is deployed. The broader goal remains paused.
 
 ## Status and Authority
 
@@ -36,11 +38,11 @@ The observed failures establish a concrete need to revisit document preparation 
 
 The 512 limit is a passage count, not the 512-token chunk size discussed in the multi-scale retrieval video. Changing a chunk size and changing a retained-passage ceiling address different mechanisms.
 
-The same extraction owner is used by qualification in [sourceQualification.ts](../../convex/domain/sourceQualification.ts), comparison preparation in [sourcePreparationActions.ts](../../convex/sourcePreparationActions.ts) and approved-source materialization in [evidenceActions.ts](../../convex/evidenceActions.ts). Qualification then applies its own selection by detailed-content priority and matches against research-angle and generic documentary terms, within a 128-KiB serialized input envelope. Fixing only comparison ranking would leave other selections unchanged.
+The same extraction owner is used by qualification in sourceQualification.ts (`convex/domain/sourceQualification.ts`, local reference as of 2026-10-22; not included in checkpoint `c4f0d24`), comparison preparation in sourcePreparationActions.ts (`convex/sourcePreparationActions.ts`, local reference as of 2026-10-22; not included in checkpoint `c4f0d24`) and approved-source materialization in [evidenceActions.ts](../../convex/evidenceActions.ts). Qualification then applies its own selection by detailed-content priority and matches against research-angle and generic documentary terms, within a 128-KiB serialized input envelope. Fixing only comparison ranking would leave other selections unchanged.
 
 ### The comparison ranker is a simple lexical heuristic
 
-[sourceComparison.ts](../../convex/domain/sourceComparison.ts) selects at most eight supporting captures using document purpose, matching reporting-period end, authority and recency. This selection precedes reading supporting document contents and is shared across the contributions in the comparison. Its preference for financial reports may be unsuitable for some capability or commercial-terms questions, but the frequency and impact of that failure remain unmeasured.
+sourceComparison.ts (`convex/domain/sourceComparison.ts`, local reference as of 2026-10-22; not included in checkpoint `c4f0d24`) selects at most eight supporting captures using document purpose, matching reporting-period end, authority and recency. This selection precedes reading supporting document contents and is shared across the contributions in the comparison. Its preference for financial reports may be unsuitable for some capability or commercial-terms questions, but the frequency and impact of that failure remain unmeasured.
 
 For passage ranking, the query text combines a contribution summary and its quotations. The code lowercases text, extracts alphanumeric terms of at least three characters, removes a small stopword list and counts distinct shared terms against each passage and heading. Every shared term has equal weight. There is no term-rarity weighting, passage-length normalization or semantic embedding in this path. Document purpose, period and authority break lexical-score ties rather than correcting a high but irrelevant lexical score.
 
@@ -54,7 +56,7 @@ The SEC HTML normalizer in [evidenceNormalization.ts](../../convex/integrations/
 
 The [second-batch report](../verification/2026-10-21-source-quality-second-batch.md) records that the Adobe annual revenue table containing USD 23,769 million was absent from the grouped comparison context. A subsequent read-only probe against the immutable capture and the real extractor showed two distinct losses: the default 512-passage extraction did not retain that table row, while extraction with a 10,000-passage allowance retained it but the comparison ranker did not select it.
 
-The grouped evaluation explicitly sets `maxPassages: 10000` in [source-quality-study.ts](../../scripts/evaluations/source-selection/source-quality-study.ts). The application comparison action uses the default allowance. The batch reused real domain preparers and validators, but it was not an identical action-level extraction path or an end-to-end workflow run. This qualification supplements the historical report without rewriting its requests, results or references. The probe was a diagnostic observation, not a new saved acceptance run.
+The grouped evaluation explicitly sets `maxPassages: 10000` in source-quality-study.ts (`scripts/evaluations/source-selection/source-quality-study.ts`, local reference as of 2026-10-22; not included in checkpoint `c4f0d24`). The application comparison action uses the default allowance. The batch reused real domain preparers and validators, but it was not an identical action-level extraction path or an end-to-end workflow run. This qualification supplements the historical report without rewriting its requests, results or references. The probe was a diagnostic observation, not a new saved acceptance run.
 
 The grouped reference expected 14 inconclusive outcomes out of 16, two scoped no-conflict outcomes and no conflict outcome. High agreement with that reference cannot establish good retrieval: an always-inconclusive result would match 14 cases. Measure retrieval against evidence in the complete available capture separately from the verdict justified by the supplied context.
 

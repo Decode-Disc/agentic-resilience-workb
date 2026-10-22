@@ -4,20 +4,11 @@
 
 This living checklist sequences the smallest coherent vertical slices needed to build the Agentic Resilience Evidence Workbench prototype.
 
-Plan and implement bounded vertical slices under the current authorization and delegation rules in `AGENTS.md`. A checked item records delivery within its stated verification boundary; it does not imply activation, remote deployment or completion of the entire phase. Preserve the product invariants in `AGENTS.md`, `context/PROJECT.md`, and `context/TECH.md`.
-
-## Working Rules
-
-- Build phases in order unless measured evidence justifies a documented change.
-- Preserve provenance, uncertainty, human approval, auditability, and idempotency in every relevant slice.
-- Introduce domain concepts only when the current observable behavior requires them.
-- Use deterministic adapters and fixtures in default tests; keep paid or nondeterministic checks explicit and bounded.
-- Keep the evidence matrix primary. Treat the architecture map and brief as derived views.
-- Keep CCC Intelligent Solutions configurable and clearly label curated or precomputed showcase data.
+This document owns delivery state and sequence. [PRODUCT.md](../PRODUCT.md) owns product requirements and acceptance, [context/TECH.md](../context/TECH.md) owns technical contracts, and [AGENTS.md](../AGENTS.md) owns working and verification rules. A checked item records delivery within its stated verification boundary; it does not imply activation, remote deployment or completion of the entire phase.
 
 ## Recorded delivery state, 2026-10-22
 
-The phase responsibilities below include the accepted pre-approval preparation boundary in [ADR-024](decisions/024-qualify-source-content-before-corpus-approval.md) and scoped retrieval in [ADR-025](decisions/025-use-versioned-scoped-evidence-retrieval.md). Implementation, local verification, provider experiments and runtime activation are separate facts. This documentation reconciliation does not recheck or change runtime configuration.
+The phase responsibilities below follow the current [source-preparation contract](../context/TECH.md#source-preparation-and-selection). [ADR-024](decisions/024-qualify-source-content-before-corpus-approval.md) and [ADR-025](decisions/025-use-versioned-scoped-evidence-retrieval.md) retain the historical rationale. Implementation, local verification, provider experiments and runtime activation are separate facts. This documentation reconciliation does not recheck or change runtime configuration.
 
 | Capability | Implementation and recorded evidence | Remaining boundary |
 | --- | --- | --- |
@@ -51,8 +42,7 @@ Outcome: the minimum typed, persisted model needed to express real product state
 
 ## Phase 2 — Private Access and Quotas
 
-Outcome: only visitors with a configured access code can reserve analyses
-within the prototype limits.
+Outcome: only visitors with a configured access code can reserve analyses within the prototype limits.
 
 - [x] Seed exactly five stable access slots through an idempotent setup path.
 - [x] Implement server-side visitor admission, session rebinding, and authorization.
@@ -83,6 +73,8 @@ Outcome: an analyst can review a useful proposed source set backed by inspected 
 - [x] Persist corpus approval and atomically hand accepted sources to the Phase 5 workflow. Preserve the protected start path for historical idle approved dossiers.
 - [x] Enforce one running workflow per visitor and prevent analytical source versions, analytical passages and claims before explicit corpus-revision approval.
 - [ ] Establish the remaining preparation acceptance evidence using useful source content, visible omissions and protected handoff, without requiring exhaustive answers or perfect source selection.
+- [ ] Before proposing activation, evaluate the actual current qualification/comparison inputs and outputs across different companies and dossier types. Historical model responses and exact-reference scores alone do not satisfy this gate.
+- [ ] Verify fresh prepared runs and legacy drafts through the protected journey, including reconnection, desktop/mobile review, keyboard/focus behavior, cancellation and exact approved capture reuse. Existing illustrative checks do not establish fresh live preparation. Any provider calls or runtime activation require separate explicit authorization.
 
 ### Demonstration Checkpoint A — Honest Live Run
 
@@ -184,7 +176,7 @@ Outcome: one carefully curated dossier demonstrates original, contested, and mea
 
 Outcome: the complete invitation-to-brief journey is reliable, honest, and ready for the candidature demonstration.
 
-- [ ] Verify the full invited-analyst journey against the product Definition of Done.
+- [ ] Verify the full invited-analyst journey against [MVP acceptance](../PRODUCT.md#mvp-acceptance).
 - [ ] Run focused, affected, full, type, lint, format, and critical browser checks.
 - [ ] Verify responsive, keyboard-accessible, and non-color-dependent critical screens.
 - [ ] Exercise empty, loading, partial-failure, needs-review, cancelled, and insufficient-evidence states.
@@ -194,15 +186,4 @@ Outcome: the complete invitation-to-brief journey is reliable, honest, and ready
 
 ## MVP Completion Gate
 
-- [ ] An invited analyst can start an analysis within enforced quotas.
-- [ ] Real source-discovery progress is visible from persisted events.
-- [ ] The analyst can approve a proposed corpus and resume the durable workflow.
-- [ ] An evidence-sufficiency checkpoint supports URL addition, honest completion, and justified continuation.
-- [ ] Atomic claims have precise citations, counter-evidence, and explicit unknowns.
-- [ ] Structural validity and analytical policy outcomes remain distinct and auditable.
-- [ ] All ten dimensions expose position, confidence, and three-year direction for review.
-- [ ] Analyst overrides require justification and remain auditable.
-- [ ] The architecture map is backed by validated claims.
-- [ ] The progressive map and draft brief contain only analyst-approved claims and show incomplete coverage.
-- [ ] Methodology, limitations, provider usage, and duration are inspectable.
-- [ ] No aggregate resilience score, investment recommendation, simulated progress, or unlabeled precomputed output is present.
+- [ ] Record evidence against every criterion in [MVP acceptance](../PRODUCT.md#mvp-acceptance), with incomplete gates and remaining risks explicit. No completed invitation-to-brief journey is certified by the present roadmap.

@@ -1,5 +1,7 @@
 # Cross-company source comparison: initial live screen
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 Date: 2026-10-20. Scope: 20 authorized inference attempts, four common cases, five models. All 20 completed with schema-valid answers. No model has been accepted for production or integrated.
 
 ## Conclusion

@@ -1,5 +1,7 @@
 # ADR-008: Use Versioned Research Revisions and Exception-Driven Review
 
+> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 ## Status
 
 Accepted. Clarified on 2026-10-22: a draft can receive multiple changes before approval. [ADR-024](024-qualify-source-content-before-corpus-approval.md) amends the prohibition on reading candidate content before approval; approved-corpus immutability and analytical-use restrictions remain in force.

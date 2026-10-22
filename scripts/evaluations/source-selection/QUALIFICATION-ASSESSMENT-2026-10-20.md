@@ -1,5 +1,7 @@
 # Historical protocol-2 qualification assessment
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../../../docs/ROADMAP.md); no historical budget or execution permission is renewed.
+
 This document preserves the protocol-2 assessment. The current result is [the protocol-3 assessment](QUALIFICATION-V3-ASSESSMENT-2026-10-20.md).
 
 **At the protocol-2 checkpoint, activation was blocked by a semantic failure. That comparison was complete.** Both selected routes now have nineteen structurally valid exact-input responses. MiMo still permits a forecast to qualify as support for an achieved result through the current evidence-use policy. No routing change or workflow activation follows from structural validity.

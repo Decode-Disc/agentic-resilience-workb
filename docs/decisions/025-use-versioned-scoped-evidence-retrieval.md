@@ -1,5 +1,7 @@
 # Use versioned, scoped evidence retrieval
 
+> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 Date: 2026-10-21
 
 Status: Accepted for implementation; activation depends on validation. The 2026-10-22 interpretation amendment below limits what the historical exact-reference experiment can establish. It does not select a new winner, revise raw scores or authorize activation.
@@ -40,7 +42,7 @@ This extends existing capture preparation, provider telemetry and native Convex 
 
 ## Related contracts
 
-This record amends ADR-006 for the bounded embedding allowance, ADR-010 for an optional non-generative retrieval provider, ADR-023 for candidate versus materialization limits, and ADR-024 for derived pre-approval search artifacts. Their other rules remain authoritative.
+This record amends ADR-006 for the bounded embedding allowance, ADR-010 for an optional non-generative retrieval provider, ADR-023 for candidate versus materialization limits, and ADR-024 for derived pre-approval search artifacts. Their other rules were unchanged by that amendment; current contracts now live in the document owners linked above.
 
 
 ## Authorized retention repair

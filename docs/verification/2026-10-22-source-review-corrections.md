@@ -1,5 +1,7 @@
 # Source review corrections
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 ## Scope and authority
 
 The user authorized correction of all ten findings from the independent review of the current working tree at `a9f30ae29dd0d796dc8b3f1f04055c7067e330b6`, using test-driven development. The reviewed implementation spans source selection, retrieval, corpus revision approval and the visual preview dependency. The original broader goal remains paused. No model replacement, paid provider evaluation, remote deployment or commit is included.

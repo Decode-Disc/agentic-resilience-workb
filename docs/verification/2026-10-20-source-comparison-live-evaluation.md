@@ -1,5 +1,7 @@
 # Targeted source comparison: live evaluation
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 **Status: not accepted for activation.** All six additional comparison attempts are consumed: four authorized at ceiling 189 and two subsequently authorized at ceiling 191. Cumulative accounting is 189 attempts and USD 0.55230824396 conservatively reported or reserved, including historical unknown-charge reservations. Two original conditional runtime attempts remain reserved. No provider-order change, production deployment or user-dossier approval occurred.
 
 ## Recorded model results

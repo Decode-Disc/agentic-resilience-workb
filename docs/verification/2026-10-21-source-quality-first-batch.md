@@ -1,5 +1,7 @@
 # First common-case source-quality comparison
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 DeepSeek V4.1 Flash is the provisional first choice for the prototype's next evaluation. Both DeepSeek conditions retain all 28 substantive documents under the agreed usefulness proxy and match 14 of 16 frozen control dispositions. The 1017 condition has no observed advantage on those primary measures. This is a recommendation for further evaluation, not production activation or proof of grouped qualification quality.
 
 ## Scope and authority

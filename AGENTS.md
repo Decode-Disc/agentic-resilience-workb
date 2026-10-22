@@ -10,32 +10,44 @@ The first-minute objective is to make the author's judgment, rigor, and executio
 
 ## Document Authority and Required Reading
 
-The repository separates agent conduct, product context, technical contracts, and decision rationale:
+The five reference documents below own current requirements within their stated responsibility. Read `PRODUCT.md` before product planning or implementation, the relevant sections of `context/TECH.md` before technical changes or architectural proposals, and `DESIGN.md` for interface work. Use `docs/ROADMAP.md` for delivery state and next work. Consult `context/PROJECT.md` only when deeper candidature context is needed.
 
-- `AGENTS.md` defines how agents work in the project and the non-negotiable guardrails they must preserve.
-- `context/PROJECT.md` defines why the product exists, whom it serves, and what it must demonstrate.
-- `PRODUCT.md` is the directly maintained product brief used by Impeccable for users, workflows, capabilities, and constraints. It references the detailed product contract below.
-- `DESIGN.md` owns visual guidance and component documentation. Runtime tokens and shared components own executed values and behavior; `.impeccable/design.json` is a generated export.
-- `context/TECH.md` consolidates the active technical architecture, implementation contracts, and verification expectations.
-- `docs/product-architecture/2026-07-20-agentic-resilience-evidence-workbench-design.md` defines the complete product design and MVP acceptance contract.
-- Accepted records in `docs/decisions/` explain the rationale and trade-offs behind individual architectural decisions.
+This table is also the policy read by `pnpm docs:check`. Patterns are repository-relative; `*` matches one path segment and `**` matches descendants. The first matching row applies. A word warning is advisory, never permission to discard a requirement. The checker inspects root Markdown and Markdown under `context/`, `docs/`, and `scripts/evaluations/`; generated instructions, installed skills, and third-party material are outside that authored-document scope.
 
-Read `PRODUCT.md` before product planning or implementation. Consult `context/PROJECT.md` when the task requires deeper context about the candidature, discontinuity, or economic orchestration.
+<!-- documentation-policy:start -->
+| Path | Role | Word warning | Responsibility |
+| --- | --- | --- | --- |
+| `AGENTS.md` | reference | - | Agent conduct, authorization, development and verification rules. |
+| `PRODUCT.md` | reference | - | Product requirements, analyst workflow, invariants and acceptance. |
+| `context/TECH.md` | reference | 6000 | Architecture and detailed technical contracts. |
+| `docs/ROADMAP.md` | reference | - | Verified delivery state, gaps and implementation sequence. |
+| `DESIGN.md` | reference | - | Visual guidance and shared component design; executed tokens remain in their runtime owners. |
+| `context/PROJECT.md` | context | - | Stable candidature purpose and research framing. |
+| `docs/decisions/**` | history | - | Dated decisions and trade-offs, not additional current obligations. |
+| `docs/brainstorming/**` | history | - | Explorations and earlier designs, not execution instructions. |
+| `docs/research/**` | history | - | Dated research and benchmark interpretation. |
+| `docs/showcases/**` | history | - | Showcase selection rationale and research material. |
+| `docs/examples/**` | history | - | Illustrative references. |
+| `docs/verification/**` | evidence | - | Dated verification reports; raw artifacts are immutable. |
+| `scripts/evaluations/source-selection/*.md` | evidence | - | Evaluation usage and dated judgments, not product acceptance. |
+| `scripts/evaluations/source-selection/fixtures/*/README.md` | evidence | - | Fixture provenance and evaluation boundaries. |
+| `scripts/evaluations/source-selection/fixtures/**` | excluded | - | Raw captures, frozen results and external copies. |
+| `scripts/evaluations/source-selection/runs/**` | excluded | - | Immutable experiment records and source snapshots. |
+| `docs/designs/**` | retired | - | Replaced by the brainstorming location. |
+| `docs/plans/**` | retired | - | Retired plan location. |
+| `docs/superpowers/**` | retired | - | Previous plans preserved in Git, not active instructions. |
+| `docs/product-architecture/**` | retired | - | Requirements consolidated into the current product and technical contracts. |
+| `docs/design-systems/**` | retired | - | Former redirect to the visual reference. |
+| `docs/preferences.md` | retired | - | Preferences incorporated into their current owners. |
+<!-- documentation-policy:end -->
 
-Before UI/UX planning or implementation, read the relevant sections of `DESIGN.md`. Apply the Analyst Experience Direction below.
+Maintain each applicable rule in its owner only. Other documents may link to it, but must not duplicate an independently maintained contract. Historical acceptance remains part of the record; it cannot override a current reference, renew an old allowance, or authorize execution. Read history only to investigate rationale or past evidence. If current references conflict, stop and identify the conflict instead of choosing silently.
 
-Read `context/TECH.md` before:
+Material product or architecture changes require an explicit user decision and an update to the owning reference. Add an ADR only when durable rationale or a meaningful rejected alternative needs preservation; an ADR cannot carry an obligation absent from the current contract. Do not create another normative document without an explicit decision updating this table.
 
-- changing production code or technical configuration;
-- modifying schemas, workflows, providers, security controls, or tests;
-- installing, removing, or upgrading dependencies;
-- proposing an architectural implementation.
+Use native planning by default. Create a persistent plan only when explicitly requested, with at most one active plan per authorized workstream and an explicitly agreed location. On closure, transfer outstanding work and verified delivery to the roadmap, then retire the plan. Skills cannot autonomously create document series or override this policy. Keep reports only for durable verification evidence; ordinary checks can be reported in the implementation handoff. Never add a new index or report merely to explain an existing document.
 
-Consult the product design or relevant ADR when a task requires exact requirements or decision rationale. A summary in `context/TECH.md` does not supersede an accepted ADR.
-
-If authoritative documents appear to conflict, stop and identify the conflict instead of selecting an interpretation silently.
-
-Do not rewrite product requirements as part of implementation. Material changes to scope, public behavior, domain invariants, persistence ownership, workflow architecture, or provider architecture require an explicit user decision and an ADR or design update.
+Write prose paragraphs on one physical line. Keep repository documents self-contained and in English. Historical references to removed documents use the documentary checkpoint `c4f0d24` and their original Git path. Mark local-only evidence explicitly rather than suggesting it is present in that commit. `pnpm docs:check` checks locations, local links and heading anchors; semantic duplication, authority conflicts and requirement preservation require review.
 
 ## Working Principles
 
@@ -67,59 +79,22 @@ Persisted progress and explicit corpus approval checkpoint
 
 Later stages remain required for the completed MVP, but must not prevent earlier slices from being runnable and demonstrable. This proportionality rule never permits fake progress, client-side bypasses, weakened evidence integrity, or deferred controls required by an exposed feature.
 
-## Product Invariants
+## Product Contract
 
-These rules are non-negotiable:
-
-1. The evidence matrix is the primary artifact. Architecture maps and briefs are derived views.
-2. Source discovery and analytical evidence extraction are separated by a mandatory, durable human approval checkpoint. ADR-024 permits bounded pre-approval source reading and qualification as preparation only; analytical source versions, passages and claims still require accepted sources in the approved corpus.
-3. Claims are atomic and classified as `Fact`, `Inference`, `Hypothesis`, or `Unknown`.
-4. Every material claim references one or more precisely locatable source passages.
-5. Rejected sources cannot contribute to claims, assessments, maps, or briefs.
-6. Each assessment dimension has separate position, confidence, and three-year direction outputs.
-7. There is no aggregate resilience score and no investment recommendation.
-8. Confidence comes from evidence characteristics, never model self-confidence.
-9. Supporting evidence, counter-evidence, and critical unknowns are visible before dimension review.
-10. Analyst decisions and overrides are append-only, audited, and never overwritten by retries or later model output.
-11. Briefs use only analyst-approved claims.
-12. Map entities and relationships require validated supporting claims.
-13. UI progress comes only from persisted workflow events. Never simulate progress or expose hidden chain-of-thought.
-14. Retries and workflow resumes must not duplicate claims, quota reservations, provider-call records, or external side effects.
-15. A weak evidence base may yield `0 / Mixed or unclear`, `Hypothesis`, `Unknown`, or `insufficient public evidence`. Never force a confident answer.
-16. User-facing product copy is written for the intended audience and the decision or action in front of them. Analyst-facing surfaces describe evidence, uncertainty, consequences, and next actions. They never expose implementation architecture, deployment configuration, provider credentials, access topology, invitation inventory, quota mechanics, persistence mechanics, internal workflow states, roadmap phases, or raw backend errors.
-
-The exact domain records, workflow states, assessment dimensions, provider boundaries, and enforcement mechanisms are defined in `context/TECH.md` and the product design.
-
-## Terminology and Product Guardrails
-
-- **Technical harness** means the internal machinery that makes model intelligence operational: routing, tools, context retrieval, memory, state, delegation, evaluation, retries, and recovery.
-- **Economic orchestration** means control of the relationship between user intent, operational context, workflow execution, and the business outcome.
-
-Do not present the prototype's workflow or harness sophistication as evidence that an assessed company has a durable economic orchestration position. Do not foreground internal orchestration as theatre.
-
-Do not implement the following without a new explicit decision:
-
-- investment recommendations or trade execution;
-- an aggregate resilience score;
-- non-US markets;
-- continuous monitoring;
-- simultaneous analyst collaboration;
-- fine-tuning;
-- general-purpose crawling;
-- autonomous publication;
-- claims of reproducing proprietary methodology;
-- chat as the main product interface;
-- a second workflow engine or persistence authority.
+Preserve the [product invariants and scope](PRODUCT.md#capabilities-and-constraints). They define analytical authority, human decisions and demonstration integrity. The [technical contract](context/TECH.md) defines their enforcement. Neither implementation convenience nor a historical plan permits weakening them.
 
 ## Implementation Discipline
 
-Build the smallest runnable vertical slice that preserves the relevant invariants. Introduce domain concepts when observable behavior requires them rather than scaffolding unused abstractions. Follow the implementation sequence in `context/TECH.md` unless measured evidence justifies a change.
+Build the smallest runnable vertical slice that preserves the relevant invariants. Introduce domain concepts when observable behavior requires them rather than scaffolding unused abstractions. Follow the implementation sequence in `docs/ROADMAP.md` unless measured evidence justifies a change.
 
 Keep domain rules out of UI components. Keep provider-specific types and model names out of domain records and workflow business logic. Convex remains the state owner.
 
 ### Coding Rules
 
-- Do not run `pnpm run build` for each change. Build only after a substantial change to verify that the build succeeds. Use focused validation during implementation: `pnpm run lint` (Biome and import checks), `pnpm run typecheck` (client and Convex), and `pnpm test <path>` for targeted tests. Run `pnpm check` once behavior stabilizes.
+- Use the established package manager and lockfile. Do not change dependencies without verifying the exact package/version and following the dependency-installation skill. Preserve strict TypeScript, validate trust boundaries and avoid `any`.
+- Use the smallest relevant test during implementation and scope diagnostics to task files. After behavior stabilizes, format once and run the applicable lint, typecheck and test checks. Run project-wide checks only for a repository/CI requirement or a transversal risk, stating the reason first. `pnpm check` is the CI aggregate; documentation and standalone tooling changes use the relevant focused checks instead of rebuilding the application.
+- Documentation-only edits need link, structure and consistency checks, not a manufactured failing test. Run `pnpm docs:check`, and `pnpm design:check` when visual documentation is touched. Tooling/configuration requires executable before-and-after validation; generated outputs are verified through their owner rather than edited independently.
+- Do not run `pnpm run build` for each change. Use a build after substantial application changes, not routine documentation edits.
 
 ### Centralization and Shared Ownership
 
@@ -144,6 +119,7 @@ Keep domain rules out of UI components. Keep provider-specific types and model n
 - Do not remove a useful affordance because one possible transport is outside the MVP. Separate the supported intent from the unsupported mechanism. For example, public HTTPS references remain valid even though local file upload is excluded.
 - Shared UI primitives remain neutral and configurable. A stacking, sizing, copy, motion, or styling requirement belonging to one consumer must be applied by that consumer unless the behavior is a documented shared contract. Never introduce a global primitive default solely to repair one screen.
 - A skeleton must preserve the geometry and semantic regions of the loaded component. Rendering a generic rectangle for a distinctive card, matrix, or review surface is not an acceptable loading state.
+- Secondary list filters may use `AnimatedListFilter` only after accessible popup semantics, keyboard/focus handling, Escape/outside-click behavior, reduced-motion support and focused tests are established. Keep responsive rail sizing in its existing single component-owned configuration.
 
 ### Provider and Durable-Workflow Planning
 
@@ -214,13 +190,14 @@ These rules govern the React + TanStack Start + Convex + shadcn/ui (`base-luma` 
 
 - Every async region must expose explicit loading (geometry-preserving skeleton), empty (`Empty` component), and actionable error states.
 - Use `LoadErrorAlert` (`@/components/ui/load-error-alert`) for analyst-safe recoverable alerts, and `LoadErrorBoundary` (`@/components/load-error-boundary`) narrowly around query-owning subtrees. Form drafts and interactive controls must stay above the boundary so retries preserve analyst inputs.
-- Insufficient evidence bases must render visibly as `0 / Mixed or unclear`, `Hypothesis`, `Unknown`, or `insufficient public evidence` per Product Invariant 15; never collapse them into a confident layout.
+- Preserve the product's [uncertainty and assessment rules](PRODUCT.md#assessment-and-review); never collapse an insufficient evidence base into a confident layout.
 - Use shared shadcn chart primitives and Recharts directly; do not wrap them in bespoke chart abstractions. Never use `<Input type="date" />` or `<Input type="datetime-local" />` — use the shared date picker built on shadcn primitives.
 
 ## Test-Driven Development
 
 Drive every production behavior change through focused tests adhering to the project test architecture:
 
+- Write one minimal test through the real public boundary, run it and observe the intended failure, implement the smallest correction, then refactor while keeping focused tests green. Record the RED command and failure in the handoff. Do not copy production logic into tests or weaken assertions to obtain green. Mock only nondeterministic or external boundaries; a mocked call count alone does not establish a domain outcome.
 - Default and CI test suites must never invoke paid or nondeterministic external providers.
 - Never complete work with `.skip`, `.only`, hidden failures, unexplained warnings, or flaky retries.
 - Keep all test files under `src/__tests__/` mirroring domain boundaries (`components/`, `routes/`, `config/`, `design-system/`, `convex/<domain>/`). Shared harness setup belongs in `src/__tests__/setup/`. Never colocate test files with production source.
@@ -228,6 +205,12 @@ Drive every production behavior change through focused tests adhering to the pro
 - Do not use `convex-test` as a React subscription simulator. React integration tests use the shared reference-routed Convex hook harness; subscription and reactivity behavior is verified with Playwright against the local Convex backend.
 - Browser E2E tests must use real anonymous authentication and access-code admission. Seed and inspect state exclusively via internal E2E functions gated by `E2E_FIXTURES_ENABLED`; never introduce public test endpoints or CLI identity impersonation.
 - Add JSDoc comments to any shared component, hook, or utility whose intent is not immediately obvious.
+
+Use three complementary verification layers: React integration tests for rendering and component-to-hook wiring, Convex tests for authorization/persistence/transitions, and Playwright against the local backend for actual subscriptions, protected checkpoints and reconnection. The shared React harness routes generated function references to stable snapshots and explicit handlers, never by hook call order. Include a real module import where isolated helpers would otherwise conceal a broken consuming module.
+
+Browser scenarios use local Convex only, real anonymous sign-in and access-code admission. Internal fixtures derive ownership from a claimed invitation slot and never accept fabricated browser identities. Their inspection is bounded and read-only; setup reuses production authorization-sensitive operations and persisted workflow events. Local fixture keys are deterministic and idempotent. Remove `E2E_FIXTURES_ENABLED` at teardown; leaving it enabled makes the verification incomplete. Evaluation fixtures that require loopback deployment must enforce both that check and the fixture flag. No cloud deployment, public fixture endpoint, CLI identity impersonation, client-side access bypass or manually edited generated Convex type is permitted.
+
+Coverage must protect concurrent quota reservations and access attempts, transitions and resumes, preparation/approval separation, source and passage integrity, source selection and revision freshness, rejected-source exclusion, typed provider failures, claim and dimension-link decisions, analyst history, derived outputs, partial failures and one-running-workflow enforcement. Use fast deterministic tests for these rules; reserve live contract checks for explicitly authorized, bounded experiments. Critical browser gates exercise the intended protected role, desktop/mobile states, keyboard/focus, relevant hover behavior, reduced motion and fresh post-action state, including console errors.
 
 ## Demo Integrity and Human Authority
 
@@ -237,7 +220,7 @@ The analyst must be able to inspect evidence, uncertainty, counter-evidence, pro
 
 ## Completion and Communication
 
-Use the product design's Definition of Done as the MVP acceptance checklist. Before declaring a meaningful implementation complete, run the applicable checks defined in `context/TECH.md` and report:
+Use the [product acceptance criteria](PRODUCT.md#mvp-acceptance) as the MVP checklist and the roadmap as its delivery record. Before declaring a meaningful implementation complete, run the applicable verification above and report:
 
 - what user-visible or invariant-backed behavior now works;
 - files and architectural boundaries changed;

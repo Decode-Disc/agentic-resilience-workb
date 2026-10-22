@@ -1,5 +1,7 @@
 # Cross-company source-selection comparison
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../../../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../../../../../docs/ROADMAP.md); no historical budget or execution permission is renewed.
+
 ## State and authority
 
 The original full 416-request manifest remains unexecuted and unapproved. Subsequent screens and two progressive batches used their own authorized manifests and recorded results. The later batches also total 416 calls, but use different cases and model conditions; that matching count does not mean the original manifest ran. The original implementation goal remains paused. Dataset preparation and historical reports do not authorize new paid dispatch, routing changes, integration, production acceptance, deployment, commit or publication. GPT-6 Luna Decisions was an original comparison witness and was later replaced in the evaluation candidate catalog; it was never accepted for prototype integration.

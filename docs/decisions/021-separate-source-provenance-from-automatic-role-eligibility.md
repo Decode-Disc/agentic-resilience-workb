@@ -1,8 +1,10 @@
 # ADR-021: Separate Source Provenance from Automatic Role Eligibility
 
+> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 ## Status
 
-Amended on 2026-10-20 by [ADR-024](024-qualify-source-content-before-corpus-approval.md). Its explicitly listed preparation, qualification and evidence-use clauses supersede the corresponding historical clauses below; all other decisions remain in force.
+Amended on 2026-10-20 by [ADR-024](024-qualify-source-content-before-corpus-approval.md). Its explicitly listed preparation, qualification and evidence-use clauses supersede the corresponding historical clauses below; the other recorded decisions were unchanged by that amendment.
 
 Accepted; supersedes ADR-020; company-linkage recommendation clauses partially superseded by ADR-022
 
@@ -70,4 +72,4 @@ Replace `source-selection-v3` with `source-selection-v4` and `source-publishers-
 
 ## Supersession
 
-ADR-021 supersedes ADR-020 in full. ADR-022 supersedes only ADR-021's requirement that every automatic recommendation use structural URL-path company linkage and its blanket prohibition on using titles for company-linkage triage. ADR-021 remains authoritative for publisher provenance, document classification, duplicate identity, automatic role eligibility, coverage-gap integrity, qualified-partner handling, and the prohibition on treating titles as evidence or content proof. ADR-018 remains authoritative for immutable proposal history, duplicate handling, caps, the recommendation ceiling, rebuild fencing, and the durable human checkpoint.
+ADR-021 supersedes ADR-020 in full. ADR-022 supersedes only ADR-021's requirement that every automatic recommendation use structural URL-path company linkage and its blanket prohibition on using titles for company-linkage triage. At that checkpoint, ADR-021 retained responsibility for publisher provenance, document classification, duplicate identity, automatic role eligibility, coverage-gap integrity, qualified-partner handling, and the prohibition on treating titles as evidence or content proof. ADR-018 remains authoritative for immutable proposal history, duplicate handling, caps, the recommendation ceiling, rebuild fencing, and the durable human checkpoint.

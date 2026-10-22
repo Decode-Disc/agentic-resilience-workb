@@ -1,8 +1,10 @@
 # Source Selection Company Linkage Design
 
+> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 ## Status
 
-Historical design validated on 2026-08-15 and represented by [ADR-022](../decisions/022-persist-company-linkage-basis-for-source-recommendations.md). [ADR-024](../decisions/024-qualify-source-content-before-corpus-approval.md) later permits anchored inspected content to establish relevance and purpose before approval without promoting provenance authority. The metadata-only rules and code observations below describe the original scope; they do not prohibit the later preparation path. Preserve the rationale and use [technical context](../../context/TECH.md#source-proposals-and-metadata-compatibility) for the consolidated contract. This record does not authorize new implementation or provider calls.
+Historical design validated on 2026-08-15 and represented by [ADR-022](../decisions/022-persist-company-linkage-basis-for-source-recommendations.md). [ADR-024](../decisions/024-qualify-source-content-before-corpus-approval.md) later permits anchored inspected content to establish relevance and purpose before approval without promoting provenance authority. The metadata-only rules and code observations below describe the original scope; they do not prohibit the later preparation path. Preserve the rationale and use [technical context](../../context/TECH.md#deterministic-proposals-and-legacy-compatibility) for the consolidated contract. This record does not authorize new implementation or provider calls.
 
 ## Problem
 

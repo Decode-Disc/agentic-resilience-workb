@@ -1,11 +1,13 @@
 # Targeted Source Comparison Verification
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 Latest continuation: [the live comparison and protected verification report](2026-10-20-source-comparison-live-evaluation.md) records the subsequent four attempts, bounded transport correction, semantic failures and illustrative approval evidence. Historical results below retain their original scope and authorization.
 The bounded implementation is integrated and independently checked: 171 tests passed across 21 relevant files, client and Convex types passed, focused Biome passed on 33 files, and the build succeeded. Global acceptance remains incomplete because of repository-wide lint/format failures and the full-suite failures recorded below. The protected inspector was checked at desktop and mobile sizes, with an existing return-focus defect retained as a limitation. Live semantic quality has not been tested, inference remains disabled, and the broader goal remains paused.
 
 ## Scope and authority
 
-The user authorized one worker to implement the accepted targeted-comparison direction, with the orchestrator responsible for scope and validation. The [implementation plan](../superpowers/plans/2026-10-20-targeted-source-comparison.md) defines the bounded contract. The broader implementation goal remains paused. No live provider call, inference activation, new dependency, commit or production deployment is authorized by this task. Local development synchronization and browser inspection serve verification only.
+The user authorized one worker to implement the accepted targeted-comparison direction, with the orchestrator responsible for scope and validation. The implementation plan (historical checkpoint: `git show c4f0d24:docs/superpowers/plans/2026-10-20-targeted-source-comparison.md`) defines the bounded contract. The broader implementation goal remains paused. No live provider call, inference activation, new dependency, commit or production deployment is authorized by this task. Local development synchronization and browser inspection serve verification only.
 
 ## Baseline
 

@@ -1,5 +1,7 @@
 # Phase 5 review repairs
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 Date: 2026-10-19. Scope: the retrieval, replay, approval handoff, question backfill, manual reference routing, timeout cancellation, and PDF acquisition defects identified during Phase 5 review. Existing working-tree changes were retained. This record supplements the historical Phase 5 verification report and does not supersede its failed or unrun checks.
 
 ## Behavior and regression evidence

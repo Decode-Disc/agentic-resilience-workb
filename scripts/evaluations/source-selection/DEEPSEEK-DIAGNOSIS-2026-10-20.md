@@ -1,5 +1,7 @@
 # DeepSeek qualification failure diagnosis
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../../../docs/ROADMAP.md); no historical budget or execution permission is renewed.
+
 **Root cause: not established. The authorized single repeat succeeded, so the failure did not reproduce. Routing remains unchanged.** The historical comparison used 133 attempts. One subsequently authorized diagnostic request brought accounting to 134 attempts. The later authorized eleven-call continuation is complete at 145 attempts and USD 0.49142902524 conservatively reserved or reported.
 
 ## Observed failure and lost information

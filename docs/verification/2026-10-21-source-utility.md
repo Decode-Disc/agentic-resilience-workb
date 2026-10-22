@@ -1,10 +1,12 @@
 # Source preparation utility across companies and dossier types
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 Date: 2026-10-21
 
 ## Outcome and interpretation
 
-This implementation evaluates whether an analyst can inspect useful source material, see limitations, adjust a proposal and approve a durable corpus across eight scenarios. It uses Adobe, Nvidia, Snowflake and CrowdStrike, with general overviews, targeted technical questions, supplied HTTPS references and uncertain arguments. It does not optimize a single retrieval numerator. The frozen needs are in [utility-scenarios.json](../../scripts/evaluations/source-selection/fixtures/cross-company-20261020/utility-scenarios.json).
+This implementation evaluates whether an analyst can inspect useful source material, see limitations, adjust a proposal and approve a durable corpus across eight scenarios. It uses Adobe, Nvidia, Snowflake and CrowdStrike, with general overviews, targeted technical questions, supplied HTTPS references and uncertain arguments. It does not optimize a single retrieval numerator. The frozen needs are in utility-scenarios.json (`scripts/evaluations/source-selection/fixtures/cross-company-20261020/utility-scenarios.json`, local reference as of 2026-10-22; not included in checkpoint `c4f0d24`).
 
 The recorded material supports useful preparation, with uneven relevance and remaining manual reading. The historical Snowflake qualification displayed in this journey does not supply the requested quarterly revenue table. That observation must be separated from the comparison input: read-only inspection on 2026-10-22 found an equivalent table in both repaired retrieval modes. See the [interpretation correction](2026-10-21-evidence-retrieval-repair.md#interpretation-correction-2026-10-22). Successful approval, useful comparison context and adequate displayed qualification are distinct observations; none proves a completed analytical answer.
 

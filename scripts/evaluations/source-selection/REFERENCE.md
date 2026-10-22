@@ -1,5 +1,7 @@
 # Source qualification reference judgments
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../../../docs/ROADMAP.md); no historical budget or execution permission is renewed.
+
 Authored by the investigating assistant before any provider inference. This is an inspectable investigator reference, not independent human ground truth. The JSON reference owns expected answers and rationale. Positive classification never establishes current applicability, factual truth, publisher independence or corpus approval.
 
 Dataset SHA-256: `5840934344478b693633de8149c6fc35eaba6ca0233875917d5013f8d5c905df`. Reference SHA-256: `e95f1a5302dfe447d33d2f4fb4dc5b98276803ba9d026d0cafdbbd69733d29cc`.

@@ -1,5 +1,7 @@
 # Source selection model comparison
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../../../docs/ROADMAP.md); no historical budget or execution permission is renewed.
+
 For the current cross-company benchmark, use the data-driven [model selection commands](#cross-company-model-selection). The ServiceNow instructions below describe the preserved historical experiment.
 
 ## Recorded evaluation state, 2026-10-22

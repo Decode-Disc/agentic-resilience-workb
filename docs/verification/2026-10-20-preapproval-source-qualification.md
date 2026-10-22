@@ -1,9 +1,11 @@
 # Pre-approval source qualification verification
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 Latest continuation: [the live comparison and protected verification report](2026-10-20-source-comparison-live-evaluation.md) records the subsequent four attempts, bounded transport correction, semantic failures and illustrative approval evidence. Historical results below retain their original scope and authorization.
 **Status: implementation in progress, not accepted.** This report records verified increments and remaining gates. It does not certify the full feature or completed MVP.
 
-The candidate is an uncommitted working tree on `roadmap-phase-5`, based on HEAD `a9f30ae`. Earlier documentation moves, benchmark artifacts and unrelated user edits are preserved. No commit, publication or production deployment has occurred. The authoritative implementation scope is [the approved plan](../superpowers/plans/2026-10-20-preapproval-source-qualification.md), with rationale in [ADR-024](../decisions/024-qualify-source-content-before-corpus-approval.md).
+The candidate is an uncommitted working tree on `roadmap-phase-5`, based on HEAD `a9f30ae`. Earlier documentation moves, benchmark artifacts and unrelated user edits are preserved. No commit, publication or production deployment has occurred. The authoritative implementation scope is the approved plan (historical checkpoint: `git show c4f0d24:docs/superpowers/plans/2026-10-20-preapproval-source-qualification.md`), with rationale in [ADR-024](../decisions/024-qualify-source-content-before-corpus-approval.md).
 
 ## Delivered boundaries
 

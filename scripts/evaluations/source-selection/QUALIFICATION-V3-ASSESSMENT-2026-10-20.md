@@ -1,5 +1,7 @@
 # Protocol 3 qualification comparison
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../../../docs/ROADMAP.md); no historical budget or execution permission is renewed.
+
 **Activation remains blocked by missing enforcement of known source issues. The thirty-eight-call comparison is complete.** The earlier forecast/result regression is resolved for the frozen negative probes. Attribution still permits an argument containing a premise contradicted by primary evidence known outside the qualification task.
 
 ## Recorded comparison
@@ -40,7 +42,7 @@ MiMo also retains Capital Blueprint p63 containing USD 10.47 billion cRPO. The c
 
 The source task does not receive these contrary primary passages. Its false dependency flag cannot establish independence from an issue known elsewhere. This input limitation does not excuse the missing application-level restriction. It also does not justify injecting benchmark judgments as production truth, rejecting entire articles or adding financial regexes.
 
-`known-premise-regression.json` records the actual allowed attributed uses, their scope and the investigator's judgment. `primary-evidence-refresh.json` records precise primary-document locators. These are research artifacts, not Convex source captures or approved claims. The separate application-owned issue channel and its targeted producer are proposed in `docs/designs/2026-10-20-known-source-issues-proposal.md` and require a decision before implementation.
+`known-premise-regression.json` records the actual allowed attributed uses, their scope and the investigator's judgment. `primary-evidence-refresh.json` records precise primary-document locators. These are research artifacts, not Convex source captures or approved claims. The separate application-owned issue channel and its targeted producer are proposed in `docs/brainstorming/2026-10-20-known-source-issues-proposal.md` and require a decision before implementation.
 
 ## Reproduction and limits
 

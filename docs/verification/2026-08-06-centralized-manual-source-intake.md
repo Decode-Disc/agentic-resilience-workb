@@ -1,5 +1,7 @@
 # Centralized Manual Source Intake Verification
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 Date: 2026-08-06
 
 Status: **Implementation and deterministic certification passed. Two bounded

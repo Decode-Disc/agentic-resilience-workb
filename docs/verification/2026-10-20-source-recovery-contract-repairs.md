@@ -1,5 +1,7 @@
 # Source recovery and live retrieval contract repairs
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 Date: 2026-10-20. Candidate: working tree based on `f3c0080`. This verification follows the failed provider contracts and incomplete browser coverage recorded in `2026-10-19-source-discovery-recovery.md`. Historical failures remain evidence of the earlier candidate.
 
 ## Changes and causes

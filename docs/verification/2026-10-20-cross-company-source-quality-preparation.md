@@ -1,12 +1,14 @@
 # Cross-company source-quality comparison: offline preparation
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 Date: 2026-10-20. Status: prepared, no inference performed, no semantic acceptance.
 
 ## Authorized result
 
 The comparison extends the evaluation surface beyond the repeatedly inspected ServiceNow examples. It prepares a fixed 32-document public corpus, 16 targeted controls, a pre-inference investigator reference, five-model common decision tasks, and separate tests through the existing grouped qualification and comparison adapters. It does not establish generalization merely by adding companies. The study can support a narrower transfer finding or remain inconclusive.
 
-The [study README](../../scripts/evaluations/source-selection/fixtures/cross-company-20261020/README.md) owns the exact manifest identifier, reservations, corpus provenance, conditions, commands, review procedure, and paid-dispatch gate. The [ready manifest](../../scripts/evaluations/source-selection/fixtures/cross-company-20261020/runs/ready/manifest.json) binds the corpus, reference, code, official tariff snapshot, and all 416 serialized provider requests. There is no authorization file and no inference journal. Actual inference attempts, charged inference cost, and application writes are all zero.
+The [study README](../../scripts/evaluations/source-selection/fixtures/cross-company-20261020/README.md) owns the exact manifest identifier, reservations, corpus provenance, conditions, commands, review procedure, and paid-dispatch gate. The ready manifest (`scripts/evaluations/source-selection/fixtures/cross-company-20261020/runs/ready/manifest.json`, local reference as of 2026-10-22; not included in checkpoint `c4f0d24`) binds the corpus, reference, code, official tariff snapshot, and all 416 serialized provider requests. There is no authorization file and no inference journal. Actual inference attempts, charged inference cost, and application writes are all zero.
 
 The original implementation goal remains paused. This evaluation does not activate a model, modify provider routing, deploy, commit, publish, or modify production/configuration/application data. GPT-6 Luna Decisions is excluded from prototype integration. The withdrawn four-call proposal and historical spending allowances remain separate.
 

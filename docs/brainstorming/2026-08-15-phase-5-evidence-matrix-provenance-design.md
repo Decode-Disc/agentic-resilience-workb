@@ -1,5 +1,7 @@
 # Phase 5 Evidence Matrix and Provenance Design
 
+> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 ## Status
 
 Historical design validated on 2026-08-15 and accepted through [ADR-023](../decisions/023-use-decision-anchored-phase-5-evidence-workflow.md). Its unchanged contracts remain authoritative. ADR-023's later handoff amendment, [ADR-024](../decisions/024-qualify-source-content-before-corpus-approval.md) and [ADR-025](../decisions/025-use-versioned-scoped-evidence-retrieval.md) replace the idle-only handoff, post-approval-only acquisition and original retrieval assumptions where explicitly stated. The problem and code observations below describe the design-time baseline, not today's implementation. See the [roadmap](../ROADMAP.md#recorded-delivery-state-2026-10-22) for recorded delivery and remaining activation limits. This record grants no new execution or provider authority.
@@ -245,7 +247,7 @@ Cached, seeded, fixture, or precomputed data is always labelled. The distinction
 
 ## Required Documentation Changes Before Implementation
 
-ADR-023 has been accepted and the product design, `context/TECH.md`, and `ROADMAP.md` have been aligned. ADR-017 through ADR-022 remain authoritative for source selection and approval; ADR-023 consumes their accepted decision boundary without rewriting them. ADR-004, ADR-009, and ADR-010 remain authoritative for provider boundaries; ADR-023 moves only approved-source SEC and Exa retrieval into Phase 5 without superseding them.
+ADR-023 has been accepted and the product design, `context/TECH.md`, and `ROADMAP.md` have been aligned. At that checkpoint, ADR-017 through ADR-022 retained responsibility for source selection and approval; ADR-023 consumes their accepted decision boundary without rewriting them. At that checkpoint, ADR-004, ADR-009, and ADR-010 retained responsibility for provider boundaries; ADR-023 moves only approved-source SEC and Exa retrieval into Phase 5 without superseding them.
 
 ## Decision
 

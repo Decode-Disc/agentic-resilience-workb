@@ -1,5 +1,7 @@
 # Source discovery recovery and coverage review
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 Started: 2026-10-19. Final verification continued on 2026-10-20 (Africa/Lagos). Candidate: working tree based on `f3c0080`. This report covers explicit failed-discovery retry, targeted requirement searches, current coverage feedback, and live approved-source retrieval contracts. It supplements historical Phase 5 verification without replacing failed or deferred evidence.
 
 Subsequent repairs and fresh live certification are recorded in [Source recovery and live retrieval contract repairs](2026-10-20-source-recovery-contract-repairs.md). The failed contracts and earlier browser limitations below describe the earlier candidate and are preserved.

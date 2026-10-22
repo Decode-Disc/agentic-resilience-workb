@@ -1,8 +1,10 @@
 # ADR-023: Use a Decision-Anchored Phase 5 Evidence Workflow
 
+> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 ## Status
 
-Amended on 2026-10-20 by [ADR-024](024-qualify-source-content-before-corpus-approval.md). Its explicitly listed preparation, qualification and evidence-use clauses supersede the corresponding historical clauses below; all other decisions remain in force.
+Amended on 2026-10-20 by [ADR-024](024-qualify-source-content-before-corpus-approval.md). Its explicitly listed preparation, qualification and evidence-use clauses supersede the corresponding historical clauses below; the other recorded decisions were unchanged by that amendment.
 
 Accepted
 
@@ -18,7 +20,7 @@ Phase 5 must turn only analyst-accepted sources into inspectable evidence withou
 
 The design must therefore prove two distinct capabilities: real post-approval retrieval and provenance for accepted live sources, and a complete claims-first Evidence Matrix for a clearly labelled showcase corpus. It must never present prefabricated claims as live analysis or convert a missing technical capability into an analytical `Unknown`.
 
-The validated Phase 5 design (`docs/designs/2026-08-15-phase-5-evidence-matrix-provenance-design.md`) defines the complete lifecycle, domain model, retrieval contract, claim generation boundary, and demonstration protocol. This ADR makes that design authoritative before any production code changes.
+The validated Phase 5 design (`docs/brainstorming/2026-08-15-phase-5-evidence-matrix-provenance-design.md`) defines the complete lifecycle, domain model, retrieval contract, claim generation boundary, and demonstration protocol. This ADR makes that design authoritative before any production code changes.
 
 ADR-004 establishes SEC, Exa, and Unstructured as the source-acquisition providers and separates discovery from post-approval retrieval and normalization. ADR-009 establishes typed AI tasks and deterministic policy adjudication. ADR-010 keeps provider routing, retries, and fallback application-controlled. ADR-017 through ADR-022 own source-selection proposal composition, authority classification, company linkage, and the durable corpus-approval checkpoint. This ADR consumes their accepted corpus boundary; it does not rewrite how proposals are composed or how providers are routed.
 
@@ -150,7 +152,7 @@ Exa Contents continues to use the installed SDK's `getContents` validation and p
 - `workflowId` becomes active-only with compare-and-clear completion; a late Phase 4 completion cannot erase a newer Phase 5 handle.
 - Real SEC and Exa approved-source retrieval enters Phase 5; real Unstructured normalization and model-provider generation remain Phase 8.
 - The curated showcase dossier can demonstrate the complete Evidence Matrix; arbitrary live dossiers preserve real provenance but pause honestly without fabricated claims or Phase 6 unlock.
-- ADR-004, ADR-009, ADR-010, and ADR-017 through ADR-022 remain authoritative for their respective decisions. This ADR consumes their accepted corpus boundary without rewriting source selection, provider routing, or policy adjudication.
+- ADR-004, ADR-009, ADR-010, and At that checkpoint, ADR-017 through ADR-022 retained responsibility for their respective decisions. This ADR consumes their accepted corpus boundary without rewriting source selection, provider routing, or policy adjudication.
 - The numeric safety limits are locked; changing any value requires revising every later test and table in the implementation plan.
 
 ## Supersession

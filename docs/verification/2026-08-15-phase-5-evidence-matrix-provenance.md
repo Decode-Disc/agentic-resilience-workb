@@ -1,10 +1,12 @@
 # Phase 5 Evidence Matrix and Provenance — Verification and Coordination Closure
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 Date: 2026-08-22
 
 Status: **Deterministic/local Phase 5 closure PASSED. External live SEC/Exa provider certification DEFERRED pending explicit authorization.** Real source URL response, latency, byte counts, attempt counts, locator reproduction, and provider cost for live SEC/Exa were not observed in this run and are not claimed here.
 
-This report covers the complete Phase 5 evidence slice — Tasks 1 through 10 of `docs/superpowers/plans/2026-08-15-phase-5-evidence-matrix-provenance.md` — from the transactionally frozen effective accepted-source heads through immutable reproducible passages, hash-gated atomic claims, evidence relations, versioned policy evaluation, the `evidence_ready + idle` strong handoff, and the honest `claim_generation_unavailable` pause for arbitrary live inputs. Real Unstructured page-aware PDF normalization and real model-provider claim extraction remain Phase 8 and are out of scope for this closure.
+This report covers the complete Phase 5 evidence slice — Tasks 1 through 10 of `git show c4f0d24:docs/superpowers/plans/2026-08-15-phase-5-evidence-matrix-provenance.md` — from the transactionally frozen effective accepted-source heads through immutable reproducible passages, hash-gated atomic claims, evidence relations, versioned policy evaluation, the `evidence_ready + idle` strong handoff, and the honest `claim_generation_unavailable` pause for arbitrary live inputs. Real Unstructured page-aware PDF normalization and real model-provider claim extraction remain Phase 8 and are out of scope for this closure.
 
 ## Confirmed (deterministic and local)
 

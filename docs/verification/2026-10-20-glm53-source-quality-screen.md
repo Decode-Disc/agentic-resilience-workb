@@ -1,5 +1,7 @@
 # GLM 5.3 Flash screen and reusable model selection
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 Date: 2026-10-20. Four user-authorized GLM calls completed successfully, with schema-valid outputs. No other model was rerun. Recorded provider cost: **USD 0.001102867344**. The original implementation goal remains paused and no application routing change has been made.
 
 ## Result

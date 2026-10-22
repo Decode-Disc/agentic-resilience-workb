@@ -1,5 +1,7 @@
 # Provider configuration observations
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../../../docs/ROADMAP.md); no historical budget or execution permission is renewed.
+
 The first five-call probe is preserved under `runs/2026-10-20/`. Jev 1.13, Jev 1.14, Microsoft Decision 1 and DeepSeek returned valid choices. GLM returned HTTP 400 stating that reasoning was mandatory and could not be disabled. This is an observed configuration failure, not a wrong classification.
 
 The main run, `2026-10-20-supported-config`, changes only GLM's inference configuration to `reasoning: { effort: "low", exclude: true }`. The 1,024-token output cap, dataset, questions and reference judgments remain unchanged. DeepSeek still uses reasoning disabled. The comparison therefore evaluates these usable configurations, not equal reasoning modes. Internal reasoning text is excluded from GLM responses.

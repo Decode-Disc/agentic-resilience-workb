@@ -1,5 +1,7 @@
 # Evidence retrieval diagnosis after implementation
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 Date: 2026-10-21
 
 **Interpretation correction, 2026-10-22:** the stage counts below track the frozen reference spans. An equivalent Snowflake quarterly revenue table was present in the original hybrid final inputs and is present in both modes after the retention repair. See the [capture offsets, hash and interpretation limits](2026-10-21-evidence-retrieval-repair.md#interpretation-correction-2026-10-22). The absence of the chosen reference does not establish loss of the useful evidence or a query defect. Runtime observations below describe the dated diagnostic, not a fresh activation check.

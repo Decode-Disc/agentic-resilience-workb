@@ -1,8 +1,10 @@
 # ADR-022: Persist Company Linkage Basis for Source Recommendations
 
+> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 ## Status
 
-Amended on 2026-10-20 by [ADR-024](024-qualify-source-content-before-corpus-approval.md). Its explicitly listed preparation, qualification and evidence-use clauses supersede the corresponding historical clauses below; all other decisions remain in force.
+Amended on 2026-10-20 by [ADR-024](024-qualify-source-content-before-corpus-approval.md). Its explicitly listed preparation, qualification and evidence-use clauses supersede the corresponding historical clauses below; the other recorded decisions were unchanged by that amendment.
 
 Accepted
 
@@ -85,4 +87,4 @@ The analyst interface keeps metadata-linked candidates in `Recommended`, labels 
 
 ## Supersession
 
-This ADR supersedes ADR-021 only where ADR-021 requires structural URL-path company linkage for every automatic recommendation and prohibits every use of titles in company-linkage triage. ADR-021 remains authoritative for publisher provenance, document classification, duplicate identity, automatic role eligibility, coverage-gap integrity, qualified-partner handling, immutable proposal history, and the prohibition on using titles as evidence or content proof.
+This ADR supersedes ADR-021 only where ADR-021 requires structural URL-path company linkage for every automatic recommendation and prohibits every use of titles in company-linkage triage. At that checkpoint, ADR-021 retained responsibility for publisher provenance, document classification, duplicate identity, automatic role eligibility, coverage-gap integrity, qualified-partner handling, immutable proposal history, and the prohibition on using titles as evidence or content proof.

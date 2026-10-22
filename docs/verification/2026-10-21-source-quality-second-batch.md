@@ -1,5 +1,7 @@
 # Grouped qualification and comparison of the DeepSeek finalists
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 DeepSeek V4.1 Flash remains the provisional qualification candidate for the prototype. It produced 31 accepted qualifications out of 32, against 28 for Flash 1017, and materialized contributions for 27 of the 28 substantive documents, against 24. The comparison task is operationally limited by its output contract: 23 of 32 explanations exceed the 600-character limit and one is empty. These are rejected results, not proof that the underlying decisions are all wrong.
 
 The 96 authorized calls completed without retries for a provider-reported cost of **USD 0.08439218**. The first and second batches together cost USD 0.185453646052. Earlier small screening experiments are excluded from that two-batch total. No application provider was activated or changed.

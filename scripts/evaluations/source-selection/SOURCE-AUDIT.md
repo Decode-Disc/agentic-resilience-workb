@@ -1,5 +1,7 @@
 # ServiceNow source-selection audit
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../../../docs/ROADMAP.md); no historical budget or execution permission is renewed.
+
 Date: 2026-10-20. Dossier: `k979t5nzs6bmkxbp7eref2bkzx8bag4f`. Repository HEAD inspected: `531dbe1`. This is a read-only research audit, not a corpus approval, policy change, implementation, or assessment of ServiceNow's investment merits.
 
 ## Result
@@ -20,7 +22,7 @@ The snapshot was obtained using Convex's bounded, inline read-only query against
 
 Public sources were read using the web tool. Some web responses were cached and expose their crawl age. Fifteen additional Firecrawl retrievals requested `maxAge: 0`, covering all seven independent leads, three Store apps, the Form 3, the Financial Analyst Day redirect, two data sheets, and the selected old presentation. Each reported one retrieval credit. No paywall was bypassed, no form was submitted, and no paid report was purchased. An absent public section is not proof that no private material exists.
 
-The original audit referred to local inputs named `snapshot.json`, `company.json` and `joined-sources.json`, plus the policy probe `replay.mjs` and `replay-result.json`. Those five targets are absent from this repository location and were not located in the available temporary workspace during the 2026-10-22 documentation check. Their previous relative links have been removed rather than presenting missing artifacts as reproducible evidence. Restore the original archive before claiming to reproduce this full 48-source audit. Numbered `scrape-*.json` and `web-*.txt` references also describe historical retrieval material, not approved application evidence. The later [frozen evaluation dataset](fixtures/dataset.json) preserves selected public captures but is not a replacement for the missing complete audit snapshot.
+The original audit referred to local inputs named `snapshot.json`, `company.json` and `joined-sources.json`, plus the policy probe `replay.mjs` and `replay-result.json`. Those five targets are absent from this repository location and were not located in the available temporary workspace during the 2026-10-22 documentation check. Their previous relative links have been removed rather than presenting missing artifacts as reproducible evidence. Restore the original archive before claiming to reproduce this full 48-source audit. Numbered `scrape-*.json` and `web-*.txt` references also describe historical retrieval material, not approved application evidence. The later frozen evaluation dataset (`scripts/evaluations/source-selection/fixtures/dataset.json`, local reference as of 2026-10-22; not included in checkpoint `c4f0d24`) preserves selected public captures but is not a replacement for the missing complete audit snapshot.
 
 ## The three current requirements
 

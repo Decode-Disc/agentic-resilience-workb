@@ -1,5 +1,7 @@
 # Source Selection v2 Verification
 
+> **Dated evidence.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 ## Automated Coverage
 
 - Table-driven policy tests cover SEC form roles and issuer-CIK conflicts, official company domains, company-matched and unrelated shared IR hosts, institutional independent publishers, qualified partners, Community content, indexes, unverified publishers, canonical and accession duplicates, direct-document preference over an index for the same accession, period-aware identities, annual/interim/material series caps, official-family and independent-producer caps, stable ordering, research-angle tie-breaking, adaptive stopping and analyst-supplied sources.
