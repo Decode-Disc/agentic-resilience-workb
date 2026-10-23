@@ -173,6 +173,7 @@ export function createExaContentsAdapter(
         title?: string;
         searchTime?: number;
         costDollars?: number;
+        textLimitReached?: true;
     }>;
 } {
     const timeoutMs = dependencies.timeoutMs ?? DEFAULT_EXA_CONTENTS_TIMEOUT_MS;
@@ -306,6 +307,9 @@ export function createExaContentsAdapter(
                         title: firstResult.title ?? undefined,
                         searchTime: response.searchTime,
                         costDollars: response.costDollars?.total,
+                        ...(rawResultText.length >= maxCharacters
+                            ? { textLimitReached: true as const }
+                            : {}),
                     };
                 } catch (error) {
                     const latencyMs = Math.max(0, now() - startedAt);
@@ -522,4 +526,53 @@ export function createExaDiscoveryAdapter(client: ExaSearchClient): {
             };
         },
     };
+}
+
+/** Reads a bounded Exa JSON response and preserves caller cancellation. */
+export async function readExaResponseJson(
+    response: Response,
+    signal: AbortSignal,
+): Promise<unknown> {
+    const declaredBytes = Number(response.headers.get("content-length"));
+    if (declaredBytes > MAX_APPROVED_SOURCE_BYTES) {
+        await response.body?.cancel();
+        throw new ExaContentsError(
+            "Exa response exceeds the byte limit",
+            "response_too_large",
+        );
+    }
+    const reader = response.body?.getReader();
+    if (!reader)
+        throw new ExaContentsError("Empty Exa response", "invalid_response");
+    const decoder = new TextDecoder();
+    let bytes = 0;
+    let text = "";
+    try {
+        while (true) {
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            bytes += chunk.value.byteLength;
+            if (bytes > MAX_APPROVED_SOURCE_BYTES) {
+                await reader.cancel();
+                throw new ExaContentsError(
+                    "Exa response exceeds the byte limit",
+                    "response_too_large",
+                );
+            }
+            text += decoder.decode(chunk.value, { stream: true });
+        }
+    } finally {
+        reader.releaseLock();
+    }
+    signal.throwIfAborted();
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(text + decoder.decode());
+    } catch {
+        throw new ExaContentsError(
+            "Exa returned invalid JSON",
+            "invalid_response",
+        );
+    }
+    return parsed;
 }

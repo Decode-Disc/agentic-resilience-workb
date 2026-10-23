@@ -1,8 +1,8 @@
 "use node";
 
-import Exa from "exa-js";
 import { lookup } from "node:dns/promises";
 import { ConvexError, v } from "convex/values";
+import Exa from "exa-js";
 
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
@@ -50,8 +50,10 @@ export async function validateExaCandidates<
 >(
     candidates: ReadonlyArray<Candidate>,
     resolveAddresses: (hostname: string) => Promise<ReadonlyArray<string>>,
+    signal?: AbortSignal,
 ): Promise<{ candidates: Array<Candidate>; rejected: number }> {
-    const results = await Promise.allSettled(
+    signal?.throwIfAborted();
+    const validation = Promise.allSettled(
         candidates.map(async (candidate) => {
             const validated = await validatePublicSourceUrl(
                 candidate.canonicalUrl,
@@ -63,12 +65,27 @@ export async function validateExaCandidates<
             };
         }),
     );
-    return {
-        candidates: results.flatMap((result) =>
-            result.status === "fulfilled" ? [result.value] : [],
-        ),
-        rejected: results.filter(({ status }) => status === "rejected").length,
-    };
+    let onAbort: (() => void) | undefined;
+    try {
+        const results = await (signal
+            ? Promise.race([
+                  validation,
+                  new Promise<never>((_resolve, reject) => {
+                      onAbort = () => reject(signal.reason);
+                      signal.addEventListener("abort", onAbort, { once: true });
+                  }),
+              ])
+            : validation);
+        return {
+            candidates: results.flatMap((result) =>
+                result.status === "fulfilled" ? [result.value] : [],
+            ),
+            rejected: results.filter(({ status }) => status === "rejected")
+                .length,
+        };
+    } finally {
+        if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+    }
 }
 
 export const discoverForRun = internalAction({

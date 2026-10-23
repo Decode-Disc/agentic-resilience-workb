@@ -1,7 +1,22 @@
 import type { CoveragePreset } from "@convex/domain/researchPlan";
+import { type Infer, v } from "convex/values";
+import type { SourceComparisonDisposition } from "./sourceComparison";
+import type { SourceQualification } from "./sourceQualification";
 
-export const SOURCE_SELECTION_POLICY_VERSION = "source-selection-v6";
+export const SOURCE_SELECTION_POLICY_VERSION = "source-selection-v13";
 export const SOURCE_PUBLISHER_REGISTRY_VERSION = "source-publishers-v4";
+
+/** These policy updates reuse saved qualification and analyst decisions without provider I/O. */
+export function canRefreshSourceSelectionPolicy(
+    policyVersion: string,
+): boolean {
+    return (
+        policyVersion === "source-selection-v10" ||
+        policyVersion === "source-selection-v11" ||
+        policyVersion === "source-selection-v12" ||
+        policyVersion === SOURCE_SELECTION_POLICY_VERSION
+    );
+}
 
 export const SOURCE_FAMILIES = [
     "regulatory",
@@ -71,6 +86,7 @@ export const SOURCE_COMPANY_LINKAGE_BASES = [
     "discovery_metadata",
     "unverified",
     "not_evaluated",
+    "inspected_content",
 ] as const;
 
 export type SourceFamily = (typeof SOURCE_FAMILIES)[number];
@@ -101,7 +117,8 @@ export type SourceSelectionReasonCode =
     | "qualified_partner_manual_review"
     | "no_new_coverage"
     | "recommendation_ceiling_reached"
-    | "integrity_conflict";
+    | "integrity_conflict"
+    | "targeted_search_review";
 
 export type SourceSelectionCandidate = {
     sourceId: string;
@@ -115,8 +132,97 @@ export type SourceSelectionCandidate = {
     secAccessionNumber?: string;
     providerResultPosition?: number;
     discoveryQueryIndex?: number;
+    requiresAnalystReview?: boolean;
     createdAt: number;
+    inspection?:
+        | {
+              status: "qualified";
+              qualification: SourceQualification;
+              readingCompleteness: "complete" | "partial";
+              comparisonOutcomes?: Record<number, SourceComparisonDisposition>;
+          }
+        | { status: "unavailable"; reasonCode: string };
 };
+
+export const SOURCE_EVIDENCE_USAGES = [
+    "documentary",
+    "historical_only",
+    "attributed_argument_only",
+    "verification_required",
+    "blocked",
+] as const;
+
+export const sourceRoleAvailabilityValidator = v.array(
+    v.object({
+        role: v.union(...SOURCE_COVERAGE_ROLES.map((role) => v.literal(role))),
+        state: v.union(
+            v.literal("available"),
+            v.literal("limited"),
+            v.literal("not_established"),
+        ),
+        reasonCodes: v.array(v.string()),
+        usage: v.union(
+            ...SOURCE_EVIDENCE_USAGES.map((usage) => v.literal(usage)),
+        ),
+    }),
+);
+export type SourceRoleAvailability = Infer<
+    typeof sourceRoleAvailabilityValidator
+>[number];
+
+/** A role's documentary availability cannot remove an individual finding's restrictions. */
+export function sourceFindingUsage(
+    finding: SourceQualification["findings"][number],
+    roleUsage: SourceRoleAvailability["usage"],
+    comparisonOutcome?: SourceComparisonDisposition,
+    limitations: SourceQualification["limitations"] = [],
+): SourceRoleAvailability["usage"] {
+    if (finding.dependsOnFlaggedAssertion || roleUsage === "blocked")
+        return "blocked";
+    if (comparisonOutcome === "possible_conflict")
+        return "verification_required";
+    if (
+        ["attributed_argument", "forecast"].includes(finding.kind) &&
+        comparisonOutcome !== "no_conflict_observed"
+    )
+        return "verification_required";
+    if (finding.period === "historical" || roleUsage === "historical_only")
+        return "historical_only";
+    if (finding.kind === "mixed_or_uncertain") return "verification_required";
+    if (
+        ["asserted_fact", "reported_outcome"].includes(finding.kind) &&
+        sourcePassagesRequireVerification(limitations, finding.passages)
+    )
+        return "verification_required";
+    if (
+        ["attributed_argument", "forecast"].includes(finding.kind) &&
+        ["documentary", "attributed_argument_only"].includes(roleUsage)
+    )
+        return "attributed_argument_only";
+    return roleUsage;
+}
+
+/** A located caveat restricts only its passages; an unlocated caveat applies globally. */
+export function sourcePassagesRequireVerification(
+    limitations: SourceQualification["limitations"],
+    passages: ReadonlyArray<{ passageKey: string }>,
+): boolean {
+    return limitations.some(
+        (limitation) =>
+            [
+                "factual_conflict",
+                "unverified_assertion",
+                "dependency_unclear",
+            ].includes(limitation.code) &&
+            (limitation.passages.length === 0 ||
+                limitation.passages.some((reference) =>
+                    passages.some(
+                        (passage) =>
+                            passage.passageKey === reference.passageKey,
+                    ),
+                )),
+    );
+}
 
 export type SourceSelectionCompany = {
     cik: string;
@@ -138,6 +244,8 @@ export type SourceSelectionProposalResult = {
         recommendationContributions: Array<string>;
         declaredCoverageRoles: Array<SourceCoverageRole>;
         eligibleCoverageRoles: Array<SourceCoverageRole>;
+        roleAvailability?: SourceRoleAvailability[];
+        inspectionStatus?: "complete" | "partial" | "unavailable";
         duplicateOfSourceId?: string;
         rank: number;
         reasonCodes: Array<SourceSelectionReasonCode>;
@@ -166,6 +274,8 @@ type ClassifiedCandidate = SourceSelectionCandidate & {
     alternativeReason?: SourceSelectionReasonCode;
     needsAttentionReason?: SourceSelectionReasonCode;
     duplicateOfSourceId?: string;
+    roleAvailability?: SourceRoleAvailability[];
+    inspectionStatus?: "complete" | "partial" | "unavailable";
 };
 
 const IR_HOSTS = new Set([
@@ -1026,7 +1136,7 @@ function eligibleCoverageRolesFor(
     return [...(publisherCapability(host)?.eligibleCoverageRoles ?? [])];
 }
 
-function classifyCandidate(
+function classifyMetadataCandidate(
     candidate: SourceSelectionCandidate,
     company: SourceSelectionCompany | undefined,
 ): ClassifiedCandidate {
@@ -1224,6 +1334,359 @@ function classifyCandidate(
     };
 }
 
+/** Reuses source eligibility's host and company classifier for comparison context. */
+export function classifySourceComparisonContext(
+    candidate: SourceSelectionCandidate,
+    company: SourceSelectionCompany | undefined,
+) {
+    const classified = classifyMetadataCandidate(candidate, company);
+    return {
+        authorityTier: classified.authorityTier,
+        companyLinkageBasis: classified.companyLinkageBasis,
+        companyIdentityConfirmed: classified.companyIdentityConfirmed,
+        documentKind: classified.documentKind,
+        coverageRole: classified.declaredCoverageRoles[0],
+    };
+}
+
+/** Document kinds describe suitability for full coverage; narrower contributions can remain useful. */
+export const SOURCE_ROLE_REQUIREMENTS: Readonly<
+    Record<
+        SourceCoverageRole,
+        { documentKinds: readonly SourceDocumentKind[]; description: string }
+    >
+> = {
+    regulatory_annual: {
+        documentKinds: ["regulatory_annual"],
+        description:
+            "Annual issuer financial and business disclosures, such as Form 10-K. Ownership filings and future announcements do not qualify.",
+    },
+    regulatory_interim: {
+        documentKinds: ["regulatory_interim"],
+        description: "Interim issuer financial disclosures, such as Form 10-Q.",
+    },
+    regulatory_material_event: {
+        documentKinds: ["regulatory_material"],
+        description:
+            "A material issuer event disclosed in a regulatory filing.",
+    },
+    investor_results: {
+        documentKinds: ["earnings_release"],
+        description:
+            "An earnings announcement reporting actual financial results, not an event invitation or forecast alone.",
+    },
+    investor_presentation: {
+        documentKinds: ["investor_presentation", "earnings_transcript"],
+        description:
+            "A substantive investor presentation or earnings discussion, not its event announcement or a listing page.",
+    },
+    official_product_platform: {
+        documentKinds: ["official_product_documentation"],
+        description:
+            "A description of the company platform or product capabilities. Present product descriptions are assertions, not forecasts.",
+    },
+    official_product_integration: {
+        documentKinds: [
+            "official_product_documentation",
+            "official_integration_documentation",
+        ],
+        description:
+            "A description of integration, APIs, interoperability or extension mechanisms.",
+    },
+    official_commercial_pricing: {
+        documentKinds: ["official_pricing"],
+        description:
+            "The company product subscription pricing or charging structure.",
+    },
+    official_commercial_terms: {
+        documentKinds: ["official_commercial_terms", "partner_evidence"],
+        description:
+            "Operative subscription or service contractual terms for the company, not website terms or a contract-management product.",
+    },
+    official_security_architecture: {
+        documentKinds: ["official_security_documentation"],
+        description:
+            "Technical descriptions of the company security or deployment architecture, not securities ownership.",
+    },
+    official_security_trust: {
+        documentKinds: ["official_security_documentation"],
+        description:
+            "Security, compliance or trust documentation about the company products, not stock or securities disclosures.",
+    },
+    counter_evidence_primary: {
+        documentKinds: [
+            "independent_analysis",
+            "news_reporting",
+            "unverified_counter_evidence",
+        ],
+        description:
+            "A specific adverse business mechanism, limitation or outcome concerning the company, including in a positive overall article.",
+    },
+    counter_evidence_secondary: {
+        documentKinds: [
+            "independent_analysis",
+            "news_reporting",
+            "unverified_counter_evidence",
+        ],
+        description:
+            "Another adverse perspective or mechanism. This role does not certify independence.",
+    },
+    independent_analysis_primary: {
+        documentKinds: ["independent_analysis"],
+        description:
+            "A substantive external author analysis of the company business or economics. This role does not certify factual truth or publisher independence.",
+    },
+    independent_analysis_secondary: {
+        documentKinds: ["independent_analysis"],
+        description:
+            "Another substantive external author perspective. This role does not certify independence or corroboration.",
+    },
+};
+
+function classifyCandidate(
+    candidate: SourceSelectionCandidate,
+    company: SourceSelectionCompany | undefined,
+): ClassifiedCandidate {
+    const base = classifyMetadataCandidate(candidate, company);
+    const inspection = candidate.inspection;
+    if (!inspection) return base;
+    const qualification =
+        inspection.status === "qualified"
+            ? inspection.qualification
+            : undefined;
+    const subject =
+        qualification?.companyMatch === "subject" &&
+        base.needsAttentionReason !== "integrity_conflict";
+    const kind = qualification?.documentKind ?? "unknown";
+    const primary = [
+        "regulator_primary",
+        "company_primary",
+        "company_hosted_ir",
+    ].includes(base.authorityTier);
+    const institutional = base.authorityTier === "institutional_independent";
+    const roleAvailability: SourceRoleAvailability[] =
+        SOURCE_COVERAGE_ROLES.map((role) => {
+            const fitsPurpose =
+                SOURCE_ROLE_REQUIREMENTS[role].documentKinds.includes(kind);
+            const unsuitablePurpose =
+                !fitsPurpose &&
+                (role.startsWith("regulatory_") ||
+                    role.startsWith("investor_") ||
+                    role === "official_commercial_terms");
+            const lowInformation = [
+                "regulatory_ownership",
+                "regulatory_registration",
+                "regulatory_proxy",
+                "regulatory_other",
+                "search_or_index",
+            ].includes(kind);
+            const findings =
+                subject && !unsuitablePurpose && !lowInformation
+                    ? (qualification?.findings.filter(
+                          (finding, findingIndex) =>
+                              finding.role === role &&
+                              sourceFindingUsage(
+                                  finding,
+                                  "documentary",
+                                  inspection?.status === "qualified"
+                                      ? inspection.comparisonOutcomes?.[
+                                            findingIndex
+                                        ]
+                                      : undefined,
+                                  qualification?.limitations,
+                              ) !== "blocked",
+                      ) ?? [])
+                    : [];
+            if (!findings.length)
+                return {
+                    role,
+                    state: "not_established",
+                    reasonCodes: [
+                        inspection.status === "unavailable"
+                            ? inspection.reasonCode
+                            : !subject
+                              ? "company_not_established"
+                              : inspection.readingCompleteness === "partial"
+                                ? "partial_reading"
+                                : "no_relevant_material",
+                    ],
+                    usage: "blocked",
+                };
+            const current = findings.filter((f) => f.period !== "historical");
+            if (!current.length)
+                return {
+                    role,
+                    state: "limited",
+                    reasonCodes: ["historical"],
+                    usage: "historical_only",
+                };
+            if (
+                role === "official_commercial_terms" &&
+                !current.some((f) => f.period === "current")
+            )
+                return {
+                    role,
+                    state: "limited",
+                    reasonCodes: ["period_unestablished"],
+                    usage: "verification_required",
+                };
+            const findingUsages = current.map((f) =>
+                sourceFindingUsage(
+                    f,
+                    "documentary",
+                    inspection?.status === "qualified"
+                        ? inspection.comparisonOutcomes?.[
+                              qualification?.findings.indexOf(f) ?? -1
+                          ]
+                        : undefined,
+                    qualification?.limitations,
+                ),
+            );
+            const hasPossibleConflict = current.some((finding) => {
+                const findingIndex =
+                    qualification?.findings.indexOf(finding) ?? -1;
+                return (
+                    inspection?.status === "qualified" &&
+                    inspection.comparisonOutcomes?.[findingIndex] ===
+                        "possible_conflict"
+                );
+            });
+            const needsComparison = current.some((finding) => {
+                const findingIndex =
+                    qualification?.findings.indexOf(finding) ?? -1;
+                return (
+                    ["attributed_argument", "forecast"].includes(
+                        finding.kind,
+                    ) &&
+                    (inspection?.status !== "qualified" ||
+                        inspection.comparisonOutcomes?.[findingIndex] !==
+                            "no_conflict_observed")
+                );
+            });
+            if (!findingUsages.includes("documentary"))
+                return {
+                    role,
+                    state: "limited",
+                    reasonCodes: [
+                        hasPossibleConflict
+                            ? "possible_conflict"
+                            : needsComparison
+                              ? "comparison_required"
+                              : findingUsages.includes(
+                                      "attributed_argument_only",
+                                  )
+                                ? "unverified_assertion"
+                                : "content_nature_uncertain",
+                    ],
+                    usage: findingUsages.includes("attributed_argument_only")
+                        ? "attributed_argument_only"
+                        : "verification_required",
+                };
+            const allowedAuthority = role.startsWith("regulatory_")
+                ? base.authorityTier === "regulator_primary"
+                : role.startsWith("official_") || role.startsWith("investor_")
+                  ? primary
+                  : institutional;
+            if (!allowedAuthority)
+                return {
+                    role,
+                    state: "limited",
+                    reasonCodes: ["publisher_unverified"],
+                    usage: "verification_required",
+                };
+            if (!fitsPurpose)
+                return {
+                    role,
+                    state: "limited",
+                    reasonCodes: ["document_scope_limited"],
+                    usage: "documentary",
+                };
+            return {
+                role,
+                state: "available",
+                reasonCodes: [],
+                usage: "documentary",
+            };
+        });
+    const useful = roleAvailability.filter(
+        (role) => role.state !== "not_established",
+    );
+    // Reading failure removes content assurance, not independently established identity or discovery utility.
+    const readingCannotExclude =
+        inspection.status === "unavailable" ||
+        (inspection.readingCompleteness === "partial" &&
+            useful.length === 0 &&
+            (qualification?.companyMatch === "subject" ||
+                qualification?.companyMatch === "uncertain") &&
+            ![
+                "search_or_index",
+                "regulatory_ownership",
+                "regulatory_registration",
+                "regulatory_proxy",
+                "regulatory_other",
+            ].includes(kind));
+    if (
+        readingCannotExclude &&
+        base.eligible &&
+        base.companyIdentityConfirmed &&
+        base.needsAttentionReason !== "integrity_conflict"
+    ) {
+        return {
+            ...base,
+            eligibleCoverageRoles: [],
+            declaredCoverageRoles: [],
+            coverageContributions: [],
+            recommendationContributions: [
+                ...base.coverageContributions,
+                ...base.recommendationContributions,
+            ],
+            roleAvailability,
+            inspectionStatus:
+                inspection.status === "unavailable"
+                    ? "unavailable"
+                    : inspection.readingCompleteness,
+        };
+    }
+    const periodIdentity = periodicDocumentIdentity({
+        ...base,
+        documentKind: kind,
+    });
+    return {
+        ...base,
+        documentKind: kind,
+        sourceFamily: familyFor(candidate, kind),
+        companyIdentityConfirmed: Boolean(subject),
+        companyLinkageBasis: subject
+            ? base.companyLinkageBasis === "structural"
+                ? "structural"
+                : "inspected_content"
+            : "unverified",
+        eligibleCoverageRoles: roleAvailability
+            .filter((role) => role.state === "available")
+            .map((role) => role.role),
+        declaredCoverageRoles: useful.map((role) => role.role),
+        coverageContributions: useful.map(
+            (role) => `content:${role.role}:${role.state}:${base.host}`,
+        ),
+        recommendationContributions:
+            useful.length > 0 && periodIdentity ? [periodIdentity] : [],
+        roleAvailability,
+        inspectionStatus:
+            inspection.status === "unavailable"
+                ? "unavailable"
+                : inspection.readingCompleteness,
+        eligible:
+            candidate.origin === "analyst_url"
+                ? base.eligible
+                : useful.length > 0,
+        alternativeReason: !subject
+            ? "company_identity_unverified"
+            : kind === "search_or_index"
+              ? "search_or_index"
+              : "no_new_coverage",
+    };
+}
+
 function compareCandidates(
     left: ClassifiedCandidate,
     right: ClassifiedCandidate,
@@ -1256,7 +1719,10 @@ function compareCandidates(
     if (leftMatches !== rightMatches) {
         return rightMatches - leftMatches;
     }
-    return left.sourceId.localeCompare(right.sourceId, "en");
+    return (
+        canonicalIdentity(left).localeCompare(canonicalIdentity(right), "en") ||
+        left.sourceId.localeCompare(right.sourceId, "en")
+    );
 }
 
 function canonicalIdentity(candidate: ClassifiedCandidate): string {
@@ -1305,9 +1771,16 @@ function secAccessionIdentity(
 function periodicDocumentIdentity(
     candidate: ClassifiedCandidate,
 ): string | undefined {
-    const publishedDate = candidate.publishedAt
-        ? new Date(candidate.publishedAt)
-        : undefined;
+    const qualifiedPeriod =
+        candidate.inspection?.status === "qualified"
+            ? candidate.inspection.qualification.reportingPeriodEnd
+            : undefined;
+    if (candidate.inspection && !qualifiedPeriod) return undefined;
+    const publishedDate = qualifiedPeriod
+        ? new Date(`${qualifiedPeriod}T00:00:00.000Z`)
+        : candidate.publishedAt
+          ? new Date(candidate.publishedAt)
+          : undefined;
     if (candidate.documentKind === "regulatory_annual") {
         const year = publishedDate?.getUTCFullYear();
         return year ? `regulatory_annual:${year}` : undefined;
@@ -1345,6 +1818,12 @@ function preferAsDuplicateWinner(
     candidate: ClassifiedCandidate,
     current: ClassifiedCandidate,
 ): boolean {
+    if (
+        Boolean(candidate.requiresAnalystReview) !==
+        Boolean(current.requiresAnalystReview)
+    ) {
+        return !candidate.requiresAnalystReview;
+    }
     if (candidate.eligible !== current.eligible) {
         return candidate.eligible;
     }
@@ -1434,6 +1913,8 @@ export function evaluateSourceCoverage<SourceId extends string>(
         declaredCoverageRoles: Array<SourceCoverageRole>;
         duplicateOfSourceId?: string;
         included: boolean;
+        decision?: "accepted" | "rejected" | "pending";
+        roleAvailability?: SourceRoleAvailability[];
     }>,
 ) {
     const selected: Array<(typeof candidates)[number] & { host: string }> = [];
@@ -1448,9 +1929,6 @@ export function evaluateSourceCoverage<SourceId extends string>(
             (candidate) =>
                 candidate.included &&
                 !candidate.duplicateOfSourceId &&
-                !selected.some(
-                    (existing) => existing.sourceId === candidate.sourceId,
-                ) &&
                 roleMatches(
                     {
                         ...candidate,
@@ -1462,9 +1940,52 @@ export function evaluateSourceCoverage<SourceId extends string>(
         );
         if (best)
             selected.push({ ...best, host: normalizedHost(best.canonicalUrl) });
+        const limits = relevant
+            .filter(
+                (candidate) =>
+                    candidate.included && !candidate.duplicateOfSourceId,
+            )
+            .flatMap(
+                (candidate) =>
+                    candidate.roleAvailability
+                        ?.filter(
+                            (item) =>
+                                item.role === role &&
+                                item.state !== "available",
+                        )
+                        .flatMap((item) => item.reasonCodes) ?? [],
+            );
         return {
             role,
             covered: Boolean(best),
+            availability: best
+                ? ("available" as const)
+                : relevant.some(
+                        (candidate) =>
+                            candidate.included &&
+                            !candidate.duplicateOfSourceId &&
+                            candidate.roleAvailability?.some(
+                                (item) =>
+                                    item.role === role &&
+                                    item.state === "limited",
+                            ),
+                    )
+                  ? ("limited" as const)
+                  : ("not_established" as const),
+            reasonCodes: best
+                ? []
+                : [
+                      ...new Set(
+                          limits.length
+                              ? limits
+                              : relevant.some(
+                                      (candidate) =>
+                                          candidate.decision === "rejected",
+                                  )
+                                ? ["analyst_exclusion"]
+                                : ["no_suitable_document"],
+                      ),
+                  ],
             candidateIds: relevant.map((candidate) => candidate.sourceId),
         };
     });
@@ -1511,7 +2032,12 @@ export function buildSourceSelectionProposal(input: {
     const angleTokens = new Set(normalizedTokens(input.researchAngle));
     const classified = input.candidates
         .map((candidate) => classifyCandidate(candidate, input.company))
-        .sort((left, right) => compareCandidates(left, right, angleTokens));
+        .sort(
+            (left, right) =>
+                Number(Boolean(left.requiresAnalystReview)) -
+                    Number(Boolean(right.requiresAnalystReview)) ||
+                compareCandidates(left, right, angleTokens),
+        );
 
     const duplicateReasons = new Map<
         string,
@@ -1566,7 +2092,9 @@ export function buildSourceSelectionProposal(input: {
 
     const selectable = classified.filter(
         (candidate) =>
-            candidate.eligible && !duplicateReasons.has(candidate.sourceId),
+            candidate.eligible &&
+            !candidate.requiresAnalystReview &&
+            !duplicateReasons.has(candidate.sourceId),
     );
     const selected: Array<ClassifiedCandidate> = [];
     const selectedReason = new Map<string, SourceSelectionReasonCode>();
@@ -1594,17 +2122,26 @@ export function buildSourceSelectionProposal(input: {
     }
 
     const coverageGaps: Array<SourceCoverageRole> = [];
+    const coverageSources: Array<ClassifiedCandidate> = [];
     for (const role of requiredRoles(input.coveragePreset)) {
+        const included = selected.find((candidate) =>
+            roleMatches(candidate, role, coverageSources),
+        );
+        if (included) {
+            coverageSources.push(included);
+            continue;
+        }
         const best = selectable.find(
             (candidate) =>
                 !selectedReason.has(candidate.sourceId) &&
-                roleMatches(candidate, role, selected),
+                roleMatches(candidate, role, coverageSources),
         );
         if (!best || selectedDiscoveryCount() >= ceiling) {
             coverageGaps.push(role);
             continue;
         }
         select(best, "required_coverage_role");
+        coverageSources.push(best);
     }
 
     const covered = new Set(
@@ -1633,7 +2170,14 @@ export function buildSourceSelectionProposal(input: {
         if (!novel) {
             continue;
         }
-        select(candidate, "additional_coverage");
+        select(
+            candidate,
+            candidate.roleAvailability?.every(
+                (role) => role.state === "not_established",
+            )
+                ? "ranked_fill"
+                : "additional_coverage",
+        );
         for (const contribution of contributions) {
             covered.add(contribution);
         }
@@ -1650,9 +2194,12 @@ export function buildSourceSelectionProposal(input: {
     const items = ordered.map((candidate, rank) => {
         const duplicate = duplicateReasons.get(candidate.sourceId);
         const selectionReason = selectedReason.get(candidate.sourceId);
-        const needsAttentionReason = candidate.needsAttentionReason;
+        const needsAttentionReason = candidate.requiresAnalystReview
+            ? ("targeted_search_review" as const)
+            : candidate.needsAttentionReason;
         const needsAttention = Boolean(
-            needsAttentionReason && !attentionConflictAssigned,
+            candidate.requiresAnalystReview ||
+                (needsAttentionReason && !attentionConflictAssigned),
         );
         if (needsAttention) {
             attentionConflictAssigned = true;
@@ -1676,6 +2223,8 @@ export function buildSourceSelectionProposal(input: {
             recommendationContributions: candidate.recommendationContributions,
             declaredCoverageRoles: candidate.declaredCoverageRoles,
             eligibleCoverageRoles: candidate.eligibleCoverageRoles,
+            roleAvailability: candidate.roleAvailability,
+            inspectionStatus: candidate.inspectionStatus,
             duplicateOfSourceId: duplicate?.duplicateOfSourceId,
             rank,
             reasonCodes: [

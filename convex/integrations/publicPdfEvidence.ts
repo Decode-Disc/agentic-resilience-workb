@@ -1,30 +1,30 @@
 "use node";
 
 import { lookup } from "node:dns/promises";
-
 import {
-    PDF_NORMALIZER_VERSION,
-    normalizePdfPages,
-} from "@convex/integrations/evidenceNormalization";
+    PublicSourceUrlError,
+    validatePublicSourceUrl,
+} from "@convex/domain/publicSourceUrl";
 import {
     extractPdfPassagesFromPages,
-    reproducePassage,
+    preparePassageReproduction,
     sha256Hex,
 } from "@convex/domain/sourcePassages";
+import type {
+    ApprovedSourceRetrievalInput,
+    ApprovedSourceRetrievalResult,
+    SourceDocumentRetrievalInput,
+} from "@convex/integrations/approvedSourceRetrieval";
+import {
+    normalizePdfPages,
+    PDF_NORMALIZER_VERSION,
+} from "@convex/integrations/evidenceNormalization";
 import {
     MAX_APPROVED_SOURCE_BYTES,
     MAX_PDF_PAGES,
     MAX_REDIRECTS,
 } from "@convex/resourceLimits";
-import {
-    validatePublicSourceUrl,
-    PublicSourceUrlError,
-} from "@convex/domain/publicSourceUrl";
 import { requestPinnedPublicSource } from "@convex/sourceActions";
-import type {
-    ApprovedSourceRetrievalInput,
-    ApprovedSourceRetrievalResult,
-} from "@convex/integrations/approvedSourceRetrieval";
 
 export const PDF_RETRIEVAL_VERSION = "pdf-direct-v1";
 export const MAX_PDF_ATTEMPTS = 2;
@@ -166,7 +166,7 @@ function isRetryablePdfError(error: unknown): boolean {
 
 export async function retrieveAndNormalizePublicPdf(
     deps: PublicPdfResolverDependencies,
-    input: ApprovedSourceRetrievalInput,
+    input: SourceDocumentRetrievalInput | ApprovedSourceRetrievalInput,
 ): Promise<ApprovedSourceRetrievalResult> {
     const resolveAddresses =
         deps.resolveAddresses ??
@@ -397,12 +397,15 @@ export async function retrieveAndNormalizePublicPdf(
             );
 
             // Replay verify every passage against normalized text before persistence
+            let reproduce:
+                | ReturnType<typeof preparePassageReproduction>
+                | undefined;
             for (const passage of passages) {
                 try {
-                    await reproducePassage(
+                    reproduce ??= preparePassageReproduction(
                         normalized.normalizedText,
-                        passage.locator,
                     );
+                    reproduce(passage.locator);
                 } catch (replayErr) {
                     return {
                         status: "failed",

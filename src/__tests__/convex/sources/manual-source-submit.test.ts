@@ -192,15 +192,12 @@ test("stops a rate-limited preparation before inspection with structured data", 
 });
 
 test("persists an active-run source through the same action helper", async () => {
-    const runQuery = vi
-        .fn()
-        .mockResolvedValueOnce({
-            executionGeneration: 4,
-            workflowVersion: 2,
-            stepKey: "source_review",
-            hasCapacity: true,
-        })
-        .mockResolvedValueOnce(null);
+    const runQuery = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({
+        executionGeneration: 4,
+        workflowVersion: 2,
+        stepKey: "source_review",
+        hasCapacity: true,
+    });
     const runMutation = vi
         .fn()
         .mockResolvedValueOnce(null)
@@ -253,19 +250,11 @@ test("persists an active-run source through the same action helper", async () =>
 });
 
 test("replays an active-run request with persisted canonical metadata", async () => {
-    const runQuery = vi
-        .fn()
-        .mockResolvedValueOnce({
-            executionGeneration: 4,
-            workflowVersion: 2,
-            stepKey: "source_review",
-            hasCapacity: true,
-        })
-        .mockResolvedValueOnce({
-            sourceId: "source-1",
-            canonicalUrl: "https://example.com/report",
-            title: "Public report",
-        });
+    const runQuery = vi.fn().mockResolvedValueOnce({
+        sourceId: "source-1",
+        canonicalUrl: "https://example.com/report",
+        title: "Public report",
+    });
     const runMutation = vi.fn();
     const inspect = vi.fn();
 
@@ -296,10 +285,10 @@ test("replays an active-run request with persisted canonical metadata", async ()
 
     expect(runMutation).not.toHaveBeenCalled();
     expect(inspect).not.toHaveBeenCalled();
-    expect(runQuery.mock.calls[1]?.[1]).toMatchObject({
+    expect(runQuery.mock.calls[0]?.[1]).toMatchObject({
         runId: "run-1",
         providerReference: expect.stringMatching(
-            /workflow:2:.*step:source_review:.*request:/,
+            /corpus:revision-1:manual-source:request:/,
         ),
     });
 });

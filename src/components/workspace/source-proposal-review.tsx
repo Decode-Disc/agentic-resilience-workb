@@ -5,12 +5,11 @@ import {
     ArrowLeft01Icon,
     CheckListIcon,
     CheckmarkCircle02Icon,
-    ArrowDown01Icon,
     MoreHorizontalIcon,
+    PlusSignIcon,
     RefreshIcon,
     Search01Icon,
     Settings02Icon,
-    PlusSignIcon,
 } from "@hugeicons/core-free-icons";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { useReducedMotion } from "motion/react";
@@ -20,15 +19,6 @@ import Icon from "@/components/icon";
 import { AlertStatus } from "@/components/ui/alert-status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-    Card,
-    CardAction,
-    CardContent,
-    CardDescription,
-    CardFooter,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card";
 import DiscreteTabs, {
     type DiscreteTabItem,
 } from "@/components/ui/discrete-tabs";
@@ -36,7 +26,6 @@ import MotionAnimatePresence from "@/components/ui/motion-animate-presence";
 import {
     Popover,
     PopoverContent,
-    PopoverDescription,
     PopoverTitle,
     PopoverTrigger,
 } from "@/components/ui/popover";
@@ -47,22 +36,25 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { AddSourceDialog } from "@/components/workspace/add-source-dialog";
+import {
+    SourceCoverageNavigation,
+    SourceCoverageRail,
+} from "@/components/workspace/source-coverage-rail";
 import { SourceFamilyBadge } from "@/components/workspace/source-family-badge";
-import {
-    SourceMasterList,
-    SOURCE_REVIEW_PAGE_SIZE,
-} from "@/components/workspace/source-master-list";
-import {
-    SourceAdjustmentActions,
-    SourceProposalAdjustmentBoard,
-} from "@/components/workspace/source-proposal-adjustment-board";
+import { SourceProposalAdjustmentBoard } from "@/components/workspace/source-proposal-adjustment-board";
+import { SourceProposalCarousel } from "@/components/workspace/source-proposal-carousel";
 import { SourceReview } from "@/components/workspace/source-review";
+import { SourceSearchFeedback } from "@/components/workspace/source-search-feedback";
 import { useMediaQuery } from "@/hooks/use-responsive";
 import {
+    type SourceRecoveryState,
     sourceCompanyLinkageLabel,
+    sourceCoverageCopy,
     sourceCoverageRoleLabel,
+    sourceCoverageSearchState,
+    sourcePreparationCopy,
+    sourceSearchAllowanceCopy,
     sourceSelectionReasonLabel,
-    type sourceRecoveryFeedback,
 } from "@/lib/presentation/research-copy";
 
 type ProposalSummary = NonNullable<
@@ -132,6 +124,8 @@ export function SourceProposalReview({
     isRecovering = false,
     recovery,
     onAddManualUrl,
+    onPrepare,
+    isStartingPreparation = false,
     inspectionFilter,
     onInspectionFilterChange,
     inspectionSelectedId,
@@ -165,14 +159,10 @@ export function SourceProposalReview({
         >["target"],
     ) => void | Promise<void>;
     isRecovering?: boolean;
-    recovery?: {
-        target: FunctionArgs<
-            typeof api.sourceSelectionProposalActions.recoverDiscovery
-        >["target"];
-        feedback: ReturnType<typeof sourceRecoveryFeedback> | null;
-        retryAfterSeconds: number;
-    };
+    recovery?: SourceRecoveryState;
     onAddManualUrl?: (url: string) => void | Promise<void>;
+    onPrepare?: () => void | Promise<void>;
+    isStartingPreparation?: boolean;
     inspectionFilter?: Parameters<typeof SourceReview>[0]["filter"];
     onInspectionFilterChange?: Parameters<
         typeof SourceReview
@@ -192,7 +182,9 @@ export function SourceProposalReview({
     onSourceReviewNavigate?: (destination: SourceReviewNavigation) => void;
 }) {
     const [internalNavigation, setInternalNavigation] =
-        useState<SourceReviewNavigation>({ view: "overview" });
+        useState<SourceReviewNavigation>({
+            view: "overview",
+        });
     const { view, coverage: coverageRole } =
         sourceReviewNavigation ?? internalNavigation;
     const navigateSourceReview = (destination: SourceReviewNavigation) => {
@@ -204,23 +196,35 @@ export function SourceProposalReview({
     const [actionsOpen, setActionsOpen] = useState(false);
     const [addSourceOpen, setAddSourceOpen] = useState(false);
     const actionsTriggerRef = useRef<HTMLButtonElement>(null);
-    const [visibleCounts, setVisibleCounts] = useState<
-        Record<ProposalDisposition, number>
-    >({
-        recommended: SOURCE_REVIEW_PAGE_SIZE,
-        needs_attention: SOURCE_REVIEW_PAGE_SIZE,
-        alternative: SOURCE_REVIEW_PAGE_SIZE,
-    });
     const includedCount = adjustmentSets.included.length;
     const navigationPreset: ProposalNavigationPreset =
         view === "overview" ? "slide-right" : "slide-left";
     const [hasNavigated, setHasNavigated] = useState(false);
     const shouldReduceMotion = useReducedMotion();
     const isApproved = summary.revisionStatus === "approved";
+    const isPreparing =
+        isStartingPreparation || summary.preparation?.status === "started";
+    const allowanceFeedback = sourceSearchAllowanceCopy(
+        summary.searchAllowance,
+        Date.now(),
+    );
+    const canSearch =
+        !!onRecoverDiscovery &&
+        (!summary.preparation || !!summary.searchAllowance);
+    const searchDisabled =
+        isRecovering ||
+        isPreparing ||
+        isRebuilding ||
+        summary.effectiveStatus !== "ready" ||
+        !!allowanceFeedback;
+    const preparationCopy = summary.preparation
+        ? sourcePreparationCopy(summary.preparation, summary.revisionStatus)
+        : null;
     const canApprove =
         !isApproved &&
         !isRecovering &&
         !isRebuilding &&
+        !isPreparing &&
         summary.effectiveStatus === "ready" &&
         includedCount > 0;
     const coverageGaps = summary.coverageGaps ?? [];
@@ -279,89 +283,261 @@ export function SourceProposalReview({
         navigateSourceReview({ view: "overview" });
     };
 
+    const reviewCoverage = (
+        role: NonNullable<SourceReviewNavigation["coverage"]>,
+        preferIncluded = false,
+    ) => {
+        onInspectionFilterChange?.("all");
+        const requirement = summary.coverageRequirements?.find(
+            (item) => item.role === role,
+        );
+        const first = preferIncluded
+            ? (requirement?.includedSourceIds?.[0] ??
+              requirement?.candidateIds[0])
+            : (requirement?.candidateIds.find(
+                  (sourceId) =>
+                      !requirement.includedSourceIds?.includes(sourceId),
+              ) ?? requirement?.candidateIds[0]);
+        onInspectionSelectedIdChange?.(first ?? null);
+        openSecondaryView("inspect", role);
+    };
+    const addSourceDialog =
+        !isApproved && onAddManualUrl ? (
+            <AddSourceDialog
+                open={addSourceOpen}
+                onOpenChange={setAddSourceOpen}
+                onAdd={onAddManualUrl}
+                finalFocus={actionsTriggerRef}
+            />
+        ) : null;
+    const overviewCoverage = (
+        <SourceCoverageRail
+            requirements={summary.coverageRequirements ?? []}
+            readOnly={isApproved}
+            onReview={reviewCoverage}
+            onSearch={
+                canSearch && onRecoverDiscovery
+                    ? (role) => onRecoverDiscovery({ kind: "coverage", role })
+                    : undefined
+            }
+            onAddSource={
+                !isApproved && onAddManualUrl
+                    ? () => setAddSourceOpen(true)
+                    : undefined
+            }
+            searchDisabled={searchDisabled}
+            isSearching={isRecovering}
+            recovery={recovery}
+            allowanceFeedback={allowanceFeedback}
+        />
+    );
+
     if (view === "inspect") {
+        const contextSearch = coverageContext
+            ? sourceCoverageSearchState({
+                  role: coverageContext.role,
+                  recovery,
+                  isSearching: isRecovering,
+                  disabled: searchDisabled,
+                  allowanceFeedback,
+              })
+            : null;
         return (
             <ProposalViewTransition
                 view={view}
                 preset={navigationPreset}
                 hasNavigated={hasNavigated}
                 shouldReduceMotion={shouldReduceMotion}>
-                <section aria-label="Inspect all source candidates">
-                    <SecondaryViewHeader
-                        title={
-                            coverageContext
-                                ? "Review matching candidates"
-                                : "Inspect all candidates"
-                        }
-                        description="Review provenance and override individual source decisions when needed."
-                        onBack={returnToProposal}
-                    />
-                    {coverageContext ? (
-                        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/60 pb-3 text-sm">
-                            <span className="font-medium">
-                                {sourceCoverageRoleLabel(coverageContext.role)}
-                            </span>
-                            <span className="text-muted-foreground">
-                                {coverageCandidates.length} potential{" "}
-                                {coverageCandidates.length === 1
-                                    ? "match"
-                                    : "matches"}
-                            </span>
+                <section
+                    aria-label="Inspect all source candidates"
+                    className="space-y-3">
+                    {addSourceDialog}
+                    <div className="surface-panel flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 p-3">
+                        <div className="flex flex-wrap items-center gap-3">
                             <Button
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                onClick={() =>
-                                    navigateSourceReview({ view: "inspect" })
-                                }>
-                                Show all candidates
+                                onClick={returnToProposal}>
+                                <Icon iconNode={ArrowLeft01Icon} />
+                                Back to proposal
                             </Button>
-                            <p className="w-full text-xs text-muted-foreground">
-                                Check provenance before including a source.
-                                Inclusion alone does not confirm coverage.
-                            </p>
+                            <span className="border-l border-border px-3 text-sm text-muted-foreground">
+                                {includedCount} sources included
+                            </span>
                         </div>
-                    ) : null}
-                    <SourceReview
-                        runId={runId}
-                        corpusRevisionId={corpusRevisionId}
-                        key={coverageRole ?? "all"}
-                        review={coverageReview}
-                        onDecide={onDecide}
-                        onApprove={onApprove}
-                        onAddManualUrl={onAddManualUrl}
-                        filter={coverageContext ? undefined : inspectionFilter}
-                        onFilterChange={
-                            coverageContext
-                                ? undefined
-                                : onInspectionFilterChange
-                        }
-                        selectedId={inspectionSelectedId}
-                        selectedSource={
-                            coverageContext
-                                ? undefined
-                                : inspectionSelectedSource
-                        }
-                        onSelectedIdChange={onInspectionSelectedIdChange}
-                        hasMore={!coverageContext && inspectionHasMore}
-                        isLoadingMore={
-                            !coverageContext && inspectionIsLoadingMore
-                        }
-                        isLoadingInitial={
-                            !coverageContext && inspectionIsLoadingInitial
-                        }
-                        onLoadMore={onLoadMoreInspection}
-                        showApprovalAction={false}
-                        emptyState={
-                            coverageContext
-                                ? {
-                                      title: "No matching candidates",
-                                      description:
-                                          "Your dossier still has other sources. Show all candidates or add a source link for this requirement.",
-                                  }
-                                : undefined
-                        }
-                    />
+                        {!isApproved && onAddManualUrl ? (
+                            <Button
+                                ref={actionsTriggerRef}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setAddSourceOpen(true)}>
+                                <Icon iconNode={PlusSignIcon} />
+                                Add source link
+                            </Button>
+                        ) : null}
+                    </div>
+                    <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[auto_minmax(0,1fr)]">
+                        <SourceCoverageNavigation
+                            requirements={summary.coverageRequirements ?? []}
+                            selectedRole={coverageRole}
+                            onReview={reviewCoverage}
+                        />
+                        <div className="min-w-0 space-y-3">
+                            <header className="surface-panel space-y-3 rounded-xl border border-border/60 p-4">
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                    <div>
+                                        <h2 className="text-xl font-medium tracking-tight">
+                                            {coverageContext
+                                                ? "Review matching candidates"
+                                                : "Inspect all candidates"}
+                                        </h2>
+                                        {coverageContext ? (
+                                            <p className="mt-1 text-sm text-muted-foreground">
+                                                {sourceCoverageRoleLabel(
+                                                    coverageContext.role,
+                                                )}{" "}
+                                                · {coverageCandidates.length}{" "}
+                                                potential{" "}
+                                                {coverageCandidates.length === 1
+                                                    ? "match"
+                                                    : "matches"}
+                                            </p>
+                                        ) : (
+                                            <p className="mt-1 text-sm text-muted-foreground">
+                                                Review provenance and individual
+                                                source decisions.
+                                            </p>
+                                        )}
+                                    </div>
+                                    {coverageContext ? (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() =>
+                                                navigateSourceReview({
+                                                    view: "inspect",
+                                                })
+                                            }>
+                                            Show all candidates
+                                        </Button>
+                                    ) : null}
+                                </div>
+                                {coverageContext ? (
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <p className="max-w-prose text-sm text-muted-foreground">
+                                            {
+                                                sourceCoverageCopy(
+                                                    coverageContext,
+                                                ).description
+                                            }
+                                        </p>
+                                        {!isApproved &&
+                                        !coverageContext.covered &&
+                                        canSearch &&
+                                        onRecoverDiscovery ? (
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                aria-label={
+                                                    contextSearch?.ariaLabel
+                                                }
+                                                disabled={
+                                                    contextSearch?.disabled ??
+                                                    true
+                                                }
+                                                aria-busy={
+                                                    contextSearch?.searching
+                                                }
+                                                onClick={() =>
+                                                    void onRecoverDiscovery({
+                                                        kind: "coverage",
+                                                        role: coverageContext.role,
+                                                    })
+                                                }>
+                                                <Icon iconNode={Search01Icon} />
+                                                {contextSearch?.label}
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                ) : null}
+                                {coverageContext ? (
+                                    <SourceSearchFeedback
+                                        feedback={contextSearch?.feedback}
+                                        searching={contextSearch?.searching}
+                                        retryAfterSeconds={
+                                            contextSearch?.retryAfterSeconds
+                                        }
+                                    />
+                                ) : null}
+                            </header>
+                            <SourceReview
+                                annotation={renderProposalAnnotation}
+                                runId={runId}
+                                corpusRevisionId={corpusRevisionId}
+                                key={coverageRole ?? "all"}
+                                review={coverageReview}
+                                proposalSources={
+                                    coverageContext
+                                        ? coverageCandidates
+                                        : [
+                                              ...adjustmentSets.included,
+                                              ...adjustmentSets.available,
+                                          ]
+                                }
+                                onDecide={onDecide}
+                                onApprove={onApprove}
+                                onAddManualUrl={onAddManualUrl}
+                                showToolbar={false}
+                                filter={
+                                    coverageContext
+                                        ? undefined
+                                        : inspectionFilter
+                                }
+                                onFilterChange={
+                                    coverageContext
+                                        ? undefined
+                                        : onInspectionFilterChange
+                                }
+                                selectedId={inspectionSelectedId}
+                                selectedSource={
+                                    !coverageContext ||
+                                    coverageCandidates.some(
+                                        (source) =>
+                                            source.sourceId ===
+                                            inspectionSelectedSource?.sourceId,
+                                    )
+                                        ? inspectionSelectedSource
+                                        : undefined
+                                }
+                                onSelectedIdChange={
+                                    onInspectionSelectedIdChange
+                                }
+                                hasMore={!coverageContext && inspectionHasMore}
+                                isLoadingMore={
+                                    !coverageContext && inspectionIsLoadingMore
+                                }
+                                isLoadingInitial={
+                                    !coverageContext &&
+                                    inspectionIsLoadingInitial
+                                }
+                                onLoadMore={onLoadMoreInspection}
+                                showApprovalAction={false}
+                                emptyState={
+                                    coverageContext
+                                        ? {
+                                              title: "No matching candidates",
+                                              description:
+                                                  "Your dossier still has other sources. Show all candidates or add a source link for this requirement.",
+                                          }
+                                        : undefined
+                                }
+                            />
+                        </div>
+                    </div>
                 </section>
             </ProposalViewTransition>
         );
@@ -383,6 +559,7 @@ export function SourceProposalReview({
                     <SourceProposalAdjustmentBoard
                         adjustmentSets={adjustmentSets}
                         runId={runId}
+                        corpusRevisionId={corpusRevisionId}
                         reviewStatus={summary.revisionStatus}
                         onDecide={onDecide}
                         annotation={renderProposalAnnotation}
@@ -409,11 +586,7 @@ export function SourceProposalReview({
         ...tab,
         count: groups[tab.id].length,
     }));
-    const dispositionTotal = groups[disposition].length;
-    const proposalItems = groups[disposition].slice(
-        0,
-        visibleCounts[disposition],
-    );
+
     const proposalActions = (
         <TooltipProvider delay={200}>
             <div
@@ -427,6 +600,7 @@ export function SourceProposalReview({
                         ref={isMobile ? undefined : actionsTriggerRef}
                         type="button"
                         variant="outline"
+                        disabled={isPreparing}
                         onClick={() => {
                             setActionsOpen(false);
                             setAddSourceOpen(true);
@@ -484,14 +658,7 @@ export function SourceProposalReview({
             hasNavigated={hasNavigated}
             shouldReduceMotion={shouldReduceMotion}>
             <section aria-label="Proposed source set" className="space-y-4">
-                {!isApproved && onAddManualUrl ? (
-                    <AddSourceDialog
-                        open={addSourceOpen}
-                        onOpenChange={setAddSourceOpen}
-                        onAdd={onAddManualUrl}
-                        finalFocus={actionsTriggerRef}
-                    />
-                ) : null}
+                {addSourceDialog}
                 {summary.effectiveStatus === "outdated" && !isApproved ? (
                     <AlertStatus
                         status="info"
@@ -505,7 +672,7 @@ export function SourceProposalReview({
                                 type="button"
                                 variant="secondary"
                                 className="w-full sm:w-auto"
-                                disabled={isRebuilding}
+                                disabled={isRebuilding || isPreparing}
                                 onClick={() => void onRebuild()}>
                                 {isRebuilding
                                     ? "Rebuilding proposal…"
@@ -515,7 +682,8 @@ export function SourceProposalReview({
                     />
                 ) : null}
                 {(summary.rebuildOutcome === "partial" || globalRecovery) &&
-                !isApproved ? (
+                !isApproved &&
+                !summary.preparation ? (
                     <AlertStatus
                         status={globalRecovery?.feedback?.status ?? "warning"}
                         closable={false}
@@ -580,21 +748,22 @@ export function SourceProposalReview({
                         }
                     />
                 ) : null}
-                <Card className="surface-floating gap-2 @container/source-proposal">
-                    <CardHeader className="flex flex-col @3xl/source-proposal:grid">
-                        <p className="text-micro text-accent-foreground">
-                            Proposed source set
-                        </p>
-                        <CardTitle>
-                            {`${includedCount} source${includedCount === 1 ? "" : "s"} included`}
-                        </CardTitle>
-                        <CardDescription>
-                            The system selected a focused corpus from the full
-                            candidate list. Review the exceptions or approve it
-                            as proposed. Selection uses discovery details only;
-                            source content has not been read.
-                        </CardDescription>
-                        <CardAction>
+                <div className="surface-panel space-y-3 rounded-xl border border-border/60 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <Icon iconNode={CheckListIcon} size={24} />
+                            <div>
+                                <h2 className="text-base font-medium">
+                                    Proposed corpus
+                                </h2>
+                                <p className="mt-0.5 text-sm text-muted-foreground">
+                                    {includedCount}{" "}
+                                    {includedCount === 1 ? "source" : "sources"}{" "}
+                                    included
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
                             {isMobile ? (
                                 <Popover
                                     open={actionsOpen}
@@ -611,7 +780,7 @@ export function SourceProposalReview({
                                         Source actions
                                     </PopoverTrigger>
                                     <PopoverContent
-                                        align="start"
+                                        align="end"
                                         className="max-w-[calc(100vw-2rem)] gap-3"
                                         finalFocus={
                                             addSourceOpen ? false : undefined
@@ -625,311 +794,152 @@ export function SourceProposalReview({
                             ) : (
                                 proposalActions
                             )}
-                        </CardAction>
-                    </CardHeader>
-                    {coverageGaps.length > 0 ? (
-                        <CardContent>
-                            <AlertStatus
-                                title="Source coverage needs review"
-                                closable={false}
-                                description={
-                                    <div className="space-y-2">
-                                        {isApproved ? (
-                                            <span>
-                                                These limitations remain in the
-                                                approved source set. Changes
-                                                need a new revision.
-                                            </span>
-                                        ) : null}
-                                        <ul
-                                            className="flex flex-wrap gap-1.5"
-                                            aria-label="Unconfirmed source requirements">
-                                            {coverageGaps.map((gap) => (
-                                                <li
-                                                    key={gap}
-                                                    className="max-w-full">
-                                                    {isApproved ? (
-                                                        <Badge variant="outline">
-                                                            {sourceCoverageRoleLabel(
-                                                                gap,
-                                                            )}
-                                                        </Badge>
-                                                    ) : (
-                                                        <CoverageGapControl
-                                                            role={gap}
-                                                            onReview={() => {
-                                                                onInspectionFilterChange?.(
-                                                                    "all",
-                                                                );
-                                                                const first =
-                                                                    summary.coverageRequirements?.find(
-                                                                        (
-                                                                            item,
-                                                                        ) =>
-                                                                            item.role ===
-                                                                            gap,
-                                                                    )
-                                                                        ?.candidateIds[0];
-                                                                if (first)
-                                                                    onInspectionSelectedIdChange?.(
-                                                                        first,
-                                                                    );
-                                                                openSecondaryView(
-                                                                    "inspect",
-                                                                    gap,
-                                                                );
-                                                            }}
-                                                            onSearch={
-                                                                onRecoverDiscovery
-                                                                    ? () =>
-                                                                          onRecoverDiscovery(
-                                                                              {
-                                                                                  kind: "coverage",
-                                                                                  role: gap,
-                                                                              },
-                                                                          )
-                                                                    : undefined
-                                                            }
-                                                            searchDisabled={
-                                                                isRecovering ||
-                                                                retryAfterSeconds >
-                                                                    0 ||
-                                                                isRebuilding ||
-                                                                summary.effectiveStatus !==
-                                                                    "ready"
-                                                            }
-                                                            isSearching={
-                                                                isRecovering &&
-                                                                recovery?.target
-                                                                    .kind ===
-                                                                    "coverage" &&
-                                                                recovery.target
-                                                                    .role ===
-                                                                    gap
-                                                            }
-                                                            retryAfterSeconds={
-                                                                retryAfterSeconds
-                                                            }
-                                                            feedback={
-                                                                recovery?.target
-                                                                    .kind ===
-                                                                    "coverage" &&
-                                                                recovery.target
-                                                                    .role ===
-                                                                    gap
-                                                                    ? recovery.feedback
-                                                                    : null
-                                                            }
-                                                        />
-                                                    )}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                }
-                                status="warning"
-                            />
-                        </CardContent>
-                    ) : null}
-                    <CardFooter className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-xs text-muted-foreground">
-                            {isApproved
-                                ? "This source set is approved and read-only."
-                                : summary.effectiveStatus === "stale"
-                                  ? "The candidate list changed. Refresh the proposal before approval."
-                                  : summary.effectiveStatus === "failed"
-                                    ? "The proposal could not be prepared. Refresh it before approval."
-                                    : summary.effectiveStatus === "outdated"
-                                      ? "Rebuild this proposal before approval."
-                                      : `${includedCount} source${includedCount === 1 ? " is" : "s are"} currently included.`}
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                            {(summary.effectiveStatus === "stale" ||
-                                summary.effectiveStatus === "failed") &&
-                            !isApproved ? (
+                            {!isApproved ? (
                                 <Button
                                     type="button"
-                                    variant="default"
+                                    disabled={!canApprove}
+                                    onClick={() => void onApprove()}
+                                    className="approve-button h-auto min-h-11 max-w-full whitespace-normal text-left">
+                                    <Icon iconNode={CheckmarkCircle02Icon} />
+                                    Approve proposed corpus
+                                </Button>
+                            ) : null}
+                        </div>
+                    </div>
+                    {preparationCopy ? (
+                        <div
+                            role="status"
+                            className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3 text-sm">
+                            <div>
+                                <p className="font-medium">
+                                    {preparationCopy.title}
+                                </p>
+                                <p className="mt-1 max-w-prose text-xs leading-relaxed text-muted-foreground">
+                                    {preparationCopy.description}
+                                </p>
+                                {isPreparing ? (
+                                    <p className="mt-1 text-xs tabular-nums text-muted-foreground">
+                                        {preparationCopy.counts}
+                                    </p>
+                                ) : null}
+                            </div>
+                            {summary.preparation?.canResume && onPrepare ? (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={
+                                        isPreparing ||
+                                        !summary.preparationAction?.available
+                                    }
+                                    onClick={() => void onPrepare()}>
+                                    Continue source preparation
+                                </Button>
+                            ) : null}
+                        </div>
+                    ) : (
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3 text-sm">
+                            <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
+                                Selection uses discovery details only; source
+                                content has not been read.
+                            </p>
+                            {!isApproved && onPrepare ? (
+                                <div className="space-y-1">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={
+                                            isPreparing ||
+                                            !summary.preparationAction
+                                                ?.available
+                                        }
+                                        onClick={() => void onPrepare()}>
+                                        {isStartingPreparation
+                                            ? "Starting source reading…"
+                                            : "Prepare source reading"}
+                                    </Button>
+                                    {summary.preparationAction?.reason ===
+                                    "disabled" ? (
+                                        <p className="text-xs text-muted-foreground">
+                                            Source reading is currently
+                                            unavailable.
+                                        </p>
+                                    ) : summary.preparationAction?.reason ===
+                                      "busy" ? (
+                                        <p className="text-xs text-muted-foreground">
+                                            Finish the running dossier before
+                                            preparing this one.
+                                        </p>
+                                    ) : null}
+                                </div>
+                            ) : null}
+                        </div>
+                    )}
+                    {isApproved ? (
+                        <p className="text-xs text-muted-foreground">
+                            This source set is approved and read-only.
+                        </p>
+                    ) : summary.effectiveStatus !== "ready" ? (
+                        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+                            <p>
+                                {summary.effectiveStatus === "outdated"
+                                    ? "Rebuild this proposal before approval."
+                                    : "Refresh the proposal before approval. Your source decisions are unchanged."}
+                            </p>
+                            {summary.effectiveStatus !== "outdated" ? (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
                                     onClick={() => void onRecompute()}>
                                     <Icon iconNode={RefreshIcon} />
                                     Refresh proposal
                                 </Button>
                             ) : null}
-                            {!isApproved ? (
-                                <Button
-                                    type="button"
-                                    size="lg"
-                                    onClick={() => void onApprove()}
-                                    disabled={!canApprove}
-                                    className="approve-button uppercase">
-                                    <Icon iconNode={CheckmarkCircle02Icon} />
-                                    Approve source set
-                                </Button>
-                            ) : null}
                         </div>
-                    </CardFooter>
-                </Card>
-
-                <div>
-                    <div className="bg-card rounded-t-(--radius-source-card) border border-border/60 p-3">
-                        <DiscreteTabs
-                            tabs={tabs}
-                            value={disposition}
-                            onValueChange={(value) =>
-                                onDispositionChange(
-                                    value as ProposalDisposition,
-                                )
-                            }
-                            ariaLabel="Review source proposal by disposition"
-                            className="gap-4"
-                        />
-                    </div>
-
-                    <SourceMasterList
-                        heading={
-                            dispositionTabs.find(({ id }) => id === disposition)
-                                ?.title ?? "Proposal sources"
-                        }
-                        description={
-                            disposition === "recommended"
-                                ? "Sources selected for the proposed corpus."
-                                : disposition === "needs_attention"
-                                  ? "Sources whose discovery details need analyst review."
-                                  : "Other candidates retained for comparison."
-                        }
+                    ) : null}
+                </div>
+                <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[auto_minmax(0,1fr)]">
+                    {overviewCoverage}
+                    <SourceProposalCarousel
+                        group={disposition}
+                        items={groups[disposition]}
                         runId={runId}
-                        items={proposalItems}
-                        hasMore={proposalItems.length < dispositionTotal}
-                        onLoadMore={() =>
-                            setVisibleCounts((current) => ({
-                                ...current,
-                                [disposition]:
-                                    current[disposition] +
-                                    SOURCE_REVIEW_PAGE_SIZE,
-                            }))
-                        }
-                        total={dispositionTotal}
-                        reviewStatus={summary.revisionStatus}
-                        collectionLabel={`${humanize(disposition)} source collection`}
-                        emptyTitle={`No ${humanize(disposition).toLocaleLowerCase("en")} sources`}
-                        emptyDescription="No sources currently match this proposal view."
+                        corpusRevisionId={corpusRevisionId}
+                        readOnly={isApproved}
+                        selectedId={inspectionSelectedId}
+                        selectedSource={inspectionSelectedSource}
+                        onSelect={onInspectionSelectedIdChange}
+                        onDecide={onDecide}
                         annotation={renderProposalAnnotation}
-                        rowAction={
-                            isApproved
-                                ? undefined
-                                : (source) => (
-                                      <SourceAdjustmentActions
-                                          source={source}
-                                          disabled={false}
-                                          onDecide={onDecide}
-                                          context="overview"
-                                      />
-                                  )
+                        toolbar={
+                            <DiscreteTabs
+                                tabs={tabs}
+                                labelVisibility="all"
+                                overflow="wrap"
+                                orientation={
+                                    isMobile ? "vertical" : "horizontal"
+                                }
+                                appearance={isMobile ? "plain" : "pill"}
+                                value={disposition}
+                                onValueChange={(value) =>
+                                    onDispositionChange(
+                                        value as ProposalDisposition,
+                                    )
+                                }
+                                ariaLabel="Review source proposal by disposition"
+                                className={
+                                    isMobile
+                                        ? "gap-0.5 rounded-lg bg-muted/35 p-1"
+                                        : "gap-2"
+                                }
+                            />
                         }
-                        className="rounded-none rounded-b-(--radius-source-card)"
-                        listClassName="grid grid-cols-1 lg:grid-cols-2 gap-4"
                     />
                 </div>
             </section>
         </ProposalViewTransition>
-    );
-}
-
-function CoverageGapControl({
-    role,
-    onReview,
-    onSearch,
-    searchDisabled,
-    isSearching,
-    retryAfterSeconds,
-    feedback,
-}: {
-    role: ProposalSummary["coverageRequirements"][number]["role"];
-    onReview: () => void;
-    onSearch?: () => void | Promise<void>;
-    searchDisabled: boolean;
-    isSearching: boolean;
-    retryAfterSeconds: number;
-    feedback: ReturnType<typeof sourceRecoveryFeedback> | null;
-}) {
-    const [open, setOpen] = useState(false);
-    const label = sourceCoverageRoleLabel(role);
-    return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger
-                aria-label={`Review coverage: ${label}`}
-                render={
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="xs"
-                        className="h-auto min-h-8 max-w-full whitespace-normal py-1 text-left font-normal text-foreground"
-                    />
-                }>
-                {label}
-                <Icon iconNode={ArrowDown01Icon} />
-            </PopoverTrigger>
-            <PopoverContent
-                align="start"
-                className="max-w-[calc(100vw-2rem)] gap-3">
-                <PopoverTitle className="text-sm">{label}</PopoverTitle>
-                <PopoverDescription>
-                    Not yet confirmed in your included sources. You can approve
-                    with this limitation, review candidates, or search for more.
-                </PopoverDescription>
-                <div className="flex flex-col gap-2 [&_button]:justify-start">
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        aria-label={`Review candidates for ${label}`}
-                        onClick={() => {
-                            setOpen(false);
-                            onReview();
-                        }}>
-                        Review candidates
-                    </Button>
-                    {onSearch ? (
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            aria-label={
-                                isSearching
-                                    ? `Searching sources for ${label}`
-                                    : retryAfterSeconds > 0
-                                      ? `Retry in ${retryAfterSeconds}s for ${label}`
-                                      : `Search sources for ${label}`
-                            }
-                            disabled={searchDisabled}
-                            aria-busy={isSearching}
-                            onClick={() => {
-                                void onSearch();
-                            }}>
-                            <Icon iconNode={Search01Icon} />
-                            {isSearching
-                                ? "Searching…"
-                                : retryAfterSeconds > 0
-                                  ? `Retry in ${retryAfterSeconds}s`
-                                  : "Search sources"}
-                        </Button>
-                    ) : null}
-                </div>
-                {feedback ? (
-                    <AlertStatus
-                        status={feedback.status}
-                        size="sm"
-                        closable={false}
-                        title={feedback.title}
-                        description={feedback.description}
-                    />
-                ) : isSearching ? (
-                    <p role="status" className="text-sm font-medium">
-                        Searching for matching sources…
-                    </p>
-                ) : null}
-            </PopoverContent>
-        </Popover>
     );
 }
 
@@ -998,9 +1008,10 @@ function SecondaryViewHeader({
 function renderProposalAnnotation(source: ProposalSource) {
     const companyLinkageLabel = sourceCompanyLinkageLabel(
         source.companyLinkageBasis,
+        source.inspectionStatus,
     );
     return (
-        <div className="mt-3 flex flex-wrap items-center gap-2 px-1 text-[11px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2 text-sm leading-relaxed text-muted-foreground">
             <SourceFamilyBadge family={source.sourceFamily} />
             {source.disposition === "needs_attention" && source.included ? (
                 <Badge variant="outline">Needs attention</Badge>

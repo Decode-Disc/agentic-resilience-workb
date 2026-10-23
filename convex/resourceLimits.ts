@@ -1,8 +1,15 @@
+import type { Id } from "./_generated/dataModel";
 import { env } from "./_generated/server";
 
 const DEFAULT_COMPANY_SEARCH_RESULT_LIMIT = 40;
-const DEFAULT_SOURCE_CANDIDATE_LIMIT = 48;
+export const MAX_INITIAL_SOURCE_CANDIDATES = 48;
+const MAX_PREPARED_RECOMMENDATIONS = 24;
 const MAX_CONFIGURED_COLLECTION_LIMIT = 200;
+
+/** Keeps staged preparation activation consistent at every workflow entry point. */
+export function sourcePreparationEnabled(): boolean {
+    return env.SOURCE_QUALIFICATION_ENABLED === "true";
+}
 
 function configuredPositiveInteger(
     value: string | undefined,
@@ -37,16 +44,29 @@ export function companySearchResultLimit(): number {
 export function sourceCandidateLimit(): number {
     return configuredPositiveInteger(
         env.SOURCE_CANDIDATE_LIMIT,
-        DEFAULT_SOURCE_CANDIDATE_LIMIT,
+        MAX_INITIAL_SOURCE_CANDIDATES,
         "Source candidate limit",
     );
 }
 
-export function sourceRecommendedTarget(): number {
-    const candidateLimit = sourceCandidateLimit();
+/** Preparation reserves a finite supplement without increasing initial discovery. */
+export function sourceDossierCandidateLimit(
+    preparationId?: Id<"sourceSelectionProposalRebuilds">,
+): number {
+    return preparationId
+        ? MAX_HISTORICAL_SOURCE_CANDIDATES
+        : sourceCandidateLimit();
+}
+
+export function sourceRecommendedTarget(
+    preparationId?: Id<"sourceSelectionProposalRebuilds">,
+): number {
+    const candidateLimit = sourceDossierCandidateLimit(preparationId);
     const ceiling = configuredPositiveInteger(
         env.SOURCE_RECOMMENDATION_CEILING,
-        Math.ceil(candidateLimit / 2),
+        preparationId
+            ? MAX_PREPARED_RECOMMENDATIONS
+            : Math.ceil(candidateLimit / 2),
         "Source recommendation ceiling",
     );
     if (ceiling > candidateLimit) {
@@ -54,7 +74,9 @@ export function sourceRecommendedTarget(): number {
             "Source recommendation ceiling must not exceed source candidate limit",
         );
     }
-    return ceiling;
+    return preparationId
+        ? Math.min(MAX_PREPARED_RECOMMENDATIONS, ceiling)
+        : ceiling;
 }
 
 const DEFAULT_PREVIEW_CACHE_TTL_MS = 60 * 60 * 1000; // one hour
@@ -87,6 +109,12 @@ export const MAX_PASSAGES_PER_SOURCE = 512;
 export const MAX_QUOTATION_CHARS = 4000;
 export const MAX_REDIRECTS = 5;
 
+export const SOURCE_PREPARATION_DEADLINE_MS = 15 * 60_000;
+export const MAX_PREPARATION_MODEL_ATTEMPTS = 120;
+export const MAX_SUPPLEMENT_SEARCHES = 3;
+export const MAX_SUPPLEMENT_CANDIDATES = 12;
+export const MAX_HISTORICAL_SOURCE_CANDIDATES = 60;
+
 // Phase 5 claim limits
 export const MAX_CLAIMS_PER_RUN = 128;
 export const MAX_EVIDENCE_PER_CLAIM = 32;
@@ -94,3 +122,17 @@ export const MAX_DIMENSION_LINKS_PER_CLAIM = 10;
 export const MAX_CLAIM_STATEMENT_CHARS = 1000;
 export const MAX_CLAIM_RATIONALE_CHARS = 2000;
 export const MAX_CLAIM_INPUT_PASSAGES = 4096;
+
+/** Shared embedding format and conservative input allowance, separate from generative-call quotas. */
+export const SOURCE_EMBEDDING_DIMENSIONS = 1024;
+export const MAX_SOURCE_EMBEDDING_BATCH_TEXTS = 32;
+export const MAX_SOURCE_EMBEDDING_TEXT_BYTES = 6000;
+export const SOURCE_EMBEDDING_PRICE_CEILING_PER_MILLION_TOKENS = 0.012;
+export const MAX_SOURCE_EMBEDDING_INPUT_BYTES = Math.floor(
+    (0.01 * 1_000_000) / SOURCE_EMBEDDING_PRICE_CEILING_PER_MILLION_TOKENS,
+);
+export const MAX_SOURCE_EMBEDDING_ATTEMPTS = 128;
+export const MAX_CONCURRENT_SOURCE_EMBEDDING_CALLS = 2;
+
+export const MAX_SOURCE_SEARCH_CANDIDATES = 20_000;
+export const MAX_SOURCE_SEARCH_BLOCKS = 100_000;

@@ -12,7 +12,6 @@ import {
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 import Icon from "@/components/icon";
-import { sourceRecoveryFeedback } from "@/lib/presentation/research-copy";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,6 +24,7 @@ import {
     type SourceFilter,
     SourceReview,
 } from "@/components/workspace/source-review";
+import { sourceRecoveryFeedback } from "@/lib/presentation/research-copy";
 
 type LiveSourceReviewProps = {
     runId: Id<"researchRuns">;
@@ -39,6 +39,7 @@ type LiveSourceReviewProps = {
 };
 
 type RecoveryAttempt = {
+    requestId: string;
     target: FunctionArgs<
         typeof api.sourceSelectionProposalActions.recoverDiscovery
     >["target"];
@@ -71,6 +72,9 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
     const [selectedId, setSelectedId] = useState<Id<"sources"> | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
     const [isRebuilding, setIsRebuilding] = useState(false);
+    const [isPreparingRequest, setIsPreparingRequest] = useState(false);
+    const [requestedPreparationId, setRequestedPreparationId] =
+        useState<Id<"sourceSelectionProposalRebuilds"> | null>(null);
     const [recoveryAttempt, setRecoveryAttempt] =
         useState<RecoveryAttempt | null>(null);
     const [clock, setClock] = useState(Date.now);
@@ -80,6 +84,7 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
     const [queries, setQueries] = useState<SourceReviewQuerySnapshot | null>(
         null,
     );
+    const prepareSources = useMutation(api.sourcePreparation.startForReview);
     const approveProposal = useMutation(
         api.sourceSelectionProposals.approveProposedCorpus,
     );
@@ -125,20 +130,34 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
             ? Math.max(0, Math.ceil((recovery.leaseExpiresAt - clock) / 1000))
             : 0;
     const recoveryTarget = recoveryAttempt?.target ?? recovery?.target;
+    const persistedResult =
+        recovery &&
+        recovery.status !== "started" &&
+        (!recoveryAttempt || recovery.requestId === recoveryAttempt.requestId)
+            ? sourceRecoveryFeedback({
+                  outcome: recovery.status,
+                  reason: recovery.reason,
+                  insertedCount: recovery.insertedCount,
+              })
+            : null;
     const feedback =
-        recoveryAttempt?.status === "finished"
+        persistedResult ??
+        (recoveryAttempt?.status === "finished"
             ? sourceRecoveryFeedback(recoveryAttempt.result)
             : recoveryAttempt?.status === "failed"
               ? sourceRecoveryFeedback({
                     outcome: "blocked",
                     reason: "unavailable",
                 })
-              : !recoveryPending && recovery?.status === "blocked"
-                ? sourceRecoveryFeedback({
-                      outcome: "blocked",
-                      reason: recovery.reason,
-                  })
-                : null;
+              : null);
+    const awaitingRecoverySnapshot =
+        recoveryAttempt?.status === "finished" &&
+        recoveryAttempt.result.reason === "in_progress" &&
+        recovery?.requestId !== recoveryAttempt.requestId;
+    const isStartingPreparation =
+        isPreparingRequest ||
+        (requestedPreparationId !== null &&
+            proposal?.preparation?.preparationId !== requestedPreparationId);
     useEffect(() => {
         if (!recoveryLeaseExpiresAt || recoveryLeaseExpiresAt <= Date.now())
             return;
@@ -375,7 +394,11 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
                             );
                         }
                     }}
-                    isRecovering={recoveryPending || recovering}
+                    isRecovering={
+                        recoveryPending ||
+                        recovering ||
+                        awaitingRecoverySnapshot
+                    }
                     recovery={
                         recoveryTarget
                             ? {
@@ -393,22 +416,36 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
                         )
                             return;
                         setActionError(null);
-                        setRecoveryAttempt({ target, status: "running" });
+                        const requestId = crypto.randomUUID();
+                        setRecoveryAttempt({
+                            target,
+                            requestId,
+                            status: "running",
+                        });
                         try {
                             const result = await recoverDiscovery({
                                 runId,
                                 corpusRevisionId,
                                 expectedProposalId: proposal.proposalId,
-                                requestId: crypto.randomUUID(),
+                                requestId,
                                 target,
                             });
                             setRecoveryAttempt({
                                 target,
+                                requestId,
                                 status: "finished",
                                 result,
                             });
                         } catch {
-                            setRecoveryAttempt({ target, status: "failed" });
+                            setRecoveryAttempt({
+                                target,
+                                requestId,
+                                status: "failed",
+                            });
+                            if (proposal.preparation)
+                                setActionError(
+                                    "Source preparation could not be confirmed. Check the current status before trying again.",
+                                );
                         } finally {
                             setClock(Date.now());
                         }
@@ -423,7 +460,10 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
                                 corpusRevisionId,
                                 expectedProposalId: proposal.proposalId,
                             });
-                            if (result.outcome === "blocked") {
+                            if (
+                                result.outcome === "blocked" &&
+                                result.reason !== "in_progress"
+                            ) {
                                 setActionError(
                                     "Source discovery is temporarily unavailable. Your existing draft and source decisions are unchanged. Try again later or add a public source.",
                                 );
@@ -436,6 +476,32 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
                             setIsRebuilding(false);
                         }
                     }}
+                    onPrepare={async () => {
+                        if (isStartingPreparation) return;
+                        setActionError(null);
+                        setIsPreparingRequest(true);
+                        try {
+                            const result = await prepareSources({
+                                runId,
+                                corpusRevisionId,
+                                expectedProposalId: proposal.proposalId,
+                                requestId: crypto.randomUUID(),
+                            });
+                            if (result.status === "started")
+                                setRequestedPreparationId(result.preparationId);
+                            else if (result.status === "blocked")
+                                setActionError(
+                                    "Source reading could not finish. Review the available sources or add a public source link.",
+                                );
+                        } catch {
+                            setActionError(
+                                "Source reading could not be started. Review the current status and try again when available.",
+                            );
+                        } finally {
+                            setIsPreparingRequest(false);
+                        }
+                    }}
+                    isStartingPreparation={isStartingPreparation}
                     onAddManualUrl={onAddManualUrl}
                     inspectionFilter={inspectionFilter}
                     onInspectionFilterChange={(nextFilter) => {

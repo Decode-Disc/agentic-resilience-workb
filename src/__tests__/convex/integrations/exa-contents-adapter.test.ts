@@ -6,6 +6,25 @@ import {
 } from "@convex/integrations/exa";
 
 describe("Exa Contents Adapter", () => {
+    test("records a provider text limit before trimming trailing whitespace", async () => {
+        const adapter = createExaContentsAdapter({
+            getContents: async () => ({
+                results: [
+                    {
+                        id: "bounded",
+                        url: "https://example.com/bounded",
+                        text: "A report\n\n",
+                    },
+                ],
+            }),
+        });
+        expect(
+            await adapter.retrieveText("https://example.com/bounded", {
+                maxCharacters: 10,
+            }),
+        ).toMatchObject({ text: "A report", textLimitReached: true });
+    });
+
     test("retrieves text-only contents for one canonical URL", async () => {
         const getContents = vi.fn(async () => ({
             results: [

@@ -1,5 +1,5 @@
 import type { Id } from "@convex/_generated/dataModel";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 
 vi.mock("@/hooks/use-source-preview", () => ({
@@ -22,6 +22,43 @@ const testSource = {
 };
 
 describe("SourceMasterList", () => {
+    test.each([
+        "keyboard",
+        "pointer",
+    ] as const)("returns focus to the opened source after %s inspection", (method) => {
+        const secondSource = {
+            ...testSource,
+            sourceId: "source-2" as Id<"sources">,
+            title: "Second report",
+        };
+        render(
+            <SourceMasterList
+                heading="Candidate sources"
+                items={[testSource, secondSource]}
+                total={2}
+                reviewStatus="draft"
+            />,
+        );
+        const first = screen.getByRole("button", {
+            name: /Open Annual report 10-K for review/i,
+        });
+        const second = screen.getByRole("button", {
+            name: /Open Second report for review/i,
+        });
+        first.focus();
+        if (method === "keyboard") {
+            second.focus();
+            fireEvent.keyDown(second, { key: "Enter" });
+        } else fireEvent.click(second);
+        const close = within(screen.getByRole("dialog")).getByRole("button", {
+            name: /^Close$/,
+        });
+        close.focus();
+        if (method === "keyboard") fireEvent.keyDown(window, { key: "Escape" });
+        else fireEvent.click(close);
+        expect(document.activeElement).toBe(second);
+    });
+
     test("opens dialog preview on click by default (enableDialogPreview = true)", () => {
         const onSelect = vi.fn();
         render(
@@ -40,12 +77,21 @@ describe("SourceMasterList", () => {
         fireEvent.click(row);
 
         expect(onSelect).toHaveBeenCalledWith("source-1");
-        expect(screen.getByRole("dialog")).toBeTruthy();
-        expect(screen.getByText("Selected source:")).toBeTruthy();
-        expect(screen.getAllByText("Primary regulator").length).toBeGreaterThan(
-            0,
-        );
-        expect(screen.getAllByText("Annual report").length).toBeGreaterThan(0);
+        const dialog = screen.getByRole("dialog");
+        expect(
+            within(dialog).getByRole("heading", { name: "Annual report 10-K" }),
+        ).toBeTruthy();
+        expect(
+            within(dialog).getByText("Primary regulator", { exact: true }),
+        ).toBeTruthy();
+        expect(
+            within(dialog).getByText("Annual report", { exact: true }),
+        ).toBeTruthy();
+        expect(
+            within(dialog)
+                .getByRole("tab", { name: "Source details" })
+                .getAttribute("aria-selected"),
+        ).toBe("true");
         expect(screen.queryByText("Independent web source")).toBeNull();
     });
 

@@ -44,6 +44,9 @@ import { RunRouteComponent } from "@/components/workspace/run-route-component";
 
 beforeEach(() => {
     convexReactHarness.reset();
+    convexReactHarness
+        .mutation(api.sourcePreparation.startForReview)
+        .uses(vi.fn());
     decideSource.mockReset();
     approveCorpus.mockReset();
     decideSufficiency.mockReset();
@@ -372,13 +375,12 @@ test.each([
             name: /Open Approved report for review/i,
         }).length,
     ).toBeGreaterThan(0);
+    expect(screen.getAllByText("Included").length).toBeGreaterThan(0);
     expect(
-        screen
-            .getByRole("button", {
-                name: /Accepted Approved report as accepted/i,
-            })
-            .hasAttribute("disabled"),
-    ).toBe(true);
+        screen.queryByRole("button", {
+            name: /Include in corpus|Move to alternatives/i,
+        }),
+    ).toBeNull();
     expect(screen.queryByRole("button", { name: /Add source/i })).toBeNull();
     expect(
         screen.queryByText(/Sources will appear here when discovery is ready/i),

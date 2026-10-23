@@ -608,30 +608,30 @@ export async function addManualUrlWithInspector(
     ) {
         throw manualSourceIntakeError("invalid_url", { field: "url" });
     }
-    const authorization: ManualCandidateAuthorization = await ctx.runQuery(
-        internal.sources.authorizeManualCandidate,
-        {
-            runId: args.runId,
-            corpusRevisionId: args.corpusRevisionId,
-        },
-    );
     const requestDigest = createHash("sha256").update(requestKey).digest("hex");
     const urlDigest = createHash("sha256").update(url).digest("hex");
-    const operationKey = `run:${args.runId}:workflow:${authorization.workflowVersion}:generation:${authorization.executionGeneration}:corpus:${args.corpusRevisionId}:step:${authorization.stepKey}:request:${requestDigest}:url_metadata:${urlDigest}`;
+    const legacyRequestSuffix = `:request:${requestDigest}:url_metadata:${urlDigest}`;
+    const providerReference = `run:${args.runId}:corpus:${args.corpusRevisionId}:manual-source${legacyRequestSuffix}`;
+    const lookup = {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        providerReference,
+        legacyRequestSuffix,
+    };
     const existing: {
         sourceId: Id<"sources">;
         canonicalUrl: string;
         title: string;
     } | null = await ctx.runQuery(
         internal.sources.findManualCandidateByProviderReference,
-        {
-            runId: args.runId,
-            providerReference: operationKey,
-        },
+        lookup,
     );
-    if (existing) {
-        return existing;
-    }
+    if (existing) return existing;
+    const authorization: ManualCandidateAuthorization = await ctx.runQuery(
+        internal.sources.authorizeManualCandidate,
+        { runId: args.runId, corpusRevisionId: args.corpusRevisionId },
+    );
+    const operationKey = `run:${args.runId}:workflow:${authorization.workflowVersion}:generation:${authorization.executionGeneration}:corpus:${args.corpusRevisionId}:step:${authorization.stepKey}${legacyRequestSuffix}`;
     if (!authorization.hasCapacity) {
         throw manualSourceIntakeError("candidate_limit");
     }
@@ -666,10 +666,7 @@ export async function addManualUrlWithInspector(
                     title: string;
                 } | null = await ctx.runQuery(
                     internal.sources.findManualCandidateByProviderReference,
-                    {
-                        runId: args.runId,
-                        providerReference: operationKey,
-                    },
+                    lookup,
                 );
                 if (!persisted) {
                     throw new Error(
@@ -693,7 +690,7 @@ export async function addManualUrlWithInspector(
                     runId: args.runId,
                     corpusRevisionId: args.corpusRevisionId,
                     executionGeneration: authorization.executionGeneration,
-                    providerReference: operationKey,
+                    providerReference,
                     ...metadata,
                 },
             );

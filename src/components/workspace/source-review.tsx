@@ -7,10 +7,17 @@ import {
 } from "@hugeicons/core-free-icons";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { motion, useReducedMotion } from "motion/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+    type ReactNode,
+    useCallback,
+    useEffect,
+    useMemo,
+    useState,
+} from "react";
 
 import Icon from "@/components/icon";
 import AnimatedListFilter from "@/components/ui/animated-list-filters";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
     Drawer,
@@ -25,12 +32,20 @@ import {
     EmptyHeader,
     EmptyTitle,
 } from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
 import MotionAnimatePresence from "@/components/ui/motion-animate-presence";
 import {
     ResizableHandle,
     ResizablePanel,
     ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import ToolbarExpandable, {
     type DynamicStep,
 } from "@/components/ui/toolbar-expandable";
@@ -40,15 +55,24 @@ import {
     compareSourceReviewDecisions,
     sourceDecisionDefinitions,
 } from "@/components/workspace/source-decision";
-import { SourceMasterList } from "@/components/workspace/source-master-list";
+import {
+    SourceMasterList,
+    toSourceContext,
+} from "@/components/workspace/source-master-list";
+import { SourceAdjustmentActions } from "@/components/workspace/source-proposal-adjustment-board";
 import { useResponsive } from "@/hooks/use-responsive";
+import {
+    sourceDocumentKindLabel,
+    sourceInclusionLabel,
+    sourceMatchesSearch,
+} from "@/lib/presentation/research-copy";
 
 type SourceReviewSummary = FunctionReturnType<
     typeof api.sources.getReviewSummary
 >;
-type SourceReviewServerSource = FunctionReturnType<
-    typeof api.sources.listForReviewPage
->["page"][number];
+type SourceReviewServerSource = NonNullable<
+    FunctionReturnType<typeof api.sources.getReviewSource>
+>;
 export type SourceReviewSource = Omit<
     SourceReviewServerSource,
     "documentKind" | "authorityTier"
@@ -66,7 +90,8 @@ const DEFAULT_SOURCE_CANDIDATE_LIMIT = 48;
 /** Full candidate inspection surface with master/detail review controls. */
 export function SourceReview({
     runId,
-    corpusRevisionId: _corpusRevisionId,
+    annotation,
+    corpusRevisionId,
     review,
     onDecide,
     onApprove,
@@ -81,9 +106,16 @@ export function SourceReview({
     isLoadingInitial = false,
     onLoadMore = () => undefined,
     showApprovalAction = true,
+    showToolbar = true,
+    proposalSources,
     emptyState,
 }: {
     runId: Id<"researchRuns">;
+    annotation?: (
+        source: FunctionReturnType<
+            typeof api.sourceSelectionProposals.listItemsPage
+        >["page"][number],
+    ) => ReactNode;
     corpusRevisionId: Id<"corpusRevisions">;
     review: SourceReviewModel;
     onDecide: (
@@ -102,6 +134,12 @@ export function SourceReview({
     isLoadingInitial?: boolean;
     onLoadMore?: () => void;
     showApprovalAction?: boolean;
+    showToolbar?: boolean;
+    proposalSources?: ReadonlyArray<
+        FunctionReturnType<
+            typeof api.sourceSelectionProposals.getAdjustmentSets
+        >["included"][number]
+    >;
     emptyState?: { title: string; description: string };
 }) {
     const total =
@@ -113,27 +151,56 @@ export function SourceReview({
     const filter = controlledFilter ?? internalFilter;
     const [internalSelectedId, setInternalSelectedId] =
         useState<Id<"sources"> | null>(review.sources[0]?.sourceId ?? null);
-    const selectedId = controlledSelectedId ?? internalSelectedId;
+    const selectedId =
+        controlledSelectedId !== undefined
+            ? controlledSelectedId
+            : internalSelectedId;
+    const isReadingLoading =
+        controlledSelectedId !== undefined &&
+        controlledSelectedId !== null &&
+        selectedSource === undefined;
     const [drawerOpen, setDrawerOpen] = useState(false);
     const { isTabletOrBelow } = useResponsive();
     const serverFiltered = controlledFilter !== undefined;
+    const [search, setSearch] = useState("");
+    const [documentType, setDocumentType] = useState<NonNullable<
+        SourceReviewSource["documentKind"]
+    > | null>(null);
+    const searchingCollection =
+        search.trim().length > 0 || documentType !== null;
     const visibleSources = useMemo(() => {
-        if (serverFiltered) {
+        if (serverFiltered && !searchingCollection) {
             return review.sources;
         }
+        const candidates =
+            searchingCollection && proposalSources
+                ? proposalSources.map(toSourceContext)
+                : review.sources;
+        const matching = candidates.filter(
+            (source) =>
+                sourceMatchesSearch(source, search) &&
+                (documentType === null ||
+                    (source.documentKind ?? "unknown") === documentType),
+        );
         if (filter !== "all") {
-            return review.sources.filter(
-                (source) => source.decision === filter,
-            );
+            return matching.filter((source) => source.decision === filter);
         }
-        return [...review.sources].sort((left, right) =>
+        return [...matching].sort((left, right) =>
             compareSourceReviewDecisions(left.decision, right.decision),
         );
-    }, [filter, review.sources, serverFiltered]);
+    }, [
+        filter,
+        review.sources,
+        serverFiltered,
+        searchingCollection,
+        proposalSources,
+        search,
+        documentType,
+    ]);
     const selected =
         selectedSource !== undefined
             ? selectedSource
-            : (review.sources.find(({ sourceId }) => sourceId === selectedId) ??
+            : (visibleSources.find(({ sourceId }) => sourceId === selectedId) ??
               null);
 
     const selectSource = useCallback(
@@ -151,7 +218,11 @@ export function SourceReview({
         if (selectedSource !== undefined) {
             if (
                 selectedSource === null ||
-                (filter !== "all" && selectedSource.decision !== filter)
+                (filter !== "all" && selectedSource.decision !== filter) ||
+                (searchingCollection &&
+                    !visibleSources.some(
+                        (source) => source.sourceId === selectedSource.sourceId,
+                    ))
             ) {
                 selectSource(firstVisibleId);
             }
@@ -163,7 +234,14 @@ export function SourceReview({
         ) {
             selectSource(firstVisibleId);
         }
-    }, [filter, selectSource, selectedId, selectedSource, visibleSources]);
+    }, [
+        filter,
+        selectSource,
+        selectedId,
+        selectedSource,
+        visibleSources,
+        searchingCollection,
+    ]);
 
     const setFilter = (nextFilter: SourceFilter) => {
         if (controlledFilter === undefined) {
@@ -209,7 +287,30 @@ export function SourceReview({
         );
     }
 
-    const filterTotal = filter === "all" ? total : review.counts[filter];
+    const filterTotal = searchingCollection
+        ? visibleSources.length
+        : filter === "all"
+          ? total
+          : review.counts[filter];
+    const documentTypes = [
+        ...new Set(
+            (proposalSources ?? review.sources).map(
+                (source) => source.documentKind ?? "unknown",
+            ),
+        ),
+    ];
+    const selectedProposal = proposalSources?.find(
+        (source) => source.sourceId === selected?.sourceId,
+    );
+    const readerActions =
+        selectedProposal && review.status === "draft" ? (
+            <SourceAdjustmentActions
+                source={selectedProposal}
+                disabled={false}
+                onDecide={onDecide}
+                context="overview"
+            />
+        ) : undefined;
     const filterOptions = [
         { value: "all" as const, label: "All decisions", icon: CheckListIcon },
         ...sourceDecisionDefinitions.map((definition) => ({
@@ -223,6 +324,7 @@ export function SourceReview({
             heading="Candidate sources"
             description="Inspect source provenance and review decisions."
             runId={runId}
+            corpusRevisionId={corpusRevisionId}
             items={visibleSources}
             total={filterTotal}
             selectedId={selectedId}
@@ -234,8 +336,33 @@ export function SourceReview({
                 }
             }}
             enableDialogPreview={false}
+            compact={proposalSources !== undefined}
+            listClassName={proposalSources ? "space-y-2" : undefined}
+            rowAction={
+                proposalSources
+                    ? (source) => {
+                          const item = proposalSources.find(
+                              (candidate) =>
+                                  candidate.sourceId === source.sourceId,
+                          );
+                          return (
+                              <Badge
+                                  variant="outline"
+                                  className={
+                                      item?.included
+                                          ? "border-approved/30 text-approved"
+                                          : undefined
+                                  }>
+                                  {sourceInclusionLabel(
+                                      item?.included ?? false,
+                                  )}
+                              </Badge>
+                          );
+                      }
+                    : undefined
+            }
             reviewStatus={review.status}
-            groupByDecision={filter === "all"}
+            groupByDecision={proposalSources ? false : filter === "all"}
             headerAction={
                 <AnimatedListFilter
                     align="end"
@@ -245,8 +372,52 @@ export function SourceReview({
                     onChange={setFilter}
                 />
             }
-            hasMore={hasMore}
-            isLoadingMore={isLoadingMore}
+            headerContent={
+                <div className="space-y-2">
+                    <Input
+                        type="search"
+                        aria-label={
+                            proposalSources
+                                ? "Search candidates"
+                                : "Search loaded candidates"
+                        }
+                        placeholder="Search candidates…"
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                        className="rounded-lg"
+                    />
+                    <Select
+                        value={documentType ?? "all"}
+                        onValueChange={(value) =>
+                            setDocumentType(
+                                documentTypes.find((kind) => kind === value) ??
+                                    null,
+                            )
+                        }>
+                        <SelectTrigger
+                            aria-label="Document type"
+                            className="w-full rounded-lg">
+                            <SelectValue>
+                                {documentType
+                                    ? sourceDocumentKindLabel(documentType)
+                                    : "All document types"}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">
+                                All document types
+                            </SelectItem>
+                            {documentTypes.map((kind) => (
+                                <SelectItem key={kind} value={kind}>
+                                    {sourceDocumentKindLabel(kind)}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            }
+            hasMore={!searchingCollection && hasMore}
+            isLoadingMore={!searchingCollection && isLoadingMore}
             isLoadingInitial={isLoadingInitial}
             onLoadMore={onLoadMore}
             className="h-full"
@@ -257,12 +428,14 @@ export function SourceReview({
         <section
             aria-label={`Source set ${review.revision}`}
             className="flex flex-col gap-4">
-            <SourceReviewToolbar
-                review={{ ...review, total, candidateLimit }}
-                onApprove={onApprove}
-                onAddManualUrl={onAddManualUrl}
-                showApprovalAction={showApprovalAction}
-            />
+            {showToolbar ? (
+                <SourceReviewToolbar
+                    review={{ ...review, total, candidateLimit }}
+                    onApprove={onApprove}
+                    onAddManualUrl={onAddManualUrl}
+                    showApprovalAction={showApprovalAction}
+                />
+            ) : null}
             {isTabletOrBelow ? (
                 masterList
             ) : (
@@ -277,7 +450,7 @@ export function SourceReview({
                     <ResizablePanel
                         id="source-master-list"
                         data-panel="source-master-list"
-                        minSize="18rem"
+                        minSize={proposalSources ? "14rem" : "18rem"}
                         maxSize="50%">
                         {masterList}
                     </ResizablePanel>
@@ -285,7 +458,7 @@ export function SourceReview({
                     <ResizablePanel
                         id="source-context"
                         data-panel="source-context"
-                        minSize="26rem">
+                        minSize={proposalSources ? "20rem" : "26rem"}>
                         <div className="h-full min-w-0">
                             <MotionAnimatePresence
                                 contentKey={
@@ -298,7 +471,20 @@ export function SourceReview({
                                 {selected ? (
                                     <SourceContextPanel
                                         source={selected}
+                                        included={selectedProposal?.included}
+                                        annotation={
+                                            selectedProposal && annotation
+                                                ? annotation(selectedProposal)
+                                                : undefined
+                                        }
+                                        actions={readerActions}
+                                        approvedCorpusRevisionId={
+                                            review.status === "approved"
+                                                ? corpusRevisionId
+                                                : undefined
+                                        }
                                         runId={runId}
+                                        isReadingLoading={isReadingLoading}
                                     />
                                 ) : (
                                     <div className="surface-panel flex h-full min-h-64 items-center justify-center rounded-2xl text-sm text-muted-foreground">
@@ -328,7 +514,20 @@ export function SourceReview({
                             {selected ? (
                                 <SourceContextPanel
                                     source={selected}
+                                    included={selectedProposal?.included}
+                                    annotation={
+                                        selectedProposal && annotation
+                                            ? annotation(selectedProposal)
+                                            : undefined
+                                    }
+                                    actions={readerActions}
+                                    approvedCorpusRevisionId={
+                                        review.status === "approved"
+                                            ? corpusRevisionId
+                                            : undefined
+                                    }
                                     runId={runId}
+                                    isReadingLoading={isReadingLoading}
                                 />
                             ) : null}
                         </div>

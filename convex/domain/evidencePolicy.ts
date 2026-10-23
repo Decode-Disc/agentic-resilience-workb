@@ -4,7 +4,7 @@ import type {
     SourceDocumentKind,
 } from "@convex/domain/sourceSelectionPolicy";
 
-export const POLICY_VERSION = "evidence-policy-v3";
+export const POLICY_VERSION = "evidence-policy-v4";
 
 export const POLICY_RULE_IDS = {
     AUTHORITY: "policy.authority",
@@ -32,8 +32,9 @@ export type PolicySourceInput = {
 };
 
 /**
- * Deterministic independent-publisher key from a validated canonical URL
- * hostname, used for corroboration. Structural collapse only, never external
+ * Corroboration identity from validated provenance. Issuer documents share a CIK;
+ * recognized institutional publishers use a hostname key. Without provenance,
+ * this performs hostname normalization only. Structural collapse uses no external
  * ownership data: recognized multi-label public suffixes extend the kept
  * label span so real second-level registrable domains are not over-collapsed;
  * otherwise the controlling-domain key is the last two labels. Missing or
@@ -111,6 +112,7 @@ const MULTI_LABEL_PUBLIC_SUFFIXES = new Set([
 
 export function derivePublisherIdentity(
     canonicalUrl: string,
+    provenance?: { authorityTier: SourceAuthorityTier; issuerCik?: string },
 ): string | undefined {
     try {
         const hostname = new URL(canonicalUrl).hostname
@@ -126,6 +128,16 @@ export function derivePublisherIdentity(
             /^\d+$/.test(hostname)
         ) {
             return undefined;
+        }
+        if (provenance) {
+            if (highAuthority.has(provenance.authorityTier)) {
+                const cik = provenance.issuerCik;
+                return cik && /^\d{1,10}$/.test(cik) && BigInt(cik) > 0n
+                    ? `issuer:${BigInt(cik)}`
+                    : undefined;
+            }
+            if (provenance.authorityTier !== "institutional_independent")
+                return undefined;
         }
         const labels = hostname.split(".").filter(Boolean);
         if (labels.length === 1) return hostname;
@@ -143,6 +155,7 @@ export type PolicyNormalizedInputs = {
     classification: ClaimClassification;
     asOfTime: number;
     sources: PolicySourceInput[];
+    supportingSourceIds: string[];
     supportingEvidenceCount: number;
     counterEvidenceCount: number;
     contextEvidenceCount: number;
@@ -217,21 +230,32 @@ export function evaluateEvidencePolicy(
     }
 
     const rules: PolicyRuleResult[] = [];
+    const supportingIds = new Set(inputs.supportingSourceIds);
+    const supportingSources = inputs.sources.filter((source) =>
+        supportingIds.has(source.sourceId),
+    );
+    if (
+        supportingIds.size > inputs.sources.length ||
+        inputs.supportingSourceIds.some(
+            (id) => !inputs.sources.some((source) => source.sourceId === id),
+        )
+    )
+        throw new Error("Supporting source is absent from cited evidence");
     rules.push({
         ruleId: POLICY_RULE_IDS.AUTHORITY,
-        outcome: inputs.sources.some((source) =>
+        outcome: supportingSources.some((source) =>
             highAuthority.has(source.authorityTier),
         )
             ? "pass"
             : "needs_review",
-        reasonCode: inputs.sources.some((source) =>
+        reasonCode: supportingSources.some((source) =>
             highAuthority.has(source.authorityTier),
         )
             ? "high_authority_present"
             : "high_authority_absent",
     });
 
-    const datedSources = inputs.sources.filter(
+    const datedSources = supportingSources.filter(
         (source) => source.publishedAt !== undefined,
     );
     const twoYearsMs = 2 * 365 * 24 * 60 * 60 * 1000;
@@ -257,14 +281,19 @@ export function evaluateEvidencePolicy(
                     ? "publication_date_current"
                     : "publication_date_stale",
     });
+    const corroboratingSources = supportingSources.filter(
+        (source) =>
+            highAuthority.has(source.authorityTier) ||
+            source.authorityTier === "institutional_independent",
+    );
     const independentPublisherCount = new Set(
-        inputs.sources
+        corroboratingSources
             .map((source) => source.publisherIdentity)
             .filter(Boolean),
     ).size;
-    const hasMissingPublisherIdentity = inputs.sources.some(
-        (source) => !source.publisherIdentity,
-    );
+    const hasMissingPublisherIdentity =
+        corroboratingSources.length !== supportingSources.length ||
+        supportingSources.some((source) => !source.publisherIdentity);
     rules.push({
         ruleId: POLICY_RULE_IDS.CORROBORATION,
         outcome: independentPublisherCount >= 2 ? "pass" : "needs_review",

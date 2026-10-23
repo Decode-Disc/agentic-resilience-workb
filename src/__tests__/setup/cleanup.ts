@@ -59,6 +59,11 @@ if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
     });
 }
 
+if (typeof window !== "undefined") {
+    // Motion restores scroll after measuring height: auto. jsdom has no scrolling layout.
+    window.scrollTo = vi.fn();
+}
+
 if (
     typeof HTMLElement !== "undefined" &&
     typeof HTMLElement.prototype.getAnimations !== "function"

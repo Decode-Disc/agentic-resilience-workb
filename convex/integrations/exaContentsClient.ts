@@ -2,8 +2,11 @@
 
 import Exa from "exa-js";
 import { z } from "zod";
-import { MAX_APPROVED_SOURCE_BYTES } from "@convex/resourceLimits";
-import { ExaContentsError, type ExaContentsClient } from "./exa";
+import {
+    type ExaContentsClient,
+    ExaContentsError,
+    readExaResponseJson,
+} from "./exa";
 
 const contentsResponseSchema = z.looseObject({
     results: z.array(
@@ -67,50 +70,7 @@ class AbortableContentsExa extends Exa {
                 `http_${response.status}`,
             );
         }
-        const declaredBytes = Number(response.headers.get("content-length"));
-        if (declaredBytes > MAX_APPROVED_SOURCE_BYTES) {
-            await response.body?.cancel();
-            throw new ExaContentsError(
-                "Exa Contents response exceeds the byte limit",
-                "response_too_large",
-            );
-        }
-        const reader = response.body?.getReader();
-        if (!reader)
-            throw new ExaContentsError(
-                "Empty Exa Contents response",
-                "invalid_response",
-            );
-        const decoder = new TextDecoder();
-        let bytes = 0;
-        let text = "";
-        try {
-            while (true) {
-                const chunk = await reader.read();
-                if (chunk.done) break;
-                bytes += chunk.value.byteLength;
-                if (bytes > MAX_APPROVED_SOURCE_BYTES) {
-                    await reader.cancel();
-                    throw new ExaContentsError(
-                        "Exa Contents response exceeds the byte limit",
-                        "response_too_large",
-                    );
-                }
-                text += decoder.decode(chunk.value, { stream: true });
-            }
-        } finally {
-            reader.releaseLock();
-        }
-        this.requestSignal.throwIfAborted();
-        let parsed: unknown;
-        try {
-            parsed = JSON.parse(text + decoder.decode());
-        } catch {
-            throw new ExaContentsError(
-                "Exa Contents returned invalid JSON",
-                "invalid_response",
-            );
-        }
+        const parsed = await readExaResponseJson(response, this.requestSignal);
         const result = contentsResponseSchema.safeParse(parsed);
         if (!result.success)
             throw new ExaContentsError(

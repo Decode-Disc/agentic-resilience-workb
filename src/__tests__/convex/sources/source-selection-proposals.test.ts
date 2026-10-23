@@ -165,7 +165,7 @@ test("persists one versioned source-selection proposal after discovery", async (
         runId,
         corpusRevisionId,
         version: 1,
-        policyVersion: "source-selection-v6",
+        policyVersion: "source-selection-v13",
         publisherRegistryVersion: "source-publishers-v4",
         coveragePreset: "balanced",
         recommendedTarget: 24,
@@ -1029,7 +1029,7 @@ test("creates a new draft revision and reopens the source checkpoint", async () 
     const proposal = await t.run((ctx) => ctx.db.get(result.proposalId));
     expect(proposal?.corpusRevisionId).toBe(result.corpusRevisionId);
     expect(proposal?.version).toBe(1);
-    expect(proposal?.policyVersion).toBe("source-selection-v6");
+    expect(proposal?.policyVersion).toBe("source-selection-v13");
 });
 
 test("rejects starting a new revision when the current corpus is not approved", async () => {

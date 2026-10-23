@@ -1,27 +1,32 @@
 "use node";
 
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { lookup } from "node:dns/promises";
-import { v, type Infer } from "convex/values";
+import { getAuthUserId } from "@convex-dev/auth/server";
 import type { FunctionReturnType } from "convex/server";
+import { type Infer, v } from "convex/values";
 
-import { internal } from "./_generated/api";
-import { action, type ActionCtx } from "./_generated/server";
-import {
-    recoveryTargetValidator,
-    recoveryReasonValidator,
-    discoveryFamilyValidator,
-    discoveryFailure,
-    DiscoveryRequestError,
-    type RecoveryTarget,
-} from "./domain/sourceDiscoveryRecovery";
-import {
-    SOURCE_SELECTION_POLICY_VERSION,
-    SOURCE_FAMILIES as DISCOVERY_FAMILIES,
-} from "./domain/sourceSelectionPolicy";
+import { api, internal } from "./_generated/api";
+import { type ActionCtx, action } from "./_generated/server";
 import { isPaidWorkDisabledError } from "./domain/providerAvailability";
+import {
+    DiscoveryRequestError,
+    discoveryFailure,
+    discoveryFamilyValidator,
+    type RecoveryTarget,
+    recoveryReasonValidator,
+    recoveryTargetValidator,
+} from "./domain/sourceDiscoveryRecovery";
+import { preparationFailureCode } from "./domain/sourcePreparationAuthority";
+import {
+    SOURCE_FAMILIES as DISCOVERY_FAMILIES,
+    SOURCE_SELECTION_POLICY_VERSION,
+} from "./domain/sourceSelectionPolicy";
 import { validateExaCandidates } from "./exaDiscoveryActions";
-import { createExaDiscoveryAdapter } from "./integrations/exa";
+import {
+    createExaDiscoveryAdapter,
+    readExaResponseJson,
+} from "./integrations/exa";
+import { sourcePreparationEnabled } from "./resourceLimits";
 import { selectSecFilingsForDiscovery } from "./sourceDiscoveryActions";
 
 const MAX_ATTEMPTS = 2;
@@ -148,10 +153,15 @@ export async function fetchExaSearch(
         contents: false;
         includeDomains?: Array<string>;
     },
+    requestSignal?: AbortSignal,
 ) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
     try {
+        const signal = requestSignal
+            ? AbortSignal.any([controller.signal, requestSignal])
+            : controller.signal;
+        signal.throwIfAborted();
         const response = await fetch("https://api.exa.ai/search", {
             method: "POST",
             headers: {
@@ -160,9 +170,11 @@ export async function fetchExaSearch(
             },
             // `false` opts out in the SDK; the HTTP API expects this field omitted.
             body: JSON.stringify({ query, ...options, contents: undefined }),
-            signal: controller.signal,
+            signal,
+            redirect: "error",
         });
         if (!response.ok) {
+            await response.body?.cancel();
             throw new DiscoveryRequestError(
                 `http_${response.status}`,
                 response.status === 408 ||
@@ -170,7 +182,7 @@ export async function fetchExaSearch(
                     response.status >= 500,
             );
         }
-        const payload: unknown = await response.json();
+        const payload: unknown = await readExaResponseJson(response, signal);
         if (!payload || typeof payload !== "object") {
             throw new DiscoveryRequestError("invalid_response", false);
         }
@@ -246,6 +258,68 @@ async function startDiscovery(
 ): Promise<RebuildResult> {
     const authUserId = await getAuthUserId(ctx);
     if (!authUserId) throw new Error("Not authenticated");
+    const before = await ctx.runQuery(api.sourceSelectionProposals.getCurrent, {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+    });
+    if (!before) throw new Error("Source selection proposal unavailable");
+    if (before.preparation || (!recovery && sourcePreparationEnabled())) {
+        let preparation: FunctionReturnType<
+            typeof api.sourcePreparation.startForReview
+        >;
+        try {
+            preparation = await ctx.runMutation(
+                api.sourcePreparation.startForReview,
+                {
+                    ...args,
+                    requestId:
+                        recovery?.requestId ??
+                        `legacy:${args.expectedProposalId}`,
+                    ...(recovery ? { target: recovery.target } : {}),
+                },
+            );
+        } catch (error) {
+            const code = preparationFailureCode(error);
+            if (!code) throw error;
+            return {
+                proposalId: before.proposalId,
+                version: before.version,
+                outcome: "blocked",
+                failedDiscoveryFamilies: before.failedDiscoveryFamilies,
+                reason:
+                    code === "search_limit_reached" ||
+                    code === "preparation_deadline_elapsed"
+                        ? "capacity_reached"
+                        : code === "search_cooldown"
+                          ? "cooldown"
+                          : code === "request_invalid"
+                            ? "request_rejected"
+                            : "unavailable",
+            };
+        }
+        const current = await ctx.runQuery(
+            api.sourceSelectionProposals.getCurrent,
+            {
+                runId: args.runId,
+                corpusRevisionId: args.corpusRevisionId,
+            },
+        );
+        if (!current) throw new Error("Source selection proposal unavailable");
+        return {
+            proposalId: current.proposalId,
+            version: current.version,
+            outcome:
+                preparation.status === "started"
+                    ? "blocked"
+                    : preparation.status,
+            failedDiscoveryFamilies: current.failedDiscoveryFamilies,
+            ...(preparation.status === "started"
+                ? { reason: "in_progress" as const }
+                : preparation.status === "blocked"
+                  ? { reason: "unavailable" as const }
+                  : {}),
+        };
+    }
     const claim = await ctx.runMutation(
         internal.sourceSelectionProposals.claimRebuild,
         { ...args, authUserId, recovery },

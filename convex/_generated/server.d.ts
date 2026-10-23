@@ -30,11 +30,16 @@ import type { DataModel } from "./dataModel.js";
 type Env = {
   readonly CONVEX_CLOUD_URL: string;
   readonly CONVEX_SITE_URL: string;
+  readonly CLOUDFLARE_ACCOUNT_ID: string | undefined;
+  readonly CLOUDFLARE_AI_TOKEN: string | undefined;
   readonly COMPANY_SEARCH_RESULT_LIMIT: string | undefined;
   readonly E2E_FIXTURES_ENABLED: string | undefined;
+  readonly OPENROUTER_API_KEY: string | undefined;
   readonly PREVIEW_CACHE_TTL_MS: string | undefined;
   readonly SOURCE_CANDIDATE_LIMIT: string | undefined;
+  readonly SOURCE_QUALIFICATION_ENABLED: string | undefined;
   readonly SOURCE_RECOMMENDATION_CEILING: string | undefined;
+  readonly SOURCE_RETRIEVAL_MODE: "lexical" | "hybrid" | undefined;
 };
 
 /**

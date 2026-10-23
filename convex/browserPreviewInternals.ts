@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 import type { Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
@@ -26,27 +27,35 @@ export const getSourceForPreview = internalQuery({
         }),
         v.null(),
     ),
-    handler: async (ctx, args) => {
-        const run = await ctx.db.get(args.runId);
-        if (!run || run.ownerVisitorId !== args.visitorId) {
-            return null;
-        }
-        const source = await ctx.db.get(args.sourceId);
-        if (!source || source.runId !== args.runId) {
-            return null;
-        }
-        const decision = await readSourceDecision(
-            ctx,
-            args.runId,
-            args.sourceId,
-        );
-        return {
-            canonicalUrl: source.canonicalUrl,
-            title: source.title,
-            decision,
-        };
-    },
+    handler: readSourceForPreview,
 });
+
+async function readSourceForPreview(
+    ctx: QueryCtx,
+    args: {
+        sourceId: Id<"sources">;
+        visitorId: Id<"visitors">;
+        runId?: Id<"researchRuns">;
+    },
+) {
+    const visitor = await ctx.db.get(args.visitorId);
+    if (visitor?.status !== "active") return null;
+    const invitation = await ctx.db.get(visitor.invitationId);
+    if (
+        invitation?.status !== "claimed" ||
+        invitation.claimedByVisitorId !== visitor._id
+    )
+        return null;
+    const source = await ctx.db.get(args.sourceId);
+    if (!source || (args.runId && source.runId !== args.runId)) return null;
+    const run = await ctx.db.get(source.runId);
+    if (!run || run.ownerVisitorId !== args.visitorId) return null;
+    return {
+        canonicalUrl: source.canonicalUrl,
+        title: source.title,
+        decision: await readSourceDecision(ctx, run._id, source._id),
+    };
+}
 
 async function readSourceDecision(
     ctx: QueryCtx,
@@ -94,6 +103,18 @@ export const getPreview = query({
     args: { sourceId: v.id("sources") },
     returns: v.union(v.object({ dataUrl: v.string() }), v.null()),
     handler: async (ctx, args) => {
+        const authUserId = await getAuthUserId(ctx);
+        if (!authUserId) return null;
+        const visitor = await ctx.db
+            .query("visitors")
+            .withIndex("by_auth_user_id", (q) => q.eq("authUserId", authUserId))
+            .unique();
+        if (!visitor) return null;
+        const source = await readSourceForPreview(ctx, {
+            sourceId: args.sourceId,
+            visitorId: visitor._id,
+        });
+        if (source?.decision !== "pending") return null;
         const entry = await ctx.db
             .query("previewCaches")
             .withIndex("by_source", (builder) =>
@@ -112,12 +133,15 @@ export const getPreview = query({
 export const storePreview = internalMutation({
     args: {
         sourceId: v.id("sources"),
+        visitorId: v.id("visitors"),
         dataUrl: v.string(),
         sizeBytes: v.number(),
         expiresAt: v.number(),
     },
-    returns: v.null(),
+    returns: v.boolean(),
     handler: async (ctx, args) => {
+        if ((await readSourceForPreview(ctx, args))?.decision !== "pending")
+            return false;
         const existing = await ctx.db
             .query("previewCaches")
             .withIndex("by_source", (builder) =>
@@ -134,7 +158,7 @@ export const storePreview = internalMutation({
             createdAt: Date.now(),
             expiresAt: args.expiresAt,
         });
-        return null;
+        return true;
     },
 });
 

@@ -1,12 +1,7 @@
 import type { Id } from "@convex/_generated/dataModel";
 import type { NormalizedPassage } from "@convex/domain/sourcePassages";
 
-export type ApprovedSourceRetrievalInput = {
-    runId: Id<"researchRuns">;
-    corpusRevisionId: Id<"corpusRevisions">;
-    sourceId: Id<"sources">;
-    acceptedDecisionId: Id<"sourceDecisions">;
-    executionGeneration: number;
+export type SourceDocumentRetrievalInput = {
     canonicalUrl: string;
     origin: "sec" | "exa" | "analyst_url";
     providerReference?: string;
@@ -14,6 +9,14 @@ export type ApprovedSourceRetrievalInput = {
     secForm?: string;
     secPrimaryDocument?: string;
     companyCik?: string;
+};
+
+export type ApprovedSourceRetrievalInput = SourceDocumentRetrievalInput & {
+    runId: Id<"researchRuns">;
+    corpusRevisionId: Id<"corpusRevisions">;
+    sourceId: Id<"sources">;
+    acceptedDecisionId: Id<"sourceDecisions">;
+    executionGeneration: number;
 };
 
 export type ApprovedSourceRetrievalResult = {

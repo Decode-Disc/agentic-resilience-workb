@@ -1,6 +1,14 @@
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 
+/** Signals contention for the existing visitor execution slot without conflating authorization or checkpoint failures. */
+export class ExecutionSlotUnavailableError extends Error {
+    constructor() {
+        super("A research workflow is already running");
+        this.name = "ExecutionSlotUnavailableError";
+    }
+}
+
 type PausedCheckpoint =
     | {
           lifecycleState: "awaiting_evidence_sufficiency_review";
@@ -52,7 +60,7 @@ export async function claimPausedRunExecution(
         )
         .first();
     if (concurrent) {
-        throw new Error("A research workflow is already running");
+        throw new ExecutionSlotUnavailableError();
     }
 
     const executionGeneration = args.run.executionGeneration + 1;

@@ -1,20 +1,31 @@
+import { retrievalMetadataValidator } from "@convex/domain/sourceRetrievalPolicy";
 import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-
+import { zodToConvex } from "convex-helpers/server/zod4";
 import {
     aiTaskExecutionModeValidator,
     claimClassificationValidator,
     claimDimensionLinkOriginValidator,
     evidenceRelationValidator,
 } from "./domain/claims";
+import { assessmentDimensionKeyValidator } from "./domain/researchPlan";
+import { showcaseClaimOutputValidator } from "./domain/showcaseManifest";
+import {
+    sourceComparisonOutcomesSchema,
+    sourceComparisonOutputSchema,
+} from "./domain/sourceComparison";
 import {
     recoveryReasonValidator,
     recoveryTargetValidator,
 } from "./domain/sourceDiscoveryRecovery";
-import { assessmentDimensionKeyValidator } from "./domain/researchPlan";
-import { showcaseClaimOutputValidator } from "./domain/showcaseManifest";
 import { sourceLocatorValidator } from "./domain/sourcePassages";
+import {
+    sourcePreparationOutcomeValidator,
+    sourcePreparationStopCodeValidator,
+} from "./domain/sourcePreparationAuthority";
+import { sourceQualificationValidator } from "./domain/sourceQualification";
+import { sourceRoleAvailabilityValidator } from "./domain/sourceSelectionPolicy";
 import {
     auditActorValidator,
     auditEventActionValidator,
@@ -28,6 +39,17 @@ import {
     workflowStepKeyValidator,
     workflowStepStateValidator,
 } from "./domain/validators";
+import { SOURCE_EMBEDDING_DIMENSIONS } from "./resourceLimits";
+
+const sourceDiscoveryQueriesValidator = v.array(
+    v.object({
+        query: v.string(),
+        category: v.string(),
+        discoveryIntent: v.optional(v.string()),
+        includeDomains: v.optional(v.array(v.string())),
+        dimensionKeys: v.array(v.string()),
+    }),
+);
 
 export default defineSchema({
     ...authTables,
@@ -134,6 +156,15 @@ export default defineSchema({
         nextEventSequence: v.number(),
         workflowId: v.optional(v.string()),
         workflowVersion: v.optional(v.number()),
+        sourceQualificationAttemptCount: v.optional(v.number()),
+        sourceEmbeddingReservedBytes: v.optional(v.number()),
+        sourceEmbeddingAttemptCount: v.optional(v.number()),
+        sourcePreparationId: v.optional(
+            v.id("sourceSelectionProposalRebuilds"),
+        ),
+        automaticSupplementOperationId: v.optional(
+            v.id("sourceSelectionProposalRebuilds"),
+        ),
         evidenceStartRequestKey: v.optional(v.string()),
         retryCount: v.optional(v.number()),
         createdAt: v.number(),
@@ -162,15 +193,7 @@ export default defineSchema({
         version: v.number(),
         coveragePreset: coveragePresetValidator,
         researchAngle: v.optional(v.string()),
-        queries: v.array(
-            v.object({
-                query: v.string(),
-                category: v.string(),
-                discoveryIntent: v.optional(v.string()),
-                includeDomains: v.optional(v.array(v.string())),
-                dimensionKeys: v.array(v.string()),
-            }),
-        ),
+        queries: sourceDiscoveryQueriesValidator,
         createdAt: v.number(),
     }).index("by_run_and_version", ["runId", "version"]),
     // Stable, versioned semantic questions derived from the confirmed company
@@ -203,6 +226,7 @@ export default defineSchema({
         secPrimaryDocument: v.optional(v.string()),
         providerResultPosition: v.optional(v.number()),
         discoveryQueryIndex: v.optional(v.number()),
+        reviewSearchId: v.optional(v.id("sourceSelectionProposalRebuilds")),
         createdAt: v.number(),
     }).index("by_run_and_url", ["runId", "canonicalUrl"]),
     previewCaches: defineTable({
@@ -214,6 +238,100 @@ export default defineSchema({
     })
         .index("by_source", ["sourceId"])
         .index("by_expires_at", ["expiresAt"]),
+    sourceSearchCaptures: defineTable({
+        scopeKey: v.string(),
+        captureId: v.id("sourceCaptures"),
+        contentHash: v.string(),
+        candidateCount: v.number(),
+        embeddedCount: v.optional(v.number()),
+        embeddingDegradationReason: v.optional(v.string()),
+        embeddingProfile: v.optional(v.string()),
+    }).index("by_scope_and_capture", ["scopeKey", "captureId"]),
+    sourceEmbeddingCache: defineTable({
+        profile: v.string(),
+        textHash: v.string(),
+        vector: v.array(v.float64()),
+    }).index("by_profile_and_hash", ["profile", "textHash"]),
+    sourceSearchPassages: defineTable({
+        scopeKey: v.string(),
+        captureId: v.id("sourceCaptures"),
+        sourceId: v.id("sources"),
+        contentHash: v.string(),
+        policyVersion: v.string(),
+        order: v.number(),
+        startOffset: v.number(),
+        endOffset: v.number(),
+        quotation: v.string(),
+        quotationHash: v.string(),
+        headingPath: v.array(v.string()),
+        searchText: v.string(),
+        embedding: v.optional(v.array(v.float64())),
+        embeddingProfile: v.optional(v.string()),
+        embeddingScopeKey: v.optional(v.string()),
+    })
+        .index("by_scope_capture_order", ["scopeKey", "captureId", "order"])
+        .searchIndex("search_text", {
+            searchField: "searchText",
+            filterFields: ["scopeKey", "captureId"],
+        })
+        .vectorIndex("search_embedding", {
+            vectorField: "embedding",
+            dimensions: SOURCE_EMBEDDING_DIMENSIONS,
+            filterFields: ["embeddingScopeKey"],
+        }),
+    sourceCaptures: defineTable({
+        runId: v.id("researchRuns"),
+        corpusRevisionId: v.id("corpusRevisions"),
+        sourceId: v.id("sources"),
+        preparationId: v.id("sourceSelectionProposalRebuilds"),
+        executionGeneration: v.number(),
+        captureKey: v.string(),
+        requestInputHash: v.string(),
+        status: v.union(
+            v.literal("reserved"),
+            v.literal("uploaded"),
+            v.literal("committed"),
+            v.literal("unavailable"),
+            v.literal("orphaned"),
+            v.literal("reconciled"),
+        ),
+        requestedUrl: v.string(),
+        resolvedUrl: v.optional(v.string()),
+        storageId: v.optional(v.id("_storage")),
+        contentHash: v.optional(v.string()),
+        byteCount: v.optional(v.number()),
+        mediaType: v.optional(v.string()),
+        retrievalVersion: v.optional(v.string()),
+        normalizerVersion: v.string(),
+        retrievedAt: v.optional(v.number()),
+        readingCompleteness: v.optional(
+            v.union(v.literal("complete"), v.literal("partial")),
+        ),
+        omittedPassageCount: v.optional(v.number()),
+        failureCode: v.optional(v.string()),
+        reconciledAt: v.optional(v.number()),
+        createdAt: v.number(),
+        updatedAt: v.number(),
+    })
+        .index("by_capture_key", ["captureKey"])
+        .index("by_source_and_input_hash_and_status", [
+            "sourceId",
+            "requestInputHash",
+            "status",
+        ])
+        .index("by_preparation_and_source", ["preparationId", "sourceId"])
+        .index("by_source_and_status_and_updated_at", [
+            "sourceId",
+            "status",
+            "updatedAt",
+        ])
+        .index("by_storage_id", ["storageId"])
+        .index("by_storage_id_and_status_and_updated_at", [
+            "storageId",
+            "status",
+            "updatedAt",
+        ])
+        .index("by_status_and_updated_at", ["status", "updatedAt"]),
     corpusRevisions: defineTable({
         runId: v.id("researchRuns"),
         revision: v.number(),
@@ -226,6 +344,9 @@ export default defineSchema({
     sourceSelectionProposals: defineTable({
         runId: v.id("researchRuns"),
         corpusRevisionId: v.id("corpusRevisions"),
+        sourcePreparationId: v.optional(
+            v.id("sourceSelectionProposalRebuilds"),
+        ),
         version: v.number(),
         policyVersion: v.string(),
         coveragePreset: coveragePresetValidator,
@@ -301,7 +422,34 @@ export default defineSchema({
     sourceSelectionProposalRebuilds: defineTable({
         runId: v.id("researchRuns"),
         corpusRevisionId: v.id("corpusRevisions"),
-        expectedProposalId: v.id("sourceSelectionProposals"),
+        expectedProposalId: v.optional(v.id("sourceSelectionProposals")),
+        kind: v.optional(v.literal("preparation")),
+        entryPoint: v.optional(
+            v.union(
+                v.literal("initial_discovery"),
+                v.literal("source_review"),
+                v.literal("manual_addition"),
+                v.literal("targeted_search"),
+            ),
+        ),
+        workflowId: v.optional(v.string()),
+        workflowVersion: v.optional(v.number()),
+        qualificationVersion: v.optional(v.string()),
+        comparisonVersion: v.optional(v.string()),
+        retrievalVersion: v.optional(v.string()),
+        retrievalMode: v.optional(
+            v.union(v.literal("lexical"), v.literal("hybrid")),
+        ),
+        deadlineAt: v.optional(v.number()),
+        asOfTime: v.optional(v.number()),
+        manualSourceIds: v.optional(v.array(v.id("sources"))),
+        readingSourceIds: v.optional(v.array(v.id("sources"))),
+        supplementQueries: v.optional(sourceDiscoveryQueriesValidator),
+        supplementClaimedQueryIndexes: v.optional(v.array(v.number())),
+        supplementSourceIds: v.optional(v.array(v.id("sources"))),
+        modelAttemptCount: v.optional(v.number()),
+        sourceOutcomes: v.optional(v.array(sourcePreparationOutcomeValidator)),
+        stopCode: v.optional(sourcePreparationStopCodeValidator),
         executionGeneration: v.number(),
         policyVersion: v.string(),
         operationKey: v.string(),
@@ -345,6 +493,20 @@ export default defineSchema({
         corpusRevisionId: v.id("corpusRevisions"),
         proposalId: v.id("sourceSelectionProposals"),
         sourceId: v.id("sources"),
+        sourceCaptureId: v.optional(v.id("sourceCaptures")),
+        qualificationTaskId: v.optional(v.id("aiTaskResults")),
+        comparisonTaskIds: v.optional(v.array(v.id("aiTaskResults"))),
+        comparisonOutcomes: v.optional(
+            zodToConvex(sourceComparisonOutcomesSchema),
+        ),
+        roleAvailability: v.optional(sourceRoleAvailabilityValidator),
+        inspectionStatus: v.optional(
+            v.union(
+                v.literal("complete"),
+                v.literal("partial"),
+                v.literal("unavailable"),
+            ),
+        ),
         disposition: v.union(
             v.literal("recommended"),
             v.literal("needs_attention"),
@@ -404,6 +566,7 @@ export default defineSchema({
                 v.literal("discovery_metadata"),
                 v.literal("unverified"),
                 v.literal("not_evaluated"),
+                v.literal("inspected_content"),
             ),
         ),
         coverageContributions: v.optional(v.array(v.string())),
@@ -472,6 +635,7 @@ export default defineSchema({
                 v.literal("no_new_coverage"),
                 v.literal("recommendation_ceiling_reached"),
                 v.literal("integrity_conflict"),
+                v.literal("targeted_search_review"),
             ),
         ),
         createdAt: v.number(),
@@ -613,6 +777,7 @@ export default defineSchema({
         .index("by_status_and_updated_at", ["status", "updatedAt"])
         .index("by_storage_id", ["storageId"]),
     sourceVersions: defineTable({
+        sourceCaptureId: v.optional(v.id("sourceCaptures")),
         runId: v.id("researchRuns"),
         corpusRevisionId: v.id("corpusRevisions"),
         sourceId: v.id("sources"),
@@ -681,12 +846,16 @@ export default defineSchema({
         ])
         .index("by_passage_key", ["passageKey"]),
     providerCalls: defineTable({
+        inputHash: v.optional(v.string()),
         runId: v.optional(v.id("researchRuns")),
         corpusRevisionId: v.optional(v.id("corpusRevisions")),
+        sourceId: v.optional(v.id("sources")),
+        preparationId: v.optional(v.id("sourceSelectionProposalRebuilds")),
         executionGeneration: v.optional(v.number()),
         workflowVersion: v.optional(v.number()),
         stepKey: v.optional(v.string()),
         service: v.union(
+            v.literal("model"),
             v.literal("sec"),
             v.literal("exa"),
             v.literal("url_metadata"),
@@ -711,7 +880,14 @@ export default defineSchema({
         completedAt: v.optional(v.number()),
     })
         .index("by_operation_key", ["operationKey"])
-        .index("by_run", ["runId"]),
+        .index("by_run_operation_input_and_attempt", [
+            "runId",
+            "operation",
+            "inputHash",
+            "attempt",
+        ])
+        .index("by_run", ["runId"])
+        .index("by_created_at", ["createdAt"]),
     paidWorkControls: defineTable({
         key: v.literal("global"),
         enabled: v.boolean(),
@@ -768,11 +944,16 @@ export default defineSchema({
         occurredAt: v.number(),
     })
         .index("by_run_and_checkpoint", ["runId", "checkpoint"])
-        .index("by_run_and_decision_key", ["runId", "decisionKey"]),
+        .index("by_run_and_decision_key", ["runId", "decisionKey"])
+        .index("by_occurred_at", ["occurredAt"]),
     aiTaskResults: defineTable({
+        sourceId: v.optional(v.id("sources")),
+        sourceCaptureId: v.optional(v.id("sourceCaptures")),
         runId: v.id("researchRuns"),
         corpusRevisionId: v.id("corpusRevisions"),
         taskType: v.union(
+            v.literal("source_qualification"),
+            v.literal("source_comparison"),
             v.literal("showcase_claim_extraction"),
             v.literal("semantic_verification"),
         ),
@@ -783,6 +964,26 @@ export default defineSchema({
         adapterVersion: v.string(),
         inputHash: v.string(),
         output: v.union(
+            v.object({
+                kind: v.literal("source_qualification"),
+                retrieval: v.optional(retrievalMetadataValidator),
+                sourceCaptureId: v.id("sourceCaptures"),
+                qualification: sourceQualificationValidator,
+                contentHash: v.string(),
+                readingCompleteness: v.union(
+                    v.literal("complete"),
+                    v.literal("partial"),
+                ),
+                omittedPassageCount: v.number(),
+                selectedPassages: v.array(
+                    v.object({
+                        passageKey: v.string(),
+                        startOffset: v.number(),
+                        endOffset: v.number(),
+                    }),
+                ),
+            }),
+            zodToConvex(sourceComparisonOutputSchema),
             v.object({
                 kind: v.literal("claim_extraction"),
                 claimCount: v.number(),
@@ -810,6 +1011,11 @@ export default defineSchema({
             "runId",
             "taskType",
             "inputHash",
+        ])
+        .index("by_source_and_task_type_and_created_at", [
+            "sourceId",
+            "taskType",
+            "createdAt",
         ])
         .index("by_run", ["runId"])
         .index("by_corpus_revision", ["corpusRevisionId"]),
@@ -901,6 +1107,7 @@ export default defineSchema({
         normalizedInputs: v.object({
             classification: claimClassificationValidator,
             asOfTime: v.number(),
+            supportingSourceIds: v.optional(v.array(v.string())),
             sources: v.array(
                 v.object({
                     sourceId: v.string(),

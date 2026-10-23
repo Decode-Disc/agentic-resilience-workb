@@ -1,4 +1,5 @@
 import schema from "@convex/schema";
+import { api } from "@convex/_generated/api";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -46,6 +47,7 @@ async function seedVisitorAndRun(t: TestCtx) {
             analysesReserved: 3,
             admittedAt: Date.now(),
         });
+        await ctx.db.patch(invitationId, { claimedByVisitorId: visitorId });
         const companyId = await ctx.db.insert("companies", {
             cik: "0000320193",
             legalName: "Apple Inc.",
@@ -71,13 +73,92 @@ async function seedVisitorAndRun(t: TestCtx) {
             category: "independent_analysis",
             createdAt: Date.now(),
         });
-        return { authUserId, visitorId, companyId, runId, sourceId };
+        return {
+            authUserId,
+            invitationId,
+            visitorId,
+            companyId,
+            runId,
+            sourceId,
+        };
     });
 }
 
 describe("browserPreviewInternals", () => {
     afterEach(() => {
         vi.restoreAllMocks();
+        vi.unstubAllGlobals();
+        vi.unstubAllEnvs();
+    });
+
+    it.each([
+        "visitor",
+        "invitation",
+    ] as const)("denies cached and rendered previews after %s revocation", async (revoked) => {
+        const t = convexTest(schema, modules);
+        rateLimiterTest.register(t);
+        const fixture = await seedVisitorAndRun(t);
+        await t.mutation(storePreview, {
+            visitorId: fixture.visitorId,
+            sourceId: fixture.sourceId,
+            dataUrl: "data:image/png;base64,PRIVATE",
+            sizeBytes: 7,
+            expiresAt: Date.now() + 60_000,
+        });
+        await t.run((ctx) =>
+            revoked === "visitor"
+                ? ctx.db.patch(fixture.visitorId, { status: "revoked" })
+                : ctx.db.patch(fixture.invitationId, { status: "revoked" }),
+        );
+        const fetch = vi.fn();
+        vi.stubGlobal("fetch", fetch);
+        const owner = t.withIdentity({ subject: fixture.authUserId });
+        expect(
+            await owner.query(getPreview, { sourceId: fixture.sourceId }),
+        ).toBeNull();
+        expect(
+            await owner.action(api.browserPreview.renderPreview, {
+                runId: fixture.runId,
+                sourceId: fixture.sourceId,
+            }),
+        ).toMatchObject({ status: "unavailable" });
+        expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it("does not return or cache a rendering completed after revocation", async () => {
+        const t = convexTest(schema, modules);
+        rateLimiterTest.register(t);
+        const fixture = await seedVisitorAndRun(t);
+        vi.stubEnv("PREVIEW_SERVICE_URL", "https://renderer.example");
+        vi.stubEnv("PREVIEW_SERVICE_SECRET", "test-renderer-secret");
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () => {
+                await t.run((ctx) =>
+                    ctx.db.patch(fixture.visitorId, { status: "revoked" }),
+                );
+                return new Response(new Uint8Array([137, 80, 78, 71]), {
+                    headers: { "content-type": "image/png" },
+                });
+            }),
+        );
+        const result = await t
+            .withIdentity({ subject: fixture.authUserId })
+            .action(api.browserPreview.renderPreview, {
+                runId: fixture.runId,
+                sourceId: fixture.sourceId,
+            });
+        expect(result).toMatchObject({ status: "unavailable" });
+        expect(
+            await t.run((ctx) =>
+                ctx.db
+                    .query("previewCaches")
+                    .withIndex("by_source", (q) =>
+                        q.eq("sourceId", fixture.sourceId),
+                    )
+                    .first(),
+            ),
+        ).toBeNull();
     });
 
     describe("checkRateLimit", () => {
@@ -198,50 +279,89 @@ describe("browserPreviewInternals", () => {
     });
 
     describe("preview cache", () => {
+        it("returns a cached preview only to its authenticated owner", async () => {
+            const t = convexTest(schema, modules);
+            const { authUserId, sourceId, visitorId } =
+                await seedVisitorAndRun(t);
+            const other = await t.run((ctx) =>
+                ctx.db.insert("users", { isAnonymous: true }),
+            );
+            await t.mutation(storePreview, {
+                sourceId,
+                visitorId,
+                dataUrl: "data:image/png;base64,PRIVATE",
+                sizeBytes: 7,
+                expiresAt: Date.now() + 60_000,
+            });
+            expect(await t.query(getPreview, { sourceId })).toBeNull();
+            expect(
+                await t
+                    .withIdentity({ subject: other })
+                    .query(getPreview, { sourceId }),
+            ).toBeNull();
+            expect(
+                await t
+                    .withIdentity({ subject: authUserId })
+                    .query(getPreview, { sourceId }),
+            ).toEqual({ dataUrl: "data:image/png;base64,PRIVATE" });
+        });
+
         it("returns null when no cache entry exists", async () => {
             const t = convexTest(schema, modules);
-            const { sourceId } = await seedVisitorAndRun(t);
+            const { sourceId, authUserId } = await seedVisitorAndRun(t);
 
-            const result = await t.query(getPreview, { sourceId });
+            const result = await t
+                .withIdentity({ subject: authUserId })
+                .query(getPreview, { sourceId });
             expect(result).toBeNull();
         });
 
         it("stores then returns a fresh cached preview", async () => {
             const t = convexTest(schema, modules);
-            const { sourceId } = await seedVisitorAndRun(t);
+            const { sourceId, authUserId, visitorId } =
+                await seedVisitorAndRun(t);
 
             await t.mutation(storePreview, {
                 sourceId,
+                visitorId,
                 dataUrl: "data:image/png;base64,AAAA",
                 sizeBytes: 4,
                 expiresAt: Date.now() + 60_000,
             });
 
-            const result = await t.query(getPreview, { sourceId });
+            const result = await t
+                .withIdentity({ subject: authUserId })
+                .query(getPreview, { sourceId });
             expect(result).toEqual({ dataUrl: "data:image/png;base64,AAAA" });
         });
 
         it("treats an expired entry as a miss", async () => {
             const t = convexTest(schema, modules);
-            const { sourceId } = await seedVisitorAndRun(t);
+            const { sourceId, authUserId, visitorId } =
+                await seedVisitorAndRun(t);
 
             await t.mutation(storePreview, {
                 sourceId,
+                visitorId,
                 dataUrl: "data:image/png;base64,BBBB",
                 sizeBytes: 4,
                 expiresAt: Date.now() - 1000,
             });
 
-            const result = await t.query(getPreview, { sourceId });
+            const result = await t
+                .withIdentity({ subject: authUserId })
+                .query(getPreview, { sourceId });
             expect(result).toBeNull();
         });
 
         it("purges a cached entry for a source", async () => {
             const t = convexTest(schema, modules);
-            const { sourceId } = await seedVisitorAndRun(t);
+            const { sourceId, authUserId, visitorId } =
+                await seedVisitorAndRun(t);
 
             await t.mutation(storePreview, {
                 sourceId,
+                visitorId,
                 dataUrl: "data:image/png;base64,CCCC",
                 sizeBytes: 4,
                 expiresAt: Date.now() + 60_000,
@@ -249,7 +369,9 @@ describe("browserPreviewInternals", () => {
 
             await t.mutation(purgePreviewForSource, { sourceId });
 
-            const result = await t.query(getPreview, { sourceId });
+            const result = await t
+                .withIdentity({ subject: authUserId })
+                .query(getPreview, { sourceId });
             expect(result).toBeNull();
         });
     });

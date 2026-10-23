@@ -7,7 +7,10 @@ import { action, internalMutation } from "./_generated/server";
 import { manualSourceIntakeError } from "./domain/manualSourceIntake";
 import { assertSourceCandidateRequestFits } from "./domain/sourceCandidateCapacity";
 import { coveragePresetValidator } from "./domain/validators";
-import { sourceCandidateLimit } from "./resourceLimits";
+import {
+    sourceCandidateLimit,
+    sourcePreparationEnabled,
+} from "./resourceLimits";
 import { insertPendingManualSource } from "./sources";
 import { workflow } from "./workflow";
 
@@ -194,7 +197,11 @@ export const confirmAndStartReserved = internalMutation({
         const workflowId = await workflow.start(
             ctx,
             internal.researchWorkflow.run,
-            { runId, executionGeneration: 1 },
+            {
+                runId,
+                executionGeneration: 1,
+                prepareSources: sourcePreparationEnabled(),
+            },
             {
                 onComplete: internal.researchWorkflow.onComplete,
                 context: { runId },

@@ -1,8 +1,10 @@
+import { createHash } from "node:crypto";
 import {
     extractPassagesFromNormalizedText,
     extractPdfPassagesFromPages,
     LOCATOR_VERSION,
     PDF_LOCATOR_VERSION,
+    preparePassageReproduction,
     reproducePassage,
     sha256Hex,
 } from "@convex/domain/sourcePassages";
@@ -12,6 +14,67 @@ import {
     normalizeSecHtml,
 } from "@convex/integrations/evidenceNormalization";
 import { describe, expect, test } from "vitest";
+
+describe("prepared passage reproduction", () => {
+    test("reuses an immutable document snapshot for independent citations", () => {
+        const text = "Évidence α.\n\nAnother exact citation.";
+        const bytes = new TextEncoder().encode(text);
+        const sourceVersionHash = createHash("sha256")
+            .update(bytes)
+            .digest("hex");
+        const reproduce = preparePassageReproduction(bytes);
+        bytes.fill(0);
+
+        for (const quotation of ["Évidence α.", "Another exact citation."]) {
+            const startOffset = text.indexOf(quotation);
+            expect(
+                reproduce({
+                    kind: "web",
+                    canonicalUrl: "https://fixture.example/evidence",
+                    sourceVersionHash,
+                    startOffset,
+                    endOffset: startOffset + quotation.length,
+                    exactQuotation: quotation,
+                }),
+            ).toBe(quotation);
+        }
+    });
+
+    test("checks each PDF locator without reusing another citation's authority", () => {
+        const text = "First page.\f\nDeuxième page α.";
+        const sourceVersionHash = createHash("sha256")
+            .update(text)
+            .digest("hex");
+        const reproduce = preparePassageReproduction(text);
+        const locator = {
+            kind: "pdf" as const,
+            canonicalUrl: "https://fixture.example/evidence.pdf",
+            sourceVersionHash,
+            pageNumber: 2,
+            startOffset: 0,
+            endOffset: "Deuxième page α.".length,
+            exactQuotation: "Deuxième page α.",
+        };
+
+        expect(reproduce(locator)).toBe("Deuxième page α.");
+        expect(() =>
+            reproduce({ ...locator, sourceVersionHash: "0".repeat(64) }),
+        ).toThrow("Source version hash mismatch");
+        expect(() =>
+            reproduce({ ...locator, exactQuotation: "Altered quote" }),
+        ).toThrow("quotation mismatch");
+        expect(() => reproduce({ ...locator, startOffset: -1 })).toThrow(
+            "Invalid PDF passage character offsets",
+        );
+        expect(() => reproduce({ ...locator, endOffset: 1000 })).toThrow(
+            "Invalid PDF passage character offsets",
+        );
+        expect(() => reproduce({ ...locator, pageNumber: 3 })).toThrow(
+            "Page 3 not found",
+        );
+        expect(reproduce(locator)).toBe("Deuxième page α.");
+    });
+});
 
 describe("evidenceNormalization", () => {
     test("normalizes SEC HTML deterministically, stripping scripts and styling while preserving text and headings", () => {

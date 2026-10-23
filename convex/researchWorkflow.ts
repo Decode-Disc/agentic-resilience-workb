@@ -14,6 +14,7 @@ export const run = workflow
         args: {
             runId: v.id("researchRuns"),
             executionGeneration: v.number(),
+            prepareSources: v.optional(v.boolean()),
         },
         returns: v.null(),
     })
@@ -117,13 +118,32 @@ export const run = workflow
                 stepKey: "check_public_evidence",
             });
         }
-        await step.runMutation(
-            internal.sourceSelectionProposals.generateForRun,
-            {
+        if (args.prepareSources) {
+            const run = await step.runQuery(internal.researchRuns.get, {
                 runId: args.runId,
-                expectedExecutionGeneration: executionGeneration,
-            },
-        );
+            });
+            if (!run?.activeCorpusRevisionId)
+                throw new Error("Draft corpus revision not found");
+            const preparationId = await step.runMutation(
+                internal.sourcePreparation.claimForDiscovery,
+                {
+                    runId: args.runId,
+                    corpusRevisionId: run.activeCorpusRevisionId,
+                    expectedExecutionGeneration: executionGeneration,
+                },
+            );
+            await step.runWorkflow(internal.sourcePreparationWorkflow.run, {
+                preparationId,
+            });
+        } else {
+            await step.runMutation(
+                internal.sourceSelectionProposals.generateForRun,
+                {
+                    runId: args.runId,
+                    expectedExecutionGeneration: executionGeneration,
+                },
+            );
+        }
         await step.runMutation(internal.researchRuns.transition, {
             runId: args.runId,
             expectedExecutionGeneration: executionGeneration,

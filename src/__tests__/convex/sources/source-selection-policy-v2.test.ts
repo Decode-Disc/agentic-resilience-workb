@@ -41,6 +41,89 @@ function build(candidates: ReadonlyArray<Candidate>) {
 }
 
 describe("source selection policy v2", () => {
+    test("keeps targeted-search candidates out of recommendations until analyst inclusion", () => {
+        const result = build([
+            candidate(
+                "targeted-product",
+                "https://www.servicenow.com/products/workflows.html",
+                "Workflow products",
+                {
+                    category: "official_product",
+                    requiresAnalystReview: true,
+                },
+            ),
+            candidate(
+                "targeted-terms",
+                "https://www.servicenow.com/legal/terms-of-service.html",
+                "Customer terms",
+                {
+                    category: "official_commercial",
+                    requiresAnalystReview: true,
+                },
+            ),
+        ]);
+        expect(result.items.map((item) => item.disposition)).toEqual([
+            "needs_attention",
+            "needs_attention",
+        ]);
+        expect(result.counts.recommended).toBe(0);
+        expect(
+            result.items.every((item) =>
+                item.reasonCodes.includes("targeted_search_review"),
+            ),
+        ).toBe(true);
+    });
+    test("a targeted duplicate cannot displace an existing recommendation", () => {
+        const existing = candidate(
+            "existing-filing",
+            "https://www.sec.gov/Archives/edgar/data/1373715/old.htm",
+            "Annual report",
+            {
+                category: "regulatory",
+                secForm: "10-K",
+                secAccessionNumber: "0001373715-26-000001",
+                origin: "exa",
+                providerResultPosition: 4,
+            },
+        );
+        const additions = [
+            candidate(
+                "canonical-target",
+                existing.canonicalUrl,
+                existing.title,
+                {
+                    ...existing,
+                    sourceId: "canonical-target",
+                    origin: "sec",
+                    providerResultPosition: 0,
+                    requiresAnalystReview: true,
+                },
+            ),
+            candidate(
+                "metadata-target",
+                "https://www.sec.gov/Archives/edgar/data/1373715/copy.htm",
+                existing.title,
+                {
+                    ...existing,
+                    sourceId: "metadata-target",
+                    canonicalUrl:
+                        "https://www.sec.gov/Archives/edgar/data/1373715/copy.htm",
+                    origin: "sec",
+                    providerResultPosition: 1,
+                    requiresAnalystReview: true,
+                },
+            ),
+        ];
+        const before = item(build([existing]), existing.sourceId);
+        const after = build([...additions, existing]);
+        expect(item(after, existing.sourceId)).toEqual(before);
+        expect(
+            additions.map(
+                (source) => item(after, source.sourceId)?.disposition,
+            ),
+        ).toEqual(["needs_attention", "needs_attention"]);
+    });
+
     test("prefers primary filings and excludes filing indexes and low-value forms", () => {
         const result = build([
             candidate(
@@ -1184,6 +1267,10 @@ describe("source selection policy v2", () => {
             ),
         ).toHaveLength(1);
         expect(item(result, "conflict-two")).toMatchObject({
+            disposition: "needs_attention",
+            reasonCodes: ["integrity_conflict"],
+        });
+        expect(item(result, "conflict-one")).toMatchObject({
             disposition: "alternative",
             reasonCodes: ["integrity_conflict"],
         });

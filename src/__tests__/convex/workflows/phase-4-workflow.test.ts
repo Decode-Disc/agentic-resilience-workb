@@ -1,9 +1,18 @@
+import { api } from "@convex/_generated/api";
+import { workflow } from "@convex/workflow";
+import type { WorkflowId } from "@convex-dev/workflow";
+import "@convex/researchLaunch";
+import "@convex/researchWorkflow";
+import "@convex/evidenceWorkflow";
+import "@convex/sourcePreparationWorkflow";
 import type { Id } from "@convex/_generated/dataModel";
 import schema from "@convex/schema";
 import "@convex/evidenceActions";
+import "@convex/sourcePreparationActions";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
+import { serializeFakeStorageWrites } from "@/__tests__/setup/convex-storage";
 import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
 import workflowTest from "./workflow-test-register.js";
 
@@ -40,6 +49,7 @@ const originalSecUserAgent = process.env.SEC_USER_AGENT;
 const originalExaApiKey = process.env.EXA_API_KEY;
 
 afterEach(() => {
+    vi.restoreAllMocks();
     exaSearch.mockReset();
     globalThis.fetch = originalFetch;
     if (originalSecUserAgent === undefined) {
@@ -52,6 +62,7 @@ afterEach(() => {
     } else {
         process.env.EXA_API_KEY = originalExaApiKey;
     }
+    vi.unstubAllEnvs();
     vi.useRealTimers();
 });
 const confirmAndStart = makeFunctionReference<
@@ -96,7 +107,19 @@ const listEvents = makeFunctionReference<
     Array<{ lifecycleState: string }>
 >("researchRuns:listEvents");
 
-test("approved corpus automatically retrieves evidence and pauses honestly without claim capability", async () => {
+test.each([
+    { prepareSources: false, cancelDuringReading: false },
+    { prepareSources: true, cancelDuringReading: false },
+    { prepareSources: true, cancelDuringReading: true },
+])("discovery preserves approval authority with preparation=$prepareSources cancellation=$cancelDuringReading", async ({
+    prepareSources,
+    cancelDuringReading,
+}) => {
+    vi.stubEnv(
+        "SOURCE_QUALIFICATION_ENABLED",
+        prepareSources ? "true" : "false",
+    );
+    vi.stubEnv("OPENROUTER_API_KEY", "");
     vi.useFakeTimers();
     process.env.SEC_USER_AGENT = "Evidence Workbench test@example.com";
     process.env.EXA_API_KEY = "deterministic-test-key";
@@ -109,8 +132,11 @@ test("approved corpus automatically retrieves evidence and pauses honestly witho
             },
         ],
     });
-    globalThis.fetch = vi.fn(async (input: string | URL | Request) =>
-        String(input).endsWith(".htm")
+    let cancelReading: (() => Promise<void>) | undefined;
+    globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
+        if (String(input).endsWith(".htm") && cancelReading)
+            await cancelReading();
+        return String(input).endsWith(".htm")
             ? new Response(
                   "<h1>Platform</h1><p>The public platform supports company workflows through documented integration APIs.</p>",
                   { headers: { "content-type": "text/html" } },
@@ -133,11 +159,12 @@ test("approved corpus automatically retrieves evidence and pauses honestly witho
                       }),
                       { status: 200 },
                   ),
-              ),
-    );
+              );
+    });
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
     workflowTest.register(t);
+    if (prepareSources) await serializeFakeStorageWrites(t);
     const fixture = await t.run(async (ctx) => {
         const userId = await ctx.db.insert("users", { isAnonymous: true });
         const invitationId = await ctx.db.insert("invitations", {
@@ -155,6 +182,7 @@ test("approved corpus automatically retrieves evidence and pauses honestly witho
             analysesReserved: 0,
             admittedAt: 1,
         });
+        await ctx.db.patch(invitationId, { claimedByVisitorId: visitorId });
         const companyId = await ctx.db.insert("companies", {
             cik: "1818201",
             legalName: "CCC Intelligent Solutions Holdings Inc.",
@@ -181,7 +209,95 @@ test("approved corpus automatically retrieves evidence and pauses honestly witho
         idempotencyKey: "phase-4-run",
         coveragePreset: "balanced",
     });
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    let canceledHandles: { parent: WorkflowId; child: WorkflowId } | undefined;
+    if (cancelDuringReading)
+        cancelReading = async () => {
+            const run = await t.run((ctx) => ctx.db.get(runId));
+            if (!run?.workflowId)
+                throw new Error("Missing main workflow handle");
+            const parent = run.workflowId as WorkflowId;
+            const journal = await t.run((ctx) =>
+                workflow.listSteps(ctx, parent),
+            );
+            const child = journal.page.find((step) => step.kind === "workflow");
+            if (child?.kind !== "workflow")
+                throw new Error("Missing nested preparation workflow");
+            canceledHandles = { parent, child: child.nestedWorkflowId };
+            await analyst.mutation(api.workflowControls.cancel, { runId });
+        };
+    for (let pump = 0; pump < 100; pump++) {
+        await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100));
+        const state = await t.run((ctx) => ctx.db.get(runId));
+        if (state?.executionStatus !== "running") break;
+    }
+    if (cancelDuringReading) {
+        const handles = canceledHandles;
+        if (!handles)
+            throw new Error(
+                "Retrieval did not reach the cancellation boundary",
+            );
+        expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
+            executionStatus: "cancelled",
+        });
+        expect(
+            await t.run((ctx) => workflow.status(ctx, handles.parent)),
+        ).toMatchObject({ type: "canceled" });
+        expect(
+            await t.run((ctx) => workflow.status(ctx, handles.child)),
+        ).toMatchObject({ type: "canceled" });
+        const artifacts = await t.run(async (ctx) => ({
+            captures: await ctx.db.query("sourceCaptures").take(5),
+            versions: await ctx.db.query("sourceVersions").take(1),
+            claims: await ctx.db.query("claims").take(1),
+            calls: await ctx.db
+                .query("providerCalls")
+                .withIndex("by_run", (q) => q.eq("runId", runId))
+                .take(60),
+        }));
+        expect(
+            artifacts.captures.filter(
+                (capture) => capture.status === "committed",
+            ),
+        ).toEqual([]);
+        expect(artifacts.versions).toEqual([]);
+        expect(artifacts.claims).toEqual([]);
+        expect(
+            artifacts.calls.filter((call) => call.service === "model"),
+        ).toEqual([]);
+        return;
+    }
+    expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
+        lifecycleState: "awaiting_source_review",
+        executionStatus: "paused",
+    });
+    if (prepareSources) {
+        const prepared = await t.run(async (ctx) => {
+            const run = await ctx.db.get(runId);
+            return {
+                run,
+                preparation: run?.sourcePreparationId
+                    ? await ctx.db.get(run.sourcePreparationId)
+                    : null,
+                captures: await ctx.db.query("sourceCaptures").take(5),
+                versions: await ctx.db.query("sourceVersions").take(1),
+                claims: await ctx.db.query("claims").take(1),
+            };
+        });
+        expect(prepared.run?.sourcePreparationId).toBeTruthy();
+        expect(prepared.run).toMatchObject({
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        });
+        expect(prepared.run?.workflowId).toBeTruthy();
+        expect(prepared.preparation?.status).toBe("blocked");
+        expect(prepared.captures.some((c) => c.status === "committed")).toBe(
+            true,
+        );
+        expect(prepared.versions).toHaveLength(0);
+        expect(prepared.claims).toHaveLength(0);
+        return;
+    }
     const exaCalls = await t.run(async (ctx) =>
         ctx.db
             .query("providerCalls")
@@ -246,7 +362,11 @@ test("approved corpus automatically retrieves evidence and pauses honestly witho
             decisionKey: "approve-corpus-1",
         }),
     ).resolves.toEqual({ accepted: false });
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    for (let pump = 0; pump < 100; pump++) {
+        await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100));
+        const state = await t.run((ctx) => ctx.db.get(runId));
+        if (state?.executionStatus !== "running") break;
+    }
 
     await expect(t.query(getRun, { runId })).resolves.toMatchObject({
         lifecycleState: "extracting_evidence",

@@ -6,6 +6,7 @@ import { extractPassagesFromNormalizedText } from "@convex/domain/sourcePassages
 import type {
     ApprovedSourceRetrievalInput,
     ApprovedSourceRetrievalResult,
+    SourceDocumentRetrievalInput,
 } from "@convex/integrations/approvedSourceRetrieval";
 import { normalizeSecHtml } from "@convex/integrations/evidenceNormalization";
 import type { SecCompanyEvidenceResolver } from "@convex/integrations/sec";
@@ -28,7 +29,7 @@ function resolveDirectFilingUrl(canonicalUrl: string): string | null {
 
 export async function retrieveAndNormalizeSecFiling(
     resolver: SecCompanyEvidenceResolver,
-    input: ApprovedSourceRetrievalInput,
+    input: SourceDocumentRetrievalInput | ApprovedSourceRetrievalInput,
 ): Promise<ApprovedSourceRetrievalResult> {
     try {
         let retrievalUrl = resolveDirectFilingUrl(input.canonicalUrl);

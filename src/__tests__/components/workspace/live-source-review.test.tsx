@@ -1,4 +1,3 @@
-import { getFunctionName } from "convex/server";
 import { api } from "@convex/_generated/api";
 import {
     act,
@@ -8,6 +7,7 @@ import {
     waitFor,
     within,
 } from "@testing-library/react";
+import { getFunctionName } from "convex/server";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 const {
@@ -18,6 +18,7 @@ const {
     startNewRevision,
     renderPreview,
     recover,
+    prepare,
 } = vi.hoisted(() => ({
     approve: vi.fn(),
     recompute: vi.fn(),
@@ -26,6 +27,7 @@ const {
     startNewRevision: vi.fn(),
     renderPreview: vi.fn(),
     recover: vi.fn(),
+    prepare: vi.fn(),
 }));
 
 vi.mock("convex/react", async () => {
@@ -59,6 +61,7 @@ const proposalSource = {
 } as const;
 
 beforeEach(() => {
+    vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
     convexReactHarness.reset();
     approve.mockReset();
     recompute.mockReset();
@@ -67,6 +70,10 @@ beforeEach(() => {
     startNewRevision.mockReset();
     renderPreview.mockReset();
     recover.mockReset();
+    prepare.mockReset();
+    convexReactHarness
+        .mutation(api.sourcePreparation.startForReview)
+        .uses(prepare);
     convexReactHarness
         .mutation(api.sourceSelectionProposals.approveProposedCorpus)
         .uses(approve);
@@ -93,9 +100,17 @@ beforeEach(() => {
         .returns(undefined);
 });
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+});
 
-function recoveryReview(recovery?: unknown) {
+function recoveryReview(
+    recovery?: unknown,
+    source = proposalSource,
+    preparation?: unknown,
+    readSource?: (args: unknown) => unknown,
+) {
     convexReactHarness.query(api.sourceSelectionProposals.getCurrent).returns({
         proposalId: "proposal-1",
         version: 1,
@@ -118,10 +133,15 @@ function recoveryReview(recovery?: unknown) {
         rebuildOutcome: "partial",
         failedDiscoveryFamilies: ["official_product"],
         recovery,
+        preparation,
+        preparationAction: {
+            kind: preparation ? "resume" : "start",
+            available: true,
+        },
     });
     convexReactHarness
         .query(api.sourceSelectionProposals.getAdjustmentSets)
-        .returns({ included: [proposalSource], available: [] });
+        .returns({ included: [source], available: [] });
     convexReactHarness.query(api.sources.getReviewSummary).returns({
         revision: 1,
         status: "draft",
@@ -129,9 +149,11 @@ function recoveryReview(recovery?: unknown) {
         total: 1,
         candidateLimit: 48,
     });
-    convexReactHarness.query(api.sources.getReviewSource).returns(undefined);
+    convexReactHarness
+        .query(api.sources.getReviewSource)
+        .returnsFrom(({ args }) => readSource?.(args));
     convexReactHarness.paginatedQuery(api.sources.listForReviewPage).returns({
-        results: [proposalSource],
+        results: [source],
         status: "Exhausted",
         loadMore: vi.fn(),
     });
@@ -144,6 +166,115 @@ function recoveryReview(recovery?: unknown) {
     );
 }
 
+test("starts source reading explicitly from a current draft using its native preparation result", async () => {
+    prepare.mockResolvedValue({
+        preparationId: "preparation-1",
+        status: "started",
+    });
+    recoveryReview();
+    fireEvent.click(
+        screen.getByRole("button", { name: "Prepare source reading" }),
+    );
+    await waitFor(() =>
+        expect(prepare).toHaveBeenCalledWith({
+            runId: "run-1",
+            corpusRevisionId: "revision-1",
+            expectedProposalId: "proposal-1",
+            requestId: expect.any(String),
+        }),
+    );
+    expect(rebuild).not.toHaveBeenCalled();
+    expect(recover).not.toHaveBeenCalled();
+    expect(
+        screen.queryByText(/discovery is temporarily unavailable/i),
+    ).toBeNull();
+});
+
+test("loads the first selected source detail when inspection opens without requiring a second source click", async () => {
+    const readSelected = vi.fn();
+    recoveryReview(undefined, proposalSource, undefined, (args) => {
+        readSelected(args);
+        return proposalSource;
+    });
+    fireEvent.click(
+        screen.getByRole("button", { name: "Inspect all candidates" }),
+    );
+    await waitFor(() =>
+        expect(readSelected).toHaveBeenCalledWith({
+            runId: "run-1",
+            corpusRevisionId: "revision-1",
+            sourceId: "source-recommended",
+        }),
+    );
+});
+
+test("loads pinned passages when a prepared source is opened from its overview card", async () => {
+    const preparedSource = {
+        ...proposalSource,
+        inspectionStatus: "partial" as const,
+    };
+    const readSelected = vi.fn();
+    const detail = {
+        ...preparedSource,
+        qualificationStatus: "available",
+        qualificationExecutionMode: "showcase",
+        roleAvailability: [
+            {
+                role: "regulatory_annual",
+                state: "limited",
+                usage: "attributed_argument_only",
+                reasonCodes: [],
+            },
+        ],
+        qualification: {
+            companyMatch: "subject",
+            companyPassages: [],
+            documentKind: "regulatory_annual",
+            reportingPeriodEnd: null,
+            reportingPeriodPassages: [],
+            limitations: [],
+            findings: [
+                {
+                    role: "regulatory_annual",
+                    kind: "attributed_argument",
+                    findingKey: "illustrative-argument-0",
+                    usage: "attributed_argument_only",
+                    summary: "An attributed argument",
+                    passages: [
+                        {
+                            passageKey: "p0",
+                            quotation:
+                                "The author argues that agents could change workflow economics.",
+                        },
+                    ],
+                    period: "unspecified",
+                    periodPassages: [],
+                    dependsOnFlaggedAssertion: false,
+                },
+            ],
+        },
+    };
+    recoveryReview(undefined, preparedSource, undefined, (args) => {
+        readSelected(args);
+        return detail;
+    });
+    fireEvent.click(
+        screen.getByRole("button", { name: "Open Annual report for review" }),
+    );
+    fireEvent.click(await screen.findByRole("tab", { name: "Source details" }));
+    expect(
+        await screen.findByText(
+            "The author argues that agents could change workflow economics.",
+        ),
+    ).toBeTruthy();
+    expect(readSelected).toHaveBeenCalledWith({
+        runId: "run-1",
+        corpusRevisionId: "revision-1",
+        sourceId: "source-recommended",
+    });
+    expect(screen.getByText("Illustrative source assessment")).toBeTruthy();
+});
+
 test("renders a rejected search at its coverage action without redirecting or hiding the result", async () => {
     recover.mockResolvedValue({
         proposalId: "proposal-1",
@@ -155,15 +286,15 @@ test("renders a rejected search at its coverage action without redirecting or hi
     recoveryReview();
     fireEvent.click(
         screen.getByRole("button", {
-            name: "Review coverage: Product or platform documentation",
+            name: "Review coverage: Product documentation",
         }),
     );
-    const dialog = await screen.findByRole("dialog", {
-        name: "Product or platform documentation",
+    const dialog = await screen.findByRole("region", {
+        name: "Product documentation",
     });
     fireEvent.click(
         within(dialog).getByRole("button", {
-            name: "Search sources for Product or platform documentation",
+            name: "Search sources for Product documentation",
         }),
     );
     await waitFor(() =>
@@ -392,7 +523,9 @@ test("shows current source groups and approves the exact visible version", async
         }),
     ).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve source set" }));
+    fireEvent.click(
+        screen.getByRole("button", { name: "Approve proposed corpus" }),
+    );
     await waitFor(() =>
         expect(approve).toHaveBeenCalledWith({
             runId: "run-1",
@@ -490,7 +623,7 @@ test("explains a blocked rebuild without exposing provider or configuration deta
     ).toBeNull();
 });
 
-test("shows an approved legacy source set without querying missing proposal items", () => {
+test("shows an approved legacy source set without querying missing proposal items", async () => {
     const reviewSummary = {
         revision: 1,
         status: "approved",
@@ -546,9 +679,11 @@ test("shows an approved legacy source set without querying missing proposal item
         />,
     );
 
-    expect(screen.getAllByText("Annual report")).toHaveLength(2);
+    await waitFor(() =>
+        expect(screen.getAllByText("Annual report")).toHaveLength(2),
+    );
     expect(
-        screen.queryByRole("button", { name: "Approve source set" }),
+        screen.queryByRole("button", { name: "Approve proposed corpus" }),
     ).toBeNull();
     expect(ensureCurrent).not.toHaveBeenCalled();
     expect(
@@ -618,4 +753,28 @@ test("repairs an authorized legacy draft before loading proposal items", async (
                 args === "skip",
         ),
     ).toBe(true);
+});
+
+test("failed continuation of a saved source remains visible beside its preparation state", async () => {
+    prepare.mockRejectedValue(
+        new Error("execution_slot_unavailable internal details"),
+    );
+    recoveryReview(undefined, proposalSource, {
+        status: "blocked",
+        checked: 0,
+        total: 1,
+        canResume: true,
+    });
+    fireEvent.click(
+        screen.getByRole("button", { name: "Continue source preparation" }),
+    );
+    expect(
+        await screen.findByText(
+            "Source reading could not be started. Review the current status and try again when available.",
+        ),
+    ).toBeTruthy();
+    expect(screen.getByText("Source link saved")).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(
+        /execution_slot_unavailable|internal details/,
+    );
 });

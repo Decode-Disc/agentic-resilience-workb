@@ -6,9 +6,9 @@ import {
     File01Icon,
     LinkSquare01Icon,
     Loading02Icon,
+    PlusIcon,
 } from "@hugeicons/core-free-icons";
 import { type ComponentProps, type ReactElement, useState } from "react";
-
 import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -205,21 +205,21 @@ export function AddSourceDialog({
                             </InputGroup>
                             <Button
                                 type="submit"
+                                aria-label="Add"
                                 variant="secondary"
-                                className="mx-0 rounded-4xl"
+                                size="icon"
+                                className="mx-0 rounded-full"
                                 disabled={
                                     isSubmitting || urlInput.trim() === ""
                                 }>
-                                {isSubmitting ? (
-                                    <Icon
-                                        iconNode={Loading02Icon}
-                                        className={
-                                            isSubmitting ? "animate-spin" : ""
-                                        }
-                                    />
-                                ) : (
-                                    <span>Add</span>
-                                )}
+                                <Icon
+                                    iconNode={
+                                        isSubmitting ? Loading02Icon : PlusIcon
+                                    }
+                                    className={
+                                        isSubmitting ? "animate-spin" : ""
+                                    }
+                                />
                             </Button>
                         </div>
                         {error ? (

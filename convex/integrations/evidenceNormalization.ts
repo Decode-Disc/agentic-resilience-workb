@@ -4,6 +4,7 @@ import { MAX_NORMALIZED_ARTIFACT_BYTES } from "@convex/resourceLimits";
 export const SEC_NORMALIZER_VERSION = "sec-html-v1";
 export const EXA_NORMALIZER_VERSION = "exa-text-v1";
 export const PDF_NORMALIZER_VERSION = "pdf-fixture-v1";
+export const QUALIFICATION_NORMALIZER_VERSION = "qualification-text-v1";
 
 export type NormalizedArtifact = {
     normalizedText: string;
@@ -183,6 +184,25 @@ export function normalizeExaText(
         mediaType: "text/plain",
         byteCount: encoded.byteLength,
     };
+}
+
+/** Removes embedded image bytes while retaining captions in a captured text representation. */
+export function normalizeQualificationText(
+    rawText: string,
+): NormalizedArtifact {
+    const text = rawText
+        .replace(/!\[([^\]]*)\]\(data:image\/[^)]+\)/gi, "$1")
+        .replace(/<img\b[^>]*>/gi, (tag) => {
+            const alt = /\balt\s*=\s*["']([^"']*)["']/i.exec(tag);
+            return alt?.[1] ?? "";
+        })
+        .replace(
+            /data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=]+/gi,
+            "[embedded image omitted]",
+        );
+    return normalizeExaText(text, {
+        normalizerVersion: QUALIFICATION_NORMALIZER_VERSION,
+    });
 }
 
 /**

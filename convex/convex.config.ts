@@ -5,6 +5,13 @@ import { v } from "convex/values";
 
 const app = defineApp({
     env: {
+        OPENROUTER_API_KEY: v.optional(v.string()),
+        SOURCE_QUALIFICATION_ENABLED: v.optional(v.string()),
+        SOURCE_RETRIEVAL_MODE: v.optional(
+            v.union(v.literal("lexical"), v.literal("hybrid")),
+        ),
+        CLOUDFLARE_ACCOUNT_ID: v.optional(v.string()),
+        CLOUDFLARE_AI_TOKEN: v.optional(v.string()),
         COMPANY_SEARCH_RESULT_LIMIT: v.optional(v.string()),
         SOURCE_CANDIDATE_LIMIT: v.optional(v.string()),
         SOURCE_RECOMMENDATION_CEILING: v.optional(v.string()),

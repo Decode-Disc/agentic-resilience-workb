@@ -5,6 +5,8 @@ import {
     paginationResultValidator,
 } from "convex/server";
 import { v } from "convex/values";
+import { zodToConvex } from "convex-helpers/server/zod4";
+import { internal } from "./_generated/api";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -18,28 +20,40 @@ import {
 import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
 import { claimPausedRunExecution } from "./domain/executionClaim";
 import { purgePreviewCacheForSource } from "./domain/previewCache";
-import { canStartNewCorpusRevision } from "./domain/transitions";
+import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
+import {
+    SOURCE_COMPARISON_VERSION,
+    type SourceComparisonDisposition,
+    sourceComparisonOutcomesSchema,
+} from "./domain/sourceComparison";
 import {
     coverageRoleValidator,
     discoveryFamilyValidator,
     recoveryReasonValidator,
-    recoveryTargetValidator,
     recoverySearchPlan,
+    recoveryTargetValidator,
 } from "./domain/sourceDiscoveryRecovery";
-import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
+import { SOURCE_QUALIFICATION_VERSION } from "./domain/sourceQualification";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
 import {
     buildSourceSelectionProposal,
+    canRefreshSourceSelectionPolicy,
     evaluateSourceCoverage,
     SOURCE_PUBLISHER_REGISTRY_VERSION,
     SOURCE_SELECTION_POLICY_VERSION,
+    type SourceSelectionCandidate,
+    sourceRoleAvailabilityValidator,
 } from "./domain/sourceSelectionPolicy";
+import { readPinnedComparisonReview } from "./domain/sourceUsage";
+import { canStartNewCorpusRevision } from "./domain/transitions";
 import {
-    sourceCandidateLimit,
+    MAX_SUPPLEMENT_SEARCHES,
+    sourceDossierCandidateLimit,
+    sourcePreparationEnabled,
     sourceRecommendedTarget,
 } from "./resourceLimits";
-import { corpusRevisionApproved, workflow } from "./workflow";
 import schema from "./schema";
+import { corpusRevisionApproved, workflow } from "./workflow";
 
 type ProposalContext = {
     run: Doc<"researchRuns">;
@@ -70,26 +84,9 @@ const rebuildOutcomeValidator = v.union(
     v.literal("blocked"),
 );
 
-const reasonCodeValidator = v.union(
-    v.literal("added_by_analyst"),
-    v.literal("required_family_coverage"),
-    v.literal("ranked_fill"),
-    v.literal("unrecognized_source_family"),
-    v.literal("not_selected"),
-    v.literal("required_coverage_role"),
-    v.literal("additional_coverage"),
-    v.literal("canonical_duplicate"),
-    v.literal("metadata_duplicate"),
-    v.literal("search_or_index"),
-    v.literal("low_information_document"),
-    v.literal("company_identity_unverified"),
-    v.literal("unverified_publisher"),
-    v.literal("unverified_counter_evidence"),
-    v.literal("qualified_partner_manual_review"),
-    v.literal("no_new_coverage"),
-    v.literal("recommendation_ceiling_reached"),
-    v.literal("integrity_conflict"),
-);
+const reasonCodeValidator =
+    schema.tables.sourceSelectionProposalItems.validator.fields.reasonCodes
+        .element;
 
 const documentKindValidator = v.union(
     v.literal("regulatory_annual"),
@@ -127,6 +124,7 @@ const authorityTierValidator = v.union(
 );
 
 const companyLinkageBasisValidator = v.union(
+    v.literal("inspected_content"),
     v.literal("structural"),
     v.literal("discovery_metadata"),
     v.literal("unverified"),
@@ -164,6 +162,18 @@ const rebuildPlanQueryValidator = v.object({
 
 const proposalSourceValidator = v.object({
     sourceId: v.id("sources"),
+    sourceCaptureId: v.optional(v.id("sourceCaptures")),
+    qualificationTaskId: v.optional(v.id("aiTaskResults")),
+    comparisonTaskIds: v.optional(v.array(v.id("aiTaskResults"))),
+    comparisonOutcomes: v.optional(zodToConvex(sourceComparisonOutcomesSchema)),
+    roleAvailability: v.optional(sourceRoleAvailabilityValidator),
+    inspectionStatus: v.optional(
+        v.union(
+            v.literal("complete"),
+            v.literal("partial"),
+            v.literal("unavailable"),
+        ),
+    ),
     canonicalUrl: v.string(),
     title: v.string(),
     origin: v.union(
@@ -190,8 +200,26 @@ const proposalSourceValidator = v.object({
     decisionReason: v.optional(v.string()),
 });
 
+function comparisonOutcomePins(
+    outcomes?: Record<number, SourceComparisonDisposition>,
+) {
+    return Object.entries(outcomes ?? {})
+        .map(([findingIndex, disposition]) => ({
+            findingIndex: Number(findingIndex),
+            disposition,
+        }))
+        .sort((left, right) => left.findingIndex - right.findingIndex);
+}
+
 async function sourceSelectionFingerprint(input: {
     candidates: Array<Doc<"sources">>;
+    qualificationInputs?: Array<{
+        sourceId: Id<"sources">;
+        taskId?: Id<"aiTaskResults">;
+        captureId?: Id<"sourceCaptures">;
+        comparisonTaskIds?: Array<Id<"aiTaskResults">>;
+        comparisonOutcomes?: Record<number, SourceComparisonDisposition>;
+    }>;
     coveragePreset: NonNullable<Doc<"researchRuns">["coveragePreset"]>;
     researchAngle?: string;
     ceiling: number;
@@ -210,6 +238,23 @@ async function sourceSelectionFingerprint(input: {
         publisherRegistryVersion: SOURCE_PUBLISHER_REGISTRY_VERSION,
         ceiling: input.ceiling,
         company: input.company ?? null,
+        qualificationInputs:
+            input.qualificationInputs?.map(
+                ({
+                    sourceId,
+                    taskId,
+                    captureId,
+                    comparisonTaskIds,
+                    comparisonOutcomes,
+                }) => ({
+                    sourceId,
+                    taskId,
+                    captureId,
+                    comparisonTaskIds: comparisonTaskIds ?? [],
+                    comparisonOutcomes:
+                        comparisonOutcomePins(comparisonOutcomes),
+                }),
+            ) ?? null,
         candidates: [...input.candidates]
             .sort((left, right) => left._id.localeCompare(right._id, "en"))
             .map((source) => ({
@@ -224,6 +269,9 @@ async function sourceSelectionFingerprint(input: {
                 secAccessionNumber: source.secAccessionNumber ?? null,
                 providerResultPosition: source.providerResultPosition ?? null,
                 discoveryQueryIndex: source.discoveryQueryIndex ?? null,
+                ...(source.reviewSearchId
+                    ? { reviewSearchId: source.reviewSearchId }
+                    : {}),
             })),
     });
     const bytes = new TextEncoder().encode(canonicalInput);
@@ -258,12 +306,12 @@ async function readSelectionCompany(
 
 async function readProposalCandidates(
     ctx: MutationCtx | QueryCtx,
-    runId: Id<"researchRuns">,
+    run: Doc<"researchRuns">,
 ): Promise<Array<Doc<"sources">>> {
-    const limit = sourceCandidateLimit();
+    const limit = sourceDossierCandidateLimit(run.sourcePreparationId);
     const candidates = await ctx.db
         .query("sources")
-        .withIndex("by_run_and_url", (query) => query.eq("runId", runId))
+        .withIndex("by_run_and_url", (query) => query.eq("runId", run._id))
         .take(limit + 1);
     if (candidates.length > limit) {
         throw new Error("Source candidate limit exceeded");
@@ -329,13 +377,139 @@ async function currentFingerprint(
         throw new Error("Research run has no coverage preset");
     }
     const company = await readSelectionCompany(ctx, run);
+    const candidates = await readProposalCandidates(ctx, run);
+    const qualificationInputs = await readQualificationInputs(
+        ctx,
+        run,
+        candidates,
+    );
     return sourceSelectionFingerprint({
-        candidates: await readProposalCandidates(ctx, run._id),
+        candidates,
+        qualificationInputs,
         coveragePreset: run.coveragePreset,
         researchAngle: run.researchAngle,
-        ceiling: sourceRecommendedTarget(),
+        ceiling: sourceRecommendedTarget(run.sourcePreparationId),
         company,
     });
+}
+
+/** Resolves immutable content judgments without making page reads start paid work. */
+async function readQualificationInputs(
+    ctx: QueryCtx | MutationCtx,
+    run: Doc<"researchRuns">,
+    candidates: Doc<"sources">[],
+) {
+    if (!run.sourcePreparationId) return undefined;
+    return Promise.all(
+        candidates.map(async (source) => {
+            const tasks = await ctx.db
+                .query("aiTaskResults")
+                .withIndex("by_source_and_task_type_and_created_at", (q) =>
+                    q
+                        .eq("sourceId", source._id)
+                        .eq("taskType", "source_qualification"),
+                )
+                .order("desc")
+                .take(4);
+            for (const task of tasks) {
+                if (
+                    task.schemaVersion !== SOURCE_QUALIFICATION_VERSION ||
+                    task.runId !== run._id ||
+                    task.output.kind !== "source_qualification"
+                )
+                    continue;
+                const capture = await ctx.db.get(task.output.sourceCaptureId);
+                if (
+                    capture?.status !== "committed" ||
+                    capture.sourceId !== source._id ||
+                    capture.runId !== run._id ||
+                    capture.contentHash !== task.output.contentHash
+                )
+                    continue;
+                const comparisonTaskIds = await readComparisonTaskIds(
+                    ctx,
+                    source._id,
+                    capture._id,
+                    capture.contentHash,
+                );
+                const comparisonReview = run.activeCorpusRevisionId
+                    ? await readPinnedComparisonReview(
+                          ctx.db,
+                          {
+                              runId: run._id,
+                              sourceId: source._id,
+                              corpusRevisionId: run.activeCorpusRevisionId,
+                              comparisonTaskIds,
+                          },
+                          {
+                              sourceCaptureId: capture._id,
+                              contentHash: capture.contentHash,
+                              qualificationTaskId: task._id,
+                              qualification: task.output.qualification,
+                              qualificationExecutionMode: task.executionMode,
+                          },
+                      )
+                    : { outcomes: {}, details: {} };
+                const comparisonOutcomes = comparisonReview.outcomes;
+                return {
+                    sourceId: source._id,
+                    taskId: task._id,
+                    captureId: capture._id,
+                    comparisonTaskIds,
+                    comparisonOutcomes,
+                    inspection: {
+                        status: "qualified",
+                        qualification: task.output.qualification,
+                        readingCompleteness: task.output.readingCompleteness,
+                        comparisonOutcomes,
+                    } satisfies SourceSelectionCandidate["inspection"],
+                };
+            }
+            const capture = await ctx.db
+                .query("sourceCaptures")
+                .withIndex("by_source_and_status_and_updated_at", (q) =>
+                    q.eq("sourceId", source._id).eq("status", "committed"),
+                )
+                .order("desc")
+                .first();
+            return {
+                sourceId: source._id,
+                taskId: undefined,
+                captureId: capture?.runId === run._id ? capture._id : undefined,
+                comparisonTaskIds: [],
+                comparisonOutcomes: {},
+                inspection: {
+                    status: "unavailable",
+                    reasonCode: "qualification_unavailable",
+                } satisfies SourceSelectionCandidate["inspection"],
+            };
+        }),
+    );
+}
+
+async function readComparisonTaskIds(
+    ctx: QueryCtx | MutationCtx,
+    sourceId: Id<"sources">,
+    captureId: Id<"sourceCaptures">,
+    contentHash: string,
+) {
+    const tasks = await ctx.db
+        .query("aiTaskResults")
+        .withIndex("by_source_and_task_type_and_created_at", (query) =>
+            query.eq("sourceId", sourceId).eq("taskType", "source_comparison"),
+        )
+        .order("asc")
+        .take(121);
+    if (tasks.length > 120)
+        throw new Error("Source comparison history exceeds its limit");
+    const matching = tasks.filter(
+        (task) =>
+            task.schemaVersion === SOURCE_COMPARISON_VERSION &&
+            task.output.kind === "source_comparison" &&
+            task.output.targetCaptureId === captureId &&
+            task.output.targetContentHash === contentHash,
+    );
+    return matching.map((task) => task._id);
 }
 
 function isIncluded(
@@ -370,6 +544,24 @@ async function hydrateProposalItem(
     const decision = reviewItem?.decision ?? "pending";
     return {
         sourceId: source._id,
+        ...(item.sourceCaptureId
+            ? { sourceCaptureId: item.sourceCaptureId }
+            : {}),
+        ...(item.qualificationTaskId
+            ? { qualificationTaskId: item.qualificationTaskId }
+            : {}),
+        ...(item.comparisonTaskIds?.length
+            ? { comparisonTaskIds: item.comparisonTaskIds }
+            : {}),
+        ...(item.comparisonOutcomes
+            ? { comparisonOutcomes: item.comparisonOutcomes }
+            : {}),
+        ...(item.roleAvailability
+            ? { roleAvailability: item.roleAvailability }
+            : {}),
+        ...(item.inspectionStatus
+            ? { inspectionStatus: item.inspectionStatus }
+            : {}),
         canonicalUrl: source.canonicalUrl,
         title: source.title,
         origin: source.origin,
@@ -452,9 +644,16 @@ export async function createSourceSelectionProposal(
                 failedDiscoveryFamilies: previous.failedDiscoveryFamilies ?? [],
             };
     }
-    const candidates = await readProposalCandidates(ctx, run._id);
-    const recommendationCeiling = sourceRecommendedTarget();
+    const candidates = await readProposalCandidates(ctx, run);
+    const recommendationCeiling = sourceRecommendedTarget(
+        run.sourcePreparationId,
+    );
     const company = await readSelectionCompany(ctx, run);
+    const qualificationInputs = await readQualificationInputs(
+        ctx,
+        run,
+        candidates,
+    );
     const result = buildSourceSelectionProposal({
         candidates: candidates.map((source) => ({
             sourceId: source._id,
@@ -468,7 +667,11 @@ export async function createSourceSelectionProposal(
             secAccessionNumber: source.secAccessionNumber,
             providerResultPosition: source.providerResultPosition,
             discoveryQueryIndex: source.discoveryQueryIndex,
+            requiresAnalystReview: source.reviewSearchId !== undefined,
             createdAt: source.createdAt,
+            inspection: qualificationInputs?.find(
+                (input) => input.sourceId === source._id,
+            )?.inspection,
         })),
         coveragePreset: run.coveragePreset,
         researchAngle: run.researchAngle,
@@ -487,6 +690,7 @@ export async function createSourceSelectionProposal(
     const proposalId = await ctx.db.insert("sourceSelectionProposals", {
         runId: run._id,
         corpusRevisionId: revision._id,
+        sourcePreparationId: run.sourcePreparationId,
         version,
         policyVersion: SOURCE_SELECTION_POLICY_VERSION,
         coveragePreset: run.coveragePreset,
@@ -498,6 +702,7 @@ export async function createSourceSelectionProposal(
         failedDiscoveryFamilies: rebuild?.failedDiscoveryFamilies,
         candidateFingerprint: await sourceSelectionFingerprint({
             candidates,
+            qualificationInputs,
             coveragePreset: run.coveragePreset,
             researchAngle: run.researchAngle,
             ceiling: recommendationCeiling,
@@ -515,6 +720,22 @@ export async function createSourceSelectionProposal(
             corpusRevisionId: revision._id,
             proposalId,
             sourceId: item.sourceId as Id<"sources">,
+            sourceCaptureId: qualificationInputs?.find(
+                (input) => input.sourceId === item.sourceId,
+            )?.captureId,
+            qualificationTaskId: qualificationInputs?.find(
+                (input) => input.sourceId === item.sourceId,
+            )?.taskId,
+            comparisonTaskIds: qualificationInputs?.find(
+                (input) => input.sourceId === item.sourceId,
+            )?.comparisonTaskIds,
+            comparisonOutcomes: comparisonOutcomePins(
+                qualificationInputs?.find(
+                    (input) => input.sourceId === item.sourceId,
+                )?.comparisonOutcomes,
+            ),
+            roleAvailability: item.roleAvailability,
+            inspectionStatus: item.inspectionStatus,
             disposition: item.disposition,
             sourceFamily: item.sourceFamily,
             documentKind: item.documentKind,
@@ -609,8 +830,10 @@ async function readProposalSources(
         .withIndex("by_proposal_and_rank_and_source", (q) =>
             q.eq("proposalId", proposal._id),
         )
-        .take(sourceCandidateLimit() + 1);
-    if (items.length > sourceCandidateLimit())
+        .take(sourceDossierCandidateLimit(proposal.sourcePreparationId) + 1);
+    if (
+        items.length > sourceDossierCandidateLimit(proposal.sourcePreparationId)
+    )
         throw new Error("Source selection proposal exceeds its limit");
     return Promise.all(items.map((item) => hydrateProposalItem(ctx, item)));
 }
@@ -640,7 +863,16 @@ export const getCurrent = query({
                 v.object({
                     role: coverageRoleValidator,
                     covered: v.boolean(),
+                    availability: v.optional(
+                        v.union(
+                            v.literal("available"),
+                            v.literal("limited"),
+                            v.literal("not_established"),
+                        ),
+                    ),
+                    reasonCodes: v.optional(v.array(v.string())),
                     candidateIds: v.array(v.id("sources")),
+                    includedSourceIds: v.optional(v.array(v.id("sources"))),
                 }),
             ),
             counts: v.object({
@@ -670,10 +902,46 @@ export const getCurrent = query({
                         "reason",
                         "leaseExpiresAt",
                         "completedAt",
+                        "insertedCount",
+                        "readingSourceIds",
                     ),
             ),
             effectiveIncludedCount: v.number(),
             revisionStatus: v.union(v.literal("draft"), v.literal("approved")),
+            preparation: v.optional(
+                v.object({
+                    preparationId: v.optional(
+                        v.id("sourceSelectionProposalRebuilds"),
+                    ),
+                    status: schema.tables.sourceSelectionProposalRebuilds
+                        .validator.fields.status,
+                    checked: v.number(),
+                    total: v.number(),
+                    canResume: v.boolean(),
+                }),
+            ),
+            preparationAction: v.optional(
+                v.object({
+                    kind: v.union(v.literal("start"), v.literal("resume")),
+                    available: v.boolean(),
+                    reason: v.optional(
+                        v.union(
+                            v.literal("disabled"),
+                            v.literal("busy"),
+                            v.literal("read_only"),
+                        ),
+                    ),
+                    deadlineAt: v.optional(v.number()),
+                }),
+            ),
+            searchAllowance: v.optional(
+                v.object({
+                    remainingSearches: v.number(),
+                    remainingCandidates: v.number(),
+                    deadlineAt: v.optional(v.number()),
+                    enabled: v.boolean(),
+                }),
+            ),
         }),
         v.null(),
     ),
@@ -684,12 +952,95 @@ export const getCurrent = query({
             return null;
         }
         const { run, revision } = context;
+        const preparation = run.sourcePreparationId
+            ? await ctx.db.get(run.sourcePreparationId)
+            : null;
+        const preparationSummary =
+            preparation?.kind === "preparation" &&
+            preparation.runId === run._id &&
+            preparation.corpusRevisionId === revision._id
+                ? {
+                      preparationId: preparation._id,
+                      status: preparation.status,
+                      checked: preparation.sourceOutcomes?.length ?? 0,
+                      canResume:
+                          revision.status === "draft" &&
+                          run.executionStatus === "paused" &&
+                          run.pauseReason === "source_review" &&
+                          preparation.stopCode === "execution_slot_unavailable",
+                      total:
+                          preparation.readingSourceIds?.length ??
+                          preparation.manualSourceIds?.length ??
+                          (await readSourceCandidateCapacity(ctx.db, run._id))
+                              .total,
+                  }
+                : undefined;
+        const running = run.ownerVisitorId
+            ? await ctx.db
+                  .query("researchRuns")
+                  .withIndex("by_owner_and_execution_status", (q) =>
+                      q
+                          .eq("ownerVisitorId", run.ownerVisitorId)
+                          .eq("executionStatus", "running"),
+                  )
+                  .take(1)
+            : [];
+        const preparationActionReason =
+            revision.status !== "draft"
+                ? ("read_only" as const)
+                : !sourcePreparationEnabled()
+                  ? ("disabled" as const)
+                  : run.executionStatus !== "paused" || running.length > 0
+                    ? ("busy" as const)
+                    : undefined;
+        const preparationAction = {
+            kind: preparationSummary ? ("resume" as const) : ("start" as const),
+            available: preparationActionReason === undefined,
+            ...(preparationActionReason
+                ? { reason: preparationActionReason }
+                : {}),
+            ...(preparation?.deadlineAt !== undefined
+                ? { deadlineAt: preparation.deadlineAt }
+                : {}),
+        };
         const hydrated = await readProposalSources(ctx, proposal);
         const fingerprint = await currentFingerprint(ctx, run);
         const coverageRequirements = evaluateSourceCoverage(
             proposal.coveragePreset,
             hydrated,
-        );
+        ).map((requirement) => ({
+            ...requirement,
+            includedSourceIds: requirement.candidateIds.filter((sourceId) =>
+                hydrated.some(
+                    (source) => source.sourceId === sourceId && source.included,
+                ),
+            ),
+        }));
+        const supplement = run.automaticSupplementOperationId
+            ? await ctx.db.get(run.automaticSupplementOperationId)
+            : null;
+        const searchAllowance = preparationSummary
+            ? {
+                  enabled: sourcePreparationEnabled(),
+                  remainingSearches: Math.max(
+                      0,
+                      MAX_SUPPLEMENT_SEARCHES -
+                          (supplement?.supplementClaimedQueryIndexes?.length ??
+                              0),
+                  ),
+                  remainingCandidates: (
+                      await readSourceCandidateCapacity(ctx.db, run._id)
+                  ).remaining,
+                  ...((supplement?.deadlineAt ?? preparation?.deadlineAt) !==
+                  undefined
+                      ? {
+                            deadlineAt:
+                                supplement?.deadlineAt ??
+                                preparation?.deadlineAt,
+                        }
+                      : {}),
+              }
+            : undefined;
         const latestRecovery = await ctx.db
             .query("sourceSelectionProposalRebuilds")
             .withIndex("by_revision_and_created_at", (q) =>
@@ -697,16 +1048,21 @@ export const getCurrent = query({
             )
             .order("desc")
             .first();
-        const recovery = latestRecovery?.requestId
-            ? {
-                  status: latestRecovery.status,
-                  requestId: latestRecovery.requestId,
-                  target: latestRecovery.target,
-                  reason: latestRecovery.reason,
-                  leaseExpiresAt: latestRecovery.leaseExpiresAt,
-                  completedAt: latestRecovery.completedAt,
-              }
-            : null;
+        const recovery =
+            (latestRecovery?.kind !== "preparation" ||
+                latestRecovery?.target) &&
+            latestRecovery?.requestId
+                ? {
+                      status: latestRecovery.status,
+                      requestId: latestRecovery.requestId,
+                      target: latestRecovery.target,
+                      reason: latestRecovery.reason,
+                      leaseExpiresAt: latestRecovery.leaseExpiresAt,
+                      completedAt: latestRecovery.completedAt,
+                      insertedCount: latestRecovery.insertedCount,
+                      readingSourceIds: latestRecovery.readingSourceIds,
+                  }
+                : null;
         return {
             proposalId: proposal._id,
             version: proposal.version,
@@ -714,9 +1070,11 @@ export const getCurrent = query({
             effectiveStatus:
                 proposal.status === "failed"
                     ? ("failed" as const)
-                    : proposal.policyVersion !== SOURCE_SELECTION_POLICY_VERSION
+                    : !canRefreshSourceSelectionPolicy(proposal.policyVersion)
                       ? ("outdated" as const)
-                      : fingerprint === proposal.candidateFingerprint
+                      : proposal.policyVersion ===
+                              SOURCE_SELECTION_POLICY_VERSION &&
+                          fingerprint === proposal.candidateFingerprint
                         ? ("ready" as const)
                         : ("stale" as const),
             recommendedTarget: proposal.recommendedTarget,
@@ -734,6 +1092,9 @@ export const getCurrent = query({
             effectiveIncludedCount: hydrated.filter(({ included }) => included)
                 .length,
             revisionStatus: revision.status,
+            ...(preparationSummary ? { preparation: preparationSummary } : {}),
+            ...(revision.status === "draft" ? { preparationAction } : {}),
+            ...(searchAllowance ? { searchAllowance } : {}),
         };
     },
 });
@@ -873,8 +1234,10 @@ export const recompute = mutation({
         if (
             revision.status !== "draft" ||
             revision.sourceSelectionProposalId !== args.expectedProposalId ||
-            (await ctx.db.get(args.expectedProposalId))?.policyVersion !==
-                SOURCE_SELECTION_POLICY_VERSION ||
+            !canRefreshSourceSelectionPolicy(
+                (await ctx.db.get(args.expectedProposalId))?.policyVersion ??
+                    "",
+            ) ||
             run.activeCorpusRevisionId !== revision._id ||
             run.lifecycleState !== "awaiting_source_review" ||
             run.executionStatus !== "paused" ||
@@ -945,6 +1308,10 @@ export const claimRebuild = internalMutation({
         ) {
             throw new Error("Unauthorized");
         }
+        if (run.sourcePreparationId)
+            throw new Error(
+                "Source preparation must use its bounded review operation",
+            );
         const recovery = args.recovery;
         if (
             recovery &&
@@ -1524,8 +1891,7 @@ export const approveProposedCorpus = mutation({
             proposal.policyVersion !== SOURCE_SELECTION_POLICY_VERSION ||
             run.lifecycleState !== "awaiting_source_review" ||
             run.executionStatus !== "paused" ||
-            run.pauseReason !== "source_review" ||
-            !run.workflowId
+            run.pauseReason !== "source_review"
         ) {
             throw new Error("Proposed corpus cannot be approved");
         }
@@ -1540,8 +1906,10 @@ export const approveProposedCorpus = mutation({
             .withIndex("by_proposal_and_rank_and_source", (query) =>
                 query.eq("proposalId", proposal._id),
             )
-            .take(sourceCandidateLimit() + 1);
-        if (items.length > sourceCandidateLimit()) {
+            .take(sourceDossierCandidateLimit(run.sourcePreparationId) + 1);
+        if (
+            items.length > sourceDossierCandidateLimit(run.sourcePreparationId)
+        ) {
             throw new Error("Source selection proposal exceeds its limit");
         }
         if (
@@ -1643,15 +2011,28 @@ export const approveProposedCorpus = mutation({
                 occurredAt: now,
             },
         );
-        await workflow.sendEvent(ctx, {
-            ...corpusRevisionApproved,
-            workflowId: run.workflowId as WorkflowId,
-            value: {
-                decisionId: checkpointDecisionId,
-                corpusRevisionId: revision._id,
-                executionGeneration,
-            },
-        });
+        if (run.workflowId) {
+            await workflow.sendEvent(ctx, {
+                ...corpusRevisionApproved,
+                workflowId: run.workflowId as WorkflowId,
+                value: {
+                    decisionId: checkpointDecisionId,
+                    corpusRevisionId: revision._id,
+                    executionGeneration,
+                },
+            });
+        } else {
+            // A reopened legacy corpus has no discovery workflow waiting for an event.
+            await ctx.runMutation(
+                internal.evidenceExecution.completeSourceReview,
+                {
+                    runId: run._id,
+                    decisionId: checkpointDecisionId,
+                    corpusRevisionId: revision._id,
+                    expectedExecutionGeneration: executionGeneration,
+                },
+            );
+        }
         await ctx.db.insert("auditEvents", {
             actor: { type: "visitor", visitorId: visitor._id },
             action: "corpus_revision_approved",
@@ -1737,11 +2118,12 @@ export const startNewCorpusRevision = mutation({
         });
 
         const newRevision = await ctx.db.get(newRevisionId);
-        if (!newRevision) {
+        const currentRun = await ctx.db.get(run._id);
+        if (!newRevision || !currentRun) {
             throw new Error("New corpus revision was not created");
         }
         const proposal = await createSourceSelectionProposal(ctx, {
-            run: { ...run, executionGeneration },
+            run: currentRun,
             revision: newRevision,
         });
 

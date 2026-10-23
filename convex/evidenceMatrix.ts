@@ -22,7 +22,7 @@ import {
     MAX_CLAIMS_PER_RUN,
     MAX_DIMENSION_LINKS_PER_CLAIM,
     MAX_EVIDENCE_PER_CLAIM,
-    sourceCandidateLimit,
+    sourceDossierCandidateLimit,
 } from "./resourceLimits";
 
 const MAX_RESEARCH_PLAN_QUESTIONS = 11;
@@ -426,8 +426,8 @@ async function countFrozenSourceBuckets(
                 .eq("corpusRevisionId", corpus._id)
                 .eq("executionGeneration", run.executionGeneration),
         )
-        .take(sourceCandidateLimit() + 1);
-    if (rows.length > sourceCandidateLimit()) {
+        .take(sourceDossierCandidateLimit(run.sourcePreparationId) + 1);
+    if (rows.length > sourceDossierCandidateLimit(run.sourcePreparationId)) {
         throw new Error("Frozen source statuses exceed candidate limit");
     }
     let accepted = 0;

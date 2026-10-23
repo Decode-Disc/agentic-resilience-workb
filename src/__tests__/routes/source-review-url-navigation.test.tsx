@@ -24,6 +24,9 @@ const recover = vi.fn();
 beforeEach(() => {
     vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
     convexReactHarness.reset();
+    convexReactHarness
+        .mutation(api.sourcePreparation.startForReview)
+        .uses(vi.fn());
     recover.mockReset();
     convexReactHarness.query(api.researchRuns.getMine).returns({
         runId: "run-1",
@@ -131,12 +134,12 @@ test("restores coverage inspection through Back and Forward without running a se
     const first = openRun("/workspace/run-1?section=sources");
     fireEvent.click(
         await screen.findByRole("button", {
-            name: "Review coverage: Terms or offer details",
+            name: "Review coverage: Subscription & service terms",
         }),
     );
     fireEvent.click(
         await screen.findByRole("button", {
-            name: "Review candidates for Terms or offer details",
+            name: "Review candidates for Subscription & service terms",
         }),
     );
     expect(
@@ -184,7 +187,7 @@ test("opens a saved coverage URL directly without running a search", async () =>
             name: "Review matching candidates",
         }),
     ).toBeTruthy();
-    expect(screen.getByText("Terms or offer details")).toBeTruthy();
+    expect(screen.getByText("Subscription & service terms")).toBeTruthy();
     expect(recover).not.toHaveBeenCalled();
 });
 

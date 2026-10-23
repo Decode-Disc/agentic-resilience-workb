@@ -1,18 +1,36 @@
 import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion";
 import { ArrowDown01Icon, ArrowUp01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import type { ReactNode } from "react";
+import {
+    DisclosureAnimationContext,
+    DisclosureMotionPanel,
+    useDisclosureAnimation,
+} from "@/components/ui/disclosure-motion";
 import { cn } from "@/lib/utils";
 
-function Accordion({ className, ...props }: AccordionPrimitive.Root.Props) {
+/** Base UI accordion with Motion enabled by default; use animated={false} for native immediate disclosure. */
+function Accordion<Value = string>({
+    className,
+    animated = true,
+    keepMounted,
+    hiddenUntilFound,
+    ...props
+}: AccordionPrimitive.Root.Props<Value> & { animated?: boolean }) {
     return (
-        <AccordionPrimitive.Root
-            data-slot="accordion"
-            className={cn(
-                "flex w-full flex-col overflow-hidden rounded-2xl border",
-                className,
-            )}
-            {...props}
-        />
+        <DisclosureAnimationContext.Provider
+            value={{ animated, keepMounted, hiddenUntilFound }}>
+            <AccordionPrimitive.Root
+                data-slot="accordion"
+                className={cn(
+                    "flex w-full flex-col overflow-hidden rounded-2xl border",
+                    className,
+                )}
+                keepMounted={keepMounted}
+                hiddenUntilFound={hiddenUntilFound}
+                {...props}
+            />
+        </DisclosureAnimationContext.Provider>
     );
 }
 
@@ -29,8 +47,9 @@ function AccordionItem({ className, ...props }: AccordionPrimitive.Item.Props) {
 function AccordionTrigger({
     className,
     children,
+    indicator,
     ...props
-}: AccordionPrimitive.Trigger.Props) {
+}: AccordionPrimitive.Trigger.Props & { indicator?: ReactNode }) {
     return (
         <AccordionPrimitive.Header className="flex">
             <AccordionPrimitive.Trigger
@@ -41,18 +60,24 @@ function AccordionTrigger({
                 )}
                 {...props}>
                 {children}
-                <HugeiconsIcon
-                    icon={ArrowDown01Icon}
-                    strokeWidth={2}
-                    data-slot="accordion-trigger-icon"
-                    className="pointer-events-none shrink-0 group-aria-expanded/accordion-trigger:hidden"
-                />
-                <HugeiconsIcon
-                    icon={ArrowUp01Icon}
-                    strokeWidth={2}
-                    data-slot="accordion-trigger-icon"
-                    className="pointer-events-none hidden shrink-0 group-aria-expanded/accordion-trigger:inline"
-                />
+                {indicator === undefined ? (
+                    <>
+                        <HugeiconsIcon
+                            icon={ArrowDown01Icon}
+                            strokeWidth={2}
+                            data-slot="accordion-trigger-icon"
+                            className="pointer-events-none shrink-0 group-aria-expanded/accordion-trigger:hidden"
+                        />
+                        <HugeiconsIcon
+                            icon={ArrowUp01Icon}
+                            strokeWidth={2}
+                            data-slot="accordion-trigger-icon"
+                            className="pointer-events-none hidden shrink-0 group-aria-expanded/accordion-trigger:inline"
+                        />
+                    </>
+                ) : (
+                    indicator
+                )}
             </AccordionPrimitive.Trigger>
         </AccordionPrimitive.Header>
     );
@@ -61,16 +86,43 @@ function AccordionTrigger({
 function AccordionContent({
     className,
     children,
+    keepMounted: keepMountedProp,
+    hiddenUntilFound: hiddenUntilFoundProp,
+    render,
     ...props
 }: AccordionPrimitive.Panel.Props) {
+    const options = useDisclosureAnimation();
+    const keepMounted = keepMountedProp ?? options.keepMounted ?? false;
+    const hiddenUntilFound =
+        hiddenUntilFoundProp ?? options.hiddenUntilFound ?? false;
+    const animated = options.animated && !hiddenUntilFound;
     return (
         <AccordionPrimitive.Panel
             data-slot="accordion-content"
-            className="overflow-hidden px-4 text-sm data-open:animate-accordion-down data-closed:animate-accordion-up"
-            {...props}>
+            className="overflow-hidden text-sm"
+            {...props}
+            hiddenUntilFound={hiddenUntilFound}
+            keepMounted={animated || keepMounted}
+            render={
+                animated
+                    ? (elementProps, state) => (
+                          <DisclosureMotionPanel
+                              open={state.open}
+                              keepMounted={keepMounted}
+                              elementProps={elementProps}
+                              render={
+                                  typeof render === "function"
+                                      ? (renderProps) =>
+                                            render(renderProps, state)
+                                      : render
+                              }
+                          />
+                      )
+                    : render
+            }>
             <div
                 className={cn(
-                    "h-(--accordion-panel-height) pt-0 pb-4 data-ending-style:h-0 data-starting-style:h-0 [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4",
+                    "px-4 pt-0 pb-4 [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4",
                     className,
                 )}>
                 {children}

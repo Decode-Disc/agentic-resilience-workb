@@ -1,23 +1,28 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { v } from "convex/values";
-import { doc } from "convex-helpers/validators";
-
+import { SOURCE_RETRIEVAL_VERSION } from "@convex/domain/sourceRetrievalPolicy";
+import { readPreparationSourceDecision } from "@convex/domain/sourcePreparationAuthority";
 import {
+    readPinnedComparisonReview,
+    readPinnedSourceQualification,
+} from "@convex/domain/sourceUsage";
+import { getAuthUserId } from "@convex-dev/auth/server";
+import { type Infer, v } from "convex/values";
+import { doc } from "convex-helpers/validators";
+import {
+    env,
     internalMutation,
     internalQuery,
-    mutation,
     type MutationCtx,
+    mutation,
     type QueryCtx,
 } from "./_generated/server";
-import { env } from "./_generated/server";
 import { assertEvidenceExecutionFence } from "./domain/evidenceAuthority";
 import { computePassageKey } from "./domain/sourcePassages";
-import schema from "./schema";
 import {
     MAX_PASSAGES_PER_SOURCE,
-    sourceCandidateLimit,
+    sourceDossierCandidateLimit,
 } from "./resourceLimits";
+import schema from "./schema";
 
 const webLocatorValidator = v.object({
     kind: v.literal("web"),
@@ -74,6 +79,172 @@ const retrievalMetadataValidator = v.object({
 const statusDocValidator = doc(schema, "evidenceSourceStatuses");
 const sourceDocValidator = doc(schema, "sources");
 
+async function readApprovedPreparation(
+    ctx: QueryCtx | MutationCtx,
+    args: {
+        corpusRevisionId: Id<"corpusRevisions">;
+        sourceId: Id<"sources">;
+        runId: Id<"researchRuns">;
+    },
+) {
+    const revision = await ctx.db.get(args.corpusRevisionId);
+    const proposal = revision?.sourceSelectionProposalId
+        ? await ctx.db.get(revision.sourceSelectionProposalId)
+        : null;
+    if (!proposal?.sourcePreparationId) {
+        const run = await ctx.db.get(args.runId);
+        return run?.sourcePreparationId ? null : undefined;
+    }
+    if (
+        revision?.status !== "approved" ||
+        proposal.runId !== args.runId ||
+        proposal.corpusRevisionId !== args.corpusRevisionId
+    )
+        return null;
+    const item = await ctx.db
+        .query("sourceSelectionProposalItems")
+        .withIndex("by_proposal_and_source", (q) =>
+            q.eq("proposalId", proposal._id).eq("sourceId", args.sourceId),
+        )
+        .unique();
+    const capture = item?.sourceCaptureId
+        ? await ctx.db.get(item.sourceCaptureId)
+        : null;
+    if (
+        capture?.status !== "committed" ||
+        capture.runId !== args.runId ||
+        capture.sourceId !== args.sourceId
+    )
+        return null;
+    const requiredSpans: Array<{
+        startOffset: number;
+        endOffset: number;
+        quotation?: string;
+    }> = [];
+    const items = await ctx.db
+        .query("sourceSelectionProposalItems")
+        .withIndex("by_proposal_and_source", (q) =>
+            q.eq("proposalId", proposal._id),
+        )
+        .take(61);
+    if (items.length > 60) throw new Error("Approved source limit exceeded");
+    for (const target of items) {
+        if (
+            !target.comparisonTaskIds?.length ||
+            (await readPreparationSourceDecision(ctx.db, target)) !== "accepted"
+        )
+            continue;
+        const review = await readPinnedComparisonReview(
+            ctx.db,
+            target,
+            await readPinnedSourceQualification(ctx.db, target),
+        );
+        for (const reference of review.requiredPrimaryReferences) {
+            if (reference.sourceId !== args.sourceId) continue;
+            if (
+                reference.captureId !== capture._id ||
+                reference.contentHash !== capture.contentHash ||
+                !Number.isSafeInteger(reference.startOffset) ||
+                !Number.isSafeInteger(reference.endOffset) ||
+                reference.startOffset < 0 ||
+                reference.endOffset - reference.startOffset !==
+                    reference.quotation.length
+            )
+                throw new Error(
+                    "Approved comparison reference identity mismatch",
+                );
+            requiredSpans.push({
+                startOffset: reference.startOffset,
+                endOffset: reference.endOffset,
+                quotation: reference.quotation,
+            });
+        }
+    }
+    const task = item?.qualificationTaskId
+        ? await ctx.db.get(item.qualificationTaskId)
+        : null;
+    const output = task?.output;
+    if (output?.kind !== "source_qualification")
+        return {
+            capture,
+            ...(requiredSpans.length
+                ? {
+                      requiredSpans,
+                      preparationVersion:
+                          SOURCE_RETRIEVAL_VERSION as typeof SOURCE_RETRIEVAL_VERSION,
+                  }
+                : {}),
+        };
+    if (
+        task?.runId !== args.runId ||
+        task.sourceId !== args.sourceId ||
+        output.sourceCaptureId !== capture._id ||
+        output.contentHash !== capture.contentHash
+    )
+        throw new Error("Approved qualification identity mismatch");
+    const q = output.qualification;
+    const keys = new Set(
+        [
+            ...q.companyPassages,
+            ...q.reportingPeriodPassages,
+            ...q.findings.flatMap((f) => [...f.passages, ...f.periodPassages]),
+            ...q.limitations.flatMap((l) => l.passages),
+        ].map((p) => p.passageKey),
+    );
+    const references = output.selectedPassages.filter((p) =>
+        keys.has(p.passageKey),
+    );
+    if (keys.size !== references.length)
+        throw new Error("Approved qualification references are unavailable");
+    requiredSpans.push(
+        ...references.map(({ startOffset, endOffset }) => ({
+            startOffset,
+            endOffset,
+        })),
+    );
+    return {
+        capture,
+        requiredSpans,
+        preparationVersion: output.retrieval?.version,
+    };
+}
+
+async function assertMaterializedReferences(
+    ctx: QueryCtx | MutationCtx,
+    sourceVersionId: Id<"sourceVersions">,
+    references: Array<{
+        startOffset: number;
+        endOffset: number;
+        quotation?: string;
+    }>,
+) {
+    const persisted = await ctx.db
+        .query("sourcePassages")
+        .withIndex("by_source_version_and_order", (q) =>
+            q.eq("sourceVersionId", sourceVersionId),
+        )
+        .take(MAX_PASSAGES_PER_SOURCE + 1);
+    if (
+        persisted.length > MAX_PASSAGES_PER_SOURCE ||
+        references.some(
+            (ref) =>
+                !persisted.some(
+                    (p) =>
+                        p.locator.startOffset !== undefined &&
+                        p.locator.endOffset !== undefined &&
+                        p.locator.startOffset <= ref.startOffset &&
+                        p.locator.endOffset >= ref.endOffset &&
+                        (!ref.quotation ||
+                            p.exactQuotation.slice(
+                                ref.startOffset - p.locator.startOffset,
+                                ref.endOffset - p.locator.startOffset,
+                            ) === ref.quotation),
+                ),
+        )
+    )
+        throw new Error("existing_materialization_incomplete");
+}
+
 async function requireMatchingSourceVersion(
     db: QueryCtx["db"],
     sourceVersionId: Id<"sourceVersions">,
@@ -126,6 +297,19 @@ export const getFrozenSourceForExecution = internalQuery({
             statusDoc: statusDocValidator,
             source: sourceDocValidator,
             companyCik: v.optional(v.string()),
+            preparationVersion: v.optional(v.literal(SOURCE_RETRIEVAL_VERSION)),
+            preparedPassageReferences: v.optional(
+                v.array(
+                    v.object({
+                        startOffset: v.number(),
+                        endOffset: v.number(),
+                        quotation: v.optional(v.string()),
+                    }),
+                ),
+            ),
+            preparedCapture: v.optional(
+                v.union(schema.doc("sourceCaptures"), v.null()),
+            ),
         }),
     ),
     handler: async (ctx, args) => {
@@ -158,10 +342,22 @@ export const getFrozenSourceForExecution = internalQuery({
             companyCik = company?.cik;
         }
 
+        const approved = await readApprovedPreparation(ctx, args);
+        if (statusDoc.sourceVersionId && approved?.requiredSpans?.length)
+            await assertMaterializedReferences(
+                ctx,
+                statusDoc.sourceVersionId,
+                approved.requiredSpans,
+            );
         return {
             statusDoc,
             source,
             companyCik,
+            preparedCapture: approved ? approved.capture : approved,
+            preparationVersion: approved?.preparationVersion,
+            ...(approved?.requiredSpans
+                ? { preparedPassageReferences: approved.requiredSpans }
+                : {}),
         };
     },
 });
@@ -192,7 +388,10 @@ export const listFrozenSourcesForRun = internalQuery({
         }),
     ),
     handler: async (ctx, args) => {
-        const candidateLimit = sourceCandidateLimit();
+        const run = await ctx.db.get(args.runId);
+        const candidateLimit = sourceDossierCandidateLimit(
+            run?.sourcePreparationId,
+        );
         const statuses = await ctx.db
             .query("evidenceSourceStatuses")
             .withIndex("by_run_and_execution_generation", (q) =>
@@ -408,6 +607,170 @@ export const markLeaseOrphaned = internalMutation({
     },
 });
 
+type SourceVersionContent = Pick<
+    Doc<"sourceVersions">,
+    | "sourceCaptureId"
+    | "runId"
+    | "corpusRevisionId"
+    | "sourceId"
+    | "acceptedDecisionId"
+    | "contentHash"
+    | "normalizerVersion"
+    | "storageId"
+    | "mediaType"
+    | "byteCount"
+    | "pageCount"
+    | "canonicalUrl"
+    | "retrievalVersion"
+    | "retrievalMetadata"
+    | "executionGeneration"
+> & { passages: Array<Infer<typeof sourcePassageInputValidator>> };
+
+async function insertSourceVersionWithPassages(
+    ctx: MutationCtx,
+    args: SourceVersionContent,
+    now: number,
+) {
+    const sourceVersionId = await ctx.db.insert("sourceVersions", {
+        sourceCaptureId: args.sourceCaptureId,
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        sourceId: args.sourceId,
+        acceptedDecisionId: args.acceptedDecisionId,
+        contentHash: args.contentHash,
+        normalizerVersion: args.normalizerVersion,
+        storageId: args.storageId,
+        mediaType: args.mediaType,
+        byteCount: args.byteCount,
+        pageCount: args.pageCount,
+        canonicalUrl: args.canonicalUrl,
+        retrievalVersion: args.retrievalVersion,
+        retrievalMetadata: args.retrievalMetadata,
+        executionGeneration: args.executionGeneration,
+        createdAt: now,
+    });
+
+    for (const passage of args.passages) {
+        const passageKey =
+            passage.passageKey ??
+            computePassageKey({
+                sourceId: args.sourceId,
+                sourceVersionHash: args.contentHash,
+                locatorVersion: passage.locatorVersion,
+                locator: passage.locator,
+                order: passage.order,
+                quotationHash: passage.quotationHash,
+            });
+        await ctx.db.insert("sourcePassages", {
+            sourceVersionId,
+            locatorVersion: passage.locatorVersion,
+            quotationHash: passage.quotationHash,
+            passageKey,
+            order: passage.order,
+            exactQuotation: passage.exactQuotation,
+            locator: passage.locator,
+            contextBefore: passage.contextBefore,
+            contextAfter: passage.contextAfter,
+            headingPath: passage.headingPath,
+            createdAt: now,
+        });
+    }
+    return sourceVersionId;
+}
+
+export const materializeInspectedSource = internalMutation({
+    args: {
+        runId: v.id("researchRuns"),
+        corpusRevisionId: v.id("corpusRevisions"),
+        sourceId: v.id("sources"),
+        acceptedDecisionId: v.id("sourceDecisions"),
+        executionGeneration: v.number(),
+        contentHash: v.string(),
+        passages: v.array(sourcePassageInputValidator),
+    },
+    returns: v.object({
+        sourceVersionId: v.id("sourceVersions"),
+        reused: v.boolean(),
+        status: v.union(v.literal("succeeded"), v.literal("partial")),
+    }),
+    handler: async (ctx, args) => {
+        const { statusDoc } = await assertExecutionFence(ctx.db, args);
+        const approved = await readApprovedPreparation(ctx, args);
+        const capture = approved?.capture;
+        if (
+            !capture?.storageId ||
+            !capture.normalizerVersion ||
+            !capture.retrievalVersion ||
+            capture.byteCount === undefined ||
+            capture.contentHash !== args.contentHash
+        )
+            throw new Error("Approved source capture is unavailable");
+        if (
+            args.passages.length === 0 ||
+            args.passages.length > MAX_PASSAGES_PER_SOURCE
+        )
+            throw new Error("Invalid inspected source passages");
+        if (
+            approved?.requiredSpans?.some(
+                (span) =>
+                    !args.passages.some(
+                        (p) =>
+                            p.locator.startOffset !== undefined &&
+                            p.locator.endOffset !== undefined &&
+                            p.locator.startOffset <= span.startOffset &&
+                            p.locator.endOffset >= span.endOffset,
+                    ),
+            )
+        )
+            throw new Error("required_passage_unavailable");
+        const existing = await ctx.db
+            .query("sourceVersions")
+            .withIndex("by_full_identity", (q) =>
+                q
+                    .eq("corpusRevisionId", args.corpusRevisionId)
+                    .eq("sourceId", args.sourceId)
+                    .eq("acceptedDecisionId", args.acceptedDecisionId)
+                    .eq("contentHash", args.contentHash)
+                    .eq("normalizerVersion", capture.normalizerVersion ?? ""),
+            )
+            .first();
+        if (existing && approved?.requiredSpans?.length)
+            await assertMaterializedReferences(
+                ctx,
+                existing._id,
+                approved.requiredSpans,
+            );
+        const now = Date.now();
+        const sourceVersionId =
+            existing?._id ??
+            (await insertSourceVersionWithPassages(
+                ctx,
+                {
+                    ...args,
+                    sourceCaptureId: capture._id,
+                    normalizerVersion: capture.normalizerVersion,
+                    storageId: capture.storageId,
+                    mediaType: capture.mediaType ?? "text/plain",
+                    byteCount: capture.byteCount,
+                    canonicalUrl: capture.resolvedUrl ?? capture.requestedUrl,
+                    retrievalVersion: capture.retrievalVersion,
+                },
+                now,
+            ));
+        const status =
+            capture.readingCompleteness === "complete"
+                ? ("succeeded" as const)
+                : ("partial" as const);
+        await ctx.db.patch(statusDoc._id, {
+            status,
+            sourceVersionId,
+            failureReason: status === "partial" ? "partial_reading" : undefined,
+            updatedAt: now,
+        });
+        return { sourceVersionId, reused: Boolean(existing), status };
+    },
+});
+
 export const finalizeSourceVersion = internalMutation({
     args: {
         runId: v.id("researchRuns"),
@@ -504,49 +867,11 @@ export const finalizeSourceVersion = internalMutation({
             };
         }
 
-        const sourceVersionId = await ctx.db.insert("sourceVersions", {
-            runId: args.runId,
-            corpusRevisionId: args.corpusRevisionId,
-            sourceId: args.sourceId,
-            acceptedDecisionId: args.acceptedDecisionId,
-            contentHash: args.contentHash,
-            normalizerVersion: args.normalizerVersion,
-            storageId: args.storageId,
-            mediaType: args.mediaType,
-            byteCount: args.byteCount,
-            pageCount: args.pageCount,
-            canonicalUrl: args.canonicalUrl,
-            retrievalVersion: args.retrievalVersion,
-            retrievalMetadata: args.retrievalMetadata,
-            executionGeneration: args.executionGeneration,
-            createdAt: now,
-        });
-
-        for (const passage of args.passages) {
-            const passageKey =
-                passage.passageKey ??
-                computePassageKey({
-                    sourceId: args.sourceId,
-                    sourceVersionHash: args.contentHash,
-                    locatorVersion: passage.locatorVersion,
-                    locator: passage.locator,
-                    order: passage.order,
-                    quotationHash: passage.quotationHash,
-                });
-            await ctx.db.insert("sourcePassages", {
-                sourceVersionId,
-                locatorVersion: passage.locatorVersion,
-                quotationHash: passage.quotationHash,
-                passageKey,
-                order: passage.order,
-                exactQuotation: passage.exactQuotation,
-                locator: passage.locator,
-                contextBefore: passage.contextBefore,
-                contextAfter: passage.contextAfter,
-                headingPath: passage.headingPath,
-                createdAt: now,
-            });
-        }
+        const sourceVersionId = await insertSourceVersionWithPassages(
+            ctx,
+            args,
+            now,
+        );
 
         await ctx.db.patch(args.leaseId, {
             status: "committed",
@@ -683,10 +1008,53 @@ function forceStorageDeleteFailure(): boolean {
     return raw !== undefined && raw.trim().length > 0 && raw.trim() !== "0";
 }
 
+async function hasRetainedArtifactReference(
+    ctx: MutationCtx,
+    storageId: Id<"_storage">,
+    cutoff: number,
+): Promise<boolean> {
+    const version = await ctx.db
+        .query("sourceVersions")
+        .withIndex("by_storage_id", (index) => index.eq("storageId", storageId))
+        .first();
+    if (version) return true;
+    for (const status of ["committed", "reserved", "uploaded"] as const) {
+        const capture = await ctx.db
+            .query("sourceCaptures")
+            .withIndex("by_storage_id_and_status_and_updated_at", (index) => {
+                const range = index
+                    .eq("storageId", storageId)
+                    .eq("status", status);
+                return status === "committed"
+                    ? range
+                    : range.gt("updatedAt", cutoff);
+            })
+            .first();
+        if (capture) return true;
+    }
+    const lease = await ctx.db
+        .query("artifactUploadLeases")
+        .withIndex("by_storage_id", (index) => index.eq("storageId", storageId))
+        .first();
+    return (
+        !!lease &&
+        lease.updatedAt > cutoff &&
+        (lease.status === "reserved" || lease.status === "uploaded")
+    );
+}
+
 async function ensureStorageObjectAbsent(
     ctx: MutationCtx,
     storageId: Id<"_storage">,
 ): Promise<boolean> {
+    if (
+        await hasRetainedArtifactReference(
+            ctx,
+            storageId,
+            Date.now() - artifactCleanupSafetyIntervalMs(),
+        )
+    )
+        return false;
     if (forceStorageDeleteFailure()) {
         return false;
     }
@@ -702,6 +1070,14 @@ async function ensureStorageObjectAbsent(
         }
     }
 }
+
+/** Transactional reference check protects shared captures from immediate upload cleanup. */
+export const deleteUnreferencedArtifact = internalMutation({
+    args: { storageId: v.id("_storage") },
+    returns: v.boolean(),
+    handler: async (ctx, args) =>
+        ensureStorageObjectAbsent(ctx, args.storageId),
+});
 
 /** Shareable composite cursor: phase progress plus the _storage index cursor. */
 type ArtifactCleanupCursor = {
@@ -782,28 +1158,30 @@ async function reconcileArtifactStorageCore(
                 index.eq("status", status),
             )
             .take(pageSize);
-        if (leaseRows.length >= pageSize) {
+        const captureRows = await ctx.db
+            .query("sourceCaptures")
+            .withIndex("by_status_and_updated_at", (index) =>
+                index.eq("status", status),
+            )
+            .take(pageSize);
+        if (leaseRows.length >= pageSize || captureRows.length >= pageSize) {
             // A full page: this status may still hold reclaimable rows and a
             // later sweep must keep going, rather than claiming the sweep is
             // done while unreconciled work remains.
             leasePageMayHaveMore = true;
         }
-        for (const lease of leaseRows) {
+        for (const lease of [...leaseRows, ...captureRows]) {
             processedLeaseCount += 1;
             if (lease.updatedAt > cutoff) {
                 continue;
             }
             let objectConfirmedAbsent = !lease.storageId;
             if (lease.storageId) {
-                const referenced = await ctx.db
-                    .query("sourceVersions")
-                    .withIndex("by_storage_id", (index) =>
-                        index.eq(
-                            "storageId",
-                            lease.storageId as Id<"_storage">,
-                        ),
-                    )
-                    .first();
+                const referenced = await hasRetainedArtifactReference(
+                    ctx,
+                    lease.storageId,
+                    cutoff,
+                );
                 if (referenced) {
                     referencedStorageCount += 1;
                 } else {
@@ -842,29 +1220,7 @@ async function reconcileArtifactStorageCore(
 
     for (const storageRow of storageResult.page) {
         scannedObjectCount += 1;
-        const versionRef = await ctx.db
-            .query("sourceVersions")
-            .withIndex("by_storage_id", (index) =>
-                index.eq("storageId", storageRow._id),
-            )
-            .first();
-        if (versionRef) {
-            referencedStorageCount += 1;
-            continue;
-        }
-        const activeLease = await ctx.db
-            .query("artifactUploadLeases")
-            .withIndex("by_storage_id", (index) =>
-                index.eq("storageId", storageRow._id),
-            )
-            .first();
-        if (
-            activeLease &&
-            activeLease.updatedAt > cutoff &&
-            (activeLease.status === "reserved" ||
-                activeLease.status === "uploaded")
-        ) {
-            // An in-flight upload owns this object; protect it during the window.
+        if (await hasRetainedArtifactReference(ctx, storageRow._id, cutoff)) {
             referencedStorageCount += 1;
             continue;
         }

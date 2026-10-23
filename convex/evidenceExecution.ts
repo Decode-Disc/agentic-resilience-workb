@@ -7,8 +7,8 @@ import type { Doc } from "./_generated/dataModel";
 
 import {
     internalMutation,
-    mutation,
     type MutationCtx,
+    mutation,
 } from "./_generated/server";
 import { loadEffectiveAcceptedSourceHeads } from "./domain/evidenceAuthority";
 import {
@@ -17,7 +17,7 @@ import {
     claimUnavailableResumeExecution,
 } from "./domain/executionClaim";
 import { lookupShowcaseManifest } from "./domain/showcaseManifest";
-import { sourceCandidateLimit } from "./resourceLimits";
+import { sourceDossierCandidateLimit } from "./resourceLimits";
 import { workflow } from "./workflow";
 
 type InternalMutationRef = FunctionReference<"mutation", "internal">;
@@ -38,7 +38,7 @@ async function startApprovedRun(
 ): Promise<{ acceptedSourceCount: number; executionGeneration: number }> {
     // Idempotent replay check with identical request key on this run
     if (run.evidenceStartRequestKey === requestKey) {
-        const limit = sourceCandidateLimit();
+        const limit = sourceDossierCandidateLimit(run.sourcePreparationId);
         const frozen = await ctx.db
             .query("evidenceSourceStatuses")
             .withIndex("by_run_and_execution_generation", (query) =>
@@ -334,7 +334,7 @@ export const retryClaimGeneration = mutation({
         if (revision?.status !== "approved") {
             throw new Error("Active corpus revision is not approved");
         }
-        const limit = sourceCandidateLimit();
+        const limit = sourceDossierCandidateLimit(run.sourcePreparationId);
         const priorStatuses = await ctx.db
             .query("evidenceSourceStatuses")
             .withIndex("by_run_and_execution_generation", (query) =>
@@ -502,7 +502,7 @@ export const retryEvidenceExtraction = mutation({
         if (revision?.status !== "approved") {
             throw new Error("Active corpus revision is not approved");
         }
-        const limit = sourceCandidateLimit();
+        const limit = sourceDossierCandidateLimit(run.sourcePreparationId);
         const priorStatuses = await ctx.db
             .query("evidenceSourceStatuses")
             .withIndex("by_run_and_execution_generation", (query) =>

@@ -6,6 +6,7 @@ import {
     waitForElementToBeRemoved,
     within,
 } from "@testing-library/react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { expect, test, vi } from "vitest";
 
@@ -18,6 +19,48 @@ import {
     sourceDecisionForKanbanMove,
 } from "@/components/workspace/source-proposal-adjustment-board";
 import { SourceProposalReview } from "@/components/workspace/source-proposal-review";
+
+test("keeps keyboard focus on the selected group while resetting its source search", () => {
+    const props = overviewProps();
+    function ControlledReview() {
+        const [disposition, setDisposition] = useState(props.disposition);
+        return (
+            <SourceProposalReview
+                {...props}
+                disposition={disposition}
+                onDispositionChange={setDisposition}
+            />
+        );
+    }
+    render(<ControlledReview />);
+    const search = screen.getByRole("searchbox", {
+        name: "Search sources in this group",
+    }) as HTMLInputElement;
+    fireEvent.change(search, { target: { value: "Annual report" } });
+    const recommendedTab = screen.getByRole("tab", { name: /Recommended/ });
+    recommendedTab.focus();
+    fireEvent.keyDown(recommendedTab, { key: "ArrowRight" });
+    const attentionTab = screen.getByRole("tab", { name: /Needs attention/ });
+    expect(document.activeElement).toBe(attentionTab);
+    expect(
+        (
+            screen.getByRole("searchbox", {
+                name: "Search sources in this group",
+            }) as HTMLInputElement
+        ).value,
+    ).toBe("");
+    fireEvent.keyDown(attentionTab, { key: "ArrowLeft" });
+    expect(document.activeElement).toBe(
+        screen.getByRole("tab", { name: /Recommended/ }),
+    );
+    expect(
+        (
+            screen.getByRole("searchbox", {
+                name: "Search sources in this group",
+            }) as HTMLInputElement
+        ).value,
+    ).toBe("");
+});
 
 const recommended = {
     sourceId: "source-recommended",
@@ -85,6 +128,15 @@ const summary = {
     counts: { recommended: 1, needsAttention: 0, alternative: 1 },
     gaps: ["counter_evidence"],
     coverageGaps: ["counter_evidence_primary"],
+    coverageRequirements: [
+        {
+            role: "counter_evidence_primary",
+            covered: false,
+            availability: "not_established",
+            candidateIds: [alternative.sourceId],
+            includedSourceIds: [],
+        },
+    ],
     effectiveIncludedCount: 1,
     revisionStatus: "draft",
 } as const;
@@ -106,6 +158,293 @@ const inspectionReview = {
         reason: undefined,
     })),
 } as const;
+
+test("presents coverage beside a carousel and an inline source reader", () => {
+    render(
+        <SourceProposalReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            summary={
+                {
+                    ...summary,
+                    coverageRequirements: [
+                        {
+                            role: "regulatory_annual",
+                            covered: true,
+                            availability: "available",
+                            candidateIds: [recommended.sourceId],
+                            includedSourceIds: [recommended.sourceId],
+                        },
+                    ],
+                } as never
+            }
+            disposition="recommended"
+            onDispositionChange={vi.fn()}
+            adjustmentSets={
+                { included: [recommended], available: [alternative] } as never
+            }
+            inspectionReview={inspectionReview as never}
+            onDecide={vi.fn()}
+            onApprove={vi.fn()}
+            onRecompute={vi.fn()}
+        />,
+    );
+    expect(
+        screen.getByRole("complementary", { name: "Source coverage" }),
+    ).toBeTruthy();
+    expect(
+        screen.getByRole("region", { name: "Source carousel" }),
+    ).toBeTruthy();
+    const reader = screen.getByRole("region", {
+        name: "Selected source reading",
+    });
+    expect(
+        within(reader).getByRole("heading", { name: "Annual report" }),
+    ).toBeTruthy();
+    expect(
+        within(reader)
+            .getByRole("tab", { name: "Source details" })
+            .getAttribute("aria-selected"),
+    ).toBe("true");
+});
+
+test("keeps a reading skeleton until the selected source query resolves", () => {
+    render(
+        <SourceProposalReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            summary={summary as never}
+            disposition="recommended"
+            onDispositionChange={vi.fn()}
+            adjustmentSets={
+                { included: [recommended], available: [alternative] } as never
+            }
+            inspectionReview={inspectionReview as never}
+            onDecide={vi.fn()}
+            onApprove={vi.fn()}
+            onRecompute={vi.fn()}
+            inspectionSelectedId={null}
+            inspectionSelectedSource={undefined}
+            onInspectionSelectedIdChange={vi.fn()}
+        />,
+    );
+    expect(
+        screen.getByRole("status", { name: "Loading source reading" }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Reading not prepared")).toBeNull();
+});
+
+test("offers a contextual search on a prepared proposal using its remaining allowance", () => {
+    const recover = vi.fn();
+    render(
+        <SourceProposalReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            summary={
+                {
+                    ...summary,
+                    preparation: {
+                        status: "complete",
+                        checked: 2,
+                        total: 2,
+                        canResume: false,
+                    },
+                    searchAllowance: {
+                        enabled: true,
+                        remainingSearches: 1,
+                        remainingCandidates: 4,
+                        deadlineAt: Date.now() + 30_000,
+                    },
+                    coverageRequirements: [
+                        {
+                            role: "official_commercial_terms",
+                            covered: false,
+                            availability: "not_established",
+                            candidateIds: [alternative.sourceId],
+                            includedSourceIds: [],
+                        },
+                    ],
+                } as never
+            }
+            disposition="recommended"
+            onDispositionChange={vi.fn()}
+            adjustmentSets={
+                { included: [recommended], available: [alternative] } as never
+            }
+            inspectionReview={inspectionReview as never}
+            onDecide={vi.fn()}
+            onApprove={vi.fn()}
+            onRecompute={vi.fn()}
+            onRecoverDiscovery={recover}
+        />,
+    );
+    fireEvent.click(
+        screen.getByRole("button", {
+            name: "Review coverage: Subscription & service terms",
+        }),
+    );
+    fireEvent.click(
+        screen.getByRole("button", {
+            name: "Search sources for Subscription & service terms",
+        }),
+    );
+    expect(recover).toHaveBeenCalledWith({
+        kind: "coverage",
+        role: "official_commercial_terms",
+    });
+});
+
+test("retains the selected source reading when inspecting candidates for a coverage need", async () => {
+    const source = {
+        ...inspectionReview.sources[0],
+        inspectionStatus: "partial",
+        qualificationStatus: "available",
+        roleAvailability: [
+            {
+                role: "regulatory_annual",
+                state: "limited",
+                reasonCodes: [],
+                usage: "historical_only",
+            },
+        ],
+        qualification: {
+            companyMatch: "subject",
+            companyPassages: [],
+            documentKind: "regulatory_annual",
+            reportingPeriodEnd: null,
+            reportingPeriodPassages: [],
+            limitations: [],
+            findings: [
+                {
+                    role: "regulatory_annual",
+                    kind: "asserted_fact",
+                    findingKey: "historical-disclosure-0",
+                    usage: "historical_only",
+                    summary: "Historical disclosure",
+                    passages: [
+                        {
+                            passageKey: "p0",
+                            quotation:
+                                "The company described this workflow in its historical annual report.",
+                        },
+                    ],
+                    period: "historical",
+                    periodPassages: [],
+                    dependsOnFlaggedAssertion: false,
+                },
+            ],
+        },
+    };
+    render(
+        <SourceProposalReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            summary={
+                {
+                    ...summary,
+                    coverageRequirements: [
+                        {
+                            role: "regulatory_annual",
+                            covered: false,
+                            availability: "limited",
+                            candidateIds: [recommended.sourceId],
+                        },
+                    ],
+                } as never
+            }
+            sourceReviewNavigation={{
+                view: "inspect",
+                coverage: "regulatory_annual",
+            }}
+            disposition="recommended"
+            onDispositionChange={vi.fn()}
+            adjustmentSets={
+                { included: [recommended], available: [alternative] } as never
+            }
+            inspectionReview={inspectionReview as never}
+            inspectionSelectedId={recommended.sourceId as never}
+            inspectionSelectedSource={source as never}
+            onDecide={vi.fn()}
+            onApprove={vi.fn()}
+            onRecompute={vi.fn()}
+        />,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Source details" }));
+    expect(
+        await screen.findByText(
+            "The company described this workflow in its historical annual report.",
+        ),
+    ).toBeTruthy();
+});
+
+test("shows persisted preparation progress and blocks grouped approval while source reading continues", () => {
+    render(
+        <SourceProposalReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            summary={
+                {
+                    ...summary,
+                    preparation: { status: "started", checked: 1, total: 2 },
+                } as never
+            }
+            disposition="recommended"
+            onDispositionChange={vi.fn()}
+            adjustmentSets={
+                { included: [recommended], available: [alternative] } as never
+            }
+            inspectionReview={inspectionReview as never}
+            onDecide={vi.fn()}
+            onApprove={vi.fn()}
+            onRecompute={vi.fn()}
+        />,
+    );
+    expect(screen.getByText("Preparing source selection")).toBeTruthy();
+    expect(screen.getByText("1 of 2 candidates checked.")).toBeTruthy();
+    expect(
+        (
+            screen.getByRole("button", {
+                name: "Approve proposed corpus",
+            }) as HTMLButtonElement
+        ).disabled,
+    ).toBe(true);
+    expect(screen.queryByText(/source content has not been read/i)).toBeNull();
+});
+
+test("describes a prepared selection without the legacy claim that its content was not read", () => {
+    render(
+        <SourceProposalReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            summary={
+                {
+                    ...summary,
+                    preparation: { status: "partial", checked: 1, total: 2 },
+                } as never
+            }
+            disposition="recommended"
+            onDispositionChange={vi.fn()}
+            adjustmentSets={
+                { included: [recommended], available: [alternative] } as never
+            }
+            inspectionReview={inspectionReview as never}
+            onDecide={vi.fn()}
+            onApprove={vi.fn()}
+            onRecompute={vi.fn()}
+        />,
+    );
+    expect(
+        screen.getByText("Source selection ready with limitations"),
+    ).toBeTruthy();
+    expect(screen.queryByText(/source content has not been read/i)).toBeNull();
+    expect(
+        (
+            screen.getByRole("button", {
+                name: "Approve proposed corpus",
+            }) as HTMLButtonElement
+        ).disabled,
+    ).toBe(false);
+});
 
 test("presents a summary-first proposal with only the three proposal tabs", () => {
     render(
@@ -142,7 +481,7 @@ test("presents a summary-first proposal with only the three proposal tabs", () =
         screen.getByRole("button", { name: "Inspect all candidates" }),
     ).toBeTruthy();
     expect(
-        screen.getByRole("button", { name: "Approve source set" }),
+        screen.getByRole("button", { name: "Approve proposed corpus" }),
     ).toBeTruthy();
     expect(
         screen.getByText(/independent counter-evidence source/i),
@@ -174,6 +513,9 @@ test("labels metadata-linked recommendations without hiding coverage gaps", () =
         />,
     );
 
+    fireEvent.click(
+        screen.getByRole("button", { name: "Why this source appears" }),
+    );
     expect(
         screen.getByText(
             "Linked from discovery metadata; source content has not been read",
@@ -208,7 +550,7 @@ test("requires an outdated draft to be rebuilt before approval", () => {
         screen.queryByRole("button", { name: "Refresh proposal" }),
     ).toBeNull();
     expect(
-        screen.getByRole("button", { name: "Approve source set" }),
+        screen.getByRole("button", { name: "Approve proposed corpus" }),
     ).toHaveProperty("disabled", true);
     fireEvent.click(screen.getByRole("button", { name: "Rebuild proposal" }));
     expect(onRebuild).toHaveBeenCalledTimes(1);
@@ -244,7 +586,7 @@ test("keeps a partial rebuild visible with analyst-readable coverage consequence
     expect(screen.getByText("Investor relations")).toBeTruthy();
     expect(screen.getByText("Official product")).toBeTruthy();
     expect(
-        screen.getByRole("button", { name: "Approve source set" }),
+        screen.getByRole("button", { name: "Approve proposed corpus" }),
     ).toHaveProperty("disabled", false);
     expect(
         screen.queryByText(/official_product|EXA_API_KEY|provider/i),
@@ -436,7 +778,7 @@ test("requires a stale proposal to be refreshed before approval", () => {
 
     expect(
         screen
-            .getByRole("button", { name: "Approve source set" })
+            .getByRole("button", { name: "Approve proposed corpus" })
             .hasAttribute("disabled"),
     ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Refresh proposal" }));
@@ -463,10 +805,15 @@ test("renders approved state without an approve button", () => {
         screen.getByText("This source set is approved and read-only."),
     ).toBeTruthy();
     expect(
-        screen.queryByRole("button", { name: "Approve source set" }),
+        screen.queryByRole("button", { name: "Approve proposed corpus" }),
     ).toBeNull();
     expect(
-        screen.queryByRole("button", { name: /^Review coverage:/ }),
+        screen.getByRole("button", {
+            name: "Review coverage: First independent counter-evidence source",
+        }),
+    ).toBeTruthy();
+    expect(
+        screen.queryByRole("button", { name: /^Search sources for/ }),
     ).toBeNull();
     expect(
         screen.getByText("First independent counter-evidence source"),
@@ -526,7 +873,12 @@ test("moves a recommended source to alternatives directly from its overview card
             disposition="alternative"
         />,
     );
-    expect(screen.getByText("Annual report")).toBeTruthy();
+    expect(
+        screen.getByRole("button", { name: "Open Annual report for review" }),
+    ).toBeTruthy();
+    fireEvent.click(
+        screen.getByRole("button", { name: "Why this source appears" }),
+    );
     expect(screen.getByText(/Analyst override: Rejected/i)).toBeTruthy();
 });
 
@@ -562,6 +914,14 @@ test("includes an alternative from its overview card without changing its origin
             name: "Open Independent analysis for review",
         }),
     ).toBeTruthy();
+    fireEvent.click(
+        screen.getByRole("button", {
+            name: "Open Independent analysis for review",
+        }),
+    );
+    fireEvent.click(
+        screen.getByRole("button", { name: "Why this source appears" }),
+    );
     expect(screen.getByText(/Analyst override: Accepted/i)).toBeTruthy();
 });
 
@@ -723,6 +1083,14 @@ test("keeps undecided attention items separate and preserves their warning when 
     expect(
         screen.getByRole("tab", { name: /Needs attention.*0/i }),
     ).toBeTruthy();
+    fireEvent.click(
+        screen.getByRole("button", {
+            name: "Open Company linkage needs review for review",
+        }),
+    );
+    fireEvent.click(
+        screen.getByRole("button", { name: "Why this source appears" }),
+    );
     expect(
         screen.getByText("Needs attention", {
             selector: '[data-slot="badge"]',
@@ -730,7 +1098,7 @@ test("keeps undecided attention items separate and preserves their warning when 
     ).toBeTruthy();
 });
 
-test("keeps incremental loading and finds removed sources beyond the first page", () => {
+test("searches the complete carousel and finds removed sources beyond the first page", () => {
     const scrollHeight = vi
         .spyOn(Element.prototype, "scrollHeight", "get")
         .mockReturnValue(1000);
@@ -752,11 +1120,9 @@ test("keeps incremental loading and finds removed sources beyond the first page"
         expect(
             screen.getByRole("tab", { name: /Recommended.*13/i }),
         ).toBeTruthy();
-        expect(
-            screen.queryByRole("button", { name: "Open Report 13 for review" }),
-        ).toBeNull();
-        fireEvent.click(
-            screen.getByRole("button", { name: "Load more sources" }),
+        fireEvent.change(
+            screen.getByLabelText("Search sources in this group"),
+            { target: { value: "Report 13" } },
         );
         expect(
             screen.getByRole("button", { name: "Open Report 13 for review" }),
@@ -871,7 +1237,7 @@ test("opens mobile source actions in a dismissible popover while keeping approva
             screen.queryByRole("button", { name: "Add source link" }),
         ).toBeNull();
         expect(
-            screen.getByRole("button", { name: "Approve source set" }),
+            screen.getByRole("button", { name: "Approve proposed corpus" }),
         ).toBeTruthy();
         expect(
             screen.getByRole("button", {
@@ -996,11 +1362,9 @@ test("keeps coverage actions behind each gap while failed searches have one retr
         />,
     );
     expect(screen.getByText("Some searches failed")).toBeTruthy();
-    const coverageWarning = screen
-        .getByText("Source coverage needs review")
-        .closest('[role="alert"]');
-    if (!coverageWarning) throw new Error("Expected coverage warning");
-    const gaps = within(coverageWarning as HTMLElement);
+    const gaps = within(
+        screen.getByRole("complementary", { name: "Source coverage" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Retry searches" }));
     expect(onRecoverDiscovery).toHaveBeenLastCalledWith({
         kind: "failed_discovery",
@@ -1015,7 +1379,7 @@ test("keeps coverage actions behind each gap while failed searches have one retr
         name: "Review coverage: First independent counter-evidence source",
     });
     fireEvent.click(gap);
-    const coverage = await screen.findByRole("dialog", {
+    const coverage = await screen.findByRole("region", {
         name: "First independent counter-evidence source",
     });
     fireEvent.click(
@@ -1033,7 +1397,7 @@ test("keeps coverage actions behind each gap while failed searches have one retr
         /official_product|counter_evidence_primary|sourceSelectionProposals|EXA_API_KEY/,
     );
     expect(
-        screen.getByRole("dialog", {
+        screen.getByRole("region", {
             name: "First independent counter-evidence source",
         }),
     ).toBeTruthy();
@@ -1089,7 +1453,7 @@ test("shows pending search feedback and blocks repeated search activation", () =
     fireEvent.click(pending);
     expect(onRecoverDiscovery).not.toHaveBeenCalled();
     expect(
-        screen.getByRole("button", { name: "Approve source set" }),
+        screen.getByRole("button", { name: "Approve proposed corpus" }),
     ).toHaveProperty("disabled", true);
 });
 
@@ -1120,7 +1484,7 @@ test("keeps a failed coverage search visible beside its disabled countdown actio
             name: "Review coverage: First independent counter-evidence source",
         }),
     );
-    const dialog = await screen.findByRole("dialog", {
+    const dialog = await screen.findByRole("region", {
         name: "First independent counter-evidence source",
     });
     expect(within(dialog).getByRole("alert").textContent).toContain(
@@ -1135,17 +1499,67 @@ test("keeps a failed coverage search visible beside its disabled countdown actio
     );
 });
 
-test("distinguishes no coverage matches from an empty dossier and can restore the full list", async () => {
+test("distinguishes a directly opened coverage gap from an empty dossier and can restore the full list", async () => {
+    const navigate = vi.fn();
+    const props = overviewProps({
+        onSourceReviewNavigate: navigate,
+        sourceReviewNavigation: {
+            view: "inspect",
+            coverage: "counter_evidence_primary",
+        },
+        summary: {
+            ...summary,
+            coverageRequirements: [
+                {
+                    role: "counter_evidence_primary",
+                    covered: false,
+                    candidateIds: [],
+                },
+            ],
+        } as never,
+    });
+    const view = render(<SourceProposalReview {...props} />);
+    expect(screen.getByText("No matching candidates")).toBeTruthy();
+    expect(
+        screen.queryByText("No public sources were found.", { exact: false }),
+    ).toBeNull();
+    fireEvent.click(
+        screen.getByRole("button", { name: "Show all candidates" }),
+    );
+    expect(navigate).toHaveBeenCalledWith({ view: "inspect" });
+    view.rerender(
+        <SourceProposalReview
+            {...props}
+            sourceReviewNavigation={{ view: "inspect" }}
+        />,
+    );
+    const inspector = within(
+        screen.getByRole("region", { name: "Inspect all source candidates" }),
+    );
+    expect(
+        inspector.getByRole("button", {
+            name: "Open Annual report for review",
+        }),
+    ).toBeTruthy();
+});
+
+test("starts candidate review on an excluded match instead of reopening the included source", () => {
+    const selectSource = vi.fn();
     render(
         <SourceProposalReview
             {...overviewProps({
+                onInspectionSelectedIdChange: selectSource,
                 summary: {
                     ...summary,
                     coverageRequirements: [
                         {
                             role: "counter_evidence_primary",
                             covered: false,
-                            candidateIds: [],
+                            candidateIds: [
+                                recommended.sourceId,
+                                alternative.sourceId,
+                            ],
+                            includedSourceIds: [recommended.sourceId],
                         },
                     ],
                 } as never,
@@ -1158,25 +1572,11 @@ test("distinguishes no coverage matches from an empty dossier and can restore th
         }),
     );
     fireEvent.click(
-        await screen.findByRole("button", {
+        screen.getByRole("button", {
             name: "Review candidates for First independent counter-evidence source",
         }),
     );
-    expect(screen.getByText("No matching candidates")).toBeTruthy();
-    expect(
-        screen.queryByText("No public sources were found.", { exact: false }),
-    ).toBeNull();
-    fireEvent.click(
-        screen.getByRole("button", { name: "Show all candidates" }),
-    );
-    const inspector = within(
-        screen.getByRole("region", { name: "Inspect all source candidates" }),
-    );
-    expect(
-        inspector.getByRole("button", {
-            name: "Open Annual report for review",
-        }),
-    ).toBeTruthy();
+    expect(selectSource).toHaveBeenLastCalledWith(alternative.sourceId);
 });
 
 test("keeps the search result visible when its resolved coverage control disappears", () => {
@@ -1208,4 +1608,141 @@ test("keeps the search result visible when its resolved coverage control disappe
     );
     expect(screen.getByRole("alert").textContent).toContain("Search completed");
     expect(screen.queryByRole("button", { name: "Retry searches" })).toBeNull();
+});
+
+test("a terminal preparation keeps inspection and link intake without offering another search series", async () => {
+    render(
+        <SourceProposalReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            summary={
+                {
+                    ...summary,
+                    preparation: {
+                        status: "partial",
+                        checked: 1,
+                        total: 2,
+                        canResume: false,
+                    },
+                    rebuildOutcome: "partial",
+                    failedDiscoveryFamilies: ["counter_evidence"],
+                } as never
+            }
+            disposition="recommended"
+            onDispositionChange={vi.fn()}
+            adjustmentSets={
+                { included: [recommended], available: [alternative] } as never
+            }
+            inspectionReview={inspectionReview as never}
+            onDecide={vi.fn()}
+            onApprove={vi.fn()}
+            onRecompute={vi.fn()}
+            onRecoverDiscovery={vi.fn()}
+            onAddManualUrl={vi.fn()}
+        />,
+    );
+    expect(
+        screen.getByRole("button", { name: "Inspect all candidates" }),
+    ).toBeTruthy();
+    expect(
+        screen.getByRole("button", { name: "Add source link" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Retry searches" })).toBeNull();
+    fireEvent.click(
+        screen.getByRole("button", {
+            name: "Review coverage: First independent counter-evidence source",
+        }),
+    );
+    expect(
+        screen.queryByRole("button", { name: /Search sources for/i }),
+    ).toBeNull();
+    expect(
+        await screen.findByRole("button", { name: /Review candidates for/i }),
+    ).toBeTruthy();
+});
+
+test("a retained new link has an actionable reading continuation without internal diagnostics", () => {
+    const recover = vi.fn();
+    const { container } = render(
+        <SourceProposalReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            summary={
+                {
+                    ...summary,
+                    preparationAction: { kind: "resume", available: true },
+                    preparation: {
+                        status: "blocked",
+                        checked: 0,
+                        total: 1,
+                        canResume: true,
+                    },
+                } as never
+            }
+            disposition="recommended"
+            onDispositionChange={vi.fn()}
+            adjustmentSets={
+                { included: [recommended], available: [alternative] } as never
+            }
+            inspectionReview={inspectionReview as never}
+            onDecide={vi.fn()}
+            onApprove={vi.fn()}
+            onRecompute={vi.fn()}
+            onPrepare={recover}
+            onAddManualUrl={vi.fn()}
+        />,
+    );
+    expect(
+        screen.getByText(
+            /Finish the other dossier.*read the source you added/i,
+        ),
+    ).toBeTruthy();
+    fireEvent.click(
+        screen.getByRole("button", { name: "Continue source preparation" }),
+    );
+    expect(recover).toHaveBeenCalledOnce();
+    expect(container.textContent).not.toMatch(
+        /execution_slot|SOURCE_QUALIFICATION|generation|provider|quota/,
+    );
+});
+
+test("an approved prepared corpus explains inspection and revision instead of asking for approval again", () => {
+    render(
+        <SourceProposalReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            summary={
+                {
+                    ...summary,
+                    revisionStatus: "approved",
+                    preparation: {
+                        status: "partial",
+                        checked: 1,
+                        total: 2,
+                        canResume: false,
+                    },
+                } as never
+            }
+            disposition="recommended"
+            onDispositionChange={vi.fn()}
+            adjustmentSets={
+                { included: [recommended], available: [alternative] } as never
+            }
+            inspectionReview={
+                { ...inspectionReview, status: "approved" } as never
+            }
+            onDecide={vi.fn()}
+            onApprove={vi.fn()}
+            onRecompute={vi.fn()}
+        />,
+    );
+    expect(
+        screen.getByText(
+            "Inspect the captured passages and recorded limitations. Changes to the source set need a new revision.",
+        ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/then approve the source set/i)).toBeNull();
+    expect(
+        screen.queryByRole("button", { name: "Approve proposed corpus" }),
+    ).toBeNull();
 });

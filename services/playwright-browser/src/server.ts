@@ -1,5 +1,7 @@
+import { randomBytes } from "node:crypto";
 import { createServer, type Server } from "node:http";
-import { isIP } from "node:net";
+import { createConnection, isIP, type Socket } from "node:net";
+import type { Duplex } from "node:stream";
 import { type Browser, chromium } from "playwright";
 
 import {
@@ -39,7 +41,6 @@ const BLOCKED_IPV4_PREFIXES: (number | null)[][] = [
     [10, null, null, null],
     [127, null, null, null],
     [169, 254, null, null],
-    [172, 16, null, null],
     [192, 0, 0, null],
     [192, 0, 2, null],
     [192, 168, null, null],
@@ -47,7 +48,6 @@ const BLOCKED_IPV4_PREFIXES: (number | null)[][] = [
     [198, 19, null, null],
     [198, 51, 100, null],
     [203, 0, 113, null],
-    [100, 64, null, null],
 ];
 
 function isPublicIpv4(address: string): boolean {
@@ -57,7 +57,12 @@ function isPublicIpv4(address: string): boolean {
         if (!Number.isInteger(o) || o < 0 || o > 255) return false;
     }
     const [first = 0, second = 0, third = 0, fourth = 0] = octets;
-    if (first >= 224) return false;
+    if (
+        first >= 224 ||
+        (first === 172 && second >= 16 && second <= 31) ||
+        (first === 100 && second >= 64 && second <= 127)
+    )
+        return false;
 
     for (const [p1, p2, p3, p4] of BLOCKED_IPV4_PREFIXES) {
         if (first !== p1) continue;
@@ -75,7 +80,7 @@ function isPublicIpv6(address: string): boolean {
     if (
         normalized === "::" ||
         normalized === "::1" ||
-        /^f[c,d]/.test(normalized) ||
+        /^f[cd]/.test(normalized) ||
         /^fe[8-9a-b]/.test(normalized) ||
         normalized.startsWith("ff") ||
         normalized.startsWith("2001:db8:")
@@ -102,7 +107,9 @@ async function resolveAddresses(hostname: string): Promise<string[]> {
     return results.map((r) => r.address);
 }
 
-async function validateUrl(rawUrl: string): Promise<URL> {
+async function validateUrl(
+    rawUrl: string,
+): Promise<{ url: URL; address: string }> {
     let url: URL;
     try {
         url = new URL(rawUrl);
@@ -110,7 +117,10 @@ async function validateUrl(rawUrl: string): Promise<URL> {
         throw new RenderError("invalid_url", "Invalid URL");
     }
     if (url.protocol !== "https:") {
-        throw new RenderError("https_required", "Only HTTPS URLs are supported");
+        throw new RenderError(
+            "https_required",
+            "Only HTTPS URLs are supported",
+        );
     }
     if (url.username || url.password) {
         throw new RenderError(
@@ -136,7 +146,9 @@ async function validateUrl(rawUrl: string): Promise<URL> {
     }
     let addresses: string[];
     try {
-        addresses = isIP(hostname) ? [hostname] : await resolveAddresses(hostname);
+        addresses = isIP(hostname)
+            ? [hostname]
+            : await resolveAddresses(hostname);
     } catch {
         throw new RenderError("dns_failed", "DNS resolution failed");
     }
@@ -148,7 +160,13 @@ async function validateUrl(rawUrl: string): Promise<URL> {
             );
         }
     }
-    return url;
+    const address = addresses[0];
+    if (!address)
+        throw new RenderError(
+            "non_public_destination",
+            "No public address was resolved",
+        );
+    return { url, address };
 }
 
 // ─── Error types ──────────────────────────────────────────────────────────
@@ -173,6 +191,120 @@ function log(event: string, meta: Record<string, unknown> = {}): void {
     process.stderr.write(`${JSON.stringify(entry)}\n`);
 }
 
+/** Every Chromium TCP destination passes this per-render CONNECT proxy, including redirects and subresources.
+ * TLS remains end-to-end in Chromium. Only the validated numeric IP reaches connect(), so DNS cannot rebind it.
+ */
+async function createPublicEgress(timeoutMs: number) {
+    const password = randomBytes(24).toString("hex");
+    const authorization = `Basic ${Buffer.from(`preview:${password}`).toString("base64")}`;
+    const sockets = new Set<Duplex>();
+    let closed = false;
+    let failure: RenderError | undefined;
+    let connections = 0;
+    let transferredBytes = 0;
+    const proxy = createServer((_req, res) => {
+        res.writeHead(403);
+        res.end();
+    });
+    const reject = (socket: Duplex) =>
+        socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+    proxy.on("connection", (socket: Socket) => {
+        sockets.add(socket);
+        socket.on("close", () => sockets.delete(socket));
+        socket.on("error", () => socket.destroy());
+    });
+    proxy.on("connect", (req, client, head) => {
+        if (req.headers["proxy-authorization"] !== authorization) {
+            client.end(
+                'HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm="preview"\r\nConnection: close\r\n\r\n',
+            );
+            return;
+        }
+        void (async () => {
+            if (closed || ++connections > 128)
+                throw new RenderError(
+                    "resource_limit",
+                    "Preview connection limit reached",
+                );
+            const { address } = await validateUrl(`https://${req.url ?? ""}`);
+            if (closed || client.destroyed) return;
+            const upstream = createConnection({
+                host: address,
+                port: 443,
+                family: isIP(address),
+            });
+            sockets.add(upstream);
+            upstream.on("close", () => sockets.delete(upstream));
+            upstream.on("error", () => client.destroy());
+            client.on("close", () => upstream.destroy());
+            upstream.setTimeout(timeoutMs, () => upstream.destroy());
+            const meter = (chunk: Buffer) => {
+                transferredBytes += chunk.length;
+                if (transferredBytes > 32 * 1024 * 1024) {
+                    failure = new RenderError(
+                        "resource_limit",
+                        "Preview transfer limit reached",
+                    );
+                    for (const socket of sockets) socket.destroy();
+                }
+            };
+            upstream.on("data", meter);
+            client.on("data", meter);
+            upstream.once("connect", () => {
+                if (closed || client.destroyed) {
+                    upstream.destroy();
+                    return;
+                }
+                client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+                if (head.length) {
+                    meter(head);
+                    upstream.write(head);
+                }
+                client.pipe(upstream);
+                upstream.pipe(client);
+            });
+        })().catch((error: unknown) => {
+            failure =
+                error instanceof RenderError
+                    ? error
+                    : new RenderError(
+                          "egress_failed",
+                          "Preview destination could not be reached",
+                      );
+            reject(client);
+        });
+    });
+    await new Promise<void>((resolve, rejectListen) => {
+        proxy.once("error", rejectListen);
+        proxy.listen(0, "127.0.0.1", resolve);
+    });
+    const address = proxy.address();
+    if (!address || typeof address === "string")
+        throw new Error("Preview proxy failed to bind");
+    const close = () => {
+        closed = true;
+        for (const socket of sockets) socket.destroy();
+        proxy.close();
+    };
+    const deadline = setTimeout(() => {
+        failure = new RenderError("render_timeout", "Preview deadline reached");
+        close();
+    }, timeoutMs);
+    return {
+        proxy: {
+            server: `http://127.0.0.1:${address.port}`,
+            username: "preview",
+            password,
+            bypass: "<-loopback>",
+        },
+        failure: () => failure,
+        close: () => {
+            clearTimeout(deadline);
+            close();
+        },
+    };
+}
+
 // ─── Render ───────────────────────────────────────────────────────────────
 
 async function render(url: string): Promise<RenderResult> {
@@ -189,7 +321,7 @@ async function render(url: string): Promise<RenderResult> {
 
     let validatedUrl: URL;
     try {
-        validatedUrl = await validateUrl(url);
+        validatedUrl = (await validateUrl(url)).url;
     } catch (err) {
         activeRenders--;
         if (err instanceof RenderError) {
@@ -206,21 +338,128 @@ async function render(url: string): Promise<RenderResult> {
     log("render_started", { hostname });
 
     let browser: Browser | null = null;
+    let navigationError: RenderError | undefined;
+    let egress: Awaited<ReturnType<typeof createPublicEgress>> | undefined;
     try {
-        browser = await chromium.launch(buildLaunchOptions());
-        const context = await browser.newContext(
-            buildBrowserContextOptions(VIEWPORT),
-        );
+        egress = await createPublicEgress(RENDER_TIMEOUT_MS);
+        const launch = buildLaunchOptions();
+        browser = await chromium.launch({
+            ...launch,
+            proxy: egress.proxy,
+            timeout: RENDER_TIMEOUT_MS,
+            args: [
+                ...launch.args,
+                "--disable-quic",
+                "--dns-prefetch-disable",
+                "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+            ],
+        });
+        const context = await browser.newContext({
+            ...buildBrowserContextOptions(VIEWPORT),
+            serviceWorkers: "block",
+            acceptDownloads: false,
+        });
         await context.addInitScript(STEALTH_INIT_SCRIPT);
         const page = await context.newPage();
 
-        // Block unnecessary resource types
-        await page.route("**/*", (route) => {
-            const type = route.request().resourceType();
-            if (type === "media" || type === "websocket" || type === "other") {
+        let requests = 0;
+        // Playwright routes run only for the first URL in a redirect chain. Pause redirect responses before Chromium follows them.
+        const session = await context.newCDPSession(page);
+        const redirectsByRequest = new Map<string, number>();
+        session.on("Fetch.requestPaused", async (event) => {
+            try {
+                const key = event.networkId ?? event.requestId;
+                const status = event.responseStatusCode ?? 0;
+                const location = event.responseHeaders?.find(
+                    (header) => header.name.toLowerCase() === "location",
+                )?.value;
+                if (status >= 300 && status < 400 && location) {
+                    const count = (redirectsByRequest.get(key) ?? 0) + 1;
+                    redirectsByRequest.set(key, count);
+                    if (count > MAX_REDIRECTS) {
+                        navigationError = new RenderError(
+                            "redirect_limit",
+                            "Too many preview redirects",
+                        );
+                        await session.send("Fetch.failRequest", {
+                            requestId: event.requestId,
+                            errorReason: "BlockedByClient",
+                        });
+                        return;
+                    }
+                    try {
+                        await validateUrl(
+                            new URL(location, event.request.url).href,
+                        );
+                    } catch (error) {
+                        navigationError =
+                            error instanceof RenderError
+                                ? error
+                                : new RenderError(
+                                      "invalid_url",
+                                      "Invalid redirect destination",
+                                  );
+                        await session.send("Fetch.failRequest", {
+                            requestId: event.requestId,
+                            errorReason: "BlockedByClient",
+                        });
+                        return;
+                    }
+                }
+                await session.send("Fetch.continueResponse", {
+                    requestId: event.requestId,
+                });
+            } catch {
+                if (!page.isClosed())
+                    navigationError = new RenderError(
+                        "render_failed",
+                        "Preview interception failed",
+                    );
+            }
+        });
+        await session.send("Fetch.enable", {
+            patterns: [{ urlPattern: "*", requestStage: "Response" }],
+        });
+        await context.routeWebSocket("**/*", (socket) => socket.close());
+        await context.route("**/*", async (route) => {
+            const request = route.request();
+            const type = request.resourceType();
+            if (
+                ++requests > 256 ||
+                type === "media" ||
+                type === "other" ||
+                request.method() !== "GET"
+            )
+                return route.abort();
+            try {
+                let redirects = 0;
+                for (
+                    let previous = request.redirectedFrom();
+                    previous;
+                    previous = previous.redirectedFrom()
+                )
+                    redirects++;
+                if (redirects > MAX_REDIRECTS)
+                    throw new RenderError(
+                        "redirect_limit",
+                        "Too many preview redirects",
+                    );
+                await validateUrl(request.url());
+                return route.continue();
+            } catch (error) {
+                if (
+                    request.isNavigationRequest() &&
+                    request.frame() === page.mainFrame()
+                )
+                    navigationError =
+                        error instanceof RenderError
+                            ? error
+                            : new RenderError(
+                                  "invalid_url",
+                                  "Invalid preview destination",
+                              );
                 return route.abort();
             }
-            return route.continue();
         });
 
         page.on("download", (download) => {
@@ -236,6 +475,7 @@ async function render(url: string): Promise<RenderResult> {
             throw new RenderError("no_response", "Page did not respond");
         }
 
+        if (navigationError) throw navigationError;
         const screenshot = await page.screenshot({
             type: "png",
             fullPage: false,
@@ -273,7 +513,11 @@ async function render(url: string): Promise<RenderResult> {
     } catch (err) {
         const durationMs = Date.now() - startTime;
         const errorCode =
-            err instanceof RenderError ? err.code : "render_failed";
+            err instanceof RenderError
+                ? err.code
+                : (navigationError?.code ??
+                  egress?.failure()?.code ??
+                  "render_failed");
         const errorMessage =
             err instanceof Error ? err.message : "Screenshot render failed";
         log("render_failed", { hostname, durationMs, errorCode });
@@ -284,6 +528,7 @@ async function render(url: string): Promise<RenderResult> {
         };
     } finally {
         activeRenders--;
+        egress?.close();
         if (browser) {
             try {
                 await browser.close();
@@ -296,14 +541,10 @@ async function render(url: string): Promise<RenderResult> {
 
 // ─── HTTP server ──────────────────────────────────────────────────────────
 
-function json(status: number, body: unknown): Response {
-    return new Response(JSON.stringify(body), {
-        status,
-        headers: { "Content-Type": "application/json" },
-    });
-}
-
-async function readBody(req: import("node:http").IncomingMessage, maxBytes = 10240): Promise<string> {
+async function readBody(
+    req: import("node:http").IncomingMessage,
+    maxBytes = 10240,
+): Promise<string> {
     return new Promise((resolve, reject) => {
         let data = "";
         req.on("data", (chunk: Buffer) => {

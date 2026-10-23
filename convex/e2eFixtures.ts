@@ -1,21 +1,53 @@
 import type { FunctionReference } from "convex/server";
 import { makeFunctionReference } from "convex/server";
-import { v } from "convex/values";
+import { type Infer, v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import {
     env,
     internalAction,
     internalMutation,
     internalQuery,
 } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
 import { ASSESSMENT_DIMENSION_KEYS } from "./domain/researchPlan";
-import { computePassageKey, sha256Hex } from "./domain/sourcePassages";
+import {
+    materializeSourceComparisonOutput,
+    prepareSourceComparisonInput,
+    SOURCE_COMPARISON_DISPOSITIONS,
+    SOURCE_COMPARISON_VERSION,
+} from "./domain/sourceComparison";
+import {
+    computePassageKey,
+    extractPassagesFromNormalizedText,
+    sha256Hex,
+} from "./domain/sourcePassages";
+import {
+    prepareQualificationInput,
+    materializeQualificationOutput,
+    sourceQualificationValidator,
+    SOURCE_QUALIFICATION_VERSION,
+} from "./domain/sourceQualification";
+import { readPinnedSourceQualification } from "./domain/sourceUsage";
 import { buildCccShowcaseManifest } from "./fixtures/cccShowcase";
-import { sourceCandidateLimit } from "./resourceLimits";
+import {
+    MAX_PASSAGES_PER_SOURCE,
+    sourceCandidateLimit,
+} from "./resourceLimits";
 import { corpusRevisionApproved, workflow } from "./workflow";
+import schema from "./schema";
+
+const sourceReviewFixtureResultValidator = v.object({
+    runId: v.id("researchRuns"),
+    corpusRevisionId: v.id("corpusRevisions"),
+    proposalId: v.id("sourceSelectionProposals"),
+    proposalVersion: v.number(),
+    sourceIds: v.array(v.id("sources")),
+});
+type SourceReviewFixtureResult = Infer<
+    typeof sourceReviewFixtureResultValidator
+>;
 
 export const sourceReviewWorkflow = workflow
     .define({
@@ -52,7 +84,13 @@ export const completeSourceReviewScenario = internalMutation({
         const fixtureRun = await ctx.db.get(args.runId);
         if (
             !fixtureRun?.reservationKey?.startsWith("e2e:") ||
-            !fixtureRun.companySnapshot?.cik.startsWith("e2e-")
+            !(
+                fixtureRun.companySnapshot?.cik.startsWith("e2e-") ||
+                (fixtureRun.reservationKey.startsWith("e2e:utility-") &&
+                    fixtureRun.companySnapshot?.legalName.endsWith(
+                        "· Recorded review",
+                    ))
+            )
         ) {
             throw new Error("E2E source review scenario not found");
         }
@@ -62,8 +100,8 @@ export const completeSourceReviewScenario = internalMutation({
         );
         const run = await ctx.db.get(args.runId);
         if (run?.executionStatus !== "running") return null;
-        // Freeze explicit acquisition failures in the same transaction as the
-        // real handoff so scheduled fixture work can never reach a provider.
+        // Prepared proposals use the captured-byte path, including explicit
+        // missing-capture failures. Legacy fixture URLs must never reach a provider.
         const sources = await ctx.runQuery(
             internal.evidenceArtifacts.listFrozenSourcesForRun,
             {
@@ -72,6 +110,17 @@ export const completeSourceReviewScenario = internalMutation({
             },
         );
         for (const source of sources) {
+            const prepared = await ctx.runQuery(
+                internal.evidenceArtifacts.getFrozenSourceForExecution,
+                {
+                    runId: run._id,
+                    corpusRevisionId: source.corpusRevisionId,
+                    sourceId: source.sourceId,
+                    acceptedDecisionId: source.acceptedDecisionId,
+                    executionGeneration: run.executionGeneration,
+                },
+            );
+            if (prepared?.preparedCapture !== undefined) continue;
             await ctx.runMutation(
                 internal.evidenceArtifacts.updateEvidenceSourceStatus,
                 {
@@ -89,19 +138,34 @@ export const completeSourceReviewScenario = internalMutation({
     },
 });
 
+const recordedSourceMetadata = {
+    canonicalUrl: v.string(),
+    title: v.string(),
+    origin: v.union(
+        v.literal("sec"),
+        v.literal("exa"),
+        v.literal("analyst_url"),
+    ),
+    category: v.string(),
+    secForm: v.optional(v.string()),
+};
 export const seedSourceReviewScenario = internalMutation({
     args: {
         slotKey: v.string(),
         fixtureKey: v.string(),
         recoveryScenario: v.optional(v.boolean()),
+        recordedScenario: v.optional(
+            v.object({
+                companyName: v.string(),
+                companyCik: v.string(),
+                ticker: v.string(),
+                websiteUrl: v.string(),
+                researchAngle: v.string(),
+                sources: v.array(v.object(recordedSourceMetadata)),
+            }),
+        ),
     },
-    returns: v.object({
-        runId: v.id("researchRuns"),
-        corpusRevisionId: v.id("corpusRevisions"),
-        proposalId: v.id("sourceSelectionProposals"),
-        proposalVersion: v.number(),
-        sourceIds: v.array(v.id("sources")),
-    }),
+    returns: sourceReviewFixtureResultValidator,
     handler: async (
         ctx,
         args,
@@ -115,6 +179,16 @@ export const seedSourceReviewScenario = internalMutation({
         if (env.E2E_FIXTURES_ENABLED !== "true") {
             throw new Error("E2E fixtures are disabled");
         }
+        if (
+            args.recordedScenario &&
+            (args.recoveryScenario ||
+                args.recordedScenario.sources.length < 1 ||
+                args.recordedScenario.sources.length > 8 ||
+                !["127.0.0.1", "localhost"].includes(
+                    new URL(env.CONVEX_CLOUD_URL).hostname,
+                ))
+        )
+            throw new Error("Invalid local recorded review scenario");
         const slotKey = args.slotKey.trim();
         const fixtureKey = args.fixtureKey.trim();
         if (!slotKey || !fixtureKey || fixtureKey.length > 80) {
@@ -163,41 +237,94 @@ export const seedSourceReviewScenario = internalMutation({
                 revision &&
                 proposal &&
                 sources.length ===
-                    (args.recoveryScenario ? sourceCandidateLimit() : 3)
+                    (args.recordedScenario?.sources.length ??
+                        (args.recoveryScenario ? sourceCandidateLimit() : 3))
             ) {
+                if (
+                    args.recordedScenario &&
+                    (existingRun.companySnapshot?.cik !==
+                        args.recordedScenario.companyCik ||
+                        existingRun.companySnapshot?.legalName !==
+                            args.recordedScenario.companyName ||
+                        existingRun.researchAngle !==
+                            args.recordedScenario.researchAngle ||
+                        args.recordedScenario.sources.some(
+                            (expected) =>
+                                !sources.some(
+                                    (actual) =>
+                                        actual.canonicalUrl ===
+                                            expected.canonicalUrl &&
+                                        actual.title === expected.title &&
+                                        actual.origin === expected.origin &&
+                                        actual.category === expected.category &&
+                                        actual.secForm === expected.secForm,
+                                ),
+                        ))
+                )
+                    throw new Error("Recorded fixture replay mismatch");
                 return {
                     runId: existingRun._id,
                     corpusRevisionId: revision._id,
                     proposalId: proposal._id,
                     proposalVersion: proposal.version,
-                    sourceIds: sources.map(({ _id }) => _id),
+                    sourceIds: args.recordedScenario
+                        ? args.recordedScenario.sources.map((expected) => {
+                              const source = sources.find(
+                                  (s) =>
+                                      s.canonicalUrl === expected.canonicalUrl,
+                              );
+                              if (!source)
+                                  throw new Error("Recorded source missing");
+                              return source._id;
+                          })
+                        : sources.map(({ _id }) => _id),
                 };
             }
         }
 
         const now = Date.now();
-        const companyId = await ctx.db.insert("companies", {
-            cik: `e2e-${fixtureKey}`,
-            legalName: "Reactive Systems Test Company",
-            ticker: "RXT",
-            exchange: "NASDAQ",
-            websiteUrl: "https://example.com/",
-            canonicalizedAt: now,
-        });
+        const existingCompany = args.recordedScenario
+            ? await ctx.db
+                  .query("companies")
+                  .withIndex("by_cik", (q) =>
+                      q.eq("cik", args.recordedScenario?.companyCik ?? ""),
+                  )
+                  .unique()
+            : null;
+        const companyId =
+            existingCompany?._id ??
+            (await ctx.db.insert("companies", {
+                cik: args.recordedScenario?.companyCik ?? `e2e-${fixtureKey}`,
+                legalName:
+                    args.recordedScenario?.companyName.replace(
+                        " · Recorded review",
+                        "",
+                    ) ?? "Reactive Systems Test Company",
+                ticker: args.recordedScenario?.ticker ?? "RXT",
+                exchange: "NASDAQ",
+                websiteUrl:
+                    args.recordedScenario?.websiteUrl ?? "https://example.com/",
+                canonicalizedAt: now,
+            }));
         const runId = await ctx.db.insert("researchRuns", {
             ownerVisitorId: visitor._id,
             reservationKey,
             reservationStatus: "consumed",
             companyId,
             companySnapshot: {
-                cik: `e2e-${fixtureKey}`,
-                legalName: "Reactive Systems Test Company",
-                ticker: "RXT",
+                cik: args.recordedScenario?.companyCik ?? `e2e-${fixtureKey}`,
+                legalName:
+                    args.recordedScenario?.companyName ??
+                    "Reactive Systems Test Company",
+                ticker: args.recordedScenario?.ticker ?? "RXT",
                 exchange: "NASDAQ",
-                websiteUrl: "https://example.com/",
+                websiteUrl:
+                    args.recordedScenario?.websiteUrl ?? "https://example.com/",
             },
             coveragePreset: "balanced",
-            researchAngle: "Reactive source review verification",
+            researchAngle:
+                args.recordedScenario?.researchAngle ??
+                "Reactive source review verification",
             lifecycleState: "discovering_sources",
             executionStatus: "running",
             executionGeneration: 1,
@@ -217,7 +344,7 @@ export const seedSourceReviewScenario = internalMutation({
             runId,
             expectedExecutionGeneration: 1,
         });
-        const sourceInputs = [
+        const sourceInputs = args.recordedScenario?.sources ?? [
             {
                 canonicalUrl: "https://example.com/e2e/annual-report",
                 title: "Annual report",
@@ -265,6 +392,7 @@ export const seedSourceReviewScenario = internalMutation({
                 title: source.title,
                 origin: source.origin,
                 category: source.category,
+                secForm: "secForm" in source ? source.secForm : undefined,
                 providerReference: `e2e:${fixtureKey}:${index}`,
                 createdAt: now + index,
             });
@@ -325,6 +453,30 @@ export const inspectSourceReviewScenario = internalQuery({
             }),
         ),
         providerCallCount: v.number(),
+        sourceReading: v.optional(
+            v.object({
+                sourceId: v.id("sources"),
+                sourceCaptureId: v.id("sourceCaptures"),
+                qualificationTaskId: v.id("aiTaskResults"),
+                comparisonOutcome: v.optional(
+                    v.union(
+                        ...SOURCE_COMPARISON_DISPOSITIONS.map((value) =>
+                            v.literal(value),
+                        ),
+                    ),
+                ),
+                contentHash: v.optional(v.string()),
+                storageId: v.optional(v.id("_storage")),
+                materializedVersion: v.optional(
+                    v.object({
+                        sourceVersionId: v.id("sourceVersions"),
+                        contentHash: v.string(),
+                        storageId: v.id("_storage"),
+                        passageCount: v.number(),
+                    }),
+                ),
+            }),
+        ),
     }),
     handler: async (ctx, args) => {
         if (env.E2E_FIXTURES_ENABLED !== "true") {
@@ -360,12 +512,101 @@ export const inspectSourceReviewScenario = internalQuery({
             .query("providerCalls")
             .withIndex("by_run", (query) => query.eq("runId", run._id))
             .take(100);
+        const captures = run.sourcePreparationId
+            ? await ctx.db
+                  .query("sourceCaptures")
+                  .withIndex("by_preparation_and_source", (q) =>
+                      q.eq(
+                          "preparationId",
+                          run.sourcePreparationId as Id<"sourceSelectionProposalRebuilds">,
+                      ),
+                  )
+                  .take(4)
+            : [];
+        const capture = captures.find(
+            (item) => item.captureKey === `e2e:${run._id}:source-reading`,
+        );
+        const proposalItem =
+            capture && revision.sourceSelectionProposalId
+                ? await ctx.db
+                      .query("sourceSelectionProposalItems")
+                      .withIndex("by_proposal_and_source", (q) =>
+                          q
+                              .eq(
+                                  "proposalId",
+                                  revision.sourceSelectionProposalId as Id<"sourceSelectionProposals">,
+                              )
+                              .eq("sourceId", capture.sourceId),
+                      )
+                      .unique()
+                : null;
+        const pinned = proposalItem
+            ? await readPinnedSourceQualification(ctx.db, proposalItem)
+            : null;
+        const comparisonTasks = await Promise.all(
+            (proposalItem?.comparisonTaskIds ?? []).map((id) => ctx.db.get(id)),
+        );
+        const fixtureComparison = comparisonTasks.find(
+            (task) =>
+                task?.executionMode === "showcase" &&
+                task.adapterVersion === "e2e-illustrative-comparison-v1" &&
+                task.output.kind === "source_comparison",
+        );
+        const comparisonOutcome =
+            fixtureComparison?.output.kind === "source_comparison"
+                ? fixtureComparison.output.findings[0]?.disposition
+                : undefined;
+        const versions = capture
+            ? await ctx.db
+                  .query("sourceVersions")
+                  .withIndex("by_revision_and_source", (q) =>
+                      q
+                          .eq("corpusRevisionId", revision._id)
+                          .eq("sourceId", capture.sourceId),
+                  )
+                  .order("desc")
+                  .take(2)
+            : [];
+        const version = versions.find(
+            (item) =>
+                item.runId === run._id && item.sourceCaptureId === capture?._id,
+        );
+        const passages = version
+            ? await ctx.db
+                  .query("sourcePassages")
+                  .withIndex("by_source_version_and_order", (q) =>
+                      q.eq("sourceVersionId", version._id),
+                  )
+                  .take(MAX_PASSAGES_PER_SOURCE + 1)
+            : [];
         return {
             lifecycleState: run.lifecycleState,
             executionStatus: run.executionStatus,
             revisionStatus: revision.status,
             decisions,
             providerCallCount: providerCalls.length,
+            ...(pinned && capture
+                ? {
+                      sourceReading: {
+                          sourceId: capture.sourceId,
+                          sourceCaptureId: pinned.sourceCaptureId,
+                          qualificationTaskId: pinned.qualificationTaskId,
+                          ...(comparisonOutcome ? { comparisonOutcome } : {}),
+                          contentHash: capture.contentHash,
+                          storageId: capture.storageId,
+                          ...(version
+                              ? {
+                                    materializedVersion: {
+                                        sourceVersionId: version._id,
+                                        contentHash: version.contentHash,
+                                        storageId: version.storageId,
+                                        passageCount: passages.length,
+                                    },
+                                }
+                              : {}),
+                      },
+                  }
+                : {}),
         };
     },
 });
@@ -397,6 +638,32 @@ const FIXTURE_PASSAGES = [
     "Adoption velocity of third-party multi-modal foundation models versus proprietary estimating logic remains undetermined.",
 ];
 const FIXTURE_ARTIFACT_TEXT = FIXTURE_PASSAGES.join("\n\n");
+const SOURCE_READING_FIXTURE_TEXT =
+    "# Illustrative source\n\nThe author argues that agents could change the economics of workflow software at Reactive Systems Test Company. This is illustrative material for interface verification.";
+const SOURCE_COMPARISON_FIXTURE_TEXT = [
+    "# Illustrative source comparison",
+    "The author argues that Reactive Systems Test Company has no outstanding borrowing and can therefore fund its strategy without borrowing costs. This is illustrative material for interface verification.",
+    "The author argues that agents could change the economics of workflow software at Reactive Systems Test Company. This is a separate illustrative argument for interface verification.",
+].join("\n\n");
+
+function assertSourceReadingFixtureReplay(
+    actual: string | undefined,
+    requested: string | undefined,
+) {
+    if (actual !== requested)
+        throw new Error("E2E reading scenario replay mismatch");
+}
+
+function sourceComparisonFixturePrimaryText(
+    outcome: "no_conflict_observed" | "possible_conflict",
+) {
+    return [
+        outcome === "possible_conflict"
+            ? "Reactive Systems Test Company reports outstanding borrowing. This is illustrative evidence for interface verification."
+            : "Reactive Systems Test Company reports no outstanding borrowing. This is illustrative evidence for interface verification.",
+        "Reactive Systems Test Company describes agents as an opportunity to change the economics of workflow software. This is illustrative evidence for interface verification.",
+    ].join("\n\n");
+}
 
 async function findSeededRun(
     ctx: MutationCtx,
@@ -496,7 +763,42 @@ export async function executeEvidenceMatrixSeedPipeline(
     if (!slotKey || !fixtureKey || fixtureKey.length > 80) {
         throw new Error("Invalid E2E fixture identifier");
     }
-    const content = FIXTURE_ARTIFACT_TEXT;
+    const result = await storeFixtureArtifact(FIXTURE_ARTIFACT_TEXT, {
+        storeBlob: deps.storeBlob,
+        deleteBlob: deps.deleteBlob,
+        commitSeed: (artifact) =>
+            deps.commitSeed({
+                slotKey,
+                fixtureKey,
+                scenarioKind: args.scenarioKind,
+                ...artifact,
+            }),
+    });
+    return {
+        runId: result.runId,
+        corpusRevisionId: result.corpusRevisionId,
+        sourceIds: result.sourceIds,
+        scenarioKind: result.scenarioKind,
+        executionGeneration: result.executionGeneration,
+    };
+}
+
+async function storeFixtureArtifact<Result extends { reused: boolean }>(
+    content: string,
+    deps: Pick<
+        EvidenceMatrixSeedPipelineDependencies,
+        "storeBlob" | "deleteBlob"
+    > & {
+        commitSeed: (
+            artifact: Pick<
+                Parameters<
+                    EvidenceMatrixSeedPipelineDependencies["commitSeed"]
+                >[0],
+                "storageId" | "contentHash" | "byteCount"
+            >,
+        ) => Promise<Result>;
+    },
+): Promise<Result> {
     const contentHash = sha256Hex(content);
     const byteCount = new TextEncoder().encode(content).length;
     const storageId = await deps.storeBlob(
@@ -504,9 +806,6 @@ export async function executeEvidenceMatrixSeedPipeline(
     );
     try {
         const result = await deps.commitSeed({
-            slotKey,
-            fixtureKey,
-            scenarioKind: args.scenarioKind,
             storageId,
             contentHash,
             byteCount,
@@ -524,13 +823,7 @@ export async function executeEvidenceMatrixSeedPipeline(
                 );
             }
         }
-        return {
-            runId: result.runId,
-            corpusRevisionId: result.corpusRevisionId,
-            sourceIds: result.sourceIds,
-            scenarioKind: result.scenarioKind,
-            executionGeneration: result.executionGeneration,
-        };
+        return result;
     } catch (error) {
         let cleanupFailure: unknown = null;
         try {
@@ -554,6 +847,507 @@ export async function executeEvidenceMatrixSeedPipeline(
         throw error;
     }
 }
+
+/** Seeds a labelled reading in the existing protected source-review fixture. */
+export const seedInspectedSourceReviewScenario = internalAction({
+    args: {
+        slotKey: v.string(),
+        fixtureKey: v.string(),
+        comparisonOutcome: v.optional(
+            v.union(
+                v.literal("no_conflict_observed"),
+                v.literal("possible_conflict"),
+            ),
+        ),
+    },
+    returns: sourceReviewFixtureResultValidator,
+    handler: async (ctx, args): Promise<SourceReviewFixtureResult> => {
+        if (env.E2E_FIXTURES_ENABLED !== "true")
+            throw new Error("E2E fixtures are disabled");
+        const base = await ctx.runMutation(
+            internal.e2eFixtures.seedSourceReviewScenario,
+            { slotKey: args.slotKey, fixtureKey: args.fixtureKey },
+        );
+        const existing = await ctx.runQuery(
+            internal.e2eFixtures.inspectSourceReviewScenario,
+            {
+                runId: base.runId,
+                fixtureKey: args.fixtureKey,
+            },
+        );
+        if (existing.sourceReading) {
+            assertSourceReadingFixtureReplay(
+                existing.sourceReading.comparisonOutcome,
+                args.comparisonOutcome,
+            );
+            return base;
+        }
+        const storage = {
+            storeBlob: (blob: Blob) => ctx.storage.store(blob),
+            deleteBlob: (storageId: Id<"_storage">) =>
+                ctx.storage.delete(storageId),
+        };
+        const commit = (artifact: {
+            storageId: Id<"_storage">;
+            contentHash: string;
+            byteCount: number;
+        }) => {
+            const comparisonOutcome = args.comparisonOutcome;
+            const baseInput = {
+                runId: base.runId,
+                fixtureKey: args.fixtureKey,
+                ...artifact,
+            };
+            return comparisonOutcome
+                ? storeFixtureArtifact(
+                      sourceComparisonFixturePrimaryText(comparisonOutcome),
+                      {
+                          ...storage,
+                          commitSeed: (primary) =>
+                              ctx.runMutation(
+                                  internal.e2eFixtures
+                                      .commitSourceReadingFixture,
+                                  {
+                                      ...baseInput,
+                                      comparison: {
+                                          outcome: comparisonOutcome,
+                                          ...primary,
+                                      },
+                                  },
+                              ),
+                      },
+                  )
+                : ctx.runMutation(
+                      internal.e2eFixtures.commitSourceReadingFixture,
+                      baseInput,
+                  );
+        };
+        const result = await storeFixtureArtifact(
+            args.comparisonOutcome
+                ? SOURCE_COMPARISON_FIXTURE_TEXT
+                : SOURCE_READING_FIXTURE_TEXT,
+            { ...storage, commitSeed: commit },
+        );
+        return {
+            runId: result.runId,
+            corpusRevisionId: result.corpusRevisionId,
+            proposalId: result.proposalId,
+            proposalVersion: result.proposalVersion,
+            sourceIds: result.sourceIds,
+        };
+    },
+});
+
+export const commitSourceReadingFixture = internalMutation({
+    args: {
+        runId: v.id("researchRuns"),
+        fixtureKey: v.string(),
+        storageId: v.id("_storage"),
+        contentHash: v.string(),
+        byteCount: v.number(),
+        comparison: v.optional(
+            v.object({
+                outcome: v.union(
+                    v.literal("no_conflict_observed"),
+                    v.literal("possible_conflict"),
+                ),
+                storageId: v.id("_storage"),
+                contentHash: v.string(),
+                byteCount: v.number(),
+            }),
+        ),
+    },
+    returns: v.object({
+        ...sourceReviewFixtureResultValidator.fields,
+        reused: v.boolean(),
+    }),
+    handler: async (
+        ctx,
+        args,
+    ): Promise<SourceReviewFixtureResult & { reused: boolean }> => {
+        if (env.E2E_FIXTURES_ENABLED !== "true")
+            throw new Error("E2E fixtures are disabled");
+        const existing = await ctx.runQuery(
+            internal.e2eFixtures.inspectSourceReviewScenario,
+            {
+                runId: args.runId,
+                fixtureKey: args.fixtureKey,
+            },
+        );
+        const run = await ctx.db.get(args.runId);
+        const revision = run?.activeCorpusRevisionId
+            ? await ctx.db.get(run.activeCorpusRevisionId)
+            : null;
+        const proposal = revision?.sourceSelectionProposalId
+            ? await ctx.db.get(revision.sourceSelectionProposalId)
+            : null;
+        if (
+            !run ||
+            !revision ||
+            !proposal ||
+            run.companySnapshot?.cik !== `e2e-${args.fixtureKey.trim()}`
+        )
+            throw new Error("E2E source review scenario not found");
+        const sources = await ctx.db
+            .query("sources")
+            .withIndex("by_run_and_url", (q) => q.eq("runId", run._id))
+            .take(4);
+        const source = sources[0];
+        if (!source || sources.length !== 3)
+            throw new Error("E2E source collection changed");
+        const result = {
+            runId: run._id,
+            corpusRevisionId: revision._id,
+            sourceIds: sources.map((item) => item._id),
+        };
+        if (existing.sourceReading) {
+            assertSourceReadingFixtureReplay(
+                existing.sourceReading.comparisonOutcome,
+                args.comparison?.outcome,
+            );
+            return {
+                ...result,
+                proposalId: proposal._id,
+                proposalVersion: proposal.version,
+                reused: true,
+            };
+        }
+        if (
+            revision.status !== "draft" ||
+            run.sourcePreparationId ||
+            run.executionGeneration !== 1 ||
+            run.lifecycleState !== "awaiting_source_review" ||
+            run.executionStatus !== "paused"
+        )
+            throw new Error("E2E reading fixture is no longer editable");
+        const fixtureText = args.comparison
+            ? SOURCE_COMPARISON_FIXTURE_TEXT
+            : SOURCE_READING_FIXTURE_TEXT;
+        const artifact = await ctx.db.system.get("_storage", args.storageId);
+        if (
+            !artifact ||
+            artifact.size !== args.byteCount ||
+            args.byteCount !== new TextEncoder().encode(fixtureText).length ||
+            args.contentHash !== sha256Hex(fixtureText)
+        )
+            throw new Error("E2E reading artifact does not match the fixture");
+        if (args.comparison) {
+            const primaryText = sourceComparisonFixturePrimaryText(
+                args.comparison.outcome,
+            );
+            const primaryArtifact = await ctx.db.system.get(
+                "_storage",
+                args.comparison.storageId,
+            );
+            if (
+                !primaryArtifact ||
+                primaryArtifact.size !== args.comparison.byteCount ||
+                args.comparison.byteCount !==
+                    new TextEncoder().encode(primaryText).length ||
+                args.comparison.contentHash !== sha256Hex(primaryText)
+            )
+                throw new Error(
+                    "E2E primary artifact does not match the fixture",
+                );
+        }
+        const now = Date.now();
+        const title = "Illustrative workflow argument";
+        const researchAngle = "Illustrative source preparation";
+        await ctx.db.patch(source._id, { title });
+        await ctx.db.patch(run._id, {
+            lifecycleState: "discovering_sources",
+            executionStatus: "running",
+            researchAngle,
+        });
+        const preparationId = await ctx.runMutation(
+            internal.sourcePreparation.claimForDiscovery,
+            {
+                runId: run._id,
+                corpusRevisionId: revision._id,
+                expectedExecutionGeneration: 1,
+            },
+        );
+        const preparation = await ctx.db.get(preparationId);
+        if (!preparation) throw new Error("E2E preparation was not created");
+        const prepared = prepareQualificationInput({
+            company: run.companySnapshot,
+            canonicalUrl: source.canonicalUrl,
+            title,
+            asOfTime: preparation.createdAt,
+            text: fixtureText,
+            researchAngle,
+            retrievalCompleteness: "partial",
+        });
+        if (prepared.request.document.contentHash !== args.contentHash)
+            throw new Error("E2E reading normalization changed");
+        const readingPassages = prepared.request.document.passages.filter(
+            (item) => item.text.startsWith("The author argues that"),
+        );
+        const passage = readingPassages[0];
+        if (!passage) throw new Error("E2E reading passage is unavailable");
+        const quotation = {
+            passageKey: passage.passageKey,
+            quotation: passage.text,
+        };
+        const sourceCaptureId = await ctx.db.insert("sourceCaptures", {
+            runId: run._id,
+            corpusRevisionId: revision._id,
+            sourceId: source._id,
+            preparationId,
+            executionGeneration: 1,
+            captureKey: `e2e:${run._id}:source-reading`,
+            requestInputHash: sha256Hex(`e2e:${run._id}:source-reading`),
+            status: "committed",
+            requestedUrl: source.canonicalUrl,
+            resolvedUrl: source.canonicalUrl,
+            storageId: args.storageId,
+            contentHash: args.contentHash,
+            byteCount: args.byteCount,
+            mediaType: "text/plain",
+            normalizerVersion: prepared.normalizerVersion,
+            retrievalVersion: "e2e-illustrative-source-v1",
+            readingCompleteness: "partial",
+            omittedPassageCount: 0,
+            createdAt: now,
+            updatedAt: now,
+        });
+        const taskId = await ctx.db.insert("aiTaskResults", {
+            runId: run._id,
+            corpusRevisionId: revision._id,
+            sourceId: source._id,
+            sourceCaptureId,
+            taskType: "source_qualification",
+            executionMode: "showcase",
+            schemaVersion: SOURCE_QUALIFICATION_VERSION,
+            adapterVersion: "e2e-illustrative-source-v1",
+            inputHash: prepared.inputHash,
+            createdAt: now,
+            output: {
+                kind: "source_qualification",
+                sourceCaptureId,
+                contentHash: args.contentHash,
+                readingCompleteness: "partial",
+                omittedPassageCount: 0,
+                selectedPassages: prepared.request.document.passages.map(
+                    ({ passageKey, startOffset, endOffset }) => ({
+                        passageKey,
+                        startOffset,
+                        endOffset,
+                    }),
+                ),
+                qualification: {
+                    companyMatch: "subject",
+                    companyPassages: [quotation],
+                    documentKind: "independent_analysis",
+                    reportingPeriodEnd: null,
+                    reportingPeriodPassages: [],
+                    findings: readingPassages.map((item, index) => ({
+                        role:
+                            index === 0
+                                ? ("counter_evidence_primary" as const)
+                                : ("independent_analysis_primary" as const),
+                        kind: "attributed_argument" as const,
+                        summary: item.text,
+                        passages: [
+                            {
+                                passageKey: item.passageKey,
+                                quotation: item.text,
+                            },
+                        ],
+                        period: "unspecified" as const,
+                        periodPassages: [],
+                        dependsOnFlaggedAssertion: false,
+                    })),
+                    limitations: [
+                        {
+                            code: "partial_reading",
+                            explanation:
+                                "Illustrative partial reading for interface verification.",
+                            passages: [],
+                        },
+                    ],
+                },
+            },
+        });
+        if (args.comparison) {
+            const primarySource = sources[1];
+            if (!primarySource)
+                throw new Error("E2E primary source is unavailable");
+            const primaryText = sourceComparisonFixturePrimaryText(
+                args.comparison.outcome,
+            );
+            const primaryTitle = "Illustrative primary company report";
+            await ctx.db.patch(primarySource._id, {
+                title: primaryTitle,
+                origin: "exa",
+                category: "official_product",
+            });
+            const primaryCaptureId = await ctx.db.insert("sourceCaptures", {
+                runId: run._id,
+                corpusRevisionId: revision._id,
+                sourceId: primarySource._id,
+                preparationId,
+                executionGeneration: 1,
+                captureKey: `e2e:${run._id}:source-reading-primary`,
+                requestInputHash: sha256Hex(
+                    `e2e:${run._id}:source-reading-primary`,
+                ),
+                status: "committed",
+                requestedUrl: primarySource.canonicalUrl,
+                resolvedUrl: primarySource.canonicalUrl,
+                storageId: args.comparison.storageId,
+                contentHash: args.comparison.contentHash,
+                byteCount: args.comparison.byteCount,
+                mediaType: "text/plain",
+                normalizerVersion: prepared.normalizerVersion,
+                retrievalVersion: "e2e-illustrative-source-v1",
+                readingCompleteness: "complete",
+                omittedPassageCount: 0,
+                createdAt: now,
+                updatedAt: now,
+            });
+            const targetTask = await ctx.db.get(taskId);
+            if (targetTask?.output.kind !== "source_qualification")
+                throw new Error("E2E qualification is unavailable");
+            const comparisonInput = prepareSourceComparisonInput({
+                company: run.companySnapshot,
+                target: {
+                    runId: run._id,
+                    corpusRevisionId: revision._id,
+                    sourceId: source._id,
+                    captureId: sourceCaptureId,
+                    contentHash: args.contentHash,
+                    qualificationTaskId: taskId,
+                    title,
+                    canonicalUrl: source.canonicalUrl,
+                    text: fixtureText,
+                    selectedPassages: targetTask.output.selectedPassages,
+                    qualification: targetTask.output.qualification,
+                },
+                primaryCandidates: [
+                    {
+                        sourceId: primarySource._id,
+                        captureId: primaryCaptureId,
+                        contentHash: args.comparison.contentHash,
+                        title: primaryTitle,
+                        canonicalUrl: primarySource.canonicalUrl,
+                        authorityTier: "company_primary",
+                        documentKind: "official_product_documentation",
+                        reportingPeriodEnd: null,
+                        text: primaryText,
+                        passages: extractPassagesFromNormalizedText({
+                            text: primaryText,
+                            canonicalUrl: primarySource.canonicalUrl,
+                            sourceVersionHash: args.comparison.contentHash,
+                        }).map((item) => ({
+                            passageKey: `p${item.order}`,
+                            quotation: item.exactQuotation,
+                            startOffset: item.locator.startOffset ?? 0,
+                            endOffset: item.locator.endOffset ?? 0,
+                            headingPath: item.headingPath ?? [],
+                        })),
+                    },
+                ],
+            });
+            const response = {
+                findings: comparisonInput.request.findings.map((finding) => {
+                    const reference =
+                        comparisonInput.request.primaryPassages.find(
+                            (item) =>
+                                finding.primaryPassageKeys.includes(
+                                    item.referenceKey,
+                                ) &&
+                                item.quotation.includes(
+                                    finding.findingIndex === 0
+                                        ? "outstanding borrowing"
+                                        : "describes agents",
+                                ),
+                        );
+                    if (!reference)
+                        throw new Error(
+                            "E2E comparison context is unavailable",
+                        );
+                    return {
+                        findingIndex: finding.findingIndex,
+                        disposition:
+                            finding.findingIndex === 0
+                                ? args.comparison?.outcome
+                                : "no_conflict_observed",
+                        explanation:
+                            finding.findingIndex === 0 &&
+                            args.comparison?.outcome === "possible_conflict"
+                                ? "The illustrative report records borrowing, which conflicts with the premise in this passage."
+                                : "The illustrative report addresses the same premise within the compared passages.",
+                        comparableDimensions: [
+                            "entity",
+                            "concept",
+                            "period",
+                            "unit_basis",
+                            "argument_effect",
+                        ],
+                        targetPassageKeys: finding.targetPassages.map(
+                            (item) => item.referenceKey,
+                        ),
+                        primaryPassageKeys: [reference.referenceKey],
+                    };
+                }),
+            };
+            const comparison = materializeSourceComparisonOutput(
+                comparisonInput,
+                response,
+            );
+            if (comparison.status !== "valid")
+                throw new Error("E2E comparison result is invalid");
+            await ctx.db.insert("aiTaskResults", {
+                runId: run._id,
+                corpusRevisionId: revision._id,
+                sourceId: source._id,
+                sourceCaptureId,
+                taskType: "source_comparison",
+                executionMode: "showcase",
+                schemaVersion: SOURCE_COMPARISON_VERSION,
+                adapterVersion: "e2e-illustrative-comparison-v1",
+                inputHash: comparisonInput.inputHash,
+                output: comparison.output,
+                createdAt: now,
+            });
+        }
+        for (const item of sources)
+            await ctx.runMutation(internal.sourcePreparation.recordResult, {
+                preparationId,
+                outcome: {
+                    sourceId: item._id,
+                    result:
+                        item._id === source._id
+                            ? { status: "qualified", sourceCaptureId, taskId }
+                            : {
+                                  status: "unavailable",
+                                  reasonCode: "illustrative_source_not_read",
+                              },
+                },
+            });
+        const completed = await ctx.runMutation(
+            internal.sourcePreparation.finish,
+            {
+                preparationId,
+                expectedExecutionGeneration: 1,
+            },
+        );
+        await ctx.runMutation(internal.researchRuns.transition, {
+            runId: run._id,
+            expectedExecutionGeneration: 1,
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            stepKey: "source_review",
+        });
+        return {
+            ...result,
+            proposalId: completed.proposalId,
+            proposalVersion: completed.version,
+            reused: false,
+        };
+    },
+});
 
 /**
  * Local-only E2E seed. Ownership derives exclusively from a claimed invitation
@@ -1030,6 +1824,419 @@ export const inspectEvidenceMatrixScenario = internalQuery({
             claimIds: claims.map((claim) => claim._id),
             claimStatements: claims.map((claim) => claim.statement),
             policyEvaluationCount: evaluations.length,
+        };
+    },
+});
+
+const recordedReadingValidator = v.object({
+    ...recordedSourceMetadata,
+    storageId: v.id("_storage"),
+    contentHash: v.string(),
+    byteCount: v.number(),
+    inputHash: v.string(),
+    responseHash: v.string(),
+    normalizerVersion: v.string(),
+    readingCompleteness: v.union(v.literal("complete"), v.literal("partial")),
+    omittedPassageCount: v.number(),
+    selectedPassages: v.array(
+        v.object({
+            passageKey: v.string(),
+            startOffset: v.number(),
+            endOffset: v.number(),
+        }),
+    ),
+    qualification: v.optional(sourceQualificationValidator),
+    failureReason: v.optional(v.string()),
+});
+
+/** Reconstructs recorded qualifications against their exact original inputs, never against the new dossier angle. */
+export const seedRecordedSourceReview = internalAction({
+    args: {
+        slotKey: v.string(),
+        fixtureKey: v.string(),
+        company: v.object({
+            cik: v.string(),
+            legalName: v.string(),
+            ticker: v.string(),
+        }),
+        websiteUrl: v.string(),
+        researchAngle: v.string(),
+        sources: v.array(
+            v.object({
+                ...recordedSourceMetadata,
+                text: v.string(),
+                contentHash: v.string(),
+                originalInputHash: v.string(),
+                asOfTime: v.number(),
+                originalResearchAngle: v.string(),
+                responseJson: v.string(),
+            }),
+        ),
+    },
+    returns: sourceReviewFixtureResultValidator,
+    handler: async (ctx, args): Promise<SourceReviewFixtureResult> => {
+        if (
+            env.E2E_FIXTURES_ENABLED !== "true" ||
+            !["localhost", "127.0.0.1"].includes(
+                new URL(env.CONVEX_CLOUD_URL).hostname,
+            )
+        )
+            throw new Error("Local recorded fixtures are disabled");
+        if (
+            args.sources.length < 1 ||
+            args.sources.length > 8 ||
+            new TextEncoder().encode(JSON.stringify(args)).length >
+                12 * 1024 * 1024
+        )
+            throw new Error("Recorded scenario exceeds fixture bounds");
+        const prepared = args.sources.map((source) => {
+            const input = prepareQualificationInput({
+                company: args.company,
+                canonicalUrl: source.canonicalUrl,
+                title: source.title,
+                asOfTime: source.asOfTime,
+                researchAngle: source.originalResearchAngle,
+                text: source.text,
+            });
+            if (
+                sha256Hex(source.text) !== source.contentHash ||
+                input.request.document.contentHash !== source.contentHash ||
+                input.inputHash !== source.originalInputHash
+            )
+                throw new Error("Recorded qualification input changed");
+            return {
+                source,
+                input,
+                result: materializeQualificationOutput(
+                    input,
+                    JSON.parse(source.responseJson),
+                ),
+            };
+        });
+        const stored: Id<"_storage">[] = [];
+        try {
+            const readings: Infer<typeof recordedReadingValidator>[] = [];
+            for (const { source, input, result } of prepared) {
+                const storageId = await ctx.storage.store(
+                    new Blob([source.text], { type: "text/plain" }),
+                );
+                stored.push(storageId);
+                readings.push({
+                    canonicalUrl: source.canonicalUrl,
+                    title: source.title,
+                    origin: source.origin,
+                    category: source.category,
+                    secForm: source.secForm,
+                    storageId,
+                    contentHash: source.contentHash,
+                    byteCount: new TextEncoder().encode(source.text).length,
+                    inputHash: input.inputHash,
+                    responseHash: sha256Hex(source.responseJson),
+                    normalizerVersion: input.normalizerVersion,
+                    readingCompleteness: input.readingCompleteness,
+                    omittedPassageCount: input.omittedPassageCount,
+                    selectedPassages: input.request.document.passages.map(
+                        ({ passageKey, startOffset, endOffset }) => ({
+                            passageKey,
+                            startOffset,
+                            endOffset,
+                        }),
+                    ),
+                    ...(result.status === "valid"
+                        ? { qualification: result.qualification }
+                        : { failureReason: result.reason }),
+                });
+            }
+            const result = await ctx.runMutation(
+                internal.e2eFixtures.commitRecordedSourceReview,
+                {
+                    slotKey: args.slotKey,
+                    fixtureKey: args.fixtureKey,
+                    companyName: `${args.company.legalName} · Recorded review`,
+                    companyCik: args.company.cik,
+                    ticker: args.company.ticker,
+                    websiteUrl: args.websiteUrl,
+                    researchAngle: args.researchAngle,
+                    readings,
+                },
+            );
+            if (result.reused)
+                for (const id of stored) await ctx.storage.delete(id);
+            return {
+                runId: result.runId,
+                corpusRevisionId: result.corpusRevisionId,
+                proposalId: result.proposalId,
+                proposalVersion: result.proposalVersion,
+                sourceIds: result.sourceIds,
+            };
+        } catch (error) {
+            for (const id of stored) await ctx.storage.delete(id);
+            throw error;
+        }
+    },
+});
+
+export const commitRecordedSourceReview = internalMutation({
+    args: {
+        slotKey: v.string(),
+        fixtureKey: v.string(),
+        companyName: v.string(),
+        companyCik: v.string(),
+        ticker: v.string(),
+        websiteUrl: v.string(),
+        researchAngle: v.string(),
+        readings: v.array(recordedReadingValidator),
+    },
+    returns: v.object({
+        ...sourceReviewFixtureResultValidator.fields,
+        reused: v.boolean(),
+    }),
+    handler: async (
+        ctx,
+        args,
+    ): Promise<SourceReviewFixtureResult & { reused: boolean }> => {
+        if (
+            env.E2E_FIXTURES_ENABLED !== "true" ||
+            !["localhost", "127.0.0.1"].includes(
+                new URL(env.CONVEX_CLOUD_URL).hostname,
+            ) ||
+            args.readings.length < 1 ||
+            args.readings.length > 8
+        )
+            throw new Error("Local recorded fixtures are disabled");
+        const base = await ctx.runMutation(
+            internal.e2eFixtures.seedSourceReviewScenario,
+            {
+                slotKey: args.slotKey,
+                fixtureKey: args.fixtureKey,
+                recordedScenario: {
+                    companyName: args.companyName,
+                    companyCik: args.companyCik,
+                    ticker: args.ticker,
+                    websiteUrl: args.websiteUrl,
+                    researchAngle: args.researchAngle,
+                    sources: args.readings.map(
+                        ({
+                            canonicalUrl,
+                            title,
+                            origin,
+                            category,
+                            secForm,
+                        }) => ({
+                            canonicalUrl,
+                            title,
+                            origin,
+                            category,
+                            secForm,
+                        }),
+                    ),
+                },
+            },
+        );
+        const run = await ctx.db.get(base.runId);
+        const revision = await ctx.db.get(base.corpusRevisionId);
+        if (!run?.ownerVisitorId || !revision)
+            throw new Error("Recorded fixture is missing");
+        // Recorded source previews must not invoke the local renderer or fetch a public page.
+        const preview = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="300"><rect width="800" height="300" fill="#f4f4f4"/><text x="32" y="145" font-size="22">Recorded fixture. Open Source details to inspect passages.</text></svg>')}`;
+        for (const sourceId of base.sourceIds)
+            await ctx.runMutation(
+                internal.browserPreviewInternals.storePreview,
+                {
+                    sourceId,
+                    dataUrl: preview,
+                    visitorId: run.ownerVisitorId,
+                    sizeBytes: new TextEncoder().encode(preview).length,
+                    expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+                },
+            );
+        if (run.sourcePreparationId) {
+            const captures = await ctx.db
+                .query("sourceCaptures")
+                .withIndex("by_preparation_and_source", (q) =>
+                    q.eq(
+                        "preparationId",
+                        run.sourcePreparationId as Id<"sourceSelectionProposalRebuilds">,
+                    ),
+                )
+                .take(9);
+            if (
+                captures.length !== args.readings.length ||
+                captures.some(
+                    (capture) =>
+                        !args.readings.some(
+                            (reading) =>
+                                reading.canonicalUrl === capture.requestedUrl &&
+                                reading.contentHash === capture.contentHash &&
+                                reading.inputHash ===
+                                    capture.requestInputHash &&
+                                capture.captureKey.endsWith(
+                                    `:${reading.responseHash}`,
+                                ),
+                        ),
+                )
+            )
+                throw new Error("Recorded fixture replay mismatch");
+            return { ...base, reused: true };
+        }
+        if (revision.status !== "draft")
+            throw new Error("Recorded fixture already approved");
+        await ctx.db.patch(base.runId, {
+            lifecycleState: "discovering_sources",
+            executionStatus: "running",
+        });
+        const preparationId = await ctx.runMutation(
+            internal.sourcePreparation.claimForDiscovery,
+            {
+                runId: base.runId,
+                corpusRevisionId: base.corpusRevisionId,
+                expectedExecutionGeneration: 1,
+            },
+        );
+        const now = Date.now();
+        for (const [index, reading] of args.readings.entries()) {
+            const sourceId = base.sourceIds[index];
+            if (!sourceId) throw new Error("Recorded source missing");
+            const artifact = await ctx.db.system.get(
+                "_storage",
+                reading.storageId,
+            );
+            if (!artifact || artifact.size !== reading.byteCount)
+                throw new Error("Recorded artifact missing");
+            const sourceCaptureId = await ctx.db.insert("sourceCaptures", {
+                runId: base.runId,
+                corpusRevisionId: base.corpusRevisionId,
+                sourceId,
+                preparationId,
+                executionGeneration: 1,
+                captureKey: `recorded:${base.runId}:${index}:${reading.responseHash}`,
+                requestInputHash: reading.inputHash,
+                status: "committed",
+                requestedUrl: reading.canonicalUrl,
+                resolvedUrl: reading.canonicalUrl,
+                storageId: reading.storageId,
+                contentHash: reading.contentHash,
+                byteCount: reading.byteCount,
+                mediaType: "text/plain",
+                normalizerVersion: reading.normalizerVersion,
+                retrievalVersion: "recorded-utility-v1",
+                readingCompleteness: reading.readingCompleteness,
+                omittedPassageCount: reading.omittedPassageCount,
+                createdAt: now,
+                updatedAt: now,
+            });
+            const taskId = reading.qualification
+                ? await ctx.db.insert("aiTaskResults", {
+                      runId: base.runId,
+                      corpusRevisionId: base.corpusRevisionId,
+                      sourceId,
+                      sourceCaptureId,
+                      taskType: "source_qualification",
+                      executionMode: "showcase",
+                      schemaVersion: SOURCE_QUALIFICATION_VERSION,
+                      adapterVersion: "recorded-utility-v1",
+                      inputHash: reading.inputHash,
+                      createdAt: now,
+                      output: {
+                          kind: "source_qualification",
+                          sourceCaptureId,
+                          contentHash: reading.contentHash,
+                          readingCompleteness: reading.readingCompleteness,
+                          omittedPassageCount: reading.omittedPassageCount,
+                          selectedPassages: reading.selectedPassages,
+                          qualification: reading.qualification,
+                      },
+                  })
+                : undefined;
+            await ctx.runMutation(internal.sourcePreparation.recordResult, {
+                preparationId,
+                outcome: {
+                    sourceId,
+                    result: taskId
+                        ? { status: "qualified", sourceCaptureId, taskId }
+                        : {
+                              status: "unavailable",
+                              sourceCaptureId,
+                              reasonCode:
+                                  reading.failureReason ??
+                                  "recorded_qualification_unavailable",
+                          },
+                },
+            });
+        }
+        const proposal = await ctx.runMutation(
+            internal.sourcePreparation.finish,
+            { preparationId, expectedExecutionGeneration: 1 },
+        );
+        await ctx.runMutation(internal.researchRuns.transition, {
+            runId: base.runId,
+            expectedExecutionGeneration: 1,
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            stepKey: "source_review",
+        });
+        return {
+            ...base,
+            proposalId: proposal.proposalId,
+            proposalVersion: proposal.version,
+            reused: false,
+        };
+    },
+});
+
+/** Bounded inspection of recorded review fixtures, including omissions rather than only selected sources. */
+export const inspectRecordedSourceReview = internalQuery({
+    args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
+    returns: v.object({
+        sources: v.array(schema.doc("sources")),
+        items: v.array(schema.doc("sourceSelectionProposalItems")),
+        tasks: v.array(schema.doc("aiTaskResults")),
+        providerCalls: v.number(),
+        revisionStatus: v.string(),
+    }),
+    handler: async (ctx, args) => {
+        if (
+            env.E2E_FIXTURES_ENABLED !== "true" ||
+            !["localhost", "127.0.0.1"].includes(
+                new URL(env.CONVEX_CLOUD_URL).hostname,
+            )
+        )
+            throw new Error("Local recorded fixtures are disabled");
+        const run = await ctx.db.get(args.runId);
+        if (
+            !run?.activeCorpusRevisionId ||
+            run.reservationKey !== `e2e:${args.fixtureKey}` ||
+            !run.companySnapshot?.legalName.endsWith("· Recorded review")
+        )
+            throw new Error("Recorded fixture not found");
+        const revision = await ctx.db.get(run.activeCorpusRevisionId);
+        if (!revision?.sourceSelectionProposalId)
+            throw new Error("Recorded proposal not found");
+        return {
+            sources: await ctx.db
+                .query("sources")
+                .withIndex("by_run_and_url", (q) => q.eq("runId", run._id))
+                .take(8),
+            items: await ctx.db
+                .query("sourceSelectionProposalItems")
+                .withIndex("by_proposal_and_rank_and_source", (q) =>
+                    q.eq(
+                        "proposalId",
+                        revision.sourceSelectionProposalId as Id<"sourceSelectionProposals">,
+                    ),
+                )
+                .take(8),
+            tasks: await ctx.db
+                .query("aiTaskResults")
+                .withIndex("by_run", (q) => q.eq("runId", run._id))
+                .take(8),
+            providerCalls: (
+                await ctx.db
+                    .query("providerCalls")
+                    .withIndex("by_run", (q) => q.eq("runId", run._id))
+                    .take(1)
+            ).length,
+            revisionStatus: revision.status,
         };
     },
 });

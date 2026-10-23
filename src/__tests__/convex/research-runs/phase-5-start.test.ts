@@ -1,8 +1,9 @@
 /// <reference types="vite/client" />
-import type { Id } from "@convex/_generated/dataModel";
+
 import { api, internal } from "@convex/_generated/api";
-import type { WorkflowId } from "@convex-dev/workflow";
+import type { Id } from "@convex/_generated/dataModel";
 import schema from "@convex/schema";
+import type { WorkflowId } from "@convex-dev/workflow";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -347,6 +348,88 @@ test("replayed atomic handoff starts once and survives late Phase 4 completion",
         "extracting_evidence",
     ]);
     expect(rows.visitor?.analysesReserved).toBe(1);
+});
+
+test("a reopened legacy dossier can be adjusted and approved into durable evidence work", async () => {
+    const t = convexTest(schema, modules);
+    workflowTest.register(t);
+    const scenario = await createApprovedCorpusScenario(t, {
+        sources: [
+            {
+                url: "https://adobe.com/legal/terms",
+                title: "Terms",
+                origin: "analyst_url",
+                decisions: ["accepted"],
+            },
+            {
+                url: "https://adobe.com/docs/index",
+                title: "Index",
+                origin: "analyst_url",
+                decisions: ["accepted"],
+            },
+        ],
+    });
+    const oldRevision = await t.run((ctx) =>
+        ctx.db.get(scenario.corpusRevisionId),
+    );
+    const reopened = await scenario.asOwner.mutation(
+        api.sourceSelectionProposals.startNewCorpusRevision,
+        { runId: scenario.runId, corpusRevisionId: scenario.corpusRevisionId },
+    );
+    const rejectedSource = scenario.createdSources[1]?.sourceId;
+    const keptSource = scenario.createdSources[0]?.sourceId;
+    if (!rejectedSource || !keptSource)
+        throw new Error("Missing review sources");
+    await scenario.asOwner.mutation(api.sources.decide, {
+        runId: scenario.runId,
+        corpusRevisionId: reopened.corpusRevisionId,
+        sourceId: rejectedSource,
+        decision: "rejected",
+        decisionKey: "exclude-index",
+    });
+    const approval = {
+        runId: scenario.runId,
+        corpusRevisionId: reopened.corpusRevisionId,
+        proposalId: reopened.proposalId,
+        proposalVersion: 1,
+        decisionKey: "reopened-approval",
+    };
+    expect(
+        await scenario.asOwner.mutation(
+            api.sourceSelectionProposals.approveProposedCorpus,
+            approval,
+        ),
+    ).toEqual({ accepted: true });
+    expect(
+        await scenario.asOwner.mutation(
+            api.sourceSelectionProposals.approveProposedCorpus,
+            approval,
+        ),
+    ).toEqual({ accepted: false });
+    const run = await t.run((ctx) => ctx.db.get(scenario.runId));
+    expect(run).toMatchObject({
+        lifecycleState: "extracting_evidence",
+        executionStatus: "running",
+        workflowId: expect.any(String),
+    });
+    expect(
+        await listFrozenSources(
+            t,
+            scenario.runId,
+            run?.executionGeneration ?? -1,
+        ),
+    ).toMatchObject([
+        {
+            sourceId: keptSource,
+            corpusRevisionId: reopened.corpusRevisionId,
+        },
+    ]);
+    expect(await t.run((ctx) => ctx.db.get(scenario.corpusRevisionId))).toEqual(
+        oldRevision,
+    );
+    expect(await t.run((ctx) => ctx.db.query("providerCalls").take(1))).toEqual(
+        [],
+    );
 });
 
 test.each([
@@ -1045,4 +1128,55 @@ test("workflow executes to honest terminal failure and clears visitor running sl
             .first();
     });
     expect(runningRun).toBeNull();
+});
+
+test("freezes and replays sixty accepted candidates from a prepared corpus without truncation", async () => {
+    const t = convexTest(schema, modules);
+    workflowTest.register(t);
+    const scenario = await createApprovedCorpusScenario(t, {
+        sources: Array.from({ length: 60 }, (_, index) => ({
+            url: `https://example.com/prepared-${index}`,
+            title: `Prepared source ${index}`,
+            origin: "exa",
+            decisions: ["accepted" as const],
+        })),
+    });
+    await t.run(async (ctx) => {
+        const preparationId = await ctx.db.insert(
+            "sourceSelectionProposalRebuilds",
+            {
+                runId: scenario.runId,
+                corpusRevisionId: scenario.corpusRevisionId,
+                kind: "preparation",
+                entryPoint: "source_review",
+                workflowVersion: 1,
+                qualificationVersion: "source-qualification-v2",
+                executionGeneration: 1,
+                policyVersion: "source-qualification-v2",
+                operationKey: "prepared-sixty-candidate-fixture",
+                status: "complete",
+                failedDiscoveryFamilies: [],
+                leaseExpiresAt: 100,
+                deadlineAt: 100,
+                createdAt: 1,
+                completedAt: 100,
+            },
+        );
+        await ctx.db.patch(scenario.runId, {
+            sourcePreparationId: preparationId,
+        });
+    });
+    const args = { runId: scenario.runId, requestKey: "prepared-sixty" };
+    const first = await scenario.asOwner.mutation(startPhase5, args);
+    expect(first.acceptedSourceCount).toBe(60);
+    expect(await scenario.asOwner.mutation(startPhase5, args)).toEqual(first);
+    const frozen = await t.query(
+        internal.evidenceArtifacts.listFrozenSourcesForRun,
+        {
+            runId: scenario.runId,
+            executionGeneration: first.executionGeneration,
+        },
+    );
+    expect(frozen).toHaveLength(60);
+    expect(new Set(frozen.map((row) => row.sourceId)).size).toBe(60);
 });

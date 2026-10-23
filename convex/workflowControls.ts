@@ -4,6 +4,7 @@ import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import { internalMutation, mutation } from "./_generated/server";
+import { sourcePreparationEnabled } from "./resourceLimits";
 import {
     assessmentReviewApproved,
     sourceReviewApproved,
@@ -47,7 +48,11 @@ export const startReserved = internalMutation({
         const workflowId = await workflow.start(
             ctx,
             internal.researchWorkflow.run,
-            { runId: run._id, executionGeneration },
+            {
+                runId: run._id,
+                executionGeneration,
+                prepareSources: sourcePreparationEnabled(),
+            },
             {
                 onComplete: internal.researchWorkflow.onComplete,
                 context: { runId: run._id },
@@ -184,14 +189,11 @@ export const cancel = mutation({
             throw new Error("Research run cannot be cancelled");
         }
 
-        // Cancelling a run that has no active workflow handle (e.g. the
-        // claim-generation-unavailable paused state, where the completed
-        // workflow already compare-cleared its ID) records cancellation
-        // without issuing a redundant workflow.cancel.
-        if (run.workflowId) {
-            await workflow.cancel(ctx, run.workflowId as WorkflowId);
-        }
+        const preparation = run.sourcePreparationId
+            ? await ctx.db.get(run.sourcePreparationId)
+            : null;
         const now = Date.now();
+        // Fence callbacks before component cancellation: completion callbacks can run in this transaction.
         await ctx.db.patch(run._id, {
             executionStatus: "cancelled",
             workflowId: undefined,
@@ -199,6 +201,31 @@ export const cancel = mutation({
             nextEventSequence: run.nextEventSequence + 1,
             updatedAt: now,
         });
+        if (
+            preparation?.kind === "preparation" &&
+            preparation.runId === run._id &&
+            preparation.executionGeneration === run.executionGeneration &&
+            (preparation.status === "started" ||
+                preparation.stopCode === "execution_slot_unavailable")
+        ) {
+            await ctx.db.patch(preparation._id, {
+                status: "blocked",
+                stopCode: "cancelled",
+                completedAt: now,
+                workflowId: undefined,
+            });
+        }
+        if (run.workflowId)
+            await workflow.cancel(ctx, run.workflowId as WorkflowId);
+        if (
+            preparation?.kind === "preparation" &&
+            preparation.executionGeneration === run.executionGeneration &&
+            preparation.status === "started" &&
+            preparation.workflowId &&
+            preparation.workflowId !== run.workflowId
+        ) {
+            await workflow.cancel(ctx, preparation.workflowId as WorkflowId);
+        }
         await ctx.db.insert("runEvents", {
             runId: run._id,
             sequence: run.nextEventSequence + 1,

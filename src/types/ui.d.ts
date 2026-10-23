@@ -5,4 +5,4 @@ export type PlatformIcon = HugeiconsProps["icon"] | LucideIcon;
 export type HugeIconType = HugeiconsIconProps;
 export type LucideIconType = LucideIcon;
 
-export type AvatarSize = "default" | "sm" | "lg";
+export type AvatarSize = "default" | "xs" | "sm" | "lg";

@@ -4,7 +4,7 @@ import { api } from "@convex/_generated/api";
 import {
     ArrowLeft01Icon,
     ArrowRight01Icon,
-    Building2Icon,
+    Building02Icon,
     Cancel01Icon,
     ChevronDownIcon,
     Plus,
@@ -779,7 +779,7 @@ function CompanyPickerTrigger({
                 highlighted && "ring-2 ring-primary text-accent-foreground",
             )}>
             <Icon
-                iconNode={Building2Icon}
+                iconNode={Building02Icon}
                 size={16}
                 className="text-muted-foreground"
             />

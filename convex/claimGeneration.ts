@@ -1,50 +1,56 @@
 import type { DataModel, Id } from "@convex/_generated/dataModel";
-import type { FunctionReference } from "convex/server";
-import { makeFunctionReference } from "convex/server";
-import type { GenericDatabaseReader } from "convex/server";
-import {
-    claimClassificationValidator,
-    claimDimensionLinkOriginValidator,
-    evidenceRelationValidator,
-} from "@convex/domain/claims";
 import {
     groupClaimsForCanonicalization,
     normalizeCanonicalText,
     type RawClaimInput,
 } from "@convex/domain/claimCanonicalization";
 import {
-    validateClaimStructure,
+    claimClassificationValidator,
+    claimDimensionLinkOriginValidator,
+    evidenceRelationValidator,
+} from "@convex/domain/claims";
+import {
     type ClaimStructuralInput,
+    validateClaimStructure,
 } from "@convex/domain/claimValidation";
 import { assertEvidenceExecutionFence } from "@convex/domain/evidenceAuthority";
 import {
     ASSESSMENT_DIMENSION_KEYS,
-    assessmentDimensionKeyValidator,
     type AssessmentDimensionKey,
+    assessmentDimensionKeyValidator,
 } from "@convex/domain/researchPlan";
 import {
     CLAIM_SCHEMA_VERSION,
     computeClaimInputHash,
-    SHOWCASE_ADAPTER_VERSION,
+    lookupShowcaseManifest,
     type NormalizedClaimInput,
     type NormalizedPassageInput,
     type NormalizedQuestionInput,
+    SHOWCASE_ADAPTER_VERSION,
 } from "@convex/domain/showcaseManifest";
-import { executeShowcaseClaimExtractionFromManifest } from "@convex/integrations/showcaseClaimAdapter";
-import { lookupShowcaseManifest } from "@convex/domain/showcaseManifest";
+import { coverageRoleValidator } from "@convex/domain/sourceDiscoveryRecovery";
 import {
     computePassageKey,
+    sha256Hex,
     sourceLocatorValidator,
 } from "@convex/domain/sourcePassages";
+import {
+    constructAttributedHypothesis,
+    readPreparedSourceUsage,
+    validatePreparedEvidenceUse,
+} from "@convex/domain/sourceUsage";
+import { executeShowcaseClaimExtractionFromManifest } from "@convex/integrations/showcaseClaimAdapter";
 import {
     MAX_CLAIM_INPUT_PASSAGES,
     MAX_CLAIMS_PER_RUN,
     MAX_PASSAGES_PER_SOURCE,
-    sourceCandidateLimit,
+    sourceDossierCandidateLimit,
 } from "@convex/resourceLimits";
+import type { FunctionReference, GenericDatabaseReader } from "convex/server";
+import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
-
 import { internalMutation, internalQuery } from "./_generated/server";
+import schema from "./schema";
 
 type InternalQueryRef = FunctionReference<"query", "internal">;
 
@@ -220,7 +226,7 @@ export const generateClaimsForRun = internalMutation({
                     .eq("runId", run._id)
                     .eq("executionGeneration", args.executionGeneration),
             )
-            .take(sourceCandidateLimit() + 1);
+            .take(sourceDossierCandidateLimit(run.sourcePreparationId) + 1);
 
         if (frozenStatuses.length === 0) {
             return {
@@ -231,7 +237,10 @@ export const generateClaimsForRun = internalMutation({
             };
         }
 
-        if (frozenStatuses.length > sourceCandidateLimit()) {
+        if (
+            frozenStatuses.length >
+            sourceDossierCandidateLimit(run.sourcePreparationId)
+        ) {
             throw new Error(
                 `Frozen source statuses exceed configured candidate limit`,
             );
@@ -246,6 +255,10 @@ export const generateClaimsForRun = internalMutation({
                 sourceVersionHash: string;
                 quotationHash: string;
                 exactQuotation: string;
+                passageOrder: number;
+                preparedUsage: Awaited<
+                    ReturnType<typeof readPreparedSourceUsage>
+                >;
             }
         >();
 
@@ -293,6 +306,10 @@ export const generateClaimsForRun = internalMutation({
                 );
             }
 
+            const preparedUsage = await readPreparedSourceUsage(
+                ctx.db,
+                sourceVersion,
+            );
             // Read only remaining+1 to detect overflow before Convex transaction limits
             const remaining =
                 MAX_CLAIM_INPUT_PASSAGES - normalizedPassages.length;
@@ -346,6 +363,8 @@ export const generateClaimsForRun = internalMutation({
                     sourceVersionHash: sourceVersion.contentHash,
                     quotationHash: p.quotationHash,
                     exactQuotation: p.exactQuotation,
+                    passageOrder: p.order,
+                    preparedUsage,
                 });
             }
         }
@@ -547,12 +566,23 @@ export const generateClaimsForRun = internalMutation({
             // Build a reverse lookup from sourcePassageId to passageKey/quotationHash
             const passageIdToKey = new Map<
                 string,
-                { passageKey: string; quotationHash: string }
+                {
+                    passageKey: string;
+                    quotationHash: string;
+                    passageOrder: number;
+                    exactQuotation: string;
+                    preparedUsage: Awaited<
+                        ReturnType<typeof readPreparedSourceUsage>
+                    >;
+                }
             >();
             for (const [pk, pv] of activePassageMap.entries()) {
                 passageIdToKey.set(pv._id, {
                     passageKey: pk,
                     quotationHash: pv.quotationHash,
+                    passageOrder: pv.passageOrder,
+                    exactQuotation: pv.exactQuotation,
+                    preparedUsage: pv.preparedUsage,
                 });
             }
 
@@ -561,6 +591,22 @@ export const generateClaimsForRun = internalMutation({
                 classification: canonical.classification,
                 evidence: canonical.evidence.map((ev) => {
                     const lookup = passageIdToKey.get(ev.sourcePassageId);
+                    if (lookup?.preparedUsage) {
+                        const usage = validatePreparedEvidenceUse({
+                            ...lookup.preparedUsage,
+                            passage: {
+                                order: lookup.passageOrder,
+                                exactQuotation: lookup.exactQuotation,
+                            },
+                            statement: canonical.statement,
+                            classification: canonical.classification,
+                            relation: ev.relation,
+                        });
+                        if (!usage.allowed)
+                            throw new Error(
+                                `Claim evidence violates ${usage.reasonCode}`,
+                            );
+                    }
                     return {
                         sourcePassageId: ev.sourcePassageId,
                         passageKey: lookup?.passageKey ?? "",
@@ -878,13 +924,16 @@ export const getNormalizedClaimInput = internalQuery({
                     .eq("runId", run._id)
                     .eq("executionGeneration", args.executionGeneration),
             )
-            .take(sourceCandidateLimit() + 1);
+            .take(sourceDossierCandidateLimit(run.sourcePreparationId) + 1);
 
         if (frozenStatuses.length === 0) {
             return null;
         }
 
-        if (frozenStatuses.length > sourceCandidateLimit()) {
+        if (
+            frozenStatuses.length >
+            sourceDossierCandidateLimit(run.sourcePreparationId)
+        ) {
             throw new Error(
                 "Frozen source statuses exceed configured candidate limit",
             );
@@ -984,58 +1033,130 @@ export const getAiTaskResult = internalQuery({
     args: {
         aiTaskResultId: v.id("aiTaskResults"),
     },
-    returns: v.object({
-        _id: v.id("aiTaskResults"),
-        runId: v.id("researchRuns"),
-        corpusRevisionId: v.id("corpusRevisions"),
-        taskType: v.string(),
-        executionMode: v.union(v.literal("showcase"), v.literal("live")),
-        fixtureId: v.optional(v.string()),
-        fixtureVersion: v.optional(v.string()),
-        schemaVersion: v.string(),
-        adapterVersion: v.string(),
-        inputHash: v.string(),
-        providerCallId: v.optional(v.id("providerCalls")),
-        output: v.union(
-            v.object({
-                kind: v.literal("claim_extraction"),
-                claimCount: v.number(),
-                claimIds: v.array(v.id("claims")),
-            }),
-            v.object({
-                kind: v.literal("semantic_verification"),
-                label: v.union(
-                    v.literal("entailed"),
-                    v.literal("contradicted"),
-                    v.literal("mixed"),
-                ),
-                evidenceReferences: v.array(
-                    v.object({
-                        sourcePassageId: v.id("sourcePassages"),
-                        passageKey: v.string(),
-                    }),
-                ),
-            }),
-        ),
-    }),
+    returns: schema.doc("aiTaskResults"),
     handler: async (ctx, args) => {
         const task = await ctx.db.get(args.aiTaskResultId);
         if (!task) {
             throw new Error("AITaskResult not found");
         }
-        return {
-            _id: task._id,
-            runId: task.runId,
-            corpusRevisionId: task.corpusRevisionId,
-            taskType: task.taskType,
-            executionMode: task.executionMode,
-            fixtureId: task.fixtureId,
-            fixtureVersion: task.fixtureVersion,
-            schemaVersion: task.schemaVersion,
-            adapterVersion: task.adapterVersion,
-            inputHash: task.inputHash,
-            providerCallId: task.providerCallId,
-            output: task.output,
-        };
+        return task;
+    },
+});
+
+/** Proposes only an attributed hypothesis constructed from an approved, independently usable finding. */
+export const proposeAttributedHypothesis = internalMutation({
+    args: {
+        runId: v.id("researchRuns"),
+        corpusRevisionId: v.id("corpusRevisions"),
+        sourceId: v.id("sources"),
+        acceptedDecisionId: v.id("sourceDecisions"),
+        executionGeneration: v.number(),
+        role: coverageRoleValidator,
+        findingIndex: v.optional(v.number()),
+    },
+    returns: v.id("claims"),
+    handler: async (ctx, args) => {
+        const { statusDoc } = await assertEvidenceExecutionFence(ctx.db, args);
+        if (
+            !["succeeded", "partial"].includes(statusDoc.status) ||
+            !statusDoc.sourceVersionId
+        )
+            throw new Error("Inspected source has not been materialized");
+        const version = await ctx.db.get(statusDoc.sourceVersionId);
+        if (
+            !version ||
+            version.acceptedDecisionId !== args.acceptedDecisionId ||
+            version.sourceId !== args.sourceId ||
+            version.corpusRevisionId !== args.corpusRevisionId ||
+            version.runId !== args.runId
+        )
+            throw new Error("Source version identity mismatch");
+        const usage = await readPreparedSourceUsage(ctx.db, version);
+        if (!usage?.qualification || !usage.qualificationTaskId)
+            throw new Error("Approved qualification is unavailable");
+        const attributed = constructAttributedHypothesis({
+            ...usage,
+            qualification: usage.qualification,
+            role: args.role,
+            findingIndex: args.findingIndex,
+        });
+        const passages = await ctx.db
+            .query("sourcePassages")
+            .withIndex("by_source_version_and_order", (q) =>
+                q.eq("sourceVersionId", version._id),
+            )
+            .take(MAX_PASSAGES_PER_SOURCE);
+        const citedPassages = attributed.passages.map((reference) =>
+            passages.find(
+                (passage) =>
+                    reference.passageKey === `p${passage.order}` &&
+                    reference.quotation === passage.exactQuotation,
+            ),
+        );
+        if (citedPassages.some((passage) => !passage))
+            throw new Error(
+                "Attributed finding does not reproduce approved passages",
+            );
+        for (const passage of citedPassages) {
+            if (
+                !passage ||
+                !validatePreparedEvidenceUse({
+                    ...usage,
+                    passage,
+                    statement: attributed.statement,
+                    classification: attributed.classification,
+                    relation: "supporting",
+                }).allowed
+            )
+                throw new Error("source_usage_restricted");
+        }
+        const inputHash = sha256Hex(
+            JSON.stringify({
+                qualificationTaskId: usage.qualificationTaskId,
+                sourceVersionId: version._id,
+                statement: attributed.statement,
+            }),
+        );
+        const canonicalText = normalizeCanonicalText(attributed.statement);
+        const existing = await ctx.db
+            .query("claims")
+            .withIndex("by_revision_input_hash_and_canonical", (q) =>
+                q
+                    .eq("corpusRevisionId", args.corpusRevisionId)
+                    .eq("inputHash", inputHash)
+                    .eq("canonicalText", canonicalText)
+                    .eq("classification", "Hypothesis"),
+            )
+            .unique();
+        if (existing) return existing._id;
+        const claims = await ctx.db
+            .query("claims")
+            .withIndex("by_run", (q) => q.eq("runId", args.runId))
+            .take(MAX_CLAIMS_PER_RUN);
+        if (claims.length >= MAX_CLAIMS_PER_RUN)
+            throw new Error("Claim limit reached");
+        const now = Date.now();
+        const claimId = await ctx.db.insert("claims", {
+            runId: args.runId,
+            corpusRevisionId: args.corpusRevisionId,
+            statement: attributed.statement,
+            canonicalText,
+            classification: "Hypothesis",
+            inputHash,
+            proposingTaskId: usage.qualificationTaskId,
+            schemaVersion: "attributed-hypothesis-v1",
+            createdAt: now,
+        });
+        for (const passage of citedPassages) {
+            if (!passage) throw new Error("Attributed passage is unavailable");
+            await ctx.db.insert("claimEvidence", {
+                claimId,
+                sourcePassageId: passage._id,
+                relation: "supporting",
+                proposingTaskId: usage.qualificationTaskId,
+                createdAt: now,
+            });
+        }
+        return claimId;
     },
 });

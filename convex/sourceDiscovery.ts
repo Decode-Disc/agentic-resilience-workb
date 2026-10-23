@@ -2,7 +2,15 @@ import { v } from "convex/values";
 
 import { internalMutation, internalQuery } from "./_generated/server";
 import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
+import {
+    assertPreparationExecutionFence,
+    sourcePreparationError,
+} from "./domain/sourcePreparationAuthority";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
+import {
+    MAX_SUPPLEMENT_CANDIDATES,
+    MAX_SUPPLEMENT_SEARCHES,
+} from "./resourceLimits";
 
 const candidateValidator = v.object({
     canonicalUrl: v.string(),
@@ -21,6 +29,7 @@ export const persistCandidates = internalMutation({
     args: {
         runId: v.id("researchRuns"),
         corpusRevisionId: v.id("corpusRevisions"),
+        preparationId: v.optional(v.id("sourceSelectionProposalRebuilds")),
         executionGeneration: v.number(),
         operationKey: v.string(),
         candidates: v.array(candidateValidator),
@@ -44,7 +53,8 @@ export const persistCandidates = internalMutation({
             !run ||
             run.executionGeneration !== args.executionGeneration ||
             run.executionStatus !== "running" ||
-            run.lifecycleState !== "discovering_sources" ||
+            (!args.preparationId &&
+                run.lifecycleState !== "discovering_sources") ||
             run.activeCorpusRevisionId !== args.corpusRevisionId ||
             revision?.runId !== run._id ||
             revision.status !== "draft"
@@ -52,12 +62,63 @@ export const persistCandidates = internalMutation({
             throw new Error("Research execution is no longer active");
         }
 
-        const capacity = await readSourceCandidateCapacity(ctx.db, run._id);
+        const preparationState = args.preparationId
+            ? await assertPreparationExecutionFence(ctx.db, {
+                  preparationId: args.preparationId,
+                  now: Date.now(),
+              })
+            : null;
+        const supplement =
+            preparationState && run.automaticSupplementOperationId
+                ? await ctx.db.get(run.automaticSupplementOperationId)
+                : null;
+        if (preparationState) {
+            const call = args.providerCompletion
+                ? await ctx.db.get(args.providerCompletion.providerCallId)
+                : null;
+            const queryIndex =
+                supplement?.supplementQueries?.findIndex(
+                    (_, index) =>
+                        call?.operationKey ===
+                        `supplement:${supplement._id}:query:${index}`,
+                ) ?? -1;
+            if (
+                preparationState.run._id !== run._id ||
+                supplement?.runId !== run._id ||
+                queryIndex < 0 ||
+                queryIndex >= MAX_SUPPLEMENT_SEARCHES ||
+                !supplement.supplementClaimedQueryIndexes?.includes(
+                    queryIndex,
+                ) ||
+                call?.runId !== run._id ||
+                call.preparationId !== args.preparationId ||
+                call.corpusRevisionId !== revision._id ||
+                call.executionGeneration !== args.executionGeneration ||
+                call.service !== "exa" ||
+                call.operation !== "source_supplement_search" ||
+                call.status !== "started" ||
+                args.candidates.length > 4
+            )
+                throw sourcePreparationError("supplement_result_invalid");
+        }
+        const capacity = await readSourceCandidateCapacity(
+            ctx.db,
+            run._id,
+            preparationState ? "dossier" : "initial_discovery",
+        );
+        const remaining = supplement
+            ? Math.min(
+                  capacity.remaining,
+                  MAX_SUPPLEMENT_CANDIDATES -
+                      (supplement.supplementSourceIds?.length ?? 0),
+              )
+            : capacity.remaining;
+        const insertedIds = [];
         let inserted = 0;
         const seen = new Set<string>();
         const now = Date.now();
         for (const candidate of args.candidates) {
-            if (inserted >= capacity.remaining) {
+            if (inserted >= remaining) {
                 break;
             }
             if (seen.has(candidate.canonicalUrl)) {
@@ -78,8 +139,12 @@ export const persistCandidates = internalMutation({
             const sourceId = await ctx.db.insert("sources", {
                 runId: run._id,
                 ...candidate,
+                ...(preparationState?.preparation.target
+                    ? { reviewSearchId: preparationState.preparation._id }
+                    : {}),
                 createdAt: now,
             });
+            insertedIds.push(sourceId);
             const decisionId = await ctx.db.insert("sourceDecisions", {
                 runId: run._id,
                 corpusRevisionId: revision._id,
@@ -100,6 +165,24 @@ export const persistCandidates = internalMutation({
             inserted += 1;
         }
         const total = capacity.total + inserted;
+        if (supplement)
+            await ctx.db.patch(supplement._id, {
+                supplementSourceIds: [
+                    ...(supplement.supplementSourceIds ?? []),
+                    ...insertedIds,
+                ],
+            });
+        if (preparationState?.preparation.target) {
+            await ctx.db.patch(preparationState.preparation._id, {
+                readingSourceIds: [
+                    ...(preparationState.preparation.readingSourceIds ?? []),
+                    ...insertedIds,
+                ],
+                insertedCount:
+                    (preparationState.preparation.insertedCount ?? 0) +
+                    inserted,
+            });
+        }
         await ctx.db.patch(run._id, {
             nextEventSequence: run.nextEventSequence + 1,
             updatedAt: now,
@@ -159,7 +242,11 @@ export const countCandidates = internalQuery({
         ) {
             throw new Error("Research execution is no longer active");
         }
-        const capacity = await readSourceCandidateCapacity(ctx.db, run._id);
+        const capacity = await readSourceCandidateCapacity(
+            ctx.db,
+            run._id,
+            "initial_discovery",
+        );
         return { total: capacity.total };
     },
 });
@@ -184,7 +271,11 @@ export const getCandidateCapacity = internalQuery({
         ) {
             throw new Error("Research execution is no longer active");
         }
-        return readSourceCandidateCapacity(ctx.db, run._id);
+        return readSourceCandidateCapacity(
+            ctx.db,
+            run._id,
+            "initial_discovery",
+        );
     },
 });
 

@@ -14,9 +14,15 @@ import {
     buildResearchPlanQuestions,
 } from "./domain/researchPlan";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
-import { sourceCandidateLimit } from "./resourceLimits";
+import { sourceDossierCandidateLimit } from "./resourceLimits";
+import schema from "./schema";
 import { createSourceSelectionProposal } from "./sourceSelectionProposals";
 import { workflow } from "./workflow";
+
+const RECENT_EVENT_LIMIT = 50;
+const runFields = schema.tables.researchRuns.validator.fields;
+const checkpointFields = schema.tables.checkpointDecisions.validator.fields;
+const providerCallFields = schema.tables.providerCalls.validator.fields;
 
 async function requireAdmin(ctx: QueryCtx | MutationCtx) {
     const authUserId = await getAuthUserId(ctx);
@@ -37,13 +43,71 @@ async function requireAdmin(ctx: QueryCtx | MutationCtx) {
 
 export const get = query({
     args: {},
+    returns: v.object({
+        paidWork: v.object({
+            enabled: v.boolean(),
+            reason: v.optional(v.string()),
+            updatedAt: v.optional(v.number()),
+        }),
+        runs: v.array(
+            v.object({
+                runId: v.id("researchRuns"),
+                lifecycleState: runFields.lifecycleState,
+                executionStatus: runFields.executionStatus,
+                pauseReason: runFields.pauseReason,
+                updatedAt: runFields.updatedAt,
+            }),
+        ),
+        checkpoints: v.array(
+            v.object({
+                runId: checkpointFields.runId,
+                checkpoint: checkpointFields.checkpoint,
+                decision: checkpointFields.decision,
+                occurredAt: checkpointFields.occurredAt,
+            }),
+        ),
+        providerCalls: v.array(
+            v.object({
+                runId: providerCallFields.runId,
+                service: providerCallFields.service,
+                operation: providerCallFields.operation,
+                status: providerCallFields.status,
+                usage: providerCallFields.usage,
+                reportedCost: providerCallFields.reportedCost,
+                errorCode: providerCallFields.errorCode,
+                createdAt: providerCallFields.createdAt,
+            }),
+        ),
+        reservations: v.array(
+            v.object({
+                visitorId: v.id("visitors"),
+                role: schema.tables.visitors.validator.fields.role,
+                remaining: v.number(),
+            }),
+        ),
+        restorableRuns: v.array(
+            v.object({
+                runId: v.id("researchRuns"),
+                ownerVisitorId: runFields.ownerVisitorId,
+                createdAt: runFields.createdAt,
+            }),
+        ),
+    }),
     handler: async (ctx) => {
         await requireAdmin(ctx);
         const [runs, checkpoints, providerCalls, visitors, paidWork] =
             await Promise.all([
                 ctx.db.query("researchRuns").collect(),
-                ctx.db.query("checkpointDecisions").collect(),
-                ctx.db.query("providerCalls").collect(),
+                ctx.db
+                    .query("checkpointDecisions")
+                    .withIndex("by_occurred_at")
+                    .order("desc")
+                    .take(RECENT_EVENT_LIMIT),
+                ctx.db
+                    .query("providerCalls")
+                    .withIndex("by_created_at")
+                    .order("desc")
+                    .take(RECENT_EVENT_LIMIT),
                 ctx.db.query("visitors").collect(),
                 ctx.db
                     .query("paidWorkControls")
@@ -70,28 +134,22 @@ export const get = query({
                     pauseReason: run.pauseReason,
                     updatedAt: run.updatedAt,
                 })),
-            checkpoints: checkpoints
-                .sort((left, right) => right.occurredAt - left.occurredAt)
-                .slice(0, 50)
-                .map((checkpoint) => ({
-                    runId: checkpoint.runId,
-                    checkpoint: checkpoint.checkpoint,
-                    decision: checkpoint.decision,
-                    occurredAt: checkpoint.occurredAt,
-                })),
-            providerCalls: providerCalls
-                .sort((left, right) => right.createdAt - left.createdAt)
-                .slice(0, 50)
-                .map((call) => ({
-                    runId: call.runId,
-                    service: call.service,
-                    operation: call.operation,
-                    status: call.status,
-                    usage: call.usage,
-                    reportedCost: call.reportedCost,
-                    errorCode: call.errorCode,
-                    createdAt: call.createdAt,
-                })),
+            checkpoints: checkpoints.map((checkpoint) => ({
+                runId: checkpoint.runId,
+                checkpoint: checkpoint.checkpoint,
+                decision: checkpoint.decision,
+                occurredAt: checkpoint.occurredAt,
+            })),
+            providerCalls: providerCalls.map((call) => ({
+                runId: call.runId,
+                service: call.service,
+                operation: call.operation,
+                status: call.status,
+                usage: call.usage,
+                reportedCost: call.reportedCost,
+                errorCode: call.errorCode,
+                createdAt: call.createdAt,
+            })),
             reservations: visitors.map((visitor) => ({
                 visitorId: visitor._id,
                 role: visitor.role,
@@ -180,10 +238,11 @@ export const backfillSourceReviewProjection = mutation({
             .query("corpusRevisions")
             .order("asc")
             .paginate(args.paginationOpts);
-        const limit = sourceCandidateLimit();
         const page = [];
 
         for (const revision of revisions.page) {
+            const run = await ctx.db.get(revision.runId);
+            const limit = sourceDossierCandidateLimit(run?.sourcePreparationId);
             const sources = await ctx.db
                 .query("sources")
                 .withIndex("by_run_and_url", (builder) =>

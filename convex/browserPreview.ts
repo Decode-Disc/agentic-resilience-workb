@@ -77,6 +77,20 @@ export const renderPreview = action({
             return { status: "unavailable", error: "service_unavailable" };
         }
 
+        if (
+            (
+                await ctx.runQuery(
+                    internal.browserPreviewInternals.getSourceForPreview,
+                    {
+                        sourceId: args.sourceId,
+                        runId: args.runId,
+                        visitorId,
+                    },
+                )
+            )?.decision !== "pending"
+        )
+            return { status: "unavailable", error: "unauthorized" };
+
         try {
             const response = await fetch(`${serviceUrl}/render`, {
                 method: "POST",
@@ -100,18 +114,36 @@ export const renderPreview = action({
                 const base64 = Buffer.from(buffer).toString("base64");
                 const dataUrl = `data:${contentType};base64,${base64}`;
 
+                if (
+                    (
+                        await ctx.runQuery(
+                            internal.browserPreviewInternals
+                                .getSourceForPreview,
+                            {
+                                sourceId: args.sourceId,
+                                runId: args.runId,
+                                visitorId,
+                            },
+                        )
+                    )?.decision !== "pending"
+                )
+                    return { status: "unavailable", error: "unauthorized" };
+
                 // Cache the rendered screenshot when it fits within the size
                 // cap; otherwise return it without persisting.
                 if (buffer.byteLength <= PREVIEW_CACHE_MAX_BYTES) {
-                    await ctx.runMutation(
+                    const stored = await ctx.runMutation(
                         internal.browserPreviewInternals.storePreview,
                         {
                             sourceId: args.sourceId,
+                            visitorId,
                             dataUrl,
                             sizeBytes: buffer.byteLength,
                             expiresAt: Date.now() + previewCacheTtlMs(),
                         },
                     );
+                    if (!stored)
+                        return { status: "unavailable", error: "unauthorized" };
                 }
 
                 return { status: "ok", base64: dataUrl };

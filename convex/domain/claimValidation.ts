@@ -59,6 +59,7 @@ export const STRUCTURAL_RULE_IDS = {
     SOURCE_STATUS_NOT_TERMINAL: "source_status_not_terminal",
     ARTIFACT_MISSING: "structural.artifact_missing",
     QUOTATION_NOT_REPRODUCIBLE: "structural.quotation_not_reproducible",
+    SOURCE_USAGE_RESTRICTED: "structural.source_usage_restricted",
 } as const;
 
 const VALID_CLASSIFICATIONS = new Set<string>(CLAIM_CLASSIFICATIONS);

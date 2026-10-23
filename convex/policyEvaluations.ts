@@ -1,21 +1,22 @@
 import type { Id } from "@convex/_generated/dataModel";
 import {
     STRUCTURAL_RULE_IDS,
-    validateClaimStructure,
     type StructuralValidationResult,
+    validateClaimStructure,
 } from "@convex/domain/claimValidation";
+import { assertEvidenceExecutionFence } from "@convex/domain/evidenceAuthority";
 import {
+    assertWithinLength,
     MAX_POLICY_INPUT_HASH_CHARS,
+    MAX_POLICY_PUBLISHER_IDENTITY_CHARS,
     MAX_POLICY_REASON_CODE_CHARS,
     MAX_POLICY_RULE_ID_CHARS,
     MAX_POLICY_SOURCE_CATEGORY_CHARS,
     MAX_POLICY_SOURCE_ID_CHARS,
-    MAX_POLICY_PUBLISHER_IDENTITY_CHARS,
     MAX_POLICY_SOURCE_SEC_FORM_CHARS,
     MAX_VERIFIER_EVIDENCE_REFERENCES,
     MAX_VERIFIER_INPUT_HASH_CHARS,
     MAX_VERIFIER_REFERENCE_IDENTITY_CHARS,
-    assertWithinLength,
 } from "@convex/domain/evidenceLimits";
 import {
     derivePublisherIdentity,
@@ -25,17 +26,20 @@ import {
     type PolicyRuleResult,
     type PolicySourceInput,
 } from "@convex/domain/evidencePolicy";
-import { assertEvidenceExecutionFence } from "@convex/domain/evidenceAuthority";
+import {
+    preparePassageReproduction,
+    type SourceLocator,
+    sha256Hex,
+    sourceLocatorValidator,
+} from "@convex/domain/sourcePassages";
 import {
     SOURCE_AUTHORITY_TIERS,
     SOURCE_DOCUMENT_KINDS,
 } from "@convex/domain/sourceSelectionPolicy";
 import {
-    reproducePassage,
-    sha256Hex,
-    sourceLocatorValidator,
-    type SourceLocator,
-} from "@convex/domain/sourcePassages";
+    readPreparedSourceUsage,
+    validatePreparedEvidenceUse,
+} from "@convex/domain/sourceUsage";
 import {
     computeVerifierInputHash,
     executeShowcaseVerifier,
@@ -45,10 +49,10 @@ import {
     type VerifierOutput,
 } from "@convex/integrations/showcaseVerifierAdapter";
 import {
+    MAX_CLAIMS_PER_RUN,
     MAX_DIMENSION_LINKS_PER_CLAIM,
     MAX_EVIDENCE_ARTIFACT_BYTES,
     MAX_EVIDENCE_PER_CLAIM,
-    MAX_CLAIMS_PER_RUN,
 } from "@convex/resourceLimits";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
@@ -92,6 +96,7 @@ const normalizedInputsValidator = v.object({
     classification: claimClassificationValidator,
     asOfTime: v.number(),
     sources: v.array(policySourceInputValidator),
+    supportingSourceIds: v.array(v.string()),
     supportingEvidenceCount: v.number(),
     counterEvidenceCount: v.number(),
     contextEvidenceCount: v.number(),
@@ -130,6 +135,7 @@ const verifierOutputValidator = v.object({
     ),
 });
 const citedEvidenceValidator = v.object({
+    strengthensFactualSupport: v.boolean(),
     relation: evidenceRelationValidator,
     sourcePassageId: v.id("sourcePassages"),
     passageKey: v.string(),
@@ -154,6 +160,7 @@ const snapshotClaimValidator = v.object({
 });
 
 type CitedEvidence = {
+    strengthensFactualSupport: boolean;
     relation: "supporting" | "counter" | "context";
     sourcePassageId: Id<"sourcePassages">;
     passageKey: string;
@@ -316,6 +323,15 @@ export const loadPolicySnapshot = internalQuery({
         }
 
         const result: SnapshotClaim[] = [];
+        const issuerCik =
+            run.companySnapshot?.cik ??
+            (run.companyId
+                ? (await ctx.db.get(run.companyId))?.cik
+                : undefined);
+        const preparedUsageByVersion = new Map<
+            Id<"sourceVersions">,
+            Awaited<ReturnType<typeof readPreparedSourceUsage>>
+        >();
         for (const claim of claims) {
             const evidenceRows = await ctx.db
                 .query("claimEvidence")
@@ -432,7 +448,33 @@ export const loadPolicySnapshot = internalQuery({
                         STRUCTURAL_RULE_IDS.SOURCE_STATUS_NOT_TERMINAL;
                     continue;
                 }
+                if (!preparedUsageByVersion.has(sourceVersion._id))
+                    preparedUsageByVersion.set(
+                        sourceVersion._id,
+                        await readPreparedSourceUsage(ctx.db, sourceVersion),
+                    );
+                const preparedUsage = preparedUsageByVersion.get(
+                    sourceVersion._id,
+                );
+                const usage = preparedUsage
+                    ? validatePreparedEvidenceUse({
+                          ...preparedUsage,
+                          passage,
+                          statement: claim.statement,
+                          classification: claim.classification,
+                          relation: row.relation,
+                      })
+                    : {
+                          allowed: true as const,
+                          strengthensFactualSupport:
+                              row.relation === "supporting",
+                      };
+                if (!usage.allowed)
+                    preblockedRuleId =
+                        STRUCTURAL_RULE_IDS.SOURCE_USAGE_RESTRICTED;
                 evidence.push({
+                    strengthensFactualSupport:
+                        usage.allowed && usage.strengthensFactualSupport,
                     relation: row.relation,
                     sourcePassageId: passage._id,
                     passageKey: passage.passageKey,
@@ -450,7 +492,10 @@ export const loadPolicySnapshot = internalQuery({
                         authorityTier: proposalItem.authorityTier,
                         documentKind: proposalItem.documentKind,
                         publisherIdentity:
-                            derivePublisherIdentity(source.canonicalUrl) ?? "",
+                            derivePublisherIdentity(source.canonicalUrl, {
+                                authorityTier: proposalItem.authorityTier,
+                                issuerCik,
+                            }) ?? "",
                         publishedAt: source.publishedAt,
                     },
                 });
@@ -753,13 +798,24 @@ export const evaluatePolicyForRun = internalAction({
     handler: async (ctx, args) => {
         const snapshot = await ctx.runQuery(loadPolicySnapshotRef, args);
         const currentQuestionIds = new Set(snapshot.currentQuestionIds);
-        const artifacts = new Map<Id<"_storage">, Uint8Array | null>();
+        const referencesByArtifact = new Map<
+            Id<"_storage">,
+            Array<{
+                claimId: Id<"claims">;
+                index: number;
+                evidence: CitedEvidence;
+            }>
+        >();
+        const failures = new Map<
+            Id<"claims">,
+            { index: number; ruleId: string }
+        >();
         const structuralResults = new Map<
             Id<"claims">,
             StructuralValidationResult
         >();
         for (const claim of snapshot.claims) {
-            let result: StructuralValidationResult = claim.preblockedRuleId
+            const result: StructuralValidationResult = claim.preblockedRuleId
                 ? {
                       status: "blocked",
                       ruleId: claim.preblockedRuleId,
@@ -779,45 +835,62 @@ export const evaluatePolicyForRun = internalAction({
                       dimensionLinks: claim.dimensionLinks,
                   });
             if (result.status === "valid") {
-                for (const evidence of claim.evidence) {
-                    if (!artifacts.has(evidence.storageId)) {
-                        const blob = await ctx.storage.get(evidence.storageId);
-                        if (!blob || blob.size > MAX_EVIDENCE_ARTIFACT_BYTES) {
-                            artifacts.set(evidence.storageId, null);
-                        } else {
-                            artifacts.set(
-                                evidence.storageId,
-                                new Uint8Array(await blob.arrayBuffer()),
-                            );
-                        }
-                    }
-                    const artifact = artifacts.get(evidence.storageId);
-                    if (!artifact) {
-                        result = {
-                            status: "blocked",
-                            ruleId: STRUCTURAL_RULE_IDS.ARTIFACT_MISSING,
-                            reason: STRUCTURAL_RULE_IDS.ARTIFACT_MISSING,
-                        };
-                        break;
-                    }
-                    try {
-                        const reproduced = await reproducePassage(
-                            artifact,
-                            evidence.locator,
-                        );
-                        if (reproduced !== evidence.exactQuotation)
-                            throw new Error("quotation mismatch");
-                    } catch {
-                        result = {
-                            status: "blocked",
-                            ruleId: STRUCTURAL_RULE_IDS.QUOTATION_NOT_REPRODUCIBLE,
-                            reason: STRUCTURAL_RULE_IDS.QUOTATION_NOT_REPRODUCIBLE,
-                        };
-                        break;
-                    }
+                for (const [index, evidence] of claim.evidence.entries()) {
+                    const references =
+                        referencesByArtifact.get(evidence.storageId) ?? [];
+                    references.push({
+                        claimId: claim.claimId,
+                        index,
+                        evidence,
+                    });
+                    referencesByArtifact.set(evidence.storageId, references);
                 }
             }
             structuralResults.set(claim.claimId, result);
+        }
+        for (const [storageId, references] of referencesByArtifact) {
+            const pending = references.filter(
+                ({ claimId, index }) =>
+                    index < (failures.get(claimId)?.index ?? Infinity),
+            );
+            if (!pending.length) continue;
+            const blob = await ctx.storage.get(storageId);
+            const artifact =
+                blob && blob.size <= MAX_EVIDENCE_ARTIFACT_BYTES
+                    ? new Uint8Array(await blob.arrayBuffer())
+                    : null;
+            let reproduce:
+                | ReturnType<typeof preparePassageReproduction>
+                | undefined;
+            for (const { claimId, index, evidence } of pending) {
+                if (index >= (failures.get(claimId)?.index ?? Infinity))
+                    continue;
+                if (!artifact) {
+                    failures.set(claimId, {
+                        index,
+                        ruleId: STRUCTURAL_RULE_IDS.ARTIFACT_MISSING,
+                    });
+                    continue;
+                }
+                try {
+                    reproduce ??= preparePassageReproduction(artifact);
+                    const reproduced = reproduce(evidence.locator);
+                    if (reproduced !== evidence.exactQuotation)
+                        throw new Error("quotation mismatch");
+                } catch {
+                    failures.set(claimId, {
+                        index,
+                        ruleId: STRUCTURAL_RULE_IDS.QUOTATION_NOT_REPRODUCIBLE,
+                    });
+                }
+            }
+        }
+        for (const [claimId, { ruleId }] of failures) {
+            structuralResults.set(claimId, {
+                status: "blocked",
+                ruleId,
+                reason: ruleId,
+            });
         }
         const coveredQuestionIds = new Set(
             snapshot.claims
@@ -853,6 +926,17 @@ export const evaluatePolicyForRun = internalAction({
                 sources: [...distinctSources.values()].sort((left, right) =>
                     left.sourceId.localeCompare(right.sourceId),
                 ),
+                supportingSourceIds: [
+                    ...new Set(
+                        claim.evidence
+                            .filter(
+                                (item) =>
+                                    item.relation === "supporting" &&
+                                    item.strengthensFactualSupport,
+                            )
+                            .map((item) => item.sourceId),
+                    ),
+                ].sort(),
                 supportingEvidenceCount: claim.evidence.filter(
                     (item) => item.relation === "supporting",
                 ).length,

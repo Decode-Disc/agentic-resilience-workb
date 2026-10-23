@@ -13,15 +13,12 @@ const args = {
 };
 
 test("records success around manual URL metadata and persists once", async () => {
-    const runQuery = vi
-        .fn()
-        .mockResolvedValueOnce({
-            executionGeneration: 3,
-            workflowVersion: 2,
-            stepKey: "source_review",
-            hasCapacity: true,
-        })
-        .mockResolvedValueOnce(null);
+    const runQuery = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({
+        executionGeneration: 3,
+        workflowVersion: 2,
+        stepKey: "source_review",
+        hasCapacity: true,
+    });
     const runMutation = vi
         .fn()
         .mockResolvedValueOnce(null)
@@ -72,19 +69,11 @@ test("records success around manual URL metadata and persists once", async () =>
 });
 
 test("replays a completed URL operation without another external request", async () => {
-    const runQuery = vi
-        .fn()
-        .mockResolvedValueOnce({
-            executionGeneration: 3,
-            workflowVersion: 2,
-            stepKey: "source_review",
-            hasCapacity: true,
-        })
-        .mockResolvedValueOnce({
-            sourceId: "source-existing",
-            canonicalUrl: "https://example.com/report",
-            title: "Public report",
-        });
+    const runQuery = vi.fn().mockResolvedValueOnce({
+        sourceId: "source-existing",
+        canonicalUrl: "https://example.com/report",
+        title: "Public report",
+    });
     const runMutation = vi.fn();
     const inspect = vi.fn();
 
@@ -108,15 +97,12 @@ test("replays a completed URL operation without another external request", async
 });
 
 test("records failed manual URL metadata inspection", async () => {
-    const runQuery = vi
-        .fn()
-        .mockResolvedValueOnce({
-            executionGeneration: 3,
-            workflowVersion: 2,
-            stepKey: "source_review",
-            hasCapacity: true,
-        })
-        .mockResolvedValueOnce(null);
+    const runQuery = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({
+        executionGeneration: 3,
+        workflowVersion: 2,
+        stepKey: "source_review",
+        hasCapacity: true,
+    });
     const runMutation = vi
         .fn()
         .mockResolvedValueOnce(null)
@@ -171,15 +157,12 @@ test("records failed manual URL metadata inspection", async () => {
 });
 
 test("retries one typed timeout and records both attempts", async () => {
-    const runQuery = vi
-        .fn()
-        .mockResolvedValueOnce({
-            executionGeneration: 3,
-            workflowVersion: 2,
-            stepKey: "source_review",
-            hasCapacity: true,
-        })
-        .mockResolvedValueOnce(null);
+    const runQuery = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({
+        executionGeneration: 3,
+        workflowVersion: 2,
+        stepKey: "source_review",
+        hasCapacity: true,
+    });
     const runMutation = vi
         .fn()
         .mockResolvedValueOnce(null)

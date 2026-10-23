@@ -13,12 +13,28 @@ import {
     mutation,
     query,
 } from "./_generated/server";
+import { aiTaskExecutionModeValidator } from "./domain/claims";
 import { manualSourceIntakeError } from "./domain/manualSourceIntake";
 import { purgePreviewCacheForSource } from "./domain/previewCache";
 import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
-import { SOURCE_SELECTION_POLICY_VERSION } from "./domain/sourceSelectionPolicy";
-import { sourceCandidateLimit } from "./resourceLimits";
+import {
+    SOURCE_SELECTION_POLICY_VERSION,
+    sourceRoleAvailabilityValidator,
+} from "./domain/sourceSelectionPolicy";
+import {
+    projectSourceQualificationForReview,
+    readPinnedComparisonReview,
+    readPinnedSourceQualification,
+    sourceQualificationReviewValidator,
+} from "./domain/sourceUsage";
+import {
+    MAX_HISTORICAL_SOURCE_CANDIDATES,
+    sourceDossierCandidateLimit,
+    sourcePreparationEnabled,
+} from "./resourceLimits";
+import schema from "./schema";
+import { startReviewPreparation } from "./sourcePreparation";
 import { createSourceSelectionProposal } from "./sourceSelectionProposals";
 
 const sourceReviewDecisionValidator = v.union(
@@ -152,16 +168,17 @@ export async function insertPendingManualSource(
     return sourceId;
 }
 
-async function authorizeReviewRead(
+export async function authorizeReviewRead(
     ctx: QueryCtx,
     args: {
         runId: Id<"researchRuns">;
         corpusRevisionId: Id<"corpusRevisions">;
     },
+    denied?: (code: "not_authenticated" | "not_authorized") => Error,
 ) {
     const authUserId = await getAuthUserId(ctx);
     if (!authUserId) {
-        throw new Error("Not authenticated");
+        throw denied?.("not_authenticated") ?? new Error("Not authenticated");
     }
     const visitor = await ctx.db
         .query("visitors")
@@ -176,9 +193,9 @@ async function authorizeReviewRead(
         run?.ownerVisitorId !== visitor._id ||
         revision?.runId !== run._id
     ) {
-        throw new Error("Unauthorized");
+        throw denied?.("not_authorized") ?? new Error("Unauthorized");
     }
-    return { revision };
+    return { run, revision };
 }
 
 export const getReviewSummary = query({
@@ -198,8 +215,10 @@ export const getReviewSummary = query({
         candidateLimit: v.number(),
     }),
     handler: async (ctx, args) => {
-        const { revision } = await authorizeReviewRead(ctx, args);
-        const candidateLimit = sourceCandidateLimit();
+        const { run, revision } = await authorizeReviewRead(ctx, args);
+        const candidateLimit = sourceDossierCandidateLimit(
+            run.sourcePreparationId,
+        );
         const count = async (decision: "accepted" | "rejected" | "pending") => {
             const items = await ctx.db
                 .query("sourceReviewItems")
@@ -291,7 +310,23 @@ export const getReviewSource = query({
         corpusRevisionId: v.id("corpusRevisions"),
         sourceId: v.id("sources"),
     },
-    returns: v.union(sourceReviewSourceValidator, v.null()),
+    returns: v.union(
+        v.object({
+            ...sourceReviewSourceValidator.fields,
+            inspectionStatus:
+                schema.tables.sourceSelectionProposalItems.validator.fields
+                    .inspectionStatus,
+            roleAvailability: v.optional(sourceRoleAvailabilityValidator),
+            qualification: v.optional(sourceQualificationReviewValidator),
+            qualificationExecutionMode: v.optional(
+                aiTaskExecutionModeValidator,
+            ),
+            qualificationStatus: v.optional(
+                v.union(v.literal("available"), v.literal("unavailable")),
+            ),
+        }),
+        v.null(),
+    ),
     handler: async (ctx, args) => {
         const { revision } = await authorizeReviewRead(ctx, args);
         const item = await ctx.db
@@ -311,6 +346,18 @@ export const getReviewSource = query({
             revision,
             source._id,
         );
+        const scopedItem =
+            classification?.runId === args.runId &&
+            classification.corpusRevisionId === revision._id
+                ? classification
+                : null;
+        const pinned = scopedItem
+            ? await readPinnedSourceQualification(ctx.db, scopedItem)
+            : null;
+        const comparisonReview =
+            scopedItem && pinned
+                ? await readPinnedComparisonReview(ctx.db, scopedItem, pinned)
+                : { outcomes: {}, details: {} };
         return {
             sourceId: source._id,
             canonicalUrl: source.canonicalUrl,
@@ -322,6 +369,31 @@ export const getReviewSource = query({
             reason: item.reason,
             documentKind: classification?.documentKind,
             authorityTier: classification?.authorityTier,
+            ...(scopedItem?.inspectionStatus
+                ? { inspectionStatus: scopedItem.inspectionStatus }
+                : {}),
+            ...(scopedItem?.roleAvailability
+                ? { roleAvailability: scopedItem.roleAvailability }
+                : {}),
+            ...(scopedItem?.sourceCaptureId
+                ? {
+                      qualificationStatus: pinned
+                          ? ("available" as const)
+                          : ("unavailable" as const),
+                  }
+                : {}),
+            ...(pinned
+                ? {
+                      qualification: projectSourceQualificationForReview({
+                          ...pinned,
+                          roleAvailability: scopedItem?.roleAvailability ?? [],
+                          comparisonOutcomes: comparisonReview.outcomes,
+                          comparisonDetails: comparisonReview.details,
+                      }),
+                      qualificationExecutionMode:
+                          pinned.qualificationExecutionMode,
+                  }
+                : {}),
         };
     },
 });
@@ -511,13 +583,42 @@ export const persistManualCandidate = internalMutation({
             now,
         });
         if (run.lifecycleState === "awaiting_source_review") {
-            const currentProposal = revision.sourceSelectionProposalId
+            let proposal = revision.sourceSelectionProposalId
                 ? await ctx.db.get(revision.sourceSelectionProposalId)
                 : null;
-            if (
-                !currentProposal ||
-                currentProposal.policyVersion ===
-                    SOURCE_SELECTION_POLICY_VERSION
+            if (sourcePreparationEnabled()) {
+                if (!proposal) {
+                    const initial = await createSourceSelectionProposal(ctx, {
+                        run,
+                        revision,
+                    });
+                    proposal = await ctx.db.get(initial.proposalId);
+                }
+                if (!proposal)
+                    throw new Error("Missing source selection proposal");
+                const started = await startReviewPreparation(ctx, {
+                    run,
+                    revision: {
+                        ...revision,
+                        sourceSelectionProposalId: proposal._id,
+                    },
+                    proposal,
+                    visitor,
+                    requestId: `manual:${sourceId}`,
+                    manualSourceId: sourceId,
+                });
+                const currentRun = await ctx.db.get(run._id);
+                if (!currentRun) throw new Error("Missing research run");
+                const updated = await createSourceSelectionProposal(ctx, {
+                    run: currentRun,
+                    revision,
+                });
+                await ctx.db.patch(started.preparationId, {
+                    expectedProposalId: updated.proposalId,
+                });
+            } else if (
+                !proposal ||
+                proposal.policyVersion === SOURCE_SELECTION_POLICY_VERSION
             ) {
                 await createSourceSelectionProposal(ctx, { run, revision });
             }
@@ -594,6 +695,8 @@ export const findManualCandidateByProviderReference = internalQuery({
     args: {
         runId: v.id("researchRuns"),
         providerReference: v.string(),
+        corpusRevisionId: v.id("corpusRevisions"),
+        legacyRequestSuffix: v.optional(v.string()),
     },
     returns: v.union(
         v.object({
@@ -604,16 +707,28 @@ export const findManualCandidateByProviderReference = internalQuery({
         v.null(),
     ),
     handler: async (ctx, args) => {
+        await authorizeReviewRead(
+            ctx,
+            args,
+            (code) => new ConvexError(manualSourceIntakeError(code).data),
+        );
         const sources = await ctx.db
             .query("sources")
             .withIndex("by_run_and_url", (builder) =>
                 builder.eq("runId", args.runId),
             )
-            .collect();
+            .take(MAX_HISTORICAL_SOURCE_CANDIDATES + 1);
         const source = sources.find(
             (candidate) =>
                 candidate.origin === "analyst_url" &&
-                candidate.providerReference === args.providerReference,
+                (candidate.providerReference === args.providerReference ||
+                    (args.legacyRequestSuffix !== undefined &&
+                        candidate.providerReference?.includes(
+                            `:corpus:${args.corpusRevisionId}:step:`,
+                        ) &&
+                        candidate.providerReference.endsWith(
+                            args.legacyRequestSuffix,
+                        ))),
         );
         return source
             ? {

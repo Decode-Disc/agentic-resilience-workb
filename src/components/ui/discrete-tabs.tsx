@@ -27,21 +27,15 @@ type DiscreteTabsProps = {
     activeIndex?: number;
     className?: string;
     ariaLabel?: string;
-    /**
-     * Clé de persistence de l'onglet actif dans l'URL query.
-     * Quand fournie, l'onglet actif est lu puis écrit dans `?key=value`
-     * sans déclencher de navigation Inertia.
-     */
+    labelVisibility?: "active" | "all";
+    overflow?: "scroll" | "wrap";
+    orientation?: "horizontal" | "vertical";
+    appearance?: "pill" | "plain";
+    /** Optional query parameter used to preserve the local selection. */
     persistKey?: string;
 };
 
-/**
- * Rend une navigation discrète composée d'onglets locaux et de liens optionnels.
- *
- * Entrées: éléments, valeur active, callback, libellé accessible et clé de persistence optionnelle.
- * Sortie: groupe horizontal scrollable ou rien quand la collection est vide.
- * Effets de bord: maintient la sélection locale, persiste l'onglet dans l'URL si persistKey est fourni.
- */
+/** Keeps controlled selection and keyboard navigation across scrolling or wrapping layouts. */
 export default function DiscreteTabs({
     tabs = [],
     value,
@@ -51,6 +45,10 @@ export default function DiscreteTabs({
     className,
     ariaLabel,
     persistKey,
+    labelVisibility = "active",
+    overflow = "scroll",
+    orientation = "horizontal",
+    appearance = "pill",
 }: DiscreteTabsProps) {
     const [internalValue, setInternalValue] = useState<string>(() => {
         if (persistKey && typeof window !== "undefined") {
@@ -140,9 +138,14 @@ export default function DiscreteTabs({
         currentIndex: number,
     ) => {
         let nextIndex: number | null = null;
-        if (event.key === "ArrowRight") {
+        if (
+            event.key ===
+            (orientation === "vertical" ? "ArrowDown" : "ArrowRight")
+        ) {
             nextIndex = (currentIndex + 1) % tabs.length;
-        } else if (event.key === "ArrowLeft") {
+        } else if (
+            event.key === (orientation === "vertical" ? "ArrowUp" : "ArrowLeft")
+        ) {
             nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
         } else if (event.key === "Home") {
             nextIndex = 0;
@@ -161,34 +164,54 @@ export default function DiscreteTabs({
         localTabRefs.current[nextIndex]?.focus();
     };
 
-    return (
+    const navigationClassName = cn(
+        "flex items-center gap-4",
+        orientation === "vertical"
+            ? "w-full min-w-0 flex-col items-stretch"
+            : overflow === "wrap"
+              ? "w-full min-w-0 flex-wrap"
+              : "w-max min-w-full flex-nowrap",
+        className,
+    );
+    const buttons = tabs.map((tab, index) => (
+        <DiscreteTabButton
+            key={tab.id}
+            tab={tab}
+            isActive={resolvedActiveButton === tab.id}
+            showLabel={labelVisibility === "all"}
+            appearance={appearance}
+            setActiveButton={setActiveButton}
+            buttonRef={(node) => {
+                localTabRefs.current[index] = node;
+            }}
+            onKeyDown={
+                hasNavigationDestination
+                    ? undefined
+                    : (event) => handleLocalTabKeyDown(event, index)
+            }
+        />
+    ));
+    const navigation = hasNavigationDestination ? (
+        <nav className={navigationClassName} aria-label={ariaLabel}>
+            {buttons}
+        </nav>
+    ) : (
+        <div
+            className={navigationClassName}
+            role="tablist"
+            aria-orientation={orientation}
+            aria-label={ariaLabel}>
+            {buttons}
+        </div>
+    );
+
+    return overflow === "wrap" || orientation === "vertical" ? (
+        navigation
+    ) : (
         <ScrollArea
             className="relative overflow-visible"
             viewportClassName="overflow-x-auto overflow-y-visible py-0.5">
-            <nav
-                className={cn(
-                    "flex w-max min-w-full flex-nowrap items-center gap-4",
-                    className,
-                )}
-                role={hasNavigationDestination ? "navigation" : "tablist"}
-                aria-label={ariaLabel}>
-                {tabs.map((tab, index) => (
-                    <DiscreteTabButton
-                        key={tab.id}
-                        tab={tab}
-                        isActive={resolvedActiveButton === tab.id}
-                        setActiveButton={setActiveButton}
-                        buttonRef={(node) => {
-                            localTabRefs.current[index] = node;
-                        }}
-                        onKeyDown={
-                            hasNavigationDestination
-                                ? undefined
-                                : (event) => handleLocalTabKeyDown(event, index)
-                        }
-                    />
-                ))}
-            </nav>
+            {navigation}
             <ScrollBar
                 orientation="horizontal"
                 className="absolute! -bottom-2!"
@@ -200,21 +223,19 @@ export default function DiscreteTabs({
 type DiscreteTabButtonProps = {
     tab: DiscreteTabItem;
     isActive: boolean;
+    showLabel: boolean;
+    appearance: "pill" | "plain";
     setActiveButton: (nextValue: string) => void;
     buttonRef: (node: HTMLButtonElement | null) => void;
     onKeyDown?: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
 };
 
-/**
- * Rend un élément de la navigation discrète comme onglet local ou lien Inertia.
- *
- * Entrées: définition de l'élément, état actif et callback de sélection locale.
- * Sortie: contrôle animé conservant le rendu historique du composant.
- * Effets de bord: affiche un tooltip et notifie les sélections locales.
- */
+/** Keeps the icon, optional label and count together across tab selection. */
 const DiscreteTabButton = ({
     tab,
     isActive,
+    showLabel,
+    appearance,
     setActiveButton,
     buttonRef,
     onKeyDown,
@@ -224,12 +245,15 @@ const DiscreteTabButton = ({
     const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
     const accessibleLabel =
         tab.count === undefined ? tab.title : `${tab.title} ${tab.count}`;
-    const activeClass =
-        "border-foreground/15 bg-background text-foreground shadow-sm";
-    const nonActiveClass =
-        "border-border/60 bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground";
+    const plain = appearance === "plain";
+    const activeClass = plain
+        ? "bg-foreground/7 text-foreground"
+        : "border-foreground/15 bg-background text-foreground shadow-sm";
+    const nonActiveClass = plain
+        ? "text-muted-foreground hover:bg-foreground/4 hover:text-foreground"
+        : "border-border/60 bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground";
 
-    /** Positionne le tooltip au-dessus du contrôle actuellement survolé ou ciblé. */
+    /** Positions the tooltip above the hovered or focused control. */
     const showTooltip = (event: React.SyntheticEvent<HTMLElement>) => {
         const rect = event.currentTarget.getBoundingClientRect();
         setTooltipPosition({
@@ -244,7 +268,7 @@ const DiscreteTabButton = ({
             {typeof document !== "undefined"
                 ? createPortal(
                       <AnimatePresence>
-                          {isTooltipVisible && (
+                          {isTooltipVisible && !showLabel && (
                               <motion.span
                                   initial={{
                                       opacity: 0,
@@ -276,7 +300,8 @@ const DiscreteTabButton = ({
                 : null}
 
             <motion.div
-                layout
+                data-slot="discrete-tab-control"
+                layout={!plain}
                 transition={{
                     layout: {
                         type: "spring",
@@ -286,11 +311,15 @@ const DiscreteTabButton = ({
                     },
                 }}
                 className={cn(
-                    "flex min-h-9 cursor-pointer items-center gap-1.5 overflow-hidden rounded-full border px-3 py-2 font-mono text-xs uppercase outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50",
+                    "flex cursor-pointer items-center gap-1.5 overflow-hidden font-mono text-xs uppercase outline-none transition-colors",
+                    plain
+                        ? "h-9 w-full rounded-md px-2.5"
+                        : "min-h-9 rounded-full border px-3 py-2",
+                    showLabel && "font-sans normal-case",
                     isActive ? activeClass : nonActiveClass,
                 )}>
                 <motion.div
-                    layoutId={`icon-id${tab.title}`}
+                    layoutId={plain ? undefined : `icon-id${tab.title}`}
                     className="shrink-0"
                     style={{ willChange: "transform" }}>
                     <Icon
@@ -299,11 +328,11 @@ const DiscreteTabButton = ({
                         className={tab.iconClassName}
                     />
                 </motion.div>
-                {isActive && (
+                {(isActive || showLabel) && (
                     <motion.div
                         className="flex items-center"
                         initial={
-                            isLoaded
+                            isLoaded && !showLabel
                                 ? { opacity: 0, filter: "blur(4px)" }
                                 : false
                         }
@@ -313,15 +342,24 @@ const DiscreteTabButton = ({
                             ease: [0.86, 0, 0.07, 1],
                         }}>
                         <motion.span
-                            layoutId={`text-id-${tab.title}`}
-                            className="text-sm font-medium font-mono uppercase whitespace-nowrap relative inline-block"
+                            layoutId={
+                                plain ? undefined : `text-id-${tab.title}`
+                            }
+                            className={cn(
+                                "text-sm font-medium font-mono uppercase whitespace-nowrap relative inline-block",
+                                showLabel && "font-sans normal-case",
+                            )}
                             style={{ willChange: "transform" }}>
                             {tab.title}
                         </motion.span>
                     </motion.div>
                 )}
                 {tab.count !== undefined ? (
-                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-foreground/8 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-current">
+                    <span
+                        className={cn(
+                            "inline-flex min-w-5 items-center justify-center rounded-full bg-foreground/8 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-current",
+                            plain && "ml-auto",
+                        )}>
                         {tab.count}
                     </span>
                 ) : null}
@@ -338,10 +376,14 @@ const DiscreteTabButton = ({
                 onMouseLeave={() => setIsTooltipVisible(false)}
                 onFocus={showTooltip}
                 onBlur={() => setIsTooltipVisible(false)}
-                className="relative flex h-fit w-fit">
+                className={cn(
+                    "relative flex h-fit rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                    plain ? "w-full" : "w-fit",
+                )}>
                 <motion.div
                     style={{ willChange: "transform" }}
-                    whileHover={{ scale: 1.05 }}>
+                    className={plain ? "w-full" : undefined}
+                    whileHover={plain ? undefined : { scale: 1.05 }}>
                     {content}
                 </motion.div>
             </Link>
@@ -352,7 +394,7 @@ const DiscreteTabButton = ({
         <motion.button
             ref={buttonRef}
             type="button"
-            layoutId={`button-id-${tab.title}`}
+            layoutId={plain ? undefined : `button-id-${tab.title}`}
             transition={{
                 layout: {
                     type: "spring",
@@ -371,9 +413,12 @@ const DiscreteTabButton = ({
             onMouseLeave={() => setIsTooltipVisible(false)}
             onFocus={showTooltip}
             onBlur={() => setIsTooltipVisible(false)}
-            className="relative flex h-fit w-fit shrink-0"
+            className={cn(
+                "relative flex h-fit shrink-0 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                plain ? "w-full" : "w-fit",
+            )}
             style={{ willChange: "transform" }}
-            whileHover={{ scale: 1.05 }}
+            whileHover={plain ? undefined : { scale: 1.05 }}
             role="tab"
             aria-selected={isActive}
             aria-label={accessibleLabel}

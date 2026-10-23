@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BrowserView } from "@/components/ui/browser-view";
+import { Toaster } from "@/components/ui/sonner";
 
 const destination = {
     url: "https://example.com/research/report",
@@ -66,13 +67,40 @@ describe("BrowserView", () => {
         expect(await screen.findByText("Link copied")).toBeTruthy();
     });
 
-    it("shows skeleton placeholder when preview is loading", () => {
+    it("offers manual copying when clipboard access is denied", async () => {
+        Object.defineProperty(navigator, "clipboard", {
+            configurable: true,
+            value: {
+                writeText: vi
+                    .fn()
+                    .mockRejectedValue(
+                        new Error("Internal clipboard diagnostic"),
+                    ),
+            },
+        });
         render(
-            <BrowserView
-                {...destination}
-                previewState="loading"
-            />,
+            <>
+                <BrowserView {...destination} />
+                <Toaster />
+            </>,
         );
+
+        fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
+
+        expect(
+            await screen.findByText(
+                "The link could not be copied. Select the address to copy it manually.",
+            ),
+        ).toBeTruthy();
+        expect(screen.queryByText("Link copied")).toBeNull();
+        expect(screen.queryByText("Internal clipboard diagnostic")).toBeNull();
+        expect(screen.getByLabelText("Source address").textContent).toContain(
+            destination.url,
+        );
+    });
+
+    it("shows skeleton placeholder when preview is loading", () => {
+        render(<BrowserView {...destination} previewState="loading" />);
 
         // Should not show the external-link heading or iframe
         expect(document.querySelector("iframe")).toBeNull();
@@ -83,9 +111,9 @@ describe("BrowserView", () => {
         ).toBeNull();
 
         // Should still show the address bar
-        expect(
-            screen.getByLabelText("Source address").textContent,
-        ).toContain(destination.url);
+        expect(screen.getByLabelText("Source address").textContent).toContain(
+            destination.url,
+        );
     });
 
     it("shows screenshot with visual-reference label", () => {
@@ -118,12 +146,7 @@ describe("BrowserView", () => {
     });
 
     it("falls back to external link when preview is unavailable", () => {
-        render(
-            <BrowserView
-                {...destination}
-                previewState="unavailable"
-            />,
-        );
+        render(<BrowserView {...destination} previewState="unavailable" />);
 
         // Should show the external-link heading (fallback)
         expect(

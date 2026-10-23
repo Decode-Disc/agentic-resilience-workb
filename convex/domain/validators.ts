@@ -103,6 +103,8 @@ export const runEventTypeValidator = v.union(
     v.literal("source_discovery_progress"),
     v.literal("source_recovery_started"),
     v.literal("source_recovery_completed"),
+    v.literal("source_preparation_progress"),
+    v.literal("source_preparation_completed"),
     v.literal("corpus_revision_approved"),
     v.literal("corpus_revision_started"),
     v.literal("evidence_source_progress"),

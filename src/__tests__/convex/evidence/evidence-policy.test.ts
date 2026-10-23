@@ -1,26 +1,19 @@
 /// <reference types="vite/client" />
 import type { Id } from "@convex/_generated/dataModel";
 import {
-    POLICY_RULE_IDS,
-    POLICY_VERSION,
-    derivePublisherIdentity,
-    evaluateEvidencePolicy,
-    type PolicyNormalizedInputs,
-} from "@convex/domain/evidencePolicy";
-import {
+    type ClaimStructuralInput,
+    deriveQuestionCoverage,
     STRUCTURAL_RULE_IDS,
     validateClaimStructure,
-    deriveQuestionCoverage,
-    type ClaimStructuralInput,
 } from "@convex/domain/claimValidation";
-import schema from "@convex/schema";
-import { makeFunctionReference } from "convex/server";
-import { convexTest } from "convex-test";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
-
-import { registerCccShowcaseFixture } from "../../fixtures/evidence/ccc-showcase-manifest";
-import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
-import workflowTest from "../workflows/workflow-test-register.js";
+import { MAX_VERIFIER_EVIDENCE_REFERENCES } from "@convex/domain/evidenceLimits";
+import {
+    derivePublisherIdentity,
+    evaluateEvidencePolicy,
+    POLICY_RULE_IDS,
+    POLICY_VERSION,
+    type PolicyNormalizedInputs,
+} from "@convex/domain/evidencePolicy";
 import {
     CLAIM_SCHEMA_VERSION,
     clearShowcaseManifests,
@@ -38,8 +31,13 @@ import {
     VERIFIER_SCHEMA_VERSION,
     type VerifierInput,
 } from "@convex/integrations/showcaseVerifierAdapter";
-
-import { MAX_VERIFIER_EVIDENCE_REFERENCES } from "@convex/domain/evidenceLimits";
+import schema from "@convex/schema";
+import { makeFunctionReference } from "convex/server";
+import { convexTest } from "convex-test";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { registerCccShowcaseFixture } from "../../fixtures/evidence/ccc-showcase-manifest";
+import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
+import workflowTest from "../workflows/workflow-test-register.js";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 
@@ -518,6 +516,7 @@ describe("Structural Validation", () => {
 const basePolicyInputs: PolicyNormalizedInputs = {
     classification: "Fact",
     asOfTime: 1_800_000_000_000,
+    supportingSourceIds: ["source-1", "source-2"],
     sources: [
         {
             sourceId: "source-1",
@@ -580,7 +579,7 @@ describe("Deterministic Policy Evaluation", () => {
     });
 
     test("policy version is immutable", () => {
-        expect(POLICY_VERSION).toBe("evidence-policy-v3");
+        expect(POLICY_VERSION).toBe("evidence-policy-v4");
         expect(evaluateEvidencePolicy(basePolicyInputs).policyVersion).toBe(
             POLICY_VERSION,
         );
@@ -686,6 +685,157 @@ describe("E2E: Claim Generation with Structural Validation + Policy", () => {
             )) {
                 expect(unknown.researchPlanQuestionId).toBeDefined();
             }
+        });
+    });
+
+    test.each([
+        true,
+        false,
+    ])("keeps the first evidence failure across shared artifacts (missing first: %s)", async (missingFirst) => {
+        const t = convexTest(schema, modules);
+        rateLimiterTest.register(t);
+        workflowTest.register(t);
+        const scenario = await createPolicyScenario(t);
+        const input = await t.query(getNormalizedClaimInput, {
+            runId: scenario.runId,
+            executionGeneration: 1,
+        });
+        if (!input) throw new Error("Missing normalized input");
+        registerCccShowcaseFixture(input.normalizedInput);
+        await t.mutation(generateClaimsForRun, {
+            runId: scenario.runId,
+            executionGeneration: 1,
+        });
+        const targetClaimId = await t.run(async (ctx) => {
+            const claims = await ctx.db
+                .query("claims")
+                .withIndex("by_run", (q) => q.eq("runId", scenario.runId))
+                .take(129);
+            const target = claims.at(-1);
+            const passage = await ctx.db.query("sourcePassages").first();
+            const version = passage
+                ? await ctx.db.get(passage.sourceVersionId)
+                : null;
+            const source = version ? await ctx.db.get(version.sourceId) : null;
+            const item = await ctx.db
+                .query("sourceSelectionProposalItems")
+                .first();
+            if (!target || !passage || !version || !source || !item)
+                throw new Error("Missing policy fixture");
+            const sourceId = await ctx.db.insert("sources", {
+                runId: scenario.runId,
+                canonicalUrl: "https://example.com/sec/missing-artifact",
+                title: "Missing source artifact",
+                origin: "sec",
+                category: source.category,
+                createdAt: 100,
+            });
+            const decisionId = await ctx.db.insert("sourceDecisions", {
+                runId: scenario.runId,
+                corpusRevisionId: scenario.corpusRevisionId,
+                sourceId,
+                decisionKey: "missing-artifact-decision",
+                decision: "accepted",
+                reviewerVisitorId: scenario.visitorId,
+                occurredAt: 100,
+            });
+            await ctx.db.insert("sourceReviewItems", {
+                runId: scenario.runId,
+                corpusRevisionId: scenario.corpusRevisionId,
+                sourceId,
+                decisionRank: 0,
+                sourceCreatedAt: 100,
+                decision: "accepted",
+                latestDecisionId: decisionId,
+                decisionOccurredAt: 100,
+            });
+            const {
+                _id: _itemId,
+                _creationTime: _itemTime,
+                ...itemData
+            } = item;
+            await ctx.db.insert("sourceSelectionProposalItems", {
+                ...itemData,
+                sourceId,
+            });
+            const storageId = await ctx.storage.store(
+                new Blob(["removed artifact"]),
+            );
+            await ctx.storage.delete(storageId);
+            const {
+                _id: _versionId,
+                _creationTime: _versionTime,
+                ...versionData
+            } = version;
+            const sourceVersionId = await ctx.db.insert("sourceVersions", {
+                ...versionData,
+                sourceId,
+                acceptedDecisionId: decisionId,
+                storageId,
+            });
+            await ctx.db.insert("evidenceSourceStatuses", {
+                runId: scenario.runId,
+                corpusRevisionId: scenario.corpusRevisionId,
+                sourceId,
+                acceptedDecisionId: decisionId,
+                sourceVersionId,
+                executionGeneration: 1,
+                status: "succeeded",
+                createdAt: 100,
+                updatedAt: 100,
+            });
+            const {
+                _id: _passageId,
+                _creationTime: _passageTime,
+                ...passageData
+            } = passage;
+            const missingPassageId = await ctx.db.insert("sourcePassages", {
+                ...passageData,
+                sourceVersionId,
+                passageKey: "missing-artifact-passage",
+            });
+            await ctx.db.patch(passage._id, {
+                locator: {
+                    ...passage.locator,
+                    startOffset: 1,
+                    endOffset: passage.exactQuotation.length + 1,
+                },
+            });
+            const rows = await ctx.db
+                .query("claimEvidence")
+                .withIndex("by_claim", (q) => q.eq("claimId", target._id))
+                .take(33);
+            await ctx.db.patch(target._id, { classification: "Fact" });
+            for (const row of rows) await ctx.db.delete(row._id);
+            for (const sourcePassageId of missingFirst
+                ? [missingPassageId, passage._id]
+                : [passage._id, missingPassageId]) {
+                await ctx.db.insert("claimEvidence", {
+                    claimId: target._id,
+                    sourcePassageId,
+                    relation: "supporting",
+                    proposingTaskId: target.proposingTaskId,
+                    createdAt: 100,
+                });
+            }
+            return target._id;
+        });
+        const result = await t.action(evaluatePolicyForRun, {
+            runId: scenario.runId,
+            executionGeneration: 1,
+        });
+        expect(result.blockedCount).toBeGreaterThan(0);
+        const evaluation = await t.run((ctx) =>
+            ctx.db
+                .query("policyEvaluations")
+                .withIndex("by_claim", (q) => q.eq("claimId", targetClaimId))
+                .unique(),
+        );
+        expect(evaluation?.structuralResult).toEqual({
+            status: "blocked",
+            ruleId: missingFirst
+                ? STRUCTURAL_RULE_IDS.ARTIFACT_MISSING
+                : STRUCTURAL_RULE_IDS.QUOTATION_NOT_REPRODUCIBLE,
         });
     });
 
@@ -908,6 +1058,7 @@ describe("E2E: Claim Generation with Structural Validation + Policy", () => {
         const base = structuredClone(basePolicyInputs);
         const future = evaluateEvidencePolicy({
             ...base,
+            supportingSourceIds: ["source-1"],
             sources: [
                 {
                     sourceId: "source-1",
@@ -929,6 +1080,7 @@ describe("E2E: Claim Generation with Structural Validation + Policy", () => {
 
         const stale = evaluateEvidencePolicy({
             ...base,
+            supportingSourceIds: ["source-1"],
             sources: [
                 {
                     sourceId: "source-1",
@@ -952,6 +1104,7 @@ describe("E2E: Claim Generation with Structural Validation + Policy", () => {
     test("corroboration counts distinct independent publishers, not sources", () => {
         const same = evaluateEvidencePolicy({
             ...basePolicyInputs,
+            supportingSourceIds: ["a", "b"],
             sources: [
                 {
                     sourceId: "a",
@@ -1014,6 +1167,7 @@ describe("E2E: Claim Generation with Structural Validation + Policy", () => {
     test("missing publisher identity is never independent corroboration", () => {
         const missing = evaluateEvidencePolicy({
             ...basePolicyInputs,
+            supportingSourceIds: ["a", "b"],
             sources: [
                 {
                     sourceId: "a",
@@ -1195,6 +1349,7 @@ describe("E2E: Claim Generation with Structural Validation + Policy", () => {
             normalizedInputs: {
                 classification: "Fact",
                 asOfTime: 1_800_000_000_000,
+                supportingSourceIds: [],
                 sources: [
                     {
                         sourceId: "s1",
@@ -1804,4 +1959,149 @@ describe("E2E: Claim Generation with Structural Validation + Policy", () => {
             ).toBe(true);
         });
     });
+});
+
+test.each([
+    "context",
+    "counter",
+] as const)("%s citations cannot supply authority, recency or corroboration for a claim", (relation) => {
+    const originalSource = basePolicyInputs.sources[0];
+    if (!originalSource) throw new Error("Missing supporting fixture source");
+    const supporting = {
+        ...originalSource,
+        sourceId: "limited-support",
+        authorityTier: "unverified" as const,
+        publisherIdentity: "independent.example",
+        publishedAt: basePolicyInputs.asOfTime - 3 * 365 * 24 * 60 * 60 * 1000,
+    };
+    const inputs = {
+        ...basePolicyInputs,
+        sources: [supporting],
+        supportingSourceIds: [supporting.sourceId],
+        supportingEvidenceCount: 1,
+        distinctSourceCount: 1,
+        distinctPublisherCount: 1,
+        distinctPassageCount: 1,
+    };
+    const initial = evaluateEvidencePolicy(inputs);
+    const withContext = evaluateEvidencePolicy({
+        ...inputs,
+        sources: [supporting, ...basePolicyInputs.sources],
+        contextEvidenceCount: relation === "context" ? 2 : 0,
+        counterEvidenceCount: relation === "counter" ? 2 : 0,
+        unresolvedCounterCount: relation === "counter" ? 2 : 0,
+        distinctSourceCount: 3,
+        distinctPublisherCount: 3,
+        distinctPassageCount: 3,
+    });
+    for (const ruleId of [
+        POLICY_RULE_IDS.AUTHORITY,
+        POLICY_RULE_IDS.RECENCY,
+        POLICY_RULE_IDS.CORROBORATION,
+    ]) {
+        expect(
+            withContext.rules.find((rule) => rule.ruleId === ruleId),
+        ).toEqual(initial.rules.find((rule) => rule.ruleId === ruleId));
+    }
+});
+
+test("persisted policy inputs derive supporting identities from citation relations", async () => {
+    const t = convexTest(schema, modules);
+    const scenario = await createPolicyScenario(t);
+    const input = await t.query(getNormalizedClaimInput, {
+        runId: scenario.runId,
+        executionGeneration: 1,
+    });
+    if (!input) throw new Error("Missing claim input");
+    registerCccShowcaseFixture(input.normalizedInput);
+    await t.mutation(generateClaimsForRun, {
+        runId: scenario.runId,
+        executionGeneration: 1,
+    });
+    const claimId = await t.run(async (ctx) => {
+        const claim = await ctx.db
+            .query("claims")
+            .withIndex("by_run", (q) => q.eq("runId", scenario.runId))
+            .first();
+        if (!claim) throw new Error("Missing fixture claim");
+        const evidence = await ctx.db
+            .query("claimEvidence")
+            .withIndex("by_claim", (q) => q.eq("claimId", claim._id))
+            .collect();
+        for (const row of evidence)
+            await ctx.db.patch(row._id, { relation: "context" });
+        return claim._id;
+    });
+    await t.action(evaluatePolicyForRun, {
+        runId: scenario.runId,
+        executionGeneration: 1,
+    });
+    const evaluation = await t.run((ctx) =>
+        ctx.db
+            .query("policyEvaluations")
+            .withIndex("by_claim", (q) => q.eq("claimId", claimId))
+            .first(),
+    );
+    expect(evaluation?.normalizedInputs.supportingSourceIds).toEqual([]);
+    expect(evaluation?.normalizedInputs.sources[0]?.publisherIdentity).toBe(
+        "issuer:1818201",
+    );
+    expect(
+        evaluation?.rules.find(
+            (rule) => rule.ruleId === POLICY_RULE_IDS.AUTHORITY,
+        )?.outcome,
+    ).toBe("needs_review");
+});
+
+test("SEC, corporate and hosted investor-relations documents retain one issuer identity", () => {
+    const identities = [
+        derivePublisherIdentity("https://www.sec.gov/Archives/company/filing", {
+            authorityTier: "regulator_primary",
+            issuerCik: "0001373715",
+        }),
+        derivePublisherIdentity(
+            "https://www.servicenow.com/investors/results",
+            { authorityTier: "company_primary", issuerCik: "1373715" },
+        ),
+        derivePublisherIdentity("https://s203.q4cdn.com/results.pdf", {
+            authorityTier: "company_hosted_ir",
+            issuerCik: "1373715",
+        }),
+    ];
+    expect(identities).toEqual([
+        "issuer:1373715",
+        "issuer:1373715",
+        "issuer:1373715",
+    ]);
+});
+
+test("unverified domains and partner provenance do not establish editorial independence", () => {
+    for (const authorityTier of [
+        "unverified",
+        "analyst_supplied",
+        "qualified_partner",
+    ] as const)
+        expect(
+            derivePublisherIdentity("https://different-host.example/analysis", {
+                authorityTier,
+            }),
+        ).toBeUndefined();
+    expect(
+        derivePublisherIdentity("https://www.reuters.com/report", {
+            authorityTier: "institutional_independent",
+        }),
+    ).toBe("reuters.com");
+});
+
+test.each([
+    "file:///private/report",
+    "https://127.0.0.1/report",
+    "invalid-url",
+])("issuer metadata cannot give an invalid source URL a publisher identity: %s", (canonicalUrl) => {
+    expect(
+        derivePublisherIdentity(canonicalUrl, {
+            authorityTier: "company_primary",
+            issuerCik: "1373715",
+        }),
+    ).toBeUndefined();
 });

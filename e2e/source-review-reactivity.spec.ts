@@ -43,28 +43,40 @@ test("source decisions update the row, count, and detail without reload", async 
     await page.evaluate(() => {
         document.documentElement.dataset.e2eDocumentInstance = "source-review";
     });
-    await expect(page.getByText("Selected source:")).toBeVisible();
-    await expect(page.getByText("Pending review", { exact: true }).last()).toBeVisible();
-
     await page
         .getByRole("button", {
-            name: "Accept Annual report as accepted",
+            name: "Open Annual report for review",
+            exact: true,
         })
         .click();
-
-    await expect(
-        page.getByRole("button", {
-            name: "Accepted Annual report as accepted",
-        }),
-    ).toBeDisabled();
     await page
-        .getByRole("button", { name: "Filter candidate sources: All decisions" })
+        .getByRole("button", {
+            name: "Move Annual report to alternatives",
+            exact: true,
+        })
+        .click();
+    await expect(
+        page.getByRole("article").getByText("Alternative", { exact: true }),
+    ).toBeVisible();
+    await page
+        .getByRole("button", {
+            name: "Include Annual report in source set",
+            exact: true,
+        })
+        .click();
+    await expect(
+        page.getByRole("article").getByText("Included", { exact: true }),
+    ).toBeVisible();
+    await page
+        .getByRole("button", {
+            name: "Filter candidate sources: All decisions",
+        })
         .click();
     await expect(
         page.getByRole("radio", { name: "Accepted (1)" }),
     ).toBeVisible();
     await expect(
-        page.getByRole("article").getByText("Accepted", { exact: true }),
+        page.getByRole("article").getByText("Included", { exact: true }),
     ).toBeVisible();
     await expect
         .poll(() =>
@@ -100,14 +112,16 @@ test("corpus approval starts evidence preparation without reload or provider wor
     await startSanitizedTrace(page);
 
     await expect(
-        page.getByRole("button", { name: "Approve source set" }),
+        page.getByRole("button", { name: "Approve proposed corpus" }),
     ).toBeEnabled();
     await page.evaluate(() => {
         document.documentElement.dataset.e2eDocumentInstance = "approval";
     });
-    await page.getByRole("button", { name: "Approve source set" }).click();
+    await page.getByRole("button", { name: "Approve proposed corpus" }).click();
 
-    await expect(page.getByText("Corpus approved", { exact: true })).toBeVisible();
+    await expect(
+        page.getByText("Corpus approved", { exact: true }),
+    ).toBeVisible();
     await expect(
         page.getByRole("heading", {
             name: "Source set is approved and read-only",
@@ -139,10 +153,18 @@ test("corpus approval starts evidence preparation without reload or provider wor
             ],
             providerCallCount: 0,
         });
-    await expect(page.getByRole("button", { name: "Start new revision" })).toBeDisabled();
+    await expect(
+        page.getByRole("button", { name: "Start new revision" }),
+    ).toBeDisabled();
     await page.getByRole("link", { name: "Progress", exact: true }).click();
-    await expect(page.getByText("Evidence could not be prepared", { exact: true })).toBeVisible();
-    await expect(page.getByRole("region", { name: "Research progress" })).not.toContainText(/e2e_fixture|no_committed_passages|extracting_evidence|evidenceExecution/);
+    await expect(
+        page.getByText("Evidence could not be prepared", { exact: true }),
+    ).toBeVisible();
+    await expect(
+        page.getByRole("region", { name: "Research progress" }),
+    ).not.toContainText(
+        /e2e_fixture|no_committed_passages|extracting_evidence|evidenceExecution/,
+    );
 });
 
 test("metadata-linked sources stay explicit through protected approval", async ({
@@ -157,21 +179,32 @@ test("metadata-linked sources stay explicit through protected approval", async (
     // fully loaded; only now may sanitized diagnostics run.
     await startSanitizedTrace(page);
 
-    await expect(
-        page.getByText("Reactive Systems Test Company analysis"),
-    ).toBeVisible();
+    await page
+        .getByRole("list", { name: "Sources in this group" })
+        .getByRole("button", {
+            name: "Open Reactive Systems Test Company analysis for review",
+            exact: true,
+        })
+        .click();
+    await page.getByText("Why this source appears", { exact: true }).click();
     await expect(
         page.getByText(
             "Linked from discovery metadata; source content has not been read",
+            { exact: true },
         ),
     ).toBeVisible();
+    await page.getByRole("button", { name: "Coverage", exact: true }).click();
     await expect(
-        page.getByText("First independent counter-evidence source"),
+        page.getByText("First independent counter-evidence source", {
+            exact: true,
+        }),
     ).toBeVisible();
 
-    await page.getByRole("button", { name: "Approve source set" }).click();
+    await page.getByRole("button", { name: "Approve proposed corpus" }).click();
 
-    await expect(page.getByText("Corpus approved", { exact: true })).toBeVisible();
+    await expect(
+        page.getByText("Corpus approved", { exact: true }),
+    ).toBeVisible();
     await expect
         .poll(() => inspectSourceReview(seeded.runId, key))
         .toMatchObject({

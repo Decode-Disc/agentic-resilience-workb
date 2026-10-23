@@ -2,14 +2,17 @@
 
 import { lookup } from "node:dns/promises";
 import type { Id } from "@convex/_generated/dataModel";
-import type { FunctionReference } from "convex/server";
-import type { FunctionReturnType } from "convex/server";
+import type { FunctionReference, FunctionReturnType } from "convex/server";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
-
-import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { ActionCtx } from "./_generated/server";
 import { internalAction } from "./_generated/server";
+import { classifyManualSourceIntakeError } from "./domain/manualSourceIntake";
+import {
+    extractPassagesFromNormalizedText,
+    sha256Hex,
+} from "./domain/sourcePassages";
 import type {
     ApprovedSourceRetrievalInput,
     ApprovedSourceRetrievalResult,
@@ -21,10 +24,13 @@ import { retrieveAndNormalizePublicPdf } from "./integrations/publicPdfEvidence"
 import { createSecCompanyResolver } from "./integrations/sec";
 import { retrieveAndNormalizeSecFiling } from "./integrations/secEvidence";
 import {
+    MAX_NORMALIZED_ARTIFACT_BYTES,
+    MAX_PASSAGES_PER_SOURCE,
+} from "./resourceLimits";
+import {
     inspectPublicSourceMetadata,
     requestPinnedPublicSource,
 } from "./sourceActions";
-import { classifyManualSourceIntakeError } from "./domain/manualSourceIntake";
 
 type InternalQueryRef = FunctionReference<"query", "internal">;
 type InternalMutationRef = FunctionReference<"mutation", "internal">;
@@ -125,6 +131,82 @@ function terminalSourceResult({
     return statusDoc.status === "failed"
         ? { status: "failed", failureReason: statusDoc.failureReason }
         : null;
+}
+
+/** Materializes the approved proposal's bytes. Missing captures never fall through to retrieval. */
+async function materializePreparedSource(
+    ctx: ActionCtx,
+    args: ExecutionActionArgs,
+    frozen: FrozenSourceData,
+): Promise<RetrieveSourceResult | null> {
+    if (frozen.preparedCapture === undefined) return null;
+    const { workerKey: _workerKey, ...fence } = args;
+    const capture = frozen.preparedCapture;
+    const blob = capture?.storageId
+        ? await ctx.storage.get(capture.storageId)
+        : null;
+    let failureReason: string | undefined;
+    let text: string | undefined;
+    if (!capture || !blob || blob.size > MAX_NORMALIZED_ARTIFACT_BYTES)
+        failureReason = "capture_unavailable";
+    else {
+        text = await blob.text();
+        if (
+            sha256Hex(text) !== capture.contentHash ||
+            blob.size !== capture.byteCount
+        )
+            failureReason = "capture_corrupt";
+    }
+    if (failureReason || !capture?.contentHash || text === undefined) {
+        failureReason ??= "capture_unavailable";
+        await ctx.runMutation(
+            internal.evidenceArtifacts.updateEvidenceSourceStatus,
+            { ...fence, status: "failed", failureReason },
+        );
+        return { status: "failed", failureReason };
+    }
+    let passages: ReturnType<typeof extractPassagesFromNormalizedText>;
+    try {
+        if (
+            frozen.preparedPassageReferences?.some(
+                (ref) =>
+                    ref.quotation &&
+                    text.slice(ref.startOffset, ref.endOffset) !==
+                        ref.quotation,
+            )
+        )
+            throw new Error("required_passage_unavailable");
+        passages = extractPassagesFromNormalizedText({
+            text,
+            canonicalUrl: capture.resolvedUrl ?? capture.requestedUrl,
+            sourceVersionHash: capture.contentHash,
+            ...(frozen.preparedPassageReferences
+                ? {
+                      preparationVersion: frozen.preparationVersion,
+                      maxPassages: MAX_PASSAGES_PER_SOURCE,
+                      requiredSpans: frozen.preparedPassageReferences,
+                  }
+                : {}),
+        });
+    } catch (error) {
+        if (
+            !(error instanceof Error) ||
+            ![
+                "required_passages_exceed_limit",
+                "required_passage_unavailable",
+            ].includes(error.message)
+        )
+            throw error;
+        await ctx.runMutation(
+            internal.evidenceArtifacts.updateEvidenceSourceStatus,
+            { ...fence, status: "failed", failureReason: error.message },
+        );
+        return { status: "failed", failureReason: error.message };
+    }
+    return ctx.runMutation(
+        internal.evidenceArtifacts.materializeInspectedSource,
+        { ...fence, contentHash: capture.contentHash, passages },
+    );
 }
 
 async function persistEvidenceArtifact(
@@ -256,7 +338,10 @@ async function persistEvidenceArtifact(
 
         if (finalResult.loserStorageId) {
             try {
-                await ctx.storage.delete(finalResult.loserStorageId);
+                await ctx.runMutation(
+                    internal.evidenceArtifacts.deleteUnreferencedArtifact,
+                    { storageId: finalResult.loserStorageId },
+                );
             } catch {
                 // Best-effort delete
             }
@@ -280,7 +365,10 @@ async function persistEvidenceArtifact(
         }
         if (storageId) {
             try {
-                await ctx.storage.delete(storageId);
+                await ctx.runMutation(
+                    internal.evidenceArtifacts.deleteUnreferencedArtifact,
+                    { storageId },
+                );
             } catch {
                 // Best effort
             }
@@ -342,6 +430,12 @@ export const retrieveAndNormalizeSecSource = internalAction({
 
         const existing = terminalSourceResult(frozenData);
         if (existing) return existing;
+        const materialized = await materializePreparedSource(
+            ctx,
+            args,
+            frozenData,
+        );
+        if (materialized) return materialized;
         const { source, companyCik } = frozenData;
 
         try {
@@ -455,6 +549,12 @@ export const retrieveAndNormalizeExaSource = internalAction({
 
         const existing = terminalSourceResult(frozenData);
         if (existing) return existing;
+        const materialized = await materializePreparedSource(
+            ctx,
+            args,
+            frozenData,
+        );
+        if (materialized) return materialized;
         const { source } = frozenData;
 
         try {
@@ -584,6 +684,8 @@ export const retrieveAndNormalizeManualSource = internalAction({
             };
         const existing = terminalSourceResult(frozen);
         if (existing) return existing;
+        const materialized = await materializePreparedSource(ctx, args, frozen);
+        if (materialized) return materialized;
         const operationKey = `run:${args.runId}:revision:${args.corpusRevisionId}:decision:${args.acceptedDecisionId}:workflow:2:gen:${args.executionGeneration}:source:${args.sourceId}:inspect_approved_manual_source`;
         try {
             await ctx.runMutation(
@@ -729,6 +831,12 @@ export const retrieveAndNormalizePublicPdfSource = internalAction({
 
         const existing = terminalSourceResult(frozenData);
         if (existing) return existing;
+        const materialized = await materializePreparedSource(
+            ctx,
+            args,
+            frozenData,
+        );
+        if (materialized) return materialized;
         const { source } = frozenData;
 
         try {

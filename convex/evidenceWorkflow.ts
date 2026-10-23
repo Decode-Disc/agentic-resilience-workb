@@ -1,14 +1,16 @@
 import type { Id } from "@convex/_generated/dataModel";
-import { vResultValidator, vWorkflowId } from "@convex-dev/workflow";
 import { fanOutFrozenBranches } from "@convex/domain/evidenceFanout";
+import { vResultValidator, vWorkflowId } from "@convex-dev/workflow";
 import type { FunctionReference } from "convex/server";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
-
-import { assertLifecycleTransition } from "./domain/transitions";
-import { applyEvidenceExtractionFailed } from "./domain/evidenceFailure";
-import { MAX_CLAIMS_PER_RUN, sourceCandidateLimit } from "./resourceLimits";
 import { internalMutation } from "./_generated/server";
+import { applyEvidenceExtractionFailed } from "./domain/evidenceFailure";
+import { assertLifecycleTransition } from "./domain/transitions";
+import {
+    MAX_CLAIMS_PER_RUN,
+    sourceDossierCandidateLimit,
+} from "./resourceLimits";
 import { workflow } from "./workflow";
 
 type InternalQueryRef = FunctionReference<"query", "internal">;
@@ -237,7 +239,7 @@ export const evidenceReadyHandoff = internalMutation({
         }
 
         // Strong source predicate: every frozen branch is terminal.
-        const limit = sourceCandidateLimit();
+        const limit = sourceDossierCandidateLimit(run.sourcePreparationId);
         const statuses = await ctx.db
             .query("evidenceSourceStatuses")
             .withIndex("by_run_and_execution_generation", (q) =>

@@ -1,14 +1,12 @@
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 
 const modules = import.meta.glob("/convex/**/*.ts");
-const getOperations = makeFunctionReference<
-    "query",
-    Record<string, never>,
-    unknown
->("adminOperations:get");
+const getOperations = api.adminOperations.get;
 const setPaidWorkEnabled = makeFunctionReference<
     "mutation",
     { enabled: boolean; reason: string },
@@ -24,7 +22,7 @@ const recordAttempt = makeFunctionReference<
         attempt: number;
     },
     {
-        providerCallId: any;
+        providerCallId: Id<"providerCalls">;
         shouldExecute: boolean;
         status: string;
     }
@@ -120,4 +118,92 @@ test("admin controls paid work while analysts remain unauthorized", async () => 
                 .collect(),
         ),
     ).resolves.toHaveLength(1);
+});
+
+test("reads the 50 latest events within a fixed document budget as history grows", async () => {
+    const t = convexTest({
+        schema,
+        modules,
+        transactionLimits: { documentsRead: 128 },
+    });
+    const { adminUserId } = await createVisitors(t);
+    await t.run(async (ctx) => {
+        const visitor = await ctx.db
+            .query("visitors")
+            .withIndex("by_auth_user_id", (q) =>
+                q.eq("authUserId", adminUserId),
+            )
+            .unique();
+        if (!visitor) throw new Error("Missing administrator fixture");
+        const runId = await ctx.db.insert("researchRuns", {
+            executionGeneration: 1,
+            lifecycleState: "draft",
+            executionStatus: "idle",
+            nextEventSequence: 1,
+            createdAt: 1,
+            updatedAt: 1,
+        });
+        // Insert older events last so insertion order cannot stand in for event time.
+        for (let time = 100; time >= 0; time--) {
+            await ctx.db.insert("checkpointDecisions", {
+                runId,
+                checkpoint: "source_review",
+                decisionKey: `checkpoint-${time}`,
+                reviewerVisitorId: visitor._id,
+                decision: "approved",
+                occurredAt: time,
+            });
+            await ctx.db.insert("providerCalls", {
+                runId,
+                service: "exa",
+                operation: `operation-${time}`,
+                operationKey: `attempt-${time}`,
+                status: "failed",
+                errorCode: "exa_not_configured",
+                attempt: 1,
+                createdAt: time,
+            });
+        }
+    });
+    const result = await t
+        .withIdentity({ subject: `${adminUserId}|admin-ops` })
+        .query(getOperations, {});
+    const expectedTimes = Array.from({ length: 50 }, (_, i) => 100 - i);
+    expect(result.checkpoints.map((event) => event.occurredAt)).toEqual(
+        expectedTimes,
+    );
+    expect(result.providerCalls.map((event) => event.createdAt)).toEqual(
+        expectedTimes,
+    );
+    expect(result.providerCalls[0]).toMatchObject({
+        operation: "operation-100",
+        status: "failed",
+        errorCode: "exa_not_configured",
+    });
+    expect(result.reservations).toHaveLength(2);
+    expect(result.runs).toEqual([]);
+    expect(result.restorableRuns).toEqual([]);
+});
+
+test("requires an authenticated active administrator to read operational history", async () => {
+    const t = convexTest(schema, modules);
+    await expect(t.query(getOperations, {})).rejects.toThrow(
+        "Not authenticated",
+    );
+    const { adminUserId } = await createVisitors(t);
+    await t.run(async (ctx) => {
+        const visitor = await ctx.db
+            .query("visitors")
+            .withIndex("by_auth_user_id", (q) =>
+                q.eq("authUserId", adminUserId),
+            )
+            .unique();
+        if (!visitor) throw new Error("Missing administrator fixture");
+        await ctx.db.patch(visitor._id, { status: "revoked" });
+    });
+    await expect(
+        t
+            .withIdentity({ subject: `${adminUserId}|admin-ops` })
+            .query(getOperations, {}),
+    ).rejects.toThrow("Unauthorized");
 });

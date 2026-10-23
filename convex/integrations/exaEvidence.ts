@@ -1,22 +1,23 @@
-import {
-    EXA_NORMALIZER_VERSION,
-    normalizeExaText,
-} from "@convex/integrations/evidenceNormalization";
 import { extractPassagesFromNormalizedText } from "@convex/domain/sourcePassages";
 import type {
     ApprovedSourceRetrievalInput,
     ApprovedSourceRetrievalResult,
+    SourceDocumentRetrievalInput,
 } from "@convex/integrations/approvedSourceRetrieval";
 import {
-    ExaContentsError,
+    EXA_NORMALIZER_VERSION,
+    normalizeExaText,
+} from "@convex/integrations/evidenceNormalization";
+import {
     type createExaContentsAdapter,
+    ExaContentsError,
 } from "@convex/integrations/exa";
 
 export const EXA_RETRIEVAL_VERSION = "exa-contents-v1";
 
 export async function retrieveAndNormalizeExaFiling(
     adapter: ReturnType<typeof createExaContentsAdapter>,
-    input: ApprovedSourceRetrievalInput,
+    input: SourceDocumentRetrievalInput | ApprovedSourceRetrievalInput,
 ): Promise<ApprovedSourceRetrievalResult> {
     try {
         const retrieval = await adapter.retrieveText(input.canonicalUrl);
@@ -28,7 +29,7 @@ export async function retrieveAndNormalizeExaFiling(
         });
 
         return {
-            status: "succeeded",
+            status: retrieval.textLimitReached ? "partial" : "succeeded",
             canonicalUrl: input.canonicalUrl,
             rawContent: retrieval.text,
             normalizedText: normalized.normalizedText,
@@ -38,6 +39,9 @@ export async function retrieveAndNormalizeExaFiling(
             mediaType: normalized.mediaType,
             byteCount: normalized.byteCount,
             passages,
+            ...(retrieval.textLimitReached
+                ? { failureReason: "Only part of this document was available." }
+                : {}),
             retrievalMetadata: {
                 providerReference:
                     retrieval.providerReference ?? input.providerReference,

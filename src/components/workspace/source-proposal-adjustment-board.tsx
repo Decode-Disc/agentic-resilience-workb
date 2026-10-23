@@ -70,12 +70,14 @@ export function sourceDecisionForKanbanMove(
 export function SourceProposalAdjustmentBoard({
     adjustmentSets,
     runId,
+    corpusRevisionId,
     reviewStatus,
     onDecide,
     annotation,
 }: {
     adjustmentSets: AdjustmentSets;
     runId?: Id<"researchRuns">;
+    corpusRevisionId?: Id<"corpusRevisions">;
     reviewStatus: "draft" | "approved";
     onDecide: (
         sourceId: Id<"sources">,
@@ -146,6 +148,7 @@ export function SourceProposalAdjustmentBoard({
                         items={adjustmentSets.included}
                         total={adjustmentSets.included.length}
                         runId={runId}
+                        corpusRevisionId={corpusRevisionId}
                         reviewStatus={reviewStatus}
                         collectionLabel="Included proposal sources"
                         emptyTitle="No included sources"
@@ -173,6 +176,7 @@ export function SourceProposalAdjustmentBoard({
                         items={adjustmentSets.available}
                         total={adjustmentSets.available.length}
                         runId={runId}
+                        corpusRevisionId={corpusRevisionId}
                         reviewStatus={reviewStatus}
                         collectionLabel="Available proposal sources"
                         emptyTitle="No available alternatives"
