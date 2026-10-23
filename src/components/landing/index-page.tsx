@@ -20,7 +20,6 @@ import {
     NavigationMenu,
     NavigationMenuContent,
     NavigationMenuItem,
-    NavigationMenuLink,
     NavigationMenuList,
     NavigationMenuTrigger,
 } from "@/components/navigation-menu";
@@ -38,7 +37,6 @@ import { LiquidMetalBorderButton } from "@/components/ui/liquid-metal-border-but
 import MotionAnimatePresence from "@/components/ui/motion-animate-presence";
 import {
     Sheet,
-    SheetClose,
     SheetContent,
     SheetDescription,
     SheetFooter,
@@ -52,48 +50,34 @@ const easeOrganic = [0.32, 0.72, 0, 1] as const;
 
 const navigationItems = [
     {
-        id: "project",
-        label: "Project",
-        title: "What this is",
+        id: "value",
+        label: "Value at stake",
+        title: "See what could hold. And what could erode.",
         description:
-            "A private, evidence-first research prototype that brings the architectural resilience question to life, asking whether a company keeps its role as agents become economic actors.",
+            "Look beyond AI announcements to examine who owns the context, directs the work, and captures the value.",
         details: [
-            "The evidence matrix is the primary artifact. Architecture maps and briefs are derived, inspectable views.",
-            "Every claim points back to a locatable source, so the reasoning can be checked, not just trusted.",
+            "Workflow control and context ownership",
+            "Dependencies and exposure to bypass",
         ],
     },
     {
-        id: "purpose",
-        label: "Purpose",
-        title: "Why it exists",
+        id: "thesis",
+        label: "Test the thesis",
+        title: "Put the company's story to the test.",
         description:
-            "Judging whether a company\u2019s position survives a discontinuity takes time, and the reasoning is hard to share. This workbench makes that judgment faster to reach and easier to defend.",
+            "Bring filings, product documentation, and independent analysis into one research dossier. Examine the support, contradictions, and unanswered questions.",
         details: [
-            "Uncertainty and counter-evidence stay visible; the workbench shows what isn\u2019t known yet, not just what is.",
-            "The analyst stays the final authority; the system assembles evidence, it doesn\u2019t reach verdicts.",
+            "Traceable sources and passages",
+            "Counter-evidence and critical unknowns",
         ],
     },
     {
-        id: "workflow",
-        label: "Workflow",
-        title: "How it works",
+        id: "judgment",
+        label: "Your judgment",
+        title: "Keep every conclusion open to challenge.",
         description:
-            "Public sources are gathered, the analyst approves what counts as evidence, then each claim is extracted, challenged, and reviewed. Conclusions arrive only after the evidence does.",
-        details: [
-            "The analyst approves the source corpus before any claim is drawn from it.",
-            "Only claims that survive review can support an assessment, map, or brief.",
-        ],
-    },
-    {
-        id: "principles",
-        label: "Principles",
-        title: "What remains non-negotiable",
-        description:
-            "The system speeds up research; it does not replace judgment or paper over thin evidence with confidence.",
-        details: [
-            "No aggregate resilience score. No investment recommendation.",
-            "Analyst decisions are recorded and never overwritten; every override leaves a trace.",
-        ],
+            "Inspect the sources, question interpretations, and record your reasoning. The workbench prepares the evidence. You make the assessment.",
+        details: ["Explicit uncertainty", "Recorded decisions and overrides"],
     },
 ] as const;
 
@@ -132,7 +116,7 @@ const capabilities = [
         icon: CheckmarkCircle02Icon,
     },
     {
-        title: "Atomic claims",
+        title: "Check each claim",
         description:
             "Every claim is single-purpose and classified as Fact, Inference, Hypothesis, or Unknown. Conflated assertions get split apart.",
         icon: FileSearchIcon,
@@ -152,13 +136,13 @@ const capabilities = [
     {
         title: "Audit trail",
         description:
-            "Every approval, override, and rejection is append-only. Retrace any conclusion to the decision that produced it.",
+            "Retrace approvals, corrections, and rejections. Your earlier decisions remain visible as the research evolves.",
         icon: Audit01Icon,
     },
     {
         title: "Derived views",
         description:
-            "Architecture maps and briefs draw only from claims you approved. Derived never precedes verified.",
+            "Architecture maps and briefs draw only from claims you approved. Follow each conclusion back to its supporting evidence.",
         icon: ChartRelationshipIcon,
     },
 ] as const;
@@ -181,10 +165,16 @@ function NavigationPanel({
     index: number;
 }) {
     return (
-        <div className="grid gap-3 sm:grid-cols-[1.45fr_1fr]">
+        <section
+            aria-labelledby={`landing-${item.id}-title`}
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: Text-only menu panels need a focus target for keyboard opening and Escape return.
+            tabIndex={0}
+            className="grid gap-3 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/30 sm:grid-cols-[1.45fr_1fr]">
             <GridCard tone={index % 2 === 0 ? "primary" : "accent"}>
                 <p className="text-micro">{item.label}</p>
-                <h2 className="mt-3 text-lg font-medium tracking-tight">
+                <h2
+                    id={`landing-${item.id}-title`}
+                    className="mt-3 text-lg font-medium tracking-tight">
                     {item.title}
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -200,7 +190,7 @@ function NavigationPanel({
                     </p>
                 ))}
             </div>
-        </div>
+        </section>
     );
 }
 
@@ -233,13 +223,6 @@ function LandingHeader() {
                                 </NavigationMenuContent>
                             </NavigationMenuItem>
                         ))}
-                        <NavigationMenuItem>
-                            <NavigationMenuLink
-                                href="#capabilities"
-                                className="flex h-9 items-center rounded-full px-3 text-base font-medium text-muted-foreground transition-colors hover:bg-brand-purple/8 hover:text-brand-purple">
-                                Capabilities
-                            </NavigationMenuLink>
-                        </NavigationMenuItem>
                     </NavigationMenuList>
                 </NavigationMenu>
 
@@ -265,8 +248,8 @@ function LandingHeader() {
                             <SheetHeader className="border-b">
                                 <SheetTitle>Project context</SheetTitle>
                                 <SheetDescription>
-                                    The workbench, its purpose, and its
-                                    guardrails.
+                                    Value at stake, evidence to examine, and
+                                    decisions that stay yours.
                                 </SheetDescription>
                             </SheetHeader>
                             <div className="overflow-y-auto px-4">
@@ -301,20 +284,6 @@ function LandingHeader() {
                                     ))}
                                 </Accordion>
                             </div>
-                            <SheetClose
-                                nativeButton={false}
-                                render={
-                                    <a
-                                        href="#capabilities"
-                                        className="mx-4 mb-2 flex items-center justify-between rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm font-medium transition-colors hover:bg-brand-purple/8 hover:text-brand-purple"
-                                    />
-                                }>
-                                Capabilities
-                                <Icon
-                                    iconNode={ArrowRight01Icon}
-                                    className="size-4"
-                                />
-                            </SheetClose>
                             <SheetFooter>
                                 <WorkbenchLink mobile />
                             </SheetFooter>
@@ -340,7 +309,7 @@ function MatrixPreview() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <p className="text-micro text-brand-purple">
-                            Primary artifact
+                            Examine the evidence
                         </p>
                         <h2 className="mt-1.5 text-xl font-medium tracking-tight">
                             Evidence matrix
@@ -508,7 +477,7 @@ export function IndexPage() {
                         duration: 0.55,
                         ease: easeOrganic,
                     }}
-                    className="flex max-w-[36rem] flex-col gap-4 items-center text-center motion-reduce:!transform-none motion-reduce:!opacity-100"
+                    className="flex max-w-[40rem] flex-col gap-4 items-center text-center motion-reduce:!transform-none motion-reduce:!opacity-100"
                     aria-labelledby="index-title">
                     <Badge
                         variant="fancy"
@@ -520,18 +489,20 @@ export function IndexPage() {
                     <h1
                         id="index-title"
                         className="text-5xl leading-[0.96] font-medium tracking-[-0.045em] text-balance sm:text-6xl lg:text-[4.4rem]">
-                        Evidence before conclusions.
+                        Which advantages survive the agentic shift?
                     </h1>
                     <p className="max-w-lg text-lg leading-7 text-foreground/90">
-                        An inspectable research dossier for assessing
-                        architectural resilience in the agentic economy.
+                        Investigate who controls the workflow, what agents can
+                        bypass, and where a company's advantage may hold.
                     </p>
                     <div className="flex justify-center">
                         <LiquidMetalBorderButton
-                            label="Start the research"
+                            label="Explore the workbench"
                             className="py-5 px-6"
                             render={<Link to="/workspace/start" />}>
-                            <span className="text-lg">Start the research</span>
+                            <span className="text-lg">
+                                Explore the workbench
+                            </span>
                             <Icon
                                 iconNode={ArrowRight01Icon}
                                 className="size-5"
@@ -539,7 +510,8 @@ export function IndexPage() {
                         </LiquidMetalBorderButton>
                     </div>
                     <p className="text-micro text-[10px]">
-                        Private research prototype · invitation only
+                        Independent research prototype · US-listed technology
+                        companies
                     </p>
                 </motion.section>
 

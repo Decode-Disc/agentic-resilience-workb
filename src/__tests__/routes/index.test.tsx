@@ -28,12 +28,12 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 import { IndexPage } from "@/components/landing/index-page";
 
 describe("IndexPage", () => {
-    it("centers the evidence matrix without product marketing", () => {
+    it("introduces the research question with an illustrative evidence matrix", () => {
         render(<IndexPage />);
 
         expect(
             screen.getByRole("heading", {
-                name: "Evidence before conclusions.",
+                name: "Which advantages survive the agentic shift?",
             }),
         ).toBeTruthy();
         expect(
@@ -50,12 +50,13 @@ describe("IndexPage", () => {
         ).toContain("/workspace/start");
         expect(
             screen
-                .getByRole("link", { name: "Start the research" })
+                .getByRole("link", { name: "Explore the workbench" })
                 .getAttribute("href"),
         ).toContain("/workspace/start");
         expect(
-            screen.queryByRole("button", { name: "Start the research" }),
+            screen.queryByRole("button", { name: "Explore the workbench" }),
         ).toBeNull();
+        expect(screen.getByText("Illustrative preview")).toBeTruthy();
         expect(screen.queryByText(/analysis complete/i)).toBeNull();
         expect(
             screen.queryByText(/pricing|get started|free trial/i),
@@ -68,36 +69,45 @@ describe("IndexPage", () => {
         const navigation = screen.getByRole("navigation", {
             name: "Project context",
         });
-        const projectTrigger = screen.getByRole("button", { name: "Project" });
+        const projectTrigger = screen.getByRole("button", {
+            name: "Value at stake",
+        });
 
         expect(navigation.contains(projectTrigger)).toBe(true);
+        expect(within(navigation).getAllByRole("button")).toHaveLength(3);
         expect(
-            screen.queryByRole("heading", { name: "What this is" }),
+            within(navigation).queryByRole("link", { name: "Capabilities" }),
+        ).toBeNull();
+        expect(
+            screen.queryByRole("heading", {
+                name: "See what could hold. And what could erode.",
+            }),
         ).toBeNull();
 
         fireEvent.click(projectTrigger);
 
         expect(
-            await screen.findByRole("heading", { name: "What this is" }),
+            await screen.findByRole("heading", {
+                name: "See what could hold. And what could erode.",
+            }),
         ).toBeTruthy();
-        expect(
-            screen.getByText(/private, evidence-first research prototype/i),
-        ).toBeTruthy();
+        expect(screen.getByText(/Look beyond AI announcements/i)).toBeTruthy();
 
         fireEvent.keyDown(projectTrigger, { key: "Escape" });
         await waitFor(() => {
             expect(
-                screen.queryByRole("heading", { name: "What this is" }),
+                screen.queryByRole("heading", {
+                    name: "See what could hold. And what could erode.",
+                }),
             ).toBeNull();
         });
         expect(document.activeElement).toBe(projectTrigger);
     });
 
     it.each([
-        ["Project", "What this is"],
-        ["Purpose", "Why it exists"],
-        ["Workflow", "How it works"],
-        ["Principles", "What remains non-negotiable"],
+        ["Value at stake", "See what could hold. And what could erode."],
+        ["Test the thesis", "Put the company's story to the test."],
+        ["Your judgment", "Keep every conclusion open to challenge."],
     ])("opens the %s panel", async (label, title) => {
         render(<IndexPage />);
 
@@ -106,6 +116,7 @@ describe("IndexPage", () => {
         expect(
             await screen.findByRole("heading", { name: title }),
         ).toBeTruthy();
+        expect(screen.getByRole("region", { name: title })).toBeTruthy();
     });
 
     it("repeats the project context and CTA in the mobile sheet", async () => {
@@ -119,11 +130,22 @@ describe("IndexPage", () => {
             name: "Project context",
         });
         const mobileMenu = within(dialog);
-        for (const label of ["Project", "Purpose", "Workflow", "Principles"]) {
+        for (const [label, title] of [
+            ["Value at stake", "See what could hold. And what could erode."],
+            ["Test the thesis", "Put the company's story to the test."],
+            ["Your judgment", "Keep every conclusion open to challenge."],
+        ]) {
             expect(
                 mobileMenu.getByRole("button", { name: label }),
             ).toBeTruthy();
+            fireEvent.click(mobileMenu.getByRole("button", { name: label }));
+            expect(
+                await mobileMenu.findByRole("heading", { name: title }),
+            ).toBeTruthy();
         }
+        expect(
+            mobileMenu.queryByRole("link", { name: "Capabilities" }),
+        ).toBeNull();
         expect(
             mobileMenu.getByRole("link", { name: "Open workbench" }),
         ).toBeTruthy();
