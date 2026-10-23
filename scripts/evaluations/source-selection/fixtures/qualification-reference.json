@@ -1,0 +1,316 @@
+{
+    "schema_version": "source-qualification-reference-v1",
+    "created_at": "2026-10-20",
+    "author": "Investigating assistant",
+    "independent_human_ground_truth": false,
+    "dataset_sha256": "5840934344478b693633de8149c6fc35eaba6ca0233875917d5013f8d5c905df",
+    "scope": "Nineteen frozen documents. Expectations are documentary judgments, not an exhaustive factual audit. Safe uncertainty is reported separately from unsafe promotion.",
+    "judgments": {
+        "doc_form3": {
+            "source_id": "form3",
+            "source_text_sha256": "f51a9c338eab835e6e346e0619cf8ded23bfc7c93a8d9d6a7ac6f9e0cecd28ed",
+            "expected_company_match": "subject",
+            "expected_document_kind": "regulatory_ownership",
+            "required_roles_any_of": [],
+            "forbidden_roles": [
+                "official_commercial_terms",
+                "counter_evidence_primary",
+                "counter_evidence_secondary"
+            ],
+            "current_commercial_terms_established": false,
+            "rationale": "Director ownership statement, not subscription terms or adverse analysis.",
+            "usage_guard": "provenance_and_period_policy"
+        },
+        "doc_analyst_day": {
+            "source_id": "analyst_day",
+            "source_text_sha256": "06ef457d5189f53098744c4f1cbc428a92c87285ff2e658e8b5f56f4494b3eb2",
+            "expected_company_match": "subject",
+            "expected_document_kind": "news_reporting",
+            "required_roles_any_of": [],
+            "forbidden_roles": [
+                "investor_presentation",
+                "official_commercial_terms"
+            ],
+            "current_commercial_terms_established": false,
+            "rationale": "Event announcement at a changed destination, not the full recorded presentation.",
+            "usage_guard": "provenance_and_period_policy"
+        },
+        "doc_platform_sheet": {
+            "source_id": "platform_sheet",
+            "source_text_sha256": "9779949f8aaa7da1f5f005663122a8a51f8ec1f38b55575328b6a172dbfcea4a",
+            "expected_company_match": "subject",
+            "expected_document_kind": "official_product_documentation",
+            "required_roles_any_of": [
+                [
+                    "official_product_platform"
+                ]
+            ],
+            "forbidden_roles": [
+                "official_commercial_terms"
+            ],
+            "current_commercial_terms_established": false,
+            "rationale": "Official platform description with shared data model and workflows; does not establish subscription terms.",
+            "usage_guard": "provenance_and_period_policy"
+        },
+        "doc_sales_sheet": {
+            "source_id": "sales_sheet",
+            "source_text_sha256": "c9eca7d62c68895438d1de892a3cd2e0021364729389009bd5bb0e0e9fc72ff5",
+            "expected_company_match": "subject",
+            "expected_document_kind": "official_product_documentation",
+            "required_roles_any_of": [
+                [
+                    "official_product_platform",
+                    "official_product_integration"
+                ]
+            ],
+            "forbidden_roles": [
+                "official_commercial_terms"
+            ],
+            "current_commercial_terms_established": false,
+            "rationale": "Lead-to-cash product workflows describe customer contract management, not the provider subscription agreement.",
+            "usage_guard": "provenance_and_period_policy"
+        },
+        "doc_store_rfq": {
+            "source_id": "store_rfq",
+            "source_text_sha256": "c1ed01d7700128c349df394720c6ad4261ef50dc282bb6302df62fe9c4b5657e",
+            "expected_company_match": "subject",
+            "expected_document_kind": "official_product_documentation",
+            "required_roles_any_of": [],
+            "forbidden_roles": [
+                "official_commercial_terms"
+            ],
+            "current_commercial_terms_established": false,
+            "rationale": "Request-for-quote application functionality. Store licensing chrome is not canonical provider terms.",
+            "usage_guard": "provenance_and_period_policy"
+        },
+        "doc_store_contracts": {
+            "source_id": "store_contracts",
+            "source_text_sha256": "327c92a610c872cc39c81b8e8c1eaf57fa83f3d301f9b4dc04cef3b1f2d7cf17",
+            "expected_company_match": "subject",
+            "expected_document_kind": "official_product_documentation",
+            "required_roles_any_of": [],
+            "forbidden_roles": [
+                "official_commercial_terms"
+            ],
+            "current_commercial_terms_established": false,
+            "rationale": "Application for managing customer contracts and entitlements, not ServiceNow subscription terms.",
+            "usage_guard": "provenance_and_period_policy"
+        },
+        "doc_store_workflows": {
+            "source_id": "store_workflows",
+            "source_text_sha256": "0bf2f4a6360d0e75355cc4a1abde24f6d4f091679b52314ac3a5ae0e8ddc444d",
+            "expected_company_match": "subject",
+            "expected_document_kind": "official_product_documentation",
+            "required_roles_any_of": [],
+            "forbidden_roles": [
+                "official_commercial_terms"
+            ],
+            "current_commercial_terms_established": false,
+            "rationale": "Customer contract workflow product, not the provider commercial agreement.",
+            "usage_guard": "provenance_and_period_policy"
+        },
+        "doc_margin": {
+            "source_id": "margin",
+            "source_text_sha256": "525ea64668efc16ffacbb803276ca697f5d8466f01c4aa11a707c8645fda158c",
+            "expected_company_match": "subject",
+            "expected_document_kind": "independent_analysis",
+            "required_roles_any_of": [
+                [
+                    "counter_evidence_primary",
+                    "counter_evidence_secondary"
+                ]
+            ],
+            "forbidden_roles": [
+                "official_commercial_terms"
+            ],
+            "current_commercial_terms_established": false,
+            "rationale": "Generated primer contains commoditization/bundling hypotheses. Do not promote its financial assertions.",
+            "usage_guard": "attributed_argument_only"
+        },
+        "doc_earningsmoat": {
+            "source_id": "earningsmoat",
+            "source_text_sha256": "a3356255e2a676161f8c9e89c92c76eff91087dce490559079381e89d4e99b5b",
+            "expected_company_match": "subject",
+            "expected_document_kind": "independent_analysis",
+            "required_roles_any_of": [],
+            "forbidden_roles": [
+                "official_commercial_terms"
+            ],
+            "current_commercial_terms_established": false,
+            "rationale": "Contains attributed analysis and a no-long-term-debt assertion. Finding that assertion is not verifying it; the audit documents contrary primary evidence.",
+            "usage_guard": "attributed_argument_only"
+        },
+        "doc_hated": {
+            "source_id": "hated",
+            "source_text_sha256": "7287280b52b4235e604bd3f4711b7c8f823a00229aa78a098e47cb39200f6f48",
+            "expected_company_match": "subject",
+            "expected_document_kind": "independent_analysis",
+            "required_roles_any_of": [
+                [
+                    "counter_evidence_primary",
+                    "counter_evidence_secondary"
+                ]
+            ],
+            "forbidden_roles": [
+                "official_commercial_terms"
+            ],
+            "current_commercial_terms_established": false,
+            "rationale": "Positive overall thesis still includes specific adverse bundling, seat economics and implementation arguments.",
+            "usage_guard": "attributed_argument_only"
+        },
+        "doc_fsm": {
+            "source_id": "fsm",
+            "source_text_sha256": "b3d7bb44ae3401c1f8715ead4b07b48a6c36cb63af220b5270e38344d3c24ea1",
+            "expected_company_match": "subject",
+            "expected_document_kind": "independent_analysis",
+            "required_roles_any_of": [
+                [
+                    "counter_evidence_primary",
+                    "counter_evidence_secondary"
+                ]
+            ],
+            "forbidden_roles": [
+                "official_commercial_terms"
+            ],
+            "current_commercial_terms_established": false,
+            "rationale": "Named research team discusses seat reduction, inference costs and margin risks. Reading its arguments does not authenticate publisher independence.",
+            "usage_guard": "attributed_argument_only"
+        },
+        "doc_flash": {
+            "source_id": "flash",
+            "source_text_sha256": "0409548a1c4009e4eef9fbde48bf1f39065c3848f149ddc05474148d9e2c41e4",
+            "expected_company_match": "subject",
+            "expected_document_kind": "independent_analysis",
+            "required_roles_any_of": [
+                [
+                    "counter_evidence_primary",
+                    "counter_evidence_secondary"
+                ]
+            ],
+            "forbidden_roles": [
+                "official_commercial_terms"
+            ],
+            "current_commercial_terms_established": false,
+            "rationale": "Competition and bypass hypotheses coexist with forecast and acquisition-timing limitations.",
+            "usage_guard": "attributed_argument_only"
+        },
+        "doc_capital": {
+            "source_id": "capital",
+            "source_text_sha256": "ec35efc627107348c44102c6f527fc4375009d9522221b1ff9665a0b7365e695",
+            "expected_company_match": "subject",
+            "expected_document_kind": "independent_analysis",
+            "required_roles_any_of": [
+                [
+                    "counter_evidence_primary",
+                    "counter_evidence_secondary"
+                ]
+            ],
+            "forbidden_roles": [
+                "official_commercial_terms"
+            ],
+            "current_commercial_terms_established": false,
+            "rationale": "Bundling substitution argument can be useful independently of the discrepant cRPO number. Do not treat the number as verified.",
+            "usage_guard": "attributed_argument_only"
+        },
+        "doc_intellectia": {
+            "source_id": "intellectia",
+            "source_text_sha256": "f55b5a589890b63c3d07db694fd4674f767dd1613831b30835fac9a85df140bc",
+            "expected_company_match": "subject",
+            "expected_document_kind": "news_reporting",
+            "required_roles_any_of": [
+                [
+                    "counter_evidence_primary",
+                    "counter_evidence_secondary"
+                ]
+            ],
+            "forbidden_roles": [
+                "official_commercial_terms"
+            ],
+            "current_commercial_terms_established": false,
+            "rationale": "Attributed report of a UBS downgrade relayed from CNBC, not an independently authenticated UBS primary note.",
+            "usage_guard": "attributed_argument_only"
+        },
+        "doc_old_presentation": {
+            "source_id": "old_presentation",
+            "source_text_sha256": "2173be34bb57079c14eab220a43ddc2d6176661500de7ab40b420ee886606878",
+            "expected_company_match": "subject",
+            "expected_document_kind": "search_or_index",
+            "required_roles_any_of": [],
+            "forbidden_roles": [
+                "investor_presentation",
+                "official_commercial_terms"
+            ],
+            "current_commercial_terms_established": false,
+            "rationale": "The captured destination is the events and presentations index, not the historical PDF named by discovery.",
+            "usage_guard": "provenance_and_period_policy"
+        },
+        "doc_sec_q1": {
+            "source_id": "sec_q1",
+            "source_text_sha256": "ab376cdd848254b3b637aed7dda01a1393c5917eee99063b76b4d7528d22d89d",
+            "expected_company_match": "subject",
+            "expected_document_kind": "earnings_release",
+            "required_roles_any_of": [
+                [
+                    "investor_results"
+                ]
+            ],
+            "forbidden_roles": [
+                "official_commercial_terms"
+            ],
+            "current_commercial_terms_established": false,
+            "rationale": "Substantial earnings exhibit with actual results and forecasts. EX-99.1 is distinct from its principal filing document.",
+            "usage_guard": "provenance_and_period_policy",
+            "expected_reporting_period_end": "2026-03-31"
+        },
+        "doc_historical_contract": {
+            "source_id": "historical_contract",
+            "source_text_sha256": "9fd183ded5d301e0dcd2112b392a4121ed8488c8d23ef7027715169e4a5a2c95",
+            "expected_company_match": "subject",
+            "expected_document_kind": "official_commercial_terms",
+            "required_roles_any_of": [
+                [
+                    "official_commercial_terms"
+                ]
+            ],
+            "forbidden_roles": [],
+            "current_commercial_terms_established": false,
+            "rationale": "Genuine reseller-hosted agreement printed 12/5/2012. It establishes historical terms only, not currently effective canonical terms.",
+            "usage_guard": "provenance_and_period_policy"
+        },
+        "doc_hr_api": {
+            "source_id": "hr_api",
+            "source_text_sha256": "ebde9d7e89efd65b02f56af83f1d39a2f9463b439421d9b4f2ad35569bff1586",
+            "expected_company_match": "subject",
+            "expected_document_kind": "official_integration_documentation",
+            "required_roles_any_of": [
+                [
+                    "official_product_integration"
+                ]
+            ],
+            "forbidden_roles": [
+                "official_commercial_terms"
+            ],
+            "current_commercial_terms_established": false,
+            "rationale": "API documentation establishes technical access rules, not the subscription license.",
+            "usage_guard": "provenance_and_period_policy"
+        },
+        "doc_q1_presentation": {
+            "source_id": "q1_presentation",
+            "source_text_sha256": "f6ed74f2eecc137ade3051d21e6bb1486e46e9160eaaea6d0f398d388182d66c",
+            "expected_company_match": "subject",
+            "expected_document_kind": "investor_presentation",
+            "required_roles_any_of": [
+                [
+                    "investor_presentation"
+                ]
+            ],
+            "forbidden_roles": [
+                "official_commercial_terms"
+            ],
+            "current_commercial_terms_established": false,
+            "rationale": "Captured Q1 2026 presentation. Retain reported period and separate outlook from realized results.",
+            "usage_guard": "provenance_and_period_policy",
+            "expected_reporting_period_end": "2026-03-31"
+        }
+    }
+}

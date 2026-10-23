@@ -1,0 +1,858 @@
+{
+  "schemaVersion": "source-quality-study-v1",
+  "studyId": "cross-company-source-quality-20261020",
+  "protocolFile": "protocol.json",
+  "protocolSha256": "210a992aa9b78b7c8d14f5bcbb72f65a476a958c539b16415c8992e9b6a6d504",
+  "instructionsFrozenAt": "2026-10-20T21:31:01.994452Z",
+  "companies": [
+    {
+      "id": "adobe",
+      "cik": "796343",
+      "legalName": "ADOBE INC.",
+      "ticker": "ADBE",
+      "websiteUrl": "https://www.adobe.com/",
+      "split": "development"
+    },
+    {
+      "id": "nvidia",
+      "cik": "1045810",
+      "legalName": "NVIDIA CORP",
+      "ticker": "NVDA",
+      "websiteUrl": "https://www.nvidia.com/",
+      "split": "holdout"
+    },
+    {
+      "id": "snowflake",
+      "cik": "1640147",
+      "legalName": "Snowflake Inc.",
+      "ticker": "SNOW",
+      "websiteUrl": "https://www.snowflake.com/",
+      "split": "holdout"
+    },
+    {
+      "id": "crowdstrike",
+      "cik": "1535527",
+      "legalName": "CrowdStrike Holdings, Inc.",
+      "ticker": "CRWD",
+      "websiteUrl": "https://www.crowdstrike.com/",
+      "split": "holdout"
+    }
+  ],
+  "documents": [
+    {
+      "id": "adobe-annual",
+      "companyId": "adobe",
+      "category": "annual",
+      "title": "adbe-20251128",
+      "url": "https://www.sec.gov/Archives/edgar/data/796343/000079634326000003/adbe-20251128.htm",
+      "capturedAt": "2026-10-20T20:54:47.778Z",
+      "textFile": "captures/adobe-annual.txt",
+      "contentHash": "b9fd796b7f97ca660fc11cdf9916351cb396f961aaf63c13c824720424628147",
+      "selectedSpan": {
+        "startOffset": 189821,
+        "endOffset": 189942
+      }
+    },
+    {
+      "id": "adobe-quarterly",
+      "companyId": "adobe",
+      "category": "quarterly",
+      "title": "adbe-20260828",
+      "url": "https://www.sec.gov/Archives/edgar/data/796343/000079634326000156/adbe-20260828.htm",
+      "capturedAt": "2026-10-20T20:54:48.216Z",
+      "textFile": "captures/adobe-quarterly.txt",
+      "contentHash": "a042f1d35200163ec9019e46b1bb5689f5a72aeeeb5b3bce5c2304f1eebc6e88",
+      "selectedSpan": {
+        "startOffset": 41200,
+        "endOffset": 41309
+      }
+    },
+    {
+      "id": "adobe-product",
+      "companyId": "adobe",
+      "category": "product",
+      "title": "Adobe Firefly - Free Generative AI for Creatives",
+      "url": "https://www.adobe.com/products/firefly.html",
+      "capturedAt": "2026-10-20T20:56:32.687Z",
+      "textFile": "captures/adobe-product.txt",
+      "contentHash": "83b74f249bda17936ea25144e2f722f4fc29620ad402a97b9291e03ef35cfa7e",
+      "selectedSpan": {
+        "startOffset": 1369,
+        "endOffset": 1490
+      }
+    },
+    {
+      "id": "adobe-integration",
+      "companyId": "adobe",
+      "category": "integration",
+      "title": "Overview - Adobe Firefly API",
+      "url": "https://developer.adobe.com/firefly-services/docs/firefly-api/",
+      "capturedAt": "2026-10-20T20:51:20.701Z",
+      "textFile": "captures/adobe-integration.txt",
+      "contentHash": "128e24bbb96e3fb8d949f20d9626c0bd5bba3e5d8aeb4958cad845d2fcd5accd",
+      "selectedSpan": {
+        "startOffset": 138,
+        "endOffset": 238
+      }
+    },
+    {
+      "id": "adobe-terms",
+      "companyId": "adobe",
+      "category": "terms",
+      "title": "Adobe General Terms of Use | Adobe Legal",
+      "url": "https://www.adobe.com/legal/terms-linkfree.html",
+      "capturedAt": "2026-10-20T20:54:49.096Z",
+      "textFile": "captures/adobe-terms.txt",
+      "contentHash": "6e8f8e96dd4b3ebaf7e39d19d79bb1580cbc1d2d62023457cd70a3e4c78cb273",
+      "selectedSpan": {
+        "startOffset": 233,
+        "endOffset": 301
+      }
+    },
+    {
+      "id": "adobe-analysis",
+      "companyId": "adobe",
+      "category": "analysis",
+      "title": "[ADBE] Adobe Thesis 2026: Firefly Premium Tier Tests AI Monetization Against GenAI Competition | drillr Research",
+      "url": "https://drillr.ai/research/adbe-adobe-thesis-2026-firefly-premium-tier-tests-ai-monetization-against-genai",
+      "capturedAt": "2026-10-20T20:51:21.553Z",
+      "textFile": "captures/adobe-analysis.txt",
+      "contentHash": "23b86416417669988fce4348a34ef7ddf9337c53fe619b52d5f5ec4f17bfea69",
+      "selectedSpan": {
+        "startOffset": 11622,
+        "endOffset": 12411
+      }
+    },
+    {
+      "id": "adobe-news",
+      "companyId": "adobe",
+      "category": "news",
+      "title": "Adobe adds its AI assistant to Premiere, Illustrator, and InDesign | TechCrunch",
+      "url": "https://techcrunch.com/2026/06/18/adobe-adds-its-ai-assistant-to-premiere-illustrator-and-indesign/",
+      "capturedAt": "2026-10-20T20:51:22.906Z",
+      "textFile": "captures/adobe-news.txt",
+      "contentHash": "faaede9720ded6489d6749d8544207bee271925ae0e651504d3eafed6b324067",
+      "selectedSpan": {
+        "startOffset": 1103,
+        "endOffset": 1209
+      }
+    },
+    {
+      "id": "adobe-distractor",
+      "companyId": "adobe",
+      "category": "distractor",
+      "title": "Adobe &#8211; Stratechery by Ben Thompson",
+      "url": "https://stratechery.com/company/adobe/",
+      "capturedAt": "2026-10-20T20:51:25.978Z",
+      "textFile": "captures/adobe-distractor.txt",
+      "contentHash": "695c6fe018cca796151db470c69bee3e6f323d279a26cde55c9da91127536688",
+      "selectedSpan": {
+        "startOffset": 2977,
+        "endOffset": 3168
+      }
+    },
+    {
+      "id": "nvidia-annual",
+      "companyId": "nvidia",
+      "category": "annual",
+      "title": "nvda-20260125",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm",
+      "capturedAt": "2026-10-20T20:58:38.841Z",
+      "textFile": "captures/nvidia-annual.txt",
+      "contentHash": "194970e58b71a169c90fac9b522152c5c3fadee4ffca8c7cadca73b6884b12fd",
+      "selectedSpan": {
+        "startOffset": 206824,
+        "endOffset": 207042
+      }
+    },
+    {
+      "id": "nvidia-quarterly",
+      "companyId": "nvidia",
+      "category": "quarterly",
+      "title": "nvda-20260726",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/nvda-20260726.htm",
+      "capturedAt": "2026-10-20T20:58:39.129Z",
+      "textFile": "captures/nvidia-quarterly.txt",
+      "contentHash": "e5f3e9febb58d2ca4b805412ef3e22c5b633bf8e0c9f30ee23d6190918b1cb00",
+      "selectedSpan": {
+        "startOffset": 58463,
+        "endOffset": 58684
+      }
+    },
+    {
+      "id": "nvidia-product",
+      "companyId": "nvidia",
+      "category": "product",
+      "title": "AI Agents: Built to Reason, Plan, Act | NVIDIA",
+      "url": "https://www.nvidia.com/en-us/ai/",
+      "capturedAt": "2026-10-20T21:00:11.074Z",
+      "textFile": "captures/nvidia-product-alt.txt",
+      "contentHash": "53e0abc9785bcac37c6953d9971e2682362fa59d9c3eca589fa88e342d916358",
+      "selectedSpan": {
+        "startOffset": 1595,
+        "endOffset": 1655
+      }
+    },
+    {
+      "id": "nvidia-integration",
+      "companyId": "nvidia",
+      "category": "integration",
+      "title": "> [!IMPORTANT]",
+      "url": "https://raw.githubusercontent.com/NVIDIA/nim-deploy/main/README.md",
+      "capturedAt": "2026-10-20T21:00:11.524Z",
+      "textFile": "captures/nvidia-integration-alt.txt",
+      "contentHash": "05150e7b1ba28f431f26c2d327fc86c6a2351e25771b49338e40ae3d491dd8a5",
+      "selectedSpan": {
+        "startOffset": 654,
+        "endOffset": 960
+      }
+    },
+    {
+      "id": "nvidia-terms",
+      "companyId": "nvidia",
+      "category": "terms",
+      "title": "NVIDIA Agreements | Enterprise Software | NVIDIA Software License Agreement",
+      "url": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/",
+      "capturedAt": "2026-10-20T20:58:43.334Z",
+      "textFile": "captures/nvidia-terms.txt",
+      "contentHash": "91b7aad60eec141a25f2007e8ab8109e2a3b3410d9e45142a692ea9d3460b12f",
+      "selectedSpan": {
+        "startOffset": 22361,
+        "endOffset": 22733
+      }
+    },
+    {
+      "id": "nvidia-analysis",
+      "companyId": "nvidia",
+      "category": "analysis",
+      "title": "Nvidia\u2019s AI networking moat is real \u2013 but the lock-in debate continues - SiliconANGLE",
+      "url": "https://siliconangle.com/2026/07/16/nvidias-ai-networking-moat-real-lock-debate-continues/",
+      "capturedAt": "2026-10-20T20:58:44.626Z",
+      "textFile": "captures/nvidia-analysis.txt",
+      "contentHash": "fd8a1e6388e98545068033d48e9ece116c58f6d591be8864aca45406259472d6",
+      "selectedSpan": {
+        "startOffset": 2884,
+        "endOffset": 3429
+      }
+    },
+    {
+      "id": "nvidia-news",
+      "companyId": "nvidia",
+      "category": "news",
+      "title": "Nvidia details Rubin architectural optimizations for inference &ndash; improvements target better performance and efficiency from the GPU to the rack | Tom's Hardware",
+      "url": "https://www.tomshardware.com/pc-components/gpus/nvidia-details-rubin-architectural-optimizations-for-inference-improvements-target-better-performance-and-efficiency-from-the-gpu-to-the-rack",
+      "capturedAt": "2026-10-20T21:01:17.334Z",
+      "textFile": "captures/nvidia-news-final.txt",
+      "contentHash": "f0ce053e71ca3370cbc73a666044f45ce435d2e55f16522a394a9298b085f40e",
+      "selectedSpan": {
+        "startOffset": 9499,
+        "endOffset": 9887
+      }
+    },
+    {
+      "id": "nvidia-distractor",
+      "companyId": "nvidia",
+      "category": "distractor",
+      "title": "News Archive | NVIDIA Newsroom",
+      "url": "https://nvidianews.nvidia.com/news",
+      "capturedAt": "2026-10-20T21:01:18.047Z",
+      "textFile": "captures/nvidia-distractor-final.txt",
+      "contentHash": "b6b6a8afbcdebf8644affdaea81dce41156cb83719d50337e6ddf5845614a015",
+      "selectedSpan": {
+        "startOffset": 673,
+        "endOffset": 767
+      }
+    },
+    {
+      "id": "snowflake-annual",
+      "companyId": "snowflake",
+      "category": "annual",
+      "title": "snow-20260131",
+      "url": "https://www.sec.gov/Archives/edgar/data/1640147/000164014726000008/snow-20260131.htm",
+      "capturedAt": "2026-10-20T20:58:39.629Z",
+      "textFile": "captures/snowflake-annual.txt",
+      "contentHash": "7fbf733499640f22c2cfdf75c4267e7546339d18477510d53cc7083d3c6c09d2",
+      "selectedSpan": {
+        "startOffset": 63799,
+        "endOffset": 64132
+      }
+    },
+    {
+      "id": "snowflake-quarterly",
+      "companyId": "snowflake",
+      "category": "quarterly",
+      "title": "snow-20260731",
+      "url": "https://www.sec.gov/Archives/edgar/data/1640147/000164014726000037/snow-20260731.htm",
+      "capturedAt": "2026-10-20T20:58:40.010Z",
+      "textFile": "captures/snowflake-quarterly.txt",
+      "contentHash": "9c8d59ab61dd69ac69d1f8cef1aa3b13524afea433646d2d878cc2f7c28cb1e4",
+      "selectedSpan": {
+        "startOffset": 72217,
+        "endOffset": 72754
+      }
+    },
+    {
+      "id": "snowflake-product",
+      "companyId": "snowflake",
+      "category": "product",
+      "title": "Snowflake key concepts and architecture | Snowflake Documentation",
+      "url": "https://docs.snowflake.com/en/user-guide/intro-key-concepts",
+      "capturedAt": "2026-10-20T20:58:46.362Z",
+      "textFile": "captures/snowflake-product.txt",
+      "contentHash": "bfd5a25e0038290ccd3c0b65d8556eb5027e1872e363bb7c0aa8548a2c970a07",
+      "selectedSpan": {
+        "startOffset": 1011,
+        "endOffset": 1233
+      }
+    },
+    {
+      "id": "snowflake-integration",
+      "companyId": "snowflake",
+      "category": "integration",
+      "title": "Snowflake SQL API | Snowflake Documentation",
+      "url": "https://docs.snowflake.com/en/developer-guide/sql-api/index",
+      "capturedAt": "2026-10-20T20:58:47.414Z",
+      "textFile": "captures/snowflake-integration.txt",
+      "contentHash": "314a1f2350081e38272298145db28742e7e3c9844b8c373463de6ed8a467cc1f",
+      "selectedSpan": {
+        "startOffset": 1206,
+        "endOffset": 1384
+      }
+    },
+    {
+      "id": "snowflake-terms",
+      "companyId": "snowflake",
+      "category": "terms",
+      "title": "Snowflake Terms of Service",
+      "url": "https://www.snowflake.com/en/legal/terms-of-service/",
+      "capturedAt": "2026-10-20T20:58:47.850Z",
+      "textFile": "captures/snowflake-terms.txt",
+      "contentHash": "a47df90ef46f7e8ff12f759e632ed4349166baa29fbde81dc53fe8640df6e4bc",
+      "selectedSpan": {
+        "startOffset": 2868,
+        "endOffset": 3930
+      }
+    },
+    {
+      "id": "snowflake-analysis",
+      "companyId": "snowflake",
+      "category": "analysis",
+      "title": "Snowflake, Databricks and the model makers: The battle for the agentic client and AI back end - SiliconANGLE",
+      "url": "https://siliconangle.com/2026/06/07/snowflake-databricks-model-makers-battle-agentic-client-ai-back-end/",
+      "capturedAt": "2026-10-20T20:58:48.688Z",
+      "textFile": "captures/snowflake-analysis.txt",
+      "contentHash": "c58be086ad1cfb34082be39beb031a52793478f7059000fd323fb675043e9aec",
+      "selectedSpan": {
+        "startOffset": 1012,
+        "endOffset": 1354
+      }
+    },
+    {
+      "id": "snowflake-news",
+      "companyId": "snowflake",
+      "category": "news",
+      "title": "Snowflake knocks it out the park with a stellar earnings and revenue beat - SiliconANGLE",
+      "url": "https://siliconangle.com/2026/09/02/snowflake-knocks-it-out-the-park-with-a-stellar-earnings-and-revenue-beat/",
+      "capturedAt": "2026-10-20T20:58:49.430Z",
+      "textFile": "captures/snowflake-news.txt",
+      "contentHash": "c328c8cb13ddfae50b9a740748c6d386f2eedb24a6d446b2e90605895da64187",
+      "selectedSpan": {
+        "startOffset": 1326,
+        "endOffset": 1705
+      }
+    },
+    {
+      "id": "snowflake-distractor",
+      "companyId": "snowflake",
+      "category": "distractor",
+      "title": "Snowflake Documentation",
+      "url": "https://docs.snowflake.com/en/",
+      "capturedAt": "2026-10-20T21:00:13.661Z",
+      "textFile": "captures/snowflake-distractor-alt.txt",
+      "contentHash": "c366fb6323ab9cea31e65f357d1fec818bf8e7b1bd14258ef8aacf584b5494f7",
+      "selectedSpan": {
+        "startOffset": 352,
+        "endOffset": 441
+      }
+    },
+    {
+      "id": "crowdstrike-annual",
+      "companyId": "crowdstrike",
+      "category": "annual",
+      "title": "crwd-20260131",
+      "url": "https://www.sec.gov/Archives/edgar/data/1535527/000153552726000010/crwd-20260131.htm",
+      "capturedAt": "2026-10-20T20:58:40.727Z",
+      "textFile": "captures/crowdstrike-annual.txt",
+      "contentHash": "e341970638b90f8462e97b9a5c907c44f407c32899996d8483568ec4b9bf37dc",
+      "selectedSpan": {
+        "startOffset": 128659,
+        "endOffset": 128808
+      }
+    },
+    {
+      "id": "crowdstrike-quarterly",
+      "companyId": "crowdstrike",
+      "category": "quarterly",
+      "title": "crwd-20260731",
+      "url": "https://www.sec.gov/Archives/edgar/data/1535527/000153552726000031/crwd-20260731.htm",
+      "capturedAt": "2026-10-20T20:58:41.764Z",
+      "textFile": "captures/crowdstrike-quarterly.txt",
+      "contentHash": "a341d15cc850574ae9c9731b14632aad7747e20ad062346ef230fe6348f1385f",
+      "selectedSpan": {
+        "startOffset": 186547,
+        "endOffset": 186975
+      }
+    },
+    {
+      "id": "crowdstrike-product",
+      "companyId": "crowdstrike",
+      "category": "product",
+      "title": "The CrowdStrike Falcon\u00ae Platform | Unified Agentic Security",
+      "url": "https://www.crowdstrike.com/en-us/platform/",
+      "capturedAt": "2026-10-20T20:58:51.129Z",
+      "textFile": "captures/crowdstrike-product.txt",
+      "contentHash": "9d93d0d8aaa6f61d78e32ea89dbdee613f9456b3c70bc8bc6bdcfcac08818f57",
+      "selectedSpan": {
+        "startOffset": 1097,
+        "endOffset": 1183
+      }
+    },
+    {
+      "id": "crowdstrike-integration",
+      "companyId": "crowdstrike",
+      "category": "integration",
+      "title": "GitHub - CrowdStrike/falconpy: The CrowdStrike Falcon SDK for Python \u00b7 GitHub",
+      "url": "https://github.com/CrowdStrike/falconpy",
+      "capturedAt": "2026-10-20T21:00:16.009Z",
+      "textFile": "captures/crowdstrike-integration-alt.txt",
+      "contentHash": "91e10567f3549ae19eb3e584f41388f2f58c4bee025c50abb70159c4998fed0d",
+      "selectedSpan": {
+        "startOffset": 4170,
+        "endOffset": 4392
+      }
+    },
+    {
+      "id": "crowdstrike-terms",
+      "companyId": "crowdstrike",
+      "category": "terms",
+      "title": "Terms and Conditions | CrowdStrike",
+      "url": "https://www.crowdstrike.com/en-us/legal/terms-conditions/",
+      "capturedAt": "2026-10-20T21:03:03.418Z",
+      "textFile": "captures/crowdstrike-terms-html.txt",
+      "contentHash": "e0331ca03b50a3fd1be7264a50a31e801e3282461508905ede543cd1aba898a5",
+      "selectedSpan": {
+        "startOffset": 20870,
+        "endOffset": 21566
+      }
+    },
+    {
+      "id": "crowdstrike-analysis",
+      "companyId": "crowdstrike",
+      "category": "analysis",
+      "title": "CrowdStrike\u2019s post-Mythos surge: Moat, momentum and the blast-radius test - SiliconANGLE",
+      "url": "https://siliconangle.com/2026/08/29/crowdstrikes-post-mythos-surge-moat-momentum-and-the-blast-radius-test/",
+      "capturedAt": "2026-10-20T20:58:54.424Z",
+      "textFile": "captures/crowdstrike-analysis.txt",
+      "contentHash": "262842cd4ff4f7e11564b9db1b1707be5b51ee292fe2276e70ac6f12bd380ef7",
+      "selectedSpan": {
+        "startOffset": 1951,
+        "endOffset": 2437
+      }
+    },
+    {
+      "id": "crowdstrike-news",
+      "companyId": "crowdstrike",
+      "category": "news",
+      "title": "What we know about CrowdStrike&#039;s update fail that&#039;s causing global outages and travel chaos | TechCrunch",
+      "url": "https://techcrunch.com/2024/07/19/what-we-know-about-crowdstrikes-update-fail-thats-causing-global-outages-and-travel-chaos/",
+      "capturedAt": "2026-10-20T20:58:54.710Z",
+      "textFile": "captures/crowdstrike-news.txt",
+      "contentHash": "343920a34a0d79771418dbf2fac6192b80e03f43f5018cdea35c4e2eaac10adc",
+      "selectedSpan": {
+        "startOffset": 1468,
+        "endOffset": 1732
+      }
+    },
+    {
+      "id": "crowdstrike-distractor",
+      "companyId": "crowdstrike",
+      "category": "distractor",
+      "title": "SEC Filings | CrowdStrike Holdings, Inc.",
+      "url": "https://ir.crowdstrike.com/results-filings/sec-filings",
+      "capturedAt": "2026-10-20T20:58:56.967Z",
+      "textFile": "captures/crowdstrike-distractor.txt",
+      "contentHash": "a374aa3aa27f01fe393896eab7279aa1b2bb2511d43f27581aabd41adea80691",
+      "selectedSpan": {
+        "startOffset": 550,
+        "endOffset": 675
+      }
+    }
+  ],
+  "controls": [
+    {
+      "id": "adobe-numeric",
+      "companyId": "adobe",
+      "targetDocumentId": "adobe-analysis",
+      "span": {
+        "startOffset": 696,
+        "endOffset": 2051
+      },
+      "kind": "attributed_argument",
+      "primaryDocumentIds": [
+        "adobe-annual",
+        "adobe-quarterly"
+      ],
+      "topic": "numeric",
+      "primaryEvidence": [
+        {
+          "documentId": "adobe-annual",
+          "startOffset": 190787,
+          "endOffset": 191310
+        },
+        {
+          "documentId": "adobe-annual",
+          "startOffset": 182927,
+          "endOffset": 183265
+        }
+      ]
+    },
+    {
+      "id": "adobe-forecast",
+      "companyId": "adobe",
+      "targetDocumentId": "adobe-analysis",
+      "span": {
+        "startOffset": 10282,
+        "endOffset": 11547
+      },
+      "kind": "forecast",
+      "primaryDocumentIds": [
+        "adobe-annual",
+        "adobe-quarterly"
+      ],
+      "topic": "forecast",
+      "primaryEvidence": [
+        {
+          "documentId": "adobe-annual",
+          "startOffset": 182927,
+          "endOffset": 183265
+        }
+      ]
+    },
+    {
+      "id": "adobe-capability",
+      "companyId": "adobe",
+      "targetDocumentId": "adobe-news",
+      "span": {
+        "startOffset": 1453,
+        "endOffset": 1706
+      },
+      "kind": "attributed_argument",
+      "primaryDocumentIds": [
+        "adobe-product",
+        "adobe-terms"
+      ],
+      "topic": "capability",
+      "primaryEvidence": [
+        {
+          "documentId": "adobe-product",
+          "startOffset": 11592,
+          "endOffset": 11823
+        }
+      ]
+    },
+    {
+      "id": "adobe-unresolved",
+      "companyId": "adobe",
+      "targetDocumentId": "adobe-analysis",
+      "span": {
+        "startOffset": 12413,
+        "endOffset": 13236
+      },
+      "kind": "attributed_argument",
+      "primaryDocumentIds": [
+        "adobe-product",
+        "adobe-terms"
+      ],
+      "topic": "unresolved",
+      "primaryEvidence": [
+        {
+          "documentId": "adobe-terms",
+          "startOffset": 771,
+          "endOffset": 2072
+        }
+      ]
+    },
+    {
+      "id": "nvidia-numeric",
+      "companyId": "nvidia",
+      "targetDocumentId": "nvidia-analysis",
+      "span": {
+        "startOffset": 4680,
+        "endOffset": 5028
+      },
+      "kind": "attributed_argument",
+      "primaryDocumentIds": [
+        "nvidia-annual",
+        "nvidia-quarterly"
+      ],
+      "topic": "numeric",
+      "primaryEvidence": [
+        {
+          "documentId": "nvidia-annual",
+          "startOffset": 47799,
+          "endOffset": 49098
+        }
+      ]
+    },
+    {
+      "id": "nvidia-forecast",
+      "companyId": "nvidia",
+      "targetDocumentId": "nvidia-analysis",
+      "span": {
+        "startOffset": 6668,
+        "endOffset": 6841
+      },
+      "kind": "forecast",
+      "primaryDocumentIds": [
+        "nvidia-annual",
+        "nvidia-quarterly"
+      ],
+      "topic": "forecast",
+      "primaryEvidence": [
+        {
+          "documentId": "nvidia-annual",
+          "startOffset": 97321,
+          "endOffset": 99454
+        }
+      ]
+    },
+    {
+      "id": "nvidia-capability",
+      "companyId": "nvidia",
+      "targetDocumentId": "nvidia-analysis",
+      "span": {
+        "startOffset": 3196,
+        "endOffset": 3429
+      },
+      "kind": "attributed_argument",
+      "primaryDocumentIds": [
+        "nvidia-product",
+        "nvidia-terms",
+        "nvidia-annual"
+      ],
+      "topic": "capability",
+      "primaryEvidence": [
+        {
+          "documentId": "nvidia-annual",
+          "startOffset": 49100,
+          "endOffset": 49658
+        }
+      ]
+    },
+    {
+      "id": "nvidia-unresolved",
+      "companyId": "nvidia",
+      "targetDocumentId": "nvidia-analysis",
+      "span": {
+        "startOffset": 4351,
+        "endOffset": 4543
+      },
+      "kind": "attributed_argument",
+      "primaryDocumentIds": [
+        "nvidia-product",
+        "nvidia-terms"
+      ],
+      "topic": "unresolved",
+      "primaryEvidence": [
+        {
+          "documentId": "nvidia-terms",
+          "startOffset": 22361,
+          "endOffset": 22733
+        }
+      ]
+    },
+    {
+      "id": "snowflake-numeric",
+      "companyId": "snowflake",
+      "targetDocumentId": "snowflake-news",
+      "span": {
+        "startOffset": 1504,
+        "endOffset": 1555
+      },
+      "kind": "attributed_argument",
+      "primaryDocumentIds": [
+        "snowflake-annual",
+        "snowflake-quarterly"
+      ],
+      "topic": "numeric",
+      "primaryEvidence": [
+        {
+          "documentId": "snowflake-quarterly",
+          "startOffset": 53212,
+          "endOffset": 53433
+        }
+      ]
+    },
+    {
+      "id": "snowflake-forecast",
+      "companyId": "snowflake",
+      "targetDocumentId": "snowflake-analysis",
+      "span": {
+        "startOffset": 1593,
+        "endOffset": 1906
+      },
+      "kind": "forecast",
+      "primaryDocumentIds": [
+        "snowflake-annual",
+        "snowflake-quarterly"
+      ],
+      "topic": "forecast",
+      "primaryEvidence": [
+        {
+          "documentId": "snowflake-annual",
+          "startOffset": 59543,
+          "endOffset": 61450
+        }
+      ]
+    },
+    {
+      "id": "snowflake-capability",
+      "companyId": "snowflake",
+      "targetDocumentId": "snowflake-product",
+      "span": {
+        "startOffset": 1599,
+        "endOffset": 1704
+      },
+      "kind": "attributed_argument",
+      "primaryDocumentIds": [
+        "snowflake-product",
+        "snowflake-terms",
+        "snowflake-annual"
+      ],
+      "topic": "capability",
+      "primaryEvidence": [
+        {
+          "documentId": "snowflake-annual",
+          "startOffset": 58586,
+          "endOffset": 59541
+        }
+      ]
+    },
+    {
+      "id": "snowflake-unresolved",
+      "companyId": "snowflake",
+      "targetDocumentId": "snowflake-analysis",
+      "span": {
+        "startOffset": 26102,
+        "endOffset": 26700
+      },
+      "kind": "attributed_argument",
+      "primaryDocumentIds": [
+        "snowflake-product",
+        "snowflake-terms"
+      ],
+      "topic": "unresolved",
+      "primaryEvidence": [
+        {
+          "documentId": "snowflake-product",
+          "startOffset": 1923,
+          "endOffset": 2617
+        }
+      ]
+    },
+    {
+      "id": "crowdstrike-numeric",
+      "companyId": "crowdstrike",
+      "targetDocumentId": "crowdstrike-analysis",
+      "span": {
+        "startOffset": 3645,
+        "endOffset": 3741
+      },
+      "kind": "attributed_argument",
+      "primaryDocumentIds": [
+        "crowdstrike-annual",
+        "crowdstrike-quarterly"
+      ],
+      "topic": "numeric",
+      "primaryEvidence": [
+        {
+          "documentId": "crowdstrike-quarterly",
+          "startOffset": 169016,
+          "endOffset": 169770
+        }
+      ]
+    },
+    {
+      "id": "crowdstrike-forecast",
+      "companyId": "crowdstrike",
+      "targetDocumentId": "crowdstrike-analysis",
+      "span": {
+        "startOffset": 1221,
+        "endOffset": 1627
+      },
+      "kind": "forecast",
+      "primaryDocumentIds": [
+        "crowdstrike-annual",
+        "crowdstrike-quarterly"
+      ],
+      "topic": "forecast",
+      "primaryEvidence": [
+        {
+          "documentId": "crowdstrike-annual",
+          "startOffset": 128535,
+          "endOffset": 129291
+        }
+      ]
+    },
+    {
+      "id": "crowdstrike-capability",
+      "companyId": "crowdstrike",
+      "targetDocumentId": "crowdstrike-news",
+      "span": {
+        "startOffset": 1213,
+        "endOffset": 1351
+      },
+      "kind": "attributed_argument",
+      "primaryDocumentIds": [
+        "crowdstrike-annual",
+        "crowdstrike-quarterly"
+      ],
+      "topic": "capability",
+      "primaryEvidence": [
+        {
+          "documentId": "crowdstrike-annual",
+          "startOffset": 314857,
+          "endOffset": 316591
+        }
+      ]
+    },
+    {
+      "id": "crowdstrike-unresolved",
+      "companyId": "crowdstrike",
+      "targetDocumentId": "crowdstrike-analysis",
+      "span": {
+        "startOffset": 1951,
+        "endOffset": 2437
+      },
+      "kind": "attributed_argument",
+      "primaryDocumentIds": [
+        "crowdstrike-product",
+        "crowdstrike-terms"
+      ],
+      "topic": "unresolved",
+      "primaryEvidence": [
+        {
+          "documentId": "crowdstrike-terms",
+          "startOffset": 62010,
+          "endOffset": 62719
+        }
+      ]
+    }
+  ],
+  "referenceFile": "reference.json",
+  "historicalDatasetFile": "../dataset.json",
+  "historicalReferenceFile": "../reference.json",
+  "historicalDatasetSha256": "5840934344478b693633de8149c6fc35eaba6ca0233875917d5013f8d5c905df",
+  "historicalReferenceSha256": "e95f1a5302dfe447d33d2f4fb4dc5b98276803ba9d026d0cafdbbd69733d29cc",
+  "inputContractFile": "input-contract-freeze.json"
+}

@@ -1,0 +1,38 @@
+
+> agentic-resilience-evidence-workbench@ test /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> TMPDIR=/tmp TEMP=/tmp TMP=/tmp vitest run src/__tests__/benchmarks/source-quality-study.test.ts
+
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+ ❯ src/__tests__/benchmarks/source-quality-study.test.ts (18 tests | 1 failed) 4845ms
+   × retains execution ownership until every in-flight worker settles after failure 74ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/benchmarks/source-quality-study.test.ts > retains execution ownership until every in-flight worker settles after failure
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/__tests__/benchmarks/source-quality-study.test.ts:622:26
+    620|     try {
+    621|         await new Promise(resolve => setImmediate(resolve));
+    622|         expect(finished).toBe(false);
+       |                          ^
+    623|         expect(stopped).toBe(true);
+    624|     } finally { release(); }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 17 passed (18)
+   Start at  23:00:49
+   Duration  6.57s (transform 432ms, setup 317ms, import 993ms, tests 4.84s, environment 0ms)
+
+ ELIFECYCLE  Test failed. See above for more details.

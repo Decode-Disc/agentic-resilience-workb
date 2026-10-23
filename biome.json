@@ -11,6 +11,8 @@
             "src/**",
             "convex/**",
             "scripts/**",
+            "!scripts/evaluations/source-selection/runs",
+            "!scripts/evaluations/source-selection/fixtures",
             "*.ts",
             "*.json",
             "!src/routeTree.gen.ts",

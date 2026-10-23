@@ -1,0 +1,38 @@
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+ ❯ src/__tests__/benchmarks/source-quality-study.test.ts (6 tests | 1 failed) 1579ms
+   × keeps failed holdout responses in the denominator without scoring a missing reference as wrong 446ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/benchmarks/source-quality-study.test.ts > keeps failed holdout responses in the denominator without scoring a missing reference as wrong
+AssertionError: expected { question: 'company', …(6) } to match object { actual: null, correct: null, …(1) }
+(5 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "actual": null,
+-   "correct": null,
+-   "referenceStatus": "missing",
++   "correct": false,
+  }
+
+ ❯ src/__tests__/benchmarks/source-quality-study.test.ts:74:42
+     72|         const observation=report.observations.find((item:{key:string})…
+     73|         expect(observation.status).toBe("unusable");
+     74|         expect(observation.judgments[0]).toMatchObject({actual:null,co…
+       |                                          ^
+     75|         expect(report.observations).toHaveLength(416);
+     76|     }finally{rmSync(fixture.directory,{recursive:true,force:true});}
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  22:00:07
+   Duration  2.58s (transform 393ms, setup 227ms, import 561ms, tests 1.58s, environment 0ms)
+

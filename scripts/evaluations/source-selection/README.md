@@ -1,6 +1,6 @@
 # Source-quality evaluation tools
 
-This README documents the evaluation runners and their files. Product outcomes belong in [PRODUCT.md](../../../PRODUCT.md#evaluation-and-demonstration); the project skill `$evaluate-quality` guides protocol design, interpretation and evidence preservation. Results and historical settings belong in the reports linked below. These tools do not select an application model or approve sources.
+This README documents the evaluation runners and their files. Product outcomes belong in [PRODUCT.md](../../../PRODUCT.md#evaluation-and-demonstration); the project skill [$workbench-evaluation](../../../.agents/skills/workbench-evaluation/SKILL.md) guides protocol design, interpretation and evidence preservation. Results and historical settings belong in the reports linked below. These tools do not select an application model or approve sources.
 
 Run commands from the repository root using its installed Node, pnpm and dependencies. Examples use placeholder paths that must be replaced with existing study inputs.
 

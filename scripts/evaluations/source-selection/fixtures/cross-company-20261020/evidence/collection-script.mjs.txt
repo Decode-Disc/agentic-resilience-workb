@@ -1,0 +1,46 @@
+import {execFileSync} from 'node:child_process';
+import {Agent} from '/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/node_modules/.pnpm/undici@7.30.0/node_modules/undici/index.js';
+import {createServer} from '/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/node_modules/vite/dist/node/index.js';
+import {lookup} from 'node:dns/promises';
+import https from 'node:https';
+import {mkdirSync,readFileSync,writeFileSync,existsSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+const root='/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto';
+const directory=root+'/scripts/evaluations/source-selection/fixtures/cross-company-20261020';
+mkdirSync(directory+'/captures',{recursive:true});
+const server=await createServer({root,configFile:false,envDir:false,server:{middlewareMode:true,hmr:false,ws:false,watch:null},resolve:{tsconfigPaths:true},appType:'custom',optimizeDeps:{noDiscovery:true},cacheDir:'/tmp/source-quality-comparison-20261020/vite'});
+const policy=await server.ssrLoadModule('/convex/domain/publicSourceUrl.ts');
+const normalizer=await server.ssrLoadModule('/convex/integrations/evidenceNormalization.ts');
+const sha=v=>createHash('sha256').update(v).digest('hex');
+const journal=directory+'/collection.json';
+const records=existsSync(journal)?JSON.parse(readFileSync(journal,'utf8')):[];
+async function capture(item){
+ if(records.some(r=>r.id===item.id&&r.status==='captured')) return;
+ let current=item.url; const redirects=[];
+ try{
+  for(let hop=0;hop<4;hop++){
+   const checked=await policy.validatePublicSourceUrl(current,async host=>(await lookup(host,{all:true,verbatim:true})).filter(v=>v.family===4).map(v=>v.address));
+   const dispatcher=new Agent({connect:{lookup:(_host,options,cb)=>options.all?cb(null,checked.addresses.map(address=>({address,family:address.includes(':')?6:4}))):cb(null,checked.addresses[0],checked.addresses[0].includes(':')?6:4)}});
+   let result;
+   try{
+    const response=await fetch(checked.canonicalUrl,{dispatcher,headers:{'User-Agent':'EvidenceWorkbench public company research contact via adobe.com'},redirect:'manual',signal:AbortSignal.timeout(30000)});
+    const reader=response.body?.getReader();const chunks=[];let count=0;
+    if(reader)while(true){const part=await reader.read();if(part.done)break;count+=part.value.byteLength;if(count>16*1024*1024){await reader.cancel();throw new Error('Source exceeds 16 MiB');}chunks.push(part.value);}
+    result={status:response.status,type:response.headers.get('content-type'),location:response.headers.get('location'),bytes:Buffer.concat(chunks)};
+   }finally{await dispatcher.close();}
+   if(result.status>=300&&result.status<400&&result.location){redirects.push(current);current=new URL(result.location,current).href;continue;}
+   if(result.status!==200) throw new Error('HTTP '+result.status);
+   const raw=result.bytes.toString('utf8');
+   let decodedRaw=raw;
+   if((result.type||'').includes('pdf')){const pdfPath='/tmp/source-quality-comparison-20261020/'+item.id+'.pdf';writeFileSync(pdfPath,result.bytes,{flag:'wx'});decodedRaw=execFileSync('/usr/bin/pdftotext',['-layout',pdfPath,'-'],{encoding:'utf8'});}
+   const artifact=(result.type||'').includes('pdf')?normalizer.normalizeExaText(decodedRaw,{normalizerVersion:'pdftotext-layout+exa-text-v1'}):(result.type||'').includes('json')?{normalizedText:raw,contentHash:sha(raw),normalizerVersion:'raw-json-v1'}:normalizer.normalizeSecHtml(raw);
+   writeFileSync(directory+'/captures/'+item.id+'.raw',result.bytes,{flag:'wx'});
+   writeFileSync(directory+'/captures/'+item.id+'.txt',artifact.normalizedText,{flag:'wx'});
+   records.push({...item,status:'captured',finalUrl:current,redirects,capturedAt:new Date().toISOString(),mediaType:result.type,rawSha256:sha(result.bytes),contentHash:artifact.contentHash,normalizerVersion:artifact.normalizerVersion,transport:'public-https-fetch-with-validated-address-dispatcher',normalizedBytes:Buffer.byteLength(artifact.normalizedText)});
+   console.log(JSON.stringify({id:item.id,status:'captured',bytes:Buffer.byteLength(artifact.normalizedText)}));return;
+  }
+  throw new Error('Redirect limit');
+ }catch(error){records.push({...item,status:'unavailable',finalUrl:current,redirects,attemptedAt:new Date().toISOString(),error:error.message});console.log(JSON.stringify({id:item.id,status:'unavailable',reason:error.message}));}
+ finally{writeFileSync(journal,JSON.stringify(records,null,2)+'\n');}
+}
+try{for(const item of JSON.parse(readFileSync(process.argv[2],'utf8'))) await capture(item);}finally{await server.close();}

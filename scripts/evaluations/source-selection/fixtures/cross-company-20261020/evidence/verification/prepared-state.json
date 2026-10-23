@@ -1,0 +1,23 @@
+{
+  "verifiedAt": "2026-10-20T22:03:38.271579+00:00",
+  "manifestSha256": "8ce2324406b1a651d54ff29a594a53b21adff252edc5a86e143cb4f5f1d306be",
+  "maximumAttempts": 416,
+  "maximumReservationUsd": 2.905615338,
+  "proposedBudgetUsd": 3,
+  "authorizationGranted": false,
+  "actualInferenceAttempts": 0,
+  "actualInferenceCostUsd": 0,
+  "applicationWrites": 0,
+  "semanticAcceptance": "not_evaluated",
+  "studyTestsPassed": 18,
+  "existingTransportTestsPassed": 14,
+  "clientAndConvexTypes": "passed",
+  "scopedBiome": "passed",
+  "importBoundaries": "passed",
+  "legacyDryRun": "byte_identical",
+  "projectCheck": "stopped_at_unrelated_analyzed_company_list_lint",
+  "originalImplementationGoal": "remains_paused",
+  "integrationExcludedModels": [
+    "openai/gpt-6-luna-decisions"
+  ]
+}

@@ -1,0 +1,34 @@
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+ ❯ src/__tests__/benchmarks/source-quality-study.test.ts (14 tests | 1 failed) 2501ms
+   × reuses the approved lot with a fresh snapshot at the same or lower tariffs 70ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/benchmarks/source-quality-study.test.ts > reuses the approved lot with a fresh snapshot at the same or lower tariffs
+AssertionError: Refresh the official tariff/provider snapshot before dispatch
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ validateStudyApproval scripts/evaluations/source-selection/study-cli.ts:156:5
+    154| export function validateStudyApproval(args:{manifestSha256:string;maxi…
+    155|     const now=args.now??Date.now();const catalog=args.catalog;
+    156|     assert(catalog&&now-Date.parse(catalog.observedAt)>=0&&now-Date.pa…
+       |     ^
+    157|     assert(args.approval&&typeof args.approval==="object","Invalid exp…
+    158|     const approval=args.approval as Approval;
+ ❯ src/__tests__/benchmarks/source-quality-study.test.ts:137:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 passed (14)
+   Start at  22:37:05
+   Duration  4.25s (transform 755ms, setup 262ms, import 1.20s, tests 2.50s, environment 0ms)
+

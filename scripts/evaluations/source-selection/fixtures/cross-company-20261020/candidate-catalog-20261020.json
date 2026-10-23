@@ -1,0 +1,50 @@
+{
+  "observedAt": "2026-10-20T22:31:00.342Z",
+  "models": [
+    {
+      "id": "deepseek/deepseek-v4.1-flash",
+      "inputPricePerToken": 7e-08,
+      "outputPricePerToken": 5e-07,
+      "contextLength": 1048576,
+      "provider": "relace",
+      "sourceUrl": "https://openrouter.ai/api/v1/models/deepseek/deepseek-v4.1-flash/endpoints"
+    },
+    {
+      "id": "z-ai/glm-5.3-flash",
+      "inputPricePerToken": 4.7076e-08,
+      "outputPricePerToken": 1.2e-07,
+      "contextLength": 1048576,
+      "provider": "open-inference/fp4",
+      "sourceUrl": "https://openrouter.ai/api/v1/models/z-ai/glm-5.3-flash/endpoints",
+      "reasoning": {
+        "effort": "low",
+        "exclude": true
+      },
+      "maximumOutputTokens": 8192
+    },
+    {
+      "id": "jev-1.14.0",
+      "inputPricePerToken": 4.2e-08,
+      "outputPricePerToken": 0,
+      "contextLength": 32768,
+      "provider": "typesafe",
+      "sourceUrl": "https://docs.typesafe.ai/models"
+    },
+    {
+      "id": "microsoft/microsoft-decision-1",
+      "inputPricePerToken": 4.2e-08,
+      "outputPricePerToken": 0.0,
+      "contextLength": 32768,
+      "provider": "azure",
+      "sourceUrl": "https://openrouter.ai/api/v1/models?output_modalities=decisions"
+    },
+    {
+      "id": "deepseek/deepseek-v4.1-flash-1017",
+      "inputPricePerToken": 7e-08,
+      "outputPricePerToken": 5e-07,
+      "contextLength": 1048576,
+      "provider": "relace",
+      "sourceUrl": "https://openrouter.ai/api/v1/models/deepseek/deepseek-v4.1-flash-1017/endpoints"
+    }
+  ]
+}

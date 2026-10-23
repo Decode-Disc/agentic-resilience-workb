@@ -1,0 +1,55 @@
+
+> agentic-resilience-evidence-workbench@ check /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> pnpm design:check && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build
+
+
+> agentic-resilience-evidence-workbench@ design:check /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> pnpm design:sync --check
+
+
+> agentic-resilience-evidence-workbench@ design:sync /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> node --experimental-strip-types scripts/sync-design-context.ts --check
+
+Design documentation is up to date.
+
+> agentic-resilience-evidence-workbench@ typecheck /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> tsc --noEmit && tsc --noEmit -p convex/tsconfig.json
+
+
+> agentic-resilience-evidence-workbench@ lint /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> biome lint . && node --experimental-strip-types scripts/check-imports.ts
+
+src/components/workbench-shell/analyzed-company-list.tsx:114:44 lint/suspicious/noArrayIndexKey ━━━━━━━━━━
+
+  × Avoid using the index of an array as key property in an element.
+  
+    112 │       >
+    113 │         {[...Array(3)].map((_, i) => (
+  > 114 │           <React.Fragment key={`skeleton-${i}`}>
+        │                                            ^
+    115 │             <Skeleton className="h-8 w-44 rounded-sm" />
+    116 │             <Separator orientation="vertical" className="mx-2 shrink-0" />
+  
+  i This is the source of the key value.
+  
+    111 │         aria-busy="true"
+    112 │       >
+  > 113 │         {[...Array(3)].map((_, i) => (
+        │                                ^
+    114 │           <React.Fragment key={`skeleton-${i}`}>
+    115 │             <Skeleton className="h-8 w-44 rounded-sm" />
+  
+  i The order of the items may change, and this also affects performances and component state.
+  
+  i Check the React documentation. 
+  
+
+Checked 419 files in 890ms. No fixes applied.
+Found 1 error.
+lint ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Some errors were emitted while running checks.
+  
+
+ ELIFECYCLE  Command failed with exit code 1.
+ ELIFECYCLE  Command failed with exit code 1.
