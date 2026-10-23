@@ -21,9 +21,9 @@ import {
     NestedMenu,
     type NestedMenuSectionProps,
 } from "@/components/ui/nested-menu";
-import { Separator } from "@/components/ui/separator";
 import { AnalyzedCompanyList } from "@/components/workbench-shell/analyzed-company-list";
 import { useInvitationAccess } from "@/components/workspace/invitation-access-context";
+import { useResponsive } from "@/hooks/use-responsive";
 import { uiLayerClasses } from "@/lib/ui-layers";
 import { cn } from "@/lib/utils";
 import { getWorkspaceDestination } from "@/lib/workspace/access-destination";
@@ -67,6 +67,7 @@ function WorkbenchHeader({ activeRunId }: { activeRunId?: string }) {
     const navigate = useNavigate();
     const { signOut } = useAuthActions();
     const { openInvitationDrawer } = useInvitationAccess();
+    const { isMobile } = useResponsive();
     const [isSigningOut, setIsSigningOut] = useState(false);
 
     const logout = async () => {
@@ -119,9 +120,8 @@ function WorkbenchHeader({ activeRunId }: { activeRunId?: string }) {
                 "sticky top-0 z-30 border-b border-border bg-card/80 backdrop-blur-md",
                 uiLayerClasses.workbenchShellHeader,
             )}>
-            <div className="max-width-container flex items-center justify-between gap-3 py-2.5">
-                <div className="flex min-w-0 items-center gap-3">
-                    {/* Home Button / Link using shadcn Button */}
+            <div className="max-width-container grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 py-2.5">
+                <div className="min-w-0 flex items-center gap-3">
                     <Button
                         render={<Link to="/" />}
                         nativeButton={false}
@@ -138,30 +138,30 @@ function WorkbenchHeader({ activeRunId }: { activeRunId?: string }) {
                             Home
                         </span>
                     </Button>
-
-                    <Button
-                        render={<Link to="/workspace/start" />}
-                        nativeButton={false}
-                        variant="default"
-                        size="sm"
-                        aria-label="Start a company dossier"
-                        title="Start a company dossier"
-                        className="rounded-sm">
-                        <span className="start-double-slash">{"//"}</span>
-                        <span className="start-label">start</span>
-                    </Button>
-
-                    <Separator orientation="vertical" className="shrink-0" />
-
-                    {/* Horizontal Analyzed Companies List */}
-                    <AnalyzedCompanyList
-                        activeRunId={activeRunId}
-                        enabled={visitor !== undefined && visitor !== null}
-                        isAdmissionLoading={visitor === undefined}
-                    />
+                    {!isMobile ? (
+                        <Button
+                            render={<Link to="/workspace/start" />}
+                            nativeButton={false}
+                            variant="secondary"
+                            size="sm"
+                            aria-label="Start a company dossier"
+                            title="Start a company dossier"
+                            className="border-accent">
+                            <span className="start-double-slash">{"//"}</span>
+                            <span className="start-label text-primary">
+                                start
+                            </span>
+                        </Button>
+                    ) : null}
                 </div>
-
-                <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                {/* Horizontal Analyzed Companies List */}
+                <AnalyzedCompanyList
+                    activeRunId={activeRunId}
+                    enabled={visitor !== undefined && visitor !== null}
+                    isAdmissionLoading={visitor === undefined}
+                    className="min-w-0 w-full justify-center md:justify-start"
+                />
+                <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
                     {visitor?.status === "active" ? (
                         <NestedMenu
                             sections={sessionMenuSections}
@@ -171,7 +171,6 @@ function WorkbenchHeader({ activeRunId }: { activeRunId?: string }) {
                                 <Button
                                     type="button"
                                     variant="secondary"
-                                    className="border border-primary"
                                     size="sm"
                                     aria-label="Workspace menu">
                                     <Icon iconNode={UserCircleIcon} />
@@ -201,7 +200,7 @@ function WorkbenchHeader({ activeRunId }: { activeRunId?: string }) {
                                 })
                             }>
                             <Icon iconNode={Login02Icon} />
-                            Workspace
+                            Go to Workspace
                         </Button>
                     ) : null}
                 </div>

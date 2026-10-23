@@ -1,9 +1,9 @@
 "use client";
 
+import { Slot } from "@radix-ui/react-slot";
 import { Sparkles } from "lucide-react";
 import type React from "react";
 import { cloneElement, useEffect, useMemo, useRef, useState } from "react";
-import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@/lib/utils";
 
 export interface LiquidMetalBorderButtonProps {
@@ -311,7 +311,7 @@ export function LiquidMetalBorderButton({
                                 gap: "8px",
                                 fontSize: "14px",
                                 fontWeight: 400,
-                                color: isHovered ? "#ffffff" : "#d7d7d7",
+                                color: isHovered ? "#d7d7d7" : "#ffffff",
                                 textShadow: "0px 1px 2px rgba(0, 0, 0, 0.5)",
                                 transition: "all 0.3s ease",
                                 whiteSpace: "nowrap",

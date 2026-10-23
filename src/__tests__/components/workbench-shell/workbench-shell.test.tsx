@@ -149,7 +149,12 @@ describe("WorkbenchShell", () => {
         ).toBeTruthy();
         visitorQuery.returns(null);
         fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-        expect(screen.getByRole("button", { name: "Workspace" })).toBeTruthy();
+        expect(
+            screen.getByRole("button", { name: "Go to Workspace" }),
+        ).toBeTruthy();
+        expect(
+            screen.queryByText("Workspace navigation unavailable"),
+        ).toBeNull();
         consoleError.mockRestore();
     });
 

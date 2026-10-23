@@ -167,10 +167,7 @@ function WorkbenchLink({ mobile = false }: { mobile?: boolean }) {
     return (
         <Link
             to="/workspace/start"
-            className={cn(
-                buttonVariants({ size: "default" }),
-                mobile && "w-full",
-            )}>
+            className={cn(buttonVariants({ size: "lg" }), mobile && "w-full")}>
             Open workbench
         </Link>
     );
@@ -213,7 +210,7 @@ function LandingHeader() {
             <div className="flex h-14 items-center justify-between gap-4 rounded-full border border-border/70 bg-card/30 px-3 shadow-floating backdrop-blur-xl sm:px-4">
                 <div className="flex min-w-0 items-center gap-2.5">
                     <AppLogo />
-                    <span className="hidden text-base font-semibold tracking-tight sm:block">
+                    <span className="text-sm sm:text-base font-semibold tracking-tight">
                         Agentic Resilience
                     </span>
                 </div>
@@ -225,7 +222,7 @@ function LandingHeader() {
                     <NavigationMenuList>
                         {navigationItems.map((item, index) => (
                             <NavigationMenuItem key={item.id} value={item.id}>
-                                <NavigationMenuTrigger className="hover:bg-brand-purple/8 hover:text-brand-purple data-popup-open:bg-brand-purple/10 data-popup-open:text-brand-purple">
+                                <NavigationMenuTrigger className="hover:bg-brand-purple/8 text-base hover:text-brand-purple data-popup-open:bg-brand-purple/10 data-popup-open:text-brand-purple">
                                     {item.label}
                                 </NavigationMenuTrigger>
                                 <NavigationMenuContent>
@@ -239,7 +236,7 @@ function LandingHeader() {
                         <NavigationMenuItem>
                             <NavigationMenuLink
                                 href="#capabilities"
-                                className="flex h-9 items-center rounded-full px-3 text-sm font-medium text-foreground/80 transition-colors hover:bg-brand-purple/8 hover:text-brand-purple">
+                                className="flex h-9 items-center rounded-full px-3 text-base font-medium text-muted-foreground transition-colors hover:bg-brand-purple/8 hover:text-brand-purple">
                                 Capabilities
                             </NavigationMenuLink>
                         </NavigationMenuItem>
@@ -516,7 +513,7 @@ export function IndexPage() {
                     <Badge
                         variant="fancy"
                         color="indigo"
-                        className="rounded-none p-2.5 font-mono font-medium tracking-[0.12em] uppercase">
+                        className="rounded-none p-2 font-mono font-medium tracking-[0.12em] uppercase">
                         <Icon iconNode={Sparkles} className="size-8" />
                         Agentic Resilience Evidence Workbench
                     </Badge>
@@ -532,11 +529,12 @@ export function IndexPage() {
                     <div className="flex justify-center">
                         <LiquidMetalBorderButton
                             label="Start the research"
+                            className="py-5 px-6"
                             render={<Link to="/workspace/start" />}>
-                            Start the research
+                            <span className="text-lg">Start the research</span>
                             <Icon
                                 iconNode={ArrowRight01Icon}
-                                className="size-4"
+                                className="size-5"
                             />
                         </LiquidMetalBorderButton>
                     </div>
