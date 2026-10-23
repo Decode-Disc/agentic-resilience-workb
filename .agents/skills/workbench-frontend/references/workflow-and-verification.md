@@ -4,6 +4,8 @@ Use this reference when a frontend change touches async work, recovery, navigati
 
 ## Reconstruct the affected transition
 
+An action can appear correct while its feedback belongs to another selection or its result disappears on return. Establish the real transition so the analyst sees the outcome of the action they took. When async work, navigation, or a checkpoint changes, follow its state from the caller through persistence and back to presentation.
+
 Trace the actual route, Convex hooks, operation, persisted result, and presentation. For the affected action, identify its prerequisite, pending state, terminal outcomes, available recovery, and consequences for existing decisions. Inspect what happens after selection changes, navigation, refresh, and reconnect when those behaviors are relevant.
 
 Source review is wired through `src/components/workspace/live-source-review.tsx` and its query-owning subtrees. Find the generated function references in the caller rather than guessing an endpoint. The same visible action in an illustrative prototype may use local state; that does not establish protected persistence or subscription behavior.
@@ -13,6 +15,8 @@ Keep status scopes visible during inspection: a dossier-wide search limit can af
 For pre-approval work, inspect both the information available before the decision and the handoff afterward. A visible approval button does not prove the analyst has the material needed to exercise it. Conversely, documentary uncertainty must not become an invented approval blocker. Consult the authoritative contracts when changing either behavior.
 
 ## Match checks to the observable change
+
+Excessive style assertions slow iteration, while a screenshot alone cannot prove a saved decision. Choose evidence that can expose the changed failure, because verification is useful only for the claim it actually tests. Classify the observable change before selecting the checks below.
 
 | Change | Smallest useful evidence |
 | --- | --- |
@@ -28,6 +32,8 @@ For new or recomposed views, inspect desktop and narrow mobile with realistic co
 Exercise relevant tabs, disclosures, search, clear, navigation, and recovery. Inspect keyboard/focus, touch operation, loading geometry, empty/error outcomes, long text, and console errors. Check reduced motion when animations change and both themes when colors or surfaces change. Measure the actual scrolling element when investigating overflow; a screenshot of the top of a list does not establish correct scrolling.
 
 ## Keep evidence levels distinct
+
+Controlled examples can establish correctness without establishing live availability or analytical usefulness. Keep the observed evidence level explicit so the handoff does not promise more than the checks demonstrate. Use the distinctions below when selecting a check and reporting its result.
 
 - **Mockup:** establishes intended composition, not execution or persistence.
 - **Deterministic fixture or component test:** establishes the exercised contract with controlled inputs, not provider availability or fresh research quality.

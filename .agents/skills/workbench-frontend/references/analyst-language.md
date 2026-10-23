@@ -8,6 +8,8 @@ Read the relevant workflow in [PRODUCT.md](../../../../PRODUCT.md) and its enfor
 
 ## Trace the fact before naming it
 
+Readable wording can still overstate what the system knows. Establish the supported fact before choosing its label, because a clearer sentence must not introduce a stronger claim. When a message or indicator changes, trace its input and resolve the following questions before writing copy.
+
 For each changed message or indicator, inspect:
 
 1. **Evidence:** Which persisted field, event, or query result supports it? Does that input distinguish the states the proposed text claims to distinguish?
@@ -20,6 +22,8 @@ If the available projection cannot distinguish an unattempted source from a fail
 Keep semantic translation in the existing presentation owner. Inspect all affected callers, including help, accessible labels, empty states, and tests, so one correction does not leave conflicting explanations elsewhere.
 
 ## Check the distinctions that matter
+
+Selection, processing, and evidence judgments can coexist on the same card. Keep their consequences understandable so the analyst does not mistake one for another. Use the relevant rows below when the changed information involves those concepts, and settle each question against the actual contract.
 
 | Information being presented | Question to resolve from the real contract |
 | --- | --- |
@@ -34,6 +38,8 @@ For example, several included regulatory candidates do not automatically mean se
 
 ## Say what happened and what follows
 
+Generic errors leave the analyst choosing a remedy that may not address the failure. Explain the task outcome and a usable next action so recovery does not require understanding internal execution. For an interrupted or limited operation, inspect its persisted outcome and available transitions before choosing the message or control.
+
 For an interruption, lead with the affected task, explain its consequence for the analyst, and offer only an available next action. Distinguish a technical inability to assess material from a finding that the material is insufficient. Finding more sources, retrying failed discovery, and continuing preparation are separate intents; inspect the operation behind each control.
 
 Illustrative wording, only when supported by the saved outcome: **“Source preparation interrupted. You can read 2 of 48 sources here. The remaining sources have not been assessed.”** Offer **“Continue preparation”** only if that transition is actually available. If recovery requires an operator intervention, explain the current limitation without inventing a working retry or exposing configuration details.
@@ -41,6 +47,8 @@ Illustrative wording, only when supported by the saved outcome: **“Source prep
 Avoid raw workflow keys, provider diagnostics, and internal identifiers in analyst copy, following `AGENTS.md`. A disabled control needs a useful reason and available alternative, or a known waiting condition. Do not promise “Retry when available” without an observable way to know when that is.
 
 ## Reduce competing information
+
+Several individually meaningful labels can repeat the same information in context. Give priority to what changes the analyst's decision, because displaying the model's entire taxonomy increases reading effort without necessarily adding insight. When metadata competes for attention, compare adjacent labels before renaming, removing, or disclosing them.
 
 The presence of distinct backend fields does not justify displaying every field as an equally prominent badge. Compare the information gained by each label. Keep the details needed for the current decision visible, and move supporting classification or rationale into the established disclosure when appropriate. Preserve useful provenance and integrity disclosures.
 

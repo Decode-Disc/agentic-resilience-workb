@@ -53,7 +53,8 @@ Write prose paragraphs on one physical line. Keep repository documents self-cont
 
 - Keep the application, source code, schemas, fixtures, tests, UI copy, and documentation in English, even if the user communicates in French.
 - Prefer the smallest coherent implementation that proves the product thesis; never build speculative abstractions, theatrical agent swarms, or features outside the MVP.
-- Route to appropriate specialist skills: `ai-sdk` for AI SDK integrations, Convex skills (`convex`, `convex-expert`, `convex-design`, `convex-test`, etc...) for backend logic and schemas, `impeccable` `frontend-ui-engineering`, `better-ux-flow`, and `shadcn` for UI engineering, and `motion-react` for motion design.
+- Use `ai-sdk` for AI SDK integrations and relevant Convex skills for backend logic and schemas.
+- For frontend planning, implementation, and review, apply [workbench-frontend](.agents/skills/workbench-frontend/SKILL.md). It selects the relevant UI/UX specialist procedures. Preserve any specialist workflow explicitly requested by the user.
 
 ## Candidature Priority and Proportionality
 

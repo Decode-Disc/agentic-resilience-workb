@@ -7,7 +7,17 @@ description: Plan, build, change, or review Agentic Resilience Workbench interfa
 
 Make the analyst's task and the available evidence understandable through the existing interface. This skill supplies a work sequence, not another product contract, design system, or permission to redesign. Keep the procedure proportional to the change.
 
+## When to Use
+
+Use for frontend planning, implementation, or review in this project, including small corrections and confusing labels or states. Start with the analyst's task so component reuse and verification support a useful result. For a local fix, inspect the affected owners and callers; for recomposition or workflow changes, inspect the broader interaction.
+
+## When Not to Use
+
+Skip for backend-only work, dependency management alone, or unrelated documentation. If a narrower specialist procedure already owns the task, use this skill only for relevant project integration checks; do not restart discovery, request new mockups, or impose a redesign. Planning and review remain read-only until implementation is authorized.
+
 ## Establish the reference
+
+Changes can preserve the code's behavior while losing the intended analyst experience. Establish the current task and accepted baseline first so the proposed change addresses the actual difficulty. For an existing surface, reconstruct its behavior; for a new one, use the product contract and closest relevant pattern without inventing a baseline.
 
 - Inspect the working diff, affected route/view, and closest existing pattern. State what the analyst needs to understand, inspect, or decide after the change. A technical score or a larger number of passing tests does not establish that outcome.
 - Read [PRODUCT.md](../../../PRODUCT.md), relevant [technical contracts](../../../context/TECH.md), [DESIGN.md](../../../DESIGN.md), and the current delivery state in [the roadmap](../../../docs/ROADMAP.md). Follow [AGENTS.md](../../../AGENTS.md) for scope, authority, and verification. Reuse context already gathered.
@@ -15,6 +25,8 @@ Make the analyst's task and the available evidence understandable through the ex
 - Keep planning and review read-only until implementation is authorized. User feedback is evidence of a problem, not automatic approval of the first proposed remedy. Recheck the underlying behavior before changing the recommendation.
 
 ## Find the existing owners
+
+Independent implementations make labels, state handling, and appearance drift across surfaces. Locate the owner before extending it so one shared rule has one maintenance path. Share behavior that must evolve together, while leaving consumer-specific composition local.
 
 Read only the local reference matching the task:
 
@@ -40,6 +52,8 @@ Repository conventions take precedence over generic examples, including test loc
 
 ## Check meaning and composition together
 
+Individually accurate labels can still form a confusing screen. The intended result is a coherent explanation of what is available and what the analyst can decide, because understanding depends on the combined text, hierarchy, and actions. Apply the semantic checks when meaning changes and the composition checks when visibility or layout changes.
+
 - Review the actual English text the analyst will encounter, including accessible names, alerts, disabled reasons, and terminal outcomes. Use the language reference whenever that meaning changes.
 - For each visible badge, count, or status, identify its input, what it establishes, and the decision it helps. Compare adjacent information and the same concept on other surfaces. Remove or disclose redundant detail before adding explanatory paragraphs.
 - Check that label, color, icon, placement, and action tell the same story. Distinguish category, selection, preparation, documentary contribution, and human approval using their authoritative contracts.
@@ -48,10 +62,12 @@ Repository conventions take precedence over generic examples, including test loc
 
 ## Verify and report the result
 
-Apply the repository's functional TDD and presentation-only browser rules. Use the workflow reference to select the smallest relevant checks. Verify the affected protected path when its behavior changes; identify unavailable access or data as an incomplete check.
+Code checks, rendered examples, and real preparation establish different facts. Match verification to the changed contract so a passing test does not become an unsupported claim of usability or live quality. Apply the repository's functional TDD and presentation-only browser rules, using the workflow reference to select the smallest relevant checks. Verify the affected protected path when its behavior changes; identify unavailable access or data as an incomplete check.
 
 Review the diff for duplicated rules and unrelated changes. Report the user-visible outcome, owners changed, exact checks run, browser states inspected, and remaining uncertainty. Keep fixture, protected-runtime, and live-provider evidence distinct. Do not claim visual acceptance or analytical quality from automated checks.
 
 ## Maintain the skill
 
-[Evaluation scenarios](evals/evals.json) exercise realistic read-only requests drawn from recurring project failures. Check reference paths, JSON, and skill structure after edits. These checks do not establish behavioral improvement. Run comparative or delegated evaluations only when requested and authorized; keep their outputs outside the application tree.
+Instructions can read well without changing an agent's decisions. [Evaluation scenarios](evals/evals.json) include an ambiguous request, recurring semantic failures, and a backend-only boundary case to make that difference inspectable. Check reference paths, JSON schema, and skill structure after edits; these mechanical checks do not establish behavioral improvement.
+
+When evaluation is requested and authorized, select an executor capable of the actual task and use the same configuration for the skill and baseline runs. Keep task prompts independent of skill invocation. For a revision, preserve the previous version before editing; for a new skill, compare against its absence. Record the executor and selection reason in evaluation metadata, keep outputs outside the application tree, and examine which expectations distinguish the runs. A criterion passed equally by both versions does not demonstrate improvement. Do not launch delegation or report a comparison that has not been authorized and completed.

@@ -1,6 +1,6 @@
 # Components and Ownership
 
-Use this locator when choosing or extending frontend controls and presentation. Paths below are relative to the repository root. Inspect installed exports, props, callers, and tests; this table does not freeze their APIs or reproduce their behavior contracts.
+Repeated controls drift when their behavior or presentation is rebuilt in individual consumers. Use this locator to find an existing owner before choosing or extending frontend controls, keeping shared behavior consistent without forcing unrelated layouts together. Paths below are relative to the repository root. Inspect installed exports, props, callers, and tests; this table does not freeze their APIs or reproduce their behavior contracts.
 
 Source review supplies the current examples. For another surface, locate its route and feature owners rather than forcing it through a source-review component.
 
@@ -19,6 +19,8 @@ Source review supplies the current examples. For another surface, locate its rou
 
 ## Reuse behavior, preserve composition
 
+Reusing a primitive does not by itself preserve the interaction or accepted layout. Aim for one operation flow with context-appropriate composition, because the same analyst action should retain its meaning across entry points. Inspect equivalent actions together, and distinguish a shared-contract change from a consumer's local requirement before editing.
+
 Trace the same action through its entry points: visible text, accessible name, icon, callback, state, and destination. Reuse one operation path rather than rebuilding it for the carousel, inspector, or mobile layout.
 
 Choose disclosure by purpose. An accordion can retain topic-specific detail in context; a popover can hold a short shared explanation. They can coexist without repeating the same content. Reuse `ResponsivePopover` for the established click/tap and narrow-screen drawer behavior when it fits. Do not make necessary help hover-only or replace the accepted interaction solely to simplify implementation.
@@ -28,5 +30,7 @@ Compare card regions across short and long titles, absent dates, annotations, an
 Before changing a shared primitive default, inspect its other consumers. Apply a local width, chevron, stacking, or density requirement in the requesting consumer unless the change belongs to the shared contract. Do not create another wrapper, status map, or palette when an existing owner can express the need.
 
 ## Inspect colors by meaning
+
+Similar-looking positive states can imply different kinds of authority. Make visual meaning agree with the underlying state so source availability does not look like human approval. When colors, badges, or categories change, compare the established treatments across affected surfaces before selecting a token.
 
 Read the current tokens and presentation owner rather than assigning colors independently in each component. Availability, analyst approval, source family, document kind, and provenance are different concepts; adjacent badges need not share a color just because they share a shape. Preserve an established family treatment unless its removal is authorized. Inspect both themes when a treatment changes, including text contrast and selected/unselected states. Never treat a category's color as proof that its assertions are verified.
