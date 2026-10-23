@@ -414,6 +414,11 @@ export function sourceCoverageRoleLabel(role: CoverageRole): string {
 
 /** Shared labels and definitions for topic statuses and the Coverage glossary. */
 export const sourceCoverageStatusHelp = {
+    not_assessed: {
+        label: "Not assessed",
+        description:
+            "Matching sources are included, but their content has not yet been assessed. This is not a finding that evidence is missing.",
+    },
     available: {
         label: "Sources available",
         description:
@@ -435,6 +440,18 @@ export const sourceCoverageStatusHelp = {
 export function sourceCoverageCopy(
     requirement: ProposalSummary["coverageRequirements"][number],
 ) {
+    if (
+        requirement.assessmentStatus === "pending" &&
+        requirement.availability !== "limited" &&
+        !requirement.covered
+    )
+        return {
+            availability: "not_assessed" as const,
+            label: "Not assessed",
+            limitation: undefined,
+            description:
+                "Matching sources are included, but their content has not been assessed. Inclusion alone does not establish coverage.",
+        };
     const availability =
         requirement.availability ??
         (requirement.covered ? "available" : "not_established");
@@ -493,10 +510,15 @@ export function sourceCoverageSummary(
     >,
 ) {
     if (requirements.length === 0) return "Coverage not assessed";
-    const counts = { available: 0, limited: 0, not_established: 0 };
+    const counts = {
+        available: 0,
+        limited: 0,
+        not_established: 0,
+        not_assessed: 0,
+    };
     for (const requirement of requirements)
         counts[sourceCoverageCopy(requirement).availability] += 1;
-    const gaps = (["limited", "not_established"] as const)
+    const gaps = (["not_assessed", "limited", "not_established"] as const)
         .filter((status) => counts[status] > 0)
         .map(
             (status) =>
@@ -523,6 +545,7 @@ export function sourceCoverageSearchState({
 }) {
     const matching =
         recovery?.target.kind === "coverage" && recovery.target.role === role;
+    const resultFeedback = matching ? recovery?.feedback : undefined;
     const searching = isSearching && matching;
     const retryAfterSeconds = Math.max(0, recovery?.retryAfterSeconds ?? 0);
     const label = searching
@@ -532,7 +555,18 @@ export function sourceCoverageSearchState({
           : "Find more sources";
     return {
         feedback:
-            (matching ? recovery?.feedback : undefined) ?? allowanceFeedback,
+            resultFeedback ??
+            allowanceFeedback ??
+            ((disabled || isSearching) && !searching
+                ? {
+                      status: "warning" as const,
+                      title: "Search paused",
+                      description: isSearching
+                          ? "Another source search is running. Review existing candidates while it finishes."
+                          : "Wait for source preparation to finish, or refresh an outdated proposal before searching. Your current sources are preserved.",
+                  }
+                : undefined),
+        availabilityFeedback: resultFeedback ? allowanceFeedback : undefined,
         searching,
         retryAfterSeconds,
         disabled: disabled || isSearching || retryAfterSeconds > 0,
@@ -579,9 +613,13 @@ export function sourcePreparationCopy(
     preparation: NonNullable<ProposalSummary["preparation"]>,
     revisionStatus: ProposalSummary["revisionStatus"] = "draft",
 ) {
-    const counts = `${preparation.checked} of ${preparation.total} candidates checked.`;
+    const counts =
+        preparation.captured === undefined
+            ? `${preparation.checked} of ${preparation.total} candidates checked.`
+            : `${preparation.captured} of ${preparation.total} source contents saved · ${preparation.assessed ?? 0} assessed · ${preparation.remaining ?? 0} not yet processed${preparation.failed ? ` · ${preparation.failed} could not be fully prepared` : ""}.`;
     if (revisionStatus === "approved")
         return {
+            status: "default" as const,
             title: "Approved source reading",
             description:
                 "Inspect the captured passages and recorded limitations. Changes to the source set need a new revision.",
@@ -589,13 +627,20 @@ export function sourcePreparationCopy(
         };
     if (preparation.status === "started")
         return {
+            status: "info" as const,
             title: "Preparing source selection",
             description:
                 "Candidate sources are being read and assessed. You can inspect completed readings while preparation continues.",
             counts,
         };
-    if (preparation.canResume)
+    if (
+        preparation.stopCode === "execution_slot_unavailable" ||
+        (preparation.canResume &&
+            !preparation.stopCode &&
+            preparation.checked === 0)
+    )
         return {
+            status: "warning" as const,
             title: "Source link saved",
             description:
                 "Finish the other dossier, then continue preparation to read the source you added.",
@@ -603,12 +648,20 @@ export function sourcePreparationCopy(
         };
     if (preparation.status === "blocked")
         return {
-            title: "Source preparation needs review",
+            status: "danger" as const,
+            title: "Source preparation interrupted",
             description:
-                "Source preparation could not finish. Inspect the available sources or add a stronger reference before approving the selection.",
+                preparation.stopCode === "missing_configuration" ||
+                preparation.stopCode === "paid_work_disabled"
+                    ? "Preparation stopped because source assessment was unavailable. Saved contents and your source decisions are preserved. Review the available material and originals."
+                    : "Preparation stopped before it could finish. Saved contents and your source decisions are preserved; unprocessed sources have not been ruled irrelevant.",
             counts,
         };
     return {
+        status:
+            preparation.status === "partial"
+                ? ("warning" as const)
+                : ("success" as const),
         title:
             preparation.status === "partial"
                 ? "Source selection ready with limitations"
@@ -619,6 +672,26 @@ export function sourcePreparationCopy(
     };
 }
 
+/** Explains the server-owned availability of preparation without exposing operational details. */
+export function sourcePreparationActionCopy(
+    action: ProposalSummary["preparationAction"],
+) {
+    switch (action?.reason) {
+        case "deadline_elapsed":
+            return "The preparation window has ended. Saved material remains available; start a new dossier for a fresh preparation.";
+        case "missing_configuration":
+            return "Preparation is currently unavailable. Review the saved material and originals; retry will become available when the service is restored.";
+        case "disabled":
+            return "Source reading is currently unavailable.";
+        case "busy":
+            return "Wait for the running preparation to finish before continuing.";
+        case "read_only":
+            return "This source set is approved and read-only.";
+        default:
+            return null;
+    }
+}
+
 /** Describes the stored reading outcome without certifying the source's assertions. */
 export function sourceReadingCopy(
     source: Pick<
@@ -627,19 +700,42 @@ export function sourceReadingCopy(
         | "qualificationStatus"
         | "qualification"
         | "roleAvailability"
+        | "readingStatus"
     >,
 ) {
-    if (source.inspectionStatus === "unavailable")
+    if (source.readingStatus === "not_started")
         return {
+            status: "default" as const,
+            title: "Source not yet processed",
+            description:
+                "Preparation has not reached this source. You can review the original; its usefulness has not been assessed.",
+        };
+    if (source.readingStatus === "preparing")
+        return {
+            status: "info" as const,
+            title: "Source preparation in progress",
+            description:
+                "This source is being prepared or waiting its turn. Completed results will appear here.",
+        };
+    if (
+        source.readingStatus === "assessment_unavailable" ||
+        (!source.readingStatus && source.qualificationStatus === "unavailable")
+    )
+        return {
+            status: "warning" as const,
+            title: "Content saved; assessment unavailable",
+            description:
+                "The source content was saved, but its contribution could not be assessed. Review the original before relying on it. This does not make the source irrelevant.",
+        };
+    if (
+        source.readingStatus === "reading_failed" ||
+        (!source.readingStatus && source.inspectionStatus === "unavailable")
+    )
+        return {
+            status: "danger" as const,
             title: "Source could not be read",
             description:
                 "Inspect the original before approving the selection. An unreadable source has not been ruled irrelevant.",
-        };
-    if (source.qualificationStatus === "unavailable")
-        return {
-            title: "Source assessment unavailable",
-            description:
-                "The source was read, but its contribution could not be assessed. Inspect the original before approving the selection.",
         };
     if (!source.qualification) return null;
     const contributions =
@@ -648,6 +744,7 @@ export function sourceReadingCopy(
         ) ?? [];
     if (contributions.length === 0)
         return {
+            status: "warning" as const,
             title: "Need not established",
             description:
                 "The inspected passages do not establish a suitable contribution. Inspect the source or add a stronger reference.",
@@ -660,6 +757,7 @@ export function sourceReadingCopy(
         ) ||
         contributions.some((role) => role.state === "limited");
     return {
+        status: limited ? ("warning" as const) : ("success" as const),
         title: limited
             ? "Useful with limitations"
             : "Useful material identified",

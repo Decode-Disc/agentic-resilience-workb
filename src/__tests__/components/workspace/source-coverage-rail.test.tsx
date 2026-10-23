@@ -18,6 +18,7 @@ test("applies the dossier-wide search cooldown to another coverage role", () => 
                     covered: false,
                     availability: "not_established",
                     reasonCodes: [],
+                    relatedCandidateIds: [],
                     candidateIds: [],
                     includedSourceIds: [],
                 },
@@ -64,6 +65,7 @@ test("keeps coverage limitations visible when mobile coverage is collapsed", () 
                 availability: "available",
                 reasonCodes: [],
                 includedSourceIds: [],
+                relatedCandidateIds: [],
                 candidateIds: [],
             },
             {
@@ -72,6 +74,7 @@ test("keeps coverage limitations visible when mobile coverage is collapsed", () 
                 availability: "limited",
                 reasonCodes: [],
                 includedSourceIds: [],
+                relatedCandidateIds: [],
                 candidateIds: [],
             },
             {
@@ -80,6 +83,7 @@ test("keeps coverage limitations visible when mobile coverage is collapsed", () 
                 availability: "not_established",
                 reasonCodes: [],
                 includedSourceIds: [],
+                relatedCandidateIds: [],
                 candidateIds: [],
             },
         ];
@@ -124,6 +128,7 @@ test("keeps coverage help separate from the open topic and restores focus when i
                     covered: false,
                     availability: "limited",
                     reasonCodes: ["partial_reading"],
+                    relatedCandidateIds: [],
                     candidateIds: [],
                     includedSourceIds: [],
                 },
@@ -178,6 +183,7 @@ test("explains why included matches do not establish coverage and offers distinc
                     availability: "not_established",
                     reasonCodes: ["no_suitable_document"],
                     includedSourceIds: [included],
+                    relatedCandidateIds: [],
                     candidateIds: candidates,
                 },
             ]}
@@ -226,6 +232,7 @@ test("keeps only one coverage detail expanded and preserves its review actions",
                     covered: true,
                     availability: "available",
                     reasonCodes: [],
+                    relatedCandidateIds: [],
                     candidateIds: [],
                     includedSourceIds: [],
                 },
@@ -234,6 +241,7 @@ test("keeps only one coverage detail expanded and preserves its review actions",
                     covered: false,
                     availability: "limited",
                     reasonCodes: [],
+                    relatedCandidateIds: [],
                     candidateIds: [],
                     includedSourceIds: [],
                 },
@@ -242,6 +250,7 @@ test("keeps only one coverage detail expanded and preserves its review actions",
                     covered: false,
                     availability: "not_established",
                     reasonCodes: [],
+                    relatedCandidateIds: [],
                     candidateIds: [],
                     includedSourceIds: [],
                 },
@@ -280,4 +289,63 @@ test("keeps only one coverage detail expanded and preserves its review actions",
         screen.queryByRole("region", { name: "Subscription & service terms" }),
     ).toBeNull();
     expect(document.activeElement).toBe(missing);
+});
+
+test.each([
+    {
+        status: "success" as const,
+        title: "2 candidates to review",
+        description: "Review the newly found sources.",
+    },
+    {
+        status: "default" as const,
+        title: "No new sources found",
+        description: "Review existing candidates.",
+    },
+    {
+        status: "danger" as const,
+        title: "Search could not be completed",
+        description: "Your source decisions are unchanged.",
+    },
+])("retains $title separately from the exhausted search allowance", (feedback) => {
+    render(
+        <SourceCoverageRail
+            requirements={[
+                {
+                    role: "official_commercial_terms",
+                    covered: false,
+                    availability: "not_established",
+                    reasonCodes: [],
+                    relatedCandidateIds: [],
+                    candidateIds: [],
+                    includedSourceIds: [],
+                },
+            ]}
+            onReview={vi.fn()}
+            onSearch={vi.fn()}
+            searchDisabled
+            recovery={{
+                target: { kind: "coverage", role: "official_commercial_terms" },
+                feedback,
+                retryAfterSeconds: 0,
+            }}
+            allowanceFeedback={{
+                status: "warning",
+                title: "Search limit reached",
+                description: "Review existing candidates or add a source link.",
+            }}
+        />,
+    );
+    fireEvent.click(
+        screen.getByRole("button", {
+            name: "Review coverage: Subscription & service terms",
+        }),
+    );
+    expect(screen.getByText(feedback.title)).toBeTruthy();
+    expect(screen.getByText("Search limit reached")).toBeTruthy();
+    expect(
+        screen.getByRole("button", {
+            name: "Search sources for Subscription & service terms",
+        }),
+    ).toHaveProperty("disabled", true);
 });

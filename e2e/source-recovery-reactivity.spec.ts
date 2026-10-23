@@ -258,6 +258,8 @@ for (const viewport of [
             path: info.outputPath("coverage-expanded.png"),
             fullPage: true,
         });
+        await actions.first().focus();
+        await expect(actions.first()).toBeFocused();
         await page.keyboard.press("Escape");
         await expect(coverageTrigger).toBeFocused();
         await coverageTrigger.press("Enter");
@@ -306,12 +308,12 @@ for (const viewport of [
             exact: true,
         });
         await expect(overview).toBeVisible();
-        await expect(
-            page.getByRole("button", {
-                name: "Prepare source reading",
-                exact: true,
-            }),
-        ).toBeDisabled();
+        const preparation = page.getByRole("button", {
+            name: "Prepare source reading",
+            exact: true,
+        });
+        const capability = inspectSourceReview(seeded.runId, key);
+        await expect(preparation).toBeEnabled({ enabled: capability.preparationEnabled });
         await expect(
             page.getByRole("tab", { name: "Source details", exact: true }),
         ).toHaveAttribute("aria-selected", "true");
@@ -438,6 +440,18 @@ for (const viewport of [
                       }),
                   });
         await expect(reader).toBeVisible();
+        const include = reader.getByRole("button", {
+            name: "Include Official product documentation in source set",
+            exact: true,
+        });
+        const remove = reader.getByRole("button", {
+            name: "Move Official product documentation to alternatives",
+            exact: true,
+        });
+        // A previous interrupted run may have left this reusable fixture excluded.
+        await expect(include.or(remove)).toBeVisible();
+        if (await include.isVisible()) await include.click();
+        await expect(reader.getByText("Included", { exact: true })).toBeVisible();
         await reader
             .getByRole("button", {
                 name: "Move Official product documentation to alternatives",
@@ -445,7 +459,7 @@ for (const viewport of [
             })
             .click();
         await expect(
-            reader.getByText("Alternative", { exact: true }),
+            reader.getByText("Not included", { exact: true }),
         ).toBeVisible();
         await reader
             .getByRole("button", {

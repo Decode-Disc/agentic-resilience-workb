@@ -6,8 +6,9 @@ import {
     InformationCircleIcon,
     Search01Icon,
 } from "@hugeicons/core-free-icons";
+import PlusIcon from "@hugeicons/core-free-icons/PlusIcon";
+import TriangleDashedIcon from "@hugeicons/core-free-icons/TriangleDashedIcon";
 import type { FunctionReturnType } from "convex/server";
-import { TriangleDashedIcon } from "lucide-react";
 import {
     type ReactNode,
     type Ref,
@@ -74,6 +75,11 @@ const coverageAppearance: Record<
         glossary?: string;
     }
 > = {
+    not_assessed: {
+        icon: TriangleDashedIcon,
+        foreground: "text-muted-foreground",
+        background: "bg-muted/40",
+    },
     available: {
         icon: File01Icon,
         foreground: "text-success-foreground dark:text-success",
@@ -94,7 +100,7 @@ const coverageAppearance: Record<
     },
 };
 const triggerClassName =
-    "flex h-auto min-h-14 w-full items-start justify-start gap-3 rounded-lg border-0 px-3 py-2.5 text-left font-normal transition-colors hover:bg-muted/35 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none";
+    "flex h-auto min-h-14 w-full min-w-0 items-start justify-start gap-3 rounded-lg border-0 px-3 py-2.5 text-left font-normal whitespace-normal transition-colors hover:bg-muted/35 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none";
 
 function CoverageHelp() {
     return (
@@ -191,7 +197,7 @@ function CoverageContainer({
             <CollapsibleContent keepMounted>
                 <div
                     ref={scrollRef}
-                    className="max-h-[min(42rem,70dvh)] overflow-y-auto p-2 [scrollbar-width:thin]">
+                    className="min-w-0 max-h-[min(42rem,70dvh)] overflow-x-hidden overflow-y-auto p-2 [scrollbar-width:thin]">
                     {children}
                 </div>
             </CollapsibleContent>
@@ -220,7 +226,7 @@ function CoverageTopicSummary({
                 )}>
                 <Icon iconNode={appearance.icon} size={21} />
             </span>
-            <span className="min-w-0 flex-1 space-y-1">
+            <span className="min-w-0 flex-1 space-y-1 break-words">
                 <span
                     id={labelId}
                     className="block text-sm font-medium leading-snug">
@@ -477,9 +483,10 @@ export function SourceCoverageRail({
                                         <Button
                                             type="button"
                                             variant="ghost"
-                                            className="h-auto min-h-11 justify-start whitespace-normal text-left text-sm"
+                                            className="h-auto min-h-11 justify-between whitespace-normal text-left text-sm"
                                             onClick={onAddSource}>
                                             Add source link
+                                            <Icon iconNode={PlusIcon} />
                                         </Button>
                                     ) : null}
                                 </div>
@@ -487,6 +494,9 @@ export function SourceCoverageRail({
                                     feedback={search.feedback}
                                     searching={search.searching}
                                     retryAfterSeconds={search.retryAfterSeconds}
+                                />
+                                <SourceSearchFeedback
+                                    feedback={search.availabilityFeedback}
                                 />
                             </AccordionContent>
                         </AccordionItem>

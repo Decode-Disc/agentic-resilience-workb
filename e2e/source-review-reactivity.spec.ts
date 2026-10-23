@@ -1,4 +1,7 @@
 import { expect, test } from "@playwright/test";
+import type { internal } from "@convex/_generated/api";
+import type { FunctionReturnType } from "convex/server";
+import { runConvexJson } from "./support/convex-cli";
 
 import {
     startSanitizedTrace,
@@ -56,7 +59,7 @@ test("source decisions update the row, count, and detail without reload", async 
         })
         .click();
     await expect(
-        page.getByRole("article").getByText("Alternative", { exact: true }),
+        page.getByRole("article").getByText("Not included", { exact: true }),
     ).toBeVisible();
     await page
         .getByRole("button", {
@@ -107,6 +110,7 @@ test("corpus approval starts evidence preparation without reload or provider wor
         .getByRole("navigation", { name: "Analyzed companies" })
         .locator(`a[href*="${seeded.runId}"]`)
         .click();
+    await page.getByRole("link", { name: "Sources", exact: true }).click();
     // Credential-bearing admission is complete and the seeded run document is
     // fully loaded; only now may sanitized diagnostics run.
     await startSanitizedTrace(page);
@@ -220,3 +224,39 @@ test("metadata-linked sources stay explicit through protected approval", async (
             providerCallCount: 0,
         });
 });
+
+
+for (const viewport of [
+    {name: "desktop", width: 1440, height: 900},
+    {name: "mobile", width: 390, height: 844},
+]) {
+    test(`preparation expires while its protected review stays open on ${viewport.name}`, async ({page}, info) => {
+        await page.setViewportSize(viewport);
+        const errors: string[] = [];
+        page.on("pageerror", (error) => errors.push(error.message));
+        page.on("console", (message) => {if (message.type() === "error") errors.push(message.text());});
+        await admitAnalyst(page);
+        const key = fixtureKey(`preparation-expiry-${viewport.name}`);
+        const seeded = runConvexJson<FunctionReturnType<typeof internal.e2eFixtures.seedInspectedSourceReviewScenario>>("e2eFixtures:seedInspectedSourceReviewScenario", {slotKey: "analyst-1", fixtureKey: key});
+        await page.clock.install();
+        await page.goto(`/workspace/${seeded.runId}?section=sources`);
+        if (viewport.name === "desktop")
+            await page.getByRole("button", {name: "Collapse navigation", exact: true}).click();
+        const resume = page.getByRole("button", {name: "Continue source preparation", exact: true});
+        await expect(resume).toBeEnabled();
+        await resume.focus();
+        await expect(resume).toBeFocused();
+        const before = inspectSourceReview(seeded.runId, key);
+        await page.clock.fastForward(16 * 60 * 1000);
+        await expect(resume).toHaveCount(0);
+        await expect(page.getByText(/The preparation window has ended/)).toBeVisible();
+        if (viewport.name === "mobile") await page.getByRole("button", {name: "Source actions", exact: true}).click();
+        await expect(page.getByRole("button", {name: "Inspect all candidates", exact: true})).toBeEnabled();
+        await page.screenshot({path: info.outputPath("expired-preparation.png"), fullPage: true});
+        const after = inspectSourceReview(seeded.runId, key);
+        expect(after.providerCallCount).toBe(0);
+        expect(after.sourceReading).toEqual(before.sourceReading);
+        expect(after.decisions).toEqual(before.decisions);
+        expect(errors).toEqual([]);
+    });
+}

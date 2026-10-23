@@ -118,7 +118,33 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
         </LoadErrorBoundary>
     );
 
-    const proposal = queries?.proposal;
+    const preparationDeadlineAt =
+        queries?.proposal?.preparationAction?.deadlineAt;
+    const preparationExpired =
+        preparationDeadlineAt !== undefined && preparationDeadlineAt <= clock;
+    const snapshot = queries?.proposal;
+    const proposal =
+        snapshot?.preparationAction?.available && preparationExpired
+            ? {
+                  ...snapshot,
+                  preparationAction: {
+                      ...snapshot.preparationAction,
+                      available: false,
+                      reason: "deadline_elapsed" as const,
+                  },
+                  preparation: snapshot.preparation
+                      ? { ...snapshot.preparation, canResume: false }
+                      : undefined,
+              }
+            : snapshot;
+    useEffect(() => {
+        if (preparationDeadlineAt === undefined) return;
+        const timer = setTimeout(
+            () => setClock(Date.now()),
+            Math.max(0, preparationDeadlineAt - Date.now()),
+        );
+        return () => clearTimeout(timer);
+    }, [preparationDeadlineAt]);
     const inspectionSummary = queries?.inspectionSummary;
     const recovery = proposal?.recovery;
     const recovering =

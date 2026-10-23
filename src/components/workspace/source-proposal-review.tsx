@@ -52,6 +52,7 @@ import {
     sourceCoverageCopy,
     sourceCoverageRoleLabel,
     sourceCoverageSearchState,
+    sourcePreparationActionCopy,
     sourcePreparationCopy,
     sourceSearchAllowanceCopy,
     sourceSelectionReasonLabel,
@@ -425,6 +426,19 @@ export function SourceProposalReview({
                                         </Button>
                                     ) : null}
                                 </div>
+                                {coverageContext?.relatedCandidateIds
+                                    ?.length ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        {
+                                            coverageContext.relatedCandidateIds
+                                                .length
+                                        }{" "}
+                                        other documents from this source family
+                                        are available under Show all candidates.
+                                        They have not been identified as matches
+                                        for this document requirement.
+                                    </p>
+                                ) : null}
                                 {coverageContext ? (
                                     <div className="flex flex-wrap items-center justify-between gap-3">
                                         <p className="max-w-prose text-sm text-muted-foreground">
@@ -465,13 +479,20 @@ export function SourceProposalReview({
                                     </div>
                                 ) : null}
                                 {coverageContext ? (
-                                    <SourceSearchFeedback
-                                        feedback={contextSearch?.feedback}
-                                        searching={contextSearch?.searching}
-                                        retryAfterSeconds={
-                                            contextSearch?.retryAfterSeconds
-                                        }
-                                    />
+                                    <>
+                                        <SourceSearchFeedback
+                                            feedback={contextSearch?.feedback}
+                                            searching={contextSearch?.searching}
+                                            retryAfterSeconds={
+                                                contextSearch?.retryAfterSeconds
+                                            }
+                                        />
+                                        <SourceSearchFeedback
+                                            feedback={
+                                                contextSearch?.availabilityFeedback
+                                            }
+                                        />
+                                    </>
                                 ) : null}
                             </header>
                             <SourceReview
@@ -807,22 +828,34 @@ export function SourceProposalReview({
                         </div>
                     </div>
                     {preparationCopy ? (
-                        <div
-                            role="status"
-                            className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3 text-sm">
-                            <div>
-                                <p className="font-medium">
-                                    {preparationCopy.title}
+                        <div className="space-y-2">
+                            <AlertStatus
+                                status={preparationCopy.status}
+                                role={
+                                    preparationCopy.status === "danger"
+                                        ? "alert"
+                                        : "status"
+                                }
+                                aria-label={preparationCopy.title}
+                                title={preparationCopy.title}
+                                description={
+                                    <div className="space-y-2">
+                                        <p>{preparationCopy.description}</p>
+                                        <p className="tabular-nums">
+                                            {preparationCopy.counts}
+                                        </p>
+                                    </div>
+                                }
+                            />
+                            {sourcePreparationActionCopy(
+                                summary.preparationAction,
+                            ) ? (
+                                <p className="text-xs text-muted-foreground">
+                                    {sourcePreparationActionCopy(
+                                        summary.preparationAction,
+                                    )}
                                 </p>
-                                <p className="mt-1 max-w-prose text-xs leading-relaxed text-muted-foreground">
-                                    {preparationCopy.description}
-                                </p>
-                                {isPreparing ? (
-                                    <p className="mt-1 text-xs tabular-nums text-muted-foreground">
-                                        {preparationCopy.counts}
-                                    </p>
-                                ) : null}
-                            </div>
+                            ) : null}
                             {summary.preparation?.canResume && onPrepare ? (
                                 <Button
                                     type="button"
@@ -847,8 +880,7 @@ export function SourceProposalReview({
                                 <div className="space-y-1">
                                     <Button
                                         type="button"
-                                        variant="outline"
-                                        size="sm"
+                                        variant="default"
                                         disabled={
                                             isPreparing ||
                                             !summary.preparationAction
@@ -914,27 +946,36 @@ export function SourceProposalReview({
                         onDecide={onDecide}
                         annotation={renderProposalAnnotation}
                         toolbar={
-                            <DiscreteTabs
-                                tabs={tabs}
-                                labelVisibility="all"
-                                overflow="wrap"
-                                orientation={
-                                    isMobile ? "vertical" : "horizontal"
-                                }
-                                appearance={isMobile ? "plain" : "pill"}
-                                value={disposition}
-                                onValueChange={(value) =>
-                                    onDispositionChange(
-                                        value as ProposalDisposition,
-                                    )
-                                }
-                                ariaLabel="Review source proposal by disposition"
-                                className={
-                                    isMobile
-                                        ? "gap-0.5 rounded-lg bg-muted/35 p-1"
-                                        : "gap-2"
-                                }
-                            />
+                            <div className="space-y-2">
+                                <DiscreteTabs
+                                    tabs={tabs}
+                                    labelVisibility="all"
+                                    overflow="wrap"
+                                    orientation={
+                                        isMobile ? "vertical" : "horizontal"
+                                    }
+                                    appearance={isMobile ? "plain" : "pill"}
+                                    value={disposition}
+                                    onValueChange={(value) =>
+                                        onDispositionChange(
+                                            value as ProposalDisposition,
+                                        )
+                                    }
+                                    ariaLabel="Review source proposal by disposition"
+                                    className={
+                                        isMobile
+                                            ? "gap-0.5 rounded-lg bg-muted/35 p-1"
+                                            : "gap-2"
+                                    }
+                                />
+                                {disposition === "needs_attention" ? (
+                                    <p className="text-xs text-muted-foreground">
+                                        Candidates awaiting your inclusion
+                                        decision. Preparation issues are shown
+                                        separately above.
+                                    </p>
+                                ) : null}
+                            </div>
                         }
                     />
                 </div>

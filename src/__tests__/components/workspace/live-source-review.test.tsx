@@ -110,6 +110,7 @@ function recoveryReview(
     source = proposalSource,
     preparation?: unknown,
     readSource?: (args: unknown) => unknown,
+    deadlineAt?: number,
 ) {
     convexReactHarness.query(api.sourceSelectionProposals.getCurrent).returns({
         proposalId: "proposal-1",
@@ -135,6 +136,7 @@ function recoveryReview(
         recovery,
         preparation,
         preparationAction: {
+            deadlineAt,
             kind: preparation ? "resume" : "start",
             available: true,
         },
@@ -777,4 +779,56 @@ test("failed continuation of a saved source remains visible beside its preparati
     expect(document.body.textContent).not.toMatch(
         /execution_slot_unavailable|internal details/,
     );
+});
+
+test("interrupted preparation explains retained progress as an error without blaming source quality", () => {
+    recoveryReview(undefined, proposalSource, {
+        status: "blocked",
+        checked: 2,
+        total: 48,
+        captured: 2,
+        assessed: 0,
+        remaining: 46,
+        failed: 2,
+        stopCode: "missing_configuration",
+        canResume: false,
+    });
+    const alert = screen.getByRole("alert", {
+        name: "Source preparation interrupted",
+    });
+    expect(alert.textContent).toContain("2 of 48 source contents saved");
+    expect(alert.textContent).toContain("0 assessed");
+    expect(alert.textContent).toContain("46 not yet processed");
+    expect(alert.textContent).not.toMatch(
+        /stronger reference|missing_configuration|OPENROUTER/,
+    );
+});
+
+test("expires source preparation without a new subscription snapshot", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-23T00:00:00Z"));
+    recoveryReview(
+        undefined,
+        proposalSource,
+        {
+            status: "partial",
+            checked: 1,
+            total: 2,
+            canResume: true,
+        },
+        undefined,
+        Date.now() + 5000,
+    );
+    const resume = screen.getByRole("button", {
+        name: "Continue source preparation",
+    });
+    expect(resume).toHaveProperty("disabled", false);
+    await act(async () => {
+        vi.advanceTimersByTime(5100);
+    });
+    expect(
+        screen.queryByRole("button", { name: "Continue source preparation" }),
+    ).toBeNull();
+    expect(screen.getByText(/The preparation window has ended/)).toBeTruthy();
+    expect(prepare).not.toHaveBeenCalled();
 });

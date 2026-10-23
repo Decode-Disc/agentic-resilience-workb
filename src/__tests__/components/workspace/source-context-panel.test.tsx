@@ -431,11 +431,11 @@ test("explains an unavailable assessment without pretending the source was unrea
     );
     fireEvent.click(screen.getByRole("tab", { name: "Source details" }));
     expect(
-        await screen.findByText("Source assessment unavailable"),
+        await screen.findByText("Content saved; assessment unavailable"),
     ).toBeTruthy();
     expect(
         screen.getByText(
-            "The source was read, but its contribution could not be assessed. Inspect the original before approving the selection.",
+            "The source content was saved, but its contribution could not be assessed. Review the original before relying on it. This does not make the source irrelevant.",
         ),
     ).toBeTruthy();
     expect(screen.queryByText("Source could not be read")).toBeNull();
@@ -444,6 +444,27 @@ test("explains an unavailable assessment without pretending the source was unrea
             .getByRole("link", { name: "Open original" })
             .getAttribute("href"),
     ).toBe(source.canonicalUrl);
+});
+
+test("a failed reading never claims that unavailable pinned content was saved", () => {
+    render(
+        <SourceContextPanel
+            source={{
+                ...source,
+                readingStatus: "reading_failed",
+                inspectionStatus: "unavailable",
+                qualificationStatus: "unavailable",
+                qualification: undefined,
+                roleAvailability: undefined,
+            }}
+        />,
+    );
+    expect(
+        screen.getByRole("alert", { name: "Source could not be read" }),
+    ).toBeTruthy();
+    expect(
+        screen.queryByText("Content saved; assessment unavailable"),
+    ).toBeNull();
 });
 
 test("shows the forecast's own restriction beside results in the same documentary role", async () => {

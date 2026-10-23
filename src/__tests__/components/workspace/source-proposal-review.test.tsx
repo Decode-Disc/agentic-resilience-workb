@@ -1746,3 +1746,77 @@ test("an approved prepared corpus explains inspection and revision instead of as
         screen.queryByRole("button", { name: "Approve proposed corpus" }),
     ).toBeNull();
 });
+
+test("keeps the last search result and exhausted allowance in coverage and candidate inspection", async () => {
+    render(
+        <SourceProposalReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            summary={
+                {
+                    ...summary,
+                    failedDiscoveryFamilies: [],
+                    coverageGaps: ["official_commercial_terms"],
+                    searchAllowance: {
+                        enabled: true,
+                        remainingSearches: 0,
+                        remainingCandidates: 4,
+                    },
+                    coverageRequirements: [
+                        {
+                            role: "official_commercial_terms",
+                            covered: false,
+                            availability: "not_established",
+                            candidateIds: [alternative.sourceId],
+                            includedSourceIds: [],
+                        },
+                    ],
+                } as never
+            }
+            disposition="recommended"
+            onDispositionChange={vi.fn()}
+            adjustmentSets={
+                { included: [recommended], available: [alternative] } as never
+            }
+            inspectionReview={inspectionReview as never}
+            onDecide={vi.fn()}
+            onApprove={vi.fn()}
+            onRecompute={vi.fn()}
+            onRecoverDiscovery={vi.fn()}
+            recovery={{
+                target: { kind: "coverage", role: "official_commercial_terms" },
+                retryAfterSeconds: 0,
+                feedback: {
+                    status: "success",
+                    title: "2 candidates to review",
+                    description:
+                        "Review the new candidates before including them.",
+                },
+            }}
+        />,
+    );
+    fireEvent.click(
+        screen.getByRole("button", {
+            name: "Review coverage: Subscription & service terms",
+        }),
+    );
+    expect(screen.getByText("2 candidates to review")).toBeTruthy();
+    expect(screen.getByText("Search limit reached")).toBeTruthy();
+    fireEvent.click(
+        screen.getByRole("button", {
+            name: "Review candidates for Subscription & service terms",
+        }),
+    );
+    const heading = await screen.findByRole("heading", {
+        name: "Review matching candidates",
+    });
+    const header = heading.closest("header");
+    if (!header) throw new Error("Missing contextual inspection header");
+    expect(within(header).getByText("2 candidates to review")).toBeTruthy();
+    expect(within(header).getByText("Search limit reached")).toBeTruthy();
+    expect(
+        within(header).getByRole("button", {
+            name: "Search sources for Subscription & service terms",
+        }),
+    ).toHaveProperty("disabled", true);
+});

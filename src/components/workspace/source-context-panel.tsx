@@ -6,9 +6,9 @@ import {
     LinkSquare01Icon,
 } from "@hugeicons/core-free-icons";
 import { type ReactNode, useMemo, useState } from "react";
-
 import { FaviconAvatar } from "@/components/favicon-avatar";
 import Icon from "@/components/icon";
+import { AlertStatus } from "@/components/ui/alert-status";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -211,6 +211,12 @@ export function SourceContextPanel({
                         ) : (
                             <SourceDecisionStatus decision={source.decision} />
                         )}
+                        {included && !approvedCorpusRevisionId ? (
+                            <p className="text-xs text-muted-foreground">
+                                Included in the proposal. Reading and coverage
+                                are assessed separately.
+                            </p>
+                        ) : null}
                     </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -339,10 +345,13 @@ function SourceReadingDetails({
     return (
         <section aria-label="Source reading" className="mt-5 space-y-4 text-sm">
             <div className="space-y-2">
-                <h4 className="font-medium">{reading.title}</h4>
-                <p className="leading-relaxed text-muted-foreground">
-                    {reading.description}
-                </p>
+                <AlertStatus
+                    status={reading.status}
+                    role={reading.status === "danger" ? "alert" : "status"}
+                    aria-label={reading.title}
+                    title={reading.title}
+                    description={reading.description}
+                />
                 <div className="flex flex-wrap gap-2">
                     {source.inspectionStatus === "partial" ? (
                         <Badge variant="outline">Partially reviewed</Badge>
