@@ -4,7 +4,7 @@
 
 ## Status
 
-Accepted for implementation. This record defines intended behavior; it is not an implementation acceptance report. See the implementation plan (historical checkpoint: `git show c4f0d24:docs/superpowers/plans/2026-10-20-preapproval-source-qualification.md`), [recorded delivery state](../ROADMAP.md#recorded-delivery-state-2026-10-22) and [source-review corrections](../verification/2026-10-22-source-review-corrections.md). The implementation and bounded experiments do not establish accepted general activation or completed live analytical work. Historical call allowances are not renewed by this document.
+Accepted for implementation. This record defines intended behavior; it is not an implementation acceptance report. See the implementation plan (historical checkpoint: `git show c4f0d24:docs/superpowers/plans/2026-10-20-preapproval-source-qualification.md`), [recorded delivery state](../ROADMAP.md#current-delivery-state) and [source-review corrections](../verification/2026-10-22-source-review-corrections.md). The implementation and bounded experiments do not establish accepted general activation or completed live analytical work. Historical call allowances are not renewed by this document.
 
 ## Date
 

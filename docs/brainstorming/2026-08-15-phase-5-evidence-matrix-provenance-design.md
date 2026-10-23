@@ -4,7 +4,7 @@
 
 ## Status
 
-Historical design validated on 2026-08-15 and accepted through [ADR-023](../decisions/023-use-decision-anchored-phase-5-evidence-workflow.md). Its unchanged contracts remain authoritative. ADR-023's later handoff amendment, [ADR-024](../decisions/024-qualify-source-content-before-corpus-approval.md) and [ADR-025](../decisions/025-use-versioned-scoped-evidence-retrieval.md) replace the idle-only handoff, post-approval-only acquisition and original retrieval assumptions where explicitly stated. The problem and code observations below describe the design-time baseline, not today's implementation. See the [roadmap](../ROADMAP.md#recorded-delivery-state-2026-10-22) for recorded delivery and remaining activation limits. This record grants no new execution or provider authority.
+Historical design validated on 2026-08-15 and accepted through [ADR-023](../decisions/023-use-decision-anchored-phase-5-evidence-workflow.md). Its unchanged contracts remain authoritative. ADR-023's later handoff amendment, [ADR-024](../decisions/024-qualify-source-content-before-corpus-approval.md) and [ADR-025](../decisions/025-use-versioned-scoped-evidence-retrieval.md) replace the idle-only handoff, post-approval-only acquisition and original retrieval assumptions where explicitly stated. The problem and code observations below describe the design-time baseline, not today's implementation. See the [roadmap](../ROADMAP.md#current-delivery-state) for recorded delivery and remaining activation limits. This record grants no new execution or provider authority.
 
 ## Problem
 
