@@ -98,7 +98,6 @@
       "name": "small-visual-fix-verification",
       "prompt": "Plan a small correction to spacing and icon placement in the Coverage header. No state, wording meaning, or interaction changes are requested. Explain the verification needed; do not edit.",
       "files": [
-        "../../../AGENTS.md",
         "../../../src/components/workspace/source-coverage-rail.tsx"
       ],
       "expectations": [

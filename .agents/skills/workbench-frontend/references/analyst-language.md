@@ -44,7 +44,7 @@ For an interruption, lead with the affected task, explain its consequence for th
 
 Illustrative wording, only when supported by the saved outcome: **“Source preparation interrupted. You can read 2 of 48 sources here. The remaining sources have not been assessed.”** Offer **“Continue preparation”** only if that transition is actually available. If recovery requires an operator intervention, explain the current limitation without inventing a working retry or exposing configuration details.
 
-Avoid raw workflow keys, provider diagnostics, and internal identifiers in analyst copy, following `AGENTS.md`. A disabled control needs a useful reason and available alternative, or a known waiting condition. Do not promise “Retry when available” without an observable way to know when that is.
+Avoid raw workflow keys, provider diagnostics, and internal identifiers in analyst copy. A disabled control needs a useful reason and available alternative, or a known waiting condition. Do not promise “Retry when available” without an observable way to know when that is.
 
 ## Reduce competing information
 

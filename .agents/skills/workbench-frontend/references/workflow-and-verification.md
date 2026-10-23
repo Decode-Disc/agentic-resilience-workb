@@ -1,6 +1,6 @@
 # Workflow and Verification
 
-Use this reference when a frontend change touches async work, recovery, navigation, selection, approval, or the evidence needed to declare the result working. [AGENTS.md](../../../../AGENTS.md) owns the testing, local-backend, provider, and authorization rules; select checks under that contract rather than repeating its full workflow here.
+Use this reference when a frontend change touches async work, recovery, navigation, selection, approval, or the evidence needed to declare the result working.
 
 ## Reconstruct the affected transition
 

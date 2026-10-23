@@ -20,7 +20,7 @@ Skip for backend-only work, dependency management alone, or unrelated documentat
 Changes can preserve the code's behavior while losing the intended analyst experience. Establish the current task and accepted baseline first so the proposed change addresses the actual difficulty. For an existing surface, reconstruct its behavior; for a new one, use the product contract and closest relevant pattern without inventing a baseline.
 
 - Inspect the working diff, affected route/view, and closest existing pattern. State what the analyst needs to understand, inspect, or decide after the change. A technical score or a larger number of passing tests does not establish that outcome.
-- Read [PRODUCT.md](../../../PRODUCT.md), relevant [technical contracts](../../../context/TECH.md), [DESIGN.md](../../../DESIGN.md), and the current delivery state in [the roadmap](../../../docs/ROADMAP.md). Follow [AGENTS.md](../../../AGENTS.md) for scope, authority, and verification. Reuse context already gathered.
+- Read [PRODUCT.md](../../../PRODUCT.md), relevant [technical contracts](../../../context/TECH.md), [DESIGN.md](../../../DESIGN.md), and the current delivery state in [the roadmap](../../../docs/ROADMAP.md). Reuse context already gathered.
 - For an existing surface, identify what is preserved and what the request changes. Compare the running surface with the accepted reference, including interactions, disclosures, mobile behavior, and failure states. Explain conflicts rather than silently choosing a new composition.
 - Keep planning and review read-only until implementation is authorized. User feedback is evidence of a problem, not automatic approval of the first proposed remedy. Recheck the underlying behavior before changing the recommendation.
 
