@@ -1,0 +1,174 @@
+{
+  "skill_name": "workbench-frontend",
+  "files_relative_to": "skill directory",
+  "mode": "Read-only evaluation scenarios; execution and comparative evaluation require separate authorization.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "redundant-sec-metadata",
+      "prompt": "Use $workbench-frontend. In the source reader, I cannot understand the difference between Primary regulator, Regulatory, and Material event filing. Inspect their real meanings and propose a clearer presentation. Analysis only; do not edit or run providers.",
+      "files": [
+        "../../../src/lib/presentation/research-copy.ts",
+        "../../../src/components/workspace/source-family-badge.tsx",
+        "../../../src/components/workspace/source-context-panel.tsx",
+        "../../../convex/domain/sourceSelectionPolicy.ts"
+      ],
+      "expectations": [
+        "Traces provenance classification, source family, and document kind to their actual owners.",
+        "Evaluates the information each visible label contributes instead of treating distinct database fields as sufficient justification for three badges.",
+        "Does not prescribe Filed with SEC for the entire authority category solely because its classification matches sec.gov.",
+        "Proposes analyst-readable English text and disclosure placement while preserving relevant provenance and the read-only scope."
+      ]
+    },
+    {
+      "id": 2,
+      "name": "interrupted-preparation",
+      "prompt": "Use $workbench-frontend. Preparation stopped before assessment, but the screen recommends a stronger reference and says coverage is not established. Diagnose the presentation and recovery path from current code. Do not edit, retry, or inspect secrets.",
+      "files": [
+        "../../../src/lib/presentation/research-copy.ts",
+        "../../../src/components/workspace/live-source-review.tsx",
+        "../../../src/components/workspace/source-proposal-review.tsx",
+        "../../../src/components/ui/alert-status.tsx"
+      ],
+      "expectations": [
+        "Separates the supplied interruption scenario from facts verified in the current code or runtime.",
+        "Distinguishes inability to assess from assessed insufficient evidence, without blaming source quality without evidence.",
+        "Checks whether the projection can distinguish unattempted, failed, partial, and assessed sources before proposing status text.",
+        "Uses existing feedback owners and recommends only an available recovery operation without executing it."
+      ]
+    },
+    {
+      "id": 3,
+      "name": "count-scope-and-drilldown",
+      "prompt": "Use $workbench-frontend. Annual regulatory report shows included matches, but the linked list contains interim and event filings too. Explain what the counter really counts and how its wording and destination should relate. Read-only inspection only.",
+      "files": [
+        "../../../src/components/workspace/source-coverage-rail.tsx",
+        "../../../src/components/workspace/source-master-list.tsx",
+        "../../../src/lib/presentation/research-copy.ts",
+        "../../../context/TECH.md"
+      ],
+      "expectations": [
+        "Traces the actual count population and filter inputs rather than assuming every match is an assessed annual report.",
+        "Checks inclusion, reading, and documentary contribution separately.",
+        "Keeps the counter label and drill-down scope consistent without inventing a new domain rule in React.",
+        "Reports missing projection detail or unavailable runtime evidence explicitly."
+      ]
+    },
+    {
+      "id": 4,
+      "name": "category-colors-and-card-composition",
+      "prompt": "Use $workbench-frontend. Audit carousel cards with long and short titles. I want clearer document kinds and annotations, but keep the established Regulatory family color and the existing composition. Do not implement changes.",
+      "files": [
+        "../../../DESIGN.md",
+        "../../../src/components/workspace/source-proposal-carousel.tsx",
+        "../../../src/components/workspace/source-family-badge.tsx",
+        "../../../src/components/workspace/source-context-panel.tsx"
+      ],
+      "expectations": [
+        "Reads the accepted composition and actual badge owners before proposing placement or colors.",
+        "Checks aligned identity and metadata regions, annotation visibility, and missing metadata across desktop and narrow layouts.",
+        "Does not remove the family color or give every category the same treatment merely to simplify the card.",
+        "Keeps domain distinctions and consumer placement separate, with explicit unverified browser observations."
+      ]
+    },
+    {
+      "id": 5,
+      "name": "disclosure-reuse-and-touch",
+      "prompt": "Use $workbench-frontend. The accepted Coverage design has topic accordions and an icon-only help popover. Explain how to implement that using existing components on desktop and touch screens. Plan only; do not regenerate mockups.",
+      "files": [
+        "../../../src/components/ui/accordion.tsx",
+        "../../../src/components/ui/collapsible.tsx",
+        "../../../src/components/ui/responsive-popover.tsx",
+        "../../../src/components/workspace/source-coverage-rail.tsx"
+      ],
+      "expectations": [
+        "Inspects existing disclosure APIs and their Coverage caller instead of constructing bespoke open-state, motion, or breakpoint behavior.",
+        "Assigns topic detail and shared definitions different purposes without assuming accordion and popover are mutually exclusive.",
+        "Preserves the approved help trigger and selects click/tap, keyboard/focus, narrow-screen, and reduced-motion checks.",
+        "Does not change shared primitive defaults to satisfy a single consumer."
+      ]
+    },
+    {
+      "id": 6,
+      "name": "small-visual-fix-verification",
+      "prompt": "Use $workbench-frontend. Plan a small correction to spacing and icon placement in the Coverage header. No state, wording meaning, or interaction changes are requested. Explain the verification needed; do not edit.",
+      "files": [
+        "../../../AGENTS.md",
+        "../../../src/components/workspace/source-coverage-rail.tsx"
+      ],
+      "expectations": [
+        "Keeps the inspection scoped to the affected owners, callers, and widths.",
+        "Chooses before-and-after browser inspection without manufacturing a failing CSS-class, pixel, or SVG assertion.",
+        "Does not require a new mockup, provider journey, global suite, or build for the routine presentation correction.",
+        "Retains functional TDD for any separately identified interaction change instead of treating all frontend changes as cosmetic."
+      ]
+    },
+    {
+      "id": 7,
+      "name": "shared-search-limit-and-context",
+      "prompt": "Use $workbench-frontend. Searching one Coverage topic starts a dossier-wide cooldown. Audit whether another topic can still show an enabled search button, and where the first topic's result appears after switching topics. Read-only; do not search or prepare sources.",
+      "files": [
+        "../../../src/lib/presentation/research-copy.ts",
+        "../../../src/components/workspace/source-coverage-rail.tsx",
+        "../../../src/components/workspace/source-search-feedback.tsx",
+        "../../../src/components/workspace/live-source-review.tsx"
+      ],
+      "expectations": [
+        "Distinguishes dossier-wide operation availability from topic-specific pending and terminal feedback.",
+        "Traces real shared state and generated function references rather than adding independent button timers or local recovery state.",
+        "Selects functional regression coverage for the cross-topic transition and relevant admitted-browser checks.",
+        "Does not claim a current defect or passing runtime check without evidence."
+      ]
+    },
+    {
+      "id": 8,
+      "name": "fixture-versus-usable-preparation",
+      "prompt": "Use $workbench-frontend. Component tests pass for prepared source reading, but my older dossier still has no useful passages before approval. Audit what this proves and what must be checked before declaring the workflow usable. Do not activate, synchronize, approve, or launch anything.",
+      "files": [
+        "../../../PRODUCT.md",
+        "../../../docs/ROADMAP.md",
+        "../../../src/components/workspace/live-source-review.tsx",
+        "../../../src/components/workspace/source-context-panel.tsx"
+      ],
+      "expectations": [
+        "Checks current legacy-draft and preparation entry conditions rather than assuming the supplied historical symptom still exists.",
+        "Separates implemented code, deterministic fixtures, protected local behavior, and fresh live preparation.",
+        "Keeps available material and the next action central instead of substituting test counts or retrieval scores for usefulness.",
+        "Reports protected and live gates that remain unverified and preserves activation and provider authority boundaries."
+      ]
+    },
+    {
+      "id": 9,
+      "name": "availability-versus-approval",
+      "prompt": "Use $workbench-frontend. Review the colors and labels for Sources available, Included, and source-set approval across Coverage and the reader. Explain what should be shared and what must remain distinct. Do not edit.",
+      "files": [
+        "../../../DESIGN.md",
+        "../../../src/assets/styles/themes/evidence-workbench.css",
+        "../../../src/assets/styles/base-preset.css",
+        "../../../src/components/workspace/source-coverage-rail.tsx",
+        "../../../src/components/workspace/source-decision.tsx",
+        "../../../src/lib/presentation/research-copy.ts"
+      ],
+      "expectations": [
+        "Reads current semantic tokens and presentation owners, including the inherited status palette.",
+        "Keeps source availability and human approval distinct without inventing a parallel palette or using approval color for all positive states.",
+        "Inspects corresponding text and icons and proposes theme-aware browser checks.",
+        "Centralizes only meanings that actually evolve together and does not merge unrelated domain states."
+      ]
+    },
+    {
+      "id": 10,
+      "name": "backend-only-exclusion",
+      "prompt": "Analyse uniquement la politique de classement des sources dans Convex et son ordre déterministe. Ne touche pas à l'interface et ne lance aucun fournisseur.",
+      "files": [
+        "../../../convex/_generated/ai/guidelines.md",
+        "../../../convex/domain/sourceSelectionPolicy.ts"
+      ],
+      "expectations": [
+        "Recognizes the request as outside this frontend skill and follows repository Convex guidance.",
+        "Does not load the component inventory, require screenshots, or expand the task into a frontend redesign.",
+        "Preserves read-only and provider boundaries and calibrates claims to inspected policy and test evidence."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+# Analyst Language and Meaning
+
+Use this procedure for text, badges, counters, status definitions, and action wording. The audience is an analyst researching a company, not an engineer operating the pipeline. Keep product copy in English. Use familiar research terms when they help the task; expanding every technical noun into a longer phrase can make the interface harder to read.
+
+Prefer short, concrete sentences and verbs that name the analyst's action or the observed result. Avoid literal enum translations, unexplained abbreviations, and vague labels such as “processed” when the useful fact is that content can be read or a decision has been saved. Keep the same term for the same concept across surfaces. Check new-user comprehension without burdening repeated expert work with permanent instructions.
+
+Read the relevant workflow in [PRODUCT.md](../../../../PRODUCT.md) and its enforcement in [context/TECH.md](../../../../context/TECH.md). The questions below check how those contracts are presented; they do not define a second glossary or new product rules.
+
+## Trace the fact before naming it
+
+For each changed message or indicator, inspect:
+
+1. **Evidence:** Which persisted field, event, or query result supports it? Does that input distinguish the states the proposed text claims to distinguish?
+2. **Meaning:** What can the analyst conclude, and what remains unconfirmed? Is this a category, a recommendation, a human decision, a processing result, or an analytical judgment?
+3. **Use:** What decision does displaying it help? Does adjacent information already communicate it?
+4. **Action:** What can the analyst actually do now, and what result will that action produce?
+
+If the available projection cannot distinguish an unattempted source from a failed read, surface the missing contract. Do not manufacture that distinction from unrelated counters or write a more confident message over ambiguous data.
+
+Keep semantic translation in the existing presentation owner. Inspect all affected callers, including help, accessible labels, empty states, and tests, so one correction does not leave conflicting explanations elsewhere.
+
+## Check the distinctions that matter
+
+| Information being presented | Question to resolve from the real contract |
+| --- | --- |
+| Included or recommended sources | Which set and revision does this describe? Could the analyst mistake selection for reading, factual support, or approval? |
+| Reading and preparation | Was content saved, only partly obtained, not attempted, or unsuccessfully processed? What remains inspectable? |
+| Documentary coverage | Is a useful contribution established, limited, absent after inspection, or not yet assessed? Does the data actually distinguish these cases? |
+| Provenance, family, and document kind | Does the label identify author, host, filing venue, category, or document form? Which of those facts are independently established? |
+| Counts | What objects are counted, from which scope, and under what qualification? Do the label and destination use that same population? |
+| Human approval | Is this still a proposal, an individual decision, or an approved source set? Does a positive color imply a decision that has not occurred? |
+
+For example, several included regulatory candidates do not automatically mean several annual reports have been read and found useful. Check the actual matching population before naming a counter or linking its drill-down.
+
+## Say what happened and what follows
+
+For an interruption, lead with the affected task, explain its consequence for the analyst, and offer only an available next action. Distinguish a technical inability to assess material from a finding that the material is insufficient. Finding more sources, retrying failed discovery, and continuing preparation are separate intents; inspect the operation behind each control.
+
+Illustrative wording, only when supported by the saved outcome: **“Source preparation interrupted. You can read 2 of 48 sources here. The remaining sources have not been assessed.”** Offer **“Continue preparation”** only if that transition is actually available. If recovery requires an operator intervention, explain the current limitation without inventing a working retry or exposing configuration details.
+
+Avoid raw workflow keys, provider diagnostics, and internal identifiers in analyst copy, following `AGENTS.md`. A disabled control needs a useful reason and available alternative, or a known waiting condition. Do not promise “Retry when available” without an observable way to know when that is.
+
+## Reduce competing information
+
+The presence of distinct backend fields does not justify displaying every field as an equally prominent badge. Compare the information gained by each label. Keep the details needed for the current decision visible, and move supporting classification or rationale into the established disclosure when appropriate. Preserve useful provenance and integrity disclosures.
+
+“Primary regulator” beside “Regulatory” and a specific filing type illustrates this problem. Renaming one badge does not by itself resolve redundancy. Check whether the record establishes a filing or only an SEC-hosted URL before considering “Filed with SEC”; never replace an entire authority category with that phrase solely from its domain classification. Test the resulting composition with other source families and missing metadata.
+
+Read the complete result as an analyst: what happened, what is available, what remains uncertain, and what can I do next? An explanation in the agent's handoff cannot compensate for an interface that leaves those questions unanswered.
