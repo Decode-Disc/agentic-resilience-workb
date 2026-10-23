@@ -1,5 +1,11 @@
 import { api } from "@convex/_generated/api";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
 
@@ -74,6 +80,32 @@ const source: Parameters<typeof SourceContextPanel>[0]["source"] = {
     },
 };
 
+test("keeps SEC hosting provenance in source details without claiming a filing or verified authorship", () => {
+    render(
+        <SourceContextPanel
+            source={{
+                ...source,
+                authorityTier: "regulator_primary",
+                canonicalUrl: "https://www.sec.gov/news/example",
+            }}
+        />,
+    );
+    const header = document.querySelector('[data-slot="source-record-header"]');
+    if (!(header instanceof HTMLElement))
+        throw new Error("Missing source header");
+    expect(within(header).queryByText("Primary regulator")).toBeNull();
+    expect(within(header).queryByText("SEC-hosted source")).toBeNull();
+    const provenance = screen.getByRole("region", {
+        name: "Source provenance",
+    });
+    expect(within(provenance).getByText("SEC-hosted source")).toBeTruthy();
+    fireEvent.click(within(provenance).getByRole("button"));
+    expect(
+        within(provenance).getByText(/Hosting alone does not establish/),
+    ).toBeTruthy();
+    expect(within(provenance).queryByText(/Filed with SEC/)).toBeNull();
+});
+
 test("distinguishes publication from the financial reporting period in UTC", () => {
     if (!source.qualification) throw new Error("Missing qualification fixture");
     render(
@@ -88,11 +120,13 @@ test("distinguishes publication from the financial reporting period in UTC", () 
             }}
         />,
     );
-    expect(screen.getByText(/^Published\b/).textContent).toBe(
-        "Published Feb 27, 2026",
+    expect(screen.getByText("Published")).toBeTruthy();
+    expect(screen.getByText("Feb 27, 2026").getAttribute("datetime")).toBe(
+        "2026-02-27T23:30:00.000Z",
     );
-    expect(screen.getByText(/^Reporting period ending\b/).textContent).toBe(
-        "Reporting period ending Dec 31, 2025",
+    expect(screen.getByText("Reporting period ending")).toBeTruthy();
+    expect(screen.getByText("Dec 31, 2025").getAttribute("datetime")).toBe(
+        "2025-12-31",
     );
 });
 
@@ -117,6 +151,20 @@ test("describes corpus membership separately from a source's proposal group", ()
     rerender(<SourceContextPanel source={source} included />);
     expect(screen.getByText("Included")).toBeTruthy();
     expect(screen.queryByText("Not included")).toBeNull();
+});
+
+test("preserves automatic arrow-key activation in the source reader tabs", async () => {
+    render(<SourceContextPanel source={source} />);
+    const details = screen.getByRole("tab", { name: "Source details" });
+    details.focus();
+    fireEvent.keyDown(details, { key: "ArrowRight" });
+    await waitFor(() =>
+        expect(
+            screen
+                .getByRole("tab", { name: "Preview" })
+                .getAttribute("aria-selected"),
+        ).toBe("true"),
+    );
 });
 
 test("opens source provenance on request and closes it for another source", () => {

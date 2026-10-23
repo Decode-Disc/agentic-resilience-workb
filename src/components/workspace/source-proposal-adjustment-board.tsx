@@ -39,6 +39,7 @@ import {
     sourceCategoryLabel,
     sourceOriginLabel,
 } from "@/lib/presentation/research-copy";
+import { cn } from "@/lib/utils";
 
 type ProposalSource = FunctionReturnType<
     typeof api.sourceSelectionProposals.listItemsPage
@@ -351,10 +352,17 @@ export function SourceAdjustmentActions({
             <Button
                 type="button"
                 size="sm"
-                variant="secondary"
+                variant={
+                    !isIncluded && context === "overview"
+                        ? "default"
+                        : "secondary"
+                }
                 disabled={disabled || saving}
                 aria-label={actionLabel.description}
-                className="min-h-11 text-sm sm:min-h-9"
+                className={cn(
+                    "text-sm",
+                    context === "overview" ? "min-h-9" : "min-h-11 sm:min-h-9",
+                )}
                 onClick={(event) => {
                     event.stopPropagation();
                     void save(isIncluded ? "rejected" : "accepted");

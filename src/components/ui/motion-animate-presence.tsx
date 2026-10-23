@@ -8,10 +8,10 @@ import {
     type TargetAndTransition,
     type Transition,
     useInView,
-    useReducedMotion,
 } from "motion/react";
 import type React from "react";
 import { useRef } from "react";
+import { useMediaQuery } from "@/hooks/use-responsive";
 
 export type AnimatePresenceMode = "sync" | "wait" | "popLayout";
 
@@ -167,7 +167,9 @@ export function MotionAnimatePresence({
     ...restProps
 }: MotionAnimatePresenceProps) {
     const containerRef = useRef<HTMLDivElement>(null);
-    const shouldReduceMotion = useReducedMotion();
+    const shouldReduceMotion = useMediaQuery(
+        "(prefers-reduced-motion: reduce)",
+    );
     const isInView = useInView(containerRef, {
         once: !infinite,
         margin: viewportMargin,
@@ -180,9 +182,7 @@ export function MotionAnimatePresence({
             ? preset
             : presetMap[preset as string] || MOTION_PRESETS.scale;
 
-    const initial = shouldReduceMotion
-        ? false
-        : customInitial;
+    const initial = shouldReduceMotion ? false : customInitial;
     const animateConfig = shouldReduceMotion
         ? { opacity: 1 }
         : (customAnimate ?? selectedPreset.animate);

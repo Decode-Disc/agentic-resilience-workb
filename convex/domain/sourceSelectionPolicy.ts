@@ -91,6 +91,49 @@ export const SOURCE_COMPANY_LINKAGE_BASES = [
 
 export type SourceFamily = (typeof SOURCE_FAMILIES)[number];
 export type SourceCoverageRole = (typeof SOURCE_COVERAGE_ROLES)[number];
+
+const selectionRoleValidator = v.union(
+    ...SOURCE_COVERAGE_ROLES.map((role) => v.literal(role)),
+);
+const selectionContributionsValidator = v.array(
+    v.object({
+        key: v.string(),
+        basis: v.union(
+            v.literal("inspected_content"),
+            v.literal("discovery_metadata"),
+        ),
+        kind: v.union(
+            v.literal("documentary_role"),
+            v.literal("report_candidate"),
+            v.literal("filing_candidate"),
+            v.literal("publisher"),
+            v.literal("document_candidate"),
+        ),
+        role: v.optional(selectionRoleValidator),
+        reportingPeriodEnd: v.optional(v.string()),
+    }),
+);
+export const sourceSelectionRationaleValidator = v.union(
+    v.object({
+        version: v.literal(1),
+        trigger: v.literal("analyst_reference"),
+        contributions: selectionContributionsValidator,
+    }),
+    v.object({
+        version: v.literal(1),
+        trigger: v.literal("required_role"),
+        role: selectionRoleValidator,
+        contributions: selectionContributionsValidator,
+    }),
+    v.object({
+        version: v.literal(1),
+        trigger: v.literal("distinct_contribution"),
+        contributions: selectionContributionsValidator,
+    }),
+);
+export type SourceSelectionRationale = Infer<
+    typeof sourceSelectionRationaleValidator
+>;
 export type SourceDocumentKind = (typeof SOURCE_DOCUMENT_KINDS)[number];
 export type SourceAuthorityTier = (typeof SOURCE_AUTHORITY_TIERS)[number];
 export type SourceCompanyLinkageBasis =
@@ -249,6 +292,7 @@ export type SourceSelectionProposalResult = {
         duplicateOfSourceId?: string;
         rank: number;
         reasonCodes: Array<SourceSelectionReasonCode>;
+        selectionRationale?: SourceSelectionRationale;
     }>;
     gaps: Array<SourceFamily>;
     coverageGaps: Array<SourceCoverageRole>;
@@ -2031,6 +2075,61 @@ function legacyFamilyGaps(
     return [...new Set(roles.map((role) => FAMILY_BY_ROLE[role]))];
 }
 
+/** Describes the identity that selection actually compared, without promoting metadata to inspected evidence. */
+function selectionContribution(
+    candidate: ClassifiedCandidate,
+    key: string,
+): SourceSelectionRationale["contributions"][number] {
+    const inspected =
+        key.startsWith("content:") &&
+        candidate.coverageContributions.includes(key);
+    const role = SOURCE_COVERAGE_ROLES.find((role) =>
+        inspected
+            ? key.startsWith(`content:${role}:`)
+            : key === role || key.startsWith(`${role}:`),
+    );
+    const reportingPeriodEnd =
+        candidate.inspection?.status === "qualified"
+            ? (candidate.inspection.qualification.reportingPeriodEnd ??
+              undefined)
+            : undefined;
+    const inspectedPeriod =
+        Boolean(reportingPeriodEnd) &&
+        key === periodicDocumentIdentity(candidate);
+    return {
+        key,
+        basis:
+            inspected || inspectedPeriod
+                ? "inspected_content"
+                : "discovery_metadata",
+        kind: inspected
+            ? "documentary_role"
+            : key.startsWith("regulatory_event:")
+              ? "filing_candidate"
+              : key.includes("_publisher:")
+                ? "publisher"
+                : inspectedPeriod ||
+                    [
+                        "regulatory_annual",
+                        "regulatory_interim",
+                        "investor_results",
+                    ].some(
+                        (prefix) =>
+                            key === prefix || key.startsWith(`${prefix}:`),
+                    )
+                  ? "report_candidate"
+                  : "document_candidate",
+        ...(key.startsWith("regulatory_event:")
+            ? { role: "regulatory_material_event" as const }
+            : role
+              ? { role }
+              : {}),
+        ...(inspectedPeriod && reportingPeriodEnd
+            ? { reportingPeriodEnd }
+            : {}),
+    };
+}
+
 export function buildSourceSelectionProposal(input: {
     candidates: ReadonlyArray<SourceSelectionCandidate>;
     company?: SourceSelectionCompany;
@@ -2109,28 +2208,44 @@ export function buildSourceSelectionProposal(input: {
             !duplicateReasons.has(candidate.sourceId),
     );
     const selected: Array<ClassifiedCandidate> = [];
-    const selectedReason = new Map<string, SourceSelectionReasonCode>();
+    const selections = new Map<
+        string,
+        {
+            reason: SourceSelectionReasonCode;
+            rationale: SourceSelectionRationale;
+        }
+    >();
     const selectedDiscoveryCount = () =>
         selected.filter(({ origin }) => origin !== "analyst_url").length;
     const select = (
         candidate: ClassifiedCandidate,
         reason: SourceSelectionReasonCode,
+        rationale: SourceSelectionRationale,
         enforceCeiling = true,
     ) => {
         if (
-            selectedReason.has(candidate.sourceId) ||
+            selections.has(candidate.sourceId) ||
             (enforceCeiling && selectedDiscoveryCount() >= ceiling)
         ) {
             return;
         }
         selected.push(candidate);
-        selectedReason.set(candidate.sourceId, reason);
+        selections.set(candidate.sourceId, { reason, rationale });
     };
 
     for (const candidate of selectable.filter(
         ({ origin }) => origin === "analyst_url",
     )) {
-        select(candidate, "added_by_analyst", false);
+        select(
+            candidate,
+            "added_by_analyst",
+            {
+                version: 1,
+                trigger: "analyst_reference",
+                contributions: [],
+            },
+            false,
+        );
     }
 
     const coverageGaps: Array<SourceCoverageRole> = [];
@@ -2145,14 +2260,19 @@ export function buildSourceSelectionProposal(input: {
         }
         const best = selectable.find(
             (candidate) =>
-                !selectedReason.has(candidate.sourceId) &&
+                !selections.has(candidate.sourceId) &&
                 roleMatches(candidate, role, coverageSources),
         );
         if (!best || selectedDiscoveryCount() >= ceiling) {
             coverageGaps.push(role);
             continue;
         }
-        select(best, "required_coverage_role");
+        select(best, "required_coverage_role", {
+            version: 1,
+            trigger: "required_role",
+            role,
+            contributions: [],
+        });
         coverageSources.push(best);
     }
 
@@ -2166,7 +2286,7 @@ export function buildSourceSelectionProposal(input: {
         if (selectedDiscoveryCount() >= ceiling) {
             break;
         }
-        if (selectedReason.has(candidate.sourceId)) {
+        if (selections.has(candidate.sourceId)) {
             continue;
         }
         if (candidateCapReached(candidate, selected, input.coveragePreset)) {
@@ -2189,6 +2309,13 @@ export function buildSourceSelectionProposal(input: {
             )
                 ? "ranked_fill"
                 : "additional_coverage",
+            {
+                version: 1,
+                trigger: "distinct_contribution",
+                contributions: [...new Set(contributions)]
+                    .filter((key) => !covered.has(key))
+                    .map((key) => selectionContribution(candidate, key)),
+            },
         );
         for (const contribution of contributions) {
             covered.add(contribution);
@@ -2205,7 +2332,8 @@ export function buildSourceSelectionProposal(input: {
     let attentionConflictAssigned = false;
     const items = ordered.map((candidate, rank) => {
         const duplicate = duplicateReasons.get(candidate.sourceId);
-        const selectionReason = selectedReason.get(candidate.sourceId);
+        const selection = selections.get(candidate.sourceId);
+        const selectionReason = selection?.reason;
         const needsAttentionReason = candidate.requiresAnalystReview
             ? ("targeted_search_review" as const)
             : candidate.needsAttentionReason;
@@ -2248,6 +2376,7 @@ export function buildSourceSelectionProposal(input: {
                         ? "recommendation_ceiling_reached"
                         : "no_new_coverage"),
             ],
+            ...(selection ? { selectionRationale: selection.rationale } : {}),
         };
     });
 

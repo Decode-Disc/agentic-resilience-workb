@@ -321,6 +321,9 @@ export const getReviewSource = query({
         v.object({
             ...sourceReviewSourceValidator.fields,
             readingStatus: v.optional(sourceReadingStatusValidator),
+            companyLinkageBasis:
+                schema.tables.sourceSelectionProposalItems.validator.fields
+                    .companyLinkageBasis,
             inspectionStatus:
                 schema.tables.sourceSelectionProposalItems.validator.fields
                     .inspectionStatus,
@@ -424,6 +427,12 @@ export const getReviewSource = query({
             reason: item.reason,
             documentKind: currentClassification?.documentKind,
             authorityTier: currentClassification?.authorityTier,
+            ...(currentClassification?.companyLinkageBasis
+                ? {
+                      companyLinkageBasis:
+                          currentClassification.companyLinkageBasis,
+                  }
+                : {}),
             ...(currentClassification?.inspectionStatus
                 ? { inspectionStatus: currentClassification.inspectionStatus }
                 : {}),

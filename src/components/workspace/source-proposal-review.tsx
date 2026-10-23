@@ -12,7 +12,6 @@ import {
     Settings02Icon,
 } from "@hugeicons/core-free-icons";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
-import { useReducedMotion } from "motion/react";
 import { type ReactNode, useRef, useState } from "react";
 
 import Icon from "@/components/icon";
@@ -48,14 +47,13 @@ import { SourceSearchFeedback } from "@/components/workspace/source-search-feedb
 import { useMediaQuery } from "@/hooks/use-responsive";
 import {
     type SourceRecoveryState,
-    sourceCompanyLinkageLabel,
     sourceCoverageCopy,
     sourceCoverageRoleLabel,
     sourceCoverageSearchState,
     sourcePreparationActionCopy,
     sourcePreparationCopy,
     sourceSearchAllowanceCopy,
-    sourceSelectionReasonLabel,
+    sourceSelectionExplanation,
 } from "@/lib/presentation/research-copy";
 
 type ProposalSummary = NonNullable<
@@ -139,7 +137,7 @@ export function SourceProposalReview({
     sourceReviewNavigation,
     onSourceReviewNavigate,
 }: {
-    runId: Id<"researchRuns">;
+    runId?: Id<"researchRuns">;
     corpusRevisionId: Id<"corpusRevisions">;
     summary: ProposalSummary;
     disposition: ProposalDisposition;
@@ -201,7 +199,9 @@ export function SourceProposalReview({
     const navigationPreset: ProposalNavigationPreset =
         view === "overview" ? "slide-right" : "slide-left";
     const [hasNavigated, setHasNavigated] = useState(false);
-    const shouldReduceMotion = useReducedMotion();
+    const shouldReduceMotion = useMediaQuery(
+        "(prefers-reduced-motion: reduce)",
+    );
     const isApproved = summary.revisionStatus === "approved";
     const isPreparing =
         isStartingPreparation || summary.preparation?.status === "started";
@@ -912,12 +912,15 @@ export function SourceProposalReview({
                         <p className="text-xs text-muted-foreground">
                             This source set is approved and read-only.
                         </p>
-                    ) : summary.effectiveStatus !== "ready" ? (
+                    ) : summary.effectiveStatus !== "ready" ||
+                      summary.selectionExplanationRefreshAvailable ? (
                         <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
                             <p>
-                                {summary.effectiveStatus === "outdated"
-                                    ? "Rebuild this proposal before approval."
-                                    : "Refresh the proposal before approval. Your source decisions are unchanged."}
+                                {summary.effectiveStatus === "ready"
+                                    ? "Refresh to record detailed selection reasons using saved source data. No new search is needed."
+                                    : summary.effectiveStatus === "outdated"
+                                      ? "Rebuild this proposal before approval."
+                                      : "Refresh the proposal before approval. Your source decisions are unchanged."}
                             </p>
                             {summary.effectiveStatus !== "outdated" ? (
                                 <Button
@@ -994,7 +997,7 @@ function ProposalViewTransition({
     view: ProposalView;
     preset: ProposalNavigationPreset;
     hasNavigated: boolean;
-    shouldReduceMotion: boolean | null;
+    shouldReduceMotion: boolean;
     children: ReactNode;
 }) {
     return (
@@ -1047,20 +1050,25 @@ function SecondaryViewHeader({
 }
 
 function renderProposalAnnotation(source: ProposalSource) {
-    const companyLinkageLabel = sourceCompanyLinkageLabel(
-        source.companyLinkageBasis,
-        source.inspectionStatus,
-    );
+    const explanation = sourceSelectionExplanation(source);
     return (
-        <div className="flex flex-wrap items-center gap-2 text-sm leading-relaxed text-muted-foreground">
-            <SourceFamilyBadge family={source.sourceFamily} />
-            {source.disposition === "needs_attention" && source.included ? (
-                <Badge variant="outline">Needs attention</Badge>
+        <div className="space-y-2 text-sm leading-relaxed text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2">
+                <SourceFamilyBadge family={source.sourceFamily} />
+                {source.disposition === "needs_attention" && source.included ? (
+                    <Badge variant="outline">Needs attention</Badge>
+                ) : null}
+            </div>
+            <p>{explanation.reason}</p>
+            <p>{explanation.assessment}</p>
+            {explanation.limitations.map((limitation) => (
+                <p key={limitation}>{limitation}</p>
+            ))}
+            {explanation.missingRationale ? (
+                <p>
+                    A detailed selection reason was not saved for this proposal.
+                </p>
             ) : null}
-            <span>
-                {companyLinkageLabel ??
-                    sourceSelectionReasonLabel(source.reasonCodes)}
-            </span>
             {source.decision !== "pending" ? (
                 <span className="font-medium text-foreground">
                     Analyst override: {humanize(source.decision)}

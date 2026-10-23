@@ -26,6 +26,52 @@ const companies = [
     },
 ] as const;
 
+test("records the new recommendation contribution without claiming unread content coverage", () => {
+    const result = buildSourceSelectionProposal({
+        company: companies[0],
+        coveragePreset: "balanced",
+        ceiling: 3,
+        candidates: [1, 2].map((event) => ({
+            sourceId: `event-${event}`,
+            origin: "sec" as const,
+            canonicalUrl: `https://www.sec.gov/Archives/edgar/data/1640147/event-${event}.htm`,
+            category: "regulatory_material",
+            title: `Material event ${event}`,
+            secForm: "8-K",
+            secAccessionNumber: `0001640147-26-00000${event}`,
+            createdAt: event,
+            inspection: {
+                status: "unavailable" as const,
+                reasonCode: "model_unavailable",
+            },
+        })),
+    });
+    expect(
+        result.items.map(({ sourceId, disposition }) => ({
+            sourceId,
+            disposition,
+        })),
+    ).toEqual([
+        { sourceId: "event-1", disposition: "recommended" },
+        { sourceId: "event-2", disposition: "recommended" },
+    ]);
+    expect(result.items[1]).toMatchObject({
+        coverageContributions: [],
+        selectionRationale: {
+            version: 1,
+            trigger: "distinct_contribution",
+            contributions: [
+                {
+                    key: "regulatory_event:0001640147-26-000002",
+                    basis: "discovery_metadata",
+                    kind: "filing_candidate",
+                    role: "regulatory_material_event",
+                },
+            ],
+        },
+    });
+});
+
 test.each([
     { cik: "0000796343", legalName: "Adobe Inc.", ticker: "ADBE" },
     { cik: "0001045810", legalName: "NVIDIA Corporation", ticker: "NVDA" },
@@ -84,6 +130,11 @@ test.each(
     expect(proposal.items[0]).toMatchObject({
         disposition: "recommended",
         reasonCodes: ["added_by_analyst"],
+        selectionRationale: {
+            version: 1,
+            trigger: "analyst_reference",
+            contributions: [],
+        },
         eligibleCoverageRoles: [],
         inspectionStatus: "unavailable",
     });

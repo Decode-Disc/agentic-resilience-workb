@@ -159,6 +159,98 @@ const inspectionReview = {
     })),
 } as const;
 
+test("explains the recorded selection separately from limited documentary use and company linkage", () => {
+    const explained = {
+        ...metadataLinked,
+        inspectionStatus: "partial",
+        selectionRationale: {
+            version: 1,
+            trigger: "required_role",
+            role: "official_commercial_terms",
+            contributions: [],
+        },
+        roleAvailability: [
+            {
+                role: "official_commercial_terms",
+                state: "limited",
+                usage: "historical_only",
+                reasonCodes: ["historical"],
+            },
+        ],
+    };
+    render(
+        <SourceProposalReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            summary={summary as never}
+            disposition="recommended"
+            onDispositionChange={vi.fn()}
+            adjustmentSets={{ included: [explained], available: [] } as never}
+            inspectionReview={inspectionReview as never}
+            onDecide={vi.fn()}
+            onApprove={vi.fn()}
+            onRecompute={vi.fn()}
+        />,
+    );
+    fireEvent.click(
+        screen.getByRole("button", { name: "Why this source appears" }),
+    );
+    expect(
+        screen.getByText("Selected for subscription & service terms."),
+    ).toBeTruthy();
+    expect(
+        screen.getByText(/Limited contribution: subscription & service terms/),
+    ).toBeTruthy();
+    expect(
+        screen.getByText(
+            "Historical material may not describe current conditions.",
+        ),
+    ).toBeTruthy();
+    expect(
+        within(
+            screen.getByRole("region", { name: "Why this source appears" }),
+        ).queryByText(/Linked from search details/),
+    ).toBeNull();
+});
+
+test("offers an explicit explanation refresh for a ready legacy draft without blocking approval", () => {
+    const onRecompute = vi.fn();
+    render(
+        <SourceProposalReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            summary={
+                {
+                    ...summary,
+                    selectionExplanationRefreshAvailable: true,
+                } as never
+            }
+            disposition="recommended"
+            onDispositionChange={vi.fn()}
+            adjustmentSets={{ included: [recommended], available: [] } as never}
+            inspectionReview={inspectionReview as never}
+            onDecide={vi.fn()}
+            onApprove={vi.fn()}
+            onRecompute={onRecompute}
+        />,
+    );
+    fireEvent.click(
+        screen.getByRole("button", { name: "Why this source appears" }),
+    );
+    expect(
+        screen.getByText(
+            "A detailed selection reason was not saved for this proposal.",
+        ),
+    ).toBeTruthy();
+    expect(
+        screen
+            .getByRole("button", { name: "Approve proposed corpus" })
+            .hasAttribute("disabled"),
+    ).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Refresh proposal" }));
+    expect(onRecompute).toHaveBeenCalledOnce();
+});
+
 test("presents coverage beside a carousel and an inline source reader", () => {
     render(
         <SourceProposalReview
@@ -515,6 +607,11 @@ test("labels metadata-linked recommendations without hiding coverage gaps", () =
 
     fireEvent.click(
         screen.getByRole("button", { name: "Why this source appears" }),
+    );
+    fireEvent.click(
+        within(
+            screen.getByRole("region", { name: "Source provenance" }),
+        ).getByRole("button"),
     );
     expect(
         screen.getByText(

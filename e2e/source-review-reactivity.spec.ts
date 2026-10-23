@@ -23,6 +23,51 @@ test.afterEach(async ({ page }) => {
     await stopSanitizedTraceIfActive(page);
 });
 
+test("selection explanations refresh a legacy draft without changing decisions or calling providers", async ({ page }) => {
+    await admitAnalyst(page);
+    const key = fixtureKey("selection-explanations");
+    const seeded = runConvexJson<FunctionReturnType<typeof internal.e2eFixtures.seedSourceReviewScenario>>(
+        "e2eFixtures:seedSourceReviewScenario",
+        { slotKey: "analyst-1", fixtureKey: key, legacySelectionReasons: true,
+          recordedScenario: { companyName: "ServiceNow, Inc.", companyCik: "1373715", ticker: "NOW", websiteUrl: "https://www.servicenow.com/", researchAngle: "Source explanation verification",
+            sources: [{ canonicalUrl: "https://www.sec.gov/Archives/edgar/data/1373715/000137371526000001/now-20251231.htm", title: "Annual report for explanation verification", origin: "sec", category: "regulatory", secForm: "10-K" },
+                { canonicalUrl: "https://www.servicenow.com/products/pricing.html", title: "Product pricing", origin: "exa", category: "official_commercial" },
+                { canonicalUrl: "https://www.morningstar.com/stocks/servicenow-risk-review", title: "ServiceNow independent analysis", origin: "exa", category: "independent_analysis" }],
+          },
+        },
+    );
+    const before = inspectSourceReview(seeded.runId, key);
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto(`/workspace/${seeded.runId}?section=sources`);
+    const reader = page.getByRole("region", { name: "Selected source reading" });
+    await expect(reader.getByRole("heading", { name: "Annual report for explanation verification" })).toBeVisible();
+    await reader.getByRole("button", { name: "Why this source appears" }).click();
+    await expect(reader.getByText("A detailed selection reason was not saved for this proposal.")).toBeVisible();
+    await page.getByRole("button", { name: "Refresh proposal", exact: true }).click();
+    await expect(reader.getByText("A detailed selection reason was not saved for this proposal.")).toHaveCount(0);
+    const disclosure = reader.getByRole("button", { name: "Why this source appears" });
+    if (await disclosure.getAttribute("aria-expanded") !== "true") await disclosure.click();
+    await expect(reader.getByText("Selected for annual regulatory report.")).toBeVisible();
+    await expect(reader.getByText("Its documentary contribution has not yet been assessed.")).toBeVisible();
+    for (const width of [1440, 390, 320]) {
+        await page.setViewportSize({ width, height: 1000 });
+        const header = reader.locator('[data-slot="source-record-header"]');
+        await expect(header.getByText("SEC-hosted source", { exact: true })).toHaveCount(0);
+        await expect(reader.getByRole("region", { name: "Source provenance" }).getByText("SEC-hosted source", { exact: true })).toBeVisible();
+        await expect(reader.getByText("Regulatory", { exact: true })).toBeVisible();
+        await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    }
+    await page.reload();
+    await reader.getByRole("button", { name: "Why this source appears" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(reader.getByText("Selected for annual regulatory report.")).toBeVisible();
+    const after = inspectSourceReview(seeded.runId, key);
+    expect(after.decisions).toEqual(before.decisions);
+    expect(after.providerCallCount).toBe(0);
+    expect(errors).toEqual([]);
+});
+
 test("source decisions update the row, count, and detail without reload", async ({
     page,
 }) => {

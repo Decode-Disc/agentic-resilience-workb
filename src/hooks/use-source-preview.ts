@@ -11,6 +11,7 @@ export type PreviewState =
 
 /**
  * Fetches an ephemeral visual preview for a pending candidate source.
+ * Disconnected presentations without a source/run context never query or render previews.
  *
  * The rendered screenshot is cached server-side (short TTL) and read through a
  * reactive Convex query, so a repeat view returns the screenshot immediately
@@ -26,7 +27,7 @@ export function useSourcePreview(
     const renderPreview = useAction(api.browserPreview.renderPreview);
     const cached = useQuery(
         api.browserPreviewInternals.getPreview,
-        decision === "pending" && sourceId ? { sourceId } : "skip",
+        decision === "pending" && sourceId && runId ? { sourceId } : "skip",
     );
 
     const [rendered, setRendered] = useState<string | null>(null);
@@ -53,6 +54,10 @@ export function useSourcePreview(
 
     if (decision !== "pending") {
         return { status: "unavailable", reason: "not_pending" };
+    }
+
+    if (!sourceId || !runId) {
+        return { status: "unavailable", reason: "no_context" };
     }
 
     const dataUrl = cached?.dataUrl ?? rendered;

@@ -51,7 +51,7 @@ export function SourceProposalCarousel({
 }: {
     items: ReadonlyArray<Source>;
     group: Source["disposition"];
-    runId: Id<"researchRuns">;
+    runId?: Id<"researchRuns">;
     corpusRevisionId: Id<"corpusRevisions">;
     readOnly: boolean;
     selectedId?: Id<"sources"> | null;

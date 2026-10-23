@@ -84,6 +84,47 @@ async function createAdmittedVisitor(t: ReturnType<typeof convexTest>) {
     });
 }
 
+test("seeds a historical explanation gap for explicit draft refresh without provider work", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
+    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
+    const t = convexTest(schema, modules);
+    workflowTest.register(t);
+    const { userId } = await createAdmittedVisitor(t);
+    const seeded = await t.mutation(seedSourceReviewScenario, {
+        slotKey: "e2e-analyst",
+        fixtureKey: "legacy-explanation",
+        legacySelectionReasons: true,
+    });
+    const owner = t.withIdentity({
+        subject: `${userId}|legacy-explanation-session`,
+    });
+    const args = {
+        runId: seeded.runId,
+        corpusRevisionId: seeded.corpusRevisionId,
+    };
+    await expect(
+        owner.query(api.sourceSelectionProposals.getCurrent, args),
+    ).resolves.toMatchObject({
+        effectiveStatus: "ready",
+        selectionExplanationRefreshAvailable: true,
+    });
+    const refreshed = await owner.mutation(
+        api.sourceSelectionProposals.recompute,
+        { ...args, expectedProposalId: seeded.proposalId },
+    );
+    expect(refreshed.version).toBe(seeded.proposalVersion + 1);
+    await expect(
+        owner.query(api.sourceSelectionProposals.getCurrent, args),
+    ).resolves.toMatchObject({ selectionExplanationRefreshAvailable: false });
+    await expect(
+        t.query(inspectSourceReviewScenario, {
+            runId: seeded.runId,
+            fixtureKey: "legacy-explanation",
+        }),
+    ).resolves.toMatchObject({ providerCallCount: 0 });
+});
+
 test("keeps the retrieval fixture compact while preserving evidence beyond the initial 512 passages", async () => {
     vi.useFakeTimers();
     vi.stubEnv("E2E_FIXTURES_ENABLED", "true");

@@ -110,7 +110,7 @@ export function SourceReview({
     proposalSources,
     emptyState,
 }: {
-    runId: Id<"researchRuns">;
+    runId?: Id<"researchRuns">;
     annotation?: (
         source: FunctionReturnType<
             typeof api.sourceSelectionProposals.listItemsPage

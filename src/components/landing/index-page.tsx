@@ -477,7 +477,7 @@ export function IndexPage() {
                         duration: 0.55,
                         ease: easeOrganic,
                     }}
-                    className="flex max-w-[40rem] flex-col gap-4 items-center text-center motion-reduce:!transform-none motion-reduce:!opacity-100"
+                    className="flex max-w-[40rem] xl:max-w-[50rem] flex-col gap-4 items-center text-center motion-reduce:!transform-none motion-reduce:!opacity-100"
                     aria-labelledby="index-title">
                     <Badge
                         variant="fancy"

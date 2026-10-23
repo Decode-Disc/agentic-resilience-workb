@@ -1,6 +1,7 @@
 import { type HTMLProps, useRender } from "@base-ui/react/use-render";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { createContext, useContext, useEffect, useState } from "react";
+import { useMediaQuery } from "@/hooks/use-responsive";
 
 export const DisclosureAnimationContext = createContext<{
     animated: boolean;
@@ -11,7 +12,7 @@ export const DisclosureAnimationContext = createContext<{
 /** Combines the component's animation preference with the user's motion preference. */
 export function useDisclosureAnimation() {
     const options = useContext(DisclosureAnimationContext);
-    const reducedMotion = useReducedMotion();
+    const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
     return { ...options, animated: options.animated && !reducedMotion };
 }
 

@@ -254,4 +254,17 @@ test("cited reporting periods distinguish reports published in the same quarter"
         undefined,
         undefined,
     ]);
+    expect(result.items.find((item) => item.sourceId === "q1")).toMatchObject({
+        selectionRationale: {
+            trigger: "distinct_contribution",
+            contributions: [
+                {
+                    key: "earnings_release:2026-q1",
+                    kind: "report_candidate",
+                    basis: "inspected_content",
+                    reportingPeriodEnd: "2026-03-31",
+                },
+            ],
+        },
+    });
 });

@@ -3,8 +3,116 @@ import {
     eventLabel,
     sourceAssessmentExplanationCopy,
     sourceCompanyLinkageLabel,
+    sourceSelectionExplanation,
     sourceUsageCopy,
 } from "@/lib/presentation/research-copy";
+
+test("keeps attributed-use restrictions explicit in the selection explanation", () => {
+    const copy = sourceSelectionExplanation({
+        disposition: "recommended",
+        documentKind: "independent_analysis",
+        reasonCodes: ["additional_coverage"],
+        selectionRationale: {
+            version: 1,
+            trigger: "distinct_contribution",
+            contributions: [
+                {
+                    key: "content:counter_evidence_primary:limited:publisher.test",
+                    kind: "documentary_role",
+                    basis: "inspected_content",
+                    role: "counter_evidence_primary",
+                },
+            ],
+        },
+        inspectionStatus: "complete",
+        roleAvailability: [
+            {
+                role: "counter_evidence_primary",
+                state: "limited",
+                usage: "attributed_argument_only",
+                reasonCodes: ["publisher_unverified"],
+            },
+        ],
+    });
+    expect(copy.limitations).toContain(
+        "Use only as an attributed argument, not as an established fact.",
+    );
+    expect(JSON.stringify(copy)).not.toMatch(
+        /content:|publisher.test|attributed_argument_only|additional_coverage/,
+    );
+});
+
+test.each([
+    {
+        inspectionStatus: undefined,
+        assessment: "Its documentary contribution has not yet been assessed.",
+    },
+    {
+        inspectionStatus: "unavailable" as const,
+        assessment: "Its documentary contribution could not be assessed.",
+    },
+    {
+        inspectionStatus: "complete" as const,
+        assessment:
+            "No documentary contribution has been established from the reviewed material.",
+    },
+])("separates supplementary selection from $inspectionStatus assessment", ({
+    inspectionStatus,
+    assessment,
+}) => {
+    const copy = sourceSelectionExplanation({
+        disposition: "recommended",
+        documentKind: "regulatory_material",
+        reasonCodes: ["ranked_fill"],
+        inspectionStatus,
+        roleAvailability: [],
+        selectionRationale: {
+            version: 1,
+            trigger: "distinct_contribution",
+            contributions: [
+                {
+                    key: "regulatory_event:example",
+                    basis: "discovery_metadata",
+                    kind: "filing_candidate",
+                    role: "regulatory_material_event",
+                },
+            ],
+        },
+    });
+    expect(copy.reason).toBe(
+        "Selected as an additional material-event filing candidate. Selection is based on discovery details.",
+    );
+    expect(copy.assessment).toBe(assessment);
+    expect(copy.missingRationale).toBe(false);
+});
+
+test("explains a distinct inspected reporting period without converting publication metadata into coverage", () => {
+    const copy = sourceSelectionExplanation({
+        disposition: "recommended",
+        documentKind: "earnings_release",
+        reasonCodes: ["additional_coverage"],
+        inspectionStatus: "complete",
+        roleAvailability: [],
+        selectionRationale: {
+            version: 1,
+            trigger: "distinct_contribution",
+            contributions: [
+                {
+                    key: "earnings_release:2026-q1",
+                    kind: "report_candidate",
+                    basis: "inspected_content",
+                    reportingPeriodEnd: "2026-03-31",
+                },
+            ],
+        },
+    });
+    expect(copy.reason).toBe(
+        "Selected for a reporting period not represented when this source was selected.",
+    );
+    expect(copy.assessment).toBe(
+        "No documentary contribution has been established from the reviewed material.",
+    );
+});
 
 test.each([
     ["source_preparation_progress", "Sources checked"],

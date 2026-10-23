@@ -25,6 +25,27 @@ describe("useSourcePreview", () => {
         vi.restoreAllMocks();
     });
 
+    test.each([
+        { source: sourceId, run: undefined },
+        { source: undefined, run: runId },
+    ])("keeps a disconnected source preview unavailable without backend work: $source / $run", ({
+        source,
+        run,
+    }) => {
+        useQuery.mockReturnValue(undefined);
+        const renderPreview = vi.fn();
+        useAction.mockReturnValue(renderPreview);
+        const { result } = renderHook(() =>
+            useSourcePreview(source, run, "pending"),
+        );
+        expect(result.current).toEqual({
+            status: "unavailable",
+            reason: "no_context",
+        });
+        expect(useQuery).toHaveBeenCalledWith(expect.anything(), "skip");
+        expect(renderPreview).not.toHaveBeenCalled();
+    });
+
     test("skips and reports unavailable for a decided source", () => {
         useQuery.mockReturnValue(undefined);
         useAction.mockReturnValue(vi.fn());

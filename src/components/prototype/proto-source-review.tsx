@@ -193,7 +193,6 @@ export function ProtoSourceReview() {
                 during discovery; source content has not been read.
             </p>
             <SourceProposalReview
-                runId={"proto-run" as Id<"researchRuns">}
                 corpusRevisionId={"proto-rev" as Id<"corpusRevisions">}
                 summary={{
                     proposalId:
@@ -201,6 +200,7 @@ export function ProtoSourceReview() {
                     version: 1,
                     status: "ready",
                     effectiveStatus: "ready",
+                    selectionExplanationRefreshAvailable: false,
                     recommendedTarget: 12,
                     recommendationCeiling: 12,
                     rebuildOutcome: undefined,

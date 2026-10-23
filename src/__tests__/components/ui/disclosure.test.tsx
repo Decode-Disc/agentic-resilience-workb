@@ -1,5 +1,14 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, expect, test, vi } from "vitest";
+import {
+    act,
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
+import { hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
     Accordion,
     AccordionContent,
@@ -19,7 +28,13 @@ vi.mock("motion/react", async (importOriginal) => ({
 }));
 beforeEach(() => {
     preference.reduced = false;
+    vi.stubGlobal("matchMedia", () => ({
+        matches: preference.reduced,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+    }));
 });
+afterEach(() => vi.unstubAllGlobals());
 
 function Example({
     kind,
@@ -56,6 +71,28 @@ function Example({
 }
 
 for (const kind of ["accordion", "collapsible"] as const) {
+    test(`${kind} hydrates without changing markup when the browser requests reduced motion`, async () => {
+        const container = document.createElement("div");
+        container.innerHTML = renderToString(<Example kind={kind} />);
+        document.body.append(container);
+        preference.reduced = true;
+        const onRecoverableError = vi.fn();
+        let root: ReturnType<typeof hydrateRoot> | undefined;
+        try {
+            await act(async () => {
+                root = hydrateRoot(container, <Example kind={kind} />, {
+                    onRecoverableError,
+                });
+            });
+            expect(onRecoverableError).not.toHaveBeenCalled();
+            expect(
+                within(container).getByRole("button", { name: "Panel action" }),
+            ).toBeTruthy();
+        } finally {
+            await act(async () => root?.unmount());
+            container.remove();
+        }
+    });
     test(`${kind} keeps exiting content mounted but inaccessible until its Motion exit completes`, async () => {
         render(<Example kind={kind} />);
         const trigger = screen.getByRole("button", { name: "Toggle details" });

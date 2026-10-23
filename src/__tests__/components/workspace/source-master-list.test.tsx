@@ -82,7 +82,7 @@ describe("SourceMasterList", () => {
             within(dialog).getByRole("heading", { name: "Annual report 10-K" }),
         ).toBeTruthy();
         expect(
-            within(dialog).getByText("Primary regulator", { exact: true }),
+            within(dialog).getByText("SEC-hosted source", { exact: true }),
         ).toBeTruthy();
         expect(
             within(dialog).getByText("Annual report", { exact: true }),

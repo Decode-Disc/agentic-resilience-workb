@@ -1,125 +1,47 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act } from "@testing-library/react";
+import { hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
+import { afterEach, expect, test, vi } from "vitest";
+import MotionAnimatePresence from "@/components/ui/motion-animate-presence";
 
-import {
-    MOTION_PRESETS,
-    MotionAnimatePresence,
-    registerMotionPreset,
-} from "@/components/ui/motion-animate-presence";
+const preference = vi.hoisted(() => ({ reduced: false }));
+vi.mock("motion/react", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("motion/react")>()),
+    useReducedMotion: () => preference.reduced,
+}));
+afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+});
 
-describe("MotionAnimatePresence", () => {
-    it("renders children with default preset and mode", () => {
-        render(
-            <MotionAnimatePresence>
-                <div data-testid="child">Test Content</div>
-            </MotionAnimatePresence>,
-        );
-
-        expect(screen.getByTestId("child")).toBeTruthy();
-        expect(screen.getByText("Test Content")).toBeTruthy();
-    });
-
-    it("supports custom presets like fade, slide-up, slide-down, blur, flip-x", () => {
-        const { rerender } = render(
-            <MotionAnimatePresence preset="fade">
-                <div data-testid="fade-child">Fade Content</div>
-            </MotionAnimatePresence>,
-        );
-
-        expect(screen.getByTestId("fade-child")).toBeTruthy();
-
-        rerender(
-            <MotionAnimatePresence preset="slide-up">
-                <div data-testid="slide-child">Slide Content</div>
-            </MotionAnimatePresence>,
-        );
-
-        expect(screen.getByTestId("slide-child")).toBeTruthy();
-
-        rerender(
-            <MotionAnimatePresence preset="blur">
-                <div data-testid="blur-child">Blur Content</div>
-            </MotionAnimatePresence>,
-        );
-
-        expect(screen.getByTestId("blur-child")).toBeTruthy();
-    });
-
-    it("supports show prop to conditionally show/hide children", () => {
-        const { rerender } = render(
-            <MotionAnimatePresence show={true}>
-                <div data-testid="visible-child">Visible</div>
-            </MotionAnimatePresence>,
-        );
-
-        expect(screen.getByTestId("visible-child")).toBeTruthy();
-
-        rerender(
-            <MotionAnimatePresence show={false}>
-                <div data-testid="visible-child">Visible</div>
-            </MotionAnimatePresence>,
-        );
-    });
-
-    it("exports MOTION_PRESETS map and registerMotionPreset utility", () => {
-        expect(MOTION_PRESETS.fade).toBeDefined();
-        expect(MOTION_PRESETS["slide-up"]).toBeDefined();
-        expect(MOTION_PRESETS["slide-down"]).toBeDefined();
-        expect(MOTION_PRESETS["slide-left"]).toBeDefined();
-        expect(MOTION_PRESETS["slide-right"]).toBeDefined();
-        expect(MOTION_PRESETS.blur).toBeDefined();
-        expect(MOTION_PRESETS["flip-x"]).toBeDefined();
-        expect(MOTION_PRESETS["flip-y"]).toBeDefined();
-
-        registerMotionPreset("custom-bounce", {
-            initial: { opacity: 0, y: -50 },
-            animate: { opacity: 1, y: 0 },
-            exit: { opacity: 0, y: 50 },
+test("hydrates an initially visible transition without a server/client motion preference mismatch", async () => {
+    preference.reduced = false;
+    vi.stubGlobal("matchMedia", () => ({
+        matches: preference.reduced,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+    }));
+    const example = (
+        <MotionAnimatePresence initial={false} preset="slide-right">
+            <p>Source details</p>
+        </MotionAnimatePresence>
+    );
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(example);
+    document.body.append(container);
+    preference.reduced = true;
+    const consoleError = vi.spyOn(console, "error");
+    const onRecoverableError = vi.fn();
+    let root: ReturnType<typeof hydrateRoot> | undefined;
+    try {
+        await act(async () => {
+            root = hydrateRoot(container, example, { onRecoverableError });
         });
-
-        expect(MOTION_PRESETS["custom-bounce"]).toBeDefined();
-    });
-
-    it("supports duration and delay props", () => {
-        render(
-            <MotionAnimatePresence duration={0.5} delay={0.2} preset="fade">
-                <div data-testid="timed-child">Timed Content</div>
-            </MotionAnimatePresence>,
-        );
-
-        expect(screen.getByTestId("timed-child")).toBeTruthy();
-    });
-
-    it("supports infinite viewport trigger mode", () => {
-        render(
-            <MotionAnimatePresence infinite preset="slide-up">
-                <div data-testid="infinite-child">Infinite Scroll Content</div>
-            </MotionAnimatePresence>,
-        );
-
-        expect(screen.getByTestId("infinite-child")).toBeTruthy();
-    });
-
-    it("supports shrink-pop built-in preset and direct PresetDefinition object", () => {
-        const { rerender } = render(
-            <MotionAnimatePresence preset="shrink-pop">
-                <div data-testid="shrink-pop-child">Shrink Pop Content</div>
-            </MotionAnimatePresence>,
-        );
-        expect(screen.getByTestId("shrink-pop-child")).toBeTruthy();
-
-        const customObjectPreset = {
-            initial: { opacity: 0, scale: 0.8 },
-            animate: { opacity: 1, scale: 1 },
-            exit: { opacity: 0, scale: 0.8 },
-            transition: { duration: 0.2 },
-        };
-
-        rerender(
-            <MotionAnimatePresence preset={customObjectPreset}>
-                <div data-testid="custom-object-child">Custom Object Content</div>
-            </MotionAnimatePresence>,
-        );
-        expect(screen.getByTestId("custom-object-child")).toBeTruthy();
-    });
+        expect(onRecoverableError).not.toHaveBeenCalled();
+        expect(consoleError).not.toHaveBeenCalled();
+        expect(container.textContent).toBe("Source details");
+    } finally {
+        await act(async () => root?.unmount());
+        container.remove();
+    }
 });

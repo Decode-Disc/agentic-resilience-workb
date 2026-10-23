@@ -68,6 +68,9 @@ export function toSourceContext(source: SourceMasterListItem) {
         reason: "reason" in source ? source.reason : source.decisionReason,
         documentKind: source.documentKind,
         authorityTier: source.authorityTier,
+        ...("companyLinkageBasis" in source
+            ? { companyLinkageBasis: source.companyLinkageBasis }
+            : {}),
         ...("inspectionStatus" in source
             ? { inspectionStatus: source.inspectionStatus }
             : {}),

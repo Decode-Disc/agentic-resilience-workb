@@ -181,6 +181,16 @@ test("persists one versioned source-selection proposal after discovery", async (
             )
             .collect(),
     );
+    expect(
+        items.find((item) => item.disposition === "recommended"),
+    ).toMatchObject({
+        selectionRationale: {
+            version: 1,
+            trigger: "required_role",
+            role: "regulatory_annual",
+            contributions: [],
+        },
+    });
     expect(items).toHaveLength(2);
     expect(items.map(({ disposition }) => disposition)).toEqual([
         "recommended",
@@ -393,6 +403,42 @@ test("marks and refreshes a proposal after current company website enrichment", 
         authorityTier: "company_primary",
         documentKind: "official_pricing",
     });
+    if (!refreshedItem) throw new Error("Missing refreshed item");
+    await t.run(async (ctx) =>
+        ctx.db.patch(refreshedItem._id, { selectionRationale: undefined }),
+    );
+    await expect(owner.query(getCurrent, args)).resolves.toMatchObject({
+        effectiveStatus: "ready",
+        selectionExplanationRefreshAvailable: true,
+    });
+    const explained = await owner.mutation(recompute, {
+        ...args,
+        expectedProposalId: refreshed.proposalId,
+    });
+    expect(explained.version).toBe(refreshed.version + 1);
+    await expect(owner.query(getCurrent, args)).resolves.toMatchObject({
+        effectiveStatus: "ready",
+        selectionExplanationRefreshAvailable: false,
+    });
+    const page = await owner.query(listItemsPage, {
+        ...args,
+        disposition: "recommended",
+        paginationOpts: { numItems: 10, cursor: null },
+    });
+    expect(page.page[0]).toMatchObject({
+        sourceId: fixture.sourceId,
+        decision: "pending",
+        selectionRationale: {
+            trigger: "required_role",
+            role: "official_commercial_pricing",
+        },
+    });
+    await expect(
+        owner.mutation(recompute, {
+            ...args,
+            expectedProposalId: refreshed.proposalId,
+        }),
+    ).rejects.toThrow("cannot be recomputed");
 });
 
 test("rejects proposal generation for a stale execution generation", async () => {

@@ -25,7 +25,10 @@ import {
     sourcePreparationStopCodeValidator,
 } from "./domain/sourcePreparationAuthority";
 import { sourceQualificationValidator } from "./domain/sourceQualification";
-import { sourceRoleAvailabilityValidator } from "./domain/sourceSelectionPolicy";
+import {
+    sourceRoleAvailabilityValidator,
+    sourceSelectionRationaleValidator,
+} from "./domain/sourceSelectionPolicy";
 import {
     auditActorValidator,
     auditEventActionValidator,
@@ -500,6 +503,7 @@ export default defineSchema({
             zodToConvex(sourceComparisonOutcomesSchema),
         ),
         roleAvailability: v.optional(sourceRoleAvailabilityValidator),
+        selectionRationale: v.optional(sourceSelectionRationaleValidator),
         inspectionStatus: v.optional(
             v.union(
                 v.literal("complete"),

@@ -155,6 +155,7 @@ export const seedSourceReviewScenario = internalMutation({
         slotKey: v.string(),
         fixtureKey: v.string(),
         recoveryScenario: v.optional(v.boolean()),
+        legacySelectionReasons: v.optional(v.boolean()),
         recordedScenario: v.optional(
             v.object({
                 companyName: v.string(),
@@ -411,6 +412,16 @@ export const seedSourceReviewScenario = internalMutation({
                 rebuildOutcome: "partial",
                 failedDiscoveryFamilies: ["official_product"],
             });
+        if (args.legacySelectionReasons) {
+            const items = await ctx.db
+                .query("sourceSelectionProposalItems")
+                .withIndex("by_proposal_and_rank_and_source", (q) =>
+                    q.eq("proposalId", proposal.proposalId),
+                )
+                .take(sourceIds.length);
+            for (const item of items)
+                await ctx.db.patch(item._id, { selectionRationale: undefined });
+        }
         const workflowId = await workflow.start(
             ctx,
             internal.e2eFixtures.sourceReviewWorkflow,

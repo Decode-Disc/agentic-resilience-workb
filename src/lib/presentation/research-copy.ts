@@ -204,34 +204,51 @@ const sourceOriginLabels = {
 
 const authorityTierPresentation = {
     regulator_primary: {
-        label: "Primary regulator",
+        label: "SEC-hosted source",
+        description:
+            "This address is hosted on sec.gov. Hosting alone does not establish authorship, filing status, or verification of its contents.",
         className: "text-info-foreground dark:text-info",
     },
     company_primary: {
         label: "Official company source",
+        description:
+            "The address matches an identified company website or investor relations domain. This does not independently verify the document's assertions.",
         className: "text-info-foreground dark:text-info",
     },
     company_hosted_ir: {
-        label: "Qualified investor relations source",
+        label: "Investor relations host",
+        description:
+            "The address uses a recognized investor relations host. Company linkage and document content are assessed separately.",
         className: "text-brand-purple",
     },
     institutional_independent: {
-        label: "Institutional independent source",
+        label: "Institutional publisher",
+        description:
+            "The publisher is recognized in the source registry. This alone does not establish independent corroboration or verify its assertions.",
         className: "text-brand-purple",
     },
     qualified_partner: {
-        label: "Qualified partner source",
+        label: "Partner source",
+        description:
+            "The address matches a recognized partner publisher. It does not establish first-party evidence for the company.",
         className: "text-brand-purple",
     },
     unverified: {
         label: "Unverified public source",
+        description:
+            "The publisher's authority has not been established. Review the source and its use restrictions before relying on it.",
         className: "text-warning-foreground dark:text-warning",
     },
     analyst_supplied: {
         label: "Analyst-supplied source",
+        description:
+            "The source was supplied by the analyst. This does not establish its publisher's authority or documentary contribution.",
         className: "text-muted-foreground",
     },
-} satisfies Record<AuthorityTier, { label: string; className: string }>;
+} satisfies Record<
+    AuthorityTier,
+    { label: string; description: string; className: string }
+>;
 
 const documentKindLabels = {
     regulatory_annual: "Annual report",
@@ -261,11 +278,12 @@ const documentKindLabels = {
 const selectionReasonLabels = {
     added_by_analyst: "Included because it was added by the analyst",
     required_family_coverage: "Included to cover a required evidence family",
-    ranked_fill: "Included to broaden the available source set",
+    ranked_fill: "Recommended as supplementary material",
     unrecognized_source_family: "Source family could not be verified",
     not_selected: "Kept available as an alternative",
     required_coverage_role: "Included to cover a required document role",
-    additional_coverage: "Included because it adds distinct coverage",
+    additional_coverage:
+        "Recommended for additional material; documentary coverage is assessed separately",
     canonical_duplicate:
         "Excluded because the same canonical source is already represented",
     metadata_duplicate:
@@ -363,7 +381,9 @@ export function sourceAuthorityPresentation(
     return authorityTier
         ? authorityTierPresentation[authorityTier]
         : {
-              label: "Authority not classified",
+              label: "Provenance not classified",
+              description:
+                  "No provenance classification is available for this source.",
               className: "text-muted-foreground",
           };
 }
@@ -394,6 +414,138 @@ export function sourceSelectionReasonLabel(
     return reason
         ? selectionReasonLabels[reason]
         : "No additional selection explanation is available";
+}
+
+/** Explains the saved selection witness separately from the source's assessed contribution. */
+export function sourceSelectionExplanation(
+    source: Pick<
+        ProposalSource,
+        | "selectionRationale"
+        | "reasonCodes"
+        | "documentKind"
+        | "roleAvailability"
+        | "inspectionStatus"
+        | "disposition"
+    >,
+) {
+    const rationale = source.selectionRationale;
+    let reason = sourceSelectionReasonLabel(source.reasonCodes);
+    if (rationale?.trigger === "analyst_reference")
+        reason = "Added by the analyst.";
+    else if (rationale?.trigger === "required_role" && rationale.role)
+        reason = `Selected for ${sourceCoverageRoleLabel(rationale.role).toLowerCase()}.`;
+    else if (rationale?.trigger === "distinct_contribution") {
+        const contentRoles = [
+            ...new Set(
+                rationale.contributions
+                    .filter((item) => item.basis === "inspected_content")
+                    .flatMap((item) =>
+                        item.role
+                            ? [sourceCoverageRoleLabel(item.role).toLowerCase()]
+                            : [],
+                    ),
+            ),
+        ];
+        if (contentRoles.length)
+            reason = `Selected for additional material on ${contentRoles.join(", ")}.`;
+        else if (
+            rationale.contributions.some(
+                (item) =>
+                    item.kind === "report_candidate" && item.reportingPeriodEnd,
+            )
+        )
+            reason =
+                "Selected for a reporting period not represented when this source was selected.";
+        else if (
+            rationale.contributions.some(
+                (item) => item.kind === "filing_candidate",
+            )
+        )
+            reason =
+                "Selected as an additional material-event filing candidate.";
+        else if (
+            rationale.contributions.some((item) => item.kind === "publisher")
+        )
+            reason = "Selected for material from an additional publisher.";
+        else
+            reason = `Selected as an additional ${source.documentKind === "unknown" ? "document" : sourceDocumentKindLabel(source.documentKind).toLowerCase()} candidate.`;
+        if (
+            !rationale.contributions.some(
+                (item) => item.basis === "inspected_content",
+            )
+        )
+            reason += " Selection is based on discovery details.";
+    }
+    const useful =
+        source.roleAvailability?.filter(
+            (item) => item.state !== "not_established",
+        ) ?? [];
+    const available = useful
+        .filter((item) => item.state === "available")
+        .map((item) => sourceCoverageRoleLabel(item.role).toLowerCase());
+    const limited = useful
+        .filter((item) => item.state === "limited")
+        .map((item) => sourceCoverageRoleLabel(item.role).toLowerCase());
+    const assessment =
+        source.inspectionStatus === "unavailable"
+            ? "Its documentary contribution could not be assessed."
+            : !source.inspectionStatus
+              ? "Its documentary contribution has not yet been assessed."
+              : useful.length === 0
+                ? "No documentary contribution has been established from the reviewed material."
+                : [
+                      available.length
+                          ? `Documentary contribution: ${available.join(", ")}.`
+                          : "",
+                      limited.length
+                          ? `Limited contribution: ${limited.join(", ")}.`
+                          : "",
+                  ]
+                      .filter(Boolean)
+                      .join(" ");
+    const limitations = [
+        ...new Set(
+            useful.flatMap((item) =>
+                item.reasonCodes.map((code) => {
+                    if (Object.hasOwn(readingConcernLabels, code))
+                        return readingConcernLabels[
+                            code as keyof typeof readingConcernLabels
+                        ];
+                    return "Review the source details for the restrictions on this contribution.";
+                }),
+            ),
+        ),
+    ];
+    if (
+        useful.some((item) => item.usage !== "documentary") &&
+        limitations.length === 0
+    )
+        limitations.push(
+            "Review the source details for the restrictions on this contribution.",
+        );
+    for (const item of useful) {
+        if (item.usage === "attributed_argument_only")
+            limitations.push(
+                "Use only as an attributed argument, not as an established fact.",
+            );
+        if (item.usage === "verification_required")
+            limitations.push("Verify this contribution before relying on it.");
+        if (item.usage === "blocked")
+            limitations.push("This contribution is not available for use.");
+        if (
+            item.usage === "historical_only" &&
+            !item.reasonCodes.includes("historical")
+        )
+            limitations.push(readingConcernLabels.historical);
+    }
+    if (source.inspectionStatus === "partial")
+        limitations.push(readingConcernLabels.partial_reading);
+    return {
+        reason,
+        assessment,
+        limitations: [...new Set(limitations)],
+        missingRationale: !rationale && source.disposition === "recommended",
+    };
 }
 
 /** Explains discovery-only linkage without implying that source content was verified. */
@@ -844,22 +996,23 @@ export function sourceFindingContributionCopy(summary: string): string | null {
 export function sourceReadingConcernCopy(
     code: SourceQualification["limitations"][number]["code"],
 ) {
-    return {
-        unverified_assertion: "Some assertions still need verification.",
-        factual_conflict:
-            "Some statements may need comparison. A contradiction has not been established.",
-        historical: "Historical material may not describe current conditions.",
-        period_unestablished:
-            "The relevant reporting period has not been established.",
-        partial_reading: "Only part of the document was reviewed.",
-        publisher_unverified:
-            "The publisher's authority has not been established.",
-        dependency_unclear:
-            "It is unclear whether the useful passage depends on an unverified assertion.",
-        no_substantive_content:
-            "The reading did not establish enough substantive material for the intended need.",
-    }[code];
+    return readingConcernLabels[code];
 }
+
+const readingConcernLabels = {
+    unverified_assertion: "Some assertions still need verification.",
+    factual_conflict:
+        "Some statements may need comparison. A contradiction has not been established.",
+    historical: "Historical material may not describe current conditions.",
+    period_unestablished:
+        "The relevant reporting period has not been established.",
+    partial_reading: "Only part of the document was reviewed.",
+    publisher_unverified: "The publisher's authority has not been established.",
+    dependency_unclear:
+        "It is unclear whether the useful passage depends on an unverified assertion.",
+    no_substantive_content:
+        "The reading did not establish enough substantive material for the intended need.",
+} satisfies Record<SourceQualification["limitations"][number]["code"], string>;
 
 /** Returns the analyst-readable label for an assessment dimension key. */
 export function dimensionLabel(key: string): string {

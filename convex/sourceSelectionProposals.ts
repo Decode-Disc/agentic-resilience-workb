@@ -93,6 +93,9 @@ const rebuildOutcomeValidator = v.union(
 const reasonCodeValidator =
     schema.tables.sourceSelectionProposalItems.validator.fields.reasonCodes
         .element;
+const selectionRationaleValidator =
+    schema.tables.sourceSelectionProposalItems.validator.fields
+        .selectionRationale;
 
 const documentKindValidator = v.union(
     v.literal("regulatory_annual"),
@@ -201,6 +204,7 @@ const proposalSourceValidator = v.object({
     duplicateOfSourceId: v.optional(v.id("sources")),
     rank: v.number(),
     reasonCodes: v.array(reasonCodeValidator),
+    selectionRationale: selectionRationaleValidator,
     decision: decisionValidator,
     included: v.boolean(),
     decisionReason: v.optional(v.string()),
@@ -587,6 +591,9 @@ async function hydrateProposalItem(
         duplicateOfSourceId: item.duplicateOfSourceId,
         rank: item.rank,
         reasonCodes: item.reasonCodes,
+        ...(item.selectionRationale
+            ? { selectionRationale: item.selectionRationale }
+            : {}),
         decision,
         included: isIncluded(item.disposition, decision),
         decisionReason: reviewItem?.reason,
@@ -758,6 +765,9 @@ export async function createSourceSelectionProposal(
                 : undefined,
             rank: item.rank,
             reasonCodes: item.reasonCodes,
+            ...(item.selectionRationale
+                ? { selectionRationale: item.selectionRationale }
+                : {}),
             createdAt: now,
         });
         // Ensure a source review item exists for this revision so the proposal
@@ -919,6 +929,7 @@ export const getCurrent = query({
                     ),
             ),
             effectiveIncludedCount: v.number(),
+            selectionExplanationRefreshAvailable: v.optional(v.boolean()),
             revisionStatus: v.union(v.literal("draft"), v.literal("approved")),
             preparation: v.optional(
                 v.object({
@@ -1189,6 +1200,18 @@ export const getCurrent = query({
             gaps: proposal.gaps,
             effectiveIncludedCount: hydrated.filter(({ included }) => included)
                 .length,
+            selectionExplanationRefreshAvailable:
+                revision.status === "draft" &&
+                run.activeCorpusRevisionId === revision._id &&
+                run.lifecycleState === "awaiting_source_review" &&
+                run.executionStatus === "paused" &&
+                run.pauseReason === "source_review" &&
+                canRefreshSourceSelectionPolicy(proposal.policyVersion) &&
+                hydrated.some(
+                    (item) =>
+                        item.disposition === "recommended" &&
+                        !item.selectionRationale,
+                ),
             revisionStatus: revision.status,
             ...(preparationSummary ? { preparation: preparationSummary } : {}),
             ...(revision.status === "draft" ? { preparationAction } : {}),
