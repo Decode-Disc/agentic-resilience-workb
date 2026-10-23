@@ -164,6 +164,8 @@ A plausible unauditable narrative, generic web-answer experience, misleading con
 
 Make the author's judgment and economic reasoning legible. Preserve provenance, uncertainty, counter-evidence and human control. Prepare routine work proactively, request human decisions at required checkpoints or material exceptions, and demonstrate the smallest honest end-to-end slice before adding breadth.
 
+At each stage, analysts should understand what is available, what remains uncertain, and which decision or action is useful next, without understanding the internal workflow. Show distinctions and metadata when they help assess evidence or make a decision, rather than merely reflecting the underlying data model.
+
 ## Accessibility & Inclusion
 
 Support desktop and mobile web, keyboard navigation, semantic HTML, visible focus, explicit labels, sufficient contrast and non-color status cues. Respect reduced motion. Loading, empty, partial-failure, review, cancellation and insufficient-evidence states must remain understandable and actionable. Loading placeholders preserve the loaded surface's geometry.

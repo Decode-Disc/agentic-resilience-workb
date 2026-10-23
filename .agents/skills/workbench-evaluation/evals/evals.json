@@ -1,0 +1,87 @@
+{
+  "skill_name": "workbench-evaluation",
+  "evals": [
+    {
+      "id": 1,
+      "name": "interpret-existing-results",
+      "prompt": "Explain what our saved source-utility results let us conclude for the prototype. I want to know whether the current approach is useful enough to continue, not just its score. Read-only; do not launch calls, replay measurements, or create an archive.",
+      "expected_output": "A plain-language interpretation of the saved observations, their implications for analyst usefulness, and a bounded recommendation or explicit lack of evidence for a choice.",
+      "files": [
+        "../../../PRODUCT.md",
+        "../../../docs/verification/2026-10-21-source-utility.md",
+        "../../../scripts/evaluations/source-selection/README.md"
+      ],
+      "expectations": [
+        "Uses recorded conditions and observations without presenting historical quality, routes or prices as current verified facts.",
+        "Distinguishes exact matches, equivalent useful evidence and actual downstream availability when those distinctions affect the conclusion.",
+        "Explains what the results permit choosing now, or identifies the evidence missing for a supported choice.",
+        "Does not initiate a comparison, provider call or archive merely to complete the interpretation."
+      ]
+    },
+    {
+      "id": 2,
+      "name": "diagnose-loss-before-expanding",
+      "prompt": "A useful passage appears in the saved source but not in the prepared input. Find where it is lost before suggesting another model comparison. Inspect the existing retrieval and preparation path; do not edit, execute measurements, or call providers.",
+      "expected_output": "A trace of the relevant stage boundaries identifying the first demonstrated loss or the specific missing observation, without an unsupported causal claim or a new benchmark campaign.",
+      "files": [
+        "../../../convex/domain/sourceComparison.ts",
+        "../../../scripts/evaluations/source-selection/retrieval-replay.ts",
+        "../../../scripts/evaluations/source-selection/README.md"
+      ],
+      "expectations": [
+        "Chooses a bounded evidence-loss diagnosis rather than assuming a new comparison is required.",
+        "Traces the actual source, capture, selected context and prepared-input owners instead of inferring loss from an aggregate score.",
+        "If no concrete saved passage is supplied or found, identifies that missing input and avoids claiming the loss is reproduced.",
+        "Stops at the supported cause or missing observation and keeps any proposed correction separate from implementation authority."
+      ]
+    },
+    {
+      "id": 3,
+      "name": "ambiguous-quality-request",
+      "prompt": "Je veux améliorer la qualité des dossiers, mais je ne sais pas si le problème vient des sources, des passages transmis ou de l'analyse finale. Dis-moi comment aborder ça. Ne lance rien et ne modifie aucun fichier.",
+      "expected_output": "A project-grounded framing that separates the possible outcome failures, reuses current evidence and asks one focused question only if the intended decision remains unresolved.",
+      "files": [
+        "../../../PRODUCT.md",
+        "../../../docs/ROADMAP.md",
+        "../../../scripts/evaluations/source-selection/README.md"
+      ],
+      "expectations": [
+        "Inspects the product outcome, current delivery limits and available evidence before selecting an investigation.",
+        "Does not turn the ambiguous request into a model benchmark or assume later analytical capabilities are already available.",
+        "Identifies the smallest observation or focused user question that can determine the relevant investigation.",
+        "Does not invent a numerical acceptance target, paid batch or expanded scope."
+      ]
+    },
+    {
+      "id": 4,
+      "name": "bounded-comparison-and-stop",
+      "prompt": "Plan a comparison of the current preparation approach with an alternative. I want useful evidence at low cost, not a perfect retrieval score. Explain what observation would justify changing the approach and when we should stop. Planning only; no new measurements or paid calls.",
+      "expected_output": "A bounded comparison proposal with comparable conditions, a decision-relevant stopping condition and an actionable conclusion format, leaving unapproved thresholds and live execution pending.",
+      "files": [
+        "../../../PRODUCT.md",
+        "../../../scripts/evaluations/source-selection/README.md"
+      ],
+      "expectations": [
+        "States the product decision and distinguishes an analyst-useful outcome from improvement of an incidental benchmark score.",
+        "Identifies the existing protocol and comparable conditions, including reference exposure and relevant cost limits.",
+        "Proposes what evidence would support changing or retaining the approach, with explicit stopping and inconclusive outcomes rather than automatic additional batches.",
+        "Does not treat planning or skill invocation as authorization to execute or establish an unapproved acceptance threshold."
+      ]
+    },
+    {
+      "id": 5,
+      "name": "frontend-check-boundary",
+      "prompt": "Planifie uniquement la vérification du placement d'une icône dans le rail Coverage. Aucun comportement ou sens de texte ne change. Ne modifie rien.",
+      "expected_output": "A narrowly scoped frontend verification proposal using the relevant UI workflow rather than the research evaluation procedure.",
+      "files": [
+        "../../../AGENTS.md",
+        "../../../src/components/workspace/source-coverage-rail.tsx"
+      ],
+      "expectations": [
+        "Recognizes ordinary presentation verification as outside this evaluation skill's scope.",
+        "Does not prepare research protocols, model comparisons, archive manifests or provider calls.",
+        "Keeps verification proportional to the visual change and preserves the read-only request."
+      ]
+    }
+  ]
+}
