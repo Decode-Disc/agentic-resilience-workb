@@ -30,11 +30,15 @@ __unconfig*
 .vscode/
 .atlas/
 
+skills-lock.json
+
 .extract-design-system/
 inspirations/
 tmp/
-
-skills-lock.json
+.impeccable/mocks/decision/*
+# !.impeccable/mocks/decision/source-review-2026-10-22/
+# .impeccable/mocks/decision/source-review-2026-10-22/*
+# !.impeccable/mocks/decision/source-review-2026-10-22/final/
 
 # Generated evaluation payloads, across studies; retain code and reference fixtures
 # Archive and restoration instructions: scripts/evaluations/source-selection/README.md

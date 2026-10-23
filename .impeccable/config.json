@@ -1,3 +1,18 @@
 {
-  "buildPath": "comp"
+  "buildPath": "comp",
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "convex/integrations/evidenceNormalization.ts"
+        ],
+        "createdAt": "2026-10-20T04:13:36.599Z",
+        "reason": "Agent verified: this backend normalizer matches HTML image tags in a regular expression and never renders an image element."
+      }
+    ]
+  }
 }
