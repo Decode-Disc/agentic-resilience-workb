@@ -1443,7 +1443,8 @@ export const SOURCE_ROLE_REQUIREMENTS: Readonly<
     },
 };
 
-function classifyCandidate(
+/** Classifies one source using the same authority and qualification rules as corpus proposals. */
+export function classifySourceCandidate(
     candidate: SourceSelectionCandidate,
     company: SourceSelectionCompany | undefined,
 ): ClassifiedCandidate {
@@ -1915,6 +1916,7 @@ export function evaluateSourceCoverage<SourceId extends string>(
         included: boolean;
         decision?: "accepted" | "rejected" | "pending";
         roleAvailability?: SourceRoleAvailability[];
+        documentKind?: SourceDocumentKind;
     }>,
 ) {
     const selected: Array<(typeof candidates)[number] & { host: string }> = [];
@@ -1923,7 +1925,10 @@ export function evaluateSourceCoverage<SourceId extends string>(
             (candidate) =>
                 candidate.eligibleCoverageRoles.includes(role) ||
                 candidate.declaredCoverageRoles.includes(role) ||
-                candidate.sourceFamily === FAMILY_BY_ROLE[role],
+                (candidate.documentKind !== undefined &&
+                    SOURCE_ROLE_REQUIREMENTS[role].documentKinds.includes(
+                        candidate.documentKind,
+                    )),
         );
         const best = candidates.find(
             (candidate) =>
@@ -1987,6 +1992,13 @@ export function evaluateSourceCoverage<SourceId extends string>(
                       ),
                   ],
             candidateIds: relevant.map((candidate) => candidate.sourceId),
+            relatedCandidateIds: candidates
+                .filter(
+                    (candidate) =>
+                        candidate.sourceFamily === FAMILY_BY_ROLE[role] &&
+                        !relevant.includes(candidate),
+                )
+                .map((candidate) => candidate.sourceId),
         };
     });
 }
@@ -2031,7 +2043,7 @@ export function buildSourceSelectionProposal(input: {
     const ceiling = Math.max(1, Math.floor(input.ceiling ?? input.target ?? 1));
     const angleTokens = new Set(normalizedTokens(input.researchAngle));
     const classified = input.candidates
-        .map((candidate) => classifyCandidate(candidate, input.company))
+        .map((candidate) => classifySourceCandidate(candidate, input.company))
         .sort(
             (left, right) =>
                 Number(Boolean(left.requiresAnalystReview)) -

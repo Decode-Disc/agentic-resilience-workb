@@ -148,6 +148,35 @@ test("persists valid uncertainty once without semantic escalation", async () => 
     expect(state.preparation?.modelAttemptCount).toBe(1);
 });
 
+test("reads credentials from the current Node invocation after environment replacement", async () => {
+    const { t, preparationId, sourceCaptureId } = await capturedCandidate();
+    vi.stubEnv("OPENROUTER_API_KEY", "");
+    expect(
+        await t.action(internal.sourcePreparationActions.qualifySource, {
+            preparationId,
+            sourceCaptureId,
+        }),
+    ).toMatchObject({
+        status: "unavailable",
+        reasonCode: "missing_configuration",
+    });
+    vi.stubGlobal("process", {
+        ...process,
+        env: { ...process.env, OPENROUTER_API_KEY: "invocation-key" },
+    });
+    const request = vi.fn<typeof fetch>(async () => success());
+    vi.stubGlobal("fetch", request);
+    expect(
+        await t.action(internal.sourcePreparationActions.qualifySource, {
+            preparationId,
+            sourceCaptureId,
+        }),
+    ).toMatchObject({ status: "qualified" });
+    expect(
+        await t.run((ctx) => ctx.db.query("aiTaskResults").take(2)),
+    ).toHaveLength(1);
+});
+
 test("uses at most one technical fallback and records both attempts", async () => {
     const { t, preparationId, sourceCaptureId } = await capturedCandidate();
     vi.stubEnv("OPENROUTER_API_KEY", "test-key");
@@ -168,7 +197,7 @@ test("uses at most one technical fallback and records both attempts", async () =
     ).toMatchObject({ status: "qualified" });
     expect(request).toHaveBeenCalledTimes(2);
     expect(JSON.parse(String(request.mock.calls[1]?.[1]?.body)).model).toBe(
-        "xiaomi/mimo-v2.6-flash",
+        "deepseek/deepseek-v4.1-flash-1017",
     );
     expect(
         await t.run((ctx) => ctx.db.query("providerCalls").take(3)),

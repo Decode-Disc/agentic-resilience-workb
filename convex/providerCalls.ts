@@ -166,7 +166,7 @@ export const recordAttempt = internalMutation({
                 args.acceptedDecisionId ||
                 (!args.sourceId &&
                     !(
-                        args.service === "exa" &&
+                        (args.service === "exa" || args.service === "sec") &&
                         args.operation === "source_supplement_search"
                     )) ||
                 args.stepKey !== "source_preparation"

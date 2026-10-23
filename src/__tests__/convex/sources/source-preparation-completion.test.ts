@@ -227,6 +227,13 @@ test("rejected sources do not delay completion or create analytical artifacts", 
             expectedExecutionGeneration: 3,
         }),
     ).toMatchObject({ outcome: "complete" });
+    const review = await t
+        .withIdentity({ subject: userId })
+        .query(api.sourceSelectionProposals.getCurrent, {
+            runId,
+            corpusRevisionId,
+        });
+    expect(review?.preparation?.status).toBe("complete");
     expect(
         await t.run((ctx) => ctx.db.query("sourceVersions").collect()),
     ).toHaveLength(0);

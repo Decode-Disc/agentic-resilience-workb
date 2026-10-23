@@ -423,7 +423,7 @@ test("a targeted supplement rechecks pinned earlier arguments without reopening 
     ).toEqual([]);
 });
 
-test("compares against captured primary text, pins the result, and reuses it on replay", async () => {
+test("persists complete comparison explanations with exact primary pins and reuses them on replay", async () => {
     const {
         t,
         runId,
@@ -438,6 +438,11 @@ test("compares against captured primary text, pins the result, and reuses it on 
         primaryPassageKey,
         response,
     } = await capturedComparison();
+    const finding = response.findings[0];
+    if (!finding) throw new Error("Missing comparison finding");
+    const explanation = finding.explanation.repeat(20);
+    expect(explanation.length).toBeGreaterThan(600);
+    finding.explanation = explanation;
     const request = vi.fn<typeof fetch>(async () =>
         comparisonResponse(response),
     );
@@ -500,6 +505,7 @@ test("compares against captured primary text, pins the result, and reuses it on 
         findings: [
             {
                 disposition: "no_conflict_observed",
+                explanation,
                 primaryPassages: [
                     {
                         sourceId: primarySourceId,

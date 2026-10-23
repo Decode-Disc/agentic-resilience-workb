@@ -63,16 +63,40 @@ export function recoverySearchPlan(input: {
     if (!input.target) return { queries, families: [...SOURCE_FAMILIES] };
     if (input.target.kind === "failed_discovery") {
         return {
-            queries: queries.filter((query) =>
-                input.failedFamilies.includes(
-                    query.discoveryIntent as SourceFamily,
+            queries: [
+                ...(input.failedFamilies.includes("regulatory")
+                    ? [
+                          {
+                              query: "Recent regulatory filings",
+                              category: "regulatory",
+                              discoveryIntent: "regulatory",
+                              dimensionKeys: [],
+                          },
+                      ]
+                    : []),
+                ...queries.filter((query) =>
+                    input.failedFamilies.includes(
+                        query.discoveryIntent as SourceFamily,
+                    ),
                 ),
-            ),
+            ],
             families: input.failedFamilies,
         };
     }
     const role = input.target.role;
     const family = FAMILY_BY_ROLE[role];
+    if (family === "regulatory")
+        return {
+            families: [family],
+            queries: [
+                {
+                    query: ROLE_SEARCH_TERMS[role],
+                    category: family,
+                    discoveryIntent: family,
+                    dimensionKeys: [],
+                },
+            ],
+        };
     const template = queries.find((query) => query.discoveryIntent === family);
     return {
         families: [family],

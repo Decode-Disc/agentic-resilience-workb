@@ -1,12 +1,15 @@
 import {
+    createSourceComparisonResponseSchema,
     materializeSourceComparisonOutput,
     type PreparedSourceComparisonInput,
     prepareSourceComparisonInput,
+    sourceComparisonOutputSchema,
 } from "@convex/domain/sourceComparison";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { compareSourceContributions } from "@convex/integrations/sourceQualification";
 import { sourceQualificationRoutes } from "@convex/integrations/sourceQualificationConfig";
 import { expect, test, vi } from "vitest";
+import { z } from "zod";
 
 const company = {
     cik: "1373715",
@@ -107,9 +110,16 @@ function responseFor(input: PreparedSourceComparisonInput) {
     };
 }
 
-test("sends one bounded schema-constrained comparison through the configured route", async () => {
+test("preserves a complete explanation beyond 600 characters through the bounded comparison transport", async () => {
     const input = makeInput(true);
     const providerOutput = responseFor(input);
+    const explanation =
+        "The cited annual report names bundled workflow products as a competitive risk. This supports the argument's premise about competition, but does not establish an observed pricing decline or quantify its effect on revenue. The argument remains attributed analysis rather than a verified financial outcome. ".repeat(
+            3,
+        );
+    const finding = providerOutput.findings[0];
+    if (!finding) throw new Error("Missing comparison finding");
+    finding.explanation = explanation;
     const fetch = vi.fn<typeof globalThis.fetch>(
         async () =>
             new Response(
@@ -117,7 +127,7 @@ test("sends one bounded schema-constrained comparison through the configured rou
                     id: "comparison-test",
                     created: 1,
                     model: sourceQualificationRoutes[0].model,
-                    provider: "Reka",
+                    provider: "Relace",
                     choices: [
                         {
                             index: 0,
@@ -150,11 +160,11 @@ test("sends one bounded schema-constrained comparison through the configured rou
     expect(fetch.mock.calls[0]?.[1]?.redirect).toBe("error");
     const body = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body));
     expect(body).toMatchObject({
-        model: sourceQualificationRoutes[0].model,
+        model: "deepseek/deepseek-v4.1-flash",
         temperature: 0,
         max_tokens: 6144,
         provider: {
-            only: [sourceQualificationRoutes[0].provider],
+            only: ["relace"],
             allow_fallbacks: false,
             require_parameters: true,
             max_price: { prompt: 0.15, completion: 0.6 },
@@ -175,8 +185,15 @@ test("sends one bounded schema-constrained comparison through the configured rou
     });
     expect(result).toMatchObject({
         status: "succeeded",
-        output: { findings: [{ disposition: "no_conflict_observed" }] },
+        output: {
+            findings: [{ disposition: "no_conflict_observed", explanation }],
+        },
     });
+    if (result.status !== "succeeded") throw new Error("Comparison failed");
+    expect(
+        sourceComparisonOutputSchema.parse(result.output).findings[0]
+            ?.explanation,
+    ).toBe(explanation);
 });
 
 test("returns cached-ready inconclusive output without a provider request when no comparable primary passage was retrieved", async () => {
@@ -205,4 +222,63 @@ test("returns cached-ready inconclusive output without a provider request when n
         status: "valid",
         output: { findings: [{ disposition: "inconclusive" }] },
     });
+});
+
+test.each([
+    { change: { explanation: "" }, reason: "schema_invalid" },
+    {
+        change: { primaryPassageKeys: ["foreign-passage"] },
+        reason: "reference_invalid",
+    },
+    {
+        change: { explanation: "a".repeat(700 * 1024) },
+        reason: "output_too_large",
+    },
+])("rejects $reason without weakening comparison integrity", ({
+    change,
+    reason,
+}) => {
+    const input = makeInput(true);
+    const output = responseFor(input);
+    Object.assign(output.findings[0] ?? {}, change);
+    expect(materializeSourceComparisonOutput(input, output)).toEqual({
+        status: "invalid",
+        reason,
+    });
+});
+
+test("changes request identity from the capped schema while keeping historical comparison output readable", () => {
+    const input = makeInput(true);
+    const schema = z.toJSONSchema(createSourceComparisonResponseSchema(input), {
+        target: "draft-7",
+        io: "input",
+        reused: "inline",
+    });
+    const historicalSchema = JSON.parse(
+        JSON.stringify(schema, (key, value) =>
+            key === "explanation" ? { ...value, maxLength: 600 } : value,
+        ),
+    );
+    const historicalHash = sha256Hex(
+        JSON.stringify({
+            request: input.request,
+            responseSchema: historicalSchema,
+        }),
+    );
+    expect(input.inputHash).not.toBe(historicalHash);
+
+    const materialized = materializeSourceComparisonOutput(
+        input,
+        responseFor(input),
+    );
+    if (materialized.status !== "valid")
+        throw new Error("Invalid historical fixture");
+    const historicalOutput = {
+        ...materialized.output,
+        inputHash: historicalHash,
+        comparisonVersion: "targeted-source-comparison-v1",
+    };
+    expect(sourceComparisonOutputSchema.parse(historicalOutput)).toEqual(
+        historicalOutput,
+    );
 });

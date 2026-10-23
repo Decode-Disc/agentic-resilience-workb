@@ -6,14 +6,17 @@ import {
     MAX_PDF_PAGES,
     MAX_QUOTATION_CHARS,
     MAX_REDIRECTS,
+    sourcePreparationEnabled,
     sourceRecommendedTarget,
 } from "@convex/resourceLimits";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 
 const originalCandidateLimit = process.env.SOURCE_CANDIDATE_LIMIT;
 const originalRecommendationCeiling = process.env.SOURCE_RECOMMENDATION_CEILING;
 
 afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     if (originalCandidateLimit === undefined) {
         delete process.env.SOURCE_CANDIDATE_LIMIT;
     } else {
@@ -25,6 +28,16 @@ afterEach(() => {
         process.env.SOURCE_RECOMMENDATION_CEILING =
             originalRecommendationCeiling;
     }
+});
+
+test("reads preparation activation from the current invocation environment", () => {
+    vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "false");
+    expect(sourcePreparationEnabled()).toBe(false);
+    vi.stubGlobal("process", {
+        ...process,
+        env: { ...process.env, SOURCE_QUALIFICATION_ENABLED: "true" },
+    });
+    expect(sourcePreparationEnabled()).toBe(true);
 });
 
 test("derives the source recommendation ceiling from half the candidate pool", () => {

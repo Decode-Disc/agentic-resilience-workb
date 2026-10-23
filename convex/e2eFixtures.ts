@@ -24,19 +24,20 @@ import {
     sha256Hex,
 } from "./domain/sourcePassages";
 import {
-    prepareQualificationInput,
     materializeQualificationOutput,
-    sourceQualificationValidator,
+    prepareQualificationInput,
     SOURCE_QUALIFICATION_VERSION,
+    sourceQualificationValidator,
 } from "./domain/sourceQualification";
 import { readPinnedSourceQualification } from "./domain/sourceUsage";
 import { buildCccShowcaseManifest } from "./fixtures/cccShowcase";
 import {
     MAX_PASSAGES_PER_SOURCE,
     sourceCandidateLimit,
+    sourcePreparationEnabled,
 } from "./resourceLimits";
-import { corpusRevisionApproved, workflow } from "./workflow";
 import schema from "./schema";
+import { corpusRevisionApproved, workflow } from "./workflow";
 
 const sourceReviewFixtureResultValidator = v.object({
     runId: v.id("researchRuns"),
@@ -439,6 +440,7 @@ export const inspectSourceReviewScenario = internalQuery({
         fixtureKey: v.string(),
     },
     returns: v.object({
+        preparationEnabled: v.boolean(),
         lifecycleState: v.string(),
         executionStatus: v.string(),
         revisionStatus: v.string(),
@@ -580,6 +582,7 @@ export const inspectSourceReviewScenario = internalQuery({
                   .take(MAX_PASSAGES_PER_SOURCE + 1)
             : [];
         return {
+            preparationEnabled: sourcePreparationEnabled(),
             lifecycleState: run.lifecycleState,
             executionStatus: run.executionStatus,
             revisionStatus: revision.status,

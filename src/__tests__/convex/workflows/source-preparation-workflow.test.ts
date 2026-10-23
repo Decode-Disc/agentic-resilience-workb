@@ -657,7 +657,7 @@ test.each([
     expect(request).toHaveBeenCalledOnce();
 });
 
-test("missing acquisition configuration stops after one bounded batch and presents an unapproved proposal", async () => {
+test("missing model configuration stops before acquisition and preserves an unapproved proposal", async () => {
     vi.useFakeTimers();
     vi.stubEnv("EXA_API_KEY", "");
     vi.stubEnv("OPENROUTER_API_KEY", "");
@@ -729,8 +729,8 @@ test("missing acquisition configuration stops after one bounded batch and presen
         status: "blocked",
         stopCode: "missing_configuration",
     });
-    expect(state.preparation?.sourceOutcomes).toHaveLength(2);
-    expect(state.captures).toHaveLength(2);
+    expect(state.preparation?.sourceOutcomes ?? []).toHaveLength(0);
+    expect(state.captures).toHaveLength(0);
     expect(state.proposals).toHaveLength(1);
     expect(state.run).toMatchObject({
         workflowId: "existing-main-approval-handle",

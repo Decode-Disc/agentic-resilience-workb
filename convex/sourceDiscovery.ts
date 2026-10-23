@@ -72,6 +72,7 @@ export const persistCandidates = internalMutation({
             preparationState && run.automaticSupplementOperationId
                 ? await ctx.db.get(run.automaticSupplementOperationId)
                 : null;
+        let recoveredFamily: string | undefined;
         if (preparationState) {
             const call = args.providerCompletion
                 ? await ctx.db.get(args.providerCompletion.providerCallId)
@@ -94,12 +95,19 @@ export const persistCandidates = internalMutation({
                 call.preparationId !== args.preparationId ||
                 call.corpusRevisionId !== revision._id ||
                 call.executionGeneration !== args.executionGeneration ||
-                call.service !== "exa" ||
+                call.service !==
+                    (supplement.supplementQueries?.[queryIndex]
+                        ?.discoveryIntent === "regulatory"
+                        ? "sec"
+                        : "exa") ||
                 call.operation !== "source_supplement_search" ||
                 call.status !== "started" ||
                 args.candidates.length > 4
             )
                 throw sourcePreparationError("supplement_result_invalid");
+            if (args.providerCompletion?.status === "succeeded")
+                recoveredFamily =
+                    supplement.supplementQueries?.[queryIndex]?.discoveryIntent;
         }
         const capacity = await readSourceCandidateCapacity(
             ctx.db,
@@ -174,6 +182,15 @@ export const persistCandidates = internalMutation({
             });
         if (preparationState?.preparation.target) {
             await ctx.db.patch(preparationState.preparation._id, {
+                ...(preparationState.preparation.target.kind ===
+                    "failed_discovery" && recoveredFamily
+                    ? {
+                          failedDiscoveryFamilies:
+                              preparationState.preparation.failedDiscoveryFamilies.filter(
+                                  (family) => family !== recoveredFamily,
+                              ),
+                      }
+                    : {}),
                 readingSourceIds: [
                     ...(preparationState.preparation.readingSourceIds ?? []),
                     ...insertedIds,

@@ -30,6 +30,7 @@ type SecCompanyResolverDependencies = {
     ) => Promise<{ shouldExecute: boolean }>;
     operationScope?: string;
     timeoutMs?: number;
+    maxAttempts?: 1 | 2;
 };
 
 const MAX_SEC_ATTEMPTS = 2;
@@ -45,7 +46,7 @@ function secTimeoutMs(custom?: number): number {
     return DEFAULT_SEC_TIMEOUT_MS;
 }
 
-class SecRetryableError extends Error {
+export class SecRetryableError extends Error {
     constructor(message: string) {
         super(message);
         this.name = "SecRetryableError";
@@ -352,12 +353,13 @@ export function createSecCompanyResolver(
     dependencies: SecCompanyResolverDependencies,
 ): SecCompanyEvidenceResolver {
     const resultLimit = companySearchResultLimit();
+    const maxAttempts = dependencies.maxAttempts ?? MAX_SEC_ATTEMPTS;
     async function requestJson(
         operation: ProviderAttempt["operation"],
         url: string,
     ): Promise<unknown> {
         const operationKey = `${dependencies.operationScope ?? "sec"}:${operation}:${url}`;
-        for (let attempt = 1; attempt <= MAX_SEC_ATTEMPTS; attempt += 1) {
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
             await dependencies.reserveRequest();
             const startedAt = dependencies.now();
             const lease = await dependencies.recordAttempt({
@@ -428,7 +430,7 @@ export function createSecCompanyResolver(
                 const retryable =
                     error instanceof TypeError ||
                     error instanceof SecRetryableError;
-                if (!retryable || attempt === MAX_SEC_ATTEMPTS) {
+                if (!retryable || attempt === maxAttempts) {
                     throw error;
                 }
             }
@@ -453,7 +455,7 @@ export function createSecCompanyResolver(
         const operation: ProviderAttempt["operation"] = "retrieve_filing_html";
         const operationKey = `${dependencies.operationScope ?? "sec"}:${operation}:${url}`;
 
-        for (let attempt = 1; attempt <= MAX_SEC_ATTEMPTS; attempt += 1) {
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
             await dependencies.reserveRequest();
             const startedAt = dependencies.now();
             const lease = await dependencies.recordAttempt({
@@ -623,7 +625,7 @@ export function createSecCompanyResolver(
                 const retryable =
                     error instanceof TypeError ||
                     error instanceof SecRetryableError;
-                if (!retryable || attempt === MAX_SEC_ATTEMPTS) {
+                if (!retryable || attempt === maxAttempts) {
                     throw error;
                 }
             } finally {

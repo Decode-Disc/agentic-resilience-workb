@@ -10,6 +10,7 @@ import { internal } from "./_generated/api";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import {
+    env,
     internalMutation,
     internalQuery,
     type MutationCtx,
@@ -33,6 +34,11 @@ import {
     recoverySearchPlan,
     recoveryTargetValidator,
 } from "./domain/sourceDiscoveryRecovery";
+import { sourcePreparationStopCodeValidator } from "./domain/sourcePreparationAuthority";
+import {
+    readPreparationHistory,
+    readSourceReading,
+} from "./domain/sourcePreparationReview";
 import { SOURCE_QUALIFICATION_VERSION } from "./domain/sourceQualification";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
 import {
@@ -446,6 +452,8 @@ async function readQualificationInputs(
                               contentHash: capture.contentHash,
                               qualificationTaskId: task._id,
                               qualification: task.output.qualification,
+                              readingCompleteness:
+                                  task.output.readingCompleteness,
                               qualificationExecutionMode: task.executionMode,
                           },
                       )
@@ -872,6 +880,10 @@ export const getCurrent = query({
                     ),
                     reasonCodes: v.optional(v.array(v.string())),
                     candidateIds: v.array(v.id("sources")),
+                    relatedCandidateIds: v.optional(v.array(v.id("sources"))),
+                    assessmentStatus: v.optional(
+                        v.union(v.literal("pending"), v.literal("assessed")),
+                    ),
                     includedSourceIds: v.optional(v.array(v.id("sources"))),
                 }),
             ),
@@ -917,6 +929,11 @@ export const getCurrent = query({
                         .validator.fields.status,
                     checked: v.number(),
                     total: v.number(),
+                    captured: v.optional(v.number()),
+                    assessed: v.optional(v.number()),
+                    failed: v.optional(v.number()),
+                    remaining: v.optional(v.number()),
+                    stopCode: v.optional(sourcePreparationStopCodeValidator),
                     canResume: v.boolean(),
                 }),
             ),
@@ -929,6 +946,9 @@ export const getCurrent = query({
                             v.literal("disabled"),
                             v.literal("busy"),
                             v.literal("read_only"),
+                            v.literal("deadline_elapsed"),
+                            v.literal("missing_configuration"),
+                            v.literal("complete"),
                         ),
                     ),
                     deadlineAt: v.optional(v.number()),
@@ -955,26 +975,80 @@ export const getCurrent = query({
         const preparation = run.sourcePreparationId
             ? await ctx.db.get(run.sourcePreparationId)
             : null;
-        const preparationSummary =
-            preparation?.kind === "preparation" &&
-            preparation.runId === run._id &&
-            preparation.corpusRevisionId === revision._id
-                ? {
-                      preparationId: preparation._id,
-                      status: preparation.status,
-                      checked: preparation.sourceOutcomes?.length ?? 0,
-                      canResume:
-                          revision.status === "draft" &&
-                          run.executionStatus === "paused" &&
-                          run.pauseReason === "source_review" &&
-                          preparation.stopCode === "execution_slot_unavailable",
-                      total:
-                          preparation.readingSourceIds?.length ??
-                          preparation.manualSourceIds?.length ??
-                          (await readSourceCandidateCapacity(ctx.db, run._id))
-                              .total,
-                  }
-                : undefined;
+        const preparations = await readPreparationHistory(
+            ctx.db,
+            run._id,
+            revision._id,
+        );
+        const hydrated = await readProposalSources(ctx, proposal);
+        const readings = await Promise.all(
+            (preparations.length ? hydrated : []).map((item) =>
+                readSourceReading(ctx.db, {
+                    runId: run._id,
+                    corpusRevisionId: revision._id,
+                    sourceId: item.sourceId,
+                    item,
+                    preparations,
+                    activePreparationId:
+                        run.executionStatus === "running"
+                            ? run.sourcePreparationId
+                            : undefined,
+                    approved: revision.status === "approved",
+                }),
+            ),
+        );
+        const assessed = readings.filter((r) => r.assessed).length;
+        const unresolvedSourceIds = new Set(
+            hydrated
+                .filter(
+                    (item, index) =>
+                        item.decision !== "rejected" &&
+                        !readings[index]?.assessed,
+                )
+                .map((item) => item.sourceId),
+        );
+        const interruptedReading = preparations.find((p) => {
+            const scope = p.readingSourceIds ?? p.manualSourceIds;
+            return (
+                p.stopCode &&
+                (scope
+                    ? scope.some((id) => unresolvedSourceIds.has(id))
+                    : !p.target && unresolvedSourceIds.size > 0)
+            );
+        });
+        const preparationSummary = preparations.length
+            ? {
+                  preparationId: preparation?._id,
+                  status:
+                      preparation?.status === "started"
+                          ? ("started" as const)
+                          : unresolvedSourceIds.size === 0
+                            ? ("complete" as const)
+                            : assessed > 0
+                              ? ("partial" as const)
+                              : ("blocked" as const),
+                  checked: readings.filter(
+                      (r) =>
+                          r.status !== "not_started" &&
+                          r.status !== "preparing",
+                  ).length,
+                  total: hydrated.length,
+                  captured: readings.filter((r) => r.captured).length,
+                  assessed,
+                  failed: readings.filter(
+                      (r) =>
+                          r.status === "reading_failed" ||
+                          r.status === "assessment_unavailable",
+                  ).length,
+                  remaining: readings.filter(
+                      (r) =>
+                          r.status === "not_started" ||
+                          r.status === "preparing",
+                  ).length,
+                  stopCode: interruptedReading?.stopCode,
+                  canResume: false,
+              }
+            : undefined;
         const running = run.ownerVisitorId
             ? await ctx.db
                   .query("researchRuns")
@@ -985,6 +1059,7 @@ export const getCurrent = query({
                   )
                   .take(1)
             : [];
+        const deadlineAt = preparation?.deadlineAt;
         const preparationActionReason =
             revision.status !== "draft"
                 ? ("read_only" as const)
@@ -992,24 +1067,47 @@ export const getCurrent = query({
                   ? ("disabled" as const)
                   : run.executionStatus !== "paused" || running.length > 0
                     ? ("busy" as const)
-                    : undefined;
+                    : deadlineAt !== undefined && deadlineAt <= Date.now()
+                      ? ("deadline_elapsed" as const)
+                      : preparation && !env.OPENROUTER_API_KEY?.trim()
+                        ? ("missing_configuration" as const)
+                        : preparationSummary && unresolvedSourceIds.size === 0
+                          ? ("complete" as const)
+                          : undefined;
         const preparationAction = {
             kind: preparationSummary ? ("resume" as const) : ("start" as const),
             available: preparationActionReason === undefined,
             ...(preparationActionReason
                 ? { reason: preparationActionReason }
                 : {}),
-            ...(preparation?.deadlineAt !== undefined
-                ? { deadlineAt: preparation.deadlineAt }
-                : {}),
+            ...(deadlineAt !== undefined ? { deadlineAt } : {}),
         };
-        const hydrated = await readProposalSources(ctx, proposal);
+        if (preparationSummary)
+            preparationSummary.canResume = preparationAction.available;
         const fingerprint = await currentFingerprint(ctx, run);
         const coverageRequirements = evaluateSourceCoverage(
             proposal.coveragePreset,
             hydrated,
         ).map((requirement) => ({
             ...requirement,
+            ...(preparationSummary
+                ? {
+                      assessmentStatus:
+                          !requirement.covered &&
+                          requirement.candidateIds.some((sourceId) => {
+                              const index = hydrated.findIndex(
+                                  (s) => s.sourceId === sourceId,
+                              );
+                              return (
+                                  index >= 0 &&
+                                  hydrated[index]?.included &&
+                                  !readings[index]?.assessed
+                              );
+                          })
+                              ? ("pending" as const)
+                              : ("assessed" as const),
+                  }
+                : {}),
             includedSourceIds: requirement.candidateIds.filter((sourceId) =>
                 hydrated.some(
                     (source) => source.sourceId === sourceId && source.included,

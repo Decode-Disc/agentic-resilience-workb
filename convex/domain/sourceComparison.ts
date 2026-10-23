@@ -72,6 +72,8 @@ export const sourceComparisonCheckStatusSchema = z.enum(
     SOURCE_COMPARISON_CHECK_STATUSES,
 );
 
+const comparisonExplanationSchema = z.string().min(1);
+
 const targetPassageSchema = z
     .object({
         passageKey: z.string().min(1).max(100),
@@ -99,7 +101,7 @@ export const sourceComparisonFindingSchema = z
     .object({
         findingIndex: z.number().int().nonnegative(),
         disposition: sourceComparisonDispositionSchema,
-        explanation: z.string().min(1).max(600),
+        explanation: comparisonExplanationSchema,
         comparableDimensions: z.array(z.enum(COMPARABLE_DIMENSIONS)).max(5),
         targetPassages: z.array(targetPassageSchema).max(3),
         primaryPassages: z
@@ -481,7 +483,7 @@ function createRequestFindingSchema(
         );
     const shared = {
         findingIndex: z.literal(finding.findingIndex),
-        explanation: z.string().min(1).max(600),
+        explanation: comparisonExplanationSchema,
     };
     const variants: z.ZodType<SourceComparisonProviderFinding>[] = [
         z
@@ -1141,7 +1143,7 @@ const providerFindingSchema = z
     .object({
         findingIndex: z.number().int().nonnegative(),
         disposition: sourceComparisonDispositionSchema,
-        explanation: z.string().min(1).max(600),
+        explanation: comparisonExplanationSchema,
         comparableDimensions: z.array(z.enum(COMPARABLE_DIMENSIONS)).max(5),
         targetPassageKeys: z.array(z.string()).max(3),
         primaryPassageKeys: z

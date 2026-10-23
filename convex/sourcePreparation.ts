@@ -122,7 +122,8 @@ export async function startReviewPreparation(
         !args.target &&
         !args.manualSourceId &&
         previous?.kind === "preparation" &&
-        !!previous.target;
+        !!previous.target &&
+        (previous.readingSourceIds?.length ?? 0) > 0;
     if (
         previous?.kind === "preparation" &&
         previous.status === "started" &&
@@ -157,6 +158,13 @@ export async function startReviewPreparation(
             throw sourcePreparationError("request_invalid");
     }
     const now = Date.now();
+    if (
+        !args.manualSourceId &&
+        !args.target &&
+        previous?.deadlineAt !== undefined &&
+        previous.deadlineAt <= now
+    )
+        throw sourcePreparationError("preparation_deadline_elapsed");
     let originalPreparation = previous;
     if (args.target) {
         if (previous?.kind !== "preparation")
@@ -1451,18 +1459,27 @@ export const reserveSupplementPlan = internalMutation({
         });
         const proposal = await ctx.db.get(proposed.proposalId);
         if (!proposal) throw sourcePreparationError("proposal_unavailable");
-        const queries = (proposal.coverageGaps ?? [])
-            .flatMap(
-                (role) =>
-                    recoverySearchPlan({
-                        company,
-                        coveragePreset,
-                        researchAngle: run.researchAngle,
-                        target: { kind: "coverage", role },
-                        failedFamilies: [],
-                    }).queries,
-            )
-            .slice(0, MAX_SUPPLEMENT_SEARCHES);
+        const queries = preparation.target
+            ? recoverySearchPlan({
+                  company,
+                  coveragePreset,
+                  researchAngle: run.researchAngle,
+                  target: preparation.target,
+                  failedFamilies: preparation.failedDiscoveryFamilies,
+              }).queries.slice(0, 1)
+            : (proposal.coverageGaps ?? [])
+                  .flatMap(
+                      (role) =>
+                          recoverySearchPlan({
+                              company,
+                              coveragePreset,
+                              researchAngle: run.researchAngle,
+                              target: { kind: "coverage", role },
+                              failedFamilies: [],
+                          }).queries,
+                  )
+                  .filter((query) => query.discoveryIntent !== "regulatory")
+                  .slice(0, MAX_SUPPLEMENT_SEARCHES);
         if (queries.length === 0) return null;
         await ctx.db.patch(preparation._id, { supplementQueries: queries });
         await ctx.db.patch(run._id, {
@@ -1478,6 +1495,7 @@ const supplementSearchReservationValidator = v.union(
         query: schema.tables.researchPlans.validator.fields.queries.element,
         providerCallId: v.id("providerCalls"),
         operationKey: v.string(),
+        companyCik: v.optional(v.string()),
         shouldExecute: v.boolean(),
         reasonCode: v.optional(sourcePreparationStopCodeValidator),
     }),
@@ -1534,6 +1552,18 @@ export const reserveNextSupplementSearch = internalMutation({
             return null;
         const query = queries[queryIndex];
         if (!query) throw sourcePreparationError("supplement_invalid");
+        const companyCik =
+            query.discoveryIntent === "regulatory"
+                ? mergeRunCompanyMetadata(
+                      run.companySnapshot,
+                      run.companyId ? await ctx.db.get(run.companyId) : null,
+                  )?.cik
+                : undefined;
+        if (
+            query.discoveryIntent === "regulatory" &&
+            (!companyCik || !/^\d{1,10}$/.test(companyCik))
+        )
+            throw sourcePreparationError("company_unavailable");
         const operationKey = `supplement:${operation._id}:query:${queryIndex}`;
         const lease = await ctx.runMutation(
             internal.providerCalls.recordAttempt,
@@ -1544,7 +1574,7 @@ export const reserveNextSupplementSearch = internalMutation({
                 executionGeneration: preparation.executionGeneration,
                 workflowVersion: preparation.workflowVersion,
                 stepKey: "source_preparation",
-                service: "exa",
+                service: query.discoveryIntent === "regulatory" ? "sec" : "exa",
                 operation: "source_supplement_search",
                 operationKey,
                 attempt: 1,
@@ -1562,6 +1592,7 @@ export const reserveNextSupplementSearch = internalMutation({
             });
         return {
             query,
+            ...(companyCik ? { companyCik } : {}),
             providerCallId: lease.providerCallId,
             operationKey,
             shouldExecute: lease.shouldExecute,
@@ -1764,7 +1795,9 @@ export const finish = internalMutation({
             : null;
         const failedDiscoveryFamilies = [
             ...new Set([
-                ...(priorProposal?.failedDiscoveryFamilies ?? []),
+                ...(preparation.target?.kind === "failed_discovery"
+                    ? []
+                    : (priorProposal?.failedDiscoveryFamilies ?? [])),
                 ...preparation.failedDiscoveryFamilies,
             ]),
         ];

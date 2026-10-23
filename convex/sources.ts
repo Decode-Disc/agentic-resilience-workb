@@ -14,11 +14,18 @@ import {
     query,
 } from "./_generated/server";
 import { aiTaskExecutionModeValidator } from "./domain/claims";
+import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
 import { manualSourceIntakeError } from "./domain/manualSourceIntake";
 import { purgePreviewCacheForSource } from "./domain/previewCache";
 import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
+import {
+    readPreparationHistory,
+    readSourceReading,
+    sourceReadingStatusValidator,
+} from "./domain/sourcePreparationReview";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
 import {
+    classifySourceCandidate,
     SOURCE_SELECTION_POLICY_VERSION,
     sourceRoleAvailabilityValidator,
 } from "./domain/sourceSelectionPolicy";
@@ -313,6 +320,7 @@ export const getReviewSource = query({
     returns: v.union(
         v.object({
             ...sourceReviewSourceValidator.fields,
+            readingStatus: v.optional(sourceReadingStatusValidator),
             inspectionStatus:
                 schema.tables.sourceSelectionProposalItems.validator.fields
                     .inspectionStatus,
@@ -328,7 +336,7 @@ export const getReviewSource = query({
         v.null(),
     ),
     handler: async (ctx, args) => {
-        const { revision } = await authorizeReviewRead(ctx, args);
+        const { revision, run } = await authorizeReviewRead(ctx, args);
         const item = await ctx.db
             .query("sourceReviewItems")
             .withIndex("by_revision_and_source", (builder) =>
@@ -351,15 +359,62 @@ export const getReviewSource = query({
             classification.corpusRevisionId === revision._id
                 ? classification
                 : null;
-        const pinned = scopedItem
-            ? await readPinnedSourceQualification(ctx.db, scopedItem)
+        const preparations = await readPreparationHistory(
+            ctx.db,
+            args.runId,
+            revision._id,
+        );
+        const reading = preparations.length
+            ? await readSourceReading(ctx.db, {
+                  ...args,
+                  item: scopedItem,
+                  preparations,
+                  activePreparationId:
+                      run.executionStatus === "running"
+                          ? run.sourcePreparationId
+                          : undefined,
+                  approved: revision.status === "approved",
+              })
             : null;
+        const pinned = reading
+            ? (reading.qualification ?? null)
+            : scopedItem
+              ? await readPinnedSourceQualification(ctx.db, scopedItem)
+              : null;
         const comparisonReview =
-            scopedItem && pinned
+            scopedItem &&
+            pinned &&
+            scopedItem.qualificationTaskId === pinned.qualificationTaskId
                 ? await readPinnedComparisonReview(ctx.db, scopedItem, pinned)
                 : { outcomes: {}, details: {} };
+        const currentClassification =
+            revision.status === "draft" &&
+            pinned &&
+            scopedItem?.qualificationTaskId !== pinned.qualificationTaskId
+                ? classifySourceCandidate(
+                      {
+                          ...source,
+                          sourceId: source._id,
+                          requiresAnalystReview:
+                              source.reviewSearchId !== undefined,
+                          inspection: {
+                              status: "qualified",
+                              qualification: pinned.qualification,
+                              readingCompleteness: pinned.readingCompleteness,
+                              comparisonOutcomes: comparisonReview.outcomes,
+                          },
+                      },
+                      mergeRunCompanyMetadata(
+                          run.companySnapshot,
+                          run.companyId
+                              ? await ctx.db.get(run.companyId)
+                              : null,
+                      ),
+                  )
+                : scopedItem;
         return {
             sourceId: source._id,
+            ...(reading ? { readingStatus: reading.status } : {}),
             canonicalUrl: source.canonicalUrl,
             title: source.title,
             origin: source.origin,
@@ -367,15 +422,15 @@ export const getReviewSource = query({
             publishedAt: source.publishedAt,
             decision: item.decision,
             reason: item.reason,
-            documentKind: classification?.documentKind,
-            authorityTier: classification?.authorityTier,
-            ...(scopedItem?.inspectionStatus
-                ? { inspectionStatus: scopedItem.inspectionStatus }
+            documentKind: currentClassification?.documentKind,
+            authorityTier: currentClassification?.authorityTier,
+            ...(currentClassification?.inspectionStatus
+                ? { inspectionStatus: currentClassification.inspectionStatus }
                 : {}),
-            ...(scopedItem?.roleAvailability
-                ? { roleAvailability: scopedItem.roleAvailability }
+            ...(currentClassification?.roleAvailability
+                ? { roleAvailability: currentClassification.roleAvailability }
                 : {}),
-            ...(scopedItem?.sourceCaptureId
+            ...(scopedItem?.sourceCaptureId || pinned
                 ? {
                       qualificationStatus: pinned
                           ? ("available" as const)
@@ -386,7 +441,8 @@ export const getReviewSource = query({
                 ? {
                       qualification: projectSourceQualificationForReview({
                           ...pinned,
-                          roleAvailability: scopedItem?.roleAvailability ?? [],
+                          roleAvailability:
+                              currentClassification?.roleAvailability ?? [],
                           comparisonOutcomes: comparisonReview.outcomes,
                           comparisonDetails: comparisonReview.details,
                       }),

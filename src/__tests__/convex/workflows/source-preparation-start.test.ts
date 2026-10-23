@@ -19,6 +19,7 @@ afterEach(() => {
 
 async function waitingReview() {
     vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "true");
+    vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
     const fixture = await seedSourcePreparation();
     const { t, runId } = fixture;
     workflowTest.register(t);
@@ -306,6 +307,49 @@ test("starts source reading atomically without replacing the waiting approval wo
     expect(state.preparation?.workflowId).toBeTruthy();
     expect(state.preparation?.workflowId).not.toBe(mainHandle);
     expect(request).not.toHaveBeenCalled();
+});
+
+test("continues the unfinished reading after a search added no candidates without extending its deadline", async () => {
+    vi.useFakeTimers();
+    const { t, runId, corpusRevisionId, userId, proposal, sourceId } =
+        await waitingReview();
+    const owned = t.withIdentity({ subject: userId });
+    const args = {
+        runId,
+        corpusRevisionId,
+        expectedProposalId: proposal.proposalId,
+    };
+    const first = await owned.mutation(api.sourcePreparation.startForReview, {
+        ...args,
+        requestId: "interrupted-search",
+    });
+    const deadlineAt = await t.run(async (ctx) => {
+        const original = await ctx.db.get(first.preparationId);
+        await ctx.db.patch(first.preparationId, {
+            status: "blocked",
+            target: { kind: "coverage", role: "regulatory_annual" },
+            readingSourceIds: [],
+            insertedCount: 0,
+            stopCode: "preparation_failed",
+        });
+        await ctx.db.patch(runId, {
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        });
+        return original?.deadlineAt;
+    });
+    const resumed = await owned.mutation(api.sourcePreparation.startForReview, {
+        ...args,
+        requestId: "continue-reading",
+    });
+    expect(
+        (await t.run((ctx) => ctx.db.get(resumed.preparationId)))?.deadlineAt,
+    ).toBe(deadlineAt);
+    expect(
+        await t.mutation(internal.sourcePreparation.nextBatch, {
+            preparationId: resumed.preparationId,
+        }),
+    ).toMatchObject({ sourceIds: [sourceId] });
 });
 
 test("a new review request preserves the original preparation deadline across execution generations", async () => {
@@ -1040,4 +1084,50 @@ test("several new links retained during another dossier are all read on continua
     expect(batch.sourceIds).toEqual(added);
     expect(batch.sourceIds).not.toContain(sourceId);
     expect(batch.canSupplement).toBe(false);
+});
+
+test("an expired preparation cannot be resumed or claim an execution slot", async () => {
+    vi.useFakeTimers();
+    const { t, runId, corpusRevisionId, userId, proposal } =
+        await waitingReview();
+    const owned = t.withIdentity({ subject: userId });
+    const started = await owned.mutation(api.sourcePreparation.startForReview, {
+        runId,
+        corpusRevisionId,
+        expectedProposalId: proposal.proposalId,
+        requestId: "expire-original",
+    });
+    const previous = await t.run(async (ctx) => {
+        const preparation = await ctx.db.get(started.preparationId);
+        await ctx.db.patch(started.preparationId, {
+            status: "blocked",
+            stopCode: "preparation_failed",
+        });
+        await ctx.db.patch(runId, {
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        });
+        return preparation;
+    });
+    vi.setSystemTime((previous?.deadlineAt ?? Date.now()) + 1);
+    expect(
+        (
+            await owned.query(api.sourceSelectionProposals.getCurrent, {
+                runId,
+                corpusRevisionId,
+            })
+        )?.preparationAction,
+    ).toMatchObject({ available: false, reason: "deadline_elapsed" });
+    await expect(
+        owned.mutation(api.sourcePreparation.startForReview, {
+            runId,
+            corpusRevisionId,
+            expectedProposalId: proposal.proposalId,
+            requestId: "expire-retry",
+        }),
+    ).rejects.toThrow("preparation_deadline_elapsed");
+    expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
+        executionStatus: "paused",
+        sourcePreparationId: started.preparationId,
+    });
 });

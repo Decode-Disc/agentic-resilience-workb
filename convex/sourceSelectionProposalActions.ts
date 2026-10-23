@@ -27,7 +27,10 @@ import {
     readExaResponseJson,
 } from "./integrations/exa";
 import { sourcePreparationEnabled } from "./resourceLimits";
-import { selectSecFilingsForDiscovery } from "./sourceDiscoveryActions";
+import {
+    secFilingCandidate,
+    selectSecFilingsForDiscovery,
+} from "./sourceDiscoveryActions";
 
 const MAX_ATTEMPTS = 2;
 const PROVIDER_TIMEOUT_MS = 10_000;
@@ -332,7 +335,7 @@ async function startDiscovery(
             failedDiscoveryFamilies: claim.failedDiscoveryFamilies,
             reason: claim.reason,
         };
-    return executeDiscovery(ctx, args, claim);
+    return executeDiscovery(ctx, args, claim, recovery?.target);
 }
 
 export const rebuild = action({
@@ -355,6 +358,7 @@ async function executeDiscovery(
     ctx: ActionCtx,
     args: DiscoveryArgs,
     context: RebuildAuthorization,
+    target?: RecoveryTarget,
 ): Promise<RebuildResult> {
     const operationScope = `run:${args.runId}:generation:${context.executionGeneration}:corpus:${args.corpusRevisionId}:proposal:${args.expectedProposalId}:policy:${SOURCE_SELECTION_POLICY_VERSION}:rebuild:${context.rebuildId}:cycle:${context.cycle}`;
     const succeededFamilies = new Set<DiscoveryFamily>();
@@ -429,30 +433,12 @@ async function executeDiscovery(
                     const filings = selectSecFilingsForDiscovery(
                         parseSecFilings(response, context.company.cik),
                         Math.min(5, context.remainingCapacity),
+                        undefined,
+                        target?.kind === "coverage" ? target.role : undefined,
                     );
-                    const candidates = filings.map((filing, index) => {
-                        const accession = filing.accessionNumber.replaceAll(
-                            "-",
-                            "",
-                        );
-                        const baseUrl = `https://www.sec.gov/Archives/edgar/data/${context.company.cik}/${accession}/`;
-                        return {
-                            canonicalUrl: filing.primaryDocument
-                                ? `${baseUrl}${filing.primaryDocument}`
-                                : baseUrl,
-                            title: `${filing.form ?? "SEC filing"} · ${filing.filingDate ?? filing.accessionNumber}`,
-                            origin: "sec" as const,
-                            category: "regulatory",
-                            publishedAt: filing.filingDate
-                                ? Date.parse(filing.filingDate)
-                                : undefined,
-                            providerReference: filing.accessionNumber,
-                            secForm: filing.form,
-                            secAccessionNumber: filing.accessionNumber,
-                            providerResultPosition: index,
-                            discoveryQueryIndex: -1,
-                        };
-                    });
+                    const candidates = filings.map((filing, index) =>
+                        secFilingCandidate(context.company.cik, filing, index),
+                    );
                     const persisted = await ctx.runMutation(
                         internal.sourceSelectionProposals
                             .persistRebuildCandidates,
@@ -505,7 +491,7 @@ async function executeDiscovery(
     if (!exaKey) {
         for (const query of context.queries) {
             const family = discoveryFamily(query.discoveryIntent);
-            if (family) failedFamilies.add(family);
+            if (family && family !== "regulatory") failedFamilies.add(family);
         }
     } else {
         const exa = createExaDiscoveryAdapter({
@@ -513,7 +499,7 @@ async function executeDiscovery(
         });
         for (const [index, query] of context.queries.entries()) {
             const family = discoveryFamily(query.discoveryIntent);
-            if (!family) continue;
+            if (!family || family === "regulatory") continue;
             const latest = await verifyActive();
             if (latest.remainingCapacity === 0) break;
             const operationKey = `${operationScope}:exa:${index}`;

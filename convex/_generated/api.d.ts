@@ -42,6 +42,7 @@ import type * as domain_sourceComparison from "../domain/sourceComparison.js";
 import type * as domain_sourceDiscoveryRecovery from "../domain/sourceDiscoveryRecovery.js";
 import type * as domain_sourcePassages from "../domain/sourcePassages.js";
 import type * as domain_sourcePreparationAuthority from "../domain/sourcePreparationAuthority.js";
+import type * as domain_sourcePreparationReview from "../domain/sourcePreparationReview.js";
 import type * as domain_sourceQualification from "../domain/sourceQualification.js";
 import type * as domain_sourceRetrievalPolicy from "../domain/sourceRetrievalPolicy.js";
 import type * as domain_sourceReviewProjection from "../domain/sourceReviewProjection.js";
@@ -142,6 +143,7 @@ declare const fullApi: ApiFromModules<{
   "domain/sourceDiscoveryRecovery": typeof domain_sourceDiscoveryRecovery;
   "domain/sourcePassages": typeof domain_sourcePassages;
   "domain/sourcePreparationAuthority": typeof domain_sourcePreparationAuthority;
+  "domain/sourcePreparationReview": typeof domain_sourcePreparationReview;
   "domain/sourceQualification": typeof domain_sourceQualification;
   "domain/sourceRetrievalPolicy": typeof domain_sourceRetrievalPolicy;
   "domain/sourceReviewProjection": typeof domain_sourceReviewProjection;

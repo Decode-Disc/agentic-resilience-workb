@@ -8,7 +8,7 @@ const MAX_CONFIGURED_COLLECTION_LIMIT = 200;
 
 /** Keeps staged preparation activation consistent at every workflow entry point. */
 export function sourcePreparationEnabled(): boolean {
-    return env.SOURCE_QUALIFICATION_ENABLED === "true";
+    return process.env.SOURCE_QUALIFICATION_ENABLED === "true";
 }
 
 function configuredPositiveInteger(

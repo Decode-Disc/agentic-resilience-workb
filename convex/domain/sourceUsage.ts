@@ -365,7 +365,10 @@ export async function readPinnedComparisonReview(
 /** Validates immutable content pins. Callers retain proposal, ownership and approval authority. */
 export async function readPinnedSourceQualification(
     db: GenericDatabaseReader<DataModel>,
-    item: Doc<"sourceSelectionProposalItems">,
+    item: Pick<
+        Doc<"sourceSelectionProposalItems">,
+        "runId" | "sourceId" | "sourceCaptureId" | "qualificationTaskId"
+    >,
 ) {
     if (!item.sourceCaptureId || !item.qualificationTaskId) return null;
     const [capture, task] = await Promise.all([
@@ -393,6 +396,7 @@ export async function readPinnedSourceQualification(
         contentHash: capture.contentHash,
         qualificationTaskId: task._id,
         qualification: task.output.qualification,
+        readingCompleteness: task.output.readingCompleteness,
         qualificationExecutionMode: task.executionMode,
     };
 }

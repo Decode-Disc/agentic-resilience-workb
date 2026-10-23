@@ -1,7 +1,7 @@
 import { v } from "convex/values";
-
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
+import type { SourceCoverageRole } from "./domain/sourceSelectionPolicy";
 
 type SecFiling = {
     accessionNumber: string;
@@ -24,12 +24,49 @@ function newestFirst(left: SecFiling, right: SecFiling): number {
     return (right.filingDate ?? "").localeCompare(left.filingDate ?? "", "en");
 }
 
+/** Keeps SEC document identity and provenance identical across initial and targeted discovery. */
+export function secFilingCandidate(
+    cik: string,
+    filing: SecFiling,
+    providerResultPosition: number,
+) {
+    const accession = filing.accessionNumber.replaceAll("-", "");
+    const publishedAt = filing.filingDate
+        ? Date.parse(filing.filingDate)
+        : undefined;
+    return {
+        canonicalUrl: `https://www.sec.gov/Archives/edgar/data/${cik}/${accession}/${filing.primaryDocument ?? ""}`,
+        title: `${filing.form ?? "SEC filing"} · ${filing.filingDate ?? filing.accessionNumber}`,
+        origin: "sec" as const,
+        category: "regulatory",
+        publishedAt: Number.isFinite(publishedAt) ? publishedAt : undefined,
+        providerReference: filing.accessionNumber,
+        secForm: filing.form,
+        secAccessionNumber: filing.accessionNumber,
+        providerResultPosition,
+        discoveryQueryIndex: -1,
+    };
+}
+
 export function selectSecFilingsForDiscovery(
     filings: ReadonlyArray<SecFiling>,
     limit: number,
     researchAngle?: string,
+    role?: SourceCoverageRole,
 ): Array<SecFiling> {
     const sorted = [...filings].sort(newestFirst);
+    const forms =
+        role === "regulatory_annual"
+            ? ANNUAL_FORMS
+            : role === "regulatory_interim"
+              ? INTERIM_FORMS
+              : role === "regulatory_material_event"
+                ? MATERIAL_FORMS
+                : undefined;
+    if (forms)
+        return sorted
+            .filter((filing) => forms.has(normalizedBaseForm(filing.form)))
+            .slice(0, limit);
     const selected: Array<SecFiling> = [];
     const addFirst = (forms: ReadonlySet<string>) => {
         const filing = sorted.find((candidate) =>
@@ -116,26 +153,7 @@ export const discoverForRun = internalAction({
             args.filings,
             Math.min(8, initialCapacity.remaining),
             context.researchAngle,
-        ).map((filing, providerResultPosition) => {
-            const accession = filing.accessionNumber.replaceAll("-", "");
-            const baseUrl = `https://www.sec.gov/Archives/edgar/data/${args.cik}/${accession}/`;
-            return {
-                canonicalUrl: filing.primaryDocument
-                    ? `${baseUrl}${filing.primaryDocument}`
-                    : baseUrl,
-                title: `${filing.form ?? "SEC filing"} · ${filing.filingDate ?? filing.accessionNumber}`,
-                origin: "sec" as const,
-                category: "regulatory",
-                publishedAt: filing.filingDate
-                    ? Date.parse(filing.filingDate)
-                    : undefined,
-                providerReference: filing.accessionNumber,
-                secForm: filing.form,
-                secAccessionNumber: filing.accessionNumber,
-                providerResultPosition,
-                discoveryQueryIndex: -1,
-            };
-        });
+        ).map((filing, index) => secFilingCandidate(args.cik, filing, index));
         const result = await ctx.runMutation(
             internal.sourceDiscovery.persistCandidates,
             {

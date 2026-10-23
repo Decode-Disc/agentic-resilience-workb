@@ -319,3 +319,97 @@ test("a search result exceeding four candidates is rejected atomically", async (
         (await t.run((ctx) => ctx.db.get(reservation.providerCallId)))?.status,
     ).toBe("started");
 });
+
+test.each([
+    "succeeded",
+    "partial",
+] as const)("mixed discovery recovery clears only fully successful families (%s) without resetting the shared budget", async (status) => {
+    const { t, runId, corpusRevisionId } = await seedSourcePreparation();
+    let preparationId = await t.mutation(
+        internal.sourcePreparation.claimForDiscovery,
+        { runId, corpusRevisionId, expectedExecutionGeneration: 3 },
+    );
+    await t.run(async (ctx) => {
+        await ctx.db.patch(preparationId, {
+            entryPoint: "targeted_search",
+            target: { kind: "failed_discovery" },
+            readingSourceIds: [],
+            failedDiscoveryFamilies: ["regulatory", "official_product"],
+        });
+        await ctx.db.patch(runId, { lifecycleState: "awaiting_source_review" });
+    });
+    const initial = await t.run((ctx) => ctx.db.get(preparationId));
+    const reservedFamilies: string[] = [];
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const reservation = await t.mutation(
+            internal.sourcePreparation.reserveNextSupplementSearch,
+            { preparationId },
+        );
+        if (!reservation?.shouldExecute)
+            throw new Error("Missing search lease");
+        reservedFamilies.push(reservation.query.discoveryIntent ?? "");
+        await t.mutation(internal.sourceDiscovery.persistCandidates, {
+            runId,
+            corpusRevisionId,
+            preparationId,
+            executionGeneration: 3,
+            operationKey: reservation.operationKey,
+            candidates: [],
+            providerCompletion: {
+                providerCallId: reservation.providerCallId,
+                status,
+                latencyMs: 1,
+                accepted: 0,
+                rejected: status === "partial" ? 1 : 0,
+            },
+        });
+        const finished = await t.mutation(internal.sourcePreparation.finish, {
+            preparationId,
+            expectedExecutionGeneration: 3,
+        });
+        const proposal = await t.run((ctx) => ctx.db.get(finished.proposalId));
+        if (attempt === 0) {
+            preparationId = await t.run(async (ctx) => {
+                const previous = await ctx.db.get(preparationId);
+                if (!previous) throw new Error("Missing preparation");
+                const { _id, _creationTime, ...fields } = previous;
+                const next = await ctx.db.insert(
+                    "sourceSelectionProposalRebuilds",
+                    {
+                        ...fields,
+                        status: "started",
+                        operationKey: "second-recovery",
+                        insertedCount: undefined,
+                        failedDiscoveryFamilies:
+                            proposal?.failedDiscoveryFamilies ?? [],
+                        createdAt: previous.createdAt + 1,
+                    },
+                );
+                await ctx.db.patch(runId, {
+                    sourcePreparationId: next,
+                    executionStatus: "running",
+                });
+                return next;
+            });
+        } else
+            expect(proposal?.failedDiscoveryFamilies).toEqual(
+                status === "succeeded"
+                    ? []
+                    : ["regulatory", "official_product"],
+            );
+    }
+    expect(reservedFamilies).toEqual(
+        status === "succeeded"
+            ? ["regulatory", "official_product"]
+            : ["regulatory", "regulatory"],
+    );
+    const current = await t.run((ctx) => ctx.db.get(preparationId));
+    expect(current?.deadlineAt).toBe(initial?.deadlineAt);
+    const ledger = await t.run(async (ctx) => {
+        const run = await ctx.db.get(runId);
+        return run?.automaticSupplementOperationId
+            ? ctx.db.get(run.automaticSupplementOperationId)
+            : null;
+    });
+    expect(ledger?.supplementClaimedQueryIndexes).toEqual([0, 1]);
+});

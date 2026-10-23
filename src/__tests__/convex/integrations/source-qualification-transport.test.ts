@@ -21,7 +21,15 @@ const preparedExample = () =>
         text: "ServiceNow provides workflow software.",
     });
 
-test("uses the selected inexpensive route and strict structured output for one grouped document task", async () => {
+test.each([
+    { index: 0, model: "deepseek/deepseek-v4.1-flash" },
+    { index: 1, model: "deepseek/deepseek-v4.1-flash-1017" },
+])("uses $model through Relace with strict structured output and price limits", async ({
+    index,
+    model,
+}) => {
+    const route = sourceQualificationRoutes[index];
+    if (!route) throw new Error("Missing qualification route");
     const input = prepareQualificationInput({
         company: {
             cik: "1373715",
@@ -91,8 +99,8 @@ test("uses the selected inexpensive route and strict structured output for one g
                 JSON.stringify({
                     id: "qualification-test",
                     created: 1,
-                    model: "deepseek/deepseek-v4-flash-0731",
-                    provider: "Reka",
+                    model,
+                    provider: "Relace",
                     choices: [
                         {
                             index: 0,
@@ -114,7 +122,7 @@ test("uses the selected inexpensive route and strict structured output for one g
             ),
     );
     expect(
-        await qualifySourceDocument(input, sourceQualificationRoutes[0], {
+        await qualifySourceDocument(input, route, {
             apiKey: "test-only-key",
             fetch: request,
         }),
@@ -123,11 +131,11 @@ test("uses the selected inexpensive route and strict structured output for one g
     expect(request.mock.calls[0]?.[1]?.redirect).toBe("error");
     const body = JSON.parse(String(request.mock.calls[0]?.[1]?.body));
     expect(body).toMatchObject({
-        model: "deepseek/deepseek-v4-flash-0731",
+        model,
         temperature: 0,
         max_tokens: 6144,
         provider: {
-            only: ["reka"],
+            only: ["relace"],
             allow_fallbacks: false,
             require_parameters: true,
             max_price: { prompt: 0.15, completion: 0.6 },

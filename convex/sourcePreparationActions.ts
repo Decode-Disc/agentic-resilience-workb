@@ -35,7 +35,10 @@ import {
 } from "@convex/integrations/exa";
 import { createExaContentsClient } from "@convex/integrations/exaContentsClient";
 import { retrieveAndNormalizeExaFiling } from "@convex/integrations/exaEvidence";
-import { createSecCompanyResolver } from "@convex/integrations/sec";
+import {
+    createSecCompanyResolver,
+    SecRetryableError,
+} from "@convex/integrations/sec";
 import { retrieveAndNormalizeSecFiling } from "@convex/integrations/secEvidence";
 import {
     compareSourceContributions,
@@ -46,13 +49,20 @@ import type { FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { env, internalAction } from "./_generated/server";
+import { internalAction } from "./_generated/server";
 import { discoveryFailure } from "./domain/sourceDiscoveryRecovery";
 import {
+    FAMILY_BY_ROLE,
     SOURCE_COVERAGE_ROLES,
     SOURCE_ROLE_REQUIREMENTS,
 } from "./domain/sourceSelectionPolicy";
 import { validateExaCandidates } from "./exaDiscoveryActions";
+import { MAX_APPROVED_SOURCE_BYTES } from "./resourceLimits";
+import { requestPinnedPublicSource } from "./sourceActions";
+import {
+    secFilingCandidate,
+    selectSecFilingsForDiscovery,
+} from "./sourceDiscoveryActions";
 import { fetchExaSearch } from "./sourceSelectionProposalActions";
 
 const supplementResultValidator = v.union(
@@ -63,6 +73,20 @@ const supplementResultValidator = v.union(
         reasonCode: sourcePreparationStopCodeValidator,
     }),
 );
+
+/** Checks the invocation environment before acquisition, without contacting a provider. */
+export const checkConfiguration = internalAction({
+    args: { preparationId: v.id("sourceSelectionProposalRebuilds") },
+    returns: v.boolean(),
+    handler: async (ctx, args) => {
+        await ctx.runQuery(internal.sourcePreparation.getForExecution, {
+            ...args,
+            now: Date.now(),
+        });
+        // Node replaces process.env between invocations; the generated env export holds the old object.
+        return Boolean(process.env.OPENROUTER_API_KEY?.trim());
+    },
+});
 
 export const searchSupplement = internalAction({
     args: { preparationId: v.id("sourceSelectionProposalRebuilds") },
@@ -77,8 +101,16 @@ export const searchSupplement = internalAction({
                 now: Date.now(),
             });
         const preparation = await verifyActive();
+        if (preparation.target && preparation.insertedCount !== undefined)
+            return { status: "complete" };
         const apiKey = process.env.EXA_API_KEY?.trim();
-        if (!apiKey)
+        const regulatory =
+            preparation.target?.kind === "coverage"
+                ? FAMILY_BY_ROLE[preparation.target.role] === "regulatory"
+                : preparation.target?.kind === "failed_discovery" &&
+                  preparation.failedDiscoveryFamilies.includes("regulatory");
+        const userAgent = process.env.SEC_USER_AGENT?.trim();
+        if (regulatory ? !userAgent : !apiKey)
             return { status: "blocked", reasonCode: "missing_configuration" };
         const reservation = await ctx.runMutation(
             internal.sourcePreparation.reserveNextSupplementSearch,
@@ -98,7 +130,7 @@ export const searchSupplement = internalAction({
             executionGeneration: preparation.executionGeneration,
             workflowVersion: preparation.workflowVersion,
             stepKey: "source_preparation",
-            service: "exa" as const,
+            service: regulatory ? ("sec" as const) : ("exa" as const),
             operation: "source_supplement_search",
             operationKey: reservation.operationKey,
             attempt: 1,
@@ -108,9 +140,163 @@ export const searchSupplement = internalAction({
             const signal = AbortSignal.timeout(
                 Math.max(1, (preparation.deadlineAt ?? startedAt) - Date.now()),
             );
+            if (regulatory && reservation.companyCik) {
+                const resolver = createSecCompanyResolver({
+                    fetch: async (url, init) => {
+                        await verifyActive();
+                        const requestSignal = AbortSignal.any([
+                            signal,
+                            ...(init?.signal ? [init.signal] : []),
+                        ]);
+                        requestSignal.throwIfAborted();
+                        const destination = await validatePublicSourceUrl(
+                            String(url),
+                            async (hostname) => {
+                                let timer:
+                                    | ReturnType<typeof setTimeout>
+                                    | undefined;
+                                try {
+                                    const addresses = await Promise.race([
+                                        lookup(hostname, {
+                                            all: true,
+                                            verbatim: true,
+                                        }),
+                                        new Promise<never>((_, reject) => {
+                                            timer = setTimeout(
+                                                () =>
+                                                    reject(
+                                                        sourcePreparationError(
+                                                            "source_url_unavailable",
+                                                        ),
+                                                    ),
+                                                Math.min(
+                                                    10_000,
+                                                    Math.max(
+                                                        1,
+                                                        (preparation.deadlineAt ??
+                                                            startedAt) -
+                                                            Date.now(),
+                                                    ),
+                                                ),
+                                            );
+                                        }),
+                                    ]);
+                                    requestSignal.throwIfAborted();
+                                    return addresses.map(
+                                        (record) => record.address,
+                                    );
+                                } finally {
+                                    clearTimeout(timer);
+                                }
+                            },
+                        );
+                        const address = destination.addresses[0];
+                        if (!address)
+                            throw sourcePreparationError(
+                                "source_url_unavailable",
+                            );
+                        await verifyActive();
+                        return requestPinnedPublicSource(
+                            destination.canonicalUrl,
+                            address,
+                            {
+                                headers: {
+                                    Accept: "application/json",
+                                    "User-Agent": userAgent as string,
+                                },
+                                maxBytes: MAX_APPROVED_SOURCE_BYTES,
+                                signal: requestSignal,
+                                timeoutMs: Math.min(
+                                    10_000,
+                                    Math.max(
+                                        1,
+                                        (preparation.deadlineAt ?? startedAt) -
+                                            Date.now(),
+                                    ),
+                                ),
+                            },
+                        );
+                    },
+                    now: Date.now,
+                    userAgent: userAgent as string,
+                    timeoutMs: Math.min(
+                        10_000,
+                        Math.max(
+                            1,
+                            (preparation.deadlineAt ?? startedAt) - Date.now(),
+                        ),
+                    ),
+                    reserveRequest: async () => {
+                        await verifyActive();
+                        signal.throwIfAborted();
+                        const { retryAfter } = await ctx.runMutation(
+                            internal.providerCalls.reserveSecRateLimit,
+                            {},
+                        );
+                        if (retryAfter)
+                            await new Promise((resolve) =>
+                                setTimeout(resolve, retryAfter),
+                            );
+                        await verifyActive();
+                        signal.throwIfAborted();
+                    },
+                    // The supplement owns one request lease and atomically commits its result below.
+                    maxAttempts: 1,
+                    recordAttempt: async () => ({ shouldExecute: true }),
+                });
+                const result = await resolver.inspectEvidence(
+                    reservation.companyCik,
+                );
+                if (
+                    result.company.cik !==
+                    reservation.companyCik.replace(/^0+/, "")
+                )
+                    throw sourcePreparationError("request_invalid");
+                await verifyActive();
+                const filings = selectSecFilingsForDiscovery(
+                    result.filings,
+                    4,
+                    undefined,
+                    preparation.target?.kind === "coverage"
+                        ? preparation.target.role
+                        : undefined,
+                );
+                const candidates = filings
+                    .filter(
+                        (f) =>
+                            /^\d{10}-\d{2}-\d{6}$/.test(f.accessionNumber) &&
+                            (!f.primaryDocument ||
+                                /^[\w.-]+$/.test(f.primaryDocument)),
+                    )
+                    .map((filing, index) =>
+                        secFilingCandidate(result.company.cik, filing, index),
+                    );
+                await ctx.runMutation(
+                    internal.sourceDiscovery.persistCandidates,
+                    {
+                        ...args,
+                        runId: preparation.runId,
+                        corpusRevisionId: preparation.corpusRevisionId,
+                        executionGeneration: preparation.executionGeneration,
+                        operationKey: reservation.operationKey,
+                        candidates,
+                        providerCompletion: {
+                            providerCallId: reservation.providerCallId,
+                            status:
+                                candidates.length === filings.length
+                                    ? "succeeded"
+                                    : "partial",
+                            latencyMs: Date.now() - startedAt,
+                            accepted: candidates.length,
+                            rejected: filings.length - candidates.length,
+                        },
+                    },
+                );
+                return { status: "searched" };
+            }
             const adapter = createExaDiscoveryAdapter({
                 search: (query, options) =>
-                    fetchExaSearch(apiKey, query, options, signal),
+                    fetchExaSearch(apiKey as string, query, options, signal),
             });
             const batch = await adapter.search(
                 reservation.query.query,
@@ -158,7 +344,16 @@ export const searchSupplement = internalAction({
             });
             return { status: "searched" };
         } catch (error) {
-            const failure = discoveryFailure(error);
+            const failure =
+                error instanceof SecRetryableError
+                    ? {
+                          code:
+                              error.name === "SecTimeoutError"
+                                  ? "timeout"
+                                  : "sec_unavailable",
+                          retryable: true,
+                      }
+                    : discoveryFailure(error);
             await ctx.runMutation(internal.providerCalls.recordAttempt, {
                 ...attempt,
                 status: "failed",
@@ -166,7 +361,13 @@ export const searchSupplement = internalAction({
                 retryable: false,
                 latencyMs: Date.now() - startedAt,
             });
-            if (preparationFailureCode(error)) throw error;
+            const code = preparationFailureCode(error);
+            if (
+                code &&
+                code !== "request_invalid" &&
+                code !== "source_url_unavailable"
+            )
+                throw error;
             return {
                 status: "blocked",
                 reasonCode: failure.retryable
@@ -275,7 +476,7 @@ export const qualifySource = internalAction({
                 },
             );
             if (cached) return { status: "qualified", taskId: cached._id };
-            if (!env.OPENROUTER_API_KEY?.trim())
+            if (!process.env.OPENROUTER_API_KEY?.trim())
                 return {
                     status: "unavailable",
                     reasonCode: "missing_configuration",
@@ -315,7 +516,7 @@ export const qualifySource = internalAction({
                     };
                 }
                 const result = await qualifySourceDocument(prepared, route, {
-                    apiKey: env.OPENROUTER_API_KEY,
+                    apiKey: process.env.OPENROUTER_API_KEY,
                     signal: AbortSignal.timeout(
                         Math.max(1, (preparation.deadlineAt ?? 0) - Date.now()),
                     ),
@@ -741,7 +942,7 @@ export const compareSource = internalAction({
                 });
                 return { status: "not_run", taskId };
             }
-            if (!env.OPENROUTER_API_KEY?.trim()) {
+            if (!process.env.OPENROUTER_API_KEY?.trim()) {
                 const output = makeTerminalOutput(
                     prepared,
                     "provider_unavailable",
@@ -838,7 +1039,7 @@ export const compareSource = internalAction({
                     prepared,
                     route,
                     {
-                        apiKey: env.OPENROUTER_API_KEY,
+                        apiKey: process.env.OPENROUTER_API_KEY,
                         signal: AbortSignal.timeout(
                             Math.max(
                                 1,

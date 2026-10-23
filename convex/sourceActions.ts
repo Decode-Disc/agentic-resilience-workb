@@ -426,19 +426,24 @@ export function requestPinnedPublicSource(
         maxBytes?: number;
         allowPdfBody?: boolean;
         timeoutMs?: number;
+        headers?: Record<string, string>;
+        signal?: AbortSignal;
     },
 ): Promise<Response> {
     const url = new URL(rawUrl);
     const maxBytes = options?.maxBytes ?? MAX_RESPONSE_BYTES;
     const timeoutMs = options?.timeoutMs ?? REQUEST_TIMEOUT_MS;
     const allowPdfBody = options?.allowPdfBody ?? false;
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
 
     return new Promise((resolve, reject) => {
         let settled = false;
         let activeResponse: IncomingMessage | null = null;
         let timer: ReturnType<typeof setTimeout> | undefined;
+        let onAbort: (() => void) | undefined;
 
         const cleanup = () => {
+            if (onAbort) options?.signal?.removeEventListener("abort", onAbort);
             if (timer !== undefined) {
                 clearTimeout(timer);
                 timer = undefined;
@@ -476,6 +481,7 @@ export function requestPinnedPublicSource(
                 method: "GET",
                 headers: {
                     Accept: "text/html,application/xhtml+xml,application/pdf;q=0.8",
+                    ...options?.headers,
                     "Accept-Encoding": "identity",
                     Host: url.host,
                 },
@@ -579,6 +585,17 @@ export function requestPinnedPublicSource(
             },
         );
         request.on("error", safeReject);
+        onAbort = () => {
+            const reason = options?.signal?.reason;
+            activeResponse?.destroy();
+            request.destroy();
+            safeReject(reason);
+        };
+        options?.signal?.addEventListener("abort", onAbort, { once: true });
+        if (options?.signal?.aborted) {
+            onAbort();
+            return;
+        }
         request.end();
     });
 }

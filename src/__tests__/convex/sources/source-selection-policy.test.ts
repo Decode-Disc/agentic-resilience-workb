@@ -1,9 +1,37 @@
-import { buildSourceSelectionProposal } from "@convex/domain/sourceSelectionPolicy";
+import {
+    buildSourceSelectionProposal,
+    evaluateSourceCoverage,
+} from "@convex/domain/sourceSelectionPolicy";
 import { describe, expect, test } from "vitest";
 
 type Candidate = Parameters<
     typeof buildSourceSelectionProposal
 >[0]["candidates"][number];
+
+test("coverage matches do not count other regulatory forms as annual reports", () => {
+    const coverage = evaluateSourceCoverage("balanced", [
+        {
+            sourceId: "annual",
+            canonicalUrl: "https://sec.gov/annual",
+            sourceFamily: "regulatory",
+            eligibleCoverageRoles: [],
+            declaredCoverageRoles: ["regulatory_annual"],
+            included: true,
+        },
+        {
+            sourceId: "event",
+            canonicalUrl: "https://sec.gov/event",
+            sourceFamily: "regulatory",
+            eligibleCoverageRoles: [],
+            declaredCoverageRoles: ["regulatory_material_event"],
+            included: true,
+        },
+    ]);
+    expect(coverage.find((r) => r.role === "regulatory_annual")).toMatchObject({
+        candidateIds: ["annual"],
+        relatedCandidateIds: ["event"],
+    });
+});
 
 const company = {
     cik: "1373715",

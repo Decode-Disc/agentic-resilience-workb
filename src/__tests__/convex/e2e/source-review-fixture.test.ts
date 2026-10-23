@@ -592,6 +592,7 @@ test("seeds an owned source review checkpoint through production projections", a
             fixtureKey: "source-review-reactivity",
         }),
     ).resolves.toEqual({
+        preparationEnabled: false,
         lifecycleState: "awaiting_source_review",
         executionStatus: "paused",
         revisionStatus: "draft",

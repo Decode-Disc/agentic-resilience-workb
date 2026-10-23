@@ -46,11 +46,31 @@ export const run = workflow
         returns: v.null(),
     })
     .handler(async (step, args): Promise<null> => {
+        let configurationChecked = false;
         while (true) {
             const batch = await step.runMutation(
                 internal.sourcePreparation.nextBatch,
                 args,
             );
+            if (
+                !configurationChecked &&
+                (batch.sourceIds.length > 0 || batch.canSupplement)
+            ) {
+                const configured = await step.runAction(
+                    internal.sourcePreparationActions.checkConfiguration,
+                    args,
+                    { retry: false },
+                );
+                if (!configured) {
+                    await step.runMutation(internal.sourcePreparation.finish, {
+                        ...args,
+                        expectedExecutionGeneration: batch.executionGeneration,
+                        stopCode: "missing_configuration",
+                    });
+                    return null;
+                }
+                configurationChecked = true;
+            }
             if (batch.sourceIds.length === 0) {
                 if (batch.comparisonVersion === SOURCE_COMPARISON_VERSION) {
                     const targets = await step.runQuery(
