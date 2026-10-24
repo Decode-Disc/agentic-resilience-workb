@@ -10,9 +10,9 @@ The first-minute objective is to make the author's judgment, rigor, and executio
 
 ## Document Authority and Required Reading
 
-The five reference documents below own current requirements within their stated responsibility. Read `PRODUCT.md` before product planning or implementation, the relevant sections of `context/TECH.md` before technical changes or architectural proposals, and `DESIGN.md` for interface work. Use `docs/ROADMAP.md` for delivery state and next work. Consult `context/PROJECT.md` only when deeper candidature context is needed.
+Read `PRODUCT.md` before product planning or implementation, relevant sections of `context/TECH.md` before technical work, and `DESIGN.md` for interface changes. Use `docs/ROADMAP.md` for delivery state and next work; consult `context/PROJECT.md` only for deeper context about the candidature purpose.
 
-This table is also the policy read by `pnpm docs:check`. Patterns are repository-relative; `*` matches one path segment and `**` matches descendants. The first matching row applies. A word warning is advisory, never permission to discard a requirement. The checker inspects root Markdown and Markdown under `context/`, `docs/`, and `scripts/evaluations/`; generated instructions, installed skills, and third-party material are outside that authored-document scope.
+`pnpm docs:check` reads this table in order: the first matching path applies (`*`: one path segment; `**`: descendants). Word warnings are advisory; never discard requirements to meet them.
 
 <!-- documentation-policy:start -->
 | Path | Role | Word warning | Responsibility |
@@ -41,21 +41,15 @@ This table is also the policy read by `pnpm docs:check`. Patterns are repository
 | `docs/preferences.md` | retired | - | Preferences incorporated into their current owners. |
 <!-- documentation-policy:end -->
 
-Maintain each applicable rule in its owner only. Other documents may link to it, but must not duplicate an independently maintained contract. Historical acceptance remains part of the record; it cannot override a current reference, renew an old allowance, or authorize execution. Read history only to investigate rationale or past evidence. If current references conflict, stop and identify the conflict instead of choosing silently.
-
-Material product or architecture changes require an explicit user decision and an update to the owning reference. Add an ADR only when durable rationale or a meaningful rejected alternative needs preservation; an ADR cannot carry an obligation absent from the current contract. Do not create another normative document without an explicit decision updating this table.
-
-Reference documents describe durable current truth, not the history of each task. Update them only when an approved durable requirement, shared design rule, technical contract or delivery milestone changes, or an existing statement becomes inaccurate or incomplete. A code change, local UI adjustment or passing check does not independently justify an update. Before editing, identify the affected statement or missing durable information and why it belongs in that document. Revise the relevant passage in place rather than appending a competing description. Keep roadmap updates at the level of delivered capabilities, remaining gaps and sequence changes; routine implementation details, test counts and verification steps belong in the task handoff.
-
-When reviewing the final diff, check documentation changes for necessity, correct ownership, duplication and obsolete or contradictory statements left elsewhere. Explain the reason for each reference document changed in the handoff; do not create another report or checklist for this review.
-
-Use native planning by default. Create a persistent plan only when explicitly requested, with at most one active plan per authorized workstream and an explicitly agreed location. On closure, transfer outstanding work and verified delivery to the roadmap, then retire the plan. Skills cannot autonomously create document series or override this policy. Keep reports only for durable verification evidence. Never add a new index or report merely to explain an existing document.
-
-Write prose paragraphs on one physical line. Keep repository documents self-contained and in English. Historical references to removed documents use the documentary checkpoint `c4f0d24` and their original Git path. Mark local-only evidence explicitly rather than suggesting it is present in that commit. `pnpm docs:check` checks locations, local links and heading anchors; semantic duplication, authority conflicts and requirement preservation require review.
+- Keep each rule in its listed owner; link to it rather than duplicating its contract. Consult history for rationale or evidence, never to override current references or renew execution permissions. If current references conflict, stop and identify the conflict.
+- Update a reference only for an approved durable change or to correct inaccurate or incomplete information. Identify the affected statement and owner, then revise the passage in place. Routine code/UI changes or passing checks alone do not justify an update. Keep roadmap entries at capability, gap and sequence level.
+- Material product or architecture changes require an explicit user decision and an update to the owning reference. Use ADRs for durable rationale or meaningful rejected alternatives, with current obligations in their reference owner. New normative documents require an explicit user decision on ownership and an update to this table.
+- Keep status concise and include each document-specific limitation only where it affects interpretation or the next decision. Apply authority and authorization rules while working; do not reproduce them as boilerplate, lists of unchanged references or generic prohibited actions.
+- Review documentation changes for necessity, ownership, duplication and stale or contradictory text; keep this review in the handoff. For removed documents, cite `git show c4f0d24:<original-path>` and distinguish local-only evidence from content preserved at that checkpoint.
 
 ## Working Principles
 
-- Keep the application, source code, schemas, fixtures, tests, UI copy, and documentation in English, even if the user communicates in French.
+- Keep the application, source code, schemas, fixtures, tests, UI copy, and documentation in English, even if the user communicates in French. Keep documents self-contained and each prose paragraph on one physical line.
 - Prefer the smallest coherent implementation that proves the product thesis; never build speculative abstractions, theatrical agent swarms, or features outside the MVP.
 - Use `ai-sdk` for AI SDK integrations and relevant Convex skills for backend logic and schemas.
 - For frontend planning, implementation, and review, apply [workbench-frontend](.agents/skills/workbench-frontend/SKILL.md). It selects the relevant UI/UX specialist procedures. Preserve any specialist workflow explicitly requested by the user.
@@ -98,7 +92,7 @@ Keep domain rules out of UI components. Keep provider-specific types and model n
 
 - Use the established package manager and lockfile. Do not change dependencies without verifying the exact package/version and following the dependency-installation skill. Preserve strict TypeScript, validate trust boundaries and avoid `any`.
 - Use the smallest relevant check during implementation and scope diagnostics to task files. After behavior stabilizes, format once and run the applicable lint, typecheck and test checks. Run project-wide checks only for a repository/CI requirement or a transversal risk, stating the reason first. `pnpm check` is the CI aggregate; documentation and standalone tooling changes use the relevant focused checks instead of rebuilding the application.
-- Documentation-only edits need link, structure and consistency checks, not a manufactured failing test. Run `pnpm docs:check`, and `pnpm design:check` when visual documentation is touched. Tooling/configuration requires executable before-and-after validation; generated outputs are verified through their owner rather than edited independently.
+- Documentation-only edits need link, structure and consistency checks, not a manufactured failing test. Run `pnpm docs:check`, and `pnpm design:check` when visual documentation is touched. The documentation checker validates locations, links and heading anchors; review meaning and requirement preservation separately. Tooling/configuration requires executable before-and-after validation; generated outputs are verified through their owner rather than edited independently.
 - Do not run `pnpm run build` for each change. Use a build after substantial application changes, not routine documentation edits.
 
 `pnpm convex:check` only typechecks the backend. Keep validation independent from synchronization. `pnpm dev` or `pnpm convex:dev` owns the local backend lifecycle; use one development watcher and preserve its running service. After editing backend code, verify a successful watcher push after the edit and exercise the changed behavior through the relevant authorized check. A listening port or an unchanged function signature alone does not prove that the latest implementation was applied.
@@ -115,6 +109,7 @@ Impeccable uses the permanent development-only root entry, enabled per page load
 ### Implementation Planning and Scope Fidelity
 
 - The AI harness's native planning mode is the default for ordinary planning, task decomposition, sequencing, and implementation discussion, including work with multiple steps.
+- Create a persistent plan in the repository only when explicitly requested, with at most one active plan per authorized workstream and an explicitly agreed location. On closure, transfer outstanding work and verified delivery to the roadmap, then retire the plan. Skills cannot autonomously create document series or override this policy.
 - Treat `writing-plans` and the project `implementation-plan` skill as opt-in workflows. Invoke either skill only when the user explicitly names or requests that skill; never trigger them merely because a task is complex, spans multiple files, crosses runtimes, or asks for a plan.
 - When the user explicitly invokes `implementation-plan`, apply it after the principal `writing-plans` skill because it adds this repository's product, UI-preservation, provider-safety, and verification contracts. Invoking `writing-plans` alone does not implicitly invoke the project overlay.
 - Planning and implementation are separate authorizations. A request to diagnose, brainstorm, review, or revise a plan does not authorize production code, dependency, schema, environment, deployment, or data changes.
@@ -236,11 +231,13 @@ The analyst must be able to inspect evidence, uncertainty, counter-evidence, pro
 Use the [product acceptance criteria](PRODUCT.md#mvp-acceptance) as the MVP checklist and the roadmap as its delivery record. Before declaring a meaningful implementation complete, run the applicable verification above and report:
 
 - what user-visible or invariant-backed behavior now works;
-- files and architectural boundaries changed;
+- files and architectural boundaries changed, including the reason for each reference-document update;
 - exact verification commands and results;
 - cost or deployment implications;
 - assumptions, remaining gaps, and blocked uncertainties;
 - the next smallest coherent slice.
+
+Keep routine implementation details, test counts and verification steps in the handoff. Create reports only for durable verification evidence; do not create another report, checklist or index merely to narrate the task, record its documentation review or explain an existing document.
 
 For a critical user journey, a public or unauthenticated page render does not prove the protected workflow. Verify the complete path with the intended role and access state, including reconnection when access is durable. Browser gates must cover the meaningful desktop and mobile states, keyboard access, relevant focus/hover interactions, reduced motion where animation changes, and console errors. If credentials or an admitted session are unavailable, report the gate as incomplete rather than substituting a component test or a nearby public screen.
 

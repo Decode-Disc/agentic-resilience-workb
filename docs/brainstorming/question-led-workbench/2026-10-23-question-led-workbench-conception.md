@@ -1,12 +1,10 @@
 # Question-Led Analysis Workbench: Retained Conception
 
-## Status and Authority
+## Status
 
-Recorded on 2026-10-23 and updated on 2026-10-24. This document preserves the accepted product direction, shared inventory, autonomous preparation, grouped analyst review, and remaining design decisions. The user authorized documenting and regrouping the conception only. It is not an implementation plan, a completed specification, or evidence of delivered functionality.
+Recorded on 2026-10-23 and updated on 2026-10-24. This document preserves the accepted product direction, shared inventory, autonomous preparation, grouped analyst review, and remaining design decisions. The target workflow is not implemented; detailed design decisions remain open.
 
-Under the [documentation policy](../../../AGENTS.md#document-authority-and-required-reading), this is a brainstorming record. It does not amend [PRODUCT.md](../../../PRODUCT.md), [context/TECH.md](../../../context/TECH.md), [context/PROJECT.md](../../../context/PROJECT.md), [AGENTS.md](../../../AGENTS.md), or [the roadmap](../../ROADMAP.md). The current ten-dimension contracts and mandatory human corpus checkpoint remain implementation obligations until those references are explicitly reconciled with the target described here.
-
-This document records the system-wide conception. The [source ingestion and processing conception](2026-10-24-source-ingestion-and-processing-conception.md) details the source module, its three principal stages, internal work, and contribution to the overall system. Neither document adds another current reference contract.
+This document owns the overall workflow, cooperation between responsibilities, shared inventory rules, and analyst judgment. The [source ingestion and processing conception](2026-10-24-source-ingestion-and-processing-conception.md) and [Investigation conception](2026-10-24-investigation-conception.md) detail their respective work and interfaces.
 
 ## Purpose
 
@@ -74,7 +72,7 @@ The system proposes a usable framing rather than requiring the analyst to write 
 
 ### Launch Mandate and Contextual Intervention
 
-The user selected a mandate at launch: the system selects sources under explicit rules, advances autonomously, and requests analyst intervention for important exceptions. Results remain proposals until human judgment. In this target conception, routine source selection does not require a separate human corpus approval before analytical work. This replaces the earlier proposed systematic approval stop in the intended workflow, without authorizing a bypass of the current implementation contract.
+The user selected a mandate at launch: the system selects sources under explicit rules, advances autonomously, and requests analyst intervention for important exceptions. Results remain proposals until human judgment. In this target conception, routine source selection does not require a separate human corpus approval before analytical work. This replaces the earlier proposed systematic approval stop in the intended workflow.
 
 Delegated source selection must remain explainable and traceable. Retaining a source does not establish that its assertions are true or that the analyst has endorsed an interpretation. The source-selection rules, permitted work and resource limits, and exceptions requiring intervention are not yet defined.
 
@@ -82,14 +80,14 @@ The discussed intervention principle is to distinguish a local limitation from a
 
 ### Allocation of Work
 
-An autonomous operation can also have optional detailed inspection. Optional inspection is not another approval checkpoint. The following allocation records the retained target rather than asserting that these operations are all implemented.
+An autonomous operation can also have optional detailed inspection. Optional inspection is not another approval checkpoint. The following allocation distinguishes system preparation from analyst judgment.
 
 | Work | Retained responsibility |
 | --- | --- |
-| Research planning and source ingestion and processing | Autonomous after framing; the source conception owns discovery, availability checks, reading, qualification, comparison, selection, and the bounded complement phase. |
-| Enriching the shared company inventory | Autonomous preparation of sourced, qualified information, with inspectable controls and limitations. Other enrichment mechanisms remain possible. |
-| Checking assertions and their question links | Mandatory system controls; important unresolved exceptions can require human intervention. Routine human confirmation of every assertion and link is not required before preparing appraisals. |
-| Examining counter-evidence and preparing appraisals | Autonomous work on the framed questions, preserving objections and unknowns. |
+| Source ingestion and processing | Sources autonomously plans discovery, checks availability, reads, qualifies, compares, and selects documentary material for the requested needs. |
+| Enriching the shared company inventory | Investigation reuses and enriches the inventory during a common inquiry into the framed questions. Other enrichment mechanisms remain possible. |
+| Checking assertions and their question links | Investigation applies the shared mandatory controls to its contributions and intended uses. Important unresolved exceptions can require human intervention; routine human confirmation of every assertion and link is not required before preparing appraisals. |
+| Examining interpretations and preparing appraisals | Investigation confronts the evidence and counter-evidence, identifies decisive gaps across questions, and prepares distinct appraisals. Sources executes the grouped documentary complement when needed, as described below. |
 | Preparing synthesis, brief, and derived views | Autonomous, with inspectable evidence dependencies and a clear distinction between proposals and retained appraisals. The map's exact place and format remain open. |
 | Retaining analytical judgments | Explicit grouped analyst review, with correction or follow-up possible per question. |
 | Routine recovery | Autonomous within the mandate and resource allowances. Changing scope or exceeding the mandate requires a decision; technical unavailability remains distinct from evidence insufficiency. |
@@ -98,7 +96,7 @@ The old fixed ten-dimension questionnaire and scoring sequence are not the targe
 
 ## Workspace Experience
 
-The user described the following interaction direction. It records the intended experience, not an approved final layout or authorization to implement a redesign.
+The retained interaction direction is described below; detailed layout remains open.
 
 - After launch, the composer becomes smaller and floats at the bottom center, remaining available for orientation and follow-up.
 - The central component presents progress and a timeline of meaningful stages. Requests for approval or intervention appear in their relevant context.
@@ -110,41 +108,54 @@ Exact card count, grouping, responsive placement, animation behavior, and the re
 
 ## Reusable Workflow Responsibilities
 
-Source ingestion and processing is documented as a reusable module. Investigation and synthesis remain useful responsibilities for explaining the larger workflow; their exact technical decomposition and card presentation are not selected. A workflow responsibility does not prescribe a separate service, agent, or extensibility mechanism.
+Sources and Investigation have dedicated conceptions. Synthesis remains a responsibility whose detailed operation is open. Their functional boundaries do not prescribe separate services, agents, model calls, or cards; the technical decomposition and presentation remain to be selected.
 
 | Proposed responsibility | Output |
 | --- | --- |
 | Source ingestion and processing | Shared documentary material with qualification, provenance, and limitations; see its dedicated conception. |
-| Investigation | A reasoned appraisal of a question, with supporting evidence, objections, and unknowns. |
+| Investigation | Controlled contributions to the shared inventory, grouped documentary needs, and distinct reasoned appraisals from a common inquiry into the dossier. |
 | Synthesis | An account of how the appraisals relate and what their economic implications and limits are. |
 
-A workflow capability, an execution of that capability, and its visible card are distinct concepts. The source matrix is a detailed view of source preparation; a research question is not another independent source-collection module. Several investigations reuse the shared material and company inventory rather than maintaining duplicate versions of the same assertion in each appraisal.
+A workflow capability, an execution of that capability, and its visible card are distinct concepts. The source matrix is a detailed view of source preparation; a research question is not another independent source-collection module. Investigation works across the framed questions with shared material and a common company inventory, then prepares separate appraisals without duplicating the same assertion for each one.
 
 ```text
-            Source ingestion and processing
-                          |
-                          v
-              Shared company inventory <--- Other enrichment
-                    /     |     \           mechanisms, undefined
-                   v      v      v
-               Question A B      C
-                   |      |      |
-               Reasoned appraisals
-                    \     |     /
-                     v    v    v
-                       Synthesis
-                          |
-                          v
-               Grouped analyst adoption
+Completed framing
+        |
+        v
+Sources: initial documentary preparation
+        |
+        v
+Investigation: common inquiry <----> Shared company inventory
+        |                                    ^
+        | Grouped needs, if useful            | Other enrichment
+        v                                    | mechanisms, undefined
+Sources: bounded targeted complement
+        |
+        v
+Investigation: re-examine and propose appraisals by question
+        |
+        v
+Synthesis of the investigated scope
+        |
+        v
+Grouped analyst adoption
 ```
 
 One source can inform several questions through the relevant passages. Reusing it must preserve its identity, permitted uses, and limitations. Whether cards represent responsibilities, individual investigations, or grouped work remains open; a growing question count should not automatically produce a separate floating source matrix for every question.
 
+### Cooperation and Documentary Complement
+
+Sources first prepares a shared documentary foundation with research targeted at the framed questions, under a bounded initial plan. Investigation then conducts a common inquiry: it exploits the prepared material and inventory, enriches the inventory with controlled assertions, and tests the interpretations across questions. This shares evidence and documentary needs across questions rather than launching independent inquiries with separate inventories for each one.
+
+After this first analytical pass, Investigation identifies which missing information could materially change an appraisal, taking account of the documentary gaps reported by Sources. It groups overlapping needs into a targeted request. Sources handles the resulting discovery, reading, qualification, comparison, and selection; Investigation uses the returned material to re-examine its reasoning. Sources does not consume an earlier complement solely to complete documentary roles before Investigation has identified the decisive needs.
+
+The prototype allows one autonomous, grouped, bounded complement phase when useful. It may contain several searches or retrievals, rather than exactly one provider call. If no useful request is identified, Investigation proceeds directly to its appraisals. Remaining gaps are disclosed after the phase; they do not automatically initiate another search cycle. Exact prioritization criteria, counts, costs, time limits, and intervention thresholds remain open. This sequence does not require the analyst to coordinate the handoffs.
+
 ## Shared Company Inventory and Evidence Matrix
 
-The retained conception preserves a general company inventory, including useful company context and sourced assertions shared across questions. The system can enrich it from the work performed, and other mechanisms may enrich it later. Those mechanisms are not selected; their possibility does not authorize new integrations, continuous monitoring, or unsourced inputs. The inventory need not be exhaustive before a useful appraisal can be proposed.
+The retained conception preserves a general company inventory, including useful company context and sourced assertions shared across questions. The system can enrich it from the work performed; other enrichment mechanisms remain to be selected. The inventory need not be exhaustive before a useful appraisal can be proposed.
 
-Source ingestion supplies documentary material. Admission to the analytical inventory also requires the assertion and its intended use to satisfy the applicable controls. Finding, reading, selecting, and quoting a source do not themselves establish an assertion's truth. A common assertion can serve several questions while each use retains its own scope, rationale, and supporting, opposing, or contextual relationship.
+Sources supplies qualified documentary material. Investigation transforms relevant material into controlled assertions and enriches the inventory during the inquiry. Admission to the analytical inventory requires the assertion and its intended use to satisfy the shared controls; Investigation applies these rules rather than defining a separate validation policy. Finding, reading, selecting, and quoting a source do not themselves establish an assertion's truth. A common assertion can serve several questions while each use retains its own scope, rationale, and supporting, opposing, or contextual relationship.
 
 The evidence matrix makes this inventory and its uses inspectable. The analyst can connect a research question to the relevant assertions, passages, objections, unknowns, control results, and corrections. It need not occupy the main progress view or require supervision of every operation. The distinctions between `Fact`, `Inference`, `Hypothesis`, and `Unknown` remain useful.
 
@@ -196,7 +207,7 @@ Human decisions remain associated with the version reviewed. Later inventory enr
 
 Question coverage must not imply that a question is resolved merely because a claim refers to it. Inspection of [claimValidation.ts](../../../convex/domain/claimValidation.ts) found that `deriveQuestionCoverage` counts question-linked claims, including `Unknown`. The [matrix query](../../../convex/evidenceMatrix.ts) uses that count. This is evidence presence, not an established answer. The exact replacement for this projection is undecided.
 
-The analyst remains the final authority over analytical judgment. Source selection follows the target launch mandate described above; exact provenance, inspectable proposals, and preserved decisions remain essential. The selected appraisal schematic does not establish final wording, control layout, or implementation authority.
+The analyst remains the final authority over analytical judgment. Source selection follows the target launch mandate described above; exact provenance, inspectable proposals, and preserved decisions remain essential.
 
 ## Economic Data Boundary
 
@@ -218,7 +229,7 @@ An earlier preference for simple verifiable calculations was explicitly narrowed
 | Wait until framing is complete before starting research | Selected for the prototype. It keeps the sequence simpler and avoids premature work against a changing scope. |
 | Prepare shared documentary material while framing remains open | Not selected for the prototype. This earlier recommendation was superseded by the user's choice to finish framing first. Any future time-saving benefit would need verification. |
 | Start all common-question investigations while framing remains open | Not selected for the prototype. It adds speculative work and consistency handling beyond the retained sequential start. |
-| Require a contextual corpus approval before every analysis | Not selected as the target workflow. The user selected delegated source selection under an initial mandate, with important exceptions raised contextually. Current reference contracts still require reconciliation before implementation. |
+| Require a contextual corpus approval before every analysis | Not selected as the target workflow. The user selected delegated source selection under an initial mandate, with important exceptions raised contextually. |
 | Independent appraisals referencing passages without a shared assertion inventory | Not selected. It reduces intermediate objects but repeats common interpretations and corrections across questions. The company inventory and reusable sourced assertions are retained. |
 | Require an exhaustive inventory and routine human confirmation of every assertion and link | Not selected. The system must retain the inventory and mandatory controls while avoiding an analyst-managed inventory-completion workflow. |
 | Individual adoption of every appraisal as the default | Not selected. The user retained grouped review with correction or follow-up per question. |
@@ -242,7 +253,7 @@ An earlier preference for simple verifiable calculations was explicitly narrowed
 
 **Protocol** — Use deterministic checks and focused technical analysis for the reproducible controls. Use the smallest reversible experiment for analytical usefulness and workload, rather than treating a polished interface or a passing schema as validation of the whole system. The proposed leverage point is the handoff from routine evidence preparation to a material human judgment, not raw collection throughput.
 
-**Next smallest test** — Proposed, not executed: use one frozen illustrative dossier with questions sharing an assertion, a contradictory passage, and a documented gap. Walk through framing, source output, appraisals, and grouped review; record whether the analyst can understand and challenge an appraisal without coordinating preparation. If the decisive friction is entirely explained by repeatable ownership or transition defects, classify that slice as Complicated and repair it with focused analysis rather than adding exploratory automation. Repeated inability to judge without deep research coordination would falsify the proposed division of work. No paid provider experiment or application implementation is authorized by this proposed test.
+**Next smallest test** — Proposed, not executed: use one frozen illustrative dossier with questions sharing an assertion, a contradictory passage, and a documented gap. Walk through framing, source output, appraisals, and grouped review; record whether the analyst can understand and challenge an appraisal without coordinating preparation. If the decisive friction is entirely explained by repeatable ownership or transition defects, classify that slice as Complicated and repair it with focused analysis rather than adding exploratory automation. Repeated inability to judge without deep research coordination would falsify the proposed division of work.
 
 ## Research Basis and Adaptation
 
@@ -275,11 +286,10 @@ These sources inform the conception. They establish public research themes, not 
 - Define the exact common research foundation, the bounded set of decisive questions, and how the proposed activity or workflow is selected and corrected.
 - Define how framing completes without making optional refinements mandatory, and how later scope changes affect ongoing work and existing results. Research starts only after framing; speculative background research during framing is not part of the prototype.
 - Specify the launch mandate's source-selection rules, resource limits, intervention criteria, and handling of material exceptions, using the source conception for its internal workflow. Delegated selection is accepted; its enforcement and replacement of the current human corpus checkpoint are not implemented.
-- Define the remaining technical decomposition of investigation and synthesis, card grouping, detail-page navigation, and completed-result presentation. Preserve the accepted composer, timeline, contextual-intervention, and optional-inspection direction without treating an illustrative layout as finished design.
+- Define the technical realization of Sources and Investigation, the detailed operation of synthesis, card grouping, detail-page navigation, and completed-result presentation. Preserve the accepted composer, timeline, contextual-intervention, and optional-inspection direction without treating an illustrative layout as finished design.
+- Specify the grouped complement's prioritization and resource allocation across questions, and the cooperation outcomes when requested material is unavailable. Its placement after the first shared analytical pass and its single bounded phase are retained.
 - Specify shared assertion identity, question-to-evidence relationships, inventory correction and enrichment mechanisms, and their presentation in the matrix. Exact records, freshness rules, and navigation are not selected.
 - Define confidence presentation, treatment of future horizons, synthesis composition, and the detailed interaction and audit semantics of grouped review. Grouped adoption is accepted; its controls and persistence shape are not selected.
 - Specify executable completion checks that distinguish investigated-but-insufficient questions from interrupted or unperformed work. Preparation may end with justified insufficiency; the exact projections and transitions remain open.
-- Determine how current dimension-linked records, policies, fixtures, and existing dossiers transition. No schema, migration, backend operation, or data rewrite is authorized by this record.
-- Decide the exact landing-page matrix example and capability copy after settling the functional design. The illustrative wireframes and capability names are not approval for a page redesign.
-
-The product direction is recorded; the detailed design remains incomplete. Before implementation, reconcile accepted durable changes in their existing owners: candidature framing in `context/PROJECT.md`, behavior and acceptance in `PRODUCT.md`, enforcement and transition contracts in `context/TECH.md`, delivery work in `docs/ROADMAP.md`, and agent priorities in `AGENTS.md`. Preserve historical delivery and failure evidence. This record itself grants no implementation, provider-spend, publication, or deployment authority.
+- Define the transition from the current ten-dimension model to the question-led workflow, including existing records, policies, fixtures, and dossiers.
+- Decide the exact landing-page matrix example and capability copy after settling the functional design.
