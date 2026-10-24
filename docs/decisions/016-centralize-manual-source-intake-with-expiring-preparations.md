@@ -1,7 +1,5 @@
 # ADR-016: Centralize Manual Source Intake With Expiring Preparations
 
-> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
-
 ## Status
 
 Accepted. [ADR-024](024-qualify-source-content-before-corpus-approval.md) amends the historical blanket prohibition on pre-approval content retrieval. Intake receipts remain expiring metadata records; bounded documentary capture and qualification belong to the later dossier-preparation workflow. The public intake owner and authorization rules remain unchanged.

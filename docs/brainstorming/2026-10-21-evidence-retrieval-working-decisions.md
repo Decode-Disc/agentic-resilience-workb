@@ -1,18 +1,14 @@
 # Evidence Retrieval: Working Decisions and Research
 
-> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
-
 ## Subsequent implementation authority
 
-The user subsequently approved implementation of the retrieval comparison. [ADR-025](../decisions/025-use-versioned-scoped-evidence-retrieval.md) and the implementation plan (historical checkpoint: `git show c4f0d24:docs/superpowers/plans/2026-10-21-evidence-retrieval.md`) own that later decision and its validation gates. The discussion below records the earlier state of knowledge. It is retained as research history and does not imply that an unverified integration is deployed. The broader goal remains paused.
+Implementation of the retrieval comparison was subsequently approved and recorded in [ADR-025](../decisions/025-use-versioned-scoped-evidence-retrieval.md) and the implementation plan (historical checkpoint: `git show c4f0d24:docs/superpowers/plans/2026-10-21-evidence-retrieval.md`). They describe the selected design and validation gates. The discussion below records the earlier state of knowledge. The broader goal remains paused.
 
 ## Status and Authority
 
 Recorded on 2026-10-21 before implementation. The user accepted comparing a structured lexical baseline with a lexical-and-embedding hybrid. The user excluded embedding models running on their own machine and prioritized free services, allowing consideration of a verified free tier or very marginal additional cost. These are accepted comparison constraints, not acceptance of a deployed architecture or a particular embedding model.
 
 Cloudflare Workers AI is the recommended hosted embedding candidate. Direct invocation from Convex is a recommendation, not an approved provider integration. Account access, available quota, runtime behavior, retrieval quality and actual workload costs remain unverified.
-
-This record documents the discussion and its evidence. It is neither an implementation plan nor an acceptance report, and it supersedes no accepted ADR. The broader implementation goal remains paused. Documentation does not authorize inference, installation, provider configuration, application or data changes, deployment, or resumption of that goal.
 
 Before implementation, reconcile the selected design with [ADR-023](../decisions/023-use-decision-anchored-phase-5-evidence-workflow.md), [ADR-024](../decisions/024-qualify-source-content-before-corpus-approval.md), [ADR-010](../decisions/010-keep-provider-routing-retries-and-fallback-application-controlled.md) and [technical context](../../context/TECH.md). In particular, do not silently raise the locked passage limits or add a provider under a contract that currently specifies no additional retrieval-model request.
 
@@ -159,5 +155,3 @@ Before implementation, settle the embedding model and task-specific input limits
 Future graph retrieval requires a concrete relationship-question failure that the simpler paths do not resolve. A dedicated reranker requires evidence that relevant candidates are already retrieved but are ordered poorly. A separate Worker requires an identifiable responsibility beyond forwarding. These are future contingencies, not unfinished prerequisites for a minimal prototype.
 
 Preserve source-review UI, corpus approval, append-only analyst decisions, source-use restrictions, rejected-source exclusion, captures and historical evaluation evidence. Neither several sources nor a better search score establishes factual authority. No new analytical claims or graph relations may bypass the approved-corpus and validated-claim boundaries.
-
-The next authorized work in this request is documentation only. A subsequent implementation decision must identify its precise scope and update affected contracts before production changes. This record authorizes no new call, deployment or broader goal resumption.

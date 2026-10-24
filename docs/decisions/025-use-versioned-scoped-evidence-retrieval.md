@@ -1,7 +1,5 @@
 # Use versioned, scoped evidence retrieval
 
-> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
-
 Date: 2026-10-21
 
 Status: Accepted for implementation; activation depends on validation. The 2026-10-22 interpretation amendment below limits what the historical exact-reference experiment can establish. It does not select a new winner, revise raw scores or authorize activation.

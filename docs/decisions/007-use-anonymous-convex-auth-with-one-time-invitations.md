@@ -1,7 +1,5 @@
 # ADR-007: Use Anonymous Convex Auth with One-Time Invitations
 
-> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
-
 ## Status
 
 Superseded in part by ADR-014. Anonymous Convex Auth and the five stable access

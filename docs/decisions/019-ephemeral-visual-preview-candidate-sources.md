@@ -1,7 +1,5 @@
 # ADR-019: Ephemeral Visual Preview of Candidate Sources Before Corpus Approval
 
-> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
-
 ## Status
 
 Accepted. The screenshot-only contract remains in force. [ADR-024](024-qualify-source-content-before-corpus-approval.md) supersedes the historical blanket prohibition on pre-approval documentary retrieval. A transient visual preview remains separate from an immutable documentary capture and cannot become analytical evidence. The [2026-10-22 verification](../verification/2026-10-22-source-review-corrections.md) records cache authorization and network-boundary corrections; it does not certify remote deployment.

@@ -1,7 +1,5 @@
 # ADR-024: Qualify Source Content Before Corpus Approval
 
-> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
-
 ## Status
 
 Accepted for implementation. This record defines intended behavior; it is not an implementation acceptance report. See the implementation plan (historical checkpoint: `git show c4f0d24:docs/superpowers/plans/2026-10-20-preapproval-source-qualification.md`), [recorded delivery state](../ROADMAP.md#current-delivery-state) and [source-review corrections](../verification/2026-10-22-source-review-corrections.md). The implementation and bounded experiments do not establish accepted general activation or completed live analytical work. Historical call allowances are not renewed by this document.

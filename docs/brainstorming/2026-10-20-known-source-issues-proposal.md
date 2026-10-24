@@ -1,8 +1,6 @@
 # Evidence-bound restrictions for known source issues
 
-> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
-
-**Status: historical accepted direction, 2026-10-20.** This record explains the targeted comparison and restriction capability subsequently specified in [ADR-024](../decisions/024-qualify-source-content-before-corpus-approval.md) and the implementation plan (historical checkpoint: `git show c4f0d24:docs/superpowers/plans/2026-10-20-targeted-source-comparison.md`). The [verification report](../verification/2026-10-20-targeted-source-comparison.md), [live comparison](../verification/2026-10-20-source-comparison-live-evaluation.md) and [source-review corrections](../verification/2026-10-22-source-review-corrections.md) record later implementation, failures and limits. The delegation and call allowances below describe the original authorized task; they do not authorize new work or renew provider budgets. The broader goal remains paused.
+**Status: direction accepted on 2026-10-20.** The targeted comparison and restriction capability was subsequently specified in [ADR-024](../decisions/024-qualify-source-content-before-corpus-approval.md) and the implementation plan (historical checkpoint: `git show c4f0d24:docs/superpowers/plans/2026-10-20-targeted-source-comparison.md`). The [verification report](../verification/2026-10-20-targeted-source-comparison.md), [live comparison](../verification/2026-10-20-source-comparison-live-evaluation.md) and [source-review corrections](../verification/2026-10-22-source-review-corrections.md) record later implementation, failures and limits. The broader goal remains paused.
 
 ## Verified gap
 

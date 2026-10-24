@@ -1,7 +1,5 @@
 # ADR-013: Use Rate-Limited Four-Digit Invitation OTPs
 
-> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
-
 ## Status
 
 Accepted in part. The four-digit format and rate limits remain; ADR-014

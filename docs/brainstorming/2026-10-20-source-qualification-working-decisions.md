@@ -1,12 +1,8 @@
 # Content-Based Source Qualification: Working Decisions
 
-> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
-
 ## Status
 
-Four product decisions were explicitly accepted on 2026-10-20 during brainstorming. This historical record preserves those decisions and their rationale. At that checkpoint, technical design and implementation authorization were incomplete. The subsequent [ADR-024](../decisions/024-qualify-source-content-before-corpus-approval.md) and implementation plan (historical checkpoint: `git show c4f0d24:docs/superpowers/plans/2026-10-20-preapproval-source-qualification.md`) recorded the subsequently accepted contract. The current requirements are consolidated in [PRODUCT.md](../../PRODUCT.md) and [context/TECH.md](../../context/TECH.md). See the [roadmap](../ROADMAP.md#current-delivery-state) for delivery evidence and remaining limits. This working record is not an acceptance report or a new authorization.
-
-The observations below describe the application and contracts at the brainstorming checkpoint. Their later reconciliation is recorded in ADR-024 and the current product and technical contracts. Do not reinterpret historical findings or model results as current acceptance, and do not use this working record to bypass authorization checks.
+Four product decisions were accepted on 2026-10-20 during brainstorming, before technical design and implementation approval were complete. The observations below describe that checkpoint. [ADR-024](../decisions/024-qualify-source-content-before-corpus-approval.md) and the implementation plan (historical checkpoint: `git show c4f0d24:docs/superpowers/plans/2026-10-20-preapproval-source-qualification.md`) record the later accepted design. Current requirements are consolidated in [PRODUCT.md](../../PRODUCT.md) and [context/TECH.md](../../context/TECH.md); the [roadmap](../ROADMAP.md#current-delivery-state) records delivery evidence and remaining limits.
 
 ## Destination
 
@@ -93,7 +89,7 @@ The system may use its bounded supplement where further research can address the
 
 ## Preserved Boundaries
 
-Preserve grouped corpus approval, individual append-only analyst decisions, rejected-source exclusion, immutable history and source-version provenance. Preserve the existing source-review layout, candidate inspection, adjustment and public-HTTPS intake affordances. This discussion does not authorize an unrelated UI redesign.
+Preserve grouped corpus approval, individual append-only analyst decisions, rejected-source exclusion, immutable history and source-version provenance. Preserve the existing source-review layout, candidate inspection, adjustment and public-HTTPS intake affordances.
 
 Convex remains the state owner and the existing workflow engine remains the orchestration authority. Extend the existing proposal and evidence-policy owners rather than introducing a parallel selection engine or a second persistence authority.
 
@@ -127,7 +123,7 @@ The existing retrieval and normalization primitives, proposal mechanism and evid
 
 The four product choices are accepted. The complete design maturity gate has not passed because the qualification contract, restriction enforcement and role-sufficiency rules remain open. This record does not promote those recommendations into accepted architecture.
 
-Continue with the smallest qualification protocol that can explain why a candidate is useful, cite the inspected content, preserve uncertainty and constrain downstream use. Then document precise changes to the acquisition, selection, provider and evidence contracts, including the relevant clauses of ADR-004, ADR-009, ADR-010, ADR-018, ADR-021, ADR-022 and ADR-023. Implementation planning and production changes remain separate authorizations.
+Continue with the smallest qualification protocol that can explain why a candidate is useful, cite the inspected content, preserve uncertainty and constrain downstream use. Then document precise changes to the acquisition, selection, provider and evidence contracts, including the relevant clauses of ADR-004, ADR-009, ADR-010, ADR-018, ADR-021, ADR-022 and ADR-023.
 
 ## Work Performed in This Brainstorming Continuation
 
