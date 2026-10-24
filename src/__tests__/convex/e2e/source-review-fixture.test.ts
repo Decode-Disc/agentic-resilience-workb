@@ -1070,3 +1070,130 @@ test.each([
     expect(lookup).not.toHaveBeenCalled();
     await t.finishInProgressScheduledFunctions();
 });
+
+test("local progress fixtures advance real review projections without providers or new analyst decisions", async () => {
+    vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
+    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
+    const t = convexTest(schema, modules);
+    workflowTest.register(t);
+    const { userId } = await createAdmittedVisitor(t);
+    const fixtureKey = "live-progress";
+    const seeded = await t.action(
+        internal.e2eFixtures.seedInspectedSourceReviewScenario,
+        { slotKey: "e2e-analyst", fixtureKey },
+    );
+    const args = { runId: seeded.runId, fixtureKey, slotKey: "e2e-analyst" };
+    const before = await t.query(
+        internal.e2eFixtures.inspectSourceReviewScenario,
+        { runId: seeded.runId, fixtureKey },
+    );
+    const owner = t.withIdentity({ subject: userId });
+    const summaryArgs = {
+        runId: seeded.runId,
+        corpusRevisionId: seeded.corpusRevisionId,
+    };
+    await expect(
+        t.mutation(internal.e2eFixtures.advanceSourcePreparationFixture, {
+            ...args,
+            phase: "reading",
+            fixtureKey: "another-fixture",
+        }),
+    ).rejects.toThrow("Owned progress fixture");
+    for (const phase of [
+        "reading",
+        "comparison",
+        "proposal",
+        "complete",
+    ] as const) {
+        await t.mutation(internal.e2eFixtures.advanceSourcePreparationFixture, {
+            ...args,
+            phase,
+        });
+        const summary = await owner.query(
+            api.sourceSelectionProposals.getCurrent,
+            summaryArgs,
+        );
+        if (phase === "complete") {
+            expect(summary?.preparation?.status).toBe("partial");
+            expect(summary?.effectiveStatus).toBe("ready");
+        } else
+            expect(summary?.preparation).toMatchObject({
+                status: "started",
+                progress: { phase },
+            });
+    }
+    const after = await t.query(
+        internal.e2eFixtures.inspectSourceReviewScenario,
+        { runId: seeded.runId, fixtureKey },
+    );
+    expect(after.decisions).toEqual(before.decisions);
+    expect(after.sourceReading).toEqual(before.sourceReading);
+    expect(after.providerCallCount).toBe(0);
+    vi.stubEnv("CONVEX_CLOUD_URL", "https://example.convex.cloud");
+    await expect(
+        t.mutation(internal.e2eFixtures.advanceSourcePreparationFixture, {
+            ...args,
+            phase: "reading",
+        }),
+    ).rejects.toThrow("Local progress fixtures");
+});
+
+test("recovery fixtures retain the inspected capture and require an owned local draft", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
+    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
+    vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "true");
+    const t = convexTest(schema, modules);
+    workflowTest.register(t);
+    const { userId } = await createAdmittedVisitor(t);
+    const fixtureKey = "bounded-recovery";
+    const seeded = await t.action(
+        internal.e2eFixtures.seedInspectedSourceReviewScenario,
+        { slotKey: "e2e-analyst", fixtureKey },
+    );
+    const before = await t.query(
+        internal.e2eFixtures.inspectSourceReviewScenario,
+        { runId: seeded.runId, fixtureKey },
+    );
+    const args = { runId: seeded.runId, fixtureKey, slotKey: "e2e-analyst" };
+    const staged = await t.mutation(
+        internal.e2eFixtures.stageSourcePreparationRecoveryFixture,
+        args,
+    );
+    expect(
+        await t.mutation(
+            internal.e2eFixtures.stageSourcePreparationRecoveryFixture,
+            args,
+        ),
+    ).toEqual(staged);
+    const after = await t.query(
+        internal.e2eFixtures.inspectSourceReviewScenario,
+        { runId: seeded.runId, fixtureKey },
+    );
+    expect(after.sourceReading).toEqual(before.sourceReading);
+    expect(after.decisions).toEqual(before.decisions);
+    expect(after.providerCallCount).toBe(0);
+    expect(
+        (
+            await t
+                .withIdentity({ subject: userId })
+                .query(api.sourceSelectionProposals.getCurrent, {
+                    runId: staged.runId,
+                    corpusRevisionId: staged.corpusRevisionId,
+                })
+        )?.preparationAction,
+    ).toMatchObject({ available: true });
+    await expect(
+        t.mutation(internal.e2eFixtures.stageSourcePreparationRecoveryFixture, {
+            ...args,
+            slotKey: "another-slot",
+        }),
+    ).rejects.toThrow("Owned recovery fixture");
+    vi.stubEnv("CONVEX_CLOUD_URL", "https://example.convex.cloud");
+    await expect(
+        t.mutation(
+            internal.e2eFixtures.stageSourcePreparationRecoveryFixture,
+            args,
+        ),
+    ).rejects.toThrow("Local recovery fixtures");
+});

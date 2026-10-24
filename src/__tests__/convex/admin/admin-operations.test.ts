@@ -207,3 +207,75 @@ test("requires an authenticated active administrator to read operational history
             .query(getOperations, {}),
     ).rejects.toThrow("Unauthorized");
 });
+
+test("admin can inspect preparation configuration and dispatch evidence without secrets", async () => {
+    const { internal } = await import("@convex/_generated/api");
+    const { seedSourcePreparation } = await import(
+        "@/__tests__/setup/source-preparation"
+    );
+    const { t, runId, corpusRevisionId, sourceId } =
+        await seedSourcePreparation();
+    const { adminUserId } = await createVisitors(t);
+    const preparationId = await t.mutation(
+        internal.sourcePreparation.claimForDiscovery,
+        { runId, corpusRevisionId, expectedExecutionGeneration: 3 },
+    );
+    await t.mutation(internal.sourcePreparation.recordConfigurationCheck, {
+        preparationId,
+        available: false,
+    });
+    const attempt = {
+        runId,
+        corpusRevisionId,
+        sourceId,
+        preparationId,
+        executionGeneration: 3,
+        workflowVersion: 1,
+        stepKey: "source_preparation",
+        service: "model" as const,
+        operation: "source_qualification",
+        inputHash: "a".repeat(64),
+        operationKey: `${(await t.run((ctx) => ctx.db.get(preparationId)))?.operationKey}:step:source_preparation:input:${"a".repeat(64)}:attempt:1`,
+        attempt: 1,
+    };
+    await t.mutation(internal.providerCalls.recordAttempt, {
+        ...attempt,
+        status: "started",
+    });
+    await t.mutation(internal.providerCalls.recordAttempt, {
+        ...attempt,
+        status: "failed",
+        errorCode: "transport_unavailable",
+        dispatchOutcome: "response_received",
+        httpStatus: 503,
+    });
+    await t.mutation(internal.sourcePreparation.recordResult, {
+        preparationId,
+        outcome: {
+            sourceId,
+            result: {
+                status: "unavailable",
+                reasonCode: "transport_unavailable",
+            },
+        },
+    });
+    const operations = await t
+        .withIdentity({ subject: adminUserId })
+        .query(getOperations, {});
+    expect(operations.runs.find((run) => run.runId === runId)).toMatchObject({
+        preparation: {
+            configurationCheck: { available: false },
+            failures: [{ sourceId, reasonCode: "transport_unavailable" }],
+        },
+    });
+    expect(operations.providerCalls[0]).toMatchObject({
+        preparationId,
+        sourceId,
+        attempt: 1,
+        dispatchOutcome: "response_received",
+        httpStatus: 503,
+    });
+    expect(JSON.stringify(operations)).not.toMatch(
+        /OPENROUTER_API_KEY|apiKey|test-key/,
+    );
+});

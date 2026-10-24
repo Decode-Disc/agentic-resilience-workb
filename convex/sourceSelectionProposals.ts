@@ -10,7 +10,6 @@ import { internal } from "./_generated/api";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import {
-    env,
     internalMutation,
     internalQuery,
     type MutationCtx,
@@ -37,7 +36,9 @@ import {
 import { sourcePreparationStopCodeValidator } from "./domain/sourcePreparationAuthority";
 import {
     readPreparationHistory,
-    readSourceReading,
+    readPreparationRecovery,
+    readSourceReview,
+    sourceReadingStatusValidator,
 } from "./domain/sourcePreparationReview";
 import { SOURCE_QUALIFICATION_VERSION } from "./domain/sourceQualification";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
@@ -170,6 +171,7 @@ const rebuildPlanQueryValidator = v.object({
 });
 
 const proposalSourceValidator = v.object({
+    readingStatus: v.optional(sourceReadingStatusValidator),
     sourceId: v.id("sources"),
     sourceCaptureId: v.optional(v.id("sourceCaptures")),
     qualificationTaskId: v.optional(v.id("aiTaskResults")),
@@ -540,11 +542,21 @@ function isIncluded(
 async function hydrateProposalItem(
     ctx: QueryCtx | MutationCtx,
     item: Doc<"sourceSelectionProposalItems">,
+    context: ProposalContext & {
+        preparations: Doc<"sourceSelectionProposalRebuilds">[];
+        company: Awaited<ReturnType<typeof readSelectionCompany>>;
+    },
 ) {
     const source = await ctx.db.get(item.sourceId);
     if (!source) {
         throw new Error("Source proposal projection is incomplete");
     }
+    const { reading, classification } = await readSourceReview(ctx.db, {
+        ...context,
+        source,
+        item,
+    });
+    const current = classification ?? item;
     const reviewItem = await ctx.db
         .query("sourceReviewItems")
         .withIndex("by_revision_and_source", (query) =>
@@ -555,48 +567,53 @@ async function hydrateProposalItem(
         .unique();
     const decision = reviewItem?.decision ?? "pending";
     return {
-        sourceId: source._id,
-        ...(item.sourceCaptureId
-            ? { sourceCaptureId: item.sourceCaptureId }
-            : {}),
-        ...(item.qualificationTaskId
-            ? { qualificationTaskId: item.qualificationTaskId }
-            : {}),
-        ...(item.comparisonTaskIds?.length
-            ? { comparisonTaskIds: item.comparisonTaskIds }
-            : {}),
-        ...(item.comparisonOutcomes
-            ? { comparisonOutcomes: item.comparisonOutcomes }
-            : {}),
-        ...(item.roleAvailability
-            ? { roleAvailability: item.roleAvailability }
-            : {}),
-        ...(item.inspectionStatus
-            ? { inspectionStatus: item.inspectionStatus }
-            : {}),
-        canonicalUrl: source.canonicalUrl,
-        title: source.title,
-        origin: source.origin,
-        category: source.category,
-        publishedAt: source.publishedAt,
-        disposition: item.disposition,
-        sourceFamily: item.sourceFamily,
-        documentKind: item.documentKind ?? "unknown",
-        authorityTier: item.authorityTier ?? "unverified",
-        companyLinkageBasis: item.companyLinkageBasis ?? "not_evaluated",
-        coverageContributions: item.coverageContributions ?? [],
-        recommendationContributions: item.recommendationContributions ?? [],
-        declaredCoverageRoles: item.declaredCoverageRoles ?? [],
-        eligibleCoverageRoles: item.eligibleCoverageRoles ?? [],
-        duplicateOfSourceId: item.duplicateOfSourceId,
-        rank: item.rank,
-        reasonCodes: item.reasonCodes,
-        ...(item.selectionRationale
-            ? { selectionRationale: item.selectionRationale }
-            : {}),
-        decision,
-        included: isIncluded(item.disposition, decision),
-        decisionReason: reviewItem?.reason,
+        reading,
+        source: {
+            ...(reading ? { readingStatus: reading.status } : {}),
+            sourceId: source._id,
+            ...(item.sourceCaptureId
+                ? { sourceCaptureId: item.sourceCaptureId }
+                : {}),
+            ...(item.qualificationTaskId
+                ? { qualificationTaskId: item.qualificationTaskId }
+                : {}),
+            ...(item.comparisonTaskIds?.length
+                ? { comparisonTaskIds: item.comparisonTaskIds }
+                : {}),
+            ...(item.comparisonOutcomes
+                ? { comparisonOutcomes: item.comparisonOutcomes }
+                : {}),
+            ...(current.roleAvailability
+                ? { roleAvailability: current.roleAvailability }
+                : {}),
+            ...(current.inspectionStatus
+                ? { inspectionStatus: current.inspectionStatus }
+                : {}),
+            canonicalUrl: source.canonicalUrl,
+            title: source.title,
+            origin: source.origin,
+            category: source.category,
+            publishedAt: source.publishedAt,
+            disposition: item.disposition,
+            sourceFamily: current.sourceFamily,
+            documentKind: current.documentKind ?? "unknown",
+            authorityTier: current.authorityTier ?? "unverified",
+            companyLinkageBasis: current.companyLinkageBasis ?? "not_evaluated",
+            coverageContributions: current.coverageContributions ?? [],
+            recommendationContributions:
+                current.recommendationContributions ?? [],
+            declaredCoverageRoles: current.declaredCoverageRoles ?? [],
+            eligibleCoverageRoles: current.eligibleCoverageRoles ?? [],
+            duplicateOfSourceId: item.duplicateOfSourceId,
+            rank: item.rank,
+            reasonCodes: item.reasonCodes,
+            ...(item.selectionRationale
+                ? { selectionRationale: item.selectionRationale }
+                : {}),
+            decision,
+            included: isIncluded(item.disposition, decision),
+            decisionReason: reviewItem?.reason,
+        },
     };
 }
 
@@ -839,9 +856,35 @@ export const generateForRun = internalMutation({
     },
 });
 
-async function readProposalSources(
+async function hydrateProposalItems(
+    ctx: QueryCtx | MutationCtx,
+    items: Doc<"sourceSelectionProposalItems">[],
+    context: ProposalContext,
+) {
+    const [preparations, company] = await Promise.all([
+        readPreparationHistory(ctx.db, context.run._id, context.revision._id),
+        readSelectionCompany(ctx, context.run),
+    ]);
+    const reviews = await Promise.all(
+        items.map((item) =>
+            hydrateProposalItem(ctx, item, {
+                ...context,
+                preparations,
+                company,
+            }),
+        ),
+    );
+    return {
+        sources: reviews.map((review) => review.source),
+        readings: reviews.map((review) => review.reading),
+        preparations,
+    };
+}
+
+async function readProposalReviews(
     ctx: QueryCtx | MutationCtx,
     proposal: Doc<"sourceSelectionProposals">,
+    context: ProposalContext,
 ) {
     const items = await ctx.db
         .query("sourceSelectionProposalItems")
@@ -853,13 +896,14 @@ async function readProposalSources(
         items.length > sourceDossierCandidateLimit(proposal.sourcePreparationId)
     )
         throw new Error("Source selection proposal exceeds its limit");
-    return Promise.all(items.map((item) => hydrateProposalItem(ctx, item)));
+    return hydrateProposalItems(ctx, items, context);
 }
 
 export const getCurrent = query({
     args: {
         runId: v.id("researchRuns"),
         corpusRevisionId: v.id("corpusRevisions"),
+        now: v.optional(v.number()),
     },
     returns: v.union(
         v.object({
@@ -944,8 +988,14 @@ export const getCurrent = query({
                     assessed: v.optional(v.number()),
                     failed: v.optional(v.number()),
                     remaining: v.optional(v.number()),
+                    excluded: v.optional(v.number()),
                     stopCode: v.optional(sourcePreparationStopCodeValidator),
                     canResume: v.boolean(),
+                    pendingComparisons: v.optional(v.number()),
+                    progress:
+                        schema.tables.sourceSelectionProposalRebuilds.validator
+                            .fields.progress,
+                    lastActivityAt: v.optional(v.number()),
                 }),
             ),
             preparationAction: v.optional(
@@ -960,9 +1010,14 @@ export const getCurrent = query({
                             v.literal("deadline_elapsed"),
                             v.literal("missing_configuration"),
                             v.literal("complete"),
+                            v.literal("cooldown"),
+                            v.literal("attempts_exhausted"),
+                            v.literal("outcome_unknown"),
+                            v.literal("no_eligible_work"),
                         ),
                     ),
                     deadlineAt: v.optional(v.number()),
+                    retryAt: v.optional(v.number()),
                 }),
             ),
             searchAllowance: v.optional(
@@ -986,29 +1041,21 @@ export const getCurrent = query({
         const preparation = run.sourcePreparationId
             ? await ctx.db.get(run.sourcePreparationId)
             : null;
-        const preparations = await readPreparationHistory(
-            ctx.db,
-            run._id,
-            revision._id,
+        const expiredReview =
+            preparation?.status === "started" &&
+            (preparation.deadlineAt ?? Infinity) <= (args.now ?? Date.now()) &&
+            preparation.executionGeneration === run.executionGeneration &&
+            run.lifecycleState === "awaiting_source_review";
+        const {
+            sources: hydrated,
+            readings,
+            preparations,
+        } = await readProposalReviews(ctx, proposal, context);
+        const eligibleReadings = readings.filter(
+            (reading, index) =>
+                reading && hydrated[index]?.decision !== "rejected",
         );
-        const hydrated = await readProposalSources(ctx, proposal);
-        const readings = await Promise.all(
-            (preparations.length ? hydrated : []).map((item) =>
-                readSourceReading(ctx.db, {
-                    runId: run._id,
-                    corpusRevisionId: revision._id,
-                    sourceId: item.sourceId,
-                    item,
-                    preparations,
-                    activePreparationId:
-                        run.executionStatus === "running"
-                            ? run.sourcePreparationId
-                            : undefined,
-                    approved: revision.status === "approved",
-                }),
-            ),
-        );
-        const assessed = readings.filter((r) => r.assessed).length;
+        const assessed = eligibleReadings.filter((r) => r?.assessed).length;
         const unresolvedSourceIds = new Set(
             hydrated
                 .filter(
@@ -1030,34 +1077,45 @@ export const getCurrent = query({
         const preparationSummary = preparations.length
             ? {
                   preparationId: preparation?._id,
+                  ...(preparation?.progress
+                      ? { progress: preparation.progress }
+                      : {}),
+                  lastActivityAt:
+                      preparation?.completedAt ??
+                      preparation?.progress?.updatedAt ??
+                      run.updatedAt,
                   status:
-                      preparation?.status === "started"
+                      preparation?.status === "started" && !expiredReview
                           ? ("started" as const)
                           : unresolvedSourceIds.size === 0
                             ? ("complete" as const)
                             : assessed > 0
                               ? ("partial" as const)
                               : ("blocked" as const),
-                  checked: readings.filter(
+                  checked: eligibleReadings.filter(
                       (r) =>
-                          r.status !== "not_started" &&
-                          r.status !== "preparing",
+                          r?.status !== "not_started" &&
+                          r?.status !== "preparing",
                   ).length,
-                  total: hydrated.length,
-                  captured: readings.filter((r) => r.captured).length,
+                  total: eligibleReadings.length,
+                  excluded: hydrated.filter(
+                      (source) => source.decision === "rejected",
+                  ).length,
+                  captured: eligibleReadings.filter((r) => r?.captured).length,
                   assessed,
-                  failed: readings.filter(
+                  failed: eligibleReadings.filter(
                       (r) =>
-                          r.status === "reading_failed" ||
-                          r.status === "assessment_unavailable",
+                          r?.status === "reading_failed" ||
+                          r?.status === "assessment_unavailable",
                   ).length,
-                  remaining: readings.filter(
+                  remaining: eligibleReadings.filter(
                       (r) =>
-                          r.status === "not_started" ||
-                          r.status === "preparing",
+                          r?.status === "not_started" ||
+                          r?.status === "preparing",
                   ).length,
                   stopCode: interruptedReading?.stopCode,
                   canResume: false,
+                  pendingComparisons: 0,
               }
             : undefined;
         const running = run.ownerVisitorId
@@ -1068,23 +1126,56 @@ export const getCurrent = query({
                           .eq("ownerVisitorId", run.ownerVisitorId)
                           .eq("executionStatus", "running"),
                   )
-                  .take(1)
+                  .take(2)
             : [];
         const deadlineAt = preparation?.deadlineAt;
+        const recoveryPlan =
+            preparation?.kind === "preparation" &&
+            (preparation.status !== "started" || expiredReview) &&
+            revision.status === "draft"
+                ? await readPreparationRecovery(ctx.db, {
+                      runId: run._id,
+                      corpusRevisionId: revision._id,
+                      preparation,
+                      now: args.now ?? Date.now(),
+                  })
+                : null;
+        if (preparationSummary && recoveryPlan?.pendingComparisons) {
+            preparationSummary.pendingComparisons =
+                recoveryPlan.pendingComparisons;
+            preparationSummary.status = "partial";
+        }
         const preparationActionReason =
             revision.status !== "draft"
                 ? ("read_only" as const)
                 : !sourcePreparationEnabled()
                   ? ("disabled" as const)
-                  : run.executionStatus !== "paused" || running.length > 0
+                  : (run.executionStatus !== "paused" && !expiredReview) ||
+                      running.some(
+                          (item) => item._id !== run._id || !expiredReview,
+                      )
                     ? ("busy" as const)
-                    : deadlineAt !== undefined && deadlineAt <= Date.now()
-                      ? ("deadline_elapsed" as const)
-                      : preparation && !env.OPENROUTER_API_KEY?.trim()
-                        ? ("missing_configuration" as const)
-                        : preparationSummary && unresolvedSourceIds.size === 0
-                          ? ("complete" as const)
-                          : undefined;
+                    : recoveryPlan &&
+                        recoveryPlan.resumableSourceIds.length === 0 &&
+                        !recoveryPlan.hasSearchWork &&
+                        recoveryPlan.blockedReason
+                      ? recoveryPlan.retryAt !== undefined
+                          ? ("cooldown" as const)
+                          : [
+                                  "recovery_attempt_exhausted",
+                                  "model_attempt_limit_reached",
+                              ].includes(recoveryPlan.blockedReason)
+                            ? ("attempts_exhausted" as const)
+                            : recoveryPlan.blockedReason ===
+                                "attempt_outcome_unknown"
+                              ? ("outcome_unknown" as const)
+                              : ("no_eligible_work" as const)
+                      : preparationSummary &&
+                          unresolvedSourceIds.size === 0 &&
+                          !recoveryPlan?.resumableSourceIds.length &&
+                          !recoveryPlan?.hasSearchWork
+                        ? ("complete" as const)
+                        : undefined;
         const preparationAction = {
             kind: preparationSummary ? ("resume" as const) : ("start" as const),
             available: preparationActionReason === undefined,
@@ -1092,6 +1183,9 @@ export const getCurrent = query({
                 ? { reason: preparationActionReason }
                 : {}),
             ...(deadlineAt !== undefined ? { deadlineAt } : {}),
+            ...(recoveryPlan?.retryAt !== undefined
+                ? { retryAt: recoveryPlan.retryAt }
+                : {}),
         };
         if (preparationSummary)
             preparationSummary.canResume = preparationAction.available;
@@ -1140,13 +1234,10 @@ export const getCurrent = query({
                   remainingCandidates: (
                       await readSourceCandidateCapacity(ctx.db, run._id)
                   ).remaining,
-                  ...((supplement?.deadlineAt ?? preparation?.deadlineAt) !==
-                  undefined
-                      ? {
-                            deadlineAt:
-                                supplement?.deadlineAt ??
-                                preparation?.deadlineAt,
-                        }
+                  ...(preparation?.status === "started" &&
+                  !expiredReview &&
+                  preparation.deadlineAt !== undefined
+                      ? { deadlineAt: preparation.deadlineAt }
                       : {}),
               }
             : undefined;
@@ -1255,9 +1346,7 @@ export const listItemsPage = query({
             .paginate(args.paginationOpts);
         return {
             ...page,
-            page: await Promise.all(
-                page.page.map((item) => hydrateProposalItem(ctx, item)),
-            ),
+            page: (await hydrateProposalItems(ctx, page.page, context)).sources,
         };
     },
 });
@@ -1277,7 +1366,11 @@ export const getAdjustmentSets = query({
         if (!proposal) {
             throw new Error("Source selection proposal is unavailable");
         }
-        const hydrated = await readProposalSources(ctx, proposal);
+        const { sources: hydrated } = await readProposalReviews(
+            ctx,
+            proposal,
+            context,
+        );
         return {
             included: hydrated.filter(({ included }) => included),
             available: hydrated.filter(({ included }) => !included),
@@ -1610,7 +1703,8 @@ export const claimRebuild = internalMutation({
         if (recovery?.target.kind === "coverage") {
             const items = evaluateSourceCoverage(
                 proposal.coveragePreset,
-                await readProposalSources(ctx, proposal),
+                (await readProposalReviews(ctx, proposal, { run, revision }))
+                    .sources,
             );
             const role = recovery.target.role;
             if (!items.some((item) => item.role === role && !item.covered))

@@ -730,7 +730,6 @@ export function sourceCoverageSearchState({
 /** Presents server-owned search limits without exposing configuration or provider diagnostics. */
 export function sourceSearchAllowanceCopy(
     allowance: ProposalSummary["searchAllowance"],
-    now: number,
 ) {
     if (!allowance) return null;
     if (!allowance.enabled)
@@ -749,13 +748,6 @@ export function sourceSearchAllowanceCopy(
             title: "Search limit reached",
             description:
                 "No more searches are available for this dossier. Review existing candidates or add a source link when available.",
-        };
-    if (allowance.deadlineAt !== undefined && allowance.deadlineAt <= now)
-        return {
-            status: "warning" as const,
-            title: "Search window ended",
-            description:
-                "Review existing candidates or add a public source link. The original search window cannot be renewed.",
         };
     return null;
 }
@@ -780,9 +772,20 @@ export function sourcePreparationCopy(
     if (preparation.status === "started")
         return {
             status: "info" as const,
-            title: "Preparing source selection",
+            title: preparation.progress
+                ? {
+                      reading: "Reading candidate sources",
+                      comparison: "Checking source contributions",
+                      supplement: "Checking for additional sources",
+                      proposal: "Preparing your proposal",
+                  }[preparation.progress.phase]
+                : "Preparing source selection",
             description:
-                "Candidate sources are being read and assessed. You can inspect completed readings while preparation continues.",
+                preparation.progress?.phase === "comparison"
+                    ? "Saved readings are being compared with available primary documents. You can keep inspecting sources below."
+                    : preparation.progress?.phase === "proposal"
+                      ? "The source selection is being updated from the saved results. It will be ready for your review shortly."
+                      : "Completed readings appear below as sources are checked. You can inspect them while preparation continues.",
             counts,
         };
     if (
@@ -809,6 +812,15 @@ export function sourcePreparationCopy(
                     : "Preparation stopped before it could finish. Saved contents and your source decisions are preserved; unprocessed sources have not been ruled irrelevant.",
             counts,
         };
+    if (preparation.pendingComparisons)
+        return {
+            status: "warning" as const,
+            title: "Source selection ready with limitations",
+            description: preparation.canResume
+                ? "Some source comparisons remain incomplete. Review the saved readings and limitations before approving. You can resume the remaining checks."
+                : "Some source comparisons remain incomplete. Review the saved readings and limitations before approving the source set.",
+            counts,
+        };
     return {
         status:
             preparation.status === "partial"
@@ -829,19 +841,37 @@ export function sourcePreparationActionCopy(
     action: ProposalSummary["preparationAction"],
 ) {
     switch (action?.reason) {
-        case "deadline_elapsed":
-            return "The preparation window has ended. Saved material remains available; start a new dossier for a fresh preparation.";
-        case "missing_configuration":
-            return "Preparation is currently unavailable. Review the saved material and originals; retry will become available when the service is restored.";
         case "disabled":
             return "Source reading is currently unavailable.";
         case "busy":
             return "Wait for the running preparation to finish before continuing.";
         case "read_only":
             return "This source set is approved and read-only.";
+        case "cooldown":
+            return "Preparation can be tried again shortly. Saved material and your source decisions are preserved.";
+        case "attempts_exhausted":
+            return "The available attempts for the remaining work have been used. Review the saved readings and originals, or add a public source.";
+        case "outcome_unknown":
+            return "Some earlier work could not be confirmed and cannot safely be repeated. Review the saved readings and originals, or add another public source.";
+        case "no_eligible_work":
+            return "The remaining source checks cannot be resumed. Review their limitations and saved readings, or add a public source.";
         default:
             return null;
     }
+}
+
+/** Compact processing labels remain distinct from source inclusion and factual verification. */
+export function sourceReadingStatusLabel(
+    status: NonNullable<ReviewSource["readingStatus"]>,
+) {
+    return {
+        not_started: "Not yet read",
+        preparing: "In preparation",
+        assessment_unavailable: "Assessment unavailable",
+        reading_failed: "Reading unavailable",
+        complete: "Assessed",
+        partial: "Assessed · partial reading",
+    }[status];
 }
 
 /** Describes the stored reading outcome without certifying the source's assertions. */
@@ -1193,6 +1223,15 @@ export function providerServiceLabel(service: string): string {
 
 export function providerStatusLabel(status: string): string {
     return providerStatusLabels[status] ?? "Unknown status";
+}
+
+/** Distinguishes an observed response from an unconfirmed dispatch in protected operations. */
+export function providerDispatchLabel(
+    outcome?: "not_dispatched" | "response_received" | "unknown",
+): string {
+    if (outcome === "not_dispatched") return "Not dispatched";
+    if (outcome === "response_received") return "Response received";
+    return "Dispatch outcome unconfirmed";
 }
 
 export function providerOperationLabel(operation: string): string {

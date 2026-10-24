@@ -56,6 +56,26 @@ export const get = query({
                 executionStatus: runFields.executionStatus,
                 pauseReason: runFields.pauseReason,
                 updatedAt: runFields.updatedAt,
+                preparation: v.optional(
+                    v.object({
+                        preparationId: v.id("sourceSelectionProposalRebuilds"),
+                        status: schema.tables.sourceSelectionProposalRebuilds
+                            .validator.fields.status,
+                        stopCode:
+                            schema.tables.sourceSelectionProposalRebuilds
+                                .validator.fields.stopCode,
+                        configurationCheck:
+                            schema.tables.sourceSelectionProposalRebuilds
+                                .validator.fields.configurationCheck,
+                        deadlineAt: v.optional(v.number()),
+                        failures: v.array(
+                            v.object({
+                                sourceId: v.id("sources"),
+                                reasonCode: v.string(),
+                            }),
+                        ),
+                    }),
+                ),
             }),
         ),
         checkpoints: v.array(
@@ -75,6 +95,14 @@ export const get = query({
                 usage: providerCallFields.usage,
                 reportedCost: providerCallFields.reportedCost,
                 errorCode: providerCallFields.errorCode,
+                preparationId: providerCallFields.preparationId,
+                sourceId: providerCallFields.sourceId,
+                attempt: providerCallFields.attempt,
+                dispatchOutcome: providerCallFields.dispatchOutcome,
+                httpStatus: providerCallFields.httpStatus,
+                retryAfterAt: providerCallFields.retryAfterAt,
+                recoveryOfProviderCallId:
+                    providerCallFields.recoveryOfProviderCallId,
                 createdAt: providerCallFields.createdAt,
             }),
         ),
@@ -122,18 +150,54 @@ export const get = query({
                 reason: paidWork?.reason,
                 updatedAt: paidWork?.updatedAt,
             },
-            runs: runs
-                .filter(({ executionStatus }) =>
-                    ["running", "paused", "failed"].includes(executionStatus),
-                )
-                .sort((left, right) => right.updatedAt - left.updatedAt)
-                .map((run) => ({
-                    runId: run._id,
-                    lifecycleState: run.lifecycleState,
-                    executionStatus: run.executionStatus,
-                    pauseReason: run.pauseReason,
-                    updatedAt: run.updatedAt,
-                })),
+            runs: await Promise.all(
+                runs
+                    .filter(({ executionStatus }) =>
+                        ["running", "paused", "failed"].includes(
+                            executionStatus,
+                        ),
+                    )
+                    .sort((left, right) => right.updatedAt - left.updatedAt)
+                    .map(async (run) => {
+                        const preparation = run.sourcePreparationId
+                            ? await ctx.db.get(run.sourcePreparationId)
+                            : null;
+                        return {
+                            runId: run._id,
+                            lifecycleState: run.lifecycleState,
+                            executionStatus: run.executionStatus,
+                            pauseReason: run.pauseReason,
+                            updatedAt: run.updatedAt,
+                            preparation:
+                                preparation?.kind === "preparation"
+                                    ? {
+                                          preparationId: preparation._id,
+                                          status: preparation.status,
+                                          stopCode: preparation.stopCode,
+                                          configurationCheck:
+                                              preparation.configurationCheck,
+                                          deadlineAt: preparation.deadlineAt,
+                                          failures: (
+                                              preparation.sourceOutcomes ?? []
+                                          ).flatMap((outcome) =>
+                                              outcome.result.status ===
+                                              "unavailable"
+                                                  ? [
+                                                        {
+                                                            sourceId:
+                                                                outcome.sourceId,
+                                                            reasonCode:
+                                                                outcome.result
+                                                                    .reasonCode,
+                                                        },
+                                                    ]
+                                                  : [],
+                                          ),
+                                      }
+                                    : undefined,
+                        };
+                    }),
+            ),
             checkpoints: checkpoints.map((checkpoint) => ({
                 runId: checkpoint.runId,
                 checkpoint: checkpoint.checkpoint,
@@ -148,6 +212,13 @@ export const get = query({
                 usage: call.usage,
                 reportedCost: call.reportedCost,
                 errorCode: call.errorCode,
+                preparationId: call.preparationId,
+                sourceId: call.sourceId,
+                attempt: call.attempt,
+                dispatchOutcome: call.dispatchOutcome,
+                httpStatus: call.httpStatus,
+                retryAfterAt: call.retryAfterAt,
+                recoveryOfProviderCallId: call.recoveryOfProviderCallId,
                 createdAt: call.createdAt,
             })),
             reservations: visitors.map((visitor) => ({

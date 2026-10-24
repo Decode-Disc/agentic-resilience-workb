@@ -15,7 +15,7 @@ function normalizeCik(value: string | number): string {
     return String(value).replace(/^0+/, "") || "0";
 }
 
-function resolveDirectFilingUrl(canonicalUrl: string): string | null {
+export function resolveDirectFilingUrl(canonicalUrl: string): string | null {
     if (
         canonicalUrl.startsWith("https://www.sec.gov/Archives/edgar/data/") &&
         (canonicalUrl.endsWith(".htm") ||
@@ -30,6 +30,7 @@ function resolveDirectFilingUrl(canonicalUrl: string): string | null {
 export async function retrieveAndNormalizeSecFiling(
     resolver: SecCompanyEvidenceResolver,
     input: SourceDocumentRetrievalInput | ApprovedSourceRetrievalInput,
+    retainResolvedUrl?: (url: string) => Promise<void>,
 ): Promise<ApprovedSourceRetrievalResult> {
     try {
         let retrievalUrl = resolveDirectFilingUrl(input.canonicalUrl);
@@ -70,6 +71,7 @@ export async function retrieveAndNormalizeSecFiling(
             }
 
             retrievalUrl = `https://www.sec.gov/Archives/edgar/data/${cleanCik}/${accessionNoDashes}/${primaryDocument}`;
+            await retainResolvedUrl?.(retrievalUrl);
         }
 
         const rawHtml = await resolver.retrieveDocumentHtml(retrievalUrl);

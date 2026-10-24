@@ -239,6 +239,9 @@ test.each([
         }),
     ).toMatchObject({ status: "unavailable" });
     expect(request).not.toHaveBeenCalled();
+    expect(await t.run((ctx) => ctx.db.query("providerCalls").take(2))).toEqual(
+        [],
+    );
 });
 
 test("late model output closes telemetry without publishing or falling back", async () => {
@@ -402,7 +405,7 @@ test("commits the model receipt and qualification in one mutation", async () => 
     ).toBe(taskId);
 });
 
-test("an attempt timeout permits one fallback while the preparation deadline is still active", async () => {
+test("an attempt timeout keeps an unknown outcome without triggering fallback", async () => {
     vi.useFakeTimers();
     vi.spyOn(AbortSignal, "timeout").mockImplementation((milliseconds) => {
         const controller = new AbortController();
@@ -441,8 +444,10 @@ test("an attempt timeout permits one fallback while the preparation deadline is 
     );
     await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
     await vi.advanceTimersByTimeAsync(60_001);
-    expect(await outcome).toMatchObject({ result: { status: "qualified" } });
-    expect(request).toHaveBeenCalledTimes(2);
+    expect(await outcome).toMatchObject({
+        result: { status: "unavailable", reasonCode: "request_timeout" },
+    });
+    expect(request).toHaveBeenCalledOnce();
 });
 
 test("an unknown model outcome is not repeated by a later execution generation", async () => {
@@ -534,4 +539,554 @@ test("new preparations snapshot hybrid mode and persist explicit lexical degrada
     expect(
         data.calls.filter((c) => c.operation === "source_embedding"),
     ).toHaveLength(0);
+});
+
+test("concurrent explicit recovery permits one further model attempt and reuses the capture", async () => {
+    vi.useFakeTimers();
+    const { api } = await import("@convex/_generated/api");
+    const { default: workflowTest } = await import(
+        "@/__tests__/convex/workflows/workflow-test-register.js"
+    );
+    const {
+        t,
+        runId,
+        corpusRevisionId,
+        preparationId,
+        sourceCaptureId,
+        sourceId,
+        userId,
+    } = await capturedCandidate();
+    workflowTest.register(t);
+    vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "true");
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    const request = vi.fn<typeof fetch>(
+        async () =>
+            new Response('{"error":{"message":"Unavailable"}}', {
+                status: 503,
+            }),
+    );
+    vi.stubGlobal("fetch", request);
+    await t.action(internal.sourcePreparationActions.qualifySource, {
+        preparationId,
+        sourceCaptureId,
+    });
+    expect(request).toHaveBeenCalledTimes(2);
+    await t.mutation(internal.sourcePreparation.recordResult, {
+        preparationId,
+        outcome: {
+            sourceId,
+            result: {
+                status: "unavailable",
+                sourceCaptureId,
+                reasonCode: "transport_unavailable",
+            },
+        },
+    });
+    const completed = await t.mutation(internal.sourcePreparation.finish, {
+        preparationId,
+        expectedExecutionGeneration: 3,
+    });
+    await t.run((ctx) =>
+        ctx.db.patch(runId, {
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        }),
+    );
+    vi.setSystemTime(Date.now() + 15_001);
+    const owned = t.withIdentity({ subject: userId });
+    const args = {
+        runId,
+        corpusRevisionId,
+        expectedProposalId: completed.proposalId,
+        requestId: "explicit-model-recovery",
+    };
+    const resumed = await owned.mutation(
+        api.sourcePreparation.startForReview,
+        args,
+    );
+    request.mockImplementation(async () => success());
+    const results = await Promise.all(
+        [1, 2].map(() =>
+            t.action(internal.sourcePreparationActions.qualifySource, {
+                preparationId: resumed.preparationId,
+                sourceCaptureId,
+            }),
+        ),
+    );
+    expect(results.some((result) => result.status === "qualified")).toBe(true);
+    expect(
+        await t.run((ctx) =>
+            ctx.db
+                .query("aiTaskResults")
+                .withIndex("by_run", (q) => q.eq("runId", runId))
+                .take(3),
+        ),
+    ).toHaveLength(1);
+    expect(
+        await owned.mutation(api.sourcePreparation.startForReview, args),
+    ).toEqual(resumed);
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(
+        await t.run((ctx) => ctx.db.query("sourceCaptures").take(10)),
+    ).toHaveLength(1);
+    expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
+        sourceQualificationAttemptCount: 3,
+    });
+});
+
+test("the review cannot offer recovery after the cumulative model allowance is exhausted", async () => {
+    const { api } = await import("@convex/_generated/api");
+    const {
+        t,
+        runId,
+        corpusRevisionId,
+        preparationId,
+        sourceCaptureId,
+        sourceId,
+        userId,
+    } = await capturedCandidate();
+    vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "true");
+    await t.mutation(internal.sourcePreparation.recordResult, {
+        preparationId,
+        outcome: {
+            sourceId,
+            result: {
+                status: "unavailable",
+                sourceCaptureId,
+                reasonCode: "missing_configuration",
+            },
+        },
+    });
+    await t.mutation(internal.sourcePreparation.finish, {
+        preparationId,
+        expectedExecutionGeneration: 3,
+    });
+    await t.run((ctx) =>
+        ctx.db.patch(runId, {
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+            sourceQualificationAttemptCount: 120,
+        }),
+    );
+    const current = await t
+        .withIdentity({ subject: userId })
+        .query(api.sourceSelectionProposals.getCurrent, {
+            runId,
+            corpusRevisionId,
+        });
+    expect(current?.preparationAction).toMatchObject({
+        available: false,
+        reason: "attempts_exhausted",
+    });
+});
+
+test.each([
+    "transport",
+    "invalid_output",
+    "legacy_unknown",
+] as const)("%s recovery cannot be renewed by another request or generation", async (mode) => {
+    vi.useFakeTimers();
+    const { api } = await import("@convex/_generated/api");
+    const { default: workflowTest } = await import(
+        "@/__tests__/convex/workflows/workflow-test-register.js"
+    );
+    const {
+        t,
+        runId,
+        corpusRevisionId,
+        preparationId,
+        sourceCaptureId,
+        sourceId,
+        userId,
+    } = await capturedCandidate();
+    workflowTest.register(t);
+    vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "true");
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    const request = vi.fn<typeof fetch>(async () =>
+        mode === "invalid_output"
+            ? new Response(
+                  JSON.stringify({
+                      id: "invalid",
+                      created: 1,
+                      model: "test",
+                      choices: [
+                          {
+                              index: 0,
+                              message: { role: "assistant", content: "{}" },
+                              finish_reason: "stop",
+                          },
+                      ],
+                  }),
+                  { headers: { "Content-Type": "application/json" } },
+              )
+            : new Response('{"error":{"message":"Unavailable"}}', {
+                  status: 503,
+              }),
+    );
+    vi.stubGlobal("fetch", request);
+    await t.action(internal.sourcePreparationActions.qualifySource, {
+        preparationId,
+        sourceCaptureId,
+    });
+    expect(request).toHaveBeenCalledTimes(2);
+    if (mode === "legacy_unknown")
+        await t.run(async (ctx) => {
+            for (const call of await ctx.db
+                .query("providerCalls")
+                .withIndex("by_run", (q) => q.eq("runId", runId))
+                .take(4))
+                await ctx.db.patch(call._id, {
+                    dispatchOutcome: undefined,
+                    httpStatus: undefined,
+                    errorCode: "transport_unavailable",
+                    retryable: true,
+                });
+        });
+    await t.mutation(internal.sourcePreparation.recordResult, {
+        preparationId,
+        outcome: {
+            sourceId,
+            result: {
+                status: "unavailable",
+                sourceCaptureId,
+                reasonCode: "qualification_unavailable",
+            },
+        },
+    });
+    const finished = await t.mutation(internal.sourcePreparation.finish, {
+        preparationId,
+        expectedExecutionGeneration: 3,
+    });
+    await t.run((ctx) =>
+        ctx.db.patch(runId, {
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        }),
+    );
+    vi.setSystemTime(Date.now() + 15_001);
+    const owned = t.withIdentity({ subject: userId });
+    const args = {
+        runId,
+        corpusRevisionId,
+        expectedProposalId: finished.proposalId,
+        requestId: "bounded-recovery",
+    };
+    const resumed = await owned.mutation(
+        api.sourcePreparation.startForReview,
+        args,
+    );
+    if (mode === "legacy_unknown") {
+        expect(resumed.status).toBe("blocked");
+        expect(
+            (
+                await owned.query(api.sourceSelectionProposals.getCurrent, {
+                    runId,
+                    corpusRevisionId,
+                })
+            )?.preparationAction,
+        ).toMatchObject({ available: false, reason: "outcome_unknown" });
+        expect(request).toHaveBeenCalledTimes(2);
+        return;
+    }
+    expect(resumed.status).toBe("started");
+    expect(
+        await t.action(internal.sourcePreparationActions.qualifySource, {
+            preparationId: resumed.preparationId,
+            sourceCaptureId,
+        }),
+    ).toMatchObject({ status: "unavailable" });
+    await t.mutation(internal.sourcePreparation.recordResult, {
+        preparationId: resumed.preparationId,
+        outcome: {
+            sourceId,
+            result: {
+                status: "unavailable",
+                sourceCaptureId,
+                reasonCode: "qualification_unavailable",
+            },
+        },
+    });
+    const latest = await t.mutation(internal.sourcePreparation.finish, {
+        preparationId: resumed.preparationId,
+        expectedExecutionGeneration: 4,
+    });
+    expect(
+        await owned.mutation(api.sourcePreparation.startForReview, {
+            ...args,
+            expectedProposalId: latest.proposalId,
+            requestId: "another-click-cannot-renew",
+        }),
+    ).toMatchObject({ status: "blocked" });
+    expect(
+        (
+            await owned.query(api.sourceSelectionProposals.getCurrent, {
+                runId,
+                corpusRevisionId,
+            })
+        )?.preparationAction,
+    ).toMatchObject({ available: false, reason: "attempts_exhausted" });
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
+        sourceQualificationAttemptCount: 3,
+    });
+});
+
+test("a provider Retry-After blocks fallback and explicit recovery until its recorded time", async () => {
+    vi.useFakeTimers();
+    const { api } = await import("@convex/_generated/api");
+    const { default: workflowTest } = await import(
+        "@/__tests__/convex/workflows/workflow-test-register.js"
+    );
+    const {
+        t,
+        runId,
+        corpusRevisionId,
+        preparationId,
+        sourceCaptureId,
+        sourceId,
+        userId,
+    } = await capturedCandidate();
+    workflowTest.register(t);
+    vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "true");
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    const startedAt = Date.now();
+    const request = vi.fn<typeof fetch>(
+        async () =>
+            new Response('{"error":{"message":"Limited"}}', {
+                status: 429,
+                headers: { "retry-after": "120" },
+            }),
+    );
+    vi.stubGlobal("fetch", request);
+    await t.action(internal.sourcePreparationActions.qualifySource, {
+        preparationId,
+        sourceCaptureId,
+    });
+    expect(request).toHaveBeenCalledOnce();
+    await t.mutation(internal.sourcePreparation.recordResult, {
+        preparationId,
+        outcome: {
+            sourceId,
+            result: {
+                status: "unavailable",
+                sourceCaptureId,
+                reasonCode: "transport_unavailable",
+            },
+        },
+    });
+    const finished = await t.mutation(internal.sourcePreparation.finish, {
+        preparationId,
+        expectedExecutionGeneration: 3,
+    });
+    await t.run((ctx) =>
+        ctx.db.patch(runId, {
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        }),
+    );
+    const owned = t.withIdentity({ subject: userId });
+    expect(
+        (
+            await owned.query(api.sourceSelectionProposals.getCurrent, {
+                runId,
+                corpusRevisionId,
+            })
+        )?.preparationAction,
+    ).toMatchObject({
+        available: false,
+        reason: "cooldown",
+        retryAt: startedAt + 120_000,
+    });
+    const args = {
+        runId,
+        corpusRevisionId,
+        expectedProposalId: finished.proposalId,
+        requestId: "after-rate-limit",
+    };
+    expect(
+        await owned.mutation(api.sourcePreparation.startForReview, args),
+    ).toMatchObject({ status: "blocked" });
+    vi.setSystemTime(startedAt + 120_001);
+    const resumed = await owned.mutation(
+        api.sourcePreparation.startForReview,
+        args,
+    );
+    request.mockImplementation(async () => success());
+    expect(
+        await t.action(internal.sourcePreparationActions.qualifySource, {
+            preparationId: resumed.preparationId,
+            sourceCaptureId,
+        }),
+    ).toMatchObject({ status: "qualified" });
+    expect(request).toHaveBeenCalledTimes(2);
+});
+
+test("a corrupt retained capture stays blocked without replacement retrieval", async () => {
+    const { api } = await import("@convex/_generated/api");
+    const {
+        t,
+        runId,
+        corpusRevisionId,
+        preparationId,
+        sourceCaptureId,
+        sourceId,
+        userId,
+    } = await capturedCandidate();
+    vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "true");
+    await t.run(async (ctx) => {
+        const storageId = await ctx.storage.store(
+            new Blob(["Changed retained bytes"]),
+        );
+        await ctx.db.patch(sourceCaptureId, { storageId });
+    });
+    const request = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", request);
+    const outcome = await t.action(
+        internal.sourcePreparationActions.qualifySource,
+        { preparationId, sourceCaptureId },
+    );
+    expect(outcome).toMatchObject({
+        status: "unavailable",
+        reasonCode: "capture_corrupt",
+    });
+    await t.mutation(internal.sourcePreparation.recordResult, {
+        preparationId,
+        outcome: {
+            sourceId,
+            result: {
+                status: "unavailable",
+                sourceCaptureId,
+                reasonCode: "capture_corrupt",
+            },
+        },
+    });
+    const finished = await t.mutation(internal.sourcePreparation.finish, {
+        preparationId,
+        expectedExecutionGeneration: 3,
+    });
+    await t.run((ctx) =>
+        ctx.db.patch(runId, {
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        }),
+    );
+    const owned = t.withIdentity({ subject: userId });
+    expect(
+        (
+            await owned.query(api.sourceSelectionProposals.getCurrent, {
+                runId,
+                corpusRevisionId,
+            })
+        )?.preparationAction,
+    ).toMatchObject({ available: false, reason: "no_eligible_work" });
+    expect(
+        await owned.mutation(api.sourcePreparation.startForReview, {
+            runId,
+            corpusRevisionId,
+            expectedProposalId: finished.proposalId,
+            requestId: "corrupt-capture-must-not-refetch",
+        }),
+    ).toMatchObject({ status: "blocked" });
+    expect(request).not.toHaveBeenCalled();
+    expect(
+        await t.run((ctx) => ctx.db.query("sourceCaptures").take(3)),
+    ).toHaveLength(1);
+});
+
+test("a historical pre-dispatch block preserves its receipt without consuming the first real attempt", async () => {
+    const { api } = await import("@convex/_generated/api");
+    const { default: workflowTest } = await import(
+        "@/__tests__/convex/workflows/workflow-test-register.js"
+    );
+    const {
+        t,
+        runId,
+        corpusRevisionId,
+        preparationId,
+        sourceCaptureId,
+        sourceId,
+        userId,
+    } = await capturedCandidate();
+    workflowTest.register(t);
+    vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "true");
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    const input = await t.query(
+        internal.sourcePreparation.getQualificationInput,
+        { preparationId, sourceCaptureId, now: Date.now() },
+    );
+    const prepared = prepareQualificationInput({
+        company: input.company,
+        canonicalUrl: input.source.canonicalUrl,
+        title: input.source.title,
+        asOfTime: input.asOfTime,
+        text: "ServiceNow provides workflow software.",
+    });
+    const legacyId = await t.run((ctx) =>
+        ctx.db.insert("providerCalls", {
+            runId,
+            corpusRevisionId,
+            sourceId,
+            preparationId,
+            service: "model",
+            operation: "source_qualification",
+            operationKey: "historical-paid-work-block",
+            inputHash: prepared.inputHash,
+            attempt: 1,
+            status: "failed",
+            errorCode: "paid_work_disabled",
+            createdAt: 1,
+            completedAt: 1,
+        }),
+    );
+    await t.mutation(internal.sourcePreparation.recordResult, {
+        preparationId,
+        outcome: {
+            sourceId,
+            result: {
+                status: "unavailable",
+                sourceCaptureId,
+                reasonCode: "paid_work_disabled",
+            },
+        },
+    });
+    const finished = await t.mutation(internal.sourcePreparation.finish, {
+        preparationId,
+        expectedExecutionGeneration: 3,
+    });
+    await t.run((ctx) =>
+        ctx.db.patch(runId, {
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        }),
+    );
+    const resumed = await t
+        .withIdentity({ subject: userId })
+        .mutation(api.sourcePreparation.startForReview, {
+            runId,
+            corpusRevisionId,
+            expectedProposalId: finished.proposalId,
+            requestId: "configuration-restored",
+        });
+    const request = vi.fn<typeof fetch>(async () => success());
+    vi.stubGlobal("fetch", request);
+    expect(
+        await t.action(internal.sourcePreparationActions.qualifySource, {
+            preparationId: resumed.preparationId,
+            sourceCaptureId,
+        }),
+    ).toMatchObject({ status: "qualified" });
+    expect(request).toHaveBeenCalledOnce();
+    expect(await t.run((ctx) => ctx.db.get(legacyId))).toMatchObject({
+        status: "failed",
+        errorCode: "paid_work_disabled",
+    });
+    expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
+        sourceQualificationAttemptCount: 1,
+    });
 });

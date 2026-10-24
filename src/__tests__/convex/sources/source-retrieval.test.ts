@@ -285,7 +285,18 @@ test("embedding reservations are atomic, cumulative, idempotent and capped per d
     ).toBe(800000);
 });
 
-test("a missing embedding credential preserves native lexical evidence and records why hybrid degraded", async () => {
+test.each([
+    "missing_configuration",
+    "model_attempt_limit_reached",
+])("hybrid retrieval preserves lexical evidence when blocked by %s", async (reason) => {
+    const request = vi.fn(() => {
+        throw Error("Provider calls must stay disabled");
+    });
+    vi.stubGlobal("fetch", request);
+    if (reason === "model_attempt_limit_reached") {
+        vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "a".repeat(32));
+        vi.stubEnv("CLOUDFLARE_AI_TOKEN", "test-token");
+    }
     const { t, runId, corpusRevisionId, sourceId } =
         await seedSourcePreparation();
     const preparationId = await t.mutation(
@@ -316,24 +327,31 @@ test("a missing embedding credential preserves native lexical evidence and recor
     });
     const indexed = await t.action(
         internal.sourceRetrievalActions.indexCapture,
-        { preparationId, captureId, mode: "hybrid" },
+        {
+            preparationId,
+            captureId,
+            mode: "hybrid",
+            allowProviderCalls: reason !== "model_attempt_limit_reached",
+        },
     );
-    expect(indexed.degradationReason).toBe("missing_configuration");
+    expect(indexed.degradationReason).toBe(reason);
     const found = await t.action(internal.sourceRetrievalActions.retrieve, {
         preparationId,
         captureIds: [captureId],
         queries: ["subscription revenue fiscal 2025"],
         mode: "hybrid",
+        allowProviderCalls: reason !== "model_attempt_limit_reached",
     });
     expect(found.metadata).toMatchObject({
         requestedMode: "hybrid",
         effectiveMode: "lexical",
-        degradationReason: "missing_configuration",
+        degradationReason: reason,
     });
     expect(found.passages[0]?.quotation).toContain("23769");
     expect(
         await t.run((ctx) => ctx.db.query("providerCalls").collect()),
     ).toHaveLength(0);
+    expect(request).not.toHaveBeenCalled();
 });
 
 test("a cancelled embedding attempt cannot persist vectors or refund its reserved allowance", async () => {
@@ -528,7 +546,11 @@ test("successful hybrid preparation caches exact inputs and repeated retrieval d
     expect(first.metadata.effectiveMode).toBe("hybrid");
     expect(first.passages[0]?.quotation).toBe(text);
     const before = await t.run((ctx) => ctx.db.get(runId));
-    await t.action(internal.sourceRetrievalActions.retrieve, args);
+    const cachedOnly = await t.action(
+        internal.sourceRetrievalActions.retrieve,
+        { ...args, allowProviderCalls: false },
+    );
+    expect(cachedOnly.metadata.effectiveMode).toBe("hybrid");
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(
         (await t.run((ctx) => ctx.db.get(runId)))?.sourceEmbeddingReservedBytes,

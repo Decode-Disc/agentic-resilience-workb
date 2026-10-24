@@ -167,7 +167,7 @@ test("rejects an oversized decompressed provider body before parsing", async () 
     ).toMatchObject({
         status: "failed",
         errorCode: "response_too_large",
-        retryable: true,
+        retryable: false,
     });
     expect(request).toHaveBeenCalledOnce();
     expect(onResponse).not.toHaveBeenCalled();

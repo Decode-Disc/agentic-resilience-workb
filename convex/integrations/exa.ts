@@ -35,10 +35,16 @@ export type ExaContentsAdapterDependencies = {
         attempt: number;
         latencyMs?: number;
         errorCode?: string;
+        dispatchOutcome?: "response_received" | "unknown";
+        httpStatus?: number;
+        retryAfterAt?: number;
         usage?: Record<string, unknown>;
         reportedCost?: number;
     }) => Promise<{ shouldExecute: boolean }>;
     operationScope?: string;
+    firstAttempt?: 1 | 2 | 3;
+    maxAttempts?: 1 | 2 | 3;
+    retryPolicy?: "confirmed_response";
     timeoutMs?: number;
     now?: () => number;
 };
@@ -52,7 +58,11 @@ export class ExaLogicalTimeoutError extends Error {
 
 export class ExaContentsError extends Error {
     readonly errorCode: string;
-    constructor(message: string, errorCode = "ExaContentsError") {
+    constructor(
+        message: string,
+        errorCode = "ExaContentsError",
+        readonly retryAfterAt?: number,
+    ) {
         super(message);
         this.name = "ExaContentsError";
         this.errorCode = errorCode;
@@ -185,8 +195,9 @@ export function createExaContentsAdapter(
             const operationKey = `${dependencies.operationScope ?? "exa"}:${operation}:${canonicalUrl}`;
 
             for (
-                let attempt = 1;
-                attempt <= MAX_EXA_CONTENTS_ATTEMPTS;
+                let attempt = dependencies.firstAttempt ?? 1;
+                attempt <=
+                (dependencies.maxAttempts ?? MAX_EXA_CONTENTS_ATTEMPTS);
                 attempt += 1
             ) {
                 const startedAt = now();
@@ -328,11 +339,33 @@ export function createExaContentsAdapter(
                             attempt,
                             latencyMs,
                             errorCode,
+                            dispatchOutcome: /^http_\d{3}$/.test(errorCode)
+                                ? "response_received"
+                                : "unknown",
+                            httpStatus: /^http_\d{3}$/.test(errorCode)
+                                ? Number(errorCode.slice(5))
+                                : undefined,
+                            retryAfterAt:
+                                error instanceof ExaContentsError
+                                    ? error.retryAfterAt
+                                    : undefined,
                         });
                     }
 
                     const retryable = isRetryableExaError(error);
-                    if (!retryable || attempt === MAX_EXA_CONTENTS_ATTEMPTS) {
+                    if (
+                        !retryable ||
+                        (dependencies.retryPolicy === "confirmed_response" &&
+                            !(
+                                error instanceof ExaContentsError &&
+                                /^http_(408|429|500|502|503|504)$/.test(
+                                    error.errorCode,
+                                )
+                            )) ||
+                        attempt ===
+                            (dependencies.maxAttempts ??
+                                MAX_EXA_CONTENTS_ATTEMPTS)
+                    ) {
                         throw error;
                     }
                 }

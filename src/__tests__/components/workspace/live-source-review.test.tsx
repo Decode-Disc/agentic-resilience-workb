@@ -61,6 +61,14 @@ const proposalSource = {
 } as const;
 
 beforeEach(() => {
+    // Clock and subscription tests use reduced motion; protected browser checks cover animated transitions.
+    const getMediaQuery = window.matchMedia.bind(window);
+    vi.spyOn(window, "matchMedia").mockImplementation((query) => {
+        const media = getMediaQuery(query);
+        return query === "(prefers-reduced-motion: reduce)"
+            ? { ...media, matches: true }
+            : media;
+    });
     vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
     convexReactHarness.reset();
     approve.mockReset();
@@ -111,6 +119,7 @@ function recoveryReview(
     preparation?: unknown,
     readSource?: (args: unknown) => unknown,
     deadlineAt?: number,
+    retryAt?: number,
 ) {
     convexReactHarness.query(api.sourceSelectionProposals.getCurrent).returns({
         proposalId: "proposal-1",
@@ -137,6 +146,7 @@ function recoveryReview(
         preparation,
         preparationAction: {
             deadlineAt,
+            retryAt,
             kind: preparation ? "resume" : "start",
             available: true,
         },
@@ -314,16 +324,40 @@ test("renders a rejected search at its coverage action without redirecting or hi
     );
 });
 
-test("counts down the persisted cooldown and enables retry only after it expires", async () => {
+test.each([
+    false,
+    true,
+])("counts down the persisted cooldown with shared preparation expiry %s", async (sharedExpiry) => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-20T00:00:00Z"));
-    recoveryReview({
-        status: "blocked",
-        target: { kind: "failed_discovery" },
-        reason: "unavailable",
-        leaseExpiresAt: Date.now() + 15_000,
-    });
+    const expiresAt = Date.now() + 15_000;
+    recoveryReview(
+        {
+            status: "blocked",
+            target: { kind: "failed_discovery" },
+            reason: "unavailable",
+            leaseExpiresAt: expiresAt,
+        },
+        proposalSource,
+        undefined,
+        undefined,
+        undefined,
+        sharedExpiry ? expiresAt : undefined,
+    );
     const retry = screen.getByRole("button", { name: "Retry in 15s" });
+    const queryTimes = () =>
+        new Set(
+            convexReactHarness.module.useQuery.mock.calls
+                .filter(
+                    ([reference]) =>
+                        getFunctionName(reference) ===
+                        "sourceSelectionProposals:getCurrent",
+                )
+                .map(
+                    ([, args]) =>
+                        args !== "skip" && (args as { now?: number }).now,
+                ),
+        );
     expect(retry).toHaveProperty("disabled", true);
     fireEvent.click(retry);
     expect(recover).not.toHaveBeenCalled();
@@ -334,11 +368,92 @@ test("counts down the persisted cooldown and enables retry only after it expires
         "disabled",
         true,
     );
+    expect(queryTimes().size).toBe(1);
     await act(async () => {
         vi.advanceTimersByTime(14_000);
     });
     expect(
         screen.getByRole("button", { name: "Retry searches" }),
+    ).toHaveProperty("disabled", false);
+    await act(async () => {
+        vi.advanceTimersByTime(100);
+    });
+    expect(queryTimes().size).toBe(2);
+});
+
+test("preparation resumes after the later of two distinct cooldown boundaries", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-24T00:00:00Z"));
+    const retryAt = Date.now() + 90_000;
+    const view = recoveryReview(
+        {
+            status: "blocked",
+            target: { kind: "coverage", role: "official_product_platform" },
+            reason: "unavailable",
+            leaseExpiresAt: Date.now() + 15_000,
+        },
+        proposalSource,
+        {
+            status: "partial",
+            checked: 1,
+            total: 2,
+            captured: 1,
+            assessed: 0,
+            failed: 1,
+            canResume: false,
+        },
+        undefined,
+        undefined,
+        retryAt,
+    );
+    const queryIndex = convexReactHarness.module.useQuery.mock.calls.findIndex(
+        ([reference]) =>
+            getFunctionName(reference) ===
+            "sourceSelectionProposals:getCurrent",
+    );
+    const initial =
+        convexReactHarness.module.useQuery.mock.results[queryIndex]?.value;
+    const blocked = {
+        ...initial,
+        preparationAction: {
+            ...initial.preparationAction,
+            available: false,
+            reason: "cooldown",
+        },
+    };
+    const available = {
+        ...blocked,
+        preparation: { ...blocked.preparation, canResume: true },
+        preparationAction: {
+            ...blocked.preparationAction,
+            available: true,
+            reason: undefined,
+            retryAt: undefined,
+        },
+    };
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getCurrent)
+        .returnsFrom(({ args }) =>
+            args !== "skip" && (args.now ?? 0) >= retryAt ? available : blocked,
+        );
+    view.rerender(
+        <LiveSourceReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            onDecide={vi.fn()}
+        />,
+    );
+    expect(
+        screen.queryByRole("button", { name: "Resume preparation" }),
+    ).toBeNull();
+    await act(async () => {
+        vi.advanceTimersByTime(16_000);
+    });
+    await act(async () => {
+        vi.advanceTimersByTime(75_000);
+    });
+    expect(
+        screen.getByRole("button", { name: "Resume preparation" }),
     ).toHaveProperty("disabled", false);
 });
 
@@ -665,7 +780,9 @@ test("shows an approved legacy source set without querying missing proposal item
     convexReactHarness
         .query(api.sources.getReviewSummary)
         .returns(reviewSummary);
-    convexReactHarness.query(api.sources.getReviewSource).returns(undefined);
+    convexReactHarness
+        .query(api.sources.getReviewSource)
+        .returns(inspectionPage.results[0]);
     convexReactHarness
         .paginatedQuery(api.sourceSelectionProposals.listItemsPage)
         .returns(skippedProposalPage);
@@ -757,6 +874,147 @@ test("repairs an authorized legacy draft before loading proposal items", async (
     ).toBe(true);
 });
 
+test("retains cached readings when a preparation deadline passes offline and refreshes after reconnecting", async () => {
+    vi.useFakeTimers();
+    const online = vi
+        .spyOn(window.navigator, "onLine", "get")
+        .mockReturnValue(true);
+    const deadlineAt = Date.now() + 1000;
+    recoveryReview(
+        undefined,
+        proposalSource,
+        {
+            status: "started",
+            checked: 1,
+            total: 1,
+            captured: 1,
+            assessed: 1,
+            canResume: false,
+        },
+        undefined,
+        deadlineAt,
+    );
+    const index = convexReactHarness.module.useQuery.mock.calls.findIndex(
+        ([reference]) =>
+            getFunctionName(reference) ===
+            "sourceSelectionProposals:getCurrent",
+    );
+    const initial =
+        convexReactHarness.module.useQuery.mock.results[index]?.value;
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getCurrent)
+        .returnsFrom(({ args }) =>
+            args !== "skip" && (args.now ?? 0) < deadlineAt
+                ? initial
+                : undefined,
+        );
+    act(() => {
+        online.mockReturnValue(false);
+        window.dispatchEvent(new Event("offline"));
+    });
+    await act(async () => {
+        vi.advanceTimersByTime(1500);
+    });
+    expect(
+        screen.getByRole("region", { name: "Selected source reading" }),
+    ).toBeTruthy();
+    expect(
+        screen.queryByLabelText("Loading source proposal summary"),
+    ).toBeNull();
+    const completed = {
+        ...initial,
+        preparation: { ...initial.preparation, status: "complete" },
+    };
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getCurrent)
+        .returnsFrom(({ args }) =>
+            args !== "skip" && (args.now ?? 0) >= deadlineAt
+                ? completed
+                : initial,
+        );
+    act(() => {
+        online.mockReturnValue(true);
+        window.dispatchEvent(new Event("online"));
+    });
+    await act(async () => {
+        vi.advanceTimersByTime(100);
+    });
+    expect(
+        screen.getByText("Source selection ready", { exact: true }),
+    ).toBeTruthy();
+});
+
+test("shows browser offline immediately even before an existing connection reports disconnection", () => {
+    const online = vi
+        .spyOn(window.navigator, "onLine", "get")
+        .mockReturnValue(true);
+    recoveryReview();
+    act(() => {
+        online.mockReturnValue(false);
+        window.dispatchEvent(new Event("offline"));
+    });
+    expect(screen.getByText("Live updates paused")).toBeTruthy();
+    expect(
+        (
+            screen.getByRole("button", {
+                name: "Approve proposed corpus",
+            }) as HTMLButtonElement
+        ).disabled,
+    ).toBe(true);
+    act(() => {
+        online.mockReturnValue(true);
+        window.dispatchEvent(new Event("online"));
+    });
+    expect(screen.queryByText("Live updates paused")).toBeNull();
+    expect(
+        (
+            screen.getByRole("button", {
+                name: "Approve proposed corpus",
+            }) as HTMLButtonElement
+        ).disabled,
+    ).toBe(false);
+});
+
+test("explains disconnected updates while retaining readings and restores approval after reconnection", () => {
+    const connected = convexReactHarness.module.useConvexConnectionState();
+    convexReactHarness.module.useConvexConnectionState.mockReturnValue({
+        ...connected,
+        isWebSocketConnected: false,
+    });
+    const view = recoveryReview();
+    expect(screen.getByText("Live updates paused")).toBeTruthy();
+    expect(
+        screen.getByRole("region", { name: "Selected source reading" }),
+    ).toBeTruthy();
+    expect(
+        (
+            screen.getByRole("button", {
+                name: "Approve proposed corpus",
+            }) as HTMLButtonElement
+        ).disabled,
+    ).toBe(true);
+    convexReactHarness.module.useConvexConnectionState.mockReturnValue(
+        connected,
+    );
+    view.rerender(
+        <LiveSourceReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            onDecide={vi.fn()}
+        />,
+    );
+    expect(screen.queryByText("Live updates paused")).toBeNull();
+    expect(
+        (
+            screen.getByRole("button", {
+                name: "Approve proposed corpus",
+            }) as HTMLButtonElement
+        ).disabled,
+    ).toBe(false);
+    expect(prepare).not.toHaveBeenCalled();
+    expect(recompute).not.toHaveBeenCalled();
+});
+
 test("failed continuation of a saved source remains visible beside its preparation state", async () => {
     prepare.mockRejectedValue(
         new Error("execution_slot_unavailable internal details"),
@@ -767,9 +1025,7 @@ test("failed continuation of a saved source remains visible beside its preparati
         total: 1,
         canResume: true,
     });
-    fireEvent.click(
-        screen.getByRole("button", { name: "Continue source preparation" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Resume preparation" }));
     expect(
         await screen.findByText(
             "Source reading could not be started. Review the current status and try again when available.",
@@ -796,15 +1052,15 @@ test("interrupted preparation explains retained progress as an error without bla
     const alert = screen.getByRole("alert", {
         name: "Source preparation interrupted",
     });
-    expect(alert.textContent).toContain("2 of 48 source contents saved");
-    expect(alert.textContent).toContain("0 assessed");
-    expect(alert.textContent).toContain("46 not yet processed");
+    expect(alert.textContent).toContain("2 saved without assessment");
+    expect(alert.textContent).toContain("No sources assessed yet");
+    expect(alert.textContent).toContain("46 sources still to prepare");
     expect(alert.textContent).not.toMatch(
         /stronger reference|missing_configuration|OPENROUTER/,
     );
 });
 
-test("expires source preparation without a new subscription snapshot", async () => {
+test("an expired previous window does not remove explicit recovery", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-23T00:00:00Z"));
     recoveryReview(
@@ -820,15 +1076,119 @@ test("expires source preparation without a new subscription snapshot", async () 
         Date.now() + 5000,
     );
     const resume = screen.getByRole("button", {
-        name: "Continue source preparation",
+        name: "Resume preparation",
     });
     expect(resume).toHaveProperty("disabled", false);
     await act(async () => {
         vi.advanceTimersByTime(5100);
     });
     expect(
-        screen.queryByRole("button", { name: "Continue source preparation" }),
-    ).toBeNull();
-    expect(screen.getByText(/The preparation window has ended/)).toBeTruthy();
-    expect(prepare).not.toHaveBeenCalled();
+        screen.getByRole("button", { name: "Resume preparation" }),
+    ).toHaveProperty("disabled", false);
+    await act(async () => {
+        fireEvent.click(resume);
+    });
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(document.body.textContent).not.toMatch(
+        /start a new dossier|deadline_elapsed/,
+    );
+});
+
+test("an unconfirmed preparation request reuses its identity when the analyst retries", async () => {
+    prepare.mockRejectedValueOnce(new Error("Response lost"));
+    recoveryReview(undefined, proposalSource, {
+        status: "partial",
+        checked: 1,
+        total: 2,
+        canResume: true,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Resume preparation" }));
+    await screen.findByText(
+        "Source reading could not be started. Review the current status and try again when available.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Resume preparation" }));
+    await waitFor(() => expect(prepare).toHaveBeenCalledTimes(2));
+    expect(prepare.mock.calls[1]?.[0]).toEqual(prepare.mock.calls[0]?.[0]);
+});
+
+test("refreshes the server projection when a running preparation reaches its deadline", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-24T00:00:00Z"));
+    const deadlineAt = Date.now() + 5000;
+    const view = recoveryReview(
+        undefined,
+        proposalSource,
+        {
+            status: "started",
+            checked: 0,
+            total: 2,
+            canResume: false,
+        },
+        undefined,
+        deadlineAt,
+    );
+    const queryIndex = convexReactHarness.module.useQuery.mock.calls.findIndex(
+        ([reference]) =>
+            getFunctionName(reference) ===
+            "sourceSelectionProposals:getCurrent",
+    );
+    const snapshot =
+        convexReactHarness.module.useQuery.mock.results[queryIndex]?.value;
+    const recovered = {
+        ...snapshot,
+        preparation: {
+            ...snapshot.preparation,
+            status: "partial",
+            canResume: true,
+        },
+    };
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getCurrent)
+        .returnsFrom(({ args }) =>
+            args !== "skip" && (args.now ?? 0) >= deadlineAt
+                ? recovered
+                : snapshot,
+        );
+    view.rerender(
+        <LiveSourceReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            onDecide={vi.fn()}
+        />,
+    );
+    await act(async () => {
+        vi.advanceTimersByTime(5100);
+    });
+    expect(
+        screen.getByRole("button", { name: "Resume preparation" }),
+    ).toHaveProperty("disabled", false);
+});
+
+test("interrupted comparisons remain visible after source reading succeeds", () => {
+    recoveryReview(undefined, proposalSource, {
+        status: "partial",
+        checked: 2,
+        total: 2,
+        captured: 2,
+        assessed: 2,
+        pendingComparisons: 1,
+        canResume: true,
+    });
+    expect(
+        screen.getByText("Source selection ready with limitations"),
+    ).toBeTruthy();
+    expect(
+        screen.getByText(/Some source comparisons remain incomplete/),
+    ).toBeTruthy();
+    expect(
+        screen.getByText(
+            /Review the saved readings and limitations before approving/,
+        ),
+    ).toBeTruthy();
+    expect(
+        screen.getByRole("button", { name: "Resume preparation" }),
+    ).toHaveProperty("disabled", false);
+    expect(document.body.textContent).not.toMatch(
+        /provider_unavailable|source_comparison|executionGeneration/,
+    );
 });

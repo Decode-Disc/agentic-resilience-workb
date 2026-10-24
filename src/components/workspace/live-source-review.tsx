@@ -5,12 +5,20 @@ import type { Id } from "@convex/_generated/dataModel";
 import { RefreshIcon } from "@hugeicons/core-free-icons";
 import {
     useAction,
+    useConvexConnectionState,
     useMutation,
     usePaginatedQuery,
     useQuery,
 } from "convex/react";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
-import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
+import {
+    type Dispatch,
+    type SetStateAction,
+    useEffect,
+    useRef,
+    useState,
+    useSyncExternalStore,
+} from "react";
 import Icon from "@/components/icon";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { Button } from "@/components/ui/button";
@@ -54,7 +62,27 @@ type RecoveryAttempt = {
       }
 );
 
+function subscribeToNetworkStatus(onChange: () => void) {
+    window.addEventListener("online", onChange);
+    window.addEventListener("offline", onChange);
+    return () => {
+        window.removeEventListener("online", onChange);
+        window.removeEventListener("offline", onChange);
+    };
+}
+
+function browserIsOnline() {
+    return navigator.onLine;
+}
+
 export function LiveSourceReview(props: LiveSourceReviewProps) {
+    const connection = useConvexConnectionState();
+    const online = useSyncExternalStore(
+        subscribeToNetworkStatus,
+        browserIsOnline,
+        () => true,
+    );
+    const updatesConnected = online && connection.isWebSocketConnected;
     const {
         runId,
         corpusRevisionId,
@@ -78,6 +106,10 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
     const [recoveryAttempt, setRecoveryAttempt] =
         useState<RecoveryAttempt | null>(null);
     const [clock, setClock] = useState(Date.now);
+    const [queryClock, setQueryClock] = useState(Date.now);
+    const preparationRequest = useRef<FunctionArgs<
+        typeof api.sourcePreparation.startForReview
+    > | null>(null);
     const [repairStatus, setRepairStatus] = useState<
         "idle" | "loading" | "complete" | "failed"
     >("idle");
@@ -111,6 +143,7 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
             <SourceReviewQueryBridge
                 runId={runId}
                 corpusRevisionId={corpusRevisionId}
+                now={queryClock}
                 inspectionFilter={inspectionFilter}
                 selectedId={selectedId}
                 setQueries={setQueries}
@@ -118,38 +151,39 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
         </LoadErrorBoundary>
     );
 
-    const preparationDeadlineAt =
-        queries?.proposal?.preparationAction?.deadlineAt;
-    const preparationExpired =
-        preparationDeadlineAt !== undefined && preparationDeadlineAt <= clock;
-    const snapshot = queries?.proposal;
-    const proposal =
-        snapshot?.preparationAction?.available && preparationExpired
-            ? {
-                  ...snapshot,
-                  preparationAction: {
-                      ...snapshot.preparationAction,
-                      available: false,
-                      reason: "deadline_elapsed" as const,
-                  },
-                  preparation: snapshot.preparation
-                      ? { ...snapshot.preparation, canResume: false }
-                      : undefined,
-              }
-            : snapshot;
-    useEffect(() => {
-        if (preparationDeadlineAt === undefined) return;
-        const timer = setTimeout(
-            () => setClock(Date.now()),
-            Math.max(0, preparationDeadlineAt - Date.now()),
-        );
-        return () => clearTimeout(timer);
-    }, [preparationDeadlineAt]);
+    const proposal = queries?.proposal;
+    const preparationRefreshAt =
+        proposal?.preparation?.status === "started"
+            ? proposal.preparationAction?.deadlineAt
+            : proposal?.preparationAction?.retryAt;
     const inspectionSummary = queries?.inspectionSummary;
     const recovery = proposal?.recovery;
     const recovering =
         recovery?.status === "started" && recovery.leaseExpiresAt > clock;
     const recoveryLeaseExpiresAt = recovery?.leaseExpiresAt;
+    const queryRefreshAt = Math.min(
+        ...[preparationRefreshAt, recoveryLeaseExpiresAt].filter(
+            (deadline): deadline is number =>
+                deadline !== undefined && deadline > queryClock,
+        ),
+    );
+    useEffect(() => {
+        if (
+            !updatesConnected ||
+            !Number.isFinite(queryRefreshAt) ||
+            queryRefreshAt <= queryClock
+        )
+            return;
+        const timer = setTimeout(
+            () => {
+                const now = Date.now();
+                setClock(now);
+                setQueryClock(now);
+            },
+            Math.max(0, queryRefreshAt - Date.now()) + 25,
+        );
+        return () => clearTimeout(timer);
+    }, [queryRefreshAt, queryClock, updatesConnected]);
     const recoveryPending = recoveryAttempt?.status === "running";
     const retryAfterSeconds =
         recovery?.status === "blocked"
@@ -192,15 +226,13 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
             const timer = setInterval(() => {
                 const now = Date.now();
                 setClock(now);
-                if (now >= recoveryLeaseExpiresAt) clearInterval(timer);
+                if (now >= recoveryLeaseExpiresAt) {
+                    clearInterval(timer);
+                }
             }, 1000);
             return () => clearInterval(timer);
         }
-        const timer = setTimeout(
-            () => setClock(Date.now()),
-            recoveryLeaseExpiresAt - Date.now() + 25,
-        );
-        return () => clearTimeout(timer);
+        return undefined;
     }, [recoveryLeaseExpiresAt, recovery?.status]);
 
     useEffect(() => {
@@ -351,6 +383,20 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
         <>
             {queryBridge}
             <div className="space-y-3">
+                {!online ||
+                (connection.hasEverConnected &&
+                    !connection.isWebSocketConnected) ? (
+                    <div
+                        role="status"
+                        className="rounded-lg bg-warning/10 px-4 py-3 text-sm text-warning-foreground dark:text-warning">
+                        <p className="font-medium">Live updates paused</p>
+                        <p className="mt-1 text-xs leading-relaxed">
+                            Reconnecting automatically. Saved readings remain
+                            available; the displayed progress may be out of
+                            date.
+                        </p>
+                    </div>
+                ) : null}
                 {actionError ? (
                     <p
                         role="alert"
@@ -377,6 +423,7 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
                     />
                 ) : null}
                 <SourceProposalReview
+                    updatesConnected={updatesConnected}
                     sourceReviewNavigation={sourceReviewNavigation}
                     onSourceReviewNavigate={onSourceReviewNavigate}
                     runId={runId}
@@ -507,12 +554,21 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
                         setActionError(null);
                         setIsPreparingRequest(true);
                         try {
-                            const result = await prepareSources({
-                                runId,
-                                corpusRevisionId,
-                                expectedProposalId: proposal.proposalId,
-                                requestId: crypto.randomUUID(),
-                            });
+                            if (
+                                preparationRequest.current?.runId !== runId ||
+                                preparationRequest.current.corpusRevisionId !==
+                                    corpusRevisionId
+                            )
+                                preparationRequest.current = {
+                                    runId,
+                                    corpusRevisionId,
+                                    expectedProposalId: proposal.proposalId,
+                                    requestId: crypto.randomUUID(),
+                                };
+                            const result = await prepareSources(
+                                preparationRequest.current,
+                            );
+                            preparationRequest.current = null;
                             if (result.status === "started")
                                 setRequestedPreparationId(result.preparationId);
                             else if (result.status === "blocked")
@@ -562,13 +618,16 @@ function useSourceReviewQueries({
     corpusRevisionId,
     inspectionFilter,
     selectedId,
+    now,
 }: Pick<LiveSourceReviewProps, "runId" | "corpusRevisionId"> & {
     inspectionFilter: SourceFilter;
     selectedId: Id<"sources"> | null;
+    now: number;
 }) {
     const proposal = useQuery(api.sourceSelectionProposals.getCurrent, {
         runId,
         corpusRevisionId,
+        now,
     });
     const hasProposal = proposal !== undefined && proposal !== null;
     const adjustmentSets = useQuery(
@@ -636,13 +695,27 @@ function LiveSourceReviewSkeleton() {
             className="space-y-4">
             <section
                 aria-label="Loading source proposal summary"
-                className="surface-floating h-48 space-y-4 rounded-2xl p-5">
-                <Skeleton className="h-4 w-36" />
-                <Skeleton className="h-8 w-56" />
-                <Skeleton className="h-4 w-3/4" />
-                <div className="flex gap-2">
-                    <Skeleton className="h-9 w-32 rounded-lg" />
-                    <Skeleton className="h-9 w-40 rounded-lg" />
+                className="surface-floating space-y-4 rounded-2xl p-4 sm:p-5">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="space-y-2">
+                        <Skeleton className="h-4 w-36" />
+                        <Skeleton className="h-3 w-28" />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <Skeleton className="h-9 w-32 rounded-lg" />
+                        <Skeleton className="h-11 w-48 rounded-lg" />
+                    </div>
+                </div>
+                <div className="space-y-3 border-t border-border/60 pt-4">
+                    <div className="flex items-start gap-3">
+                        <Skeleton className="size-7 shrink-0 rounded-full" />
+                        <div className="flex-1 space-y-2">
+                            <Skeleton className="h-4 w-48 max-w-full" />
+                            <Skeleton className="h-3 w-3/4" />
+                        </div>
+                    </div>
+                    <Skeleton className="h-1.5 w-full" />
+                    <Skeleton className="h-3 w-2/3" />
                 </div>
             </section>
             <div className="grid min-h-168 gap-4 md:grid-cols-[minmax(18rem,36%)_minmax(26rem,1fr)]">

@@ -2,6 +2,7 @@ import type {
     SecCompanyMatch,
     SecCompanyResolver,
 } from "@convex/companyResolution";
+import { providerRetryAfterAt } from "@convex/domain/sourcePreparationAuthority";
 import {
     companySearchResultLimit,
     MAX_APPROVED_SOURCE_BYTES,
@@ -18,6 +19,9 @@ type ProviderAttempt = {
     attempt: number;
     latencyMs?: number;
     errorCode?: string;
+    dispatchOutcome?: "response_received" | "unknown";
+    httpStatus?: number;
+    retryAfterAt?: number;
 };
 
 type SecCompanyResolverDependencies = {
@@ -30,7 +34,9 @@ type SecCompanyResolverDependencies = {
     ) => Promise<{ shouldExecute: boolean }>;
     operationScope?: string;
     timeoutMs?: number;
-    maxAttempts?: 1 | 2;
+    maxAttempts?: 1 | 2 | 3;
+    firstAttempt?: 1 | 2 | 3;
+    retryPolicy?: "confirmed_response";
 };
 
 const MAX_SEC_ATTEMPTS = 2;
@@ -47,7 +53,11 @@ function secTimeoutMs(custom?: number): number {
 }
 
 export class SecRetryableError extends Error {
-    constructor(message: string) {
+    constructor(
+        message: string,
+        readonly httpStatus?: number,
+        readonly retryAfterAt?: number,
+    ) {
         super(message);
         this.name = "SecRetryableError";
     }
@@ -359,7 +369,11 @@ export function createSecCompanyResolver(
         url: string,
     ): Promise<unknown> {
         const operationKey = `${dependencies.operationScope ?? "sec"}:${operation}:${url}`;
-        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        for (
+            let attempt = dependencies.firstAttempt ?? 1;
+            attempt <= maxAttempts;
+            attempt += 1
+        ) {
             await dependencies.reserveRequest();
             const startedAt = dependencies.now();
             const lease = await dependencies.recordAttempt({
@@ -373,6 +387,8 @@ export function createSecCompanyResolver(
                     "SEC provider attempt was already recorded",
                 );
             }
+            let responseStatus: number | undefined;
+            let retryAfterAt: number | undefined;
             try {
                 const controller = new AbortController();
                 const timeout = setTimeout(
@@ -396,10 +412,17 @@ export function createSecCompanyResolver(
                 } finally {
                     clearTimeout(timeout);
                 }
+                responseStatus = response.status;
+                retryAfterAt = providerRetryAfterAt(
+                    response.headers.get("retry-after"),
+                    dependencies.now(),
+                );
                 if (!response.ok) {
                     if (response.status === 429 || response.status >= 500) {
                         throw new SecRetryableError(
                             `SEC request failed with ${response.status}`,
+                            response.status,
+                            retryAfterAt,
                         );
                     }
                     throw new Error(
@@ -423,14 +446,29 @@ export function createSecCompanyResolver(
                     attempt,
                     latencyMs: Math.max(0, dependencies.now() - startedAt),
                     errorCode:
-                        error instanceof Error
-                            ? error.name
-                            : "UnknownProviderError",
+                        responseStatus && responseStatus >= 400
+                            ? `http_${responseStatus}`
+                            : error instanceof Error
+                              ? error.name
+                              : "UnknownProviderError",
+                    dispatchOutcome:
+                        responseStatus === undefined
+                            ? "unknown"
+                            : "response_received",
+                    httpStatus: responseStatus,
+                    retryAfterAt,
                 });
                 const retryable =
                     error instanceof TypeError ||
                     error instanceof SecRetryableError;
-                if (!retryable || attempt === maxAttempts) {
+                if (
+                    !retryable ||
+                    (dependencies.retryPolicy === "confirmed_response" &&
+                        ![408, 429, 500, 502, 503, 504].includes(
+                            responseStatus ?? 0,
+                        )) ||
+                    attempt === maxAttempts
+                ) {
                     throw error;
                 }
             }
@@ -455,7 +493,11 @@ export function createSecCompanyResolver(
         const operation: ProviderAttempt["operation"] = "retrieve_filing_html";
         const operationKey = `${dependencies.operationScope ?? "sec"}:${operation}:${url}`;
 
-        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        for (
+            let attempt = dependencies.firstAttempt ?? 1;
+            attempt <= maxAttempts;
+            attempt += 1
+        ) {
             await dependencies.reserveRequest();
             const startedAt = dependencies.now();
             const lease = await dependencies.recordAttempt({
@@ -476,6 +518,8 @@ export function createSecCompanyResolver(
                 secTimeoutMs(dependencies.timeoutMs),
             );
 
+            let responseStatus: number | undefined;
+            let retryAfterAt: number | undefined;
             try {
                 let response: Response;
                 try {
@@ -493,10 +537,17 @@ export function createSecCompanyResolver(
                     throw error;
                 }
 
+                responseStatus = response.status;
+                retryAfterAt = providerRetryAfterAt(
+                    response.headers.get("retry-after"),
+                    dependencies.now(),
+                );
                 if (!response.ok) {
                     if (response.status === 429 || response.status >= 500) {
                         throw new SecRetryableError(
                             `SEC request failed with ${response.status}`,
+                            response.status,
+                            retryAfterAt,
                         );
                     }
                     throw new Error(
@@ -618,14 +669,29 @@ export function createSecCompanyResolver(
                     attempt,
                     latencyMs: Math.max(0, dependencies.now() - startedAt),
                     errorCode:
-                        error instanceof Error
-                            ? error.name
-                            : "UnknownProviderError",
+                        responseStatus && responseStatus >= 400
+                            ? `http_${responseStatus}`
+                            : error instanceof Error
+                              ? error.name
+                              : "UnknownProviderError",
+                    dispatchOutcome:
+                        responseStatus === undefined
+                            ? "unknown"
+                            : "response_received",
+                    httpStatus: responseStatus,
+                    retryAfterAt,
                 });
                 const retryable =
                     error instanceof TypeError ||
                     error instanceof SecRetryableError;
-                if (!retryable || attempt === maxAttempts) {
+                if (
+                    !retryable ||
+                    (dependencies.retryPolicy === "confirmed_response" &&
+                        ![408, 429, 500, 502, 503, 504].includes(
+                            responseStatus ?? 0,
+                        )) ||
+                    attempt === maxAttempts
+                ) {
                     throw error;
                 }
             } finally {

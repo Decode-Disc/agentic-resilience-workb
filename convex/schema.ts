@@ -21,7 +21,9 @@ import {
 } from "./domain/sourceDiscoveryRecovery";
 import { sourceLocatorValidator } from "./domain/sourcePassages";
 import {
+    preparationDispatchOutcomeValidator,
     sourcePreparationOutcomeValidator,
+    sourcePreparationProgressValidator,
     sourcePreparationStopCodeValidator,
 } from "./domain/sourcePreparationAuthority";
 import { sourceQualificationValidator } from "./domain/sourceQualification";
@@ -423,10 +425,20 @@ export default defineSchema({
         "version",
     ]),
     sourceSelectionProposalRebuilds: defineTable({
+        progress: v.optional(sourcePreparationProgressValidator),
         runId: v.id("researchRuns"),
         corpusRevisionId: v.id("corpusRevisions"),
         expectedProposalId: v.optional(v.id("sourceSelectionProposals")),
         kind: v.optional(v.literal("preparation")),
+        resumesPreparationId: v.optional(
+            v.id("sourceSelectionProposalRebuilds"),
+        ),
+        configurationCheck: v.optional(
+            v.object({
+                available: v.boolean(),
+                checkedAt: v.number(),
+            }),
+        ),
         entryPoint: v.optional(
             v.union(
                 v.literal("initial_discovery"),
@@ -879,6 +891,10 @@ export default defineSchema({
         reportedCost: v.optional(v.number()),
         errorCode: v.optional(v.string()),
         retryable: v.optional(v.boolean()),
+        dispatchOutcome: v.optional(preparationDispatchOutcomeValidator),
+        httpStatus: v.optional(v.number()),
+        retryAfterAt: v.optional(v.number()),
+        recoveryOfProviderCallId: v.optional(v.id("providerCalls")),
         leaseExpiresAt: v.optional(v.number()),
         createdAt: v.number(),
         completedAt: v.optional(v.number()),
@@ -891,6 +907,7 @@ export default defineSchema({
             "attempt",
         ])
         .index("by_run", ["runId"])
+        .index("by_run_source_operation", ["runId", "sourceId", "operation"])
         .index("by_created_at", ["createdAt"]),
     paidWorkControls: defineTable({
         key: v.literal("global"),
@@ -951,6 +968,7 @@ export default defineSchema({
         .index("by_run_and_decision_key", ["runId", "decisionKey"])
         .index("by_occurred_at", ["occurredAt"]),
     aiTaskResults: defineTable({
+        comparisonContextHash: v.optional(v.string()),
         sourceId: v.optional(v.id("sources")),
         sourceCaptureId: v.optional(v.id("sourceCaptures")),
         runId: v.id("researchRuns"),

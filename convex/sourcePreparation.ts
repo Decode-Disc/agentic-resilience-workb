@@ -1,5 +1,4 @@
 import {
-    SOURCE_COMPARISON_MAX_CANDIDATES,
     SOURCE_COMPARISON_MAX_OUTPUT_BYTES,
     SOURCE_COMPARISON_VERSION,
     type SourceComparisonOutput,
@@ -17,6 +16,7 @@ import {
     sourcePreparationEnabled,
 } from "@convex/resourceLimits";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import type { WorkflowId } from "@convex-dev/workflow";
 import { type Infer, v } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
 import { api, internal } from "./_generated/api";
@@ -35,25 +35,34 @@ import {
 } from "./domain/executionClaim";
 import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
 import {
+    comparisonContextForTarget,
+    readComparisonPrimaryContext,
+} from "./domain/sourceComparisonContext";
+import {
     type RecoveryTarget,
+    readSupplementalSearchAttempts,
     recoverySearchPlan,
     recoveryTargetValidator,
+    supplementalSearchInputHash,
+    supplementalSearchOperationKey,
 } from "./domain/sourceDiscoveryRecovery";
 import {
     assertPreparationComparisonFence,
     assertPreparationCompletionFence,
     assertPreparationExecutionFence,
+    nextPreparationAttempt,
+    preparationFailureClass,
     readEligiblePreparationSourceIds,
+    readPreparationModelAttempts,
     readPreparationSourceDecision,
     sourcePreparationError,
     sourcePreparationOutcomeValidator,
+    sourcePreparationPhaseValidator,
     sourcePreparationStopCodeValidator,
 } from "./domain/sourcePreparationAuthority";
+import { readPreparationRecovery } from "./domain/sourcePreparationReview";
 import { sourceQualificationValidator } from "./domain/sourceQualification";
-import {
-    classifySourceComparisonContext,
-    SOURCE_DOCUMENT_KINDS,
-} from "./domain/sourceSelectionPolicy";
+import { SOURCE_DOCUMENT_KINDS } from "./domain/sourceSelectionPolicy";
 import { readPinnedSourceQualification } from "./domain/sourceUsage";
 import { companySnapshotValidator } from "./domain/validators";
 import schema from "./schema";
@@ -77,7 +86,8 @@ export async function startReviewPreparation(
         target?: RecoveryTarget;
     },
 ) {
-    const { run, revision, proposal, visitor } = args;
+    let { run } = args;
+    const { revision, proposal, visitor } = args;
     const invitation = await ctx.db.get(visitor.invitationId);
     if (
         invitation?.status !== "claimed" ||
@@ -115,9 +125,63 @@ export async function startReviewPreparation(
         revision.sourceSelectionProposalId !== proposal._id
     )
         throw new Error("Source selection proposal changed");
-    const previous = run.sourcePreparationId
+    let previous = run.sourcePreparationId
         ? await ctx.db.get(run.sourcePreparationId)
         : null;
+    if (
+        previous?.kind === "preparation" &&
+        previous.status === "started" &&
+        (previous.deadlineAt ?? Infinity) <= Date.now() &&
+        previous.executionGeneration === run.executionGeneration &&
+        run.lifecycleState === "awaiting_source_review" &&
+        run.executionStatus === "running"
+    ) {
+        if (previous.workflowId)
+            await workflow.cancel(ctx, previous.workflowId as WorkflowId);
+        await ctx.db.patch(previous._id, {
+            status: "blocked",
+            stopCode: "execution_expired",
+            workflowId: undefined,
+            completedAt: Date.now(),
+        });
+        await ctx.db.patch(run._id, {
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        });
+        previous = {
+            ...previous,
+            status: "blocked",
+            stopCode: "execution_expired",
+            workflowId: undefined,
+        };
+        run = {
+            ...run,
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        };
+    }
+    const recovery =
+        previous?.kind === "preparation" &&
+        !args.target &&
+        !args.manualSourceId &&
+        previous.status !== "started"
+            ? await readPreparationRecovery(ctx.db, {
+                  runId: run._id,
+                  corpusRevisionId: revision._id,
+                  preparation: previous,
+                  now: Date.now(),
+              })
+            : null;
+    if (recovery) {
+        if (recovery.resumableSourceIds.length === 0 && !recovery.hasSearchWork)
+            return {
+                preparationId: recovery.scopePreparation._id,
+                status: "blocked" as const,
+                reason: recovery.blockedReason ?? "complete",
+                retryAt: recovery.retryAt,
+            };
+        previous = recovery.scopePreparation;
+    }
     const resumingTargetedReading =
         !args.target &&
         !args.manualSourceId &&
@@ -158,37 +222,9 @@ export async function startReviewPreparation(
             throw sourcePreparationError("request_invalid");
     }
     const now = Date.now();
-    if (
-        !args.manualSourceId &&
-        !args.target &&
-        previous?.deadlineAt !== undefined &&
-        previous.deadlineAt <= now
-    )
-        throw sourcePreparationError("preparation_deadline_elapsed");
-    let originalPreparation = previous;
     if (args.target) {
         if (previous?.kind !== "preparation")
             throw sourcePreparationError("preparation_unavailable");
-        if (previous.manualSourceIds) {
-            originalPreparation =
-                (
-                    await ctx.db
-                        .query("sourceSelectionProposalRebuilds")
-                        .withIndex("by_revision_and_created_at", (q) =>
-                            q.eq("corpusRevisionId", revision._id),
-                        )
-                        .order("asc")
-                        .take(MAX_HISTORICAL_SOURCE_CANDIDATES)
-                ).find(
-                    (item) =>
-                        item.kind === "preparation" && !item.manualSourceIds,
-                ) ?? null;
-        }
-        if (
-            !originalPreparation?.deadlineAt ||
-            originalPreparation.deadlineAt <= now
-        )
-            throw sourcePreparationError("preparation_deadline_elapsed");
         if (
             previous.target &&
             previous.status === "blocked" &&
@@ -226,15 +262,9 @@ export async function startReviewPreparation(
             throw error;
         slotUnavailable = true;
     }
-    const deadlineAt = args.target
-        ? originalPreparation?.deadlineAt
-        : slotUnavailable
-          ? undefined
-          : !args.manualSourceId && previous?.kind === "preparation"
-            ? (previous.deadlineAt ??
-              (previous.manualSourceIds ? now : previous.createdAt) +
-                  SOURCE_PREPARATION_DEADLINE_MS)
-            : now + SOURCE_PREPARATION_DEADLINE_MS;
+    const deadlineAt = slotUnavailable
+        ? undefined
+        : now + SOURCE_PREPARATION_DEADLINE_MS;
     const preparationId = await ctx.db.insert(
         "sourceSelectionProposalRebuilds",
         {
@@ -242,6 +272,9 @@ export async function startReviewPreparation(
             corpusRevisionId: revision._id,
             expectedProposalId: proposal._id,
             kind: "preparation",
+            ...(previous?.kind === "preparation"
+                ? { resumesPreparationId: previous._id }
+                : {}),
             entryPoint: args.target
                 ? "targeted_search"
                 : args.manualSourceId || previous?.manualSourceIds
@@ -261,7 +294,7 @@ export async function startReviewPreparation(
                   : previous?.manualSourceIds,
             ...(args.target
                 ? { target: args.target, readingSourceIds: [] }
-                : resumingTargetedReading
+                : resumingTargetedReading && previous
                   ? {
                         target: previous.target,
                         readingSourceIds: previous.readingSourceIds ?? [],
@@ -285,6 +318,7 @@ export async function startReviewPreparation(
             requestId,
             cycle: 1,
             status: slotUnavailable ? "blocked" : "started",
+            progress: { phase: "reading", updatedAt: now },
             ...(slotUnavailable
                 ? {
                       stopCode: "execution_slot_unavailable" as const,
@@ -299,10 +333,18 @@ export async function startReviewPreparation(
                     ? (previous.asOfTime ?? previous.createdAt)
                     : now,
             modelAttemptCount: 0,
+            ...(recovery ? { sourceOutcomes: recovery.retainedOutcomes } : {}),
             createdAt: now,
         },
     );
-    await ctx.db.patch(run._id, { sourcePreparationId: preparationId });
+    await ctx.db.patch(run._id, {
+        sourcePreparationId: preparationId,
+        sourceQualificationAttemptCount: await readPreparationModelAttempts(
+            ctx.db,
+            run,
+            previous?.kind === "preparation" ? previous : undefined,
+        ),
+    });
     if (slotUnavailable) return { preparationId, status: "blocked" as const };
     const workflowId = await workflow.start(
         ctx,
@@ -329,6 +371,8 @@ export const startForReview = mutation({
         preparationId: v.id("sourceSelectionProposalRebuilds"),
         status: schema.tables.sourceSelectionProposalRebuilds.validator.fields
             .status,
+        reason: v.optional(v.string()),
+        retryAt: v.optional(v.number()),
     }),
     handler: async (ctx, args) => {
         const authUserId = await getAuthUserId(ctx);
@@ -464,6 +508,7 @@ export const getComparisonInput = internalQuery({
         company: companySnapshotValidator,
         primaryCandidates: v.array(comparisonCandidateValidator),
         candidateMetadataLimitReached: v.boolean(),
+        comparisonContextHash: v.string(),
     }),
     handler: async (ctx, args) => {
         const targetCapture = await ctx.db.get(args.sourceCaptureId);
@@ -509,96 +554,18 @@ export const getComparisonInput = internalQuery({
         )
             throw sourcePreparationError("qualification_unavailable");
 
-        const sources = await ctx.db
-            .query("sources")
-            .withIndex("by_run_and_url", (q) => q.eq("runId", run._id))
-            .take(SOURCE_COMPARISON_MAX_CANDIDATES);
-        const primaryCandidates: Array<
-            Infer<typeof comparisonCandidateValidator>
-        > = [];
-        const seenCaptures = new Set<string>();
-        for (const source of sources) {
-            if (source._id === targetSource._id) continue;
-            const context = classifySourceComparisonContext(
-                {
-                    sourceId: source._id,
-                    canonicalUrl: source.canonicalUrl,
-                    title: source.title,
-                    origin: source.origin,
-                    category: source.category,
-                    publishedAt: source.publishedAt,
-                    providerReference: source.providerReference,
-                    secForm: source.secForm,
-                    secAccessionNumber: source.secAccessionNumber,
-                    providerResultPosition: source.providerResultPosition,
-                    discoveryQueryIndex: source.discoveryQueryIndex,
-                    createdAt: source.createdAt,
-                },
-                company,
-            );
-            if (
-                (context.authorityTier !== "regulator_primary" &&
-                    context.authorityTier !== "company_primary" &&
-                    context.authorityTier !== "company_hosted_ir") ||
-                !context.companyIdentityConfirmed
-            )
-                continue;
-            const authorityTier = context.authorityTier;
-            const decision = await readPreparationSourceDecision(ctx.db, {
-                runId: run._id,
-                corpusRevisionId: revision._id,
-                sourceId: source._id,
+        const primaryContext = await readComparisonPrimaryContext(
+            ctx.db,
+            run,
+            revision._id,
+        );
+        const { primaryCandidates, comparisonContextHash } =
+            comparisonContextForTarget(primaryContext, {
+                source: targetSource,
+                capture: targetCapture,
+                qualification: qualificationTask,
+                preparation,
             });
-            if (decision === "rejected") continue;
-            const capture = await ctx.db
-                .query("sourceCaptures")
-                .withIndex("by_source_and_status_and_updated_at", (q) =>
-                    q.eq("sourceId", source._id).eq("status", "committed"),
-                )
-                .order("desc")
-                .first();
-            if (
-                !capture?.storageId ||
-                !capture.contentHash ||
-                capture.runId !== run._id ||
-                source.runId !== run._id
-            )
-                continue;
-            const identity = `${source._id}:${capture._id}:${capture.contentHash}`;
-            if (seenCaptures.has(identity)) continue;
-            seenCaptures.add(identity);
-            const priorQualification = await ctx.db
-                .query("aiTaskResults")
-                .withIndex("by_source_and_task_type_and_created_at", (q) =>
-                    q
-                        .eq("sourceId", source._id)
-                        .eq("taskType", "source_qualification"),
-                )
-                .order("desc")
-                .first();
-            const matchingQualification =
-                priorQualification?.runId === run._id &&
-                priorQualification.corpusRevisionId ===
-                    capture.corpusRevisionId &&
-                priorQualification.output.kind === "source_qualification" &&
-                priorQualification.output.sourceCaptureId === capture._id &&
-                priorQualification.output.contentHash === capture.contentHash
-                    ? priorQualification
-                    : null;
-            primaryCandidates.push({
-                source,
-                capture,
-                context: { ...context, authorityTier },
-                ...(matchingQualification?.output.kind ===
-                "source_qualification"
-                    ? {
-                          reportingPeriodEnd:
-                              matchingQualification.output.qualification
-                                  .reportingPeriodEnd,
-                      }
-                    : {}),
-            });
-        }
         return {
             preparation,
             run,
@@ -608,8 +575,9 @@ export const getComparisonInput = internalQuery({
             qualificationTask,
             company,
             primaryCandidates,
+            comparisonContextHash,
             candidateMetadataLimitReached:
-                sources.length === SOURCE_COMPARISON_MAX_CANDIDATES,
+                primaryContext.candidateMetadataLimitReached,
         };
     },
 });
@@ -786,23 +754,56 @@ export const getComparison = internalQuery({
             )
             .take(10);
         if (tasks.length === 0) return { status: "missing" as const };
-        const task = tasks.find(
-            (candidate) =>
-                candidate.schemaVersion === SOURCE_COMPARISON_VERSION &&
-                candidate.output.kind === "source_comparison" &&
-                candidate.output.comparisonVersion ===
-                    SOURCE_COMPARISON_VERSION &&
-                candidate.output.inputHash === args.inputHash &&
-                candidate.output.runId === run._id &&
-                candidate.output.corpusRevisionId === revision._id &&
-                candidate.output.targetSourceId === targetCapture.sourceId &&
-                candidate.output.targetCaptureId === targetCapture._id &&
-                candidate.output.targetContentHash ===
-                    targetCapture.contentHash &&
-                candidate.output.qualificationTaskId === qualification._id,
-        );
+        const task = [...tasks]
+            .sort(
+                (a, b) =>
+                    Number(
+                        b.output.kind === "source_comparison" &&
+                            ["compared", "not_run"].includes(
+                                b.output.checkStatus,
+                            ),
+                    ) -
+                    Number(
+                        a.output.kind === "source_comparison" &&
+                            ["compared", "not_run"].includes(
+                                a.output.checkStatus,
+                            ),
+                    ),
+            )
+            .find(
+                (candidate) =>
+                    candidate.schemaVersion === SOURCE_COMPARISON_VERSION &&
+                    candidate.output.kind === "source_comparison" &&
+                    candidate.output.comparisonVersion ===
+                        SOURCE_COMPARISON_VERSION &&
+                    candidate.output.inputHash === args.inputHash &&
+                    candidate.output.runId === run._id &&
+                    candidate.output.corpusRevisionId === revision._id &&
+                    candidate.output.targetSourceId ===
+                        targetCapture.sourceId &&
+                    candidate.output.targetCaptureId === targetCapture._id &&
+                    candidate.output.targetContentHash ===
+                        targetCapture.contentHash &&
+                    candidate.output.qualificationTaskId === qualification._id,
+            );
         if (task?.output.kind !== "source_comparison")
             return { status: "stale" as const };
+        if (
+            !["compared", "not_run"].includes(task.output.checkStatus) &&
+            preparation.resumesPreparationId
+        ) {
+            const calls = await ctx.db
+                .query("providerCalls")
+                .withIndex("by_run_operation_input_and_attempt", (q) =>
+                    q
+                        .eq("runId", run._id)
+                        .eq("operation", "source_comparison")
+                        .eq("inputHash", args.inputHash),
+                )
+                .take(4);
+            if (nextPreparationAttempt(calls, preparation, args.now).attempt)
+                return { status: "missing" as const };
+        }
         return (await comparisonReferencesAreCurrent(
             ctx,
             {
@@ -905,6 +906,7 @@ export const saveComparison = internalMutation({
         sourceCaptureId: v.id("sourceCaptures"),
         qualificationTaskId: v.id("aiTaskResults"),
         inputHash: v.string(),
+        comparisonContextHash: v.optional(v.string()),
         output: sourceComparisonOutputValidator,
         providerCallId: v.optional(v.id("providerCalls")),
         receipt: v.optional(
@@ -972,9 +974,28 @@ export const saveComparison = internalMutation({
                     .eq("inputHash", args.inputHash),
             )
             .take(10);
+        if (args.comparisonContextHash) {
+            const source = await ctx.db.get(targetCapture.sourceId);
+            const primaryContext = await readComparisonPrimaryContext(
+                ctx.db,
+                run,
+                revision._id,
+            );
+            if (
+                !source ||
+                comparisonContextForTarget(primaryContext, {
+                    source,
+                    capture: targetCapture,
+                    qualification,
+                    preparation,
+                }).comparisonContextHash !== args.comparisonContextHash
+            )
+                throw sourcePreparationError("stale_execution");
+        }
         const cached = existing.find(
             (task) =>
                 task.schemaVersion === SOURCE_COMPARISON_VERSION &&
+                task.providerCallId === args.providerCallId &&
                 task.output.kind === "source_comparison" &&
                 task.output.targetCaptureId === targetCapture._id &&
                 task.output.qualificationTaskId === qualification._id,
@@ -1000,7 +1021,7 @@ export const saveComparison = internalMutation({
                     preparation.executionGeneration ||
                 providerCall.workflowVersion !== preparation.workflowVersion ||
                 providerCall.stepKey !== "source_preparation" ||
-                ![1, 2].includes(providerCall.attempt) ||
+                ![1, 2, 3].includes(providerCall.attempt) ||
                 !["started", "succeeded", "failed"].includes(
                     providerCall.status,
                 ) ||
@@ -1045,10 +1066,55 @@ export const saveComparison = internalMutation({
             schemaVersion: SOURCE_COMPARISON_VERSION,
             adapterVersion: "openrouter-comparison-v1",
             inputHash: args.inputHash,
+            comparisonContextHash: args.comparisonContextHash,
             ...(providerCall ? { providerCallId: providerCall._id } : {}),
             output,
             createdAt: Date.now(),
         });
+    },
+});
+
+/** Backfills a derived context checkpoint only after the exact retained result is validated. */
+export const confirmComparisonContext = internalMutation({
+    args: {
+        preparationId: v.id("sourceSelectionProposalRebuilds"),
+        sourceCaptureId: v.id("sourceCaptures"),
+        qualificationTaskId: v.id("aiTaskResults"),
+        taskId: v.id("aiTaskResults"),
+        inputHash: v.string(),
+        comparisonContextHash: v.string(),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const input = await ctx.runQuery(
+            internal.sourcePreparation.getComparisonInput,
+            {
+                preparationId: args.preparationId,
+                sourceCaptureId: args.sourceCaptureId,
+                qualificationTaskId: args.qualificationTaskId,
+                now: Date.now(),
+            },
+        );
+        const cached = await ctx.runQuery(
+            internal.sourcePreparation.getComparison,
+            {
+                preparationId: args.preparationId,
+                sourceCaptureId: args.sourceCaptureId,
+                qualificationTaskId: args.qualificationTaskId,
+                inputHash: args.inputHash,
+                now: Date.now(),
+            },
+        );
+        if (
+            input.comparisonContextHash !== args.comparisonContextHash ||
+            cached.status !== "cached" ||
+            cached.taskId !== args.taskId
+        )
+            throw sourcePreparationError("stale_execution");
+        await ctx.db.patch(args.taskId, {
+            comparisonContextHash: args.comparisonContextHash,
+        });
+        return null;
     },
 });
 
@@ -1159,6 +1225,97 @@ export const saveQualification = internalMutation({
     },
 });
 
+export const recordConfigurationCheck = internalMutation({
+    args: {
+        preparationId: v.id("sourceSelectionProposalRebuilds"),
+        available: v.boolean(),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        await assertPreparationExecutionFence(ctx.db, {
+            preparationId: args.preparationId,
+            now: Date.now(),
+        });
+        await ctx.db.patch(args.preparationId, {
+            configurationCheck: {
+                available: args.available,
+                checkedAt: Date.now(),
+            },
+        });
+        return null;
+    },
+});
+
+/** Persists real workflow boundaries with their event; replay cannot renew work or repeat an unchanged update. */
+export const recordProgress = internalMutation({
+    args: {
+        preparationId: v.id("sourceSelectionProposalRebuilds"),
+        phase: sourcePreparationPhaseValidator,
+        current: v.optional(v.number()),
+        total: v.optional(v.number()),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const { preparation, run } = await assertPreparationCompletionFence(
+            ctx.db,
+            args,
+        );
+        if (!preparation.progress) return null;
+        if (
+            (args.current !== undefined &&
+                (!Number.isSafeInteger(args.current) || args.current < 0)) ||
+            (args.total !== undefined &&
+                (!Number.isSafeInteger(args.total) ||
+                    args.total < 0 ||
+                    args.total > MAX_HISTORICAL_SOURCE_CANDIDATES)) ||
+            (args.current !== undefined &&
+                args.total !== undefined &&
+                args.current > args.total)
+        )
+            throw sourcePreparationError("preparation_result_invalid");
+        if (
+            preparation.progress.phase === args.phase &&
+            preparation.progress.current === args.current &&
+            preparation.progress.total === args.total
+        )
+            return null;
+        const now = Date.now();
+        await ctx.db.patch(preparation._id, {
+            progress: {
+                phase: args.phase,
+                current: args.current,
+                total: args.total,
+                updatedAt: now,
+            },
+        });
+        await ctx.db.patch(run._id, {
+            nextEventSequence: run.nextEventSequence + 1,
+            updatedAt: now,
+        });
+        await ctx.db.insert("runEvents", {
+            runId: run._id,
+            sequence: run.nextEventSequence + 1,
+            type: "source_preparation_progress",
+            lifecycleState: run.lifecycleState,
+            executionStatus: run.executionStatus,
+            stepKey:
+                preparation.entryPoint === "initial_discovery"
+                    ? "discover_sources"
+                    : "source_review",
+            messageKey: {
+                reading: "source_candidates_checked",
+                comparison: "source_comparisons_checked",
+                supplement: "source_supplement_check",
+                proposal: "source_proposal_finalizing",
+            }[args.phase],
+            current: args.current,
+            total: args.total,
+            occurredAt: now,
+        });
+        return null;
+    },
+});
+
 export const getForExecution = internalQuery({
     args: {
         preparationId: v.id("sourceSelectionProposalRebuilds"),
@@ -1235,6 +1392,7 @@ export const claimForDiscovery = internalMutation({
                 cycle: 1,
                 status: "started",
                 failedDiscoveryFamilies: [],
+                progress: { phase: "reading", updatedAt: now },
                 deadlineAt,
                 leaseExpiresAt: deadlineAt,
                 asOfTime:
@@ -1257,8 +1415,25 @@ export const nextBatch = internalMutation({
         sourceIds: v.array(v.id("sources")),
         canSupplement: v.boolean(),
         comparisonVersion: v.optional(v.string()),
+        // Older journal entries omit this flag and retain their original workflow step order.
+        progressEnabled: v.optional(v.boolean()),
+        completed: v.optional(v.boolean()),
     }),
     handler: async (ctx, args) => {
+        const previous = await ctx.db.get(args.preparationId);
+        if (
+            previous?.kind === "preparation" &&
+            previous.status !== "started" &&
+            previous.proposalId
+        )
+            return {
+                executionGeneration: previous.executionGeneration,
+                sourceIds: [],
+                canSupplement: false,
+                completed: true,
+                comparisonVersion: previous.comparisonVersion,
+                progressEnabled: previous.progress ? true : undefined,
+            };
         const { preparation, run } = await assertPreparationCompletionFence(
             ctx.db,
             args,
@@ -1268,6 +1443,8 @@ export const nextBatch = internalMutation({
             executionGeneration: preparation.executionGeneration,
             sourceIds,
             canSupplement: false,
+            completed: false,
+            ...(preparation.progress ? { progressEnabled: true } : {}),
             ...(preparation.comparisonVersion
                 ? { comparisonVersion: preparation.comparisonVersion }
                 : {}),
@@ -1495,14 +1672,21 @@ const supplementSearchReservationValidator = v.union(
         query: schema.tables.researchPlans.validator.fields.queries.element,
         providerCallId: v.id("providerCalls"),
         operationKey: v.string(),
+        attempt: v.optional(v.number()),
         companyCik: v.optional(v.string()),
         shouldExecute: v.boolean(),
         reasonCode: v.optional(sourcePreparationStopCodeValidator),
+        retryAt: v.optional(v.number()),
     }),
 );
 
 export const reserveNextSupplementSearch = internalMutation({
-    args: { preparationId: v.id("sourceSelectionProposalRebuilds") },
+    args: {
+        preparationId: v.id("sourceSelectionProposalRebuilds"),
+        configuration: v.optional(
+            v.object({ sec: v.boolean(), exa: v.boolean() }),
+        ),
+    },
     returns: supplementSearchReservationValidator,
     handler: async (
         ctx,
@@ -1510,7 +1694,7 @@ export const reserveNextSupplementSearch = internalMutation({
     ): Promise<Infer<typeof supplementSearchReservationValidator>> => {
         const plan = await ctx.runMutation(
             internal.sourcePreparation.reserveSupplementPlan,
-            args,
+            { preparationId: args.preparationId },
         );
         if (!plan) return null;
         const { preparation, run } = await assertPreparationExecutionFence(
@@ -1519,11 +1703,65 @@ export const reserveNextSupplementSearch = internalMutation({
         );
         const operation = await ctx.db.get(plan.supplementOperationId);
         if (!operation) throw sourcePreparationError("supplement_invalid");
+        if (
+            (await readSourceCandidateCapacity(ctx.db, run._id)).remaining === 0
+        )
+            return null;
         if (preparation.target && preparation.insertedCount !== undefined)
             return null;
         const claimed = operation.supplementClaimedQueryIndexes ?? [];
+        if (claimed.length >= MAX_SUPPLEMENT_SEARCHES) return null;
         let queryIndex = plan.queries.findIndex((_, i) => !claimed.includes(i));
         const queries = [...plan.queries];
+        let retryIndex: number | undefined;
+        const retryableQueryIndexes = new Set<number>();
+        const blockedQueries = new Map<
+            number,
+            NonNullable<Infer<typeof supplementSearchReservationValidator>>
+        >();
+        if (preparation.resumesPreparationId) {
+            for (const index of new Set(claimed)) {
+                const query = queries[index];
+                if (!query) continue;
+                const calls = await readSupplementalSearchAttempts(
+                    ctx.db,
+                    run._id,
+                    operation,
+                    index,
+                );
+                const retry = nextPreparationAttempt(
+                    calls,
+                    preparation,
+                    Date.now(),
+                    1,
+                );
+                const last = [...calls].sort(
+                    (a, b) => b.attempt - a.attempt,
+                )[0];
+                if (
+                    last &&
+                    retry.attempt !== 2 &&
+                    retry.errorCode !== "result_already_recorded"
+                )
+                    blockedQueries.set(index, {
+                        query,
+                        providerCallId: last._id,
+                        operationKey: last.operationKey,
+                        shouldExecute: false,
+                        reasonCode:
+                            preparationFailureClass(last) === "terminal"
+                                ? "request_invalid"
+                                : "transport_unavailable",
+                        retryAt: retry.retryAt,
+                    });
+                if (retry.attempt === 2) {
+                    retryableQueryIndexes.add(index);
+                    retryIndex ??= index;
+                }
+            }
+        }
+        if (!preparation.target && retryIndex !== undefined)
+            queryIndex = retryIndex;
         if (preparation.target) {
             const company = mergeRunCompanyMetadata(
                 run.companySnapshot,
@@ -1531,25 +1769,63 @@ export const reserveNextSupplementSearch = internalMutation({
             );
             if (!company || !run.coveragePreset)
                 throw sourcePreparationError("company_unavailable");
-            const targetedQuery = recoverySearchPlan({
+            const targetedQueries = recoverySearchPlan({
                 company,
                 coveragePreset: run.coveragePreset,
                 researchAngle: run.researchAngle,
                 target: preparation.target,
                 failedFamilies: preparation.failedDiscoveryFamilies,
-            }).queries[0];
-            if (!targetedQuery) throw sourcePreparationError("request_invalid");
-            if (queryIndex < 0 && queries.length < MAX_SUPPLEMENT_SEARCHES)
+            }).queries;
+            if (!targetedQueries.length)
+                throw sourcePreparationError("request_invalid");
+            const targetedQuery =
+                targetedQueries.find((query) => {
+                    const index = queries.findIndex(
+                        (existing) =>
+                            supplementalSearchInputHash(existing) ===
+                            supplementalSearchInputHash(query),
+                    );
+                    return (
+                        index < 0 ||
+                        !claimed.includes(index) ||
+                        retryableQueryIndexes.has(index)
+                    );
+                }) ??
+                targetedQueries.find((query) =>
+                    blockedQueries.has(
+                        queries.findIndex(
+                            (existing) =>
+                                supplementalSearchInputHash(existing) ===
+                                supplementalSearchInputHash(query),
+                        ),
+                    ),
+                );
+            if (!targetedQuery) return null;
+            const existingIndex = queries.findIndex(
+                (query) =>
+                    supplementalSearchInputHash(query) ===
+                    supplementalSearchInputHash(targetedQuery),
+            );
+            const blocked = blockedQueries.get(existingIndex);
+            if (blocked) return blocked;
+            if (existingIndex >= 0 && claimed.includes(existingIndex)) {
+                if (!retryableQueryIndexes.has(existingIndex)) return null;
+                queryIndex = existingIndex;
+            } else if (
+                queryIndex < 0 &&
+                queries.length < MAX_SUPPLEMENT_SEARCHES
+            )
                 queryIndex = queries.length;
             if (queryIndex >= 0 && queryIndex < MAX_SUPPLEMENT_SEARCHES) {
-                queries[queryIndex] = targetedQuery;
+                if (!claimed.includes(queryIndex))
+                    queries[queryIndex] = targetedQuery;
                 await ctx.db.patch(operation._id, {
                     supplementQueries: queries,
                 });
             }
         }
         if (queryIndex < 0 || queryIndex >= MAX_SUPPLEMENT_SEARCHES)
-            return null;
+            return blockedQueries.values().next().value ?? null;
         const query = queries[queryIndex];
         if (!query) throw sourcePreparationError("supplement_invalid");
         const companyCik =
@@ -1564,7 +1840,21 @@ export const reserveNextSupplementSearch = internalMutation({
             (!companyCik || !/^\d{1,10}$/.test(companyCik))
         )
             throw sourcePreparationError("company_unavailable");
-        const operationKey = `supplement:${operation._id}:query:${queryIndex}`;
+        if (
+            args.configuration &&
+            !(query.discoveryIntent === "regulatory"
+                ? args.configuration.sec
+                : args.configuration.exa)
+        )
+            throw sourcePreparationError("missing_configuration");
+        const attempt =
+            claimed.filter((index) => index === queryIndex).length + 1;
+        if (attempt > 2) return null;
+        const operationKey = supplementalSearchOperationKey(
+            operation._id,
+            queryIndex,
+            attempt,
+        );
         const lease = await ctx.runMutation(
             internal.providerCalls.recordAttempt,
             {
@@ -1577,7 +1867,8 @@ export const reserveNextSupplementSearch = internalMutation({
                 service: query.discoveryIntent === "regulatory" ? "sec" : "exa",
                 operation: "source_supplement_search",
                 operationKey,
-                attempt: 1,
+                inputHash: supplementalSearchInputHash(query),
+                attempt,
                 status: "started",
             },
         );
@@ -1595,6 +1886,7 @@ export const reserveNextSupplementSearch = internalMutation({
             ...(companyCik ? { companyCik } : {}),
             providerCallId: lease.providerCallId,
             operationKey,
+            attempt,
             shouldExecute: lease.shouldExecute,
             ...(!lease.shouldExecute
                 ? {
@@ -1695,6 +1987,9 @@ export const recordResult = internalMutation({
                 : undefined;
         await ctx.db.patch(preparation._id, {
             sourceOutcomes: [...outcomes, args.outcome],
+            ...(preparation.progress
+                ? { progress: { phase: "reading" as const, updatedAt: now } }
+                : {}),
             ...(stopCode && !preparation.stopCode ? { stopCode } : {}),
         });
         await ctx.db.patch(run._id, {
@@ -1738,6 +2033,7 @@ export const finish = internalMutation({
         preparationId: v.id("sourceSelectionProposalRebuilds"),
         expectedExecutionGeneration: v.number(),
         stopCode: v.optional(sourcePreparationStopCodeValidator),
+        retryAt: v.optional(v.number()),
     },
     returns: completionResultValidator,
     handler: async (ctx, args) => {
@@ -1823,7 +2119,7 @@ export const finish = internalMutation({
                         ? "unavailable"
                         : undefined,
             ...(preparation.target && outcome === "blocked"
-                ? { leaseExpiresAt: now + 15_000 }
+                ? { leaseExpiresAt: Math.max(now + 15_000, args.retryAt ?? 0) }
                 : {}),
             proposalId: proposal.proposalId,
             proposalVersion: proposal.version,

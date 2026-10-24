@@ -1,9 +1,11 @@
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
 import { sha256Hex } from "./domain/sourcePassages";
 import {
     assertPreparationExecutionFence,
+    nextPreparationAttempt,
     sourcePreparationError,
 } from "./domain/sourcePreparationAuthority";
 import { companySnapshotValidator } from "./domain/validators";
@@ -12,11 +14,47 @@ import {
     QUALIFICATION_NORMALIZER_VERSION,
     SEC_NORMALIZER_VERSION,
 } from "./integrations/evidenceNormalization";
+import { resolveDirectFilingUrl } from "./integrations/secEvidence";
 import {
     MAX_HISTORICAL_SOURCE_CANDIDATES,
     MAX_NORMALIZED_ARTIFACT_BYTES,
 } from "./resourceLimits";
 import schema from "./schema";
+
+function assertSecDocumentUrl(
+    resolvedUrl: string,
+    source: Doc<"sources">,
+    cik: string,
+) {
+    let url: URL;
+    try {
+        url = new URL(resolvedUrl);
+    } catch {
+        throw sourcePreparationError("capture_identity_changed");
+    }
+    const prefix = `/Archives/edgar/data/${cik.replace(/^0+/, "")}/${source.secAccessionNumber?.replaceAll("-", "")}/`;
+    if (
+        source.origin !== "sec" ||
+        resolvedUrl.length > 2048 ||
+        url.origin !== "https://www.sec.gov" ||
+        url.username ||
+        url.password ||
+        url.search ||
+        url.hash
+    )
+        throw sourcePreparationError("capture_identity_changed");
+    if (
+        resolvedUrl === source.canonicalUrl &&
+        resolveDirectFilingUrl(resolvedUrl)
+    )
+        return;
+    if (
+        !source.secAccessionNumber ||
+        !url.pathname.startsWith(prefix) ||
+        !/^[\w.-]+$/.test(url.pathname.slice(prefix.length))
+    )
+        throw sourcePreparationError("capture_identity_changed");
+}
 
 export const reserveUpload = internalMutation({
     args: {
@@ -83,13 +121,17 @@ export const reserveUpload = internalMutation({
             .take(MAX_HISTORICAL_SOURCE_CANDIDATES + 1);
         if (previousCaptures.length > MAX_HISTORICAL_SOURCE_CANDIDATES)
             throw sourcePreparationError("capture_history_limit_reached");
+        let resolvedUrl =
+            source.origin === "sec"
+                ? previousCaptures.find((capture) => capture.resolvedUrl)
+                      ?.resolvedUrl
+                : undefined;
         const previous = previousCaptures.find(
             (capture) =>
                 ![
                     "missing_configuration",
                     "paid_work_disabled",
                     "source_url_unavailable",
-                    "source_url_not_public",
                 ].includes(capture.failureCode ?? ""),
         );
         if (previous) {
@@ -109,8 +151,68 @@ export const reserveUpload = internalMutation({
                     shouldExecute: false,
                 };
             }
-            return { capture: previous, source, company, shouldExecute: false };
+            let calls = await ctx.db
+                .query("providerCalls")
+                .withIndex("by_run_source_operation", (q) =>
+                    q
+                        .eq("runId", run._id)
+                        .eq("sourceId", source._id)
+                        .eq(
+                            "operation",
+                            source.origin === "sec"
+                                ? "retrieve_filing_html"
+                                : "get_contents",
+                        ),
+                )
+                .take(4);
+            if (!calls.length && source.origin === "sec")
+                calls = await ctx.db
+                    .query("providerCalls")
+                    .withIndex("by_run_source_operation", (q) =>
+                        q
+                            .eq("runId", run._id)
+                            .eq("sourceId", source._id)
+                            .eq("operation", "revalidate_company"),
+                    )
+                    .take(4);
+            const plan = nextPreparationAttempt(
+                calls.filter(
+                    (c) => !c.inputHash || c.inputHash === requestInputHash,
+                ),
+                preparation,
+                Date.now(),
+            );
+            if (!plan.attempt || !calls.length)
+                return {
+                    capture: previous,
+                    source,
+                    company,
+                    shouldExecute: false,
+                };
+            if (source.origin === "sec" && !resolvedUrl) {
+                const marker = ":retrieve_filing_html:";
+                const urls = new Set(
+                    calls
+                        .filter(
+                            (call) =>
+                                call.operation === "retrieve_filing_html" &&
+                                (!call.inputHash ||
+                                    call.inputHash === requestInputHash) &&
+                                call.operationKey.includes(marker),
+                        )
+                        .map((call) =>
+                            call.operationKey.slice(
+                                call.operationKey.lastIndexOf(marker) +
+                                    marker.length,
+                            ),
+                        ),
+                );
+                if (urls.size > 1)
+                    throw sourcePreparationError("capture_identity_changed");
+                resolvedUrl = [...urls][0];
+            }
         }
+        if (resolvedUrl) assertSecDocumentUrl(resolvedUrl, source, company.cik);
         const captures = await ctx.db
             .query("sourceCaptures")
             .withIndex("by_preparation_and_source", (q) =>
@@ -130,6 +232,7 @@ export const reserveUpload = internalMutation({
             requestInputHash,
             status: "reserved",
             requestedUrl: source.canonicalUrl,
+            resolvedUrl,
             normalizerVersion,
             createdAt: now,
             updatedAt: now,
@@ -149,6 +252,47 @@ export const assertActive = internalQuery({
     returns: v.null(),
     handler: async (ctx, args) => {
         await assertPreparationExecutionFence(ctx.db, args);
+        return null;
+    },
+});
+
+/** Retains the resolved SEC prerequisite independently of the document download outcome. */
+export const retainSecDocumentUrl = internalMutation({
+    args: {
+        preparationId: v.id("sourceSelectionProposalRebuilds"),
+        captureId: v.id("sourceCaptures"),
+        resolvedUrl: v.string(),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const capture = await ctx.db.get(args.captureId);
+        if (
+            !capture ||
+            capture.preparationId !== args.preparationId ||
+            capture.status !== "reserved"
+        )
+            throw sourcePreparationError("capture_identity_changed");
+        const { run } = await assertPreparationExecutionFence(ctx.db, {
+            preparationId: args.preparationId,
+            sourceId: capture.sourceId,
+            now: Date.now(),
+        });
+        const source = await ctx.db.get(capture.sourceId);
+        const company = mergeRunCompanyMetadata(
+            run.companySnapshot,
+            run.companyId ? await ctx.db.get(run.companyId) : null,
+        );
+        if (
+            !source ||
+            !company ||
+            (capture.resolvedUrl && capture.resolvedUrl !== args.resolvedUrl)
+        )
+            throw sourcePreparationError("capture_identity_changed");
+        assertSecDocumentUrl(args.resolvedUrl, source, company.cik);
+        await ctx.db.patch(capture._id, {
+            resolvedUrl: args.resolvedUrl,
+            updatedAt: Date.now(),
+        });
         return null;
     },
 });

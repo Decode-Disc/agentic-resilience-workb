@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type WebSocketRoute } from "@playwright/test";
 import type { internal } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { runConvexJson } from "./support/convex-cli";
@@ -275,26 +275,31 @@ for (const viewport of [
     {name: "desktop", width: 1440, height: 900},
     {name: "mobile", width: 390, height: 844},
 ]) {
-    test(`preparation expires while its protected review stays open on ${viewport.name}`, async ({page}, info) => {
+    test(`expired preparation resumes with retained readings on ${viewport.name}`, async ({page}, info) => {
         await page.setViewportSize(viewport);
         const errors: string[] = [];
         page.on("pageerror", (error) => errors.push(error.message));
         page.on("console", (message) => {if (message.type() === "error") errors.push(message.text());});
         await admitAnalyst(page);
         const key = fixtureKey(`preparation-expiry-${viewport.name}`);
-        const seeded = runConvexJson<FunctionReturnType<typeof internal.e2eFixtures.seedInspectedSourceReviewScenario>>("e2eFixtures:seedInspectedSourceReviewScenario", {slotKey: "analyst-1", fixtureKey: key});
-        await page.clock.install();
+        const inspected = runConvexJson<FunctionReturnType<typeof internal.e2eFixtures.seedInspectedSourceReviewScenario>>("e2eFixtures:seedInspectedSourceReviewScenario", {slotKey: "analyst-1", fixtureKey: key});
+        const seeded = runConvexJson<FunctionReturnType<typeof internal.e2eFixtures.stageSourcePreparationRecoveryFixture>>("e2eFixtures:stageSourcePreparationRecoveryFixture", {runId: inspected.runId, slotKey: "analyst-1", fixtureKey: key});
         await page.goto(`/workspace/${seeded.runId}?section=sources`);
         if (viewport.name === "desktop")
             await page.getByRole("button", {name: "Collapse navigation", exact: true}).click();
-        const resume = page.getByRole("button", {name: "Continue source preparation", exact: true});
+        const resume = page.getByRole("button", {name: "Resume preparation", exact: true});
         await expect(resume).toBeEnabled();
         await resume.focus();
         await expect(resume).toBeFocused();
         const before = inspectSourceReview(seeded.runId, key);
-        await page.clock.fastForward(16 * 60 * 1000);
-        await expect(resume).toHaveCount(0);
-        await expect(page.getByText(/The preparation window has ended/)).toBeVisible();
+        expect(before.preparation?.deadlineAt).toBeLessThan(Date.now());
+        await page.screenshot({path: info.outputPath("before-recovery.png"), fullPage: true});
+        await resume.press("Enter");
+        await expect.poll(() => {
+            const current = inspectSourceReview(seeded.runId, key);
+            return current.executionStatus === "paused" && current.preparation?.preparationId !== before.preparation?.preparationId;
+        }).toBe(true);
+        await expect(page.getByText(/start a new dossier/)).toHaveCount(0);
         if (viewport.name === "mobile") await page.getByRole("button", {name: "Source actions", exact: true}).click();
         await expect(page.getByRole("button", {name: "Inspect all candidates", exact: true})).toBeEnabled();
         await page.screenshot({path: info.outputPath("expired-preparation.png"), fullPage: true});
@@ -302,6 +307,112 @@ for (const viewport of [
         expect(after.providerCallCount).toBe(0);
         expect(after.sourceReading).toEqual(before.sourceReading);
         expect(after.decisions).toEqual(before.decisions);
+        expect(after.revisionStatus).toBe("draft");
+        expect(after.preparation?.executionGeneration).toBe((before.preparation?.executionGeneration ?? 0) + 1);
+        await page.reload();
+        await expect(page.getByRole("region", {name: "Selected source reading"})).toBeVisible();
+        expect(inspectSourceReview(seeded.runId, key).sourceReading).toEqual(before.sourceReading);
+        await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await expect(page.getByRole("button", {name: "Approve proposed corpus", exact: true})).toBeEnabled();
         expect(errors).toEqual([]);
+    });
+}
+
+for (const viewport of [{ name: "desktop", width: 1440, height: 900 }, { name: "mobile", width: 390, height: 844 }]) {
+    test(`source preparation phases update coverage and cards without reload on ${viewport.name}`, async ({ page, context }, info) => {
+        test.setTimeout(120_000);
+        await page.setViewportSize(viewport);
+        const errors: string[] = [];
+        let intentionallyOffline = false;
+        const transport: { current: WebSocketRoute | null } = { current: null };
+        await page.routeWebSocket((url) => ["127.0.0.1", "localhost"].includes(url.hostname) && url.port === "3210", (socket) => {
+            if (intentionallyOffline) { void socket.close({ code: 1001 }); return; }
+            socket.connectToServer();
+            transport.current = socket;
+        });
+        page.on("pageerror", (error) => errors.push(error.message));
+        page.on("console", (message) => {
+            if (message.type() !== "error") return;
+            if (intentionallyOffline && /ERR_INTERNET_DISCONNECTED|WebSocket.*(?:closed|failed)/i.test(message.text())) return;
+            errors.push(message.text());
+        });
+        await admitAnalyst(page);
+        const key = fixtureKey(`live-progress-${viewport.name}`);
+        const seeded = runConvexJson<FunctionReturnType<typeof internal.e2eFixtures.seedInspectedSourceReviewScenario>>("e2eFixtures:seedInspectedSourceReviewScenario", { slotKey: "analyst-1", fixtureKey: key });
+        const advance = (phase: "reading" | "comparison" | "proposal" | "complete") => runConvexJson("e2eFixtures:advanceSourcePreparationFixture", { runId: seeded.runId, fixtureKey: key, slotKey: "analyst-1", phase });
+        const before = inspectSourceReview(seeded.runId, key);
+        try {
+            advance("reading");
+            await page.goto(`/workspace/${seeded.runId}?section=sources`);
+            await expect(page.getByText("Reading candidate sources", { exact: true })).toBeVisible();
+            if (viewport.name === "desktop") await page.getByRole("button", { name: "Collapse navigation", exact: true }).click();
+            else await page.getByRole("button", { name: "Coverage", exact: true }).click();
+            await page.emulateMedia({ reducedMotion: viewport.name === "mobile" ? "reduce" : "no-preference" });
+            const readingProgress = page.getByRole("progressbar", { name: "Source reading progress", exact: true });
+            await expect(readingProgress).toHaveAttribute("aria-valuenow", "2");
+            await expect(readingProgress).toHaveAttribute("aria-valuemax", "3");
+            const card = page.getByRole("button", { name: "Open Illustrative workflow argument for review", exact: true });
+            await expect(card.getByText("In preparation", { exact: true })).toBeVisible();
+            await card.focus();
+            await expect(card).toBeFocused();
+            await expect(page.getByRole("button", { name: "Refresh proposal", exact: true })).toHaveCount(0);
+            await page.evaluate(() => window.scrollTo(0, 0));
+            await page.screenshot({ path: info.outputPath("reading.png"), fullPage: true });
+            advance("comparison");
+            await expect(page.getByText("Checking source contributions", { exact: true })).toBeVisible();
+            await expect(page.getByText("0 of 1 source comparisons checked", { exact: true })).toBeVisible();
+            const comparisonProgress = page.getByRole("progressbar", { name: "Source comparison progress", exact: true });
+            await expect(comparisonProgress).toHaveAttribute("aria-valuenow", "0");
+            await expect(comparisonProgress).toHaveAttribute("aria-valuemax", "1");
+            await expect(readingProgress).toHaveCount(0);
+            await expect(page.getByText("1 source read and assessed", { exact: true })).toBeVisible();
+            await expect(page.getByText("1 of 3 source contents saved", { exact: true })).toHaveCount(0);
+            await expect(card.getByText("Assessed · partial reading", { exact: true })).toBeVisible();
+            await expect(card).toBeFocused();
+            await expect(page.getByRole("complementary", { name: "Source coverage" }).getByText("Limited", { exact: true }).first()).toBeVisible();
+            await page.evaluate(() => window.scrollTo(0, 0));
+            await page.screenshot({ path: info.outputPath("comparison.png"), fullPage: true });
+            advance("proposal");
+            await expect(page.getByText("Preparing your proposal", { exact: true })).toBeVisible();
+            await expect(page.getByRole("progressbar")).toHaveCount(0);
+            await expect(page.getByRole("button", { name: "Approve proposed corpus", exact: true })).toBeDisabled();
+            intentionallyOffline = true;
+            await context.setOffline(true);
+            if (!transport.current) throw new Error("The local source subscription was not established");
+            await transport.current.close({ code: 1001, reason: "Controlled source review reconnection check" });
+            await expect(page.getByText("Live updates paused", { exact: true })).toBeVisible({ timeout: 25_000 });
+            advance("complete");
+            intentionallyOffline = false;
+            await context.setOffline(false);
+            await expect(page.getByText("Live updates paused", { exact: true })).toHaveCount(0, { timeout: 25_000 });
+            await expect(page.getByText("Preparing your proposal", { exact: true })).toHaveCount(0);
+            await expect(page.getByText("Source selection ready with limitations", { exact: true })).toBeVisible();
+            await expect(page.getByRole("button", { name: "Approve proposed corpus", exact: true })).toBeEnabled();
+            await expect(page.getByRole("button", { name: "Refresh proposal", exact: true })).toHaveCount(0);
+            await page.evaluate(() => window.scrollTo(0, 0));
+            await page.screenshot({ path: info.outputPath("ready-for-review.png"), fullPage: true });
+            const limits = page.getByRole("button", { name: "Review 2 unavailable sources", exact: true });
+            await limits.click();
+            const limitations = page.getByRole("dialog", { name: "Sources that could not be fully prepared" });
+            await expect(limitations.getByRole("link", { name: /^Open original:/ })).toHaveCount(2);
+            await limitations.screenshot({ path: info.outputPath("source-limitations.png") });
+            await page.keyboard.press("Escape");
+            await expect(limitations).toBeHidden();
+            await expect(limits).toBeFocused();
+            const after = inspectSourceReview(seeded.runId, key);
+            expect(after.decisions).toEqual(before.decisions);
+            expect(after.sourceReading).toEqual(before.sourceReading);
+            expect(after.providerCallCount).toBe(0);
+            await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+            expect(errors).toEqual([]);
+        } finally {
+            intentionallyOffline = false;
+            await context.setOffline(false);
+            if (inspectSourceReview(seeded.runId, key).executionStatus === "running") {
+                advance("comparison");
+                advance("proposal");
+                advance("complete");
+            }
+        }
     });
 }

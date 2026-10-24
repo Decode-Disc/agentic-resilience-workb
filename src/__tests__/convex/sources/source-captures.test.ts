@@ -1,5 +1,7 @@
 import { api, internal } from "@convex/_generated/api";
+import { requestPinnedPublicSource } from "@convex/sourceActions";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import rateLimiterTest from "@/__tests__/convex/integrations/rate-limiter-test-register.js";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
 
 const { lookupMock } = vi.hoisted(() => ({
@@ -14,6 +16,15 @@ vi.mock("node:dns/promises", async (importOriginal) => {
         lookup: lookupMock,
     };
 });
+vi.mock("@convex/sourceActions", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@convex/sourceActions")>()),
+    requestPinnedPublicSource: vi.fn(async (url, _address, options) =>
+        globalThis.fetch(url, {
+            headers: options?.headers,
+            signal: options?.signal,
+        }),
+    ),
+}));
 
 beforeEach(() => {
     lookupMock
@@ -24,6 +35,7 @@ beforeEach(() => {
 afterEach(() => {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
+    vi.clearAllMocks();
     vi.useRealTimers();
 });
 
@@ -616,4 +628,340 @@ test("a new generation can inspect a document previously blocked before provider
         }),
     ).toMatchObject({ status: "complete" });
     expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+test("explicit recovery retries confirmed failed acquisition once without replacing its history", async () => {
+    vi.useFakeTimers();
+    const { default: workflowTest } = await import(
+        "@/__tests__/convex/workflows/workflow-test-register.js"
+    );
+    const { t, runId, corpusRevisionId, sourceId, userId } =
+        await seedSourcePreparation();
+    workflowTest.register(t);
+    vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "true");
+    vi.stubEnv("EXA_API_KEY", "test-exa-key");
+    const preparationId = await t.mutation(
+        internal.sourcePreparation.claimForDiscovery,
+        { runId, corpusRevisionId, expectedExecutionGeneration: 3 },
+    );
+    const fetch = vi.fn(
+        async () => new Response('{"error":"unavailable"}', { status: 503 }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const failed = await t.action(
+        internal.sourcePreparationActions.inspectSource,
+        { preparationId, sourceId },
+    );
+    expect(failed.status).toBe("unavailable");
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await t.mutation(internal.sourcePreparation.recordResult, {
+        preparationId,
+        outcome: {
+            sourceId,
+            result: {
+                status: "unavailable",
+                sourceCaptureId: failed.sourceCaptureId,
+                reasonCode: failed.reasonCode ?? "retrieval_unavailable",
+            },
+        },
+    });
+    const completed = await t.mutation(internal.sourcePreparation.finish, {
+        preparationId,
+        expectedExecutionGeneration: 3,
+    });
+    await t.run((ctx) =>
+        ctx.db.patch(runId, {
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        }),
+    );
+    vi.setSystemTime(Date.now() + 15_001);
+    const resumed = await t
+        .withIdentity({ subject: userId })
+        .mutation(api.sourcePreparation.startForReview, {
+            runId,
+            corpusRevisionId,
+            expectedProposalId: completed.proposalId,
+            requestId: "retry-capture",
+        });
+    fetch.mockImplementation(
+        async () =>
+            new Response(
+                JSON.stringify({
+                    results: [
+                        {
+                            id: "https://www.servicenow.com/products/workflows.html",
+                            url: "https://www.servicenow.com/products/workflows.html",
+                            text: "ServiceNow provides workflow software.",
+                        },
+                    ],
+                }),
+                { status: 200 },
+            ),
+    );
+    expect(
+        await t.action(internal.sourcePreparationActions.inspectSource, {
+            preparationId: resumed.preparationId,
+            sourceId,
+        }),
+    ).toMatchObject({ status: "complete" });
+    expect(fetch).toHaveBeenCalledTimes(3);
+    const captures = await t.run((ctx) =>
+        ctx.db
+            .query("sourceCaptures")
+            .withIndex("by_preparation_and_source", (q) =>
+                q.eq("preparationId", preparationId),
+            )
+            .take(4),
+    );
+    expect(captures).toHaveLength(1);
+    expect(captures[0]?.status).toBe("unavailable");
+});
+
+test("SEC preparation connects to the validated public address before retaining a capture", async () => {
+    const { t, runId, corpusRevisionId, sourceId } =
+        await seedSourcePreparation();
+    rateLimiterTest.register(t);
+    const canonicalUrl =
+        "https://www.sec.gov/Archives/edgar/data/1373715/000137371526000001/now-20251231.htm";
+    await t.run((ctx) =>
+        ctx.db.patch(sourceId, {
+            origin: "sec",
+            canonicalUrl,
+            category: "regulatory",
+            secAccessionNumber: "0001373715-26-000001",
+            secPrimaryDocument: "now-20251231.htm",
+            secForm: "10-K",
+        }),
+    );
+    const preparationId = await t.mutation(
+        internal.sourcePreparation.claimForDiscovery,
+        { runId, corpusRevisionId, expectedExecutionGeneration: 3 },
+    );
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(
+            async () =>
+                new Response(
+                    "<html><body><p>ServiceNow provides enterprise workflow software.</p></body></html>",
+                    { headers: { "content-type": "text/html" } },
+                ),
+        ),
+    );
+    expect(
+        await t.action(internal.sourcePreparationActions.inspectSource, {
+            preparationId,
+            sourceId,
+        }),
+    ).toMatchObject({ status: "complete" });
+    expect(requestPinnedPublicSource).toHaveBeenCalledWith(
+        canonicalUrl,
+        "93.184.216.34",
+        expect.objectContaining({ maxBytes: 16 * 1024 * 1024 }),
+    );
+});
+
+test("SEC capture receipts remain distinct for two filing inputs in the same dossier", async () => {
+    const { t, runId, corpusRevisionId, sourceId } =
+        await seedSourcePreparation();
+    rateLimiterTest.register(t);
+    const sourceIds = await t.run(async (ctx) => {
+        const fields = {
+            runId,
+            origin: "sec" as const,
+            category: "regulatory",
+            title: "Annual filing",
+            createdAt: Date.now(),
+        };
+        await ctx.db.patch(sourceId, {
+            ...fields,
+            canonicalUrl:
+                "https://www.sec.gov/Archives/edgar/data/1373715/000137371526000001/",
+            secAccessionNumber: "0001373715-26-000001",
+        });
+        const other = await ctx.db.insert("sources", {
+            ...fields,
+            canonicalUrl:
+                "https://www.sec.gov/Archives/edgar/data/1373715/000137371525000001/",
+            secAccessionNumber: "0001373715-25-000001",
+        });
+        return [sourceId, other];
+    });
+    const preparationId = await t.mutation(
+        internal.sourcePreparation.claimForDiscovery,
+        {
+            runId,
+            corpusRevisionId,
+            expectedExecutionGeneration: 3,
+        },
+    );
+    const request = vi.fn<typeof fetch>(async (url) =>
+        String(url).includes("submissions")
+            ? Response.json({
+                  cik: "1373715",
+                  name: "ServiceNow, Inc.",
+                  tickers: ["NOW"],
+                  exchanges: ["NYSE"],
+                  filings: {
+                      recent: {
+                          accessionNumber: [
+                              "0001373715-26-000001",
+                              "0001373715-25-000001",
+                          ],
+                          form: ["10-K", "10-K"],
+                          filingDate: ["2026-02-01", "2025-02-01"],
+                          primaryDocument: [
+                              "now-20251231.htm",
+                              "now-20241231.htm",
+                          ],
+                      },
+                  },
+              })
+            : new Response(
+                  "<html><body><p>Enterprise workflow software.</p></body></html>",
+                  {
+                      headers: { "content-type": "text/html" },
+                  },
+              ),
+    );
+    vi.stubGlobal("fetch", request);
+    for (const filingSourceId of sourceIds) {
+        expect(
+            await t.action(internal.sourcePreparationActions.inspectSource, {
+                preparationId,
+                sourceId: filingSourceId,
+            }),
+        ).toMatchObject({ status: "complete" });
+    }
+    expect(request).toHaveBeenCalledTimes(4);
+});
+
+test.each([
+    "lookup",
+    "document",
+    "legacy_document",
+    "direct_document",
+])("SEC recovery resumes a failed %s without repeating completed work", async (failedStep) => {
+    vi.useFakeTimers();
+    const { default: workflowTest } = await import(
+        "@/__tests__/convex/workflows/workflow-test-register.js"
+    );
+    const { t, runId, corpusRevisionId, sourceId, userId } =
+        await seedSourcePreparation();
+    workflowTest.register(t);
+    rateLimiterTest.register(t);
+    vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "true");
+    await t.run((ctx) =>
+        ctx.db.patch(sourceId, {
+            origin: "sec",
+            canonicalUrl:
+                failedStep === "direct_document"
+                    ? "https://www.sec.gov/Archives/edgar/data/1373715/000137371526000001/now-20251231.htm"
+                    : "https://www.sec.gov/Archives/edgar/data/1373715/000137371526000001/",
+            category: "regulatory",
+            secAccessionNumber:
+                failedStep === "direct_document"
+                    ? undefined
+                    : "0001373715-26-000001",
+            secForm: "10-K",
+        }),
+    );
+    const preparationId = await t.mutation(
+        internal.sourcePreparation.claimForDiscovery,
+        { runId, corpusRevisionId, expectedExecutionGeneration: 3 },
+    );
+    const request = vi.fn<typeof fetch>(async (url) =>
+        failedStep !== "lookup" && String(url).includes("submissions")
+            ? Response.json({
+                  cik: "1373715",
+                  name: "ServiceNow, Inc.",
+                  tickers: ["NOW"],
+                  exchanges: ["NYSE"],
+                  filings: {
+                      recent: {
+                          accessionNumber: ["0001373715-26-000001"],
+                          form: ["10-K"],
+                          filingDate: ["2026-02-01"],
+                          primaryDocument: ["now-20251231.htm"],
+                      },
+                  },
+              })
+            : new Response("Unavailable", { status: 503 }),
+    );
+    vi.stubGlobal("fetch", request);
+    const failed = await t.action(
+        internal.sourcePreparationActions.inspectSource,
+        { preparationId, sourceId },
+    );
+    expect(request).toHaveBeenCalledTimes(
+        failedStep === "lookup" || failedStep === "direct_document" ? 2 : 3,
+    );
+    const failedCaptureId = failed.sourceCaptureId;
+    if (failedStep === "legacy_document" && failedCaptureId)
+        await t.run((ctx) =>
+            ctx.db.patch(failedCaptureId, { resolvedUrl: undefined }),
+        );
+    await t.mutation(internal.sourcePreparation.recordResult, {
+        preparationId,
+        outcome: {
+            sourceId,
+            result: {
+                status: "unavailable",
+                sourceCaptureId: failed.sourceCaptureId,
+                reasonCode: failed.reasonCode ?? "retrieval_unavailable",
+            },
+        },
+    });
+    const finished = await t.mutation(internal.sourcePreparation.finish, {
+        preparationId,
+        expectedExecutionGeneration: 3,
+    });
+    await t.run((ctx) =>
+        ctx.db.patch(runId, {
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        }),
+    );
+    vi.setSystemTime(Date.now() + 15_001);
+    const resumed = await t
+        .withIdentity({ subject: userId })
+        .mutation(api.sourcePreparation.startForReview, {
+            runId,
+            corpusRevisionId,
+            expectedProposalId: finished.proposalId,
+            requestId: "resume-sec-lookup",
+        });
+    expect(resumed.status).toBe("started");
+    request.mockImplementation(async (url) =>
+        String(url).includes("submissions")
+            ? Response.json({
+                  cik: "1373715",
+                  name: "ServiceNow, Inc.",
+                  tickers: ["NOW"],
+                  exchanges: ["NYSE"],
+                  filings: {
+                      recent: {
+                          accessionNumber: ["0001373715-26-000001"],
+                          form: ["10-K"],
+                          filingDate: ["2026-02-01"],
+                          primaryDocument: ["now-20251231.htm"],
+                      },
+                  },
+              })
+            : new Response(
+                  "<html><body><p>Enterprise workflow software.</p></body></html>",
+                  { headers: { "content-type": "text/html" } },
+              ),
+    );
+    expect(
+        await t.action(internal.sourcePreparationActions.inspectSource, {
+            preparationId: resumed.preparationId,
+            sourceId,
+        }),
+    ).toMatchObject({ status: "complete" });
+    expect(request).toHaveBeenCalledTimes(
+        failedStep === "direct_document" ? 3 : 4,
+    );
 });

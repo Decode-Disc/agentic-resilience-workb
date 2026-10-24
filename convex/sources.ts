@@ -20,19 +20,16 @@ import { purgePreviewCacheForSource } from "./domain/previewCache";
 import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
 import {
     readPreparationHistory,
-    readSourceReading,
+    readSourceReview,
     sourceReadingStatusValidator,
 } from "./domain/sourcePreparationReview";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
 import {
-    classifySourceCandidate,
     SOURCE_SELECTION_POLICY_VERSION,
     sourceRoleAvailabilityValidator,
 } from "./domain/sourceSelectionPolicy";
 import {
     projectSourceQualificationForReview,
-    readPinnedComparisonReview,
-    readPinnedSourceQualification,
     sourceQualificationReviewValidator,
 } from "./domain/sourceUsage";
 import {
@@ -367,54 +364,22 @@ export const getReviewSource = query({
             args.runId,
             revision._id,
         );
-        const reading = preparations.length
-            ? await readSourceReading(ctx.db, {
-                  ...args,
-                  item: scopedItem,
-                  preparations,
-                  activePreparationId:
-                      run.executionStatus === "running"
-                          ? run.sourcePreparationId
-                          : undefined,
-                  approved: revision.status === "approved",
-              })
-            : null;
-        const pinned = reading
-            ? (reading.qualification ?? null)
-            : scopedItem
-              ? await readPinnedSourceQualification(ctx.db, scopedItem)
-              : null;
-        const comparisonReview =
-            scopedItem &&
-            pinned &&
-            scopedItem.qualificationTaskId === pinned.qualificationTaskId
-                ? await readPinnedComparisonReview(ctx.db, scopedItem, pinned)
-                : { outcomes: {}, details: {} };
-        const currentClassification =
-            revision.status === "draft" &&
-            pinned &&
-            scopedItem?.qualificationTaskId !== pinned.qualificationTaskId
-                ? classifySourceCandidate(
-                      {
-                          ...source,
-                          sourceId: source._id,
-                          requiresAnalystReview:
-                              source.reviewSearchId !== undefined,
-                          inspection: {
-                              status: "qualified",
-                              qualification: pinned.qualification,
-                              readingCompleteness: pinned.readingCompleteness,
-                              comparisonOutcomes: comparisonReview.outcomes,
-                          },
-                      },
-                      mergeRunCompanyMetadata(
-                          run.companySnapshot,
-                          run.companyId
-                              ? await ctx.db.get(run.companyId)
-                              : null,
-                      ),
-                  )
-                : scopedItem;
+        const {
+            reading,
+            pinned,
+            comparisonReview,
+            classification: currentClassification,
+        } = await readSourceReview(ctx.db, {
+            run,
+            revision,
+            source,
+            item: scopedItem,
+            preparations,
+            company: mergeRunCompanyMetadata(
+                run.companySnapshot,
+                run.companyId ? await ctx.db.get(run.companyId) : null,
+            ),
+        });
         return {
             sourceId: source._id,
             ...(reading ? { readingStatus: reading.status } : {}),

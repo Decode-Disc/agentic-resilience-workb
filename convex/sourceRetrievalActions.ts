@@ -39,6 +39,7 @@ async function embed(
     preparationId: Id<"sourceSelectionProposalRebuilds">,
     sourceId: Id<"sources">,
     texts: string[],
+    allowProviderCalls = true,
 ): Promise<Embedded> {
     const preparation = await ctx.runQuery(
         internal.sourcePreparation.getForExecution,
@@ -51,6 +52,7 @@ async function embed(
     });
     const missing = texts.filter((_, i) => !vectors[i]);
     if (!missing.length) return { vectors: vectors as number[][] };
+    if (!allowProviderCalls) return { reason: "model_attempt_limit_reached" };
     const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
     const apiToken = process.env.CLOUDFLARE_AI_TOKEN;
     if (!accountId || !apiToken) return { reason: "missing_configuration" };
@@ -138,6 +140,7 @@ export const indexCapture = internalAction({
         preparationId: v.id("sourceSelectionProposalRebuilds"),
         captureId: v.id("sourceCaptures"),
         mode: retrievalModeValidator,
+        allowProviderCalls: v.optional(v.boolean()),
         maxReadBytes: v.optional(v.number()),
     },
     returns: v.object({
@@ -252,6 +255,7 @@ export const indexCapture = internalAction({
                     args.preparationId,
                     capture.sourceId,
                     batch.map((row) => row.searchText),
+                    args.allowProviderCalls,
                 );
                 if (!result.vectors) {
                     reason = result.reason;
@@ -310,6 +314,7 @@ export const retrieve = internalAction({
         captureIds: v.array(v.id("sourceCaptures")),
         queries: v.array(v.string()),
         mode: retrievalModeValidator,
+        allowProviderCalls: v.optional(v.boolean()),
     },
     returns: retrieved,
     handler: async (ctx, args): Promise<Infer<typeof retrieved>> => {
@@ -359,6 +364,7 @@ export const retrieve = internalAction({
                 args.preparationId,
                 capture.sourceId,
                 queries,
+                args.allowProviderCalls,
             );
             if (result.reason) reason = result.reason;
             else vectors = result.vectors;

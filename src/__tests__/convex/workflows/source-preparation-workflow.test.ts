@@ -14,6 +14,15 @@ vi.mock("node:dns/promises", () => {
     const lookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]);
     return { lookup, default: { lookup } };
 });
+vi.mock("@convex/sourceActions", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@convex/sourceActions")>()),
+    requestPinnedPublicSource: vi.fn(async (url, _address, options) =>
+        globalThis.fetch(url, {
+            headers: options?.headers,
+            signal: options?.signal,
+        }),
+    ),
+}));
 
 const prepareWorkflow = internal.sourcePreparationWorkflow.run;
 
@@ -257,7 +266,23 @@ test("valid uncertainty finishes without fallback and durable replay repeats no 
     });
     expect(state.calls).toHaveLength(1);
     expect(state.proposals).toHaveLength(1);
-    expect(state.progress).toHaveLength(1);
+    expect(
+        state.progress.filter(
+            (event) => event.messageKey === "source_candidates_checked",
+        ),
+    ).toHaveLength(1);
+    expect(state.progress).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                messageKey: "source_comparisons_checked",
+                current: 1,
+                total: 1,
+            }),
+            expect.objectContaining({
+                messageKey: "source_proposal_finalizing",
+            }),
+        ]),
+    );
     expect(state.revision?.status).toBe("draft");
     expect(state.run?.executionStatus).toBe("paused");
     expect(request).toHaveBeenCalledOnce();
@@ -747,6 +772,13 @@ test("reads existing candidates before one three-search supplement and replay ca
     vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
     vi.stubEnv("EXA_API_KEY", "test-only-exa-key");
     const { t, preparationId } = await capturedWorkflowCandidate();
+    // convex-test's installed runtime accepts this bounded budget; its declaration omits the second argument.
+    const scheduler = t as typeof t & {
+        finishAllScheduledFunctions(
+            advance: () => void,
+            maxIterations: number,
+        ): Promise<void>;
+    };
     const order: string[] = [];
     const request = vi.fn<typeof fetch>(async (url) => {
         if (String(url).includes("openrouter.ai")) {
@@ -763,12 +795,51 @@ test("reads existing candidates before one three-search supplement and replay ca
     const handle = await t.run((ctx) =>
         workflow.start(ctx, prepareWorkflow, { preparationId }),
     );
-    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100));
+    for (let pump = 0; pump < 20; pump++) {
+        await scheduler.finishAllScheduledFunctions(
+            () => vi.advanceTimersByTime(100),
+            300,
+        );
+        if (
+            (await t.run((ctx) => workflow.status(ctx, handle))).type ===
+            "completed"
+        )
+            break;
+    }
     expect(await t.run((ctx) => workflow.status(ctx, handle))).toMatchObject({
         type: "completed",
     });
     expect(order).toEqual(["model", "search", "search", "search"]);
     await t.run((ctx) => workflow.restart(ctx, handle, { from: 0 }));
-    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100));
+    for (let pump = 0; pump < 20; pump++) {
+        await scheduler.finishAllScheduledFunctions(
+            () => vi.advanceTimersByTime(100),
+            300,
+        );
+        if (
+            (await t.run((ctx) => workflow.status(ctx, handle))).type ===
+            "completed"
+        )
+            break;
+    }
+    expect(await t.run((ctx) => workflow.status(ctx, handle))).toMatchObject({
+        type: "completed",
+    });
     expect(request).toHaveBeenCalledTimes(4);
+});
+
+test("configuration checks are inspectable without inventing a provider attempt", async () => {
+    const { t, preparationId } = await capturedWorkflowCandidate();
+    vi.stubEnv("OPENROUTER_API_KEY", "");
+    expect(
+        await t.action(internal.sourcePreparationActions.checkConfiguration, {
+            preparationId,
+        }),
+    ).toBe(false);
+    expect(await t.run((ctx) => ctx.db.get(preparationId))).toMatchObject({
+        configurationCheck: { available: false },
+    });
+    expect(await t.run((ctx) => ctx.db.query("providerCalls").take(2))).toEqual(
+        [],
+    );
 });

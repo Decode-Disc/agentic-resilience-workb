@@ -39,6 +39,7 @@ import type * as domain_researchPlan from "../domain/researchPlan.js";
 import type * as domain_showcaseManifest from "../domain/showcaseManifest.js";
 import type * as domain_sourceCandidateCapacity from "../domain/sourceCandidateCapacity.js";
 import type * as domain_sourceComparison from "../domain/sourceComparison.js";
+import type * as domain_sourceComparisonContext from "../domain/sourceComparisonContext.js";
 import type * as domain_sourceDiscoveryRecovery from "../domain/sourceDiscoveryRecovery.js";
 import type * as domain_sourcePassages from "../domain/sourcePassages.js";
 import type * as domain_sourcePreparationAuthority from "../domain/sourcePreparationAuthority.js";
@@ -140,6 +141,7 @@ declare const fullApi: ApiFromModules<{
   "domain/showcaseManifest": typeof domain_showcaseManifest;
   "domain/sourceCandidateCapacity": typeof domain_sourceCandidateCapacity;
   "domain/sourceComparison": typeof domain_sourceComparison;
+  "domain/sourceComparisonContext": typeof domain_sourceComparisonContext;
   "domain/sourceDiscoveryRecovery": typeof domain_sourceDiscoveryRecovery;
   "domain/sourcePassages": typeof domain_sourcePassages;
   "domain/sourcePreparationAuthority": typeof domain_sourcePreparationAuthority;

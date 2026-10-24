@@ -1,5 +1,6 @@
 "use node";
 
+import { providerRetryAfterAt } from "@convex/domain/sourcePreparationAuthority";
 import Exa from "exa-js";
 import { z } from "zod";
 import {
@@ -68,6 +69,10 @@ class AbortableContentsExa extends Exa {
             throw new ExaContentsError(
                 `Exa Contents request failed with status ${response.status}`,
                 `http_${response.status}`,
+                providerRetryAfterAt(
+                    response.headers.get("retry-after"),
+                    Date.now(),
+                ),
             );
         }
         const parsed = await readExaResponseJson(response, this.requestSignal);

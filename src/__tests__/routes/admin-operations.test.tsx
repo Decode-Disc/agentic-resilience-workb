@@ -37,6 +37,11 @@ test("renders the bounded admin projection and confirms paid-work changes", asyn
                 lifecycleState: "awaiting_source_review",
                 executionStatus: "paused",
                 updatedAt: 1,
+                preparation: {
+                    preparationId: "prep-1",
+                    status: "blocked",
+                    configurationCheck: { available: false, checkedAt: 1 },
+                },
             },
         ],
         checkpoints: [],
@@ -47,6 +52,9 @@ test("renders the bounded admin projection and confirms paid-work changes", asyn
                 status: "failed",
                 errorCode: "exa_not_configured",
                 createdAt: 1,
+                attempt: 1,
+                dispatchOutcome: "response_received",
+                httpStatus: 503,
             },
         ],
         reservations: [{ visitorId: "v1", role: "analyst", remaining: 2 }],
@@ -64,6 +72,10 @@ test("renders the bounded admin projection and confirms paid-work changes", asyn
     render(<OperationsPage />);
 
     expect(screen.getByText(/Operations control/i)).toBeTruthy();
+    expect(
+        screen.getByText("Assessment configuration unavailable"),
+    ).toBeTruthy();
+    expect(screen.getByText(/Response received · HTTP 503/)).toBeTruthy();
     expect(screen.getByText("Review source set")).toBeTruthy();
     expect(screen.getByText("Waiting for review")).toBeTruthy();
     expect(screen.getByText(/Independent web discovery/i)).toBeTruthy();

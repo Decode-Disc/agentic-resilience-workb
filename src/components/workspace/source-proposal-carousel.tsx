@@ -6,6 +6,7 @@ import {
     Search01Icon,
 } from "@hugeicons/core-free-icons";
 import type { FunctionReturnType } from "convex/server";
+import { AnimatePresence, motion } from "motion/react";
 import {
     type KeyboardEvent,
     type ReactNode,
@@ -27,7 +28,11 @@ import { SourceContextPanel } from "@/components/workspace/source-context-panel"
 import { SourceDocumentKindBadge } from "@/components/workspace/source-family-badge";
 import { toSourceContext } from "@/components/workspace/source-master-list";
 import { SourceAdjustmentActions } from "@/components/workspace/source-proposal-adjustment-board";
-import { sourceMatchesSearch } from "@/lib/presentation/research-copy";
+import { useMediaQuery } from "@/hooks/use-responsive";
+import {
+    sourceMatchesSearch,
+    sourceReadingStatusLabel,
+} from "@/lib/presentation/research-copy";
 import { cn } from "@/lib/utils";
 
 type Source = FunctionReturnType<
@@ -61,6 +66,7 @@ export function SourceProposalCarousel({
     annotation: (source: Source) => ReactNode;
     toolbar: ReactNode;
 }) {
+    const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
     const [browsing, setBrowsing] = useState<{
         group: Source["disposition"];
         query: string;
@@ -202,10 +208,43 @@ export function SourceProposalCarousel({
                                                     {source.title}
                                                 </span>
                                             </span>
-                                            <span className="flex min-w-0 items-start">
+                                            <span className="flex min-w-0 flex-col items-start gap-1.5">
                                                 <SourceDocumentKindBadge
                                                     kind={source.documentKind}
                                                 />
+                                                {source.readingStatus ? (
+                                                    <span className="relative block min-h-4 text-xs leading-snug text-muted-foreground">
+                                                        <AnimatePresence
+                                                            initial={false}
+                                                            mode="popLayout">
+                                                            <motion.span
+                                                                key={
+                                                                    source.readingStatus
+                                                                }
+                                                                initial={{
+                                                                    opacity: 0,
+                                                                    y: reduceMotion
+                                                                        ? 0
+                                                                        : 3,
+                                                                }}
+                                                                animate={{
+                                                                    opacity: 1,
+                                                                    y: 0,
+                                                                }}
+                                                                exit={{
+                                                                    opacity: 0,
+                                                                }}
+                                                                transition={{
+                                                                    duration: 0.2,
+                                                                }}
+                                                                className="block">
+                                                                {sourceReadingStatusLabel(
+                                                                    source.readingStatus,
+                                                                )}
+                                                            </motion.span>
+                                                        </AnimatePresence>
+                                                    </span>
+                                                ) : null}
                                             </span>
                                         </button>
                                     </li>

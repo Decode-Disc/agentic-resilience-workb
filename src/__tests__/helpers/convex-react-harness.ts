@@ -1,3 +1,4 @@
+import type { useConvexConnectionState as connectionStateHook } from "convex/react";
 import {
     type FunctionArgs,
     type FunctionReference,
@@ -19,6 +20,17 @@ const queryResolvers = new Map<string, QueryResolver>();
 const paginatedQueryResolvers = new Map<string, PaginatedQueryResolver>();
 const mutationFunctions = new Map<string, CallableFunction>();
 const actionFunctions = new Map<string, CallableFunction>();
+const connectedState: ReturnType<typeof connectionStateHook> = {
+    isWebSocketConnected: true,
+    hasEverConnected: true,
+    hasInflightRequests: false,
+    timeOfOldestInflightRequest: null,
+    connectionCount: 1,
+    connectionRetries: 0,
+    inflightActions: 0,
+    inflightMutations: 0,
+};
+const useConvexConnectionState = vi.fn(() => connectedState);
 
 function functionName(reference: AnyFunctionReference) {
     return getFunctionName(reference);
@@ -172,6 +184,7 @@ function reset() {
     usePaginatedQuery.mockClear();
     useMutation.mockClear();
     useAction.mockClear();
+    useConvexConnectionState.mockReset().mockReturnValue(connectedState);
 }
 
 export const convexReactHarness = {
@@ -185,5 +198,6 @@ export const convexReactHarness = {
         usePaginatedQuery,
         useMutation,
         useAction,
+        useConvexConnectionState,
     },
 };

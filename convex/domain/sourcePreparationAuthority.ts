@@ -1,8 +1,172 @@
 import type { DataModel, Doc, Id } from "@convex/_generated/dataModel";
-import { MAX_HISTORICAL_SOURCE_CANDIDATES } from "@convex/resourceLimits";
+import {
+    MAX_HISTORICAL_SOURCE_CANDIDATES,
+    MAX_PREPARATION_MODEL_ATTEMPTS,
+} from "@convex/resourceLimits";
 import type { GenericDatabaseReader } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { SOURCE_QUALIFICATION_VERSION } from "./sourceQualification";
+
+export const preparationDispatchOutcomeValidator = v.union(
+    v.literal("not_dispatched"),
+    v.literal("response_received"),
+    v.literal("unknown"),
+);
+
+export const sourcePreparationPhaseValidator = v.union(
+    v.literal("reading"),
+    v.literal("comparison"),
+    v.literal("supplement"),
+    v.literal("proposal"),
+);
+
+export const sourcePreparationProgressValidator = v.object({
+    phase: sourcePreparationPhaseValidator,
+    current: v.optional(v.number()),
+    total: v.optional(v.number()),
+    updatedAt: v.number(),
+});
+
+export const PREPARATION_RECOVERY_COOLDOWN_MS = 15_000;
+export const MAX_PREPARATION_ATTEMPT_HISTORY =
+    MAX_HISTORICAL_SOURCE_CANDIDATES + 4;
+
+/** Accepts provider seconds or an HTTP date without renewing allowance. */
+export function providerRetryAfterAt(
+    value: string | null,
+    now: number,
+): number | undefined {
+    if (!value?.trim()) return undefined;
+    const seconds = Number(value);
+    const date = Number.isFinite(seconds)
+        ? seconds >= 0
+            ? now + seconds * 1000
+            : NaN
+        : Date.parse(value);
+    return Number.isSafeInteger(date) ? Math.max(now, date) : undefined;
+}
+
+/** Old dossiers can lack a cumulative counter; existing receipts cannot become fresh allowance. */
+export async function readPreparationModelAttempts(
+    db: GenericDatabaseReader<DataModel>,
+    run: Doc<"researchRuns">,
+    preparation?: Doc<"sourceSelectionProposalRebuilds">,
+) {
+    if (run.sourceQualificationAttemptCount !== undefined)
+        return run.sourceQualificationAttemptCount;
+    const histories = await Promise.all(
+        (["source_qualification", "source_comparison"] as const).map(
+            (operation) =>
+                db
+                    .query("providerCalls")
+                    .withIndex("by_run_operation_input_and_attempt", (q) =>
+                        q.eq("runId", run._id).eq("operation", operation),
+                    )
+                    .take(MAX_PREPARATION_MODEL_ATTEMPTS + 1),
+        ),
+    );
+    return Math.max(
+        preparation?.modelAttemptCount ?? 0,
+        histories
+            .flat()
+            .filter(
+                (call) => preparationFailureClass(call) !== "not_dispatched",
+            ).length,
+    );
+}
+
+/** A retry flag alone cannot prove that a dispatched request returned a failure. */
+export function preparationFailureClass(
+    call: Pick<
+        Doc<"providerCalls">,
+        "status" | "errorCode" | "dispatchOutcome" | "httpStatus"
+    >,
+) {
+    if (
+        call.dispatchOutcome === "not_dispatched" ||
+        ["missing_configuration", "paid_work_disabled"].includes(
+            call.errorCode ?? "",
+        )
+    )
+        return "not_dispatched";
+    if (call.status === "succeeded" || call.status === "partial")
+        return "succeeded";
+    if (
+        [
+            "request_timeout",
+            "cancelled",
+            "attempt_outcome_unknown",
+            "network_error",
+            "TypeError",
+            "SecTimeoutError",
+            "ExaLogicalTimeoutError",
+        ].includes(call.errorCode ?? "")
+    )
+        return "unknown";
+    if (call.dispatchOutcome === "response_received") {
+        if ([408, 429, 500, 502, 503, 504].includes(call.httpStatus ?? 0))
+            return "transient";
+        if (call.errorCode === "invalid_output") return "invalid_output";
+        return "terminal";
+    }
+    if (call.errorCode === "invalid_output") return "invalid_output";
+    if (/^http_(408|429|500|502|503|504)$/.test(call.errorCode ?? ""))
+        return "transient";
+    if (
+        [
+            "access_unavailable",
+            "request_invalid",
+            "response_too_large",
+            "invalid_local_result",
+        ].includes(call.errorCode ?? "")
+    )
+        return "terminal";
+    return "unknown";
+}
+
+/** Selects the next lifetime attempt; explicit recovery never renews an input's allowance. */
+export function nextPreparationAttempt(
+    calls: Doc<"providerCalls">[],
+    preparation: Pick<
+        Doc<"sourceSelectionProposalRebuilds">,
+        "resumesPreparationId" | "createdAt"
+    > & { _id?: Id<"sourceSelectionProposalRebuilds"> },
+    now: number,
+    initialAttempts = 2,
+): { attempt?: number; errorCode?: string; retryAt?: number } {
+    if (calls.length >= MAX_PREPARATION_ATTEMPT_HISTORY)
+        return { errorCode: "attempt_history_limit_reached" };
+    const dispatched = calls.filter(
+        (c) => preparationFailureClass(c) !== "not_dispatched",
+    );
+    const last = [...dispatched].sort((a, b) => b.attempt - a.attempt)[0];
+    if (!last) return { attempt: 1 };
+    const kind = preparationFailureClass(last);
+    if (kind === "succeeded") return { errorCode: "result_already_recorded" };
+    if (kind === "unknown") return { errorCode: "attempt_outcome_unknown" };
+    if (kind === "terminal")
+        return { errorCode: last.errorCode ?? "terminal_failure" };
+    if (last.attempt >= initialAttempts + 1)
+        return { errorCode: "recovery_attempt_exhausted" };
+    if ((last.retryAfterAt ?? 0) > now)
+        return { errorCode: "recovery_cooldown", retryAt: last.retryAfterAt };
+    if (last.preparationId !== preparation._id) {
+        if (
+            !preparation.resumesPreparationId ||
+            (preparation._id &&
+                (last.completedAt ?? Infinity) > preparation.createdAt)
+        )
+            return { errorCode: "explicit_recovery_required" };
+        const retryAt = Math.max(
+            (last.completedAt ?? last.createdAt) +
+                PREPARATION_RECOVERY_COOLDOWN_MS,
+            last.retryAfterAt ?? 0,
+        );
+        if (now < retryAt) return { errorCode: "recovery_cooldown", retryAt };
+    } else if (last.attempt >= initialAttempts)
+        return { errorCode: "explicit_recovery_required" };
+    return { attempt: last.attempt + 1 };
+}
 
 export function sourcePreparationError(code: string) {
     return new ConvexError({ area: "source_preparation", code });
@@ -263,6 +427,7 @@ export const sourcePreparationStopCodeValidator = v.union(
     v.literal("cancelled"),
     v.literal("execution_slot_unavailable"),
     v.literal("preparation_failed"),
+    v.literal("execution_expired"),
     v.literal("missing_configuration"),
     v.literal("paid_work_disabled"),
     v.literal("access_unavailable"),

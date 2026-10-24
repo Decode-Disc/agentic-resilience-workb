@@ -6,6 +6,7 @@ import {
     CheckListIcon,
     CheckmarkCircle02Icon,
     MoreHorizontalIcon,
+    PlayIcon,
     PlusSignIcon,
     RefreshIcon,
     Search01Icon,
@@ -40,6 +41,7 @@ import {
     SourceCoverageRail,
 } from "@/components/workspace/source-coverage-rail";
 import { SourceFamilyBadge } from "@/components/workspace/source-family-badge";
+import { SourcePreparationStatus } from "@/components/workspace/source-preparation-status";
 import { SourceProposalAdjustmentBoard } from "@/components/workspace/source-proposal-adjustment-board";
 import { SourceProposalCarousel } from "@/components/workspace/source-proposal-carousel";
 import { SourceReview } from "@/components/workspace/source-review";
@@ -51,7 +53,6 @@ import {
     sourceCoverageRoleLabel,
     sourceCoverageSearchState,
     sourcePreparationActionCopy,
-    sourcePreparationCopy,
     sourceSearchAllowanceCopy,
     sourceSelectionExplanation,
 } from "@/lib/presentation/research-copy";
@@ -125,6 +126,7 @@ export function SourceProposalReview({
     onAddManualUrl,
     onPrepare,
     isStartingPreparation = false,
+    updatesConnected = true,
     inspectionFilter,
     onInspectionFilterChange,
     inspectionSelectedId,
@@ -140,6 +142,7 @@ export function SourceProposalReview({
     runId?: Id<"researchRuns">;
     corpusRevisionId: Id<"corpusRevisions">;
     summary: ProposalSummary;
+    updatesConnected?: boolean;
     disposition: ProposalDisposition;
     onDispositionChange: (disposition: ProposalDisposition) => void;
     adjustmentSets: AdjustmentSets;
@@ -207,21 +210,19 @@ export function SourceProposalReview({
         isStartingPreparation || summary.preparation?.status === "started";
     const allowanceFeedback = sourceSearchAllowanceCopy(
         summary.searchAllowance,
-        Date.now(),
     );
     const canSearch =
         !!onRecoverDiscovery &&
         (!summary.preparation || !!summary.searchAllowance);
     const searchDisabled =
+        !updatesConnected ||
         isRecovering ||
         isPreparing ||
         isRebuilding ||
         summary.effectiveStatus !== "ready" ||
         !!allowanceFeedback;
-    const preparationCopy = summary.preparation
-        ? sourcePreparationCopy(summary.preparation, summary.revisionStatus)
-        : null;
     const canApprove =
+        updatesConnected &&
         !isApproved &&
         !isRecovering &&
         !isRebuilding &&
@@ -827,27 +828,18 @@ export function SourceProposalReview({
                             ) : null}
                         </div>
                     </div>
-                    {preparationCopy ? (
+                    {summary.preparation ? (
                         <div className="space-y-2">
-                            <AlertStatus
-                                status={preparationCopy.status}
-                                role={
-                                    preparationCopy.status === "danger"
-                                        ? "alert"
-                                        : "status"
-                                }
-                                aria-label={preparationCopy.title}
-                                title={preparationCopy.title}
-                                description={
-                                    <div className="space-y-2">
-                                        <p>{preparationCopy.description}</p>
-                                        <p className="tabular-nums">
-                                            {preparationCopy.counts}
-                                        </p>
-                                    </div>
-                                }
+                            <SourcePreparationStatus
+                                preparation={summary.preparation}
+                                revisionStatus={summary.revisionStatus}
+                                sources={[
+                                    ...adjustmentSets.included,
+                                    ...adjustmentSets.available,
+                                ]}
                             />
-                            {sourcePreparationActionCopy(
+                            {!isPreparing &&
+                            sourcePreparationActionCopy(
                                 summary.preparationAction,
                             ) ? (
                                 <p className="text-xs text-muted-foreground">
@@ -860,13 +852,14 @@ export function SourceProposalReview({
                                 <Button
                                     type="button"
                                     variant="outline"
-                                    size="sm"
+                                    className="edit-button"
                                     disabled={
                                         isPreparing ||
                                         !summary.preparationAction?.available
                                     }
                                     onClick={() => void onPrepare()}>
-                                    Continue source preparation
+                                    <Icon iconNode={PlayIcon} />
+                                    Resume preparation
                                 </Button>
                             ) : null}
                         </div>
@@ -912,8 +905,9 @@ export function SourceProposalReview({
                         <p className="text-xs text-muted-foreground">
                             This source set is approved and read-only.
                         </p>
-                    ) : summary.effectiveStatus !== "ready" ||
-                      summary.selectionExplanationRefreshAvailable ? (
+                    ) : !isPreparing &&
+                      (summary.effectiveStatus !== "ready" ||
+                          summary.selectionExplanationRefreshAvailable) ? (
                         <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
                             <p>
                                 {summary.effectiveStatus === "ready"

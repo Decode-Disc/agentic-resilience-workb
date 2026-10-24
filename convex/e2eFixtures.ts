@@ -11,6 +11,8 @@ import {
     internalMutation,
     internalQuery,
 } from "./_generated/server";
+import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
+import { claimPausedRunExecution } from "./domain/executionClaim";
 import { ASSESSMENT_DIMENSION_KEYS } from "./domain/researchPlan";
 import {
     materializeSourceComparisonOutput,
@@ -29,14 +31,17 @@ import {
     SOURCE_QUALIFICATION_VERSION,
     sourceQualificationValidator,
 } from "./domain/sourceQualification";
+import { classifySourceCandidate } from "./domain/sourceSelectionPolicy";
 import { readPinnedSourceQualification } from "./domain/sourceUsage";
 import { buildCccShowcaseManifest } from "./fixtures/cccShowcase";
 import {
     MAX_PASSAGES_PER_SOURCE,
+    SOURCE_PREPARATION_DEADLINE_MS,
     sourceCandidateLimit,
     sourcePreparationEnabled,
 } from "./resourceLimits";
 import schema from "./schema";
+import { createSourceSelectionProposal } from "./sourceSelectionProposals";
 import { corpusRevisionApproved, workflow } from "./workflow";
 
 const sourceReviewFixtureResultValidator = v.object({
@@ -466,6 +471,13 @@ export const inspectSourceReviewScenario = internalQuery({
             }),
         ),
         providerCallCount: v.number(),
+        preparation: v.optional(
+            v.object({
+                preparationId: v.id("sourceSelectionProposalRebuilds"),
+                executionGeneration: v.number(),
+                deadlineAt: v.optional(v.number()),
+            }),
+        ),
         sourceReading: v.optional(
             v.object({
                 sourceId: v.id("sources"),
@@ -525,20 +537,15 @@ export const inspectSourceReviewScenario = internalQuery({
             .query("providerCalls")
             .withIndex("by_run", (query) => query.eq("runId", run._id))
             .take(100);
-        const captures = run.sourcePreparationId
-            ? await ctx.db
-                  .query("sourceCaptures")
-                  .withIndex("by_preparation_and_source", (q) =>
-                      q.eq(
-                          "preparationId",
-                          run.sourcePreparationId as Id<"sourceSelectionProposalRebuilds">,
-                      ),
-                  )
-                  .take(4)
-            : [];
-        const capture = captures.find(
-            (item) => item.captureKey === `e2e:${run._id}:source-reading`,
-        );
+        const capture = await ctx.db
+            .query("sourceCaptures")
+            .withIndex("by_capture_key", (q) =>
+                q.eq("captureKey", `e2e:${run._id}:source-reading`),
+            )
+            .unique();
+        const preparation = run.sourcePreparationId
+            ? await ctx.db.get(run.sourcePreparationId)
+            : null;
         const proposalItem =
             capture && revision.sourceSelectionProposalId
                 ? await ctx.db
@@ -599,6 +606,15 @@ export const inspectSourceReviewScenario = internalQuery({
             revisionStatus: revision.status,
             decisions,
             providerCallCount: providerCalls.length,
+            ...(preparation
+                ? {
+                      preparation: {
+                          preparationId: preparation._id,
+                          executionGeneration: preparation.executionGeneration,
+                          deadlineAt: preparation.deadlineAt,
+                      },
+                  }
+                : {}),
             ...(pinned && capture
                 ? {
                       sourceReading: {
@@ -2252,5 +2268,265 @@ export const inspectRecordedSourceReview = internalQuery({
             ).length,
             revisionStatus: revision.status,
         };
+    },
+});
+
+/** Stages a local-only interrupted manual reading that cannot reach any external provider. */
+export const stageSourcePreparationRecoveryFixture = internalMutation({
+    args: {
+        runId: v.id("researchRuns"),
+        fixtureKey: v.string(),
+        slotKey: v.string(),
+    },
+    returns: sourceReviewFixtureResultValidator,
+    handler: async (ctx, args) => {
+        if (
+            env.E2E_FIXTURES_ENABLED !== "true" ||
+            !["127.0.0.1", "localhost"].includes(
+                new URL(env.CONVEX_CLOUD_URL).hostname,
+            )
+        )
+            throw new Error("Local recovery fixtures are disabled");
+        const run = await ctx.db.get(args.runId);
+        const invitation = await ctx.db
+            .query("invitations")
+            .withIndex("by_slot_key", (q) => q.eq("slotKey", args.slotKey))
+            .unique();
+        const revision = run?.activeCorpusRevisionId
+            ? await ctx.db.get(run.activeCorpusRevisionId)
+            : null;
+        const preparation = run?.sourcePreparationId
+            ? await ctx.db.get(run.sourcePreparationId)
+            : null;
+        if (
+            !run ||
+            run.reservationKey !== `e2e:${args.fixtureKey.trim()}` ||
+            invitation?.status !== "claimed" ||
+            invitation.claimedByVisitorId !== run.ownerVisitorId ||
+            revision?.status !== "draft" ||
+            run.executionStatus !== "paused" ||
+            preparation?.kind !== "preparation"
+        )
+            throw new Error("Owned recovery fixture is unavailable");
+        const sources = await ctx.db
+            .query("sources")
+            .withIndex("by_run_and_url", (q) => q.eq("runId", run._id))
+            .take(4);
+        const reading = await ctx.db
+            .query("sourceCaptures")
+            .withIndex("by_capture_key", (q) =>
+                q.eq("captureKey", `e2e:${run._id}:source-reading`),
+            )
+            .unique();
+        if (!reading || sources.length !== 3)
+            throw new Error("Inspected recovery fixture is unavailable");
+        const unavailableUrl = "https://127.0.0.1/illustrative-unavailable";
+        const queued =
+            sources.find(
+                (source) =>
+                    source._id !== reading.sourceId &&
+                    source.canonicalUrl === unavailableUrl,
+            ) ?? sources.find((source) => source._id !== reading.sourceId);
+        if (!queued) throw new Error("Missing recovery source");
+        const sourceIds = sources.map((source) => source._id).sort();
+        if (queued.canonicalUrl === unavailableUrl) {
+            const proposal = revision.sourceSelectionProposalId
+                ? await ctx.db.get(revision.sourceSelectionProposalId)
+                : null;
+            if (!proposal) throw new Error("Missing recovery proposal");
+            return {
+                runId: run._id,
+                corpusRevisionId: revision._id,
+                proposalId: proposal._id,
+                proposalVersion: proposal.version,
+                sourceIds,
+            };
+        }
+        if (queued.canonicalUrl !== unavailableUrl) {
+            await ctx.db.patch(queued._id, { canonicalUrl: unavailableUrl });
+            await ctx.db.patch(preparation._id, {
+                entryPoint: "manual_addition",
+                manualSourceIds: [queued._id],
+                readingSourceIds: undefined,
+                status: "partial",
+                stopCode: "missing_configuration",
+                deadlineAt: Date.now() - 1,
+                leaseExpiresAt: Date.now() - 1,
+                sourceOutcomes: preparation.sourceOutcomes?.filter(
+                    (outcome) => outcome.sourceId !== queued._id,
+                ),
+            });
+        }
+        const proposal = await createSourceSelectionProposal(ctx, {
+            run,
+            revision,
+        });
+        return {
+            runId: run._id,
+            corpusRevisionId: revision._id,
+            proposalId: proposal.proposalId,
+            proposalVersion: proposal.version,
+            sourceIds,
+        };
+    },
+});
+
+/** Stages illustrative workflow boundaries through the real projections and completion fence, without external I/O. */
+export const advanceSourcePreparationFixture = internalMutation({
+    args: {
+        runId: v.id("researchRuns"),
+        fixtureKey: v.string(),
+        slotKey: v.string(),
+        phase: v.union(
+            v.literal("reading"),
+            v.literal("comparison"),
+            v.literal("proposal"),
+            v.literal("complete"),
+        ),
+    },
+    returns: v.literal(true),
+    handler: async (ctx, args): Promise<true> => {
+        if (
+            env.E2E_FIXTURES_ENABLED !== "true" ||
+            !["localhost", "127.0.0.1"].includes(
+                new URL(env.CONVEX_CLOUD_URL).hostname,
+            )
+        )
+            throw new Error("Local progress fixtures are disabled");
+        const run = await ctx.db.get(args.runId);
+        const invitation = await ctx.db
+            .query("invitations")
+            .withIndex("by_slot_key", (q) => q.eq("slotKey", args.slotKey))
+            .unique();
+        const revision = run?.activeCorpusRevisionId
+            ? await ctx.db.get(run.activeCorpusRevisionId)
+            : null;
+        const preparation = run?.sourcePreparationId
+            ? await ctx.db.get(run.sourcePreparationId)
+            : null;
+        const visitor = run?.ownerVisitorId
+            ? await ctx.db.get(run.ownerVisitorId)
+            : null;
+        if (
+            !run ||
+            run.reservationKey !== `e2e:${args.fixtureKey.trim()}` ||
+            invitation?.status !== "claimed" ||
+            invitation.claimedByVisitorId !== run.ownerVisitorId ||
+            visitor?.status !== "active" ||
+            revision?.status !== "draft" ||
+            !revision.sourceSelectionProposalId ||
+            preparation?.kind !== "preparation"
+        )
+            throw new Error("Owned progress fixture is unavailable");
+        const capture = await ctx.db
+            .query("sourceCaptures")
+            .withIndex("by_capture_key", (q) =>
+                q.eq("captureKey", `e2e:${run._id}:source-reading`),
+            )
+            .unique();
+        if (!capture)
+            throw new Error("Inspected progress fixture is unavailable");
+        const operationKey = `e2e:${run._id}:live-progress`;
+        if (args.phase === "reading") {
+            if (preparation.operationKey === operationKey) return true;
+            const now = Date.now();
+            const executionGeneration = await claimPausedRunExecution(ctx, {
+                run,
+                visitor,
+                checkpoint: {
+                    lifecycleState: "awaiting_source_review",
+                    pauseReason: "source_review",
+                },
+                now,
+            });
+            await ctx.db.patch(preparation._id, {
+                operationKey,
+                executionGeneration,
+                entryPoint: "source_review",
+                status: "started",
+                stopCode: undefined,
+                completedAt: undefined,
+                deadlineAt: now + SOURCE_PREPARATION_DEADLINE_MS,
+                leaseExpiresAt: now + SOURCE_PREPARATION_DEADLINE_MS,
+                progress: { phase: "reading", updatedAt: now },
+                sourceOutcomes: preparation.sourceOutcomes?.filter(
+                    (outcome) => outcome.sourceId !== capture.sourceId,
+                ),
+            });
+            const source = await ctx.db.get(capture.sourceId);
+            if (!source) throw new Error("Missing illustrative source");
+            const classification = classifySourceCandidate(
+                { ...source, sourceId: source._id },
+                mergeRunCompanyMetadata(
+                    run.companySnapshot,
+                    run.companyId ? await ctx.db.get(run.companyId) : null,
+                ),
+            );
+            const proposalId = revision.sourceSelectionProposalId;
+            const item = await ctx.db
+                .query("sourceSelectionProposalItems")
+                .withIndex("by_proposal_and_source", (q) =>
+                    q.eq("proposalId", proposalId).eq("sourceId", source._id),
+                )
+                .unique();
+            if (!item) throw new Error("Missing illustrative proposal item");
+            await ctx.db.patch(item._id, {
+                sourceCaptureId: undefined,
+                qualificationTaskId: undefined,
+                comparisonTaskIds: undefined,
+                comparisonOutcomes: undefined,
+                inspectionStatus: undefined,
+                roleAvailability: classification.roleAvailability,
+                coverageContributions: classification.coverageContributions,
+                eligibleCoverageRoles: classification.eligibleCoverageRoles,
+            });
+            return true;
+        }
+        if (preparation.operationKey !== operationKey)
+            throw new Error("Progress fixture was not started");
+        if (args.phase === "complete") {
+            if (preparation.status !== "started") return true;
+            await ctx.runMutation(internal.sourcePreparation.finish, {
+                preparationId: preparation._id,
+                expectedExecutionGeneration: run.executionGeneration,
+            });
+            return true;
+        }
+        if (args.phase === "comparison") {
+            const tasks = await ctx.db
+                .query("aiTaskResults")
+                .withIndex("by_run_and_task_type_and_input_hash", (q) =>
+                    q
+                        .eq("runId", run._id)
+                        .eq("taskType", "source_qualification"),
+                )
+                .take(8);
+            const task = tasks.find(
+                (task) => task.sourceCaptureId === capture._id,
+            );
+            if (!task) throw new Error("Missing illustrative qualification");
+            await ctx.runMutation(internal.sourcePreparation.recordResult, {
+                preparationId: preparation._id,
+                outcome: {
+                    sourceId: capture.sourceId,
+                    result: {
+                        status: "qualified",
+                        sourceCaptureId: capture._id,
+                        taskId: task._id,
+                    },
+                },
+            });
+            await ctx.runMutation(internal.sourcePreparation.recordProgress, {
+                preparationId: preparation._id,
+                phase: "comparison",
+                current: 0,
+                total: 1,
+            });
+        } else
+            await ctx.runMutation(internal.sourcePreparation.recordProgress, {
+                preparationId: preparation._id,
+                phase: "proposal",
+            });
+        return true;
     },
 });

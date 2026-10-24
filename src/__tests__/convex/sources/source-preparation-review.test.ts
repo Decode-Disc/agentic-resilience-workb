@@ -24,6 +24,101 @@ type InstrumentedQuery<Ref extends FunctionReference<"query">> = {
     ) => Promise<FunctionReturnType<Ref>>;
 };
 
+test("review exposes the persisted comparison phase and rejects progress from a stale execution", async () => {
+    const { t, runId, corpusRevisionId, userId } =
+        await seedSourcePreparation();
+    const preparationId = await t.mutation(
+        internal.sourcePreparation.claimForDiscovery,
+        { runId, corpusRevisionId, expectedExecutionGeneration: 3 },
+    );
+    await t.mutation(internal.sourceSelectionProposals.generateForRun, {
+        runId,
+        expectedExecutionGeneration: 3,
+    });
+    await t.run(async (ctx) => {
+        await ctx.db.patch(runId, { lifecycleState: "awaiting_source_review" });
+        await ctx.db.patch(preparationId, { entryPoint: "source_review" });
+    });
+    const progress = {
+        preparationId,
+        phase: "comparison" as const,
+        current: 1,
+        total: 3,
+    };
+    await t.mutation(internal.sourcePreparation.recordProgress, progress);
+    const eventCount = await t.run(
+        async (ctx) => (await ctx.db.query("runEvents").take(20)).length,
+    );
+    await t.mutation(internal.sourcePreparation.recordProgress, progress);
+    expect(
+        await t.run(
+            async (ctx) => (await ctx.db.query("runEvents").take(20)).length,
+        ),
+    ).toBe(eventCount);
+    const owned = t.withIdentity({ subject: userId });
+    const summary = await owned.query(api.sourceSelectionProposals.getCurrent, {
+        runId,
+        corpusRevisionId,
+    });
+    expect(summary?.preparation).toMatchObject({
+        progress: {
+            phase: "comparison",
+            current: 1,
+            total: 3,
+            updatedAt: expect.any(Number),
+        },
+    });
+    await t.run((ctx) => ctx.db.patch(runId, { executionGeneration: 4 }));
+    await expect(
+        t.mutation(internal.sourcePreparation.recordProgress, {
+            ...progress,
+            current: 2,
+        }),
+    ).rejects.toThrow();
+    expect(
+        (await t.run((ctx) => ctx.db.get(preparationId)))?.progress?.current,
+    ).toBe(1);
+});
+
+test("excluded sources are shown separately from remaining preparation work", async () => {
+    const { t, runId, corpusRevisionId, sourceId, userId } =
+        await seedSourcePreparation();
+    await t.mutation(internal.sourcePreparation.claimForDiscovery, {
+        runId,
+        corpusRevisionId,
+        expectedExecutionGeneration: 3,
+    });
+    await t.mutation(internal.sourceSelectionProposals.generateForRun, {
+        runId,
+        expectedExecutionGeneration: 3,
+    });
+    await t.run((ctx) =>
+        ctx.db.patch(runId, {
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        }),
+    );
+    const owned = t.withIdentity({ subject: userId });
+    await owned.mutation(api.sources.decide, {
+        runId,
+        corpusRevisionId,
+        sourceId,
+        decision: "rejected",
+        decisionKey: "exclude-before-reading",
+    });
+    const summary = await owned.query(api.sourceSelectionProposals.getCurrent, {
+        runId,
+        corpusRevisionId,
+    });
+    expect(summary?.preparation).toMatchObject({
+        total: 0,
+        remaining: 0,
+        checked: 0,
+        excluded: 1,
+    });
+});
+
 test("an interrupted preparation preserves captured content and distinguishes untouched sources after a failed search", async () => {
     const { t, runId, corpusRevisionId, sourceId, userId } =
         await seedSourcePreparation();
@@ -313,6 +408,33 @@ test.each([
             captured: 1,
             assessed: 1,
             failed: 0,
+        });
+        expect(
+            summary?.coverageRequirements.find(
+                (requirement) =>
+                    requirement.role === "official_product_platform",
+            ),
+        ).toMatchObject({ availability: "available", covered: true });
+        const sets = await owned.query(
+            api.sourceSelectionProposals.getAdjustmentSets,
+            {
+                runId,
+                corpusRevisionId,
+            },
+        );
+        expect(
+            sets.included.find((source) => source.sourceId === sourceId),
+        ).toMatchObject({
+            readingStatus: "complete",
+            documentKind: "official_product_documentation",
+            roleAvailability: expect.arrayContaining([
+                {
+                    role: "official_product_platform",
+                    state: "available",
+                    usage: "documentary",
+                    reasonCodes: expect.any(Array),
+                },
+            ]),
         });
     } else {
         expect(review?.qualification).toBeUndefined();

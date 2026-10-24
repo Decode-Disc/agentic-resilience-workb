@@ -52,6 +52,7 @@ export const run = workflow
                 internal.sourcePreparation.nextBatch,
                 args,
             );
+            if (batch.completed) return null;
             if (
                 !configurationChecked &&
                 (batch.sourceIds.length > 0 || batch.canSupplement)
@@ -77,6 +78,16 @@ export const run = workflow
                         internal.sourcePreparation.comparisonTargets,
                         { ...args, now: Date.now() },
                     );
+                    if (batch.progressEnabled && targets.length)
+                        await step.runMutation(
+                            internal.sourcePreparation.recordProgress,
+                            {
+                                ...args,
+                                phase: "comparison",
+                                current: 0,
+                                total: targets.length,
+                            },
+                        );
                     for (let offset = 0; offset < targets.length; offset += 2) {
                         await Promise.all(
                             targets.slice(offset, offset + 2).map((target) =>
@@ -93,8 +104,26 @@ export const run = workflow
                                 ),
                             ),
                         );
+                        if (batch.progressEnabled)
+                            await step.runMutation(
+                                internal.sourcePreparation.recordProgress,
+                                {
+                                    ...args,
+                                    phase: "comparison",
+                                    current: Math.min(
+                                        offset + 2,
+                                        targets.length,
+                                    ),
+                                    total: targets.length,
+                                },
+                            );
                     }
                 }
+                if (batch.progressEnabled && batch.canSupplement)
+                    await step.runMutation(
+                        internal.sourcePreparation.recordProgress,
+                        { ...args, phase: "supplement" },
+                    );
                 const supplement = batch.canSupplement
                     ? await step.runAction(
                           internal.sourcePreparationActions.searchSupplement,
@@ -103,15 +132,28 @@ export const run = workflow
                       )
                     : null;
                 if (supplement?.status === "searched") continue;
+                if (batch.progressEnabled)
+                    await step.runMutation(
+                        internal.sourcePreparation.recordProgress,
+                        { ...args, phase: "proposal" },
+                    );
                 await step.runMutation(internal.sourcePreparation.finish, {
                     ...args,
                     expectedExecutionGeneration: batch.executionGeneration,
                     ...(supplement?.status === "blocked"
-                        ? { stopCode: supplement.reasonCode }
+                        ? {
+                              stopCode: supplement.reasonCode,
+                              retryAt: supplement.retryAt,
+                          }
                         : {}),
                 });
                 return null;
             }
+            if (batch.progressEnabled)
+                await step.runMutation(
+                    internal.sourcePreparation.recordProgress,
+                    { ...args, phase: "reading" },
+                );
             const outcomes = await Promise.all(
                 batch.sourceIds.map(async (sourceId) => {
                     const inspection = await step.runAction(

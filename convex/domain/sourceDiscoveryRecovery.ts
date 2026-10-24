@@ -1,5 +1,10 @@
+import type { DataModel, Doc, Id } from "@convex/_generated/dataModel";
+import type { GenericDatabaseReader } from "convex/server";
 import { v } from "convex/values";
+import type { ResearchPlanQuery } from "./researchPlan";
 import { buildResearchPlan, type CoveragePreset } from "./researchPlan";
+import { sha256Hex } from "./sourcePassages";
+import { sourcePreparationError } from "./sourcePreparationAuthority";
 import {
     FAMILY_BY_ROLE,
     SOURCE_COVERAGE_ROLES,
@@ -12,6 +17,72 @@ import {
 export const coverageRoleValidator = v.union(
     ...SOURCE_COVERAGE_ROLES.map((role) => v.literal(role)),
 );
+
+/** Stored object key order cannot create another logical search or retry allowance. */
+export function supplementalSearchInputHash(
+    query: Omit<ResearchPlanQuery, "dimensionKeys" | "discoveryIntent"> & {
+        dimensionKeys: string[];
+        discoveryIntent?: string;
+    },
+) {
+    return sha256Hex(
+        JSON.stringify([
+            query.query,
+            query.category,
+            query.discoveryIntent ?? null,
+            query.includeDomains ?? [],
+            query.dimensionKeys,
+        ]),
+    );
+}
+
+/** Retains historical first-attempt keys while identifying a separately reserved retry receipt. */
+export function supplementalSearchOperationKey(
+    supplementId: string,
+    queryIndex: number,
+    attempt = 1,
+) {
+    return `supplement:${supplementId}:query:${queryIndex}${attempt > 1 ? `:attempt:${attempt}` : ""}`;
+}
+
+/** Reads the same immutable query history for planning and atomic dispatch, including pre-hash receipts. */
+export async function readSupplementalSearchAttempts(
+    db: GenericDatabaseReader<DataModel>,
+    runId: Id<"researchRuns">,
+    supplement: Doc<"sourceSelectionProposalRebuilds">,
+    queryIndex: number,
+) {
+    const query = supplement.supplementQueries?.[queryIndex];
+    if (supplement.runId !== runId || !query)
+        throw sourcePreparationError("supplement_invalid");
+    const calls = await db
+        .query("providerCalls")
+        .withIndex("by_run_operation_input_and_attempt", (q) =>
+            q
+                .eq("runId", runId)
+                .eq("operation", "source_supplement_search")
+                .eq("inputHash", supplementalSearchInputHash(query)),
+        )
+        .take(3);
+    const legacy = await db
+        .query("providerCalls")
+        .withIndex("by_operation_key", (q) =>
+            q.eq(
+                "operationKey",
+                supplementalSearchOperationKey(supplement._id, queryIndex),
+            ),
+        )
+        .first();
+    if (legacy && !legacy.inputHash) {
+        if (
+            legacy.runId !== runId ||
+            legacy.operation !== "source_supplement_search"
+        )
+            throw sourcePreparationError("supplement_invalid");
+        calls.push(legacy);
+    }
+    return calls;
+}
 export const discoveryFamilyValidator = v.union(
     ...SOURCE_FAMILIES.map((family) => v.literal(family)),
 );
@@ -115,6 +186,7 @@ export class DiscoveryRequestError extends Error {
     constructor(
         readonly code: string,
         readonly retryable: boolean,
+        readonly retryAfterAt?: number,
     ) {
         super(code);
         this.name = "DiscoveryRequestError";
@@ -124,7 +196,11 @@ export class DiscoveryRequestError extends Error {
 /** Keeps provider diagnostics bounded and independent of raw messages or credentials. */
 export function discoveryFailure(error: unknown) {
     if (error instanceof DiscoveryRequestError)
-        return { code: error.code, retryable: error.retryable };
+        return {
+            code: error.code,
+            retryable: error.retryable,
+            retryAfterAt: error.retryAfterAt,
+        };
     const name =
         error && typeof error === "object" && "name" in error
             ? error.name

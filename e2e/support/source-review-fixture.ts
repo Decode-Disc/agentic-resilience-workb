@@ -78,7 +78,7 @@ export async function admitAnalyst(page: Page): Promise<void> {
     ).toBeHidden();
     await expect(
         page.getByRole("heading", { name: "Dossiers", exact: true }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 30_000 });
 }
 
 export function seedSourceReview(

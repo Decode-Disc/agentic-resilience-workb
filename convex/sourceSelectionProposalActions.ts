@@ -1,6 +1,7 @@
 "use node";
 
 import { lookup } from "node:dns/promises";
+import { providerRetryAfterAt } from "@convex/domain/sourcePreparationAuthority";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
@@ -122,6 +123,10 @@ async function fetchWithTimeout(
                 response.status === 408 ||
                     response.status === 429 ||
                     response.status >= 500,
+                providerRetryAfterAt(
+                    response.headers.get("retry-after"),
+                    Date.now(),
+                ),
             );
         }
         return await response.json();

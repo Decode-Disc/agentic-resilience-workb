@@ -1,10 +1,21 @@
 import { ConvexError, type Infer, v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { assertEvidenceExecutionFence } from "./domain/evidenceAuthority";
 import { manualSourceIntakeError } from "./domain/manualSourceIntake";
 import {
+    readSupplementalSearchAttempts,
+    supplementalSearchInputHash,
+    supplementalSearchOperationKey,
+} from "./domain/sourceDiscoveryRecovery";
+import {
     assertPreparationComparisonFence,
     assertPreparationExecutionFence,
+    MAX_PREPARATION_ATTEMPT_HISTORY,
+    nextPreparationAttempt,
+    preparationDispatchOutcomeValidator,
+    preparationFailureClass,
+    readPreparationModelAttempts,
     sourcePreparationError,
 } from "./domain/sourcePreparationAuthority";
 import { rateLimiter } from "./rateLimiter";
@@ -108,6 +119,62 @@ const recordAttemptResultValidator = v.object({
     retryable: v.optional(v.boolean()),
 });
 
+/** Advises actions before dispatch; recordAttempt revalidates atomically before granting work. */
+export const nextPreparationAttemptForInput = internalQuery({
+    args: {
+        preparationId: v.id("sourceSelectionProposalRebuilds"),
+        sourceId: v.id("sources"),
+        operation: v.string(),
+        inputHash: v.string(),
+        now: v.number(),
+    },
+    returns: v.object({
+        attempt: v.optional(v.number()),
+        errorCode: v.optional(v.string()),
+        retryAt: v.optional(v.number()),
+    }),
+    handler: async (ctx, args) => {
+        const { preparation } = await assertPreparationExecutionFence(ctx.db, {
+            preparationId: args.preparationId,
+            now: args.now,
+        });
+        await (args.operation === "source_comparison"
+            ? assertPreparationComparisonFence
+            : assertPreparationExecutionFence)(ctx.db, {
+            preparationId: args.preparationId,
+            sourceId: args.sourceId,
+            now: args.now,
+        });
+        let calls = await ctx.db
+            .query("providerCalls")
+            .withIndex("by_run_operation_input_and_attempt", (q) =>
+                q
+                    .eq("runId", preparation.runId)
+                    .eq("operation", args.operation)
+                    .eq("inputHash", args.inputHash),
+            )
+            .take(MAX_PREPARATION_ATTEMPT_HISTORY);
+        if (!args.operation.startsWith("source_")) {
+            const legacy = await ctx.db
+                .query("providerCalls")
+                .withIndex("by_run_source_operation", (q) =>
+                    q
+                        .eq("runId", preparation.runId)
+                        .eq("sourceId", args.sourceId)
+                        .eq("operation", args.operation),
+                )
+                .take(MAX_PREPARATION_ATTEMPT_HISTORY);
+            calls = [...calls, ...legacy.filter((c) => !c.inputHash)];
+        }
+        return nextPreparationAttempt(
+            calls,
+            preparation,
+            args.now,
+            args.operation === "source_supplement_search" ? 1 : 2,
+        );
+    },
+});
+
 export const recordAttempt = internalMutation({
     args: {
         inputHash: v.optional(v.string()),
@@ -130,6 +197,9 @@ export const recordAttempt = internalMutation({
         embeddingInputBytes: v.optional(v.number()),
         errorCode: v.optional(v.string()),
         retryable: v.optional(v.boolean()),
+        dispatchOutcome: v.optional(preparationDispatchOutcomeValidator),
+        httpStatus: v.optional(v.number()),
+        retryAfterAt: v.optional(v.number()),
     },
     returns: recordAttemptResultValidator,
     handler: async (
@@ -147,7 +217,7 @@ export const recordAttempt = internalMutation({
                     "source_comparison",
                     "source_embedding",
                 ].includes(args.operation) ||
-                ![1, 2].includes(args.attempt))
+                ![1, 2, 3].includes(args.attempt))
         ) {
             throw sourcePreparationError(
                 args.operation === "source_comparison"
@@ -268,6 +338,8 @@ export const recordAttempt = internalMutation({
                     .withIndex("by_key", (query) => query.eq("key", "global"))
                     .unique();
                 if (paidWork?.enabled === false) {
+                    if (args.preparationId)
+                        throw sourcePreparationError("paid_work_disabled");
                     const existing = await ctx.db
                         .query("providerCalls")
                         .withIndex("by_operation_key", (query) =>
@@ -313,19 +385,25 @@ export const recordAttempt = internalMutation({
             }
 
             const logicalAttempt =
-                args.service === "model" && args.inputHash
-                    ? await ctx.db
-                          .query("providerCalls")
-                          .withIndex(
-                              "by_run_operation_input_and_attempt",
-                              (q) =>
-                                  q
-                                      .eq("runId", args.runId)
-                                      .eq("operation", args.operation)
-                                      .eq("inputHash", args.inputHash)
-                                      .eq("attempt", args.attempt),
-                          )
-                          .first()
+                args.preparationId && args.inputHash
+                    ? (
+                          await ctx.db
+                              .query("providerCalls")
+                              .withIndex(
+                                  "by_run_operation_input_and_attempt",
+                                  (q) =>
+                                      q
+                                          .eq("runId", args.runId)
+                                          .eq("operation", args.operation)
+                                          .eq("inputHash", args.inputHash)
+                                          .eq("attempt", args.attempt),
+                              )
+                              .take(MAX_PREPARATION_ATTEMPT_HISTORY)
+                      ).find(
+                          (call) =>
+                              preparationFailureClass(call) !==
+                              "not_dispatched",
+                      )
                     : null;
             const matches = logicalAttempt
                 ? [logicalAttempt]
@@ -340,7 +418,9 @@ export const recordAttempt = internalMutation({
                     call.service === args.service &&
                     call.operation === args.operation &&
                     call.attempt === args.attempt &&
-                    call.runId === args.runId,
+                    call.runId === args.runId &&
+                    (!args.preparationId ||
+                        preparationFailureClass(call) !== "not_dispatched"),
             );
             if (existing) {
                 if (
@@ -386,6 +466,82 @@ export const recordAttempt = internalMutation({
                           }
                         : {}),
                 };
+            }
+
+            let recoveryOfProviderCallId: Id<"providerCalls"> | undefined;
+            if (
+                args.preparationId &&
+                args.inputHash &&
+                args.operation !== "source_embedding"
+            ) {
+                const preparation = await ctx.db.get(args.preparationId);
+                if (!preparation)
+                    throw sourcePreparationError("stale_execution");
+                let calls = await ctx.db
+                    .query("providerCalls")
+                    .withIndex("by_run_operation_input_and_attempt", (q) =>
+                        q
+                            .eq("runId", args.runId)
+                            .eq("operation", args.operation)
+                            .eq("inputHash", args.inputHash),
+                    )
+                    .take(MAX_PREPARATION_ATTEMPT_HISTORY);
+                if (args.operation === "source_supplement_search") {
+                    const run = args.runId
+                        ? await ctx.db.get(args.runId)
+                        : null;
+                    const supplement = run?.automaticSupplementOperationId
+                        ? await ctx.db.get(run.automaticSupplementOperationId)
+                        : null;
+                    const queryIndex =
+                        supplement?.supplementQueries?.findIndex(
+                            (query, index) =>
+                                args.operationKey ===
+                                    supplementalSearchOperationKey(
+                                        supplement._id,
+                                        index,
+                                        args.attempt,
+                                    ) &&
+                                args.inputHash ===
+                                    supplementalSearchInputHash(query),
+                        ) ?? -1;
+                    if (!supplement || queryIndex < 0)
+                        throw sourcePreparationError("supplement_invalid");
+                    calls = await readSupplementalSearchAttempts(
+                        ctx.db,
+                        preparation.runId,
+                        supplement,
+                        queryIndex,
+                    );
+                } else if (!args.operation.startsWith("source_")) {
+                    const legacy = await ctx.db
+                        .query("providerCalls")
+                        .withIndex("by_run_source_operation", (q) =>
+                            q
+                                .eq("runId", args.runId)
+                                .eq("sourceId", args.sourceId)
+                                .eq("operation", args.operation),
+                        )
+                        .take(MAX_PREPARATION_ATTEMPT_HISTORY);
+                    calls.push(...legacy.filter((c) => !c.inputHash));
+                }
+                const plan = nextPreparationAttempt(
+                    calls,
+                    preparation,
+                    now,
+                    args.operation === "source_supplement_search" ? 1 : 2,
+                );
+                if (plan.attempt !== args.attempt)
+                    throw sourcePreparationError(
+                        plan.errorCode ?? "qualification_attempt_invalid",
+                    );
+                if (
+                    args.attempt >
+                    (args.operation === "source_supplement_search" ? 1 : 2)
+                )
+                    recoveryOfProviderCallId = [...calls].sort(
+                        (a, b) => b.attempt - a.attempt,
+                    )[0]?._id;
             }
 
             if (args.operation === "source_embedding") {
@@ -441,10 +597,13 @@ export const recordAttempt = internalMutation({
             ) {
                 const preparation = await ctx.db.get(args.preparationId);
                 const run = args.runId ? await ctx.db.get(args.runId) : null;
-                const usedAttempts =
-                    run?.sourceQualificationAttemptCount ??
-                    preparation?.modelAttemptCount ??
-                    0;
+                const usedAttempts = run
+                    ? await readPreparationModelAttempts(
+                          ctx.db,
+                          run,
+                          preparation ?? undefined,
+                      )
+                    : 0;
                 if (
                     !preparation ||
                     !run ||
@@ -461,8 +620,7 @@ export const recordAttempt = internalMutation({
                 });
             }
             const providerCallId = await ctx.db.insert("providerCalls", {
-                inputHash:
-                    args.service === "model" ? args.inputHash : undefined,
+                inputHash: args.inputHash,
                 runId: args.runId,
                 corpusRevisionId: args.corpusRevisionId,
                 preparationId: args.preparationId,
@@ -475,6 +633,7 @@ export const recordAttempt = internalMutation({
                 operationKey: args.operationKey,
                 status: "started",
                 attempt: args.attempt,
+                recoveryOfProviderCallId,
                 leaseExpiresAt:
                     now + providerLeaseDurationMs(args.service, args.operation),
                 usage:
@@ -501,7 +660,9 @@ export const recordAttempt = internalMutation({
                 call.service === args.service &&
                 call.operation === args.operation &&
                 call.attempt === args.attempt &&
-                call.runId === args.runId,
+                call.runId === args.runId &&
+                (!args.preparationId ||
+                    preparationFailureClass(call) !== "not_dispatched"),
         );
         if (!existing) {
             throw new Error("Provider attempt was not started");
@@ -513,6 +674,13 @@ export const recordAttempt = internalMutation({
             reportedCost: args.reportedCost,
             errorCode: args.errorCode,
             retryable: args.retryable,
+            dispatchOutcome:
+                args.dispatchOutcome ??
+                (["succeeded", "partial"].includes(args.status)
+                    ? "response_received"
+                    : undefined),
+            httpStatus: args.httpStatus,
+            retryAfterAt: args.retryAfterAt,
             completedAt: now,
         });
         return {

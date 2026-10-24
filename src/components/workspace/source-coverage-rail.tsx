@@ -9,6 +9,7 @@ import {
 import PlusIcon from "@hugeicons/core-free-icons/PlusIcon";
 import TriangleDashedIcon from "@hugeicons/core-free-icons/TriangleDashedIcon";
 import type { FunctionReturnType } from "convex/server";
+import { AnimatePresence, motion } from "motion/react";
 import {
     type ReactNode,
     type Ref,
@@ -214,17 +215,27 @@ function CoverageTopicSummary({
     labelId?: string;
     children?: ReactNode;
 }) {
+    const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
     const copy = sourceCoverageCopy(requirement);
     const appearance = coverageAppearance[copy.availability];
     return (
         <>
             <span
                 className={cn(
-                    "flex size-8 shrink-0 items-center justify-center rounded-md",
+                    "relative flex size-8 shrink-0 items-center justify-center rounded-md transition-colors duration-200 motion-reduce:transition-none",
                     appearance.iconForeground ?? appearance.foreground,
                     appearance.background,
                 )}>
-                <Icon iconNode={appearance.icon} size={21} />
+                <AnimatePresence initial={false} mode="popLayout">
+                    <motion.span
+                        key={copy.availability}
+                        initial={{ opacity: 0, scale: reduceMotion ? 1 : 0.85 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}>
+                        <Icon iconNode={appearance.icon} size={21} />
+                    </motion.span>
+                </AnimatePresence>
             </span>
             <span className="min-w-0 flex-1 space-y-1 break-words">
                 <span
@@ -234,10 +245,20 @@ function CoverageTopicSummary({
                 </span>
                 <span
                     className={cn(
-                        "block text-xs leading-relaxed",
+                        "relative block min-h-4 text-xs leading-relaxed",
                         appearance.foreground,
                     )}>
-                    {copy.label}
+                    <AnimatePresence initial={false} mode="popLayout">
+                        <motion.span
+                            key={copy.label}
+                            initial={{ opacity: 0, y: reduceMotion ? 0 : 3 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="block">
+                            {copy.label}
+                        </motion.span>
+                    </AnimatePresence>
                 </span>
                 {children}
             </span>

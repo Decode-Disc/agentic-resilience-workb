@@ -16,6 +16,17 @@ import type {
     SourceDocumentKind,
 } from "./sourceSelectionPolicy";
 
+/** Only attributed arguments and forecasts require the scoped comparison step. */
+export function sourceFindingNeedsComparison(
+    finding: SourceQualification["findings"][number],
+): finding is SourceQualification["findings"][number] & {
+    kind: "attributed_argument" | "forecast";
+} {
+    return (
+        finding.kind === "attributed_argument" || finding.kind === "forecast"
+    );
+}
+
 export const SOURCE_COMPARISON_VERSION = "targeted-source-comparison-v1";
 export const SOURCE_COMPARISON_MAX_INPUT_BYTES = 128 * 1024;
 export const SOURCE_COMPARISON_MAX_FINDINGS = 15;
@@ -701,11 +712,7 @@ export function prepareSourceComparisonInput(args: {
 
     const allTargetFindings = target.qualification.findings.flatMap(
         (finding, findingIndex) => {
-            if (
-                finding.kind !== "attributed_argument" &&
-                finding.kind !== "forecast"
-            )
-                return [];
+            if (!sourceFindingNeedsComparison(finding)) return [];
             const targetPassages = finding.passages.flatMap((reference) => {
                 const passage = makeTargetPassage(
                     target,

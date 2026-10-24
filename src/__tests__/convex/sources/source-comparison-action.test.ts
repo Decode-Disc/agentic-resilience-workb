@@ -18,6 +18,7 @@ afterEach(() => {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+    vi.useRealTimers();
 });
 
 test("stores a local not-run result when no comparable primary passage exists", async () => {
@@ -423,7 +424,10 @@ test("a targeted supplement rechecks pinned earlier arguments without reopening 
     ).toEqual([]);
 });
 
-test("persists complete comparison explanations with exact primary pins and reuses them on replay", async () => {
+test.each([
+    "current",
+    "legacy",
+])("persists complete comparison explanations and reuses a %s result on replay", async (recordFormat) => {
     const {
         t,
         runId,
@@ -452,6 +456,11 @@ test("persists complete comparison explanations with exact primary pins and reus
         internal.sourcePreparationActions.compareSource,
         { preparationId, sourceCaptureId, qualificationTaskId },
     );
+    const retainedTaskId = result.taskId;
+    if (recordFormat === "legacy" && retainedTaskId)
+        await t.run((ctx) =>
+            ctx.db.patch(retainedTaskId, { comparisonContextHash: undefined }),
+        );
     const replay = await t.action(
         internal.sourcePreparationActions.compareSource,
         { preparationId, sourceCaptureId, qualificationTaskId },
@@ -494,6 +503,7 @@ test("persists complete comparison explanations with exact primary pins and reus
         preparation: await ctx.db.get(preparationId),
     }));
     expect(state.tasks).toHaveLength(1);
+    expect(state.tasks[0]?.comparisonContextHash).toMatch(/^[a-f0-9]{64}$/);
     expect(state.tasks[0]?.output).toMatchObject({
         kind: "source_comparison",
         checkStatus: "compared",
@@ -833,4 +843,244 @@ test("versioned comparison delivers extra retrieved evidence to the provider, pe
             },
         ],
     });
+});
+
+test.each([
+    false,
+    true,
+])("explicit comparison recovery preserves the current failed input with earlier not-run result %s", async (earlierNotRun) => {
+    vi.useFakeTimers();
+    const { api } = await import("@convex/_generated/api");
+    const { default: workflowTest } = await import(
+        "@/__tests__/convex/workflows/workflow-test-register.js"
+    );
+    const {
+        t,
+        runId,
+        corpusRevisionId,
+        sourceId,
+        userId,
+        preparationId,
+        sourceCaptureId,
+        qualificationTaskId,
+        response,
+        primarySourceId,
+        primaryCaptureId,
+    } = await capturedComparison();
+    workflowTest.register(t);
+    vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "true");
+    if (earlierNotRun) {
+        await t.run((ctx) =>
+            ctx.db.patch(primaryCaptureId, { status: "unavailable" }),
+        );
+        expect(
+            await t.action(internal.sourcePreparationActions.compareSource, {
+                preparationId,
+                sourceCaptureId,
+                qualificationTaskId,
+            }),
+        ).toMatchObject({ status: "not_run" });
+        await t.run((ctx) =>
+            ctx.db.patch(primaryCaptureId, { status: "committed" }),
+        );
+    }
+    const request = vi.fn<typeof fetch>(
+        async () =>
+            new Response('{"error":{"message":"Unavailable"}}', {
+                status: 503,
+            }),
+    );
+    vi.stubGlobal("fetch", request);
+    expect(
+        await t.action(internal.sourcePreparationActions.compareSource, {
+            preparationId,
+            sourceCaptureId,
+            qualificationTaskId,
+        }),
+    ).toMatchObject({ status: "unavailable" });
+    expect(request).toHaveBeenCalledTimes(2);
+    await t.mutation(internal.sourcePreparation.recordResult, {
+        preparationId,
+        outcome: {
+            sourceId,
+            result: {
+                status: "qualified",
+                sourceCaptureId,
+                taskId: qualificationTaskId,
+            },
+        },
+    });
+    await t.mutation(internal.sourcePreparation.recordResult, {
+        preparationId,
+        outcome: {
+            sourceId: primarySourceId,
+            result: {
+                status: "unavailable",
+                reasonCode: "content_not_available",
+            },
+        },
+    });
+    const completed = await t.mutation(internal.sourcePreparation.finish, {
+        preparationId,
+        expectedExecutionGeneration: 3,
+    });
+    await t.run((ctx) =>
+        ctx.db.patch(runId, {
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        }),
+    );
+    expect(
+        (
+            await t
+                .withIdentity({ subject: userId })
+                .query(api.sourceSelectionProposals.getCurrent, {
+                    runId,
+                    corpusRevisionId,
+                })
+        )?.preparation,
+    ).toMatchObject({ pendingComparisons: 1, status: "partial", failed: 1 });
+    vi.setSystemTime(Date.now() + 15_001);
+    const resumed = await t
+        .withIdentity({ subject: userId })
+        .mutation(api.sourcePreparation.startForReview, {
+            runId,
+            corpusRevisionId,
+            expectedProposalId: completed.proposalId,
+            requestId: "resume-comparison",
+        });
+    request.mockImplementation(async () => comparisonResponse(response));
+    expect(
+        await t.action(internal.sourcePreparationActions.compareSource, {
+            preparationId: resumed.preparationId,
+            sourceCaptureId,
+            qualificationTaskId,
+        }),
+    ).toMatchObject({ status: "compared" });
+    expect(request).toHaveBeenCalledTimes(3);
+    const tasks = await t.run((ctx) =>
+        ctx.db
+            .query("aiTaskResults")
+            .withIndex("by_source_and_task_type_and_created_at", (q) =>
+                q.eq("sourceId", sourceId).eq("taskType", "source_comparison"),
+            )
+            .take(4),
+    );
+    expect(tasks).toHaveLength(earlierNotRun ? 3 : 2);
+    expect(
+        tasks.map((task) =>
+            task.output.kind === "source_comparison"
+                ? task.output.checkStatus
+                : null,
+        ),
+    ).toEqual(
+        earlierNotRun
+            ? ["not_run", "provider_unavailable", "compared"]
+            : ["provider_unavailable", "compared"],
+    );
+    vi.useRealTimers();
+});
+
+test("an exact legacy comparison can be revalidated at the model limit without provider work", async () => {
+    vi.useFakeTimers();
+    const { api } = await import("@convex/_generated/api");
+    const { default: workflowTest } = await import(
+        "@/__tests__/convex/workflows/workflow-test-register.js"
+    );
+    const {
+        t,
+        runId,
+        corpusRevisionId,
+        userId,
+        sourceId,
+        preparationId,
+        sourceCaptureId,
+        qualificationTaskId,
+        primarySourceId,
+        response,
+    } = await capturedComparison();
+    workflowTest.register(t);
+    vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "true");
+    const request = vi.fn<typeof fetch>(async () =>
+        comparisonResponse(response),
+    );
+    vi.stubGlobal("fetch", request);
+    const compared = await t.action(
+        internal.sourcePreparationActions.compareSource,
+        { preparationId, sourceCaptureId, qualificationTaskId },
+    );
+    if (!compared.taskId) throw Error("Missing retained comparison");
+    const taskId = compared.taskId;
+    const retained = await t.run((ctx) => ctx.db.get(taskId));
+    await t.run(async (ctx) => {
+        await ctx.db.patch(taskId, { comparisonContextHash: undefined });
+        await ctx.db.patch(runId, { sourceQualificationAttemptCount: 120 });
+    });
+    await t.mutation(internal.sourcePreparation.recordResult, {
+        preparationId,
+        outcome: {
+            sourceId,
+            result: {
+                status: "qualified",
+                sourceCaptureId,
+                taskId: qualificationTaskId,
+            },
+        },
+    });
+    await t.mutation(internal.sourcePreparation.recordResult, {
+        preparationId,
+        outcome: {
+            sourceId: primarySourceId,
+            result: {
+                status: "unavailable",
+                reasonCode: "content_not_available",
+            },
+        },
+    });
+    const finished = await t.mutation(internal.sourcePreparation.finish, {
+        preparationId,
+        expectedExecutionGeneration: 3,
+    });
+    await t.run((ctx) =>
+        ctx.db.patch(runId, {
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        }),
+    );
+    const owned = t.withIdentity({ subject: userId });
+    expect(
+        (
+            await owned.query(api.sourceSelectionProposals.getCurrent, {
+                runId,
+                corpusRevisionId,
+            })
+        )?.preparationAction,
+    ).toMatchObject({ available: true });
+    const resumed = await owned.mutation(api.sourcePreparation.startForReview, {
+        runId,
+        corpusRevisionId,
+        expectedProposalId: finished.proposalId,
+        requestId: "validate-retained-at-model-limit",
+    });
+    expect(resumed.status).toBe("started");
+    expect(
+        await t.action(internal.sourcePreparationActions.compareSource, {
+            preparationId: resumed.preparationId,
+            sourceCaptureId,
+            qualificationTaskId,
+        }),
+    ).toMatchObject({ status: "cached", taskId });
+    expect(request).toHaveBeenCalledOnce();
+    expect(
+        (await t.run((ctx) => ctx.db.get(runId)))
+            ?.sourceQualificationAttemptCount,
+    ).toBe(120);
+    expect((await t.run((ctx) => ctx.db.get(taskId)))?.output).toEqual(
+        retained?.output,
+    );
+    expect(
+        await t.run((ctx) => ctx.db.query("providerCalls").take(3)),
+    ).toHaveLength(1);
 });

@@ -68,7 +68,7 @@ test("offers explicit reading preparation for a current metadata-only draft with
     );
 });
 
-test("targets a review search without rereading existing sources or renewing the preparation deadline", async () => {
+test("targets a review search without rereading existing sources or replenishing the supplement", async () => {
     vi.useFakeTimers();
     const { t, runId, corpusRevisionId, userId, proposal, sourceId } =
         await waitingReview();
@@ -96,7 +96,7 @@ test("targets a review search without rereading existing sources or renewing the
     await t.mutation(internal.sourcePreparation.reserveNextSupplementSearch, {
         preparationId: first.preparationId,
     });
-    const original = await t.run(async (ctx) => {
+    await t.run(async (ctx) => {
         const original = await ctx.db.get(first.preparationId);
         await ctx.db.patch(first.preparationId, { status: "complete" });
         await ctx.db.patch(runId, {
@@ -166,7 +166,7 @@ test("targets a review search without rereading existing sources or renewing the
         ),
     ).toBeNull();
     const current = await t.run((ctx) => ctx.db.get(search.preparationId));
-    expect(current?.deadlineAt).toBe(original?.deadlineAt);
+    expect(current?.deadlineAt).toBe(Date.now() + 900_000);
     expect(current?.target).toEqual(targetedArgs.target);
     expect(current?.readingSourceIds).toEqual([]);
     expect(
@@ -209,7 +209,7 @@ test("targets a review search without rereading existing sources or renewing the
             sourceId: newSourceId,
             result: {
                 status: "unavailable",
-                reasonCode: "content_not_available",
+                reasonCode: "missing_configuration",
             },
         },
     });
@@ -250,7 +250,7 @@ test("targets a review search without rereading existing sources or renewing the
     ).toMatchObject({
         target: targetedArgs.target,
         readingSourceIds: [newSourceId],
-        deadlineAt: original?.deadlineAt,
+        deadlineAt: Date.now() + 900_000,
         insertedCount: 1,
     });
     expect(
@@ -352,7 +352,7 @@ test("continues the unfinished reading after a search added no candidates withou
     ).toMatchObject({ sourceIds: [sourceId] });
 });
 
-test("a new review request preserves the original preparation deadline across execution generations", async () => {
+test("a new review request renews execution time while preserving qualification input identity", async () => {
     vi.useFakeTimers();
     const { t, runId, corpusRevisionId, userId, sourceId, proposal } =
         await waitingReview();
@@ -363,7 +363,6 @@ test("a new review request preserves the original preparation deadline across ex
         expectedProposalId: proposal.proposalId,
         requestId: "first-read",
     });
-    const original = await t.run((ctx) => ctx.db.get(first.preparationId));
     const { capture } = await t.mutation(
         internal.sourceCaptures.reserveUpload,
         { preparationId: first.preparationId, sourceId },
@@ -417,9 +416,9 @@ test("a new review request preserves the original preparation deadline across ex
         requestId: "resume-read",
     });
     const preparation = await t.run((ctx) => ctx.db.get(resumed.preparationId));
-    expect(preparation?.deadlineAt).toBe(original?.deadlineAt);
+    expect(preparation?.deadlineAt).toBe(Date.now() + 900_000);
     expect(preparation?.executionGeneration).toBe(5);
-    expect(preparation?.leaseExpiresAt).toBe(original?.deadlineAt);
+    expect(preparation?.leaseExpiresAt).toBe(Date.now() + 900_000);
     const resumedInput = await t.query(
         internal.sourcePreparation.getQualificationInput,
         {
@@ -714,7 +713,7 @@ test("a genuinely new manual link gets its own window after expiry and never reo
     expect(state.preparation).toMatchObject({
         entryPoint: "manual_addition",
         manualSourceIds: [manualId],
-        deadlineAt: now + 900_000,
+        deadlineAt: Date.now() + 900_000,
         asOfTime: now,
     });
     expect(state.original?.deadlineAt).toBe(now - 1);
@@ -743,7 +742,7 @@ test("a genuinely new manual link gets its own window after expiry and never reo
             sourceId: manualId,
             result: {
                 status: "unavailable",
-                reasonCode: "content_unavailable",
+                reasonCode: "missing_configuration",
             },
         },
     });
@@ -771,7 +770,7 @@ test("a genuinely new manual link gets its own window after expiry and never reo
         await t.run((ctx) => ctx.db.get(resumed.preparationId)),
     ).toMatchObject({
         manualSourceIds: [manualId],
-        deadlineAt: now + 900_000,
+        deadlineAt: Date.now() + 900_000,
         asOfTime: now,
     });
 });
@@ -1086,7 +1085,10 @@ test("several new links retained during another dossier are all read on continua
     expect(batch.canSupplement).toBe(false);
 });
 
-test("an expired preparation cannot be resumed or claim an execution slot", async () => {
+test.each([
+    "dossier",
+    "legacy_operation",
+])("explicit recovery after expiry retains the %s allowance and claims one bounded execution", async (counterOwner) => {
     vi.useFakeTimers();
     const { t, runId, corpusRevisionId, userId, proposal } =
         await waitingReview();
@@ -1101,11 +1103,14 @@ test("an expired preparation cannot be resumed or claim an execution slot", asyn
         const preparation = await ctx.db.get(started.preparationId);
         await ctx.db.patch(started.preparationId, {
             status: "blocked",
-            stopCode: "preparation_failed",
+            stopCode: "missing_configuration",
+            modelAttemptCount: counterOwner === "legacy_operation" ? 19 : 0,
         });
         await ctx.db.patch(runId, {
             executionStatus: "paused",
             pauseReason: "source_review",
+            sourceQualificationAttemptCount:
+                counterOwner === "dossier" ? 19 : undefined,
         });
         return preparation;
     });
@@ -1117,17 +1122,74 @@ test("an expired preparation cannot be resumed or claim an execution slot", asyn
                 corpusRevisionId,
             })
         )?.preparationAction,
-    ).toMatchObject({ available: false, reason: "deadline_elapsed" });
-    await expect(
-        owned.mutation(api.sourcePreparation.startForReview, {
-            runId,
-            corpusRevisionId,
-            expectedProposalId: proposal.proposalId,
-            requestId: "expire-retry",
-        }),
-    ).rejects.toThrow("preparation_deadline_elapsed");
-    expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
-        executionStatus: "paused",
-        sourcePreparationId: started.preparationId,
+    ).toMatchObject({ kind: "resume", available: true });
+    const args = {
+        runId,
+        corpusRevisionId,
+        expectedProposalId: proposal.proposalId,
+        requestId: "expire-retry",
+    };
+    const resumed = await owned.mutation(
+        api.sourcePreparation.startForReview,
+        args,
+    );
+    expect(
+        await owned.mutation(api.sourcePreparation.startForReview, args),
+    ).toEqual(resumed);
+    expect(
+        await t.run((ctx) => ctx.db.get(resumed.preparationId)),
+    ).toMatchObject({
+        deadlineAt: Date.now() + 15 * 60_000,
+        asOfTime: previous?.asOfTime,
+        executionGeneration: (previous?.executionGeneration ?? 0) + 1,
     });
+    expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
+        executionStatus: "running",
+        sourcePreparationId: resumed.preparationId,
+        sourceQualificationAttemptCount: 19,
+    });
+    expect(await t.run((ctx) => ctx.db.query("providerCalls").take(1))).toEqual(
+        [],
+    );
+});
+
+test("an expired started review is fenced before recovery without cancelling the approval workflow", async () => {
+    vi.useFakeTimers();
+    const { t, runId, corpusRevisionId, userId, proposal, mainHandle } =
+        await waitingReview();
+    const owned = t.withIdentity({ subject: userId });
+    const initial = await owned.mutation(api.sourcePreparation.startForReview, {
+        runId,
+        corpusRevisionId,
+        expectedProposalId: proposal.proposalId,
+        requestId: "stalled-review",
+    });
+    const preparation = await t.run((ctx) => ctx.db.get(initial.preparationId));
+    vi.setSystemTime((preparation?.deadlineAt ?? Date.now()) + 1);
+    expect(
+        (
+            await owned.query(api.sourceSelectionProposals.getCurrent, {
+                runId,
+                corpusRevisionId,
+            })
+        )?.preparationAction,
+    ).toMatchObject({ available: true });
+    const resumed = await owned.mutation(api.sourcePreparation.startForReview, {
+        runId,
+        corpusRevisionId,
+        expectedProposalId: proposal.proposalId,
+        requestId: "recover-stalled-review",
+    });
+    expect(resumed.preparationId).not.toBe(initial.preparationId);
+    expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
+        workflowId: mainHandle,
+        executionGeneration: (preparation?.executionGeneration ?? 0) + 1,
+        executionStatus: "running",
+    });
+    await expect(
+        t.query(internal.sourcePreparation.getForExecution, {
+            preparationId: initial.preparationId,
+            now: Date.now(),
+        }),
+    ).rejects.toThrow("stale_execution");
 });

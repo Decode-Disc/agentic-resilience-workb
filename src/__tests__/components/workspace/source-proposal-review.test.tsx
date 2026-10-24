@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 vi.mock("@/hooks/use-source-preview", () => ({
     useSourcePreview: () => ({ status: "idle" }),
@@ -19,6 +19,19 @@ import {
     sourceDecisionForKanbanMove,
 } from "@/components/workspace/source-proposal-adjustment-board";
 import { SourceProposalReview } from "@/components/workspace/source-proposal-review";
+
+beforeEach(() => {
+    // Functional controls run without animation timing; desktop browser checks exercise normal motion.
+    const getMediaQuery = window.matchMedia.bind(window);
+    vi.spyOn(window, "matchMedia").mockImplementation((query) => {
+        const media = getMediaQuery(query);
+        return query === "(prefers-reduced-motion: reduce)"
+            ? { ...media, matches: true }
+            : media;
+    });
+});
+
+afterEach(() => vi.restoreAllMocks());
 
 test("keeps keyboard focus on the selected group while resetting its source search", () => {
     const props = overviewProps();
@@ -326,7 +339,7 @@ test("keeps a reading skeleton until the selected source query resolves", () => 
     expect(screen.queryByText("Reading not prepared")).toBeNull();
 });
 
-test("offers a contextual search on a prepared proposal using its remaining allowance", () => {
+test("offers a contextual search after the previous window ended using its remaining allowance", () => {
     const recover = vi.fn();
     render(
         <SourceProposalReview
@@ -345,7 +358,7 @@ test("offers a contextual search on a prepared proposal using its remaining allo
                         enabled: true,
                         remainingSearches: 1,
                         remainingCandidates: 4,
-                        deadlineAt: Date.now() + 30_000,
+                        deadlineAt: Date.now() - 30_000,
                     },
                     coverageRequirements: [
                         {
@@ -467,6 +480,189 @@ test("retains the selected source reading when inspecting candidates for a cover
             "The company described this workflow in its historical annual report.",
         ),
     ).toBeTruthy();
+});
+
+test("updates a source card reading state while preserving the selected card and keyboard focus", () => {
+    const props = overviewProps({
+        adjustmentSets: {
+            included: [{ ...recommended, readingStatus: "preparing" }],
+            available: [alternative],
+        } as never,
+    });
+    const view = render(<SourceProposalReview {...props} />);
+    expect(screen.getByText("In preparation")).toBeTruthy();
+    const card = screen.getByRole("button", {
+        name: "Open Annual report for review",
+    });
+    card.focus();
+    view.rerender(
+        <SourceProposalReview
+            {...props}
+            adjustmentSets={
+                {
+                    included: [{ ...recommended, readingStatus: "complete" }],
+                    available: [alternative],
+                } as never
+            }
+        />,
+    );
+    expect(screen.getByText("Assessed")).toBeTruthy();
+    expect(document.activeElement).toBe(card);
+});
+
+test("opens unavailable source details without discarding the current source selection", () => {
+    render(
+        <SourceProposalReview
+            {...overviewProps({
+                summary: {
+                    ...summary,
+                    preparation: {
+                        status: "partial",
+                        checked: 2,
+                        total: 2,
+                        captured: 1,
+                        assessed: 1,
+                        failed: 1,
+                        remaining: 0,
+                        canResume: false,
+                    },
+                } as never,
+                adjustmentSets: {
+                    included: [recommended],
+                    available: [
+                        { ...alternative, readingStatus: "reading_failed" },
+                    ],
+                } as never,
+            })}
+        />,
+    );
+    fireEvent.click(
+        screen.getByRole("button", { name: "Review 1 unavailable source" }),
+    );
+    const details = screen.getByRole("dialog", {
+        name: "Sources that could not be fully prepared",
+    });
+    expect(within(details).getByText("Independent analysis")).toBeTruthy();
+    expect(
+        within(details)
+            .getByRole("link", { name: "Open original: Independent analysis" })
+            .getAttribute("href"),
+    ).toBe("https://example.com/analysis");
+});
+
+test("hands preparation back to review with a compact retained summary even when another attempt is available", async () => {
+    const preparation = {
+        status: "started",
+        checked: 1,
+        total: 2,
+        captured: 1,
+        assessed: 1,
+        failed: 0,
+        remaining: 1,
+        canResume: false,
+    };
+    const props = overviewProps({
+        summary: {
+            ...summary,
+            preparation,
+            preparationAction: { kind: "resume", available: true },
+        } as never,
+        onPrepare: vi.fn(),
+    });
+    const view = render(<SourceProposalReview {...props} />);
+    expect(
+        screen.getByRole("progressbar", { name: "Source reading progress" }),
+    ).toBeTruthy();
+    view.rerender(
+        <SourceProposalReview
+            {...props}
+            summary={
+                {
+                    ...summary,
+                    preparation: {
+                        ...preparation,
+                        status: "partial",
+                        canResume: true,
+                        pendingComparisons: 1,
+                    },
+                    preparationAction: { kind: "resume", available: true },
+                } as never
+            }
+        />,
+    );
+    expect(
+        screen.getByText("Source selection ready with limitations"),
+    ).toBeTruthy();
+    await waitFor(() =>
+        expect(
+            screen.queryByRole("progressbar", {
+                name: "Source reading progress",
+            }),
+        ).toBeNull(),
+    );
+    expect(screen.getByText("1 source read and assessed")).toBeTruthy();
+    expect(
+        screen.getByText(
+            /Review the saved readings and limitations before approving/,
+        ),
+    ).toBeTruthy();
+    expect(
+        (
+            screen.getByRole("button", {
+                name: "Resume preparation",
+            }) as HTMLButtonElement
+        ).disabled,
+    ).toBe(false);
+});
+
+test("shows comparison activity after reading finishes without asking to refresh a running proposal", () => {
+    render(
+        <SourceProposalReview
+            {...overviewProps({
+                summary: {
+                    ...summary,
+                    effectiveStatus: "stale",
+                    preparation: {
+                        status: "started",
+                        checked: 47,
+                        total: 47,
+                        captured: 38,
+                        assessed: 38,
+                        failed: 9,
+                        remaining: 0,
+                        excluded: 1,
+                        canResume: false,
+                        progress: {
+                            phase: "comparison",
+                            current: 3,
+                            total: 12,
+                            updatedAt: Date.now(),
+                        },
+                    },
+                } as never,
+            })}
+        />,
+    );
+    expect(screen.getByText("Checking source contributions")).toBeTruthy();
+    expect(screen.getByText("3 of 12 source comparisons checked")).toBeTruthy();
+    const progress = screen.getByRole("progressbar", {
+        name: "Source comparison progress",
+    });
+    expect(progress.getAttribute("aria-valuenow")).toBe("3");
+    expect(progress.getAttribute("aria-valuemax")).toBe("12");
+    expect(
+        screen.queryByRole("progressbar", { name: "Source reading progress" }),
+    ).toBeNull();
+    expect(screen.getByText("1 source excluded")).toBeTruthy();
+    expect(
+        screen.queryByRole("button", { name: "Refresh proposal" }),
+    ).toBeNull();
+    expect(
+        screen.queryByText(/Refresh the proposal before approval/),
+    ).toBeNull();
+    expect(
+        screen.queryByText(/source_comparison|executionGeneration|workflowId/),
+    ).toBeNull();
 });
 
 test("shows persisted preparation progress and blocks grouped approval while source reading continues", () => {
@@ -1310,7 +1506,9 @@ test.each([
 
 function mobileViewport() {
     return vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
-        matches: query === "(width < 48rem)",
+        matches:
+            query === "(width < 48rem)" ||
+            query === "(prefers-reduced-motion: reduce)",
         media: query,
         onchange: null,
         addListener: () => undefined,
@@ -1794,9 +1992,7 @@ test("a retained new link has an actionable reading continuation without interna
             /Finish the other dossier.*read the source you added/i,
         ),
     ).toBeTruthy();
-    fireEvent.click(
-        screen.getByRole("button", { name: "Continue source preparation" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Resume preparation" }));
     expect(recover).toHaveBeenCalledOnce();
     expect(container.textContent).not.toMatch(
         /execution_slot|SOURCE_QUALIFICATION|generation|provider|quota/,

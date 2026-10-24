@@ -6,6 +6,7 @@ import {
     type PreparedSourceComparisonInput,
     type SourceComparisonOutput,
 } from "@convex/domain/sourceComparison";
+import { providerRetryAfterAt } from "@convex/domain/sourcePreparationAuthority";
 import {
     createQualificationResponseSchema,
     materializeQualificationOutput,
@@ -33,6 +34,9 @@ type AttemptReceipt = {
     cachedInputTokens?: number;
     reportedCost?: number;
     latencyMs: number;
+    dispatchOutcome?: "not_dispatched" | "response_received" | "unknown";
+    httpStatus?: number;
+    retryAfterAt?: number;
 };
 
 type ProviderResponse = {
@@ -84,6 +88,7 @@ async function runBoundedStructuredAttempt<T>(args: {
             latencyMs: 0,
             status: "failed",
             errorCode: "missing_configuration",
+            dispatchOutcome: "not_dispatched",
             retryable: false,
         };
     if (dependencies.signal?.aborted)
@@ -92,9 +97,12 @@ async function runBoundedStructuredAttempt<T>(args: {
             latencyMs: 0,
             status: "failed",
             errorCode: "cancelled",
+            dispatchOutcome: "not_dispatched",
             retryable: false,
         };
     let responseTooLarge = false;
+    let httpStatus: number | undefined;
+    let retryAfterAt: number | undefined;
     try {
         const provider = createOpenRouter({
             apiKey: dependencies.apiKey,
@@ -102,6 +110,11 @@ async function runBoundedStructuredAttempt<T>(args: {
                 const response = await (dependencies.fetch ?? globalThis.fetch)(
                     url,
                     { ...init, redirect: "error" },
+                );
+                httpStatus = response.status;
+                retryAfterAt = providerRetryAfterAt(
+                    response.headers.get("retry-after"),
+                    Date.now(),
                 );
                 const chunks: Uint8Array[] = [];
                 let bytes = 0;
@@ -176,6 +189,9 @@ async function runBoundedStructuredAttempt<T>(args: {
         const usage = metadata?.usage;
         const receipt: AttemptReceipt = {
             model: route.model,
+            dispatchOutcome: "response_received",
+            httpStatus,
+            retryAfterAt,
             resolvedModel: result.response.modelId,
             provider:
                 typeof metadata?.provider === "string"
@@ -199,6 +215,10 @@ async function runBoundedStructuredAttempt<T>(args: {
     } catch (error) {
         const receipt: AttemptReceipt = {
             model: route.model,
+            dispatchOutcome:
+                httpStatus === undefined ? "unknown" : "response_received",
+            httpStatus,
+            retryAfterAt,
             latencyMs: Math.max(0, Date.now() - startedAt),
         };
         if (dependencies.signal?.aborted)
@@ -213,7 +233,7 @@ async function runBoundedStructuredAttempt<T>(args: {
                 ...receipt,
                 status: "failed",
                 errorCode: "response_too_large",
-                retryable: true,
+                retryable: false,
             };
         if (NoObjectGeneratedError.isInstance(error))
             return {
@@ -234,19 +254,19 @@ async function runBoundedStructuredAttempt<T>(args: {
             const status = error.statusCode;
             const access = status === 401 || status === 402 || status === 403;
             const transient =
-                status === 408 ||
-                status === 429 ||
-                status === 404 ||
-                (status !== undefined && status >= 500) ||
-                (status === undefined && error.isRetryable);
+                httpStatus !== undefined &&
+                [408, 429, 500, 502, 503, 504].includes(status ?? 0);
             return {
                 ...receipt,
                 status: "failed",
-                errorCode: access
-                    ? "access_unavailable"
-                    : transient
-                      ? "transport_unavailable"
-                      : "request_invalid",
+                errorCode:
+                    httpStatus === undefined
+                        ? "transport_outcome_unknown"
+                        : access
+                          ? "access_unavailable"
+                          : transient
+                            ? "transport_unavailable"
+                            : "request_invalid",
                 retryable: transient,
             };
         }
@@ -259,7 +279,7 @@ async function runBoundedStructuredAttempt<T>(args: {
                 ...receipt,
                 status: "failed",
                 errorCode: "request_timeout",
-                retryable: true,
+                retryable: false,
             };
         throw error;
     }

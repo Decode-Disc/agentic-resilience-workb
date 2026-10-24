@@ -1,7 +1,7 @@
 import { v } from "convex/values";
-
 import { internalMutation, internalQuery } from "./_generated/server";
 import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
+import { supplementalSearchOperationKey } from "./domain/sourceDiscoveryRecovery";
 import {
     assertPreparationExecutionFence,
     sourcePreparationError,
@@ -81,7 +81,11 @@ export const persistCandidates = internalMutation({
                 supplement?.supplementQueries?.findIndex(
                     (_, index) =>
                         call?.operationKey ===
-                        `supplement:${supplement._id}:query:${index}`,
+                        supplementalSearchOperationKey(
+                            supplement._id,
+                            index,
+                            call?.attempt,
+                        ),
                 ) ?? -1;
             if (
                 preparationState.run._id !== run._id ||
@@ -101,6 +105,11 @@ export const persistCandidates = internalMutation({
                         ? "sec"
                         : "exa") ||
                 call.operation !== "source_supplement_search" ||
+                call.operationKey !== args.operationKey ||
+                call.attempt > 2 ||
+                (supplement.supplementClaimedQueryIndexes?.filter(
+                    (index) => index === queryIndex,
+                ).length ?? 0) < call.attempt ||
                 call.status !== "started" ||
                 args.candidates.length > 4
             )
@@ -229,6 +238,7 @@ export const persistCandidates = internalMutation({
             }
             await ctx.db.patch(providerCall._id, {
                 status: args.providerCompletion.status,
+                dispatchOutcome: "response_received",
                 latencyMs: args.providerCompletion.latencyMs,
                 usage: {
                     accepted: args.providerCompletion.accepted,
