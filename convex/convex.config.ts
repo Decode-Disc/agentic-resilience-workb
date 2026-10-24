@@ -7,6 +7,8 @@ const app = defineApp({
     env: {
         OPENROUTER_API_KEY: v.optional(v.string()),
         SOURCE_QUALIFICATION_ENABLED: v.optional(v.string()),
+        SOURCE_PREPARATION_WORK_LIMIT: v.optional(v.string()),
+        SOURCE_PREPARATION_INCIDENT_LIMIT: v.optional(v.string()),
         SOURCE_RETRIEVAL_MODE: v.optional(
             v.union(v.literal("lexical"), v.literal("hybrid")),
         ),

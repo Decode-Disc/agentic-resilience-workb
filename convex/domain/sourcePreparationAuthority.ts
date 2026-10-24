@@ -1,10 +1,11 @@
 import type { DataModel, Doc, Id } from "@convex/_generated/dataModel";
 import {
+    LEGACY_PREPARATION_MODEL_ATTEMPT_LIMIT,
     MAX_HISTORICAL_SOURCE_CANDIDATES,
-    MAX_PREPARATION_MODEL_ATTEMPTS,
+    preparationModelLimits,
 } from "@convex/resourceLimits";
 import type { GenericDatabaseReader } from "convex/server";
-import { ConvexError, v } from "convex/values";
+import { ConvexError, type Infer, v } from "convex/values";
 import { SOURCE_QUALIFICATION_VERSION } from "./sourceQualification";
 
 export const preparationDispatchOutcomeValidator = v.union(
@@ -46,14 +47,42 @@ export function providerRetryAfterAt(
     return Number.isSafeInteger(date) ? Math.max(now, date) : undefined;
 }
 
-/** Old dossiers can lack a cumulative counter; existing receipts cannot become fresh allowance. */
-export async function readPreparationModelAttempts(
+export const preparationModelLimitsValidator = v.object({
+    work: v.number(),
+    incidents: v.number(),
+});
+
+export const preparationBudgetValidator = v.object({
+    version: v.literal(1),
+    work: v.number(),
+    incidents: v.number(),
+    reserved: v.number(),
+    dispatches: v.number(),
+});
+
+type PreparationBudget = Infer<typeof preparationBudgetValidator>;
+
+/** A received valid response is productive; ambiguity retains both possible charges. */
+export function preparationBudgetOutcome(
+    call: Pick<
+        Doc<"providerCalls">,
+        "status" | "errorCode" | "dispatchOutcome" | "httpStatus"
+    >,
+): "work" | "incidents" | "reserved" | "released" {
+    const kind = preparationFailureClass(call);
+    if (kind === "not_dispatched") return "released";
+    if (kind === "succeeded") return "work";
+    if (kind === "unknown") return "reserved";
+    return "incidents";
+}
+
+/** Legacy receipts are bounded by their original envelope; unexplained consumption stays reserved. */
+export async function readPreparationBudget(
     db: GenericDatabaseReader<DataModel>,
     run: Doc<"researchRuns">,
     preparation?: Doc<"sourceSelectionProposalRebuilds">,
-) {
-    if (run.sourceQualificationAttemptCount !== undefined)
-        return run.sourceQualificationAttemptCount;
+): Promise<PreparationBudget> {
+    if (run.sourcePreparationBudget) return run.sourcePreparationBudget;
     const histories = await Promise.all(
         (["source_qualification", "source_comparison"] as const).map(
             (operation) =>
@@ -62,17 +91,70 @@ export async function readPreparationModelAttempts(
                     .withIndex("by_run_operation_input_and_attempt", (q) =>
                         q.eq("runId", run._id).eq("operation", operation),
                     )
-                    .take(MAX_PREPARATION_MODEL_ATTEMPTS + 1),
+                    .take(LEGACY_PREPARATION_MODEL_ATTEMPT_LIMIT + 1),
         ),
     );
-    return Math.max(
-        preparation?.modelAttemptCount ?? 0,
-        histories
-            .flat()
-            .filter(
-                (call) => preparationFailureClass(call) !== "not_dispatched",
-            ).length,
+    const budget: PreparationBudget = {
+        version: 1,
+        work: 0,
+        incidents: 0,
+        reserved: 0,
+        dispatches: 0,
+    };
+    for (const call of histories.flat()) {
+        const outcome = preparationBudgetOutcome(call);
+        if (outcome === "released") continue;
+        budget.dispatches++;
+        budget[
+            call.inputHash && /^[a-f0-9]{64}$/.test(call.inputHash)
+                ? outcome
+                : "reserved"
+        ]++;
+    }
+    const unexplained = Math.max(
+        0,
+        Math.max(
+            run.sourceQualificationAttemptCount ?? 0,
+            preparation?.modelAttemptCount ?? 0,
+            // Without the cumulative counter, a clipped read can conceal the entire legacy envelope.
+            run.sourceQualificationAttemptCount === undefined &&
+                histories.some(
+                    (calls) =>
+                        calls.length > LEGACY_PREPARATION_MODEL_ATTEMPT_LIMIT,
+                )
+                ? LEGACY_PREPARATION_MODEL_ATTEMPT_LIMIT
+                : 0,
+        ) - budget.dispatches,
     );
+    budget.reserved += unexplained;
+    budget.dispatches += unexplained;
+    return budget;
+}
+
+/** Both review and dispatch admission use the same conservative remaining capacity. */
+export function preparationBudgetBlock(
+    budget: PreparationBudget,
+    limits: Infer<typeof preparationModelLimitsValidator>,
+) {
+    if (budget.work + budget.reserved >= limits.work)
+        return "work_budget_exhausted" as const;
+    if (budget.incidents + budget.reserved >= limits.incidents)
+        return "incident_budget_exhausted" as const;
+    if (budget.dispatches >= limits.work + limits.incidents)
+        return "model_attempt_limit_reached" as const;
+    return undefined;
+}
+
+/** Active executions retain their snapshot; a new explicit execution reads current configuration. */
+export function readPreparationLimits(
+    preparation?: Doc<"sourceSelectionProposalRebuilds">,
+) {
+    if (preparation?.modelLimits) return preparation.modelLimits;
+    try {
+        return preparationModelLimits();
+    } catch {
+        throw sourcePreparationError("preparation_configuration_invalid");
+    }
 }
 
 /** A retry flag alone cannot prove that a dispatched request returned a failure. */
@@ -134,19 +216,24 @@ export function nextPreparationAttempt(
     now: number,
     initialAttempts = 2,
 ): { attempt?: number; errorCode?: string; retryAt?: number } {
-    if (calls.length >= MAX_PREPARATION_ATTEMPT_HISTORY)
-        return { errorCode: "attempt_history_limit_reached" };
     const dispatched = calls.filter(
         (c) => preparationFailureClass(c) !== "not_dispatched",
     );
     const last = [...dispatched].sort((a, b) => b.attempt - a.attempt)[0];
-    if (!last) return { attempt: 1 };
+    if (!last)
+        return calls.length >= MAX_PREPARATION_ATTEMPT_HISTORY
+            ? { errorCode: "attempt_history_limit_reached" }
+            : { attempt: 1 };
     const kind = preparationFailureClass(last);
     if (kind === "succeeded") return { errorCode: "result_already_recorded" };
     if (kind === "unknown") return { errorCode: "attempt_outcome_unknown" };
     if (kind === "terminal")
         return { errorCode: last.errorCode ?? "terminal_failure" };
-    if (last.attempt >= initialAttempts + 1)
+    const modelOperation = [
+        "source_qualification",
+        "source_comparison",
+    ].includes(last.operation);
+    if (!modelOperation && last.attempt >= initialAttempts + 1)
         return { errorCode: "recovery_attempt_exhausted" };
     if ((last.retryAfterAt ?? 0) > now)
         return { errorCode: "recovery_cooldown", retryAt: last.retryAfterAt };
@@ -434,4 +521,6 @@ export const sourcePreparationStopCodeValidator = v.union(
     v.literal("transport_unavailable"),
     v.literal("request_invalid"),
     v.literal("model_attempt_limit_reached"),
+    v.literal("work_budget_exhausted"),
+    v.literal("incident_budget_exhausted"),
 );

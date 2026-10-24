@@ -288,7 +288,11 @@ test("valid uncertainty finishes without fallback and durable replay repeats no 
     expect(request).toHaveBeenCalledOnce();
 });
 
-test("compares an early attributed contribution after a later SEC capture is available", async () => {
+test.each([
+    "comparison",
+    "work_limit",
+] as const)("compares after the reading pass or reports its %s", async (mode) => {
+    if (mode === "work_limit") vi.stubEnv("SOURCE_PREPARATION_WORK_LIMIT", "3");
     vi.useFakeTimers();
     vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
     const targetText =
@@ -488,6 +492,16 @@ test("compares an early attributed contribution after a later SEC capture is ava
         all: true,
         verbatim: true,
     });
+    if (mode === "work_limit") {
+        expect(comparisonRequests).toHaveLength(0);
+        expect(await t.run((ctx) => ctx.db.get(preparationId))).toMatchObject({
+            stopCode: "work_budget_exhausted",
+        });
+        expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
+            sourcePreparationBudget: { work: 3, reserved: 0 },
+        });
+        return;
+    }
     expect(comparisonRequests).toHaveLength(1);
     const comparedInput = comparisonRequests[0];
     expect(comparedInput?.primaryPassages).toEqual(

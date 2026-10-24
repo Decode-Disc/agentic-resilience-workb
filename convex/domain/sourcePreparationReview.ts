@@ -1,7 +1,6 @@
 import type { DataModel, Doc, Id } from "@convex/_generated/dataModel";
 import {
     MAX_HISTORICAL_SOURCE_CANDIDATES,
-    MAX_PREPARATION_MODEL_ATTEMPTS,
     MAX_SUPPLEMENT_SEARCHES,
 } from "@convex/resourceLimits";
 import type { GenericDatabaseReader } from "convex/server";
@@ -18,13 +17,17 @@ import {
 import { readSupplementalSearchAttempts } from "./sourceDiscoveryRecovery";
 import {
     nextPreparationAttempt,
-    readPreparationModelAttempts,
+    preparationBudgetBlock,
+    preparationFailureCode,
+    readPreparationBudget,
+    readPreparationLimits,
     readPreparationSourceDecision,
     sourcePreparationError,
     type sourcePreparationOutcomeValidator,
 } from "./sourcePreparationAuthority";
 import { classifySourceCandidate } from "./sourceSelectionPolicy";
 import {
+    readComparisonHistory,
     readPinnedComparisonReview,
     readPinnedSourceQualification,
 } from "./sourceUsage";
@@ -266,10 +269,24 @@ export async function readPreparationRecovery(
         input.corpusRevisionId,
     );
     const run = await db.get(input.runId);
-    const modelBudgetExhausted =
-        run &&
-        (await readPreparationModelAttempts(db, run, input.preparation)) >=
-            MAX_PREPARATION_MODEL_ATTEMPTS;
+    let modelBudgetBlocked:
+        | ReturnType<typeof preparationBudgetBlock>
+        | "preparation_configuration_invalid";
+    try {
+        modelBudgetBlocked = run
+            ? preparationBudgetBlock(
+                  await readPreparationBudget(db, run, input.preparation),
+                  readPreparationLimits(),
+              )
+            : undefined;
+    } catch (error) {
+        if (
+            preparationFailureCode(error) !==
+            "preparation_configuration_invalid"
+        )
+            throw error;
+        modelBudgetBlocked = "preparation_configuration_invalid";
+    }
     const scope = input.preparation.readingSourceIds?.length
         ? input.preparation.readingSourceIds
         : input.preparation.manualSourceIds;
@@ -324,15 +341,11 @@ export async function readPreparationRecovery(
                 )
             )
                 continue;
-            const tasks = await db
-                .query("aiTaskResults")
-                .withIndex("by_source_and_task_type_and_created_at", (q) =>
-                    q
-                        .eq("sourceId", source._id)
-                        .eq("taskType", "source_comparison"),
-                )
-                .order("desc")
-                .take(121);
+            const tasks: Doc<"aiTaskResults">[] = [];
+            for await (const task of readComparisonHistory(db, {
+                sourceId: source._id,
+            }))
+                tasks.push(task);
             primaryContext ??= run
                 ? await readComparisonPrimaryContext(
                       db,
@@ -468,12 +481,12 @@ export async function readPreparationRecovery(
         if (
             plan.attempt &&
             !terminalReading &&
-            (!modelBudgetExhausted || canValidateRetainedComparison)
+            (!modelBudgetBlocked || canValidateRetainedComparison)
         )
             resumableSourceIds.push(source._id);
         else {
-            const reasonCode = modelBudgetExhausted
-                ? "model_attempt_limit_reached"
+            const reasonCode = modelBudgetBlocked
+                ? modelBudgetBlocked
                 : terminalReading
                   ? previousFailure
                   : (plan.errorCode ?? "terminal_failure");
@@ -523,7 +536,9 @@ export async function readPreparationRecovery(
             }
         }
     }
-    if (scope && resumableSourceIds.length === 0) {
+    const configurationUnavailable =
+        modelBudgetBlocked === "preparation_configuration_invalid";
+    if (scope && resumableSourceIds.length === 0 && !configurationUnavailable) {
         const original = preparations.find(
             (p) => !p.manualSourceIds && !p.target,
         );
@@ -537,12 +552,16 @@ export async function readPreparationRecovery(
         }
     }
     return {
-        resumableSourceIds,
+        resumableSourceIds: configurationUnavailable ? [] : resumableSourceIds,
         retainedOutcomes,
         scopePreparation: input.preparation,
-        hasSearchWork,
+        hasSearchWork: !configurationUnavailable && hasSearchWork,
         pendingComparisons,
         ...(retryAt !== undefined ? { retryAt } : {}),
-        ...(blockedReason ? { blockedReason } : {}),
+        ...(configurationUnavailable
+            ? { blockedReason: "preparation_configuration_invalid" }
+            : blockedReason
+              ? { blockedReason }
+              : {}),
     };
 }

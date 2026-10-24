@@ -21,7 +21,9 @@ import {
 } from "./domain/sourceDiscoveryRecovery";
 import { sourceLocatorValidator } from "./domain/sourcePassages";
 import {
+    preparationBudgetValidator,
     preparationDispatchOutcomeValidator,
+    preparationModelLimitsValidator,
     sourcePreparationOutcomeValidator,
     sourcePreparationProgressValidator,
     sourcePreparationStopCodeValidator,
@@ -162,6 +164,7 @@ export default defineSchema({
         workflowId: v.optional(v.string()),
         workflowVersion: v.optional(v.number()),
         sourceQualificationAttemptCount: v.optional(v.number()),
+        sourcePreparationBudget: v.optional(preparationBudgetValidator),
         sourceEmbeddingReservedBytes: v.optional(v.number()),
         sourceEmbeddingAttemptCount: v.optional(v.number()),
         sourcePreparationId: v.optional(
@@ -464,6 +467,7 @@ export default defineSchema({
         supplementClaimedQueryIndexes: v.optional(v.array(v.number())),
         supplementSourceIds: v.optional(v.array(v.id("sources"))),
         modelAttemptCount: v.optional(v.number()),
+        modelLimits: v.optional(preparationModelLimitsValidator),
         sourceOutcomes: v.optional(v.array(sourcePreparationOutcomeValidator)),
         stopCode: v.optional(sourcePreparationStopCodeValidator),
         executionGeneration: v.number(),

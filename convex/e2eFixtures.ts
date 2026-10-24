@@ -1,7 +1,6 @@
 import type { FunctionReference } from "convex/server";
 import { makeFunctionReference } from "convex/server";
 import { type Infer, v } from "convex/values";
-
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
@@ -25,6 +24,7 @@ import {
     extractPassagesFromNormalizedText,
     sha256Hex,
 } from "./domain/sourcePassages";
+import { readPreparationLimits } from "./domain/sourcePreparationAuthority";
 import {
     materializeQualificationOutput,
     prepareQualificationInput,
@@ -2277,6 +2277,9 @@ export const stageSourcePreparationRecoveryFixture = internalMutation({
         runId: v.id("researchRuns"),
         fixtureKey: v.string(),
         slotKey: v.string(),
+        exhaustedBudget: v.optional(
+            v.union(v.literal("work"), v.literal("incidents")),
+        ),
     },
     returns: sourceReviewFixtureResultValidator,
     handler: async (ctx, args) => {
@@ -2308,6 +2311,22 @@ export const stageSourcePreparationRecoveryFixture = internalMutation({
             preparation?.kind !== "preparation"
         )
             throw new Error("Owned recovery fixture is unavailable");
+        if (args.exhaustedBudget) {
+            const limits = readPreparationLimits();
+            const work = args.exhaustedBudget === "work" ? limits.work : 0;
+            const incidents =
+                args.exhaustedBudget === "incidents" ? limits.incidents : 0;
+            await ctx.db.patch(run._id, {
+                sourcePreparationBudget: {
+                    version: 1,
+                    work,
+                    incidents,
+                    reserved: 0,
+                    dispatches: work + incidents,
+                },
+                sourceQualificationAttemptCount: work + incidents,
+            });
+        }
         const sources = await ctx.db
             .query("sources")
             .withIndex("by_run_and_url", (q) => q.eq("runId", run._id))

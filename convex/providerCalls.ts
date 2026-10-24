@@ -13,15 +13,17 @@ import {
     assertPreparationExecutionFence,
     MAX_PREPARATION_ATTEMPT_HISTORY,
     nextPreparationAttempt,
+    preparationBudgetBlock,
+    preparationBudgetOutcome,
     preparationDispatchOutcomeValidator,
     preparationFailureClass,
-    readPreparationModelAttempts,
+    readPreparationBudget,
+    readPreparationLimits,
     sourcePreparationError,
 } from "./domain/sourcePreparationAuthority";
 import { rateLimiter } from "./rateLimiter";
 import {
     MAX_CONCURRENT_SOURCE_EMBEDDING_CALLS,
-    MAX_PREPARATION_MODEL_ATTEMPTS,
     MAX_SOURCE_EMBEDDING_ATTEMPTS,
     MAX_SOURCE_EMBEDDING_BATCH_TEXTS,
     MAX_SOURCE_EMBEDDING_INPUT_BYTES,
@@ -153,6 +155,7 @@ export const nextPreparationAttemptForInput = internalQuery({
                     .eq("operation", args.operation)
                     .eq("inputHash", args.inputHash),
             )
+            .order("desc")
             .take(MAX_PREPARATION_ATTEMPT_HISTORY);
         if (!args.operation.startsWith("source_")) {
             const legacy = await ctx.db
@@ -163,15 +166,31 @@ export const nextPreparationAttemptForInput = internalQuery({
                         .eq("sourceId", args.sourceId)
                         .eq("operation", args.operation),
                 )
+                .order("desc")
                 .take(MAX_PREPARATION_ATTEMPT_HISTORY);
             calls = [...calls, ...legacy.filter((c) => !c.inputHash)];
         }
-        return nextPreparationAttempt(
+        const plan = nextPreparationAttempt(
             calls,
             preparation,
             args.now,
             args.operation === "source_supplement_search" ? 1 : 2,
         );
+        if (
+            !plan.attempt ||
+            !["source_qualification", "source_comparison"].includes(
+                args.operation,
+            )
+        )
+            return plan;
+        const run = await ctx.db.get(preparation.runId);
+        if (!run) throw sourcePreparationError("stale_execution");
+        const blocked = preparationBudgetBlock(
+            await readPreparationBudget(ctx.db, run, preparation),
+            readPreparationLimits(preparation),
+        );
+        if (blocked) return { errorCode: blocked };
+        return plan;
     },
 });
 
@@ -217,7 +236,8 @@ export const recordAttempt = internalMutation({
                     "source_comparison",
                     "source_embedding",
                 ].includes(args.operation) ||
-                ![1, 2, 3].includes(args.attempt))
+                !Number.isSafeInteger(args.attempt) ||
+                args.attempt < 1)
         ) {
             throw sourcePreparationError(
                 args.operation === "source_comparison"
@@ -485,6 +505,7 @@ export const recordAttempt = internalMutation({
                             .eq("operation", args.operation)
                             .eq("inputHash", args.inputHash),
                     )
+                    .order("desc")
                     .take(MAX_PREPARATION_ATTEMPT_HISTORY);
                 if (args.operation === "source_supplement_search") {
                     const run = args.runId
@@ -522,6 +543,7 @@ export const recordAttempt = internalMutation({
                                 .eq("sourceId", args.sourceId)
                                 .eq("operation", args.operation),
                         )
+                        .order("desc")
                         .take(MAX_PREPARATION_ATTEMPT_HISTORY);
                     calls.push(...legacy.filter((c) => !c.inputHash));
                 }
@@ -597,26 +619,29 @@ export const recordAttempt = internalMutation({
             ) {
                 const preparation = await ctx.db.get(args.preparationId);
                 const run = args.runId ? await ctx.db.get(args.runId) : null;
-                const usedAttempts = run
-                    ? await readPreparationModelAttempts(
-                          ctx.db,
-                          run,
-                          preparation ?? undefined,
-                      )
-                    : 0;
-                if (
-                    !preparation ||
-                    !run ||
-                    usedAttempts >= MAX_PREPARATION_MODEL_ATTEMPTS ||
-                    (preparation.modelAttemptCount ?? 0) >=
-                        MAX_PREPARATION_MODEL_ATTEMPTS
-                )
-                    throw sourcePreparationError("model_attempt_limit_reached");
+                if (!preparation || !run)
+                    throw sourcePreparationError("stale_execution");
+                const budget = await readPreparationBudget(
+                    ctx.db,
+                    run,
+                    preparation,
+                );
+                const blocked = preparationBudgetBlock(
+                    budget,
+                    readPreparationLimits(preparation),
+                );
+                if (blocked) throw sourcePreparationError(blocked);
                 await ctx.db.patch(preparation._id, {
                     modelAttemptCount: (preparation.modelAttemptCount ?? 0) + 1,
+                    modelLimits: readPreparationLimits(preparation),
                 });
                 await ctx.db.patch(run._id, {
-                    sourceQualificationAttemptCount: usedAttempts + 1,
+                    sourceQualificationAttemptCount: budget.dispatches + 1,
+                    sourcePreparationBudget: {
+                        ...budget,
+                        reserved: budget.reserved + 1,
+                        dispatches: budget.dispatches + 1,
+                    },
                 });
             }
             const providerCallId = await ctx.db.insert("providerCalls", {
@@ -666,6 +691,57 @@ export const recordAttempt = internalMutation({
         );
         if (!existing) {
             throw new Error("Provider attempt was not started");
+        }
+        if (
+            args.service === "model" &&
+            args.preparationId &&
+            args.operation !== "source_embedding"
+        ) {
+            if (existing.status !== "started") {
+                if (
+                    existing.status !== args.status ||
+                    existing.errorCode !== args.errorCode
+                )
+                    throw sourcePreparationError("attempt_result_conflict");
+                return {
+                    providerCallId: existing._id,
+                    shouldExecute: false,
+                    status: existing.status,
+                };
+            }
+            const run = args.runId ? await ctx.db.get(args.runId) : null;
+            const preparation = await ctx.db.get(args.preparationId);
+            if (!run || !preparation)
+                throw sourcePreparationError("stale_execution");
+            const budget = await readPreparationBudget(
+                ctx.db,
+                run,
+                preparation,
+            );
+            const before = preparationBudgetOutcome(existing);
+            const after = preparationBudgetOutcome({
+                ...args,
+                dispatchOutcome:
+                    args.dispatchOutcome ??
+                    (["succeeded", "partial"].includes(args.status)
+                        ? "response_received"
+                        : undefined),
+            });
+            if (before !== "released") budget[before]--;
+            if (after !== "released") budget[after]++;
+            else {
+                budget.dispatches--;
+                await ctx.db.patch(preparation._id, {
+                    modelAttemptCount: Math.max(
+                        0,
+                        (preparation.modelAttemptCount ?? 0) - 1,
+                    ),
+                });
+            }
+            await ctx.db.patch(run._id, {
+                sourcePreparationBudget: budget,
+                sourceQualificationAttemptCount: budget.dispatches,
+            });
         }
         await ctx.db.patch(existing._id, {
             status: args.status,

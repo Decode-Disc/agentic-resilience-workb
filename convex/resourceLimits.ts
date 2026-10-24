@@ -110,7 +110,26 @@ export const MAX_QUOTATION_CHARS = 4000;
 export const MAX_REDIRECTS = 5;
 
 export const SOURCE_PREPARATION_DEADLINE_MS = 15 * 60_000;
-export const MAX_PREPARATION_MODEL_ATTEMPTS = 120;
+// Legacy envelope used only when reconstructing dossiers without versioned accounting.
+export const LEGACY_PREPARATION_MODEL_ATTEMPT_LIMIT = 120;
+
+/** Read at execution start so an explicit resume can adopt updated deployment limits. */
+export function preparationModelLimits() {
+    const read = (value: string | undefined, fallback: number) => {
+        if (value === undefined || value.trim() === "") return fallback;
+        const limit = Number(value);
+        if (!Number.isSafeInteger(limit) || limit < 1)
+            throw new Error(
+                "Preparation limits must be positive safe integers",
+            );
+        return limit;
+    };
+    const work = read(process.env.SOURCE_PREPARATION_WORK_LIMIT, 120);
+    const incidents = read(process.env.SOURCE_PREPARATION_INCIDENT_LIMIT, 40);
+    if (!Number.isSafeInteger(work + incidents))
+        throw new Error("Combined preparation limit must be a safe integer");
+    return { work, incidents };
+}
 export const MAX_SUPPLEMENT_SEARCHES = 3;
 export const MAX_SUPPLEMENT_CANDIDATES = 12;
 export const MAX_HISTORICAL_SOURCE_CANDIDATES = 60;

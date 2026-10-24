@@ -19,6 +19,7 @@ import {
     sha256Hex,
 } from "@convex/domain/sourcePassages";
 import {
+    preparationBudgetOutcome,
     preparationFailureCode,
     sourcePreparationError,
     sourcePreparationStopCodeValidator,
@@ -42,9 +43,14 @@ import {
 import { retrieveAndNormalizeSecFiling } from "@convex/integrations/secEvidence";
 import {
     compareSourceContributions,
+    type QualificationAttemptResult,
     qualifySourceDocument,
+    type SourceComparisonAttemptResult,
 } from "@convex/integrations/sourceQualification";
-import { sourceQualificationRoutes } from "@convex/integrations/sourceQualificationConfig";
+import {
+    type SourceQualificationRoute,
+    sourceQualificationRoutes,
+} from "@convex/integrations/sourceQualificationConfig";
 import type { FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -56,16 +62,151 @@ import {
     SOURCE_ROLE_REQUIREMENTS,
 } from "./domain/sourceSelectionPolicy";
 import { validateExaCandidates } from "./exaDiscoveryActions";
-import {
-    MAX_APPROVED_SOURCE_BYTES,
-    MAX_PREPARATION_MODEL_ATTEMPTS,
-} from "./resourceLimits";
+import { MAX_APPROVED_SOURCE_BYTES } from "./resourceLimits";
 import { requestPinnedPublicSource } from "./sourceActions";
 import {
     secFilingCandidate,
     selectSecFilingsForDiscovery,
 } from "./sourceDiscoveryActions";
 import { fetchExaSearch } from "./sourceSelectionProposalActions";
+
+type PreparationModelReceipt = {
+    latencyMs: number;
+    reportedCost?: number;
+    usage: unknown;
+};
+
+/** Owns dispatch admission, routes, finite automatic fallback and receipts for both real model tasks. */
+async function executePreparationModel<
+    Result extends QualificationAttemptResult | SourceComparisonAttemptResult,
+>(
+    ctx: ActionCtx,
+    input: {
+        preparation: Doc<"sourceSelectionProposalRebuilds">;
+        sourceId: Id<"sources">;
+        operation: "source_qualification" | "source_comparison";
+        inputHash: string;
+        validate?: () => Promise<void>;
+        execute: (
+            route: SourceQualificationRoute,
+            signal: AbortSignal,
+        ) => Promise<Result>;
+    },
+): Promise<
+    | {
+          result: Result;
+          providerCallId: Id<"providerCalls">;
+          receipt: PreparationModelReceipt;
+      }
+    | {
+          reasonCode: string;
+          providerCallId?: Id<"providerCalls">;
+          receipt?: PreparationModelReceipt;
+      }
+> {
+    const { preparation } = input;
+    let providerCallId: Id<"providerCalls"> | undefined;
+    let receipt: PreparationModelReceipt | undefined;
+    let firstAttempt: number | undefined;
+    while (true) {
+        const plan = await ctx.runQuery(
+            internal.providerCalls.nextPreparationAttemptForInput,
+            {
+                preparationId: preparation._id,
+                sourceId: input.sourceId,
+                operation: input.operation,
+                inputHash: input.inputHash,
+                now: Date.now(),
+            },
+        );
+        if (!plan.attempt)
+            return {
+                reasonCode: plan.errorCode ?? "preparation_unavailable",
+                providerCallId,
+                receipt,
+            };
+        firstAttempt ??= plan.attempt;
+        const automaticFallback = firstAttempt === 1 && plan.attempt === 2;
+        const route = sourceQualificationRoutes[automaticFallback ? 1 : 0];
+        await input.validate?.();
+        const attempt = {
+            inputHash: input.inputHash,
+            runId: preparation.runId,
+            corpusRevisionId: preparation.corpusRevisionId,
+            sourceId: input.sourceId,
+            preparationId: preparation._id,
+            executionGeneration: preparation.executionGeneration,
+            workflowVersion: preparation.workflowVersion,
+            stepKey: "source_preparation",
+            service: "model" as const,
+            operation: input.operation,
+            operationKey: `${preparation.operationKey}:step:${input.operation === "source_comparison" ? "source_comparison" : "source_preparation"}:input:${input.inputHash}:attempt:${plan.attempt}`,
+            attempt: plan.attempt,
+        };
+        const claimed = await ctx.runMutation(
+            internal.providerCalls.recordAttempt,
+            { ...attempt, status: "started" },
+        );
+        providerCallId = claimed.providerCallId;
+        if (!claimed.shouldExecute)
+            return {
+                reasonCode: claimed.errorCode ?? "attempt_already_recorded",
+                providerCallId,
+                receipt,
+            };
+        const result = await input.execute(
+            route,
+            AbortSignal.timeout(
+                Math.max(1, (preparation.deadlineAt ?? 0) - Date.now()),
+            ),
+        );
+        receipt = {
+            latencyMs: result.latencyMs,
+            reportedCost: result.reportedCost,
+            usage: {
+                model: result.model,
+                resolvedModel: result.resolvedModel,
+                provider: result.provider,
+                inputTokens: result.inputTokens,
+                outputTokens: result.outputTokens,
+                reasoningTokens: result.reasoningTokens,
+                cachedInputTokens: result.cachedInputTokens,
+                inputHash: input.inputHash,
+            },
+        };
+        if (result.status === "not_run") {
+            await ctx.runMutation(internal.providerCalls.recordAttempt, {
+                ...attempt,
+                ...receipt,
+                status: "failed",
+                errorCode: result.reason,
+                dispatchOutcome: "not_dispatched",
+                retryable: false,
+            });
+            return { result, providerCallId, receipt };
+        }
+        await ctx.runMutation(internal.providerCalls.recordAttempt, {
+            ...attempt,
+            ...receipt,
+            status: result.status,
+            dispatchOutcome: result.dispatchOutcome,
+            httpStatus: result.httpStatus,
+            retryAfterAt: result.retryAfterAt,
+            ...(result.status === "failed"
+                ? { errorCode: result.errorCode, retryable: result.retryable }
+                : {}),
+        });
+        if (result.status === "succeeded")
+            return { result, providerCallId, receipt };
+        if (
+            firstAttempt !== 1 ||
+            plan.attempt !== 1 ||
+            !result.retryable ||
+            preparationBudgetOutcome(result) === "reserved"
+        )
+            return { reasonCode: result.errorCode, providerCallId, receipt };
+    }
+}
 
 /** Shares authorization, pinned public transport and aggregate throttling for every preparation SEC request. */
 function preparationSecResolver(
@@ -519,140 +660,53 @@ export const qualifySource = internalAction({
                     reasonCode: "missing_configuration",
                 };
 
-            let reasonCode = "qualification_unavailable";
-            const attemptPlan = await ctx.runQuery(
-                internal.providerCalls.nextPreparationAttemptForInput,
-                {
-                    preparationId: args.preparationId,
-                    sourceId: source._id,
-                    operation: "source_qualification",
-                    inputHash: prepared.inputHash,
-                    now: Date.now(),
-                },
-            );
-            if (!attemptPlan.attempt)
+            const outcome = await executePreparationModel(ctx, {
+                preparation,
+                sourceId: source._id,
+                operation: "source_qualification",
+                inputHash: prepared.inputHash,
+                execute: (route, signal) =>
+                    qualifySourceDocument(prepared, route, {
+                        apiKey: process.env.OPENROUTER_API_KEY ?? "",
+                        signal,
+                    }),
+            });
+            if ("reasonCode" in outcome)
                 return {
                     status: "unavailable",
-                    reasonCode:
-                        attemptPlan.errorCode ?? "qualification_unavailable",
+                    reasonCode: outcome.reasonCode,
                 };
-            for (
-                let index = attemptPlan.attempt - 1;
-                index < (attemptPlan.attempt === 3 ? 3 : 2);
-                index++
-            ) {
-                const route = sourceQualificationRoutes[index === 1 ? 1 : 0];
-                const attempt = {
+            if (outcome.result.status !== "succeeded")
+                throw sourcePreparationError("qualification_unavailable");
+            const taskId = await ctx.runMutation(
+                internal.sourcePreparation.saveQualification,
+                {
+                    ...args,
+                    receipt: outcome.receipt,
+                    providerCallId: outcome.providerCallId,
                     inputHash: prepared.inputHash,
-                    runId: capture.runId,
-                    corpusRevisionId: preparation.corpusRevisionId,
-                    sourceId: source._id,
-                    preparationId: args.preparationId,
-                    executionGeneration: preparation.executionGeneration,
-                    workflowVersion: preparation.workflowVersion,
-                    stepKey: "source_preparation",
-                    service: "model" as const,
-                    operation: "source_qualification",
-                    operationKey: `${preparation.operationKey}:step:source_preparation:input:${prepared.inputHash}:attempt:${index + 1}`,
-                    attempt: index + 1,
-                };
-                const claimed = await ctx.runMutation(
-                    internal.providerCalls.recordAttempt,
-                    { ...attempt, status: "started" },
-                );
-                if (!claimed.shouldExecute) {
-                    if (
-                        index === 0 &&
-                        claimed.status === "failed" &&
-                        claimed.retryable === true
-                    )
-                        continue;
-                    return {
-                        status: "unavailable",
-                        reasonCode:
-                            claimed.errorCode ?? "attempt_already_recorded",
-                    };
-                }
-                const result = await qualifySourceDocument(prepared, route, {
-                    apiKey: process.env.OPENROUTER_API_KEY,
-                    signal: AbortSignal.timeout(
-                        Math.max(1, (preparation.deadlineAt ?? 0) - Date.now()),
+                    qualification: outcome.result.qualification,
+                    readingCompleteness:
+                        capture.readingCompleteness === "partial"
+                            ? "partial"
+                            : prepared.readingCompleteness,
+                    omittedPassageCount: Math.max(
+                        capture.omittedPassageCount ?? 0,
+                        prepared.omittedPassageCount,
                     ),
-                });
-                const receipt = {
-                    latencyMs: result.latencyMs,
-                    reportedCost: result.reportedCost,
-                    usage: {
-                        model: result.model,
-                        resolvedModel: result.resolvedModel,
-                        provider: result.provider,
-                        inputTokens: result.inputTokens,
-                        outputTokens: result.outputTokens,
-                        reasoningTokens: result.reasoningTokens,
-                        cachedInputTokens: result.cachedInputTokens,
-                        inputHash: prepared.inputHash,
-                    },
-                };
-                if (result.status === "succeeded") {
-                    try {
-                        const taskId = await ctx.runMutation(
-                            internal.sourcePreparation.saveQualification,
-                            {
-                                ...args,
-                                receipt,
-                                providerCallId: claimed.providerCallId,
-                                inputHash: prepared.inputHash,
-                                qualification: result.qualification,
-                                readingCompleteness:
-                                    capture.readingCompleteness === "partial"
-                                        ? "partial"
-                                        : prepared.readingCompleteness,
-                                omittedPassageCount: Math.max(
-                                    capture.omittedPassageCount ?? 0,
-                                    prepared.omittedPassageCount,
-                                ),
-                                ...(prepared.request.retrieval
-                                    ? { retrieval: prepared.request.retrieval }
-                                    : {}),
-                                selectedPassages:
-                                    prepared.request.document.passages.map(
-                                        (passage) => ({
-                                            passageKey: passage.passageKey,
-                                            startOffset: passage.startOffset,
-                                            endOffset: passage.endOffset,
-                                        }),
-                                    ),
-                            },
-                        );
-                        return { status: "qualified", taskId };
-                    } catch (error) {
-                        await ctx.runMutation(
-                            internal.providerCalls.recordAttempt,
-                            { ...attempt, ...receipt, status: "succeeded" },
-                        );
-                        throw error;
-                    }
-                }
-                await ctx.runMutation(internal.providerCalls.recordAttempt, {
-                    ...attempt,
-                    ...receipt,
-                    status: "failed",
-                    errorCode: result.errorCode,
-                    retryable: result.retryable,
-                    dispatchOutcome: result.dispatchOutcome,
-                    httpStatus: result.httpStatus,
-                    retryAfterAt: result.retryAfterAt,
-                });
-                reasonCode = result.errorCode;
-                if (!result.retryable || result.errorCode === "cancelled")
-                    break;
-                await ctx.runQuery(internal.sourcePreparation.getForExecution, {
-                    preparationId: args.preparationId,
-                    sourceId: source._id,
-                    now: Date.now(),
-                });
-            }
-            return { status: "unavailable", reasonCode };
+                    ...(prepared.request.retrieval
+                        ? { retrieval: prepared.request.retrieval }
+                        : {}),
+                    selectedPassages: prepared.request.document.passages.map(
+                        (passage) => ({
+                            passageKey: passage.passageKey,
+                            startOffset: passage.startOffset,
+                            endOffset: passage.endOffset,
+                        }),
+                    ),
+                },
+            );
+            return { status: "qualified", taskId };
         } catch (error) {
             const reasonCode = preparationFailureCode(error);
             if (!reasonCode) throw error;
@@ -717,9 +771,7 @@ export const compareSource = internalAction({
                 },
             );
             comparisonContextHash = input.comparisonContextHash;
-            const modelBudgetExhausted =
-                (input.run.sourceQualificationAttemptCount ?? 0) >=
-                MAX_PREPARATION_MODEL_ATTEMPTS;
+            const modelBudgetExhausted = input.modelBudgetBlocked;
             if (!input.targetCapture.storageId)
                 throw sourcePreparationError("capture_unavailable");
             const targetBlob = await ctx.storage.get(
@@ -1046,196 +1098,83 @@ export const compareSource = internalAction({
                     now: Date.now(),
                 },
             );
-            let terminalStatus: SourceComparisonCheckStatus =
-                "provider_unavailable";
-            let terminalReason = "transport_unavailable";
-            let terminalCallId: Id<"providerCalls"> | undefined;
-            let terminalReceipt:
-                | {
-                      latencyMs: number;
-                      usage: unknown;
-                      reportedCost?: number;
-                  }
-                | undefined;
-            const attemptPlan = await ctx.runQuery(
-                internal.providerCalls.nextPreparationAttemptForInput,
-                {
-                    preparationId: args.preparationId,
-                    sourceId: input.targetSource._id,
-                    operation: "source_comparison",
-                    inputHash: prepared.inputHash,
-                    now: Date.now(),
-                },
-            );
-            if (!attemptPlan.attempt)
-                return {
-                    status: "unavailable",
-                    reasonCode:
-                        attemptPlan.errorCode ?? "comparison_unavailable",
-                };
-            for (
-                let index = attemptPlan.attempt - 1;
-                index < (attemptPlan.attempt === 3 ? 3 : 2);
-                index++
-            ) {
-                const route = sourceQualificationRoutes[index === 1 ? 1 : 0];
-                const attempt = {
-                    inputHash: prepared.inputHash,
-                    runId: input.run._id,
-                    corpusRevisionId: input.revision._id,
-                    sourceId: input.targetSource._id,
-                    preparationId: args.preparationId,
-                    executionGeneration: preparation.executionGeneration,
-                    workflowVersion: preparation.workflowVersion,
-                    stepKey: "source_preparation",
-                    service: "model" as const,
-                    operation: "source_comparison",
-                    operationKey: `${preparation.operationKey}:step:source_comparison:input:${prepared.inputHash}:attempt:${index + 1}`,
-                    attempt: index + 1,
-                };
-                const current = await ctx.runQuery(
-                    internal.sourcePreparation.validateComparisonAuthority,
-                    {
-                        ...args,
-                        qualificationTaskId: input.qualificationTask._id,
-                        primaryCaptures: prepared.request.primarySources.map(
-                            (source) => ({
-                                sourceId: source.sourceId as Id<"sources">,
-                                captureId:
-                                    source.captureId as Id<"sourceCaptures">,
-                                contentHash: source.contentHash,
-                            }),
-                        ),
-                        now: Date.now(),
-                    },
-                );
-                if (!current) throw sourcePreparationError("stale_execution");
-                let claimed: FunctionReturnType<
-                    typeof internal.providerCalls.recordAttempt
-                >;
-                try {
-                    claimed = await ctx.runMutation(
-                        internal.providerCalls.recordAttempt,
-                        { ...attempt, status: "started" },
-                    );
-                } catch (error) {
-                    const failure = preparationFailureCode(error);
-                    if (!failure) throw error;
-                    terminalReason = failure;
-                    break;
-                }
-                terminalCallId = claimed.providerCallId;
-                if (!claimed.shouldExecute) {
-                    terminalReason =
-                        claimed.errorCode ?? "attempt_already_recorded";
-                    if (
-                        index === 0 &&
-                        claimed.status === "failed" &&
-                        claimed.retryable === true
-                    )
-                        continue;
-                    break;
-                }
-                const result = await compareSourceContributions(
-                    prepared,
-                    route,
-                    {
-                        apiKey: process.env.OPENROUTER_API_KEY,
-                        signal: AbortSignal.timeout(
-                            Math.max(
-                                1,
-                                (preparation.deadlineAt ?? 0) - Date.now(),
-                            ),
-                        ),
-                    },
-                );
-                const receipt = {
-                    latencyMs: result.latencyMs,
-                    reportedCost: result.reportedCost,
-                    usage: {
-                        model: result.model,
-                        resolvedModel: result.resolvedModel,
-                        provider: result.provider,
-                        inputTokens: result.inputTokens,
-                        outputTokens: result.outputTokens,
-                        reasoningTokens: result.reasoningTokens,
-                        cachedInputTokens: result.cachedInputTokens,
-                        inputHash: prepared.inputHash,
-                    },
-                };
-                terminalReceipt = receipt;
-                if (result.status === "succeeded") {
-                    try {
-                        const taskId = await persist({
+            const outcome = await executePreparationModel(ctx, {
+                preparation,
+                sourceId: input.targetSource._id,
+                operation: "source_comparison",
+                inputHash: prepared.inputHash,
+                validate: async () => {
+                    const current = await ctx.runQuery(
+                        internal.sourcePreparation.validateComparisonAuthority,
+                        {
                             ...args,
                             qualificationTaskId: input.qualificationTask._id,
-                            inputHash: prepared.inputHash,
-                            output: result.output,
-                            providerCallId: claimed.providerCallId,
-                            receipt,
-                        });
-                        return { status: "compared", taskId };
-                    } catch (error) {
-                        await ctx.runMutation(
-                            internal.providerCalls.recordAttempt,
-                            { ...attempt, ...receipt, status: "succeeded" },
-                        );
-                        throw error;
-                    }
-                }
-                if (result.status === "not_run") {
-                    await ctx.runMutation(
-                        internal.providerCalls.recordAttempt,
-                        {
-                            ...attempt,
-                            status: "failed",
-                            errorCode: "no_comparable_primary_evidence",
-                            retryable: false,
-                            latencyMs: result.latencyMs,
+                            primaryCaptures:
+                                prepared.request.primarySources.map(
+                                    (source) => ({
+                                        sourceId:
+                                            source.sourceId as Id<"sources">,
+                                        captureId:
+                                            source.captureId as Id<"sourceCaptures">,
+                                        contentHash: source.contentHash,
+                                    }),
+                                ),
+                            now: Date.now(),
                         },
                     );
-                    terminalCallId = undefined;
-                    const taskId = await persist({
-                        ...args,
-                        qualificationTaskId: input.qualificationTask._id,
-                        inputHash: prepared.inputHash,
-                        output: result.output,
-                    });
-                    return { status: "not_run", taskId };
-                }
-                await ctx.runMutation(internal.providerCalls.recordAttempt, {
-                    ...attempt,
-                    ...receipt,
-                    status: "failed",
-                    errorCode: result.errorCode,
-                    retryable: result.retryable,
-                    dispatchOutcome: result.dispatchOutcome,
-                    httpStatus: result.httpStatus,
-                    retryAfterAt: result.retryAfterAt,
+                    if (!current)
+                        throw sourcePreparationError("stale_execution");
+                },
+                execute: (route, signal) =>
+                    compareSourceContributions(prepared, route, {
+                        apiKey: process.env.OPENROUTER_API_KEY ?? "",
+                        signal,
+                    }),
+            });
+            if (!("reasonCode" in outcome)) {
+                if (outcome.result.status === "failed")
+                    throw sourcePreparationError("comparison_unavailable");
+                const taskId = await persist({
+                    ...args,
+                    qualificationTaskId: input.qualificationTask._id,
+                    inputHash: prepared.inputHash,
+                    output: outcome.result.output,
+                    ...(outcome.result.status === "succeeded"
+                        ? {
+                              providerCallId: outcome.providerCallId,
+                              receipt: outcome.receipt,
+                          }
+                        : {}),
                 });
-                terminalReason = result.errorCode;
-                terminalStatus =
-                    result.errorCode === "invalid_output"
-                        ? "invalid_output"
-                        : "provider_unavailable";
-                if (!result.retryable || result.errorCode === "cancelled")
-                    break;
+                return {
+                    status:
+                        outcome.result.status === "not_run"
+                            ? "not_run"
+                            : "compared",
+                    taskId,
+                };
             }
-            if (terminalReason === "cancelled")
+            if (outcome.reasonCode === "cancelled")
                 throw sourcePreparationError("stale_execution");
-            const output = makeTerminalOutput(prepared, terminalStatus);
             const taskId = await persist({
                 ...args,
                 qualificationTaskId: input.qualificationTask._id,
                 inputHash: prepared.inputHash,
-                output,
-                ...(terminalCallId ? { providerCallId: terminalCallId } : {}),
-                ...(terminalReceipt ? { receipt: terminalReceipt } : {}),
+                output: makeTerminalOutput(
+                    prepared,
+                    outcome.reasonCode === "invalid_output"
+                        ? "invalid_output"
+                        : "provider_unavailable",
+                ),
+                ...(outcome.providerCallId
+                    ? { providerCallId: outcome.providerCallId }
+                    : {}),
+                ...(outcome.receipt ? { receipt: outcome.receipt } : {}),
             });
             return {
                 status: "unavailable",
                 taskId,
-                reasonCode: terminalReason,
+                reasonCode: outcome.reasonCode,
             };
         } catch (error) {
             const reasonCode = preparationFailureCode(error);

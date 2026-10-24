@@ -182,6 +182,66 @@ function recoveryReview(
     return { ...view, proposalSnapshot };
 }
 
+test.each([
+    true,
+    false,
+])("unavailable preparation settings preserve review with saved readings: %s", (prepared) => {
+    const view = recoveryReview(
+        undefined,
+        proposalSource,
+        prepared
+            ? {
+                  status: "partial",
+                  checked: 1,
+                  total: 1,
+                  captured: 1,
+                  assessed: 1,
+                  failed: 0,
+                  remaining: 0,
+                  canResume: false,
+              }
+            : undefined,
+    );
+    convexReactHarness.query(api.sourceSelectionProposals.getCurrent).returns({
+        ...view.proposalSnapshot,
+        preparationAction: {
+            kind: "resume",
+            available: false,
+            reason: "configuration_unavailable",
+        },
+    });
+    view.rerender(
+        <LiveSourceReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            onDecide={vi.fn()}
+        />,
+    );
+    expect(
+        screen.getByText(
+            "Preparation is currently unavailable. You can still review the available sources and your source decisions.",
+        ),
+    ).toBeTruthy();
+    expect(
+        screen.queryByRole("button", { name: "Resume preparation" }),
+    ).toBeNull();
+    expect(screen.getAllByText(proposalSource.title).length).toBeGreaterThan(0);
+    if (!prepared)
+        expect(
+            screen
+                .getByRole("button", { name: "Prepare source reading" })
+                .hasAttribute("disabled"),
+        ).toBe(true);
+    expect(
+        screen
+            .getByRole("button", { name: "Approve proposed corpus" })
+            .hasAttribute("disabled"),
+    ).toBe(false);
+    expect(document.body.textContent).not.toMatch(
+        /configuration_unavailable|preparation_configuration_invalid|SOURCE_PREPARATION_/,
+    );
+});
+
 test("starts source reading explicitly from a current draft using its native preparation result", async () => {
     prepare.mockResolvedValue({
         preparationId: "preparation-1",

@@ -89,7 +89,7 @@ export const run = workflow
                             },
                         );
                     for (let offset = 0; offset < targets.length; offset += 2) {
-                        await Promise.all(
+                        const outcomes = await Promise.all(
                             targets.slice(offset, offset + 2).map((target) =>
                                 step.runAction(
                                     internal.sourcePreparationActions
@@ -103,6 +103,18 @@ export const run = workflow
                                     { retry: false },
                                 ),
                             ),
+                        );
+                        await step.runMutation(
+                            internal.sourcePreparation.recordComparisonResults,
+                            {
+                                ...args,
+                                failures: outcomes.flatMap((outcome) =>
+                                    outcome.status === "unavailable" &&
+                                    outcome.reasonCode
+                                        ? [outcome.reasonCode]
+                                        : [],
+                                ),
+                            },
                         );
                         if (batch.progressEnabled)
                             await step.runMutation(

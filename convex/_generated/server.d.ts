@@ -37,6 +37,8 @@ type Env = {
   readonly OPENROUTER_API_KEY: string | undefined;
   readonly PREVIEW_CACHE_TTL_MS: string | undefined;
   readonly SOURCE_CANDIDATE_LIMIT: string | undefined;
+  readonly SOURCE_PREPARATION_INCIDENT_LIMIT: string | undefined;
+  readonly SOURCE_PREPARATION_WORK_LIMIT: string | undefined;
   readonly SOURCE_QUALIFICATION_ENABLED: string | undefined;
   readonly SOURCE_RECOMMENDATION_CEILING: string | undefined;
   readonly SOURCE_RETRIEVAL_MODE: "lexical" | "hybrid" | undefined;

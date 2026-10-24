@@ -2,6 +2,26 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { expect, test, vi } from "vitest";
 import { SourcePreparationStatus } from "@/components/workspace/source-preparation-status";
+import { sourcePreparationActionCopy } from "@/lib/presentation/research-copy";
+
+test.each([
+    ["work_budget_exhausted", "The source reading allowance has been used."],
+    [
+        "incident_budget_exhausted",
+        "Preparation stopped after repeated service failures.",
+    ],
+] as const)("explains %s without internal details or promising an unavailable retry", (reason, expected) => {
+    const copy = sourcePreparationActionCopy({
+        kind: "resume",
+        available: false,
+        reason,
+    });
+    expect(copy).toContain(expected);
+    expect(copy).toContain("Review the saved readings and original sources");
+    expect(copy).not.toMatch(
+        /budget_exhausted|provider|SOURCE_|Resume preparation|add a public source/i,
+    );
+});
 
 const preparation: ComponentProps<
     typeof SourcePreparationStatus
@@ -23,6 +43,21 @@ const preparation: ComponentProps<
     canResume: false,
     progress: { phase: "comparison", current: 0, total: 41, updatedAt: 1000 },
 };
+
+test("unavailable preparation configuration keeps saved readings actionable without internal diagnostics", () => {
+    const copy = sourcePreparationActionCopy({
+        kind: "resume",
+        available: false,
+        reason: "configuration_unavailable",
+    });
+    expect(copy).toContain("Preparation is currently unavailable.");
+    expect(copy).toContain(
+        "review the available sources and your source decisions",
+    );
+    expect(copy).not.toMatch(
+        /configuration|SOURCE_|preparation_configuration_invalid|Resume preparation/,
+    );
+});
 
 test("updates comparison progress instead of leaving the finished reading bar full", () => {
     const view = render(

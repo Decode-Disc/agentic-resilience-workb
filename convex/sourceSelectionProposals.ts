@@ -33,7 +33,11 @@ import {
     recoverySearchPlan,
     recoveryTargetValidator,
 } from "./domain/sourceDiscoveryRecovery";
-import { sourcePreparationStopCodeValidator } from "./domain/sourcePreparationAuthority";
+import {
+    preparationFailureCode,
+    readPreparationLimits,
+    sourcePreparationStopCodeValidator,
+} from "./domain/sourcePreparationAuthority";
 import {
     readPreparationHistory,
     readPreparationRecovery,
@@ -51,7 +55,10 @@ import {
     type SourceSelectionCandidate,
     sourceRoleAvailabilityValidator,
 } from "./domain/sourceSelectionPolicy";
-import { readPinnedComparisonReview } from "./domain/sourceUsage";
+import {
+    readComparisonHistory,
+    readPinnedComparisonReview,
+} from "./domain/sourceUsage";
 import { canStartNewCorpusRevision } from "./domain/transitions";
 import {
     MAX_SUPPLEMENT_SEARCHES,
@@ -507,23 +514,17 @@ async function readComparisonTaskIds(
     captureId: Id<"sourceCaptures">,
     contentHash: string,
 ) {
-    const tasks = await ctx.db
-        .query("aiTaskResults")
-        .withIndex("by_source_and_task_type_and_created_at", (query) =>
-            query.eq("sourceId", sourceId).eq("taskType", "source_comparison"),
-        )
-        .order("asc")
-        .take(121);
-    if (tasks.length > 120)
-        throw new Error("Source comparison history exceeds its limit");
-    const matching = tasks.filter(
-        (task) =>
+    const ids: Id<"aiTaskResults">[] = [];
+    for await (const task of readComparisonHistory(ctx.db, { sourceId })) {
+        if (
             task.schemaVersion === SOURCE_COMPARISON_VERSION &&
             task.output.kind === "source_comparison" &&
             task.output.targetCaptureId === captureId &&
-            task.output.targetContentHash === contentHash,
-    );
-    return matching.map((task) => task._id);
+            task.output.targetContentHash === contentHash
+        )
+            ids.push(task._id);
+    }
+    return ids.reverse();
 }
 
 function isIncluded(
@@ -1014,8 +1015,11 @@ export const getCurrent = query({
                             v.literal("complete"),
                             v.literal("cooldown"),
                             v.literal("attempts_exhausted"),
+                            v.literal("work_budget_exhausted"),
+                            v.literal("incident_budget_exhausted"),
                             v.literal("outcome_unknown"),
                             v.literal("no_eligible_work"),
+                            v.literal("configuration_unavailable"),
                         ),
                     ),
                     deadlineAt: v.optional(v.number()),
@@ -1154,37 +1158,60 @@ export const getCurrent = query({
                 recoveryPlan.pendingComparisons;
             preparationSummary.status = "partial";
         }
+        let configurationUnavailable =
+            recoveryPlan?.blockedReason === "preparation_configuration_invalid";
+        if (!recoveryPlan) {
+            try {
+                readPreparationLimits();
+            } catch (error) {
+                if (
+                    preparationFailureCode(error) !==
+                    "preparation_configuration_invalid"
+                )
+                    throw error;
+                configurationUnavailable = true;
+            }
+        }
         const preparationActionReason =
             revision.status !== "draft"
                 ? ("read_only" as const)
                 : !sourcePreparationEnabled()
                   ? ("disabled" as const)
-                  : (run.executionStatus !== "paused" && !expiredReview) ||
-                      running.some(
-                          (item) => item._id !== run._id || !expiredReview,
-                      )
-                    ? ("busy" as const)
-                    : recoveryPlan &&
-                        recoveryPlan.resumableSourceIds.length === 0 &&
-                        !recoveryPlan.hasSearchWork &&
-                        recoveryPlan.blockedReason
-                      ? recoveryPlan.retryAt !== undefined
-                          ? ("cooldown" as const)
-                          : [
-                                  "recovery_attempt_exhausted",
-                                  "model_attempt_limit_reached",
-                              ].includes(recoveryPlan.blockedReason)
-                            ? ("attempts_exhausted" as const)
+                  : configurationUnavailable
+                    ? ("configuration_unavailable" as const)
+                    : (run.executionStatus !== "paused" && !expiredReview) ||
+                        running.some(
+                            (item) => item._id !== run._id || !expiredReview,
+                        )
+                      ? ("busy" as const)
+                      : recoveryPlan &&
+                          recoveryPlan.resumableSourceIds.length === 0 &&
+                          !recoveryPlan.hasSearchWork &&
+                          recoveryPlan.blockedReason
+                        ? recoveryPlan.retryAt !== undefined
+                            ? ("cooldown" as const)
                             : recoveryPlan.blockedReason ===
-                                "attempt_outcome_unknown"
-                              ? ("outcome_unknown" as const)
-                              : ("no_eligible_work" as const)
-                      : preparationSummary &&
-                          unresolvedSourceIds.size === 0 &&
-                          !recoveryPlan?.resumableSourceIds.length &&
-                          !recoveryPlan?.hasSearchWork
-                        ? ("complete" as const)
-                        : undefined;
+                                    "work_budget_exhausted" ||
+                                recoveryPlan.blockedReason ===
+                                    "incident_budget_exhausted"
+                              ? (recoveryPlan.blockedReason as
+                                    | "work_budget_exhausted"
+                                    | "incident_budget_exhausted")
+                              : [
+                                      "recovery_attempt_exhausted",
+                                      "model_attempt_limit_reached",
+                                  ].includes(recoveryPlan.blockedReason)
+                                ? ("attempts_exhausted" as const)
+                                : recoveryPlan.blockedReason ===
+                                    "attempt_outcome_unknown"
+                                  ? ("outcome_unknown" as const)
+                                  : ("no_eligible_work" as const)
+                        : preparationSummary &&
+                            unresolvedSourceIds.size === 0 &&
+                            !recoveryPlan?.resumableSourceIds.length &&
+                            !recoveryPlan?.hasSearchWork
+                          ? ("complete" as const)
+                          : undefined;
         const preparationAction = {
             kind: preparationSummary ? ("resume" as const) : ("start" as const),
             available: preparationActionReason === undefined,

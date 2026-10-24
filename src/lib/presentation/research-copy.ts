@@ -946,12 +946,18 @@ export function sourcePreparationActionCopy(
     switch (action?.reason) {
         case "disabled":
             return "Source reading is currently unavailable.";
+        case "configuration_unavailable":
+            return "Preparation is currently unavailable. You can still review the available sources and your source decisions.";
         case "busy":
             return "Wait for the running preparation to finish before continuing.";
         case "read_only":
             return "This source set is approved and read-only.";
         case "cooldown":
             return "Preparation can be tried again shortly. Saved material and your source decisions are preserved.";
+        case "work_budget_exhausted":
+            return "The source reading allowance has been used. Review the saved readings and original sources before approving this source set with its limitations.";
+        case "incident_budget_exhausted":
+            return "Preparation stopped after repeated service failures. Review the saved readings and original sources before approving this source set with its limitations.";
         case "attempts_exhausted":
             return "The available attempts for the remaining work have been used. Review the saved readings and originals, or add a public source.";
         case "outcome_unknown":

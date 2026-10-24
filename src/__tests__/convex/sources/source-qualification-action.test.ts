@@ -270,7 +270,16 @@ test("a fresh preparation cannot reset the dossier model-attempt allowance", asy
         await capturedCandidate();
     vi.stubEnv("OPENROUTER_API_KEY", "test-key");
     await t.run((ctx) =>
-        ctx.db.patch(runId, { sourceQualificationAttemptCount: 120 }),
+        ctx.db.patch(runId, {
+            sourceQualificationAttemptCount: 120,
+            sourcePreparationBudget: {
+                version: 1,
+                work: 120,
+                incidents: 0,
+                reserved: 0,
+                dispatches: 120,
+            },
+        }),
     );
     const request = vi.fn<typeof fetch>(async () => success());
     vi.stubGlobal("fetch", request);
@@ -281,7 +290,7 @@ test("a fresh preparation cannot reset the dossier model-attempt allowance", asy
         }),
     ).toMatchObject({
         status: "unavailable",
-        reasonCode: "model_attempt_limit_reached",
+        reasonCode: "work_budget_exhausted",
     });
     expect(request).not.toHaveBeenCalled();
 });
@@ -635,7 +644,10 @@ test("concurrent explicit recovery permits one further model attempt and reuses 
     });
 });
 
-test("the review cannot offer recovery after the cumulative model allowance is exhausted", async () => {
+test.each([
+    "work",
+    "incidents",
+] as const)("the review and mutation block an exhausted %s allowance", async (kind) => {
     const { api } = await import("@convex/_generated/api");
     const {
         t,
@@ -667,9 +679,17 @@ test("the review cannot offer recovery after the cumulative model allowance is e
             lifecycleState: "awaiting_source_review",
             executionStatus: "paused",
             pauseReason: "source_review",
-            sourceQualificationAttemptCount: 120,
+            sourceQualificationAttemptCount: kind === "work" ? 120 : 40,
+            sourcePreparationBudget: {
+                version: 1,
+                work: kind === "work" ? 120 : 0,
+                incidents: kind === "incidents" ? 40 : 0,
+                reserved: 0,
+                dispatches: kind === "work" ? 120 : 40,
+            },
         }),
     );
+    const before = await t.run((ctx) => ctx.db.get(runId));
     const current = await t
         .withIdentity({ subject: userId })
         .query(api.sourceSelectionProposals.getCurrent, {
@@ -678,15 +698,36 @@ test("the review cannot offer recovery after the cumulative model allowance is e
         });
     expect(current?.preparationAction).toMatchObject({
         available: false,
-        reason: "attempts_exhausted",
+        reason:
+            kind === "work"
+                ? "work_budget_exhausted"
+                : "incident_budget_exhausted",
     });
+    if (!current) throw new Error("Missing proposal");
+    expect(
+        await t
+            .withIdentity({ subject: userId })
+            .mutation(api.sourcePreparation.startForReview, {
+                runId,
+                corpusRevisionId,
+                expectedProposalId: current.proposalId,
+                requestId: "exhausted-budget",
+            }),
+    ).toMatchObject({
+        status: "blocked",
+        reason:
+            kind === "work"
+                ? "work_budget_exhausted"
+                : "incident_budget_exhausted",
+    });
+    expect(await t.run((ctx) => ctx.db.get(runId))).toEqual(before);
 });
 
 test.each([
     "transport",
     "invalid_output",
     "legacy_unknown",
-] as const)("%s recovery cannot be renewed by another request or generation", async (mode) => {
+] as const)("%s recovery preserves accounting across repeated explicit executions", async (mode) => {
     vi.useFakeTimers();
     const { api } = await import("@convex/_generated/api");
     const { default: workflowTest } = await import(
@@ -813,24 +854,26 @@ test.each([
         preparationId: resumed.preparationId,
         expectedExecutionGeneration: 4,
     });
-    expect(
-        await owned.mutation(api.sourcePreparation.startForReview, {
-            ...args,
-            expectedProposalId: latest.proposalId,
-            requestId: "another-click-cannot-renew",
-        }),
-    ).toMatchObject({ status: "blocked" });
-    expect(
-        (
-            await owned.query(api.sourceSelectionProposals.getCurrent, {
-                runId,
-                corpusRevisionId,
-            })
-        )?.preparationAction,
-    ).toMatchObject({ available: false, reason: "attempts_exhausted" });
-    expect(request).toHaveBeenCalledTimes(3);
+    vi.setSystemTime(Date.now() + 15_001);
+    const again = await owned.mutation(api.sourcePreparation.startForReview, {
+        ...args,
+        expectedProposalId: latest.proposalId,
+        requestId: "another-explicit-recovery",
+    });
+    expect(again.status).toBe("started");
+    await t.action(internal.sourcePreparationActions.qualifySource, {
+        preparationId: again.preparationId,
+        sourceCaptureId,
+    });
+    expect(request).toHaveBeenCalledTimes(4);
     expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
-        sourceQualificationAttemptCount: 3,
+        sourceQualificationAttemptCount: 4,
+        sourcePreparationBudget: {
+            work: 0,
+            incidents: 4,
+            reserved: 0,
+            dispatches: 4,
+        },
     });
 });
 

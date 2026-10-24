@@ -318,6 +318,88 @@ for (const viewport of [
     });
 }
 
+for (const viewport of [
+    { name: "desktop", width: 1440, height: 900 },
+    { name: "mobile", width: 390, height: 844 },
+]) {
+    for (const exhaustedBudget of ["work", "incidents"] as const) {
+        test(`${exhaustedBudget} preparation budget preserves review on ${viewport.name}`, async ({
+            page,
+        }, info) => {
+            await page.setViewportSize(viewport);
+            const errors: string[] = [];
+            page.on("pageerror", (error) => errors.push(error.message));
+            page.on("console", (message) => {
+                if (message.type() === "error") errors.push(message.text());
+            });
+            await admitAnalyst(page);
+            const key = `preparation-budget-${exhaustedBudget}-${viewport.name}`;
+            const inspected = runConvexJson<
+                FunctionReturnType<
+                    typeof internal.e2eFixtures.seedInspectedSourceReviewScenario
+                >
+            >("e2eFixtures:seedInspectedSourceReviewScenario", {
+                slotKey: "analyst-1",
+                fixtureKey: key,
+            });
+            const seeded = runConvexJson<
+                FunctionReturnType<
+                    typeof internal.e2eFixtures.stageSourcePreparationRecoveryFixture
+                >
+            >("e2eFixtures:stageSourcePreparationRecoveryFixture", {
+                runId: inspected.runId,
+                slotKey: "analyst-1",
+                fixtureKey: key,
+                exhaustedBudget,
+            });
+            const before = inspectSourceReview(seeded.runId, key);
+            await page.goto(`/workspace/${seeded.runId}?section=sources`);
+            const copy = page.getByText(
+                exhaustedBudget === "work"
+                    ? /^The source reading allowance has been used/
+                    : /^Preparation stopped after repeated service failures/,
+            );
+            await expect(copy).toBeVisible();
+            await expect(
+                page.getByRole("button", {
+                    name: "Resume preparation",
+                    exact: true,
+                }),
+            ).toHaveCount(0);
+            const approve = page.getByRole("button", {
+                name: "Approve proposed corpus",
+                exact: true,
+            });
+            await expect(approve).toBeEnabled();
+            await approve.focus();
+            await expect(approve).toBeFocused();
+            await expect(page.locator("body")).not.toContainText(
+                /work_budget_exhausted|incident_budget_exhausted|SOURCE_PREPARATION_/,
+            );
+            await page.screenshot({
+                path: info.outputPath(`${exhaustedBudget}.png`),
+                fullPage: true,
+            });
+            await page.reload();
+            await expect(copy).toBeVisible();
+            const after = inspectSourceReview(seeded.runId, key);
+            expect(after.sourceReading).toEqual(before.sourceReading);
+            expect(after.decisions).toEqual(before.decisions);
+            expect(after.providerCallCount).toBe(0);
+            expect(after.revisionStatus).toBe("draft");
+            await expect
+                .poll(() =>
+                    page.evaluate(
+                        () =>
+                            document.documentElement.scrollWidth <= innerWidth,
+                    ),
+                )
+                .toBe(true);
+            expect(errors).toEqual([]);
+        });
+    }
+}
+
 for (const viewport of [{ name: "desktop", width: 1440, height: 900 }, { name: "mobile", width: 390, height: 844 }]) {
     test(`source preparation phases update coverage and cards without reload on ${viewport.name}`, async ({ page, context }, info) => {
         test.setTimeout(120_000);

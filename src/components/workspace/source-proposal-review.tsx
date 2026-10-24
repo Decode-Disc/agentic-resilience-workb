@@ -887,7 +887,14 @@ export function SourceProposalReview({
                                             : "Prepare source reading"}
                                     </Button>
                                     {summary.preparationAction?.reason ===
-                                    "disabled" ? (
+                                    "configuration_unavailable" ? (
+                                        <p className="text-xs text-muted-foreground">
+                                            {sourcePreparationActionCopy(
+                                                summary.preparationAction,
+                                            )}
+                                        </p>
+                                    ) : summary.preparationAction?.reason ===
+                                      "disabled" ? (
                                         <p className="text-xs text-muted-foreground">
                                             Source reading is currently
                                             unavailable.

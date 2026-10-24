@@ -1121,6 +1121,7 @@ test.each([
             pauseReason: "source_review",
             sourceQualificationAttemptCount:
                 counterOwner === "dossier" ? 19 : undefined,
+            sourcePreparationBudget: undefined,
         });
         return preparation;
     });
@@ -1133,6 +1134,9 @@ test.each([
             })
         )?.preparationAction,
     ).toMatchObject({ kind: "resume", available: true });
+    expect(previous?.modelLimits).toEqual({ work: 120, incidents: 40 });
+    vi.stubEnv("SOURCE_PREPARATION_WORK_LIMIT", "140");
+    vi.stubEnv("SOURCE_PREPARATION_INCIDENT_LIMIT", "50");
     const args = {
         runId,
         corpusRevisionId,
@@ -1150,6 +1154,7 @@ test.each([
         await t.run((ctx) => ctx.db.get(resumed.preparationId)),
     ).toMatchObject({
         deadlineAt: Date.now() + 15 * 60_000,
+        modelLimits: { work: 140, incidents: 50 },
         asOfTime: previous?.asOfTime,
         executionGeneration: (previous?.executionGeneration ?? 0) + 1,
     });

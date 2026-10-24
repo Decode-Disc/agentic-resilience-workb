@@ -50,10 +50,13 @@ import {
     assertPreparationComparisonFence,
     assertPreparationCompletionFence,
     assertPreparationExecutionFence,
+    MAX_PREPARATION_ATTEMPT_HISTORY,
     nextPreparationAttempt,
+    preparationBudgetBlock,
     preparationFailureClass,
     readEligiblePreparationSourceIds,
-    readPreparationModelAttempts,
+    readPreparationBudget,
+    readPreparationLimits,
     readPreparationSourceDecision,
     sourcePreparationError,
     sourcePreparationOutcomeValidator,
@@ -63,7 +66,10 @@ import {
 import { readPreparationRecovery } from "./domain/sourcePreparationReview";
 import { sourceQualificationValidator } from "./domain/sourceQualification";
 import { SOURCE_DOCUMENT_KINDS } from "./domain/sourceSelectionPolicy";
-import { readPinnedSourceQualification } from "./domain/sourceUsage";
+import {
+    readComparisonHistory,
+    readPinnedSourceQualification,
+} from "./domain/sourceUsage";
 import { companySnapshotValidator } from "./domain/validators";
 import schema from "./schema";
 import { createSourceSelectionProposal } from "./sourceSelectionProposals";
@@ -125,6 +131,7 @@ export async function startReviewPreparation(
         revision.sourceSelectionProposalId !== proposal._id
     )
         throw new Error("Source selection proposal changed");
+    const modelLimits = readPreparationLimits();
     let previous = run.sourcePreparationId
         ? await ctx.db.get(run.sourcePreparationId)
         : null;
@@ -265,6 +272,11 @@ export async function startReviewPreparation(
     const deadlineAt = slotUnavailable
         ? undefined
         : now + SOURCE_PREPARATION_DEADLINE_MS;
+    const budget = await readPreparationBudget(
+        ctx.db,
+        run,
+        previous?.kind === "preparation" ? previous : undefined,
+    );
     const preparationId = await ctx.db.insert(
         "sourceSelectionProposalRebuilds",
         {
@@ -337,17 +349,15 @@ export async function startReviewPreparation(
                     ? (previous.asOfTime ?? previous.createdAt)
                     : now,
             modelAttemptCount: 0,
+            modelLimits,
             ...(recovery ? { sourceOutcomes: recovery.retainedOutcomes } : {}),
             createdAt: now,
         },
     );
     await ctx.db.patch(run._id, {
         sourcePreparationId: preparationId,
-        sourceQualificationAttemptCount: await readPreparationModelAttempts(
-            ctx.db,
-            run,
-            previous?.kind === "preparation" ? previous : undefined,
-        ),
+        sourcePreparationBudget: budget,
+        sourceQualificationAttemptCount: budget.dispatches,
     });
     if (slotUnavailable) return { preparationId, status: "blocked" as const };
     const workflowId = await workflow.start(
@@ -512,6 +522,7 @@ export const getComparisonInput = internalQuery({
         company: companySnapshotValidator,
         primaryCandidates: v.array(comparisonCandidateValidator),
         candidateMetadataLimitReached: v.boolean(),
+        modelBudgetBlocked: v.boolean(),
         comparisonContextHash: v.string(),
     }),
     handler: async (ctx, args) => {
@@ -580,6 +591,10 @@ export const getComparisonInput = internalQuery({
             company,
             primaryCandidates,
             comparisonContextHash,
+            modelBudgetBlocked: !!preparationBudgetBlock(
+                await readPreparationBudget(ctx.db, run, preparation),
+                readPreparationLimits(preparation),
+            ),
             candidateMetadataLimitReached:
                 primaryContext.candidateMetadataLimitReached,
         };
@@ -748,48 +763,37 @@ export const getComparison = internalQuery({
             qualification.output.contentHash !== targetCapture.contentHash
         )
             throw sourcePreparationError("qualification_unavailable");
-        const tasks = await ctx.db
-            .query("aiTaskResults")
-            .withIndex("by_run_and_task_type_and_input_hash", (q) =>
-                q
-                    .eq("runId", run._id)
-                    .eq("taskType", "source_comparison")
-                    .eq("inputHash", args.inputHash),
+        let hasHistory = false;
+        let task: Doc<"aiTaskResults"> | undefined;
+        for await (const candidate of readComparisonHistory(ctx.db, {
+            runId: run._id,
+            inputHash: args.inputHash,
+        })) {
+            hasHistory = true;
+            if (
+                candidate.schemaVersion !== SOURCE_COMPARISON_VERSION ||
+                candidate.output.kind !== "source_comparison" ||
+                candidate.output.comparisonVersion !==
+                    SOURCE_COMPARISON_VERSION ||
+                candidate.output.inputHash !== args.inputHash ||
+                candidate.output.runId !== run._id ||
+                candidate.output.corpusRevisionId !== revision._id ||
+                candidate.output.targetSourceId !== targetCapture.sourceId ||
+                candidate.output.targetCaptureId !== targetCapture._id ||
+                candidate.output.targetContentHash !==
+                    targetCapture.contentHash ||
+                candidate.output.qualificationTaskId !== qualification._id
             )
-            .take(10);
-        if (tasks.length === 0) return { status: "missing" as const };
-        const task = [...tasks]
-            .sort(
-                (a, b) =>
-                    Number(
-                        b.output.kind === "source_comparison" &&
-                            ["compared", "not_run"].includes(
-                                b.output.checkStatus,
-                            ),
-                    ) -
-                    Number(
-                        a.output.kind === "source_comparison" &&
-                            ["compared", "not_run"].includes(
-                                a.output.checkStatus,
-                            ),
-                    ),
-            )
-            .find(
-                (candidate) =>
-                    candidate.schemaVersion === SOURCE_COMPARISON_VERSION &&
-                    candidate.output.kind === "source_comparison" &&
-                    candidate.output.comparisonVersion ===
-                        SOURCE_COMPARISON_VERSION &&
-                    candidate.output.inputHash === args.inputHash &&
-                    candidate.output.runId === run._id &&
-                    candidate.output.corpusRevisionId === revision._id &&
-                    candidate.output.targetSourceId ===
-                        targetCapture.sourceId &&
-                    candidate.output.targetCaptureId === targetCapture._id &&
-                    candidate.output.targetContentHash ===
-                        targetCapture.contentHash &&
-                    candidate.output.qualificationTaskId === qualification._id,
-            );
+                continue;
+            task ??= candidate;
+            if (
+                ["compared", "not_run"].includes(candidate.output.checkStatus)
+            ) {
+                task = candidate;
+                break;
+            }
+        }
+        if (!hasHistory) return { status: "missing" as const };
         if (task?.output.kind !== "source_comparison")
             return { status: "stale" as const };
         if (
@@ -804,7 +808,8 @@ export const getComparison = internalQuery({
                         .eq("operation", "source_comparison")
                         .eq("inputHash", args.inputHash),
                 )
-                .take(4);
+                .order("desc")
+                .take(MAX_PREPARATION_ATTEMPT_HISTORY);
             if (nextPreparationAttempt(calls, preparation, args.now).attempt)
                 return { status: "missing" as const };
         }
@@ -969,15 +974,6 @@ export const saveComparison = internalMutation({
             ))
         )
             throw sourcePreparationError("comparison_output_invalid");
-        const existing = await ctx.db
-            .query("aiTaskResults")
-            .withIndex("by_run_and_task_type_and_input_hash", (q) =>
-                q
-                    .eq("runId", run._id)
-                    .eq("taskType", "source_comparison")
-                    .eq("inputHash", args.inputHash),
-            )
-            .take(10);
         if (args.comparisonContextHash) {
             const source = await ctx.db.get(targetCapture.sourceId);
             const primaryContext = await readComparisonPrimaryContext(
@@ -996,15 +992,18 @@ export const saveComparison = internalMutation({
             )
                 throw sourcePreparationError("stale_execution");
         }
-        const cached = existing.find(
-            (task) =>
-                task.schemaVersion === SOURCE_COMPARISON_VERSION &&
-                task.providerCallId === args.providerCallId &&
-                task.output.kind === "source_comparison" &&
-                task.output.targetCaptureId === targetCapture._id &&
-                task.output.qualificationTaskId === qualification._id,
-        );
-        if (cached) {
+        for await (const cached of readComparisonHistory(ctx.db, {
+            runId: run._id,
+            inputHash: args.inputHash,
+        })) {
+            if (
+                cached.schemaVersion !== SOURCE_COMPARISON_VERSION ||
+                cached.providerCallId !== args.providerCallId ||
+                cached.output.kind !== "source_comparison" ||
+                cached.output.targetCaptureId !== targetCapture._id ||
+                cached.output.qualificationTaskId !== qualification._id
+            )
+                continue;
             if (JSON.stringify(cached.output) !== JSON.stringify(output))
                 throw sourcePreparationError("comparison_input_conflict");
             return cached._id;
@@ -1025,7 +1024,8 @@ export const saveComparison = internalMutation({
                     preparation.executionGeneration ||
                 providerCall.workflowVersion !== preparation.workflowVersion ||
                 providerCall.stepKey !== "source_preparation" ||
-                ![1, 2, 3].includes(providerCall.attempt) ||
+                !Number.isSafeInteger(providerCall.attempt) ||
+                providerCall.attempt < 1 ||
                 !["started", "succeeded", "failed"].includes(
                     providerCall.status,
                 ) ||
@@ -1414,10 +1414,18 @@ export const claimForDiscovery = internalMutation({
                         ? (previous.asOfTime ?? previous.createdAt)
                         : now,
                 modelAttemptCount: 0,
+                modelLimits: readPreparationLimits(),
                 createdAt: now,
             },
         );
-        await ctx.db.patch(run._id, { sourcePreparationId: preparationId });
+        await ctx.db.patch(run._id, {
+            sourcePreparationId: preparationId,
+            sourcePreparationBudget: await readPreparationBudget(
+                ctx.db,
+                run,
+                previous?.kind === "preparation" ? previous : undefined,
+            ),
+        });
         return preparationId;
     },
 });
@@ -2029,6 +2037,27 @@ export const recordResult = internalMutation({
             occurredAt: now,
         });
         return "recorded" as const;
+    },
+});
+
+/** Records model-stage stop causes without replacing retained reading outcomes. */
+export const recordComparisonResults = internalMutation({
+    args: {
+        preparationId: v.id("sourceSelectionProposalRebuilds"),
+        failures: v.array(v.string()),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const { preparation } = await assertPreparationCompletionFence(
+            ctx.db,
+            args,
+        );
+        const stopCode = sourcePreparationStopCodeValidator.members.find(
+            (code) => args.failures.includes(code.value),
+        )?.value;
+        if (stopCode && !preparation.stopCode)
+            await ctx.db.patch(preparation._id, { stopCode });
+        return null;
     },
 });
 

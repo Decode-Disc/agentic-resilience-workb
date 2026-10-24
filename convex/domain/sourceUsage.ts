@@ -15,7 +15,10 @@ import {
     type SourceComparisonOutput,
     sourceComparisonDispositionSchema,
 } from "./sourceComparison";
-import { readPreparationSourceDecision } from "./sourcePreparationAuthority";
+import {
+    readPreparationSourceDecision,
+    sourcePreparationError,
+} from "./sourcePreparationAuthority";
 import type { SourceQualification } from "./sourceQualification";
 import {
     MAX_QUALIFICATION_FINDINGS,
@@ -31,6 +34,41 @@ import {
     sourceFindingUsage,
     sourcePassagesRequireVerification,
 } from "./sourceSelectionPolicy";
+
+// A proposal stores comparison references in one Convex array; this is a format capacity, not an attempt allowance.
+const MAX_COMPARISON_HISTORY_REFERENCES = 8192;
+
+/** Reads comparison history newest first, sharing indexed scope and bounded retention across lookup and publication. */
+export async function* readComparisonHistory(
+    db: GenericDatabaseReader<DataModel>,
+    scope:
+        | { sourceId: Id<"sources"> }
+        | { runId: Id<"researchRuns">; inputHash: string },
+): AsyncGenerator<Doc<"aiTaskResults">> {
+    const history =
+        "sourceId" in scope
+            ? db
+                  .query("aiTaskResults")
+                  .withIndex("by_source_and_task_type_and_created_at", (q) =>
+                      q
+                          .eq("sourceId", scope.sourceId)
+                          .eq("taskType", "source_comparison"),
+                  )
+            : db
+                  .query("aiTaskResults")
+                  .withIndex("by_run_and_task_type_and_input_hash", (q) =>
+                      q
+                          .eq("runId", scope.runId)
+                          .eq("taskType", "source_comparison")
+                          .eq("inputHash", scope.inputHash),
+                  );
+    let read = 0;
+    for await (const task of history.order("desc")) {
+        if (++read > MAX_COMPARISON_HISTORY_REFERENCES)
+            throw sourcePreparationError("comparison_history_capacity_reached");
+        yield task;
+    }
+}
 
 const sourceComparisonReviewDetailsSchema = z
     .object({

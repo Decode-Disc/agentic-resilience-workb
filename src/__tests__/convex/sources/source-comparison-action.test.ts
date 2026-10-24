@@ -1,4 +1,4 @@
-import { internal } from "@convex/_generated/api";
+import { api, internal } from "@convex/_generated/api";
 import {
     materializeSourceComparisonOutput,
     type PreparedSourceComparisonInput,
@@ -351,6 +351,237 @@ function comparisonResponse(
     );
 }
 
+async function completedComparison() {
+    const fixture = await capturedComparison();
+    vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
+    const request = vi.fn<typeof fetch>(async () =>
+        comparisonResponse(fixture.response),
+    );
+    vi.stubGlobal("fetch", request);
+    const result = await fixture.t.action(
+        internal.sourcePreparationActions.compareSource,
+        {
+            preparationId: fixture.preparationId,
+            sourceCaptureId: fixture.sourceCaptureId,
+            qualificationTaskId: fixture.qualificationTaskId,
+        },
+    );
+    const taskId = result.taskId;
+    if (!taskId) throw new Error("Missing completed comparison");
+    const comparison = await fixture.t.run((ctx) => ctx.db.get(taskId));
+    if (comparison?.output.kind !== "source_comparison")
+        throw new Error("Invalid comparison fixture");
+    return {
+        ...fixture,
+        comparison: { ...comparison, output: comparison.output },
+        request,
+    };
+}
+
+test.each([
+    "lookup",
+    "replay",
+] as const)("comparison %s retains a success after ten unavailable results", async (mode) => {
+    vi.useFakeTimers();
+    const {
+        t,
+        preparationId,
+        sourceCaptureId,
+        qualificationTaskId,
+        comparison,
+        request,
+    } = await completedComparison();
+    const latest = await t.run(async (ctx) => {
+        const { _id, _creationTime, ...base } = comparison;
+        const unavailable = {
+            ...comparison.output,
+            checkStatus: "provider_unavailable" as const,
+            findings: [],
+        };
+        await ctx.db.patch(_id, {
+            providerCallId: undefined,
+            output: unavailable,
+        });
+        for (let index = 0; index < 9; index++) {
+            vi.setSystemTime(Date.now() + 1);
+            await ctx.db.insert("aiTaskResults", {
+                ...base,
+                providerCallId: undefined,
+                output: unavailable,
+                createdAt: Date.now(),
+            });
+        }
+        vi.setSystemTime(Date.now() + 1);
+        return ctx.db.insert("aiTaskResults", {
+            ...base,
+            createdAt: Date.now(),
+        });
+    });
+    if (mode === "lookup") {
+        expect(
+            await t.query(internal.sourcePreparation.getComparison, {
+                preparationId,
+                sourceCaptureId,
+                qualificationTaskId,
+                inputHash: comparison.inputHash,
+                now: Date.now(),
+            }),
+        ).toEqual({ status: "cached", taskId: latest });
+    } else {
+        expect(
+            await t.mutation(internal.sourcePreparation.saveComparison, {
+                preparationId,
+                sourceCaptureId,
+                qualificationTaskId,
+                inputHash: comparison.inputHash,
+                providerCallId: comparison.providerCallId,
+                output: comparison.output,
+            }),
+        ).toBe(latest);
+    }
+    expect(
+        await t.run((ctx) =>
+            ctx.db
+                .query("aiTaskResults")
+                .withIndex("by_run_and_task_type_and_input_hash", (q) =>
+                    q
+                        .eq("runId", comparison.runId)
+                        .eq("taskType", "source_comparison")
+                        .eq("inputHash", comparison.inputHash),
+                )
+                .take(20),
+        ),
+    ).toHaveLength(11);
+    expect(request).toHaveBeenCalledOnce();
+});
+
+test("publication and review retain comparison history beyond 120, including earlier conflicts", async () => {
+    vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "true");
+    vi.stubEnv("SOURCE_PREPARATION_WORK_LIMIT", "200");
+    vi.stubEnv("SOURCE_PREPARATION_INCIDENT_LIMIT", "150");
+    const {
+        t,
+        runId,
+        corpusRevisionId,
+        sourceId,
+        userId,
+        comparison,
+        request,
+    } = await completedComparison();
+    const latest = await t.run(async (ctx) => {
+        const { _id, _creationTime, ...base } = comparison;
+        await ctx.db.patch(_id, {
+            output: {
+                ...comparison.output,
+                findings: comparison.output.findings.map((finding) => ({
+                    ...finding,
+                    disposition: "possible_conflict" as const,
+                })),
+            },
+        });
+        let latestId = _id;
+        for (let index = 0; index < 120; index++)
+            latestId = await ctx.db.insert("aiTaskResults", {
+                ...base,
+                createdAt: Date.now() + index + 1,
+            });
+        return latestId;
+    });
+    const proposal = await t.mutation(
+        internal.sourceSelectionProposals.generateForRun,
+        { runId, expectedExecutionGeneration: 3 },
+    );
+    const item = await t.run((ctx) =>
+        ctx.db
+            .query("sourceSelectionProposalItems")
+            .withIndex("by_proposal_and_source", (q) =>
+                q
+                    .eq("proposalId", proposal.proposalId)
+                    .eq("sourceId", sourceId),
+            )
+            .unique(),
+    );
+    expect(item?.comparisonTaskIds).toHaveLength(121);
+    expect(item?.comparisonTaskIds).toEqual(
+        expect.arrayContaining([comparison._id, latest]),
+    );
+    expect(item?.comparisonOutcomes).toContainEqual({
+        findingIndex: 0,
+        disposition: "possible_conflict",
+    });
+    // Lower current limits cannot erase history from earlier, more generous executions.
+    vi.stubEnv("SOURCE_PREPARATION_WORK_LIMIT", "40");
+    expect(
+        await t
+            .withIdentity({ subject: userId })
+            .query(api.sourceSelectionProposals.getCurrent, {
+                runId,
+                corpusRevisionId,
+            }),
+    ).toMatchObject({ proposalId: proposal.proposalId });
+    expect(request).toHaveBeenCalledOnce();
+});
+
+test("invalid future limits preserve saved readings and block only the next preparation", async () => {
+    vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "true");
+    const {
+        t,
+        runId,
+        corpusRevisionId,
+        sourceId,
+        userId,
+        preparationId,
+        sourceCaptureId,
+        qualificationTaskId,
+        request,
+    } = await completedComparison();
+    await t.mutation(internal.sourcePreparation.recordResult, {
+        preparationId,
+        outcome: {
+            sourceId,
+            result: {
+                status: "qualified",
+                sourceCaptureId,
+                taskId: qualificationTaskId,
+            },
+        },
+    });
+    const finished = await t.mutation(internal.sourcePreparation.finish, {
+        preparationId,
+        expectedExecutionGeneration: 3,
+        stopCode: "missing_configuration",
+    });
+    await t.run((ctx) =>
+        ctx.db.patch(runId, {
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        }),
+    );
+    const before = await t.run((ctx) => ctx.db.get(runId));
+    vi.stubEnv("SOURCE_PREPARATION_WORK_LIMIT", "broken");
+    const owned = t.withIdentity({ subject: userId });
+    const current = await owned.query(api.sourceSelectionProposals.getCurrent, {
+        runId,
+        corpusRevisionId,
+    });
+    expect(current?.preparation?.assessed).toBeGreaterThan(0);
+    expect(current?.preparationAction).toMatchObject({
+        available: false,
+        reason: "configuration_unavailable",
+    });
+    await expect(
+        owned.mutation(api.sourcePreparation.startForReview, {
+            runId,
+            corpusRevisionId,
+            expectedProposalId: finished.proposalId,
+            requestId: "invalid-future-limits",
+        }),
+    ).rejects.toThrow("preparation_configuration_invalid");
+    expect(await t.run((ctx) => ctx.db.get(runId))).toEqual(before);
+    expect(request).toHaveBeenCalledOnce();
+});
+
 test("a targeted supplement rechecks pinned earlier arguments without reopening their reading", async () => {
     const {
         t,
@@ -669,7 +900,16 @@ test("comparison shares the dossier model allowance and reserves nothing when ex
         response,
     } = await capturedComparison();
     await t.run((ctx) =>
-        ctx.db.patch(runId, { sourceQualificationAttemptCount: 120 }),
+        ctx.db.patch(runId, {
+            sourceQualificationAttemptCount: 120,
+            sourcePreparationBudget: {
+                version: 1,
+                work: 120,
+                incidents: 0,
+                reserved: 0,
+                dispatches: 120,
+            },
+        }),
     );
     const request = vi.fn<typeof fetch>(async () =>
         comparisonResponse(response),
@@ -683,7 +923,7 @@ test("comparison shares the dossier model allowance and reserves nothing when ex
         }),
     ).toMatchObject({
         status: "unavailable",
-        reasonCode: "model_attempt_limit_reached",
+        reasonCode: "work_budget_exhausted",
     });
     expect(request).not.toHaveBeenCalled();
     const state = await t.run(async (ctx) => ({
@@ -1015,7 +1255,16 @@ test("an exact legacy comparison can be revalidated at the model limit without p
     const retained = await t.run((ctx) => ctx.db.get(taskId));
     await t.run(async (ctx) => {
         await ctx.db.patch(taskId, { comparisonContextHash: undefined });
-        await ctx.db.patch(runId, { sourceQualificationAttemptCount: 120 });
+        await ctx.db.patch(runId, {
+            sourceQualificationAttemptCount: 120,
+            sourcePreparationBudget: {
+                version: 1,
+                work: 120,
+                incidents: 0,
+                reserved: 0,
+                dispatches: 120,
+            },
+        });
     });
     await t.mutation(internal.sourcePreparation.recordResult, {
         preparationId,
