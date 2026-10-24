@@ -1,0 +1,223 @@
+# Question-Led Analysis Workbench: Retained Conception
+
+## Status and Authority
+
+Recorded on 2026-10-23 and updated on 2026-10-24. This document preserves the product direction accepted during brainstorming, recommendations still awaiting a decision, and the alternatives considered. The user authorized documenting the conception only. It is not an implementation plan, a completed specification, or evidence of delivered functionality.
+
+Under the [documentation policy](../../AGENTS.md#document-authority-and-required-reading), this is a brainstorming record. It does not amend [PRODUCT.md](../../PRODUCT.md), [context/TECH.md](../../context/TECH.md), [context/PROJECT.md](../../context/PROJECT.md), [AGENTS.md](../../AGENTS.md), or [the roadmap](../ROADMAP.md). The current ten-dimension contracts and mandatory human corpus checkpoint remain implementation obligations until those references are explicitly reconciled with the target described here.
+
+## Purpose
+
+The prototype supports an unsolicited application to join Decoding Discontinuity. Its first design criterion is usefulness to Raphaëlle d'Ornano and alignment with Decoding Discontinuity's research questions. Recognition of the author's abilities should follow from that usefulness, rather than determine the product's organization.
+
+The retained destination is an analysis dossier that examines a precise economic question, confronts the evidence and interpretations that illuminate it, and identifies what deserves further investigation. The analyst supplies an intention; the system takes responsibility for the preparatory research and proposes reasoned appraisals. The experience should make the analyst's attention available for judgment without requiring them to coordinate collection, reading, or successive internal operations. Public-source provenance, uncertainty, counter-evidence, and final analyst authority remain essential. This is not a reproduction of a proprietary methodology.
+
+## Accepted Scope
+
+The dossier first situates the company, then investigates an activity or workflow relevant to its economic position. The reason for choosing that scope is qualitative and grounded in available sources. The prototype does not systematically measure the activity's share of company economics. Findings remain attached to the investigated scope rather than automatically extending to the whole company. The existing US-listed technology-company scope is retained.
+
+The accepted reference example is the existing CCC Intelligent Solutions case: within a photo-led auto physical damage workflow, investigate whether CCC controls a difficult-to-substitute coordination point or supplies modules under carrier or core-platform authority. This is a question to investigate, not a conclusion about CCC. The [existing research boundary](../../PRODUCT.md#evidence-on-hand) remains the reference for the case.
+
+The analytical structure combines a common research foundation with the decisive questions specific to the case. A fixed ten-dimension grid is not the retained target. Its useful questions may inform the new foundation, whose exact content remains to be defined.
+
+## Three Principal Capabilities
+
+| Capability | Work prepared for the analyst |
+| --- | --- |
+| Understand where value resides | Situate the business and the selected activity, identify participants and dependencies, and distinguish what the company supplies, recommends, executes, or controls. |
+| Examine resilience to the agentic transition | Investigate what agents could strengthen, weaken, bypass, or redistribute. Confront interpretations with technical, commercial, and financial evidence, their assumptions, and their limitations. |
+| Prepare an actionable assessment | Propose a reasoned appraisal for the decisive questions, expose its evidence and objections, and identify unknowns that could change the assessment or justify further research. |
+
+Question framing, source preparation, comparison, classification, and decision history support these capabilities. They are not separate headline capabilities merely because they are distinct implementation steps. These are target capabilities, not claims that the current prototype already delivers them completely.
+
+## Proactive Workflow and Analyst Role
+
+The retained direction delegates preparation to the system. The analyst can orient, inspect, and challenge the work without having to manage each research operation. The following schematic records the high-level sequence; it does not define new mandatory analyst confirmations or a finalization rule.
+
+```text
+START
+Choose the company and optionally a research angle
+Launch with a research mandate
+                         |
+                         v
+FRAMING
+The system proposes the scope and research questions
+The analyst may refine the orientation
+Complete framing before starting research
+                         |
+                         v
+AUTONOMOUS PREPARATION AND INVESTIGATION
+Prepare sources, read and confront useful material
+Investigate the framed questions
+Prepare reasoned appraisals and expose limitations
+                         |
+                         v
+PROPOSED RESULTS
+Appraisals by question and synthesis of the scope
+Supporting evidence, objections and unknowns accessible
+                         |
+                         v
+ANALYST JUDGMENT AND FOLLOW-UP
+Retain, challenge or redirect the proposed interpretation
+The system resumes the affected work
+```
+
+Interventions can occur contextually throughout the workflow rather than becoming a succession of analyst-managed stages. Work that does not depend on the requested decision should remain able to advance within the mandate. The precise exception policy is still open.
+
+### Research Starts After Framing
+
+The user selected waiting until framing is complete before starting source preparation or question investigations. This keeps the prototype sequence simpler and avoids research performed against a scope that is still being established. Common questions remain part of the analytical foundation; they do not launch background investigations while the analyst is refining the case-specific questions.
+
+The system proposes a usable framing rather than requiring the analyst to write the research plan. Refinements are optional. How framing reaches a completed state, and what happens when the scope changes afterward, remain to be specified; this decision does not introduce an additional mandatory confirmation by itself.
+
+### Launch Mandate and Contextual Intervention
+
+The user selected a mandate at launch: the system selects sources under explicit rules, advances autonomously, and requests analyst intervention for important exceptions. Results remain proposals until human judgment. In this target conception, routine source selection does not require a separate human corpus approval before analytical work. This replaces the earlier proposed systematic approval stop in the intended workflow, without authorizing a bypass of the current implementation contract.
+
+Delegated source selection must remain explainable and traceable. Retaining a source does not establish that its assertions are true or that the analyst has endorsed an interpretation. The source-selection rules, permitted work and resource limits, and exceptions requiring intervention are not yet defined.
+
+The discussed intervention principle is to distinguish a local limitation from a material decision the system has no mandate to make. An inaccessible source can lead to another source or a disclosed limitation; conflicting material can become an objection; insufficient evidence can remain an explicit unknown. These are examples for defining the policy, not approved automatic exception thresholds. Autonomy does not imply unbounded searching or concealing failure.
+
+## Workspace Experience
+
+The user described the following interaction direction. It records the intended experience, not an approved final layout or authorization to implement a redesign.
+
+- After launch, the composer becomes smaller and floats at the bottom center, remaining available for orientation and follow-up.
+- The central component presents progress and a timeline of meaningful stages. Requests for approval or intervention appear in their relevant context.
+- Floating cards around the edges or corners preview the workflow's work units. They are inactive before their work starts, activate with animation when it actually starts, and provide access to dedicated detail pages. The overall view should remain calm rather than accumulate competing process displays.
+- Detailed research is available when the analyst chooses to inspect it. Routine progress should not require opening those pages.
+- The selected [shadcn Questionnaire](https://ui.shadcn.com/docs/components/base/questionnaire) collects framing choices and contextual answers. It supports the analyst in refining a proposed scope or priority; the system remains responsible for investigating the economic questions. The component does not determine persistence, branching, or workflow authority.
+
+Exact card count, grouping, responsive placement, animation behavior, and the relationship between the timeline and completed results remain to be designed. A visible activation must reflect actual execution rather than illustrative activity.
+
+## Proposed Reusable Workflow Responsibilities
+
+The following three responsibilities were proposed to clarify the user's idea of reusable workflow bricks. Their exact decomposition and presentation have not been separately ratified. They do not prescribe new services, agents, or an extensibility framework.
+
+| Proposed responsibility | Output |
+| --- | --- |
+| Sources | Useful documentary material with qualification, provenance, and limitations. |
+| Investigation | A reasoned appraisal of a question, with supporting evidence, objections, and unknowns. |
+| Synthesis | An account of how the appraisals relate and what their economic implications and limits are. |
+
+A workflow capability, an execution of that capability, and its visible card are distinct concepts. The source matrix is a detailed view of source preparation; a research question is not automatically another independent source-collection capability. The proposed organization lets several investigations share the dossier's sources while asking for targeted documentary additions when necessary.
+
+```text
+                 SHARED DOSSIER SOURCES
+                      /    |    \
+                     v     v     v
+                Question A B     C
+                     |     |     |
+                Reasoned appraisals
+                      \    |    /
+                       v   v   v
+                       SYNTHESIS
+```
+
+One source can inform several questions through the relevant passages. Reusing it must preserve its identity, permitted uses, and limitations. Whether cards represent responsibilities, individual investigations, or grouped work remains open; a growing question count should not automatically produce a separate floating source matrix for every question.
+
+## Evidence Matrix and Assessment
+
+The evidence matrix remains the inspectable evidence foundation, accessible for deeper examination from the workspace. It need not occupy the main progress view or require the analyst to supervise research there. The analyst should be able to connect a research question to the relevant claims and passages, supporting and opposing evidence, and unresolved matters. The existing distinctions between `Fact`, `Inference`, `Hypothesis`, and `Unknown` remain useful. Source preparation and the analytical evidence matrix remain distinct responsibilities even when they share navigation or data.
+
+The accepted assessment format is a reasoned appraisal for each decisive question, followed by a synthesis of the investigated scope. The interpretation, its support, objections, and unknowns should be visible together. Confidence is explained through the evidence and its limitations. An explicit horizon is relevant when an interpretation concerns future change; no replacement categorical confidence scale or fixed horizon was selected.
+
+The following wireframe records the selected information organization. All example statements are fictional and illustrate the presentation only; they are not findings about CCC. It is not a final layout, approved wording, or implementation of review controls.
+
+```text
+┌──────────────────────────────────────────────────────┐
+│ CCC · Auto physical damage workflow                  │
+│ Proposed appraisal · For analyst review              │
+├──────────────────────────────────────────────────────┤
+│ RESEARCH QUESTION                                    │
+│ Does CCC control coordination, or supply             │
+│ substitutable modules?                               │
+├──────────────────────────────────────────────────────┤
+│ PROVISIONAL APPRAISAL                                │
+│ The reviewed material suggests a coordination role.  │
+│ Effective decision control remains unestablished.    │
+│                                                      │
+│ Confidence limited by undocumented decision rights.  │
+├──────────────────────────────────────────────────────┤
+│ EVIDENCE SUPPORTING THIS INTERPRETATION              │
+│ • Passages about coordination between participants   │
+│   [View passages]                                    │
+│                                                      │
+│ OBJECTIONS AND COUNTER-EVIDENCE                      │
+│ • Passages about decisions retained by other actors  │
+│   [View passages]                                    │
+│                                                      │
+│ DECISIVE UNKNOWN                                     │
+│ Who can change routing and decision rules?           │
+├──────────────────────────────────────────────────────┤
+│ [Open evidence]       [Revise]       [Approve]       │
+└──────────────────────────────────────────────────────┘
+```
+
+The dossier synthesis would connect the appraisals of its decisive questions while keeping their scope and limitations visible.
+
+Question coverage must not imply that a question is resolved merely because a claim refers to it. Inspection of [claimValidation.ts](../../convex/domain/claimValidation.ts) found that `deriveQuestionCoverage` counts question-linked claims, including `Unknown`. The [matrix query](../../convex/evidenceMatrix.ts) uses that count. This is evidence presence, not an established answer. The exact replacement for this projection is undecided.
+
+The analyst remains the final authority over analytical judgment. Source selection follows the target launch mandate described above; exact provenance, inspectable proposals, and preserved decisions remain essential. The selected appraisal schematic establishes information organization, not final review controls, review granularity, or implementation authority.
+
+## Economic Data Boundary
+
+The accepted prototype scope retains sourced figures, ratios, and projections with their attribution, definitions, periods, and limitations. It may place relevant material alongside one another and explain differences in scope or meaning. Numerical comparability cannot be assumed from a shared unit alone.
+
+The tool does not calculate new results or undertake dedicated financial data collection or modeling. A ratio published by a source can remain an attributed claim; recomputing it is outside the selected scope. Determining an activity's revenue share, reconstructing segment economics, and building quantitative scenarios are not included.
+
+An earlier preference for simple verifiable calculations was explicitly narrowed after considering the work required to delimit activities, obtain comparable inputs, and preserve reproducible calculations. Tool-generated arithmetic was then excluded from the prototype. Reconsideration would require a concrete demonstrated need and a new scope decision.
+
+## Alternatives Considered
+
+| Alternative | Outcome and reason |
+| --- | --- |
+| A revised fixed grid for every company | Not selected. It supports repeated comparison but can force attention onto weakly relevant or poorly documented categories. The user selected a common foundation with case-specific decisive questions. |
+| Entirely bespoke research without a common analytical foundation | Not selected. It is flexible but offers fewer shared checks against omissions. |
+| A theme profile of positions, confidence, and direction | Not selected as the principal restitution. It is quick to scan but requires defensible category definitions and comparability. The user selected reasoned appraisals with evidence, objections, and unknowns visible. |
+| Dedicated financial scenarios or tool-generated calculations | Not retained in the prototype scope. Even simple arithmetic introduces input-definition, comparability, provenance, and validation work beyond the selected preparation task. Sourced figures and ratios remain useful. |
+| A product organized primarily to display the author's abilities | Explicitly rejected as the priority. Usefulness to Raphaëlle and Decoding Discontinuity comes first; candidature value follows from it. |
+| Wait until framing is complete before starting research | Selected for the prototype. It keeps the sequence simpler and avoids premature work against a changing scope. |
+| Prepare shared documentary material while framing remains open | Not selected for the prototype. This earlier recommendation was superseded by the user's choice to finish framing first. Any future time-saving benefit would need verification. |
+| Start all common-question investigations while framing remains open | Not selected for the prototype. It adds speculative work and consistency handling beyond the retained sequential start. |
+| Require a contextual corpus approval before every analysis | Not selected as the target workflow. The user selected delegated source selection under an initial mandate, with important exceptions raised contextually. Current reference contracts still require reconciliation before implementation. |
+
+## Research Basis and Adaptation
+
+These sources inform the conception. They establish public research themes, not confirmed internal requirements or usability validation from Decoding Discontinuity.
+
+### Source Coverage
+
+- [Anthropic interview, Silicon Carne](https://youtu.be/wZ4Fq6lrnbE): metadata and French timed transcript retrieved through YouTube Transcript in Executor. Relevant passages were examined, including the discussion of durable advantage and value migration around 25:00–33:00. The description was read; no sponsor or social-profile link was used as analytical evidence.
+- [OpenAI interview, Silicon Carne](https://youtu.be/vjANwplght0): metadata and French timed transcript retrieved through the same connection. Relevant passages were examined, including the reconciliation of revenue projections, model usage, routing, and pricing around 4:20–10:50. The description links to the Decoding Discontinuity homepage, which was read through Exa.
+- [The Investor's Edge Lives in Their Head, Anekha Sokhal, Moshi](https://youtu.be/UHbODjuviAU): English transcript read through Exa; metadata, description, and transcript retrieved through Firecrawl on 2026-10-24. Executor was not exposed in that session, and the available transcript connector returned no text. The chapter beginning at 10:28 distinguishes preparatory reading, gathering, and cross-checking from human judgment. The description's [Moshi link](https://hellomoshi.ai) was read through Exa; the event-promotion link was not used. This informs the division of work, not a claim that the prototype delivers continuous market monitoring, trading decisions, a quant team, or Moshi's advertised performance.
+- The user-supplied [Questionnaire documentation](https://ui.shadcn.com/docs/components/base/questionnaire) was read through Exa. It describes single and multiple choices, freeform answers, optional questions, and host-owned persistence and branching. This supports the selected interaction direction without establishing installation or compatibility in the prototype.
+- External content read through Exa includes [About Decoding Discontinuity](https://www.decodingdiscontinuity.com/about), [Institutional Research](https://www.decodingdiscontinuity.com/p/institutional-research), and the [public ARAF presentation](https://www.decodingdiscontinuity.com/p/araf-architectural-resilience-assessment-framework).
+- Local discovery included the current reference documents, [researchPlan.ts](../../convex/domain/researchPlan.ts), [the claim detail view](../../src/components/workspace/evidence-claim-detail.tsx), the matrix query and coverage derivation, and the existing CCC selection rationale. Workflow discovery also inspected [Start](../../src/routes/workspace/start.tsx), [the composer](../../src/components/workspace/research-composer.tsx), [persisted progress](../../src/components/workspace/run-progress.tsx), [source preparation](../../convex/sourcePreparationWorkflow.ts), and [corpus approval](../../convex/sourceSelectionProposals.ts). Source inspection does not establish runtime readiness or analytical usefulness.
+
+### Source-to-Design Mapping
+
+| Source component | Mechanism and intended result | Design decision | Status |
+| --- | --- | --- | --- |
+| Public research on value migration, context, and workflow control | Connect a company's operating role to the durability of its economic position. | Retain this research problem within a bounded company dossier. | Adapted; independent contribution, not framework reproduction. |
+| Anthropic interview on durable advantage beyond model quality | Investigate which business positions can remain valuable as models and competition change. | Examine resilience through evidence and competing interpretations specific to the activity. | Adapted. |
+| OpenAI interview reconciling economic projections with technical choices | Preserve the assumptions and definitions needed to examine apparently conflicting arguments. | Retain attributed economic material and inspect comparability, while excluding new calculations and financial modeling. | Intentional divergence in scope, explicitly chosen by the user. |
+| Public ARAF discussion of strategic position, technical readiness, and execution | Distinguish a plausible position from demonstrated implementation. | Inform the research questions without copying its scoring, dimensions, or output instrument. | Adapted. |
+| Existing CCC research question | Test coordination control against a credible substitutability interpretation. | Use it as the concrete reference for the retained dossier outcome. | Preserved research scope; no company conclusion established. |
+| Moshi talk: preparatory work feeds human judgment, with traceable reasoning | Gather, read, and cross-check material so the analyst can focus attention on interpretation and decisions. | Let the system advance under a launch mandate and expose important exceptions and supporting reasoning. | Adapted to the user's direction; the mandate is the user's decision, not a rule demonstrated by the talk. |
+| Moshi's continuous monitoring and quant-team positioning | Deliver ongoing market intelligence at institutional scope. | Exclude continuous monitoring, a quant-agent team, trading execution, and financial calculations from this conception. | Intentional divergence to preserve the prototype's scope. |
+| Questionnaire: structured choices, freeform input, and optional questions | Collect intent while keeping answer and navigation behavior understandable. | Use it for contextual framing and intervention, without asking the analyst to perform the research or treating the component as workflow authority. | Selected component direction; detailed integration remains open. |
+
+## Open Decisions and Handoff Boundary
+
+- Define the exact common research foundation, the bounded set of decisive questions, and how the proposed activity or workflow is selected and corrected.
+- Define how framing completes without making optional refinements mandatory, and how later scope changes affect ongoing work and existing results. Research starts only after framing; speculative background research during framing is not part of the prototype.
+- Specify the launch mandate's source-selection rules, resource limits, intervention criteria, and handling of material exceptions. The delegated-selection principle is accepted; its enforcement and replacement of the current human corpus checkpoint are not implemented or fully specified.
+- Decide the proposed Sources, Investigation, and Synthesis decomposition, source sharing across questions, card grouping, detail-page navigation, and completed-result presentation. Preserve the accepted composer, timeline, contextual-intervention, and optional-inspection direction without treating an illustrative layout as finished design.
+- Specify question-to-evidence relationships, their presentation in the existing matrix, and the distinction between available evidence and an adequately examined question. Exact fields, navigation, and evaluation rules are not selected.
+- Define confidence presentation, treatment of future horizons, review granularity, and synthesis composition without reintroducing an unsupported aggregate resilience score.
+- Decide finalization criteria. Finalization after analyst review of every decisive question, allowing explicitly documented insufficient evidence, was proposed but was not separately ratified. It must not be recorded as an accepted replacement for the current finalization rule.
+- Determine how current dimension-linked records, policies, fixtures, and existing dossiers transition. No schema, migration, backend operation, or data rewrite is authorized by this record.
+- Decide the exact landing-page matrix example and capability copy after settling the functional design. The illustrative wireframes and capability names are not approval for a page redesign.
+
+The product direction is recorded; the detailed design remains incomplete. Before implementation, reconcile accepted durable changes in their existing owners: candidature framing in `context/PROJECT.md`, behavior and acceptance in `PRODUCT.md`, enforcement and transition contracts in `context/TECH.md`, delivery work in `docs/ROADMAP.md`, and agent priorities in `AGENTS.md`. Preserve historical delivery and failure evidence. This record itself grants no implementation, provider-spend, publication, or deployment authority.
