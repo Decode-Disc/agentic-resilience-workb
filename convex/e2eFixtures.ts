@@ -2380,6 +2380,9 @@ export const advanceSourcePreparationFixture = internalMutation({
         phase: v.union(
             v.literal("reading"),
             v.literal("comparison"),
+            v.literal("comparison_progress"),
+            v.literal("supplement"),
+            v.literal("additional_reading"),
             v.literal("proposal"),
             v.literal("complete"),
         ),
@@ -2489,6 +2492,25 @@ export const advanceSourcePreparationFixture = internalMutation({
             await ctx.runMutation(internal.sourcePreparation.finish, {
                 preparationId: preparation._id,
                 expectedExecutionGeneration: run.executionGeneration,
+            });
+            return true;
+        }
+        if (
+            args.phase === "comparison_progress" ||
+            args.phase === "supplement" ||
+            args.phase === "additional_reading"
+        ) {
+            await ctx.runMutation(internal.sourcePreparation.recordProgress, {
+                preparationId: preparation._id,
+                phase:
+                    args.phase === "comparison_progress"
+                        ? "comparison"
+                        : args.phase === "additional_reading"
+                          ? "reading"
+                          : "supplement",
+                ...(args.phase === "comparison_progress"
+                    ? { current: 1, total: 1 }
+                    : {}),
             });
             return true;
         }

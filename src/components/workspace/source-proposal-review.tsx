@@ -198,6 +198,7 @@ export function SourceProposalReview({
     const [actionsOpen, setActionsOpen] = useState(false);
     const [addSourceOpen, setAddSourceOpen] = useState(false);
     const actionsTriggerRef = useRef<HTMLButtonElement>(null);
+    const readingAnchorRef = useRef<HTMLElement>(null);
     const includedCount = adjustmentSets.included.length;
     const navigationPreset: ProposalNavigationPreset =
         view === "overview" ? "slide-right" : "slide-left";
@@ -831,6 +832,7 @@ export function SourceProposalReview({
                     {summary.preparation ? (
                         <div className="space-y-2">
                             <SourcePreparationStatus
+                                readingAnchorRef={readingAnchorRef}
                                 preparation={summary.preparation}
                                 revisionStatus={summary.revisionStatus}
                                 sources={[
@@ -932,6 +934,7 @@ export function SourceProposalReview({
                 <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[auto_minmax(0,1fr)]">
                     {overviewCoverage}
                     <SourceProposalCarousel
+                        readingRef={readingAnchorRef}
                         group={disposition}
                         items={groups[disposition]}
                         runId={runId}

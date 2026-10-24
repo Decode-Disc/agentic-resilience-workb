@@ -426,6 +426,7 @@ export default defineSchema({
     ]),
     sourceSelectionProposalRebuilds: defineTable({
         progress: v.optional(sourcePreparationProgressValidator),
+        initialReadingsCompletedAt: v.optional(v.number()),
         runId: v.id("researchRuns"),
         corpusRevisionId: v.id("corpusRevisions"),
         expectedProposalId: v.optional(v.id("sourceSelectionProposals")),

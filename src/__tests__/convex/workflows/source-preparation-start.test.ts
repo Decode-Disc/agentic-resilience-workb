@@ -404,6 +404,15 @@ test("a new review request renews execution time while preserving qualification 
             },
         },
     });
+    await t.mutation(internal.sourcePreparation.recordProgress, {
+        preparationId: first.preparationId,
+        phase: "comparison",
+        current: 0,
+        total: 1,
+    });
+    const readingMilestone = (
+        await t.run((ctx) => ctx.db.get(first.preparationId))
+    )?.initialReadingsCompletedAt;
     const completed = await t.mutation(internal.sourcePreparation.finish, {
         preparationId: first.preparationId,
         expectedExecutionGeneration: 4,
@@ -417,6 +426,7 @@ test("a new review request renews execution time while preserving qualification 
     });
     const preparation = await t.run((ctx) => ctx.db.get(resumed.preparationId));
     expect(preparation?.deadlineAt).toBe(Date.now() + 900_000);
+    expect(preparation?.initialReadingsCompletedAt).toBe(readingMilestone);
     expect(preparation?.executionGeneration).toBe(5);
     expect(preparation?.leaseExpiresAt).toBe(Date.now() + 900_000);
     const resumedInput = await t.query(

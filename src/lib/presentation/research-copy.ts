@@ -789,6 +789,17 @@ export function sourcePreparationCopy(
             counts,
         };
     if (
+        preparation.proposalPublished === false &&
+        preparation.status !== "blocked"
+    )
+        return {
+            status: "warning" as const,
+            title: "Source preparation interrupted",
+            description:
+                "Preparation stopped before the proposal was updated. Saved readings and your source decisions are preserved.",
+            counts,
+        };
+    if (
         preparation.stopCode === "execution_slot_unavailable" ||
         (preparation.canResume &&
             !preparation.stopCode &&
@@ -815,24 +826,116 @@ export function sourcePreparationCopy(
     if (preparation.pendingComparisons)
         return {
             status: "warning" as const,
-            title: "Source selection ready with limitations",
+            title: "Ready for review with limitations",
             description: preparation.canResume
                 ? "Some source comparisons remain incomplete. Review the saved readings and limitations before approving. You can resume the remaining checks."
                 : "Some source comparisons remain incomplete. Review the saved readings and limitations before approving the source set.",
             counts,
         };
+    const hasLimitations =
+        preparation.status === "partial" ||
+        !!preparation.failed ||
+        !!preparation.remaining;
     return {
-        status:
-            preparation.status === "partial"
-                ? ("warning" as const)
-                : ("success" as const),
-        title:
-            preparation.status === "partial"
-                ? "Source selection ready with limitations"
-                : "Source selection ready",
+        status: hasLimitations ? ("warning" as const) : ("success" as const),
+        title: hasLimitations
+            ? "Ready for review with limitations"
+            : "Ready for your review",
         description:
             "Source readings informed this proposal. Review the available passages and remaining limitations, then approve the source set.",
         counts,
+    };
+}
+
+/** Presents the persisted journey while supplemental work stays inside the source-checking stage. */
+export function sourcePreparationStages(
+    preparation: NonNullable<ProposalSummary["preparation"]>,
+) {
+    const active = preparation.status === "started";
+    const phase = preparation.progress?.phase;
+    const published =
+        preparation.proposalPublished ??
+        (!active && preparation.status !== "blocked");
+    const readingsComplete =
+        preparation.initialReadingsCompletedAt !== undefined ||
+        (phase !== undefined && phase !== "reading") ||
+        (published && preparation.remaining === 0);
+    const checksComplete =
+        (phase === "proposal" || published) && !preparation.pendingComparisons;
+    const step = !readingsComplete ? 1 : phase === "proposal" ? 3 : 2;
+    type StageStatus = "complete" | "running" | "pending" | "failed";
+    const state = (complete: boolean, current: boolean): StageStatus =>
+        complete
+            ? "complete"
+            : current
+              ? active
+                  ? "running"
+                  : "failed"
+              : "pending";
+    const comparison =
+        phase === "comparison" &&
+        preparation.progress?.total !== undefined &&
+        preparation.progress.total > 0;
+    return {
+        step,
+        published,
+        stages: [
+            {
+                id: "reading",
+                label: "Read candidate sources",
+                status: state(readingsComplete, !readingsComplete),
+                detail: readingsComplete
+                    ? "Initial source checks finished"
+                    : `${preparation.checked} of ${preparation.total} sources checked`,
+                ...(!readingsComplete && preparation.total > 0
+                    ? { current: preparation.checked, total: preparation.total }
+                    : {}),
+                progressLabel: "Source reading progress",
+            },
+            {
+                id: "checks",
+                label: "Check source contributions",
+                status: state(
+                    checksComplete,
+                    readingsComplete && !checksComplete,
+                ),
+                detail: checksComplete
+                    ? "Source checks finished"
+                    : !active && preparation.pendingComparisons
+                      ? `${preparation.pendingComparisons} ${preparation.pendingComparisons === 1 ? "source comparison remains" : "source comparisons remain"} unfinished`
+                      : !active && readingsComplete
+                        ? "Source checks did not finish"
+                        : phase === "supplement"
+                          ? "Checking for additional sources"
+                          : readingsComplete && phase === "reading"
+                            ? "Reading additional sources using saved results"
+                            : comparison
+                              ? `${preparation.progress?.current ?? 0} of ${preparation.progress?.total} source comparisons checked`
+                              : preparation.pendingComparisons
+                                ? `${preparation.pendingComparisons} source comparisons remain unfinished`
+                                : readingsComplete
+                                  ? "Source checks have not finished"
+                                  : "Starts after the initial readings finish",
+                ...(comparison
+                    ? {
+                          current: preparation.progress?.current ?? 0,
+                          total: preparation.progress?.total,
+                      }
+                    : {}),
+                progressLabel: "Source comparison progress",
+            },
+            {
+                id: "proposal",
+                label: "Prepare your proposal",
+                status: state(published, active && phase === "proposal"),
+                detail: published
+                    ? "Proposal saved for your review"
+                    : phase === "proposal"
+                      ? "Organizing the saved results for your review"
+                      : "Starts after source checks finish",
+                progressLabel: "Proposal preparation progress",
+            },
+        ],
     };
 }
 

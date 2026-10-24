@@ -996,6 +996,8 @@ export const getCurrent = query({
                         schema.tables.sourceSelectionProposalRebuilds.validator
                             .fields.progress,
                     lastActivityAt: v.optional(v.number()),
+                    initialReadingsCompletedAt: v.optional(v.number()),
+                    proposalPublished: v.optional(v.boolean()),
                 }),
             ),
             preparationAction: v.optional(
@@ -1077,6 +1079,13 @@ export const getCurrent = query({
         const preparationSummary = preparations.length
             ? {
                   preparationId: preparation?._id,
+                  proposalPublished:
+                      preparation?.status !== "started" &&
+                      preparation?.proposalId === proposal._id,
+                  initialReadingsCompletedAt: preparations.find(
+                      (operation) =>
+                          operation.initialReadingsCompletedAt !== undefined,
+                  )?.initialReadingsCompletedAt,
                   ...(preparation?.progress
                       ? { progress: preparation.progress }
                       : {}),

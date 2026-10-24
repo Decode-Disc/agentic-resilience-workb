@@ -61,6 +61,8 @@ test("review exposes the persisted comparison phase and rejects progress from a 
         corpusRevisionId,
     });
     expect(summary?.preparation).toMatchObject({
+        initialReadingsCompletedAt: expect.any(Number),
+        proposalPublished: false,
         progress: {
             phase: "comparison",
             current: 1,
@@ -68,6 +70,24 @@ test("review exposes the persisted comparison phase and rejects progress from a 
             updatedAt: expect.any(Number),
         },
     });
+    const milestone = summary?.preparation?.initialReadingsCompletedAt;
+    await t.mutation(internal.sourcePreparation.recordProgress, {
+        preparationId,
+        phase: "supplement",
+    });
+    await t.mutation(internal.sourcePreparation.recordProgress, {
+        preparationId,
+        phase: "reading",
+    });
+    expect(
+        (
+            await owned.query(api.sourceSelectionProposals.getCurrent, {
+                runId,
+                corpusRevisionId,
+            })
+        )?.preparation?.initialReadingsCompletedAt,
+    ).toBe(milestone);
+    await t.mutation(internal.sourcePreparation.recordProgress, progress);
     await t.run((ctx) => ctx.db.patch(runId, { executionGeneration: 4 }));
     await expect(
         t.mutation(internal.sourcePreparation.recordProgress, {
@@ -606,4 +626,31 @@ test("source detail validates each pinned capture and qualification only once", 
             get.mockRestore();
         }
     });
+});
+
+test("retains the established reading milestone when an older preparation returns from supplementation", async () => {
+    const { t, runId, corpusRevisionId } = await seedSourcePreparation();
+    const preparationId = await t.mutation(
+        internal.sourcePreparation.claimForDiscovery,
+        { runId, corpusRevisionId, expectedExecutionGeneration: 3 },
+    );
+    await t.mutation(internal.sourcePreparation.recordProgress, {
+        preparationId,
+        phase: "supplement",
+    });
+    const establishedAt = await t.run(async (ctx) => {
+        const preparation = await ctx.db.get(preparationId);
+        await ctx.db.patch(preparationId, {
+            initialReadingsCompletedAt: undefined,
+        });
+        return preparation?.progress?.updatedAt;
+    });
+    await t.mutation(internal.sourcePreparation.recordProgress, {
+        preparationId,
+        phase: "reading",
+    });
+    expect(
+        (await t.run((ctx) => ctx.db.get(preparationId)))
+            ?.initialReadingsCompletedAt,
+    ).toBe(establishedAt);
 });

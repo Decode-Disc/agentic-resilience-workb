@@ -590,9 +590,7 @@ test("hands preparation back to review with a compact retained summary even when
             }
         />,
     );
-    expect(
-        screen.getByText("Source selection ready with limitations"),
-    ).toBeTruthy();
+    expect(screen.getByText("Ready for review with limitations")).toBeTruthy();
     await waitFor(() =>
         expect(
             screen.queryByRole("progressbar", {
@@ -643,7 +641,7 @@ test("shows comparison activity after reading finishes without asking to refresh
             })}
         />,
     );
-    expect(screen.getByText("Checking source contributions")).toBeTruthy();
+    expect(screen.getByText("Check source contributions")).toBeTruthy();
     expect(screen.getByText("3 of 12 source comparisons checked")).toBeTruthy();
     const progress = screen.getByRole("progressbar", {
         name: "Source comparison progress",
@@ -687,7 +685,12 @@ test("shows persisted preparation progress and blocks grouped approval while sou
             onRecompute={vi.fn()}
         />,
     );
-    expect(screen.getByText("Preparing source selection")).toBeTruthy();
+    expect(
+        screen.getByRole("listitem", {
+            name: "Read candidate sources: Active",
+        }),
+    ).toBeTruthy();
+    expect(screen.getByText("Step 1 of 3")).toBeTruthy();
     expect(screen.getByText("1 of 2 candidates checked.")).toBeTruthy();
     expect(
         (
@@ -721,9 +724,7 @@ test("describes a prepared selection without the legacy claim that its content w
             onRecompute={vi.fn()}
         />,
     );
-    expect(
-        screen.getByText("Source selection ready with limitations"),
-    ).toBeTruthy();
+    expect(screen.getByText("Ready for review with limitations")).toBeTruthy();
     expect(screen.queryByText(/source content has not been read/i)).toBeNull();
     expect(
         (

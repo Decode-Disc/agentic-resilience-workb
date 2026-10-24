@@ -105,6 +105,8 @@ Keep domain rules out of UI components. Keep provider-specific types and model n
 
 For an explicitly intended manual push to an already running local backend, use `pnpm convex:sync --url http://127.0.0.1:<port>`. It requires matching project configuration and running instance identity before calling the installed publisher, preserves project environment files, and never starts or stops a backend. It may regenerate Convex types and update backend functions, schema and indexes. It is not part of routine validation or CI. Do not replace it with a second `convex dev --once`, silently select another port or deployment, or bypass the native duplicate-instance protection.
 
+Impeccable uses the permanent development-only root entry, enabled per page load by `?impeccable=1` (or `&impeccable=1` when other parameters exist). Start its helper with `pnpm design:live` and stop it with `pnpm design:live:stop`;
+
 ### Centralization and Shared Ownership
 
 - Decisions, semantic status, presentation tokens, validation, and policy must each have a single owner. When a concept appears on multiple surfaces, expose it through a focused shared helper, hook, or domain module at the owning boundary; never duplicate mapping or conditional logic.

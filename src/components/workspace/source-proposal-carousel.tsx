@@ -10,6 +10,7 @@ import { AnimatePresence, motion } from "motion/react";
 import {
     type KeyboardEvent,
     type ReactNode,
+    type Ref,
     useEffect,
     useRef,
     useState,
@@ -53,6 +54,7 @@ export function SourceProposalCarousel({
     onDecide,
     annotation,
     toolbar,
+    readingRef,
 }: {
     items: ReadonlyArray<Source>;
     group: Source["disposition"];
@@ -65,6 +67,7 @@ export function SourceProposalCarousel({
     onDecide: Parameters<typeof SourceAdjustmentActions>[0]["onDecide"];
     annotation: (source: Source) => ReactNode;
     toolbar: ReactNode;
+    readingRef?: Ref<HTMLElement>;
 }) {
     const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
     const [browsing, setBrowsing] = useState<{
@@ -281,6 +284,7 @@ export function SourceProposalCarousel({
             </section>
             {active ? (
                 <section
+                    ref={readingRef}
                     aria-label="Selected source reading"
                     className="min-w-0">
                     {detailMatches && selectedSource === null ? (

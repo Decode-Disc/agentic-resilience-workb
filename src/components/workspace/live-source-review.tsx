@@ -113,9 +113,17 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
     const [repairStatus, setRepairStatus] = useState<
         "idle" | "loading" | "complete" | "failed"
     >("idle");
-    const [queries, setQueries] = useState<SourceReviewQuerySnapshot | null>(
-        null,
-    );
+    const [queryState, setQueryState] = useState<SourceReviewQueryState>({
+        snapshot: null,
+        refreshing: true,
+    });
+    const { snapshot: cachedQueries, refreshing: queriesRefreshing } =
+        queryState;
+    const queries =
+        cachedQueries?.runId === runId &&
+        cachedQueries.corpusRevisionId === corpusRevisionId
+            ? cachedQueries
+            : null;
     const prepareSources = useMutation(api.sourcePreparation.startForReview);
     const approveProposal = useMutation(
         api.sourceSelectionProposals.approveProposedCorpus,
@@ -146,7 +154,7 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
                 now={queryClock}
                 inspectionFilter={inspectionFilter}
                 selectedId={selectedId}
-                setQueries={setQueries}
+                setQueryState={setQueryState}
             />
         </LoadErrorBoundary>
     );
@@ -382,7 +390,13 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
     return (
         <>
             {queryBridge}
-            <div className="space-y-3">
+            <div className="space-y-3" aria-busy={queriesRefreshing}>
+                {queriesRefreshing && updatesConnected ? (
+                    <p role="status" className="text-xs text-muted-foreground">
+                        Updating source status. Your current review remains
+                        available.
+                    </p>
+                ) : null}
                 {!online ||
                 (connection.hasEverConnected &&
                     !connection.isWebSocketConnected) ? (
@@ -423,7 +437,7 @@ export function LiveSourceReview(props: LiveSourceReviewProps) {
                     />
                 ) : null}
                 <SourceProposalReview
-                    updatesConnected={updatesConnected}
+                    updatesConnected={updatesConnected && !queriesRefreshing}
                     sourceReviewNavigation={sourceReviewNavigation}
                     onSourceReviewNavigate={onSourceReviewNavigate}
                     runId={runId}
@@ -649,6 +663,8 @@ function useSourceReviewQueries({
     );
 
     return {
+        runId,
+        corpusRevisionId,
         proposal,
         adjustmentSets,
         inspectionSummary,
@@ -659,29 +675,51 @@ function useSourceReviewQueries({
 
 type SourceReviewQuerySnapshot = ReturnType<typeof useSourceReviewQueries>;
 
+type SourceReviewQueryState = {
+    snapshot: SourceReviewQuerySnapshot | null;
+    refreshing: boolean;
+};
+
 function SourceReviewQueryBridge({
-    setQueries,
+    setQueryState,
     ...queryArgs
 }: Parameters<typeof useSourceReviewQueries>[0] & {
-    setQueries: Dispatch<SetStateAction<SourceReviewQuerySnapshot | null>>;
+    setQueryState: Dispatch<SetStateAction<SourceReviewQueryState>>;
 }) {
     const queries = useSourceReviewQueries(queryArgs);
 
     useEffect(() => {
-        setQueries((current) =>
-            current !== null &&
-            current.proposal === queries.proposal &&
-            current.adjustmentSets === queries.adjustmentSets &&
-            current.inspectionSummary === queries.inspectionSummary &&
-            current.inspectionPage.results === queries.inspectionPage.results &&
-            current.inspectionPage.status === queries.inspectionPage.status &&
-            current.inspectionPage.loadMore ===
-                queries.inspectionPage.loadMore &&
-            current.selectedSource === queries.selectedSource
-                ? current
-                : queries,
-        );
-    }, [queries, setQueries]);
+        setQueryState((current) => {
+            const resolved =
+                queries.proposal !== undefined &&
+                queries.inspectionSummary !== undefined &&
+                (queries.proposal === null ||
+                    queries.adjustmentSets !== undefined);
+            if (!resolved)
+                return current.refreshing
+                    ? current
+                    : { ...current, refreshing: true };
+            const snapshot = current.snapshot;
+            if (
+                !current.refreshing &&
+                snapshot !== null &&
+                snapshot.runId === queries.runId &&
+                snapshot.corpusRevisionId === queries.corpusRevisionId &&
+                snapshot.proposal === queries.proposal &&
+                snapshot.adjustmentSets === queries.adjustmentSets &&
+                snapshot.inspectionSummary === queries.inspectionSummary &&
+                snapshot.inspectionPage.results ===
+                    queries.inspectionPage.results &&
+                snapshot.inspectionPage.status ===
+                    queries.inspectionPage.status &&
+                snapshot.inspectionPage.loadMore ===
+                    queries.inspectionPage.loadMore &&
+                snapshot.selectedSource === queries.selectedSource
+            )
+                return current;
+            return { snapshot: queries, refreshing: false };
+        });
+    }, [queries, setQueryState]);
 
     return null;
 }
@@ -707,14 +745,29 @@ function LiveSourceReviewSkeleton() {
                     </div>
                 </div>
                 <div className="space-y-3 border-t border-border/60 pt-4">
-                    <div className="flex items-start gap-3">
-                        <Skeleton className="size-7 shrink-0 rounded-full" />
-                        <div className="flex-1 space-y-2">
-                            <Skeleton className="h-4 w-48 max-w-full" />
-                            <Skeleton className="h-3 w-3/4" />
-                        </div>
+                    <div className="flex items-center justify-between gap-3">
+                        <Skeleton className="h-4 w-36" />
+                        <Skeleton className="h-5 w-20 rounded-full" />
                     </div>
-                    <Skeleton className="h-1.5 w-full" />
+                    <div className="flex gap-1">
+                        {[0, 1, 2].map((step) => (
+                            <Skeleton
+                                key={step}
+                                className="h-1.5 flex-1 rounded-full"
+                            />
+                        ))}
+                    </div>
+                    {[0, 1, 2].map((step) => (
+                        <div
+                            key={step}
+                            className="flex items-start gap-3 py-1.5">
+                            <Skeleton className="mt-1 size-4 shrink-0 rounded-full" />
+                            <div className="flex min-h-6 min-w-0 flex-1 flex-col gap-2 lg:flex-row lg:items-center lg:gap-4">
+                                <Skeleton className="h-4 w-36 max-w-full lg:w-64" />
+                                <Skeleton className="h-3 w-64 max-w-full" />
+                            </div>
+                        </div>
+                    ))}
                     <Skeleton className="h-3 w-2/3" />
                 </div>
             </section>

@@ -121,7 +121,7 @@ function recoveryReview(
     deadlineAt?: number,
     retryAt?: number,
 ) {
-    convexReactHarness.query(api.sourceSelectionProposals.getCurrent).returns({
+    const proposalSnapshot = {
         proposalId: "proposal-1",
         version: 1,
         status: "ready",
@@ -150,7 +150,10 @@ function recoveryReview(
             kind: preparation ? "resume" : "start",
             available: true,
         },
-    });
+    };
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getCurrent)
+        .returns(proposalSnapshot);
     convexReactHarness
         .query(api.sourceSelectionProposals.getAdjustmentSets)
         .returns({ included: [source], available: [] });
@@ -169,13 +172,14 @@ function recoveryReview(
         status: "Exhausted",
         loadMore: vi.fn(),
     });
-    return render(
+    const view = render(
         <LiveSourceReview
             runId={"run-1" as never}
             corpusRevisionId={"revision-1" as never}
             onDecide={vi.fn()}
         />,
     );
+    return { ...view, proposalSnapshot };
 }
 
 test("starts source reading explicitly from a current draft using its native preparation result", async () => {
@@ -940,7 +944,7 @@ test("retains cached readings when a preparation deadline passes offline and ref
         vi.advanceTimersByTime(100);
     });
     expect(
-        screen.getByText("Source selection ready", { exact: true }),
+        screen.getByText("Ready for your review", { exact: true }),
     ).toBeTruthy();
 });
 
@@ -1174,12 +1178,8 @@ test("interrupted comparisons remain visible after source reading succeeds", () 
         pendingComparisons: 1,
         canResume: true,
     });
-    expect(
-        screen.getByText("Source selection ready with limitations"),
-    ).toBeTruthy();
-    expect(
-        screen.getByText(/Some source comparisons remain incomplete/),
-    ).toBeTruthy();
+    expect(screen.getByText("Ready for review with limitations")).toBeTruthy();
+    expect(screen.getByText("1 source comparison needs review")).toBeTruthy();
     expect(
         screen.getByText(
             /Review the saved readings and limitations before approving/,
@@ -1191,4 +1191,77 @@ test("interrupted comparisons remain visible after source reading succeeds", () 
     expect(document.body.textContent).not.toMatch(
         /provider_unavailable|source_comparison|executionGeneration/,
     );
+});
+
+test("keeps the current reader and focus while status reloads and blocks approval until fresh data returns", () => {
+    const view = recoveryReview();
+    const reader = screen.getByRole("region", {
+        name: "Selected source reading",
+    });
+    const card = screen.getByRole("button", { name: /^Open .* for review$/ });
+    card.focus();
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getCurrent)
+        .returns(undefined);
+    view.rerender(
+        <LiveSourceReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            onDecide={vi.fn()}
+        />,
+    );
+    expect(
+        screen.getByRole("region", { name: "Selected source reading" }),
+    ).toBe(reader);
+    expect(document.activeElement).toBe(card);
+    expect(
+        screen.getByText(
+            "Updating source status. Your current review remains available.",
+        ),
+    ).toBeTruthy();
+    expect(
+        screen.getByRole("button", { name: "Approve proposed corpus" }),
+    ).toHaveProperty("disabled", true);
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getCurrent)
+        .returns(view.proposalSnapshot);
+    view.rerender(
+        <LiveSourceReview
+            runId={"run-1" as never}
+            corpusRevisionId={"revision-1" as never}
+            onDecide={vi.fn()}
+        />,
+    );
+    expect(
+        screen.getByRole("region", { name: "Selected source reading" }),
+    ).toBe(reader);
+    expect(document.activeElement).toBe(card);
+    expect(
+        screen.queryByText(
+            "Updating source status. Your current review remains available.",
+        ),
+    ).toBeNull();
+    expect(
+        screen.getByRole("button", { name: "Approve proposed corpus" }),
+    ).toHaveProperty("disabled", false);
+});
+
+test("does not retain source readings across a dossier or corpus revision change", () => {
+    const view = recoveryReview();
+    convexReactHarness
+        .query(api.sourceSelectionProposals.getCurrent)
+        .returns(undefined);
+    view.rerender(
+        <LiveSourceReview
+            runId={"run-other" as never}
+            corpusRevisionId={"revision-other" as never}
+            onDecide={vi.fn()}
+        />,
+    );
+    expect(
+        screen.queryByRole("region", { name: "Selected source reading" }),
+    ).toBeNull();
+    expect(
+        screen.getByRole("region", { name: "Loading source proposal summary" }),
+    ).toBeTruthy();
 });

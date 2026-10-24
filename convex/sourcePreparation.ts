@@ -273,7 +273,11 @@ export async function startReviewPreparation(
             expectedProposalId: proposal._id,
             kind: "preparation",
             ...(previous?.kind === "preparation"
-                ? { resumesPreparationId: previous._id }
+                ? {
+                      resumesPreparationId: previous._id,
+                      initialReadingsCompletedAt:
+                          previous.initialReadingsCompletedAt,
+                  }
                 : {}),
             entryPoint: args.target
                 ? "targeted_search"
@@ -1281,6 +1285,16 @@ export const recordProgress = internalMutation({
             return null;
         const now = Date.now();
         await ctx.db.patch(preparation._id, {
+            ...((args.phase !== "reading" ||
+                preparation.progress.phase !== "reading") &&
+            preparation.initialReadingsCompletedAt === undefined
+                ? {
+                      initialReadingsCompletedAt:
+                          preparation.progress.phase === "reading"
+                              ? now
+                              : preparation.progress.updatedAt,
+                  }
+                : {}),
             progress: {
                 phase: args.phase,
                 current: args.current,

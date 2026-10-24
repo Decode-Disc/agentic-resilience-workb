@@ -1102,6 +1102,9 @@ test("local progress fixtures advance real review projections without providers 
     for (const phase of [
         "reading",
         "comparison",
+        "comparison_progress",
+        "supplement",
+        "additional_reading",
         "proposal",
         "complete",
     ] as const) {
@@ -1116,11 +1119,23 @@ test("local progress fixtures advance real review projections without providers 
         if (phase === "complete") {
             expect(summary?.preparation?.status).toBe("partial");
             expect(summary?.effectiveStatus).toBe("ready");
+            expect(summary?.preparation?.proposalPublished).toBe(true);
         } else
             expect(summary?.preparation).toMatchObject({
                 status: "started",
-                progress: { phase },
+                progress: {
+                    phase:
+                        phase === "comparison_progress"
+                            ? "comparison"
+                            : phase === "additional_reading"
+                              ? "reading"
+                              : phase,
+                },
             });
+        if (phase !== "reading")
+            expect(summary?.preparation?.initialReadingsCompletedAt).toEqual(
+                expect.any(Number),
+            );
     }
     const after = await t.query(
         internal.e2eFixtures.inspectSourceReviewScenario,
