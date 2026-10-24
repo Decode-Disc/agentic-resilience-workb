@@ -298,7 +298,7 @@ function LandingHeader() {
 function MatrixPreview() {
     return (
         <LiquidGlassCard
-            className="relative w-full text-left bg-card/80 border border-brand-purple/20 motion-reduce:!transform-none"
+            className="relative w-full text-left bg-card/80 border border-brand-purple/30 shadow shadow-primary motion-reduce:transform-none!"
             blurIntensity="md"
             glowIntensity="sm"
             shadowIntensity="md"
@@ -469,7 +469,7 @@ export function IndexPage() {
                 <div className="absolute top-[13rem] left-1/2 size-[84rem] -translate-x-1/2 rounded-full border border-dashed border-brand-purple/40" />
             </div>
 
-            <main className="relative z-10 mx-auto flex w-full min-h-0 max-w-3xl flex-col items-center px-4 pb-10 pt-20 md:pt-30">
+            <main className="relative z-10 mx-auto flex w-full min-h-0 max-w-4xl flex-col items-center px-4 pb-10 pt-20 md:pt-30">
                 <motion.section
                     initial={{ opacity: 0, y: 14 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -477,7 +477,7 @@ export function IndexPage() {
                         duration: 0.55,
                         ease: easeOrganic,
                     }}
-                    className="flex max-w-[40rem] xl:max-w-[50rem] flex-col gap-4 items-center text-center motion-reduce:!transform-none motion-reduce:!opacity-100"
+                    className="flex max-w-[40rem] xl:max-w-[50rem] flex-col gap-4 items-center text-center motion-reduce:transform-none! motion-reduce:opacity-100!"
                     aria-labelledby="index-title">
                     <Badge
                         variant="fancy"

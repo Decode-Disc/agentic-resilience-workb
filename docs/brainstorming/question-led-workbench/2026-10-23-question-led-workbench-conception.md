@@ -2,9 +2,11 @@
 
 ## Status and Authority
 
-Recorded on 2026-10-23 and updated on 2026-10-24. This document preserves the product direction accepted during brainstorming, recommendations still awaiting a decision, and the alternatives considered. The user authorized documenting the conception only. It is not an implementation plan, a completed specification, or evidence of delivered functionality.
+Recorded on 2026-10-23 and updated on 2026-10-24. This document preserves the accepted product direction, shared inventory, autonomous preparation, grouped analyst review, and remaining design decisions. The user authorized documenting and regrouping the conception only. It is not an implementation plan, a completed specification, or evidence of delivered functionality.
 
-Under the [documentation policy](../../AGENTS.md#document-authority-and-required-reading), this is a brainstorming record. It does not amend [PRODUCT.md](../../PRODUCT.md), [context/TECH.md](../../context/TECH.md), [context/PROJECT.md](../../context/PROJECT.md), [AGENTS.md](../../AGENTS.md), or [the roadmap](../ROADMAP.md). The current ten-dimension contracts and mandatory human corpus checkpoint remain implementation obligations until those references are explicitly reconciled with the target described here.
+Under the [documentation policy](../../../AGENTS.md#document-authority-and-required-reading), this is a brainstorming record. It does not amend [PRODUCT.md](../../../PRODUCT.md), [context/TECH.md](../../../context/TECH.md), [context/PROJECT.md](../../../context/PROJECT.md), [AGENTS.md](../../../AGENTS.md), or [the roadmap](../../ROADMAP.md). The current ten-dimension contracts and mandatory human corpus checkpoint remain implementation obligations until those references are explicitly reconciled with the target described here.
+
+This document records the system-wide conception. The [source ingestion and processing conception](2026-10-24-source-ingestion-and-processing-conception.md) details the source module, its three principal stages, internal work, and contribution to the overall system. Neither document adds another current reference contract.
 
 ## Purpose
 
@@ -16,7 +18,7 @@ The retained destination is an analysis dossier that examines a precise economic
 
 The dossier first situates the company, then investigates an activity or workflow relevant to its economic position. The reason for choosing that scope is qualitative and grounded in available sources. The prototype does not systematically measure the activity's share of company economics. Findings remain attached to the investigated scope rather than automatically extending to the whole company. The existing US-listed technology-company scope is retained.
 
-The accepted reference example is the existing CCC Intelligent Solutions case: within a photo-led auto physical damage workflow, investigate whether CCC controls a difficult-to-substitute coordination point or supplies modules under carrier or core-platform authority. This is a question to investigate, not a conclusion about CCC. The [existing research boundary](../../PRODUCT.md#evidence-on-hand) remains the reference for the case.
+The accepted reference example is the existing CCC Intelligent Solutions case: within a photo-led auto physical damage workflow, investigate whether CCC controls a difficult-to-substitute coordination point or supplies modules under carrier or core-platform authority. This is a question to investigate, not a conclusion about CCC. The [existing research boundary](../../../PRODUCT.md#evidence-on-hand) remains the reference for the case.
 
 The analytical structure combines a common research foundation with the decisive questions specific to the case. A fixed ten-dimension grid is not the retained target. Its useful questions may inform the new foundation, whose exact content remains to be defined.
 
@@ -32,7 +34,7 @@ Question framing, source preparation, comparison, classification, and decision h
 
 ## Proactive Workflow and Analyst Role
 
-The retained direction delegates preparation to the system. The analyst can orient, inspect, and challenge the work without having to manage each research operation. The following schematic records the high-level sequence; it does not define new mandatory analyst confirmations or a finalization rule.
+The retained direction delegates preparation to the system. The analyst can orient, inspect, and challenge the work without having to manage each research operation. The following schematic records the high-level sequence. Preparation completion and analyst adoption are distinct, as defined below.
 
 ```text
 START
@@ -78,6 +80,22 @@ Delegated source selection must remain explainable and traceable. Retaining a so
 
 The discussed intervention principle is to distinguish a local limitation from a material decision the system has no mandate to make. An inaccessible source can lead to another source or a disclosed limitation; conflicting material can become an objection; insufficient evidence can remain an explicit unknown. These are examples for defining the policy, not approved automatic exception thresholds. Autonomy does not imply unbounded searching or concealing failure.
 
+### Allocation of Work
+
+An autonomous operation can also have optional detailed inspection. Optional inspection is not another approval checkpoint. The following allocation records the retained target rather than asserting that these operations are all implemented.
+
+| Work | Retained responsibility |
+| --- | --- |
+| Research planning and source ingestion and processing | Autonomous after framing; the source conception owns discovery, availability checks, reading, qualification, comparison, selection, and the bounded complement phase. |
+| Enriching the shared company inventory | Autonomous preparation of sourced, qualified information, with inspectable controls and limitations. Other enrichment mechanisms remain possible. |
+| Checking assertions and their question links | Mandatory system controls; important unresolved exceptions can require human intervention. Routine human confirmation of every assertion and link is not required before preparing appraisals. |
+| Examining counter-evidence and preparing appraisals | Autonomous work on the framed questions, preserving objections and unknowns. |
+| Preparing synthesis, brief, and derived views | Autonomous, with inspectable evidence dependencies and a clear distinction between proposals and retained appraisals. The map's exact place and format remain open. |
+| Retaining analytical judgments | Explicit grouped analyst review, with correction or follow-up possible per question. |
+| Routine recovery | Autonomous within the mandate and resource allowances. Changing scope or exceeding the mandate requires a decision; technical unavailability remains distinct from evidence insufficiency. |
+
+The old fixed ten-dimension questionnaire and scoring sequence are not the target. Neither is a requirement to finish an exhaustive company inventory before appraisals can be prepared. These changes remove inherited progression requirements, not evidence controls.
+
 ## Workspace Experience
 
 The user described the following interaction direction. It records the intended experience, not an approved final layout or authorization to implement a redesign.
@@ -90,39 +108,55 @@ The user described the following interaction direction. It records the intended 
 
 Exact card count, grouping, responsive placement, animation behavior, and the relationship between the timeline and completed results remain to be designed. A visible activation must reflect actual execution rather than illustrative activity.
 
-## Proposed Reusable Workflow Responsibilities
+## Reusable Workflow Responsibilities
 
-The following three responsibilities were proposed to clarify the user's idea of reusable workflow bricks. Their exact decomposition and presentation have not been separately ratified. They do not prescribe new services, agents, or an extensibility framework.
+Source ingestion and processing is documented as a reusable module. Investigation and synthesis remain useful responsibilities for explaining the larger workflow; their exact technical decomposition and card presentation are not selected. A workflow responsibility does not prescribe a separate service, agent, or extensibility mechanism.
 
 | Proposed responsibility | Output |
 | --- | --- |
-| Sources | Useful documentary material with qualification, provenance, and limitations. |
+| Source ingestion and processing | Shared documentary material with qualification, provenance, and limitations; see its dedicated conception. |
 | Investigation | A reasoned appraisal of a question, with supporting evidence, objections, and unknowns. |
 | Synthesis | An account of how the appraisals relate and what their economic implications and limits are. |
 
-A workflow capability, an execution of that capability, and its visible card are distinct concepts. The source matrix is a detailed view of source preparation; a research question is not automatically another independent source-collection capability. The proposed organization lets several investigations share the dossier's sources while asking for targeted documentary additions when necessary.
+A workflow capability, an execution of that capability, and its visible card are distinct concepts. The source matrix is a detailed view of source preparation; a research question is not another independent source-collection module. Several investigations reuse the shared material and company inventory rather than maintaining duplicate versions of the same assertion in each appraisal.
 
 ```text
-                 SHARED DOSSIER SOURCES
-                      /    |    \
-                     v     v     v
-                Question A B     C
-                     |     |     |
-                Reasoned appraisals
-                      \    |    /
-                       v   v   v
-                       SYNTHESIS
+            Source ingestion and processing
+                          |
+                          v
+              Shared company inventory <--- Other enrichment
+                    /     |     \           mechanisms, undefined
+                   v      v      v
+               Question A B      C
+                   |      |      |
+               Reasoned appraisals
+                    \     |     /
+                     v    v    v
+                       Synthesis
+                          |
+                          v
+               Grouped analyst adoption
 ```
 
 One source can inform several questions through the relevant passages. Reusing it must preserve its identity, permitted uses, and limitations. Whether cards represent responsibilities, individual investigations, or grouped work remains open; a growing question count should not automatically produce a separate floating source matrix for every question.
 
-## Evidence Matrix and Assessment
+## Shared Company Inventory and Evidence Matrix
 
-The evidence matrix remains the inspectable evidence foundation, accessible for deeper examination from the workspace. It need not occupy the main progress view or require the analyst to supervise research there. The analyst should be able to connect a research question to the relevant claims and passages, supporting and opposing evidence, and unresolved matters. The existing distinctions between `Fact`, `Inference`, `Hypothesis`, and `Unknown` remain useful. Source preparation and the analytical evidence matrix remain distinct responsibilities even when they share navigation or data.
+The retained conception preserves a general company inventory, including useful company context and sourced assertions shared across questions. The system can enrich it from the work performed, and other mechanisms may enrich it later. Those mechanisms are not selected; their possibility does not authorize new integrations, continuous monitoring, or unsourced inputs. The inventory need not be exhaustive before a useful appraisal can be proposed.
+
+Source ingestion supplies documentary material. Admission to the analytical inventory also requires the assertion and its intended use to satisfy the applicable controls. Finding, reading, selecting, and quoting a source do not themselves establish an assertion's truth. A common assertion can serve several questions while each use retains its own scope, rationale, and supporting, opposing, or contextual relationship.
+
+The evidence matrix makes this inventory and its uses inspectable. The analyst can connect a research question to the relevant assertions, passages, objections, unknowns, control results, and corrections. It need not occupy the main progress view or require supervision of every operation. The distinctions between `Fact`, `Inference`, `Hypothesis`, and `Unknown` remain useful.
+
+Three meanings of validation must remain separate: documentary integrity checks, checks on the permitted use and reasoning of an assertion and its links, and human adoption of an analytical interpretation. System controls remain mandatory. A failed integrity check cannot be waived by a human approval. An unresolved analytical limitation must produce an explicit restriction, uncertainty, exclusion from the affected use, or important exception; it cannot silently become a successful validation.
+
+What is removed from the target is systematic human confirmation of each assertion and link before appraisals can be prepared. Inspection, correction, and important human interventions remain available. The shared inventory and its controls are retained, rather than replaced by repeated independent arguments embedded in each appraisal. Exact persistence, correction propagation, and revision granularity are still to be designed; no complete incremental dependency engine is selected.
+
+## Appraisal, Grouped Review, and Completion
 
 The accepted assessment format is a reasoned appraisal for each decisive question, followed by a synthesis of the investigated scope. The interpretation, its support, objections, and unknowns should be visible together. Confidence is explained through the evidence and its limitations. An explicit horizon is relevant when an interpretation concerns future change; no replacement categorical confidence scale or fixed horizon was selected.
 
-The following wireframe records the selected information organization. All example statements are fictional and illustrate the presentation only; they are not findings about CCC. It is not a final layout, approved wording, or implementation of review controls.
+The following wireframe records the selected information organization. All example statements are fictional and illustrate the presentation only; they are not findings about CCC. Its per-question controls are illustrative; grouped review is the retained adoption mechanism, not a requirement to approve each question through this layout.
 
 ```text
 ┌──────────────────────────────────────────────────────┐
@@ -154,11 +188,15 @@ The following wireframe records the selected information organization. All examp
 └──────────────────────────────────────────────────────┘
 ```
 
-The dossier synthesis would connect the appraisals of its decisive questions while keeping their scope and limitations visible.
+The system prepares appraisals and the proposed synthesis before analyst adoption. The synthesis connects the appraisals while keeping their scope, objections, and limitations visible. The analyst can retain the reviewed appraisals in one grouped action, correct an appraisal, or leave a question for follow-up. The action must make its included appraisals identifiable and cannot imply that unreviewed proposals were retained.
 
-Question coverage must not imply that a question is resolved merely because a claim refers to it. Inspection of [claimValidation.ts](../../convex/domain/claimValidation.ts) found that `deriveQuestionCoverage` counts question-linked claims, including `Unknown`. The [matrix query](../../convex/evidenceMatrix.ts) uses that count. This is evidence presence, not an established answer. The exact replacement for this projection is undecided.
+Preparation may finish when the framed questions have been investigated, including a question that ends in explicitly justified evidence insufficiency. This means the authorized preparatory work is complete, not that every question is resolved or that the analyst agrees. Interrupted or unperformed work remains incomplete; missing technical capability cannot be relabelled as an evidence-based unknown. The former finalization requirement of ten dimension decisions is not retained.
 
-The analyst remains the final authority over analytical judgment. Source selection follows the target launch mandate described above; exact provenance, inspectable proposals, and preserved decisions remain essential. The selected appraisal schematic establishes information organization, not final review controls, review granularity, or implementation authority.
+Human decisions remain associated with the version reviewed. Later inventory enrichment must not silently rewrite a retained interpretation or imply fresh analyst adoption. Exact freshness indicators, follow-up behavior, and revision mechanics remain open.
+
+Question coverage must not imply that a question is resolved merely because a claim refers to it. Inspection of [claimValidation.ts](../../../convex/domain/claimValidation.ts) found that `deriveQuestionCoverage` counts question-linked claims, including `Unknown`. The [matrix query](../../../convex/evidenceMatrix.ts) uses that count. This is evidence presence, not an established answer. The exact replacement for this projection is undecided.
+
+The analyst remains the final authority over analytical judgment. Source selection follows the target launch mandate described above; exact provenance, inspectable proposals, and preserved decisions remain essential. The selected appraisal schematic does not establish final wording, control layout, or implementation authority.
 
 ## Economic Data Boundary
 
@@ -181,6 +219,30 @@ An earlier preference for simple verifiable calculations was explicitly narrowed
 | Prepare shared documentary material while framing remains open | Not selected for the prototype. This earlier recommendation was superseded by the user's choice to finish framing first. Any future time-saving benefit would need verification. |
 | Start all common-question investigations while framing remains open | Not selected for the prototype. It adds speculative work and consistency handling beyond the retained sequential start. |
 | Require a contextual corpus approval before every analysis | Not selected as the target workflow. The user selected delegated source selection under an initial mandate, with important exceptions raised contextually. Current reference contracts still require reconciliation before implementation. |
+| Independent appraisals referencing passages without a shared assertion inventory | Not selected. It reduces intermediate objects but repeats common interpretations and corrections across questions. The company inventory and reusable sourced assertions are retained. |
+| Require an exhaustive inventory and routine human confirmation of every assertion and link | Not selected. The system must retain the inventory and mandatory controls while avoiding an analyst-managed inventory-completion workflow. |
+| Individual adoption of every appraisal as the default | Not selected. The user retained grouped review with correction or follow-up per question. |
+
+## Working System Brief
+
+**System type** — Complex at the level of analytical usefulness and analyst workload, with Clear and Complicated internal controls. Exact passage reproduction and workflow authorization have reproducible rules; whether prepared material helps the intended analyst judge a particular economic question depends on the case, available sources, and use. The new interaction has illustrative design evidence, not demonstrated end-to-end analytical usefulness. This is a working classification, not a measured product result.
+
+**Players and incentives** — The following are design hypotheses about roles, not verified findings about Decoding Discontinuity's internal practices.
+
+| Player | Wants | Incentive or constraint to consider |
+| --- | --- | --- |
+| Intended analyst, including Raphaëlle | Useful economic interpretation with credible evidence and limited coordination work. | Readily available narrative can feel useful before its limitations are examined. |
+| Prototype author | Deliver a useful contribution that supports the candidature. | Visible breadth and polish can displace the work needed for a convincing analytical result. |
+| Operator and maintainer | Reliable, bounded execution and understandable failures. | Optimizing for terminal workflow states or low cost alone can conceal inadequate preparation. |
+| Source producers | Communicate their disclosures, products, reporting, or interpretations. | Publication purposes differ; confidence, volume, and domain diversity do not establish truth or independence. |
+
+**Stocks and flows** — Sources, captures, qualified contributions, shared assertions, unresolved questions, and analyst decisions accumulate. Discovery, reading, qualification, reuse, correction, and adoption move them between states. Analyst attention and execution allowances are finite. Increasing the source stock faster than useful qualification and review can absorb it creates a backlog rather than demonstrated value. No rates or savings have been measured for this direction.
+
+**What the change sets off** — A hypothesized reinforcing loop is shared evidence reuse, less repeated preparation, more attention for material judgments, useful corrections, and a better inventory. A harmful reinforcing loop is rewarding source or assertion counts, producing more review work, encouraging superficial confirmation, and accumulating false confidence. A balancing loop is bounded research plus visible unresolved questions, limiting further acquisition while enabling a deliberate follow-up. Delayed feedback matters: an attractive early appraisal can appear successful before source misuse or stale reasoning is discovered. Later enrichment can also invalidate an earlier interpretation; version-bound decisions prevent that change from silently becoming the analyst's new view.
+
+**Protocol** — Use deterministic checks and focused technical analysis for the reproducible controls. Use the smallest reversible experiment for analytical usefulness and workload, rather than treating a polished interface or a passing schema as validation of the whole system. The proposed leverage point is the handoff from routine evidence preparation to a material human judgment, not raw collection throughput.
+
+**Next smallest test** — Proposed, not executed: use one frozen illustrative dossier with questions sharing an assertion, a contradictory passage, and a documented gap. Walk through framing, source output, appraisals, and grouped review; record whether the analyst can understand and challenge an appraisal without coordinating preparation. If the decisive friction is entirely explained by repeatable ownership or transition defects, classify that slice as Complicated and repair it with focused analysis rather than adding exploratory automation. Repeated inability to judge without deep research coordination would falsify the proposed division of work. No paid provider experiment or application implementation is authorized by this proposed test.
 
 ## Research Basis and Adaptation
 
@@ -193,7 +255,7 @@ These sources inform the conception. They establish public research themes, not 
 - [The Investor's Edge Lives in Their Head, Anekha Sokhal, Moshi](https://youtu.be/UHbODjuviAU): English transcript read through Exa; metadata, description, and transcript retrieved through Firecrawl on 2026-10-24. Executor was not exposed in that session, and the available transcript connector returned no text. The chapter beginning at 10:28 distinguishes preparatory reading, gathering, and cross-checking from human judgment. The description's [Moshi link](https://hellomoshi.ai) was read through Exa; the event-promotion link was not used. This informs the division of work, not a claim that the prototype delivers continuous market monitoring, trading decisions, a quant team, or Moshi's advertised performance.
 - The user-supplied [Questionnaire documentation](https://ui.shadcn.com/docs/components/base/questionnaire) was read through Exa. It describes single and multiple choices, freeform answers, optional questions, and host-owned persistence and branching. This supports the selected interaction direction without establishing installation or compatibility in the prototype.
 - External content read through Exa includes [About Decoding Discontinuity](https://www.decodingdiscontinuity.com/about), [Institutional Research](https://www.decodingdiscontinuity.com/p/institutional-research), and the [public ARAF presentation](https://www.decodingdiscontinuity.com/p/araf-architectural-resilience-assessment-framework).
-- Local discovery included the current reference documents, [researchPlan.ts](../../convex/domain/researchPlan.ts), [the claim detail view](../../src/components/workspace/evidence-claim-detail.tsx), the matrix query and coverage derivation, and the existing CCC selection rationale. Workflow discovery also inspected [Start](../../src/routes/workspace/start.tsx), [the composer](../../src/components/workspace/research-composer.tsx), [persisted progress](../../src/components/workspace/run-progress.tsx), [source preparation](../../convex/sourcePreparationWorkflow.ts), and [corpus approval](../../convex/sourceSelectionProposals.ts). Source inspection does not establish runtime readiness or analytical usefulness.
+- Local discovery included the current reference documents, [researchPlan.ts](../../../convex/domain/researchPlan.ts), [the claim detail view](../../../src/components/workspace/evidence-claim-detail.tsx), the matrix query and coverage derivation, and the existing CCC selection rationale. Workflow discovery also inspected [Start](../../../src/routes/workspace/start.tsx), [the composer](../../../src/components/workspace/research-composer.tsx), [persisted progress](../../../src/components/workspace/run-progress.tsx), [source preparation](../../../convex/sourcePreparationWorkflow.ts), and [corpus approval](../../../convex/sourceSelectionProposals.ts). Source inspection does not establish runtime readiness or analytical usefulness.
 
 ### Source-to-Design Mapping
 
@@ -212,11 +274,11 @@ These sources inform the conception. They establish public research themes, not 
 
 - Define the exact common research foundation, the bounded set of decisive questions, and how the proposed activity or workflow is selected and corrected.
 - Define how framing completes without making optional refinements mandatory, and how later scope changes affect ongoing work and existing results. Research starts only after framing; speculative background research during framing is not part of the prototype.
-- Specify the launch mandate's source-selection rules, resource limits, intervention criteria, and handling of material exceptions. The delegated-selection principle is accepted; its enforcement and replacement of the current human corpus checkpoint are not implemented or fully specified.
-- Decide the proposed Sources, Investigation, and Synthesis decomposition, source sharing across questions, card grouping, detail-page navigation, and completed-result presentation. Preserve the accepted composer, timeline, contextual-intervention, and optional-inspection direction without treating an illustrative layout as finished design.
-- Specify question-to-evidence relationships, their presentation in the existing matrix, and the distinction between available evidence and an adequately examined question. Exact fields, navigation, and evaluation rules are not selected.
-- Define confidence presentation, treatment of future horizons, review granularity, and synthesis composition without reintroducing an unsupported aggregate resilience score.
-- Decide finalization criteria. Finalization after analyst review of every decisive question, allowing explicitly documented insufficient evidence, was proposed but was not separately ratified. It must not be recorded as an accepted replacement for the current finalization rule.
+- Specify the launch mandate's source-selection rules, resource limits, intervention criteria, and handling of material exceptions, using the source conception for its internal workflow. Delegated selection is accepted; its enforcement and replacement of the current human corpus checkpoint are not implemented.
+- Define the remaining technical decomposition of investigation and synthesis, card grouping, detail-page navigation, and completed-result presentation. Preserve the accepted composer, timeline, contextual-intervention, and optional-inspection direction without treating an illustrative layout as finished design.
+- Specify shared assertion identity, question-to-evidence relationships, inventory correction and enrichment mechanisms, and their presentation in the matrix. Exact records, freshness rules, and navigation are not selected.
+- Define confidence presentation, treatment of future horizons, synthesis composition, and the detailed interaction and audit semantics of grouped review. Grouped adoption is accepted; its controls and persistence shape are not selected.
+- Specify executable completion checks that distinguish investigated-but-insufficient questions from interrupted or unperformed work. Preparation may end with justified insufficiency; the exact projections and transitions remain open.
 - Determine how current dimension-linked records, policies, fixtures, and existing dossiers transition. No schema, migration, backend operation, or data rewrite is authorized by this record.
 - Decide the exact landing-page matrix example and capability copy after settling the functional design. The illustrative wireframes and capability names are not approval for a page redesign.
 
