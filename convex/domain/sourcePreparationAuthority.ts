@@ -7,7 +7,7 @@ import {
 } from "@convex/resourceLimits";
 import type { GenericDatabaseReader } from "convex/server";
 import { ConvexError, type Infer, v } from "convex/values";
-import { SOURCE_QUALIFICATION_VERSION } from "./sourceQualification";
+import { isExecutableQualificationVersion } from "./sourceQualification";
 
 export const preparationDispatchOutcomeValidator = v.union(
     v.literal("not_dispatched"),
@@ -300,7 +300,8 @@ async function readCurrentPreparation(
     if (
         preparation?.kind !== "preparation" ||
         preparation.status !== "started" ||
-        preparation.qualificationVersion !== SOURCE_QUALIFICATION_VERSION ||
+        !preparation.qualificationVersion ||
+        !isExecutableQualificationVersion(preparation.qualificationVersion) ||
         preparation.deadlineAt === undefined
     ) {
         throw sourcePreparationError("stale_execution");

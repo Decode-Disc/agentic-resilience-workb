@@ -1040,3 +1040,121 @@ test("the same attributed passage under two documentary roles proposes one hypot
         1,
     );
 });
+
+test("keeps an approved legacy proposal's uses while exposing its original qualification", async () => {
+    const q: SourceQualification = {
+        ...qualification,
+        findings: qualification.findings.map((finding) => ({
+            ...finding,
+            kind: "asserted_fact",
+            role: "official_product_platform",
+        })),
+        documentKind: "official_product_documentation",
+        limitations: [
+            {
+                code: "no_substantive_content",
+                explanation: "Legacy scope was not specified.",
+                passages: [],
+            },
+        ],
+    };
+    const { t, args, userId, sourceId } = await seedInspectedEvidence({
+        qualification: q,
+        text: passage.exactQuotation,
+    });
+    await t.run(async (ctx) => {
+        const revision = await ctx.db.get(args.corpusRevisionId);
+        if (!revision?.sourceSelectionProposalId)
+            throw new Error("Missing proposal");
+        const proposalId = revision.sourceSelectionProposalId;
+        const item = await ctx.db
+            .query("sourceSelectionProposalItems")
+            .withIndex("by_proposal_and_source", (query) =>
+                query.eq("proposalId", proposalId).eq("sourceId", sourceId),
+            )
+            .unique();
+        if (!item) throw new Error("Missing source");
+        await ctx.db.patch(revision.sourceSelectionProposalId, {
+            policyVersion: "source-selection-v13",
+        });
+        await ctx.db.patch(item._id, {
+            roleAvailability: [
+                {
+                    role: "official_product_platform",
+                    state: "available",
+                    usage: "documentary",
+                    reasonCodes: [],
+                },
+            ],
+        });
+    });
+    const reviewed = await t
+        .withIdentity({ subject: userId })
+        .query(api.sources.getReviewSource, {
+            runId: args.runId,
+            corpusRevisionId: args.corpusRevisionId,
+            sourceId,
+        });
+    expect(reviewed?.qualification?.findings[0]?.usage).toBe("documentary");
+});
+
+test("blocks factual evidence from a conflicting contribution while preserving an independent passage", () => {
+    const independent = {
+        passageKey: "p1",
+        quotation: "The platform delivers signed webhooks.",
+    };
+    const baseFinding = qualification.findings[0];
+    if (!baseFinding) throw new Error("Missing fixture finding");
+    const scoped: SourceQualification = {
+        ...qualification,
+        limitations: [
+            {
+                code: "no_substantive_content",
+                explanation:
+                    "This passage establishes no substantive material.",
+                passages: [reference],
+                scope: { kind: "passages", passageKeys: ["p0"], roles: null },
+            },
+        ],
+        findings: [
+            {
+                ...baseFinding,
+                kind: "asserted_fact",
+                role: "official_product_platform",
+            },
+            {
+                ...baseFinding,
+                kind: "asserted_fact",
+                role: "official_product_integration",
+                summary: independent.quotation,
+                passages: [independent],
+            },
+        ],
+    };
+    const input = {
+        qualification: scoped,
+        sourceTitle: "Illustrative product documentation",
+        roleAvailability: [
+            { role: "official_product_platform", usage: "documentary" },
+            { role: "official_product_integration", usage: "documentary" },
+        ],
+        classification: "Fact",
+        relation: "supporting",
+    } as const;
+    expect(
+        validatePreparedEvidenceUse({
+            ...input,
+            roleAvailability: [...input.roleAvailability],
+            passage,
+            statement: reference.quotation,
+        }),
+    ).toEqual({ allowed: false, reasonCode: "source_usage_restricted" });
+    expect(
+        validatePreparedEvidenceUse({
+            ...input,
+            roleAvailability: [...input.roleAvailability],
+            passage: { order: 1, exactQuotation: independent.quotation },
+            statement: independent.quotation,
+        }),
+    ).toEqual({ allowed: true, strengthensFactualSupport: true });
+});

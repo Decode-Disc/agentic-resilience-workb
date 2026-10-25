@@ -339,3 +339,161 @@ test.each([
     expect(messageBytes + schemaBytes).toBeLessThanOrEqual(128 * 1024);
     expect(input.readingCompleteness).toBe("partial");
 });
+
+test("retains a bounded rejected assistant output and the exact parsing reason without hidden reasoning", async () => {
+    const content = "☀️".repeat(30000);
+    const request = vi.fn<typeof fetch>(
+        async () =>
+            new Response(
+                JSON.stringify({
+                    id: "bad-structured-result",
+                    created: 1,
+                    model: sourceQualificationRoutes[0].model,
+                    choices: [
+                        {
+                            index: 0,
+                            message: {
+                                role: "assistant",
+                                content,
+                                reasoning_content:
+                                    "private reasoning must not be retained",
+                            },
+                            finish_reason: "stop",
+                        },
+                    ],
+                    usage: {
+                        prompt_tokens: 10,
+                        completion_tokens: 10,
+                        total_tokens: 20,
+                    },
+                }),
+                { headers: { "Content-Type": "application/json" } },
+            ),
+    );
+    const result = await qualifySourceDocument(
+        preparedExample(),
+        sourceQualificationRoutes[0],
+        { apiKey: "test-only-key", fetch: request },
+    );
+    expect(result).toMatchObject({
+        status: "failed",
+        errorCode: "invalid_output",
+        outputDiagnostic: {
+            reason: "json_invalid",
+            finishReason: "stop",
+            originalBytes: new TextEncoder().encode(content).length,
+            truncated: true,
+        },
+    });
+    if (result.status !== "failed" || !result.outputDiagnostic?.output)
+        throw new Error("Missing diagnostic");
+    expect(
+        new TextEncoder().encode(result.outputDiagnostic.output).length,
+    ).toBeLessThanOrEqual(64 * 1024);
+    expect(JSON.stringify(result.outputDiagnostic)).not.toContain(
+        "private reasoning",
+    );
+    expect(result.outputDiagnostic.output).not.toContain("�");
+});
+
+test.each([
+    ["{}", "stop", "schema_invalid"],
+    ["{", "length", "finish_reason_invalid"],
+])("distinguishes a rejected %s output finished by %s", async (content, finishReason, reason) => {
+    const request = vi.fn<typeof fetch>(
+        async () =>
+            new Response(
+                JSON.stringify({
+                    id: "invalid-output",
+                    created: 1,
+                    model: sourceQualificationRoutes[0].model,
+                    choices: [
+                        {
+                            index: 0,
+                            message: { role: "assistant", content },
+                            finish_reason: finishReason,
+                        },
+                    ],
+                    usage: {
+                        prompt_tokens: 10,
+                        completion_tokens: 10,
+                        total_tokens: 20,
+                    },
+                }),
+                { headers: { "Content-Type": "application/json" } },
+            ),
+    );
+    expect(
+        await qualifySourceDocument(
+            preparedExample(),
+            sourceQualificationRoutes[0],
+            { apiKey: "test-only-key", fetch: request },
+        ),
+    ).toMatchObject({
+        status: "failed",
+        errorCode: "invalid_output",
+        outputDiagnostic: {
+            reason,
+            finishReason,
+            output: content,
+            truncated: false,
+        },
+    });
+});
+
+test("retains the original assistant text when documentary validation rejects a schema-valid output", async () => {
+    const content = JSON.stringify(
+        {
+            companyMatch: "subject",
+            companyPassageKeys: [],
+            documentKind: "official_product_documentation",
+            reportingPeriodEnd: null,
+            reportingPeriodPassageKeys: [],
+            contributions: Object.fromEntries(
+                SOURCE_COVERAGE_ROLES.map((role) => [role, null]),
+            ),
+            limitations: [],
+        },
+        null,
+        2,
+    );
+    const request = vi.fn<typeof fetch>(
+        async () =>
+            new Response(
+                JSON.stringify({
+                    id: "invalid-documentary-basis",
+                    created: 1,
+                    model: sourceQualificationRoutes[0].model,
+                    choices: [
+                        {
+                            index: 0,
+                            message: { role: "assistant", content },
+                            finish_reason: "stop",
+                        },
+                    ],
+                    usage: {
+                        prompt_tokens: 10,
+                        completion_tokens: 10,
+                        total_tokens: 20,
+                    },
+                }),
+                { headers: { "Content-Type": "application/json" } },
+            ),
+    );
+    const result = await qualifySourceDocument(
+        preparedExample(),
+        sourceQualificationRoutes[0],
+        { apiKey: "test-only-key", fetch: request },
+    );
+    expect(result).toMatchObject({
+        status: "failed",
+        errorCode: "invalid_output",
+        outputDiagnostic: {
+            reason: "company_basis_missing",
+            output: content,
+            originalBytes: new TextEncoder().encode(content).length,
+            truncated: false,
+        },
+    });
+    expect(result).not.toHaveProperty("assistantOutput");
+});

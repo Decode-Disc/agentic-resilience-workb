@@ -1,12 +1,18 @@
+import { createHash } from "node:crypto";
 import { extractPassagesFromNormalizedText } from "@convex/domain/sourcePassages";
 import {
     createQualificationResponseSchema,
     materializeQualificationOutput,
     prepareQualificationInput,
     validateQualificationOutput,
+    sourceQualificationSchema,
 } from "@convex/domain/sourceQualification";
-import { SOURCE_COVERAGE_ROLES } from "@convex/domain/sourceSelectionPolicy";
+import {
+    SOURCE_COVERAGE_ROLES,
+    classifySourceCandidate,
+} from "@convex/domain/sourceSelectionPolicy";
 import { describe, expect, test } from "vitest";
+import { z } from "zod";
 
 const unspecifiedPeriod = {
     reportingPeriodEnd: null,
@@ -27,6 +33,97 @@ const input = {
 };
 
 describe("source qualification protocol", () => {
+    test("requires a scoped restriction on new qualifications without changing the version-three request", () => {
+        const legacy = prepareQualificationInput({
+            ...input,
+            protocolVersion: "source-qualification-v3",
+        });
+        expect(legacy.inputHash).toBe(
+            "3593fc9d8951880ae867d436137f4c05221c559714564167380e572cca6d10d2",
+        );
+        const legacySchema = z.toJSONSchema(
+            createQualificationResponseSchema(
+                legacy.request.document.passages,
+                "source-qualification-v3",
+            ),
+            { target: "draft-7", io: "input", reused: "inline" },
+        );
+        expect(
+            createHash("sha256")
+                .update(JSON.stringify(legacySchema))
+                .digest("hex"),
+        ).toBe(
+            "48b590b4a1e1f11c9077b29603b53b8cfe77360ce93205a92f8efd63bf06551c",
+        );
+        const prepared = prepareQualificationInput(input);
+        expect(prepared.request.protocolVersion).toBe(
+            "source-qualification-v4",
+        );
+        const response = {
+            companyMatch: "subject",
+            companyPassageKeys: ["p0"],
+            documentKind: "independent_analysis",
+            reportingPeriodEnd: null,
+            reportingPeriodPassageKeys: [],
+            contributions: Object.fromEntries(
+                SOURCE_COVERAGE_ROLES.map((role) => [role, null]),
+            ),
+            limitations: [
+                {
+                    code: "no_substantive_content",
+                    explanation: "No pricing information.",
+                    passageKeys: ["p0"],
+                },
+            ],
+        };
+        expect(materializeQualificationOutput(prepared, response)).toEqual({
+            status: "invalid",
+            reason: "schema_invalid",
+        });
+        expect(materializeQualificationOutput(legacy, response).status).toBe(
+            "valid",
+        );
+        const scoped = {
+            ...response,
+            limitations: [
+                {
+                    ...response.limitations[0],
+                    scope: {
+                        kind: "roles",
+                        roles: ["official_commercial_pricing"],
+                    },
+                },
+            ],
+        };
+        expect(materializeQualificationOutput(prepared, scoped)).toMatchObject({
+            status: "valid",
+            qualification: {
+                limitations: [
+                    {
+                        scope: {
+                            kind: "roles",
+                            roles: ["official_commercial_pricing"],
+                        },
+                    },
+                ],
+            },
+        });
+        expect(
+            materializeQualificationOutput(prepared, {
+                ...response,
+                limitations: [
+                    {
+                        ...response.limitations[0],
+                        scope: {
+                            kind: "passages",
+                            passageKeys: ["foreign"],
+                            roles: null,
+                        },
+                    },
+                ],
+            }).status,
+        ).toBe("invalid");
+    });
     test("the frozen API document exposes capabilities and access requirements beyond its navigation", () => {
         const dataset = JSON.parse(
             readFileSync(
@@ -639,4 +736,53 @@ test("versioned qualification uses native ranked late candidates instead of the 
         ),
     ).toBe(true);
     expect(prepared.request.retrieval?.version).toBe("structured-v1");
+});
+
+test("the archived navigation portal cannot establish product coverage under the new policy", () => {
+    const fixture = JSON.parse(
+        readFileSync(
+            "src/__tests__/fixtures/evidence/navigation-portal.json",
+            "utf8",
+        ),
+    );
+    const qualification = sourceQualificationSchema.parse(
+        fixture.qualification,
+    );
+    const prepared = prepareQualificationInput({
+        ...input,
+        protocolVersion: "source-qualification-v3",
+        canonicalUrl: fixture.canonicalUrl,
+        title: fixture.title,
+        text: fixture.text,
+    });
+    expect(validateQualificationOutput(prepared, qualification).status).toBe(
+        "valid",
+    );
+    const classified = classifySourceCandidate(
+        {
+            sourceId: "archived-portal",
+            canonicalUrl: fixture.canonicalUrl,
+            title: fixture.title,
+            origin: "exa",
+            category: "official_product",
+            createdAt: 1,
+            inspection: {
+                status: "qualified",
+                qualification,
+                readingCompleteness: "complete",
+            },
+        },
+        { ...company, websiteUrl: "https://www.servicenow.com" },
+    );
+    expect(classified.eligibleCoverageRoles).toEqual([]);
+    expect(classified.documentaryCoverageRoles).toEqual([]);
+    expect(
+        classified.roleAvailability?.find(
+            (role) => role.role === "official_product_platform",
+        ),
+    ).toMatchObject({
+        state: "not_established",
+        usage: "blocked",
+        reasonCodes: ["qualification_scope_unknown"],
+    });
 });

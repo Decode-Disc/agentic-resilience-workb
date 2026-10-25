@@ -164,3 +164,6 @@ export const MAX_SOURCE_SEARCH_BLOCKS = 100_000;
 
 /** Snapshotted so existing preparation journals retain their recorded step sequence. */
 export const SOURCE_PREPARATION_EXECUTION_PLAN_VERSION = "inline_controls_v2";
+
+/** Keeps rejected assistant output within one bounded provider receipt. */
+export const MAX_PREPARATION_DIAGNOSTIC_BYTES = 64 * 1024;

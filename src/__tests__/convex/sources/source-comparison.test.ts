@@ -1,4 +1,5 @@
 import {
+    type SourceComparisonTarget,
     createSourceComparisonResponseSchema,
     materializeSourceComparisonOutput,
     prepareSourceComparisonInput,
@@ -15,7 +16,7 @@ const company = {
 
 const makeTarget = (
     findings: Array<{ passageKey: string; quotation: string }[]>,
-) => {
+): SourceComparisonTarget => {
     let text = "";
     const selectedPassages: Array<{
         passageKey: string;
@@ -953,4 +954,90 @@ test("default context expansion stays within 32 KiB and does not alter unversion
             },
         }),
     ).toThrow("Invalid comparison context expansion budget");
+});
+
+test("does not compare blocked contributions and preserves the indexes of independent useful findings", () => {
+    const target = makeTarget([
+        [{ passageKey: "p0", quotation: "Navigation" }],
+        [{ passageKey: "p1", quotation: "Bundling may pressure pricing." }],
+    ]);
+    target.qualification.limitations = [
+        {
+            code: "no_substantive_content",
+            explanation: "Navigation only.",
+            passages: [{ passageKey: "p0", quotation: "Navigation" }],
+            scope: { kind: "passages", passageKeys: ["p0"], roles: null },
+        },
+    ];
+    const prepared = prepareSourceComparisonInput({
+        company,
+        target,
+        primaryCandidates: [primary("Bundling pressures pricing.")],
+    });
+    expect(
+        prepared.request.findings.map((finding) => finding.findingIndex),
+    ).toEqual([1]);
+});
+
+test("keeps version-three grouped comparison input stable when an old restriction becomes visible", () => {
+    const target = {
+        ...makeTarget([
+            [{ passageKey: "p0", quotation: "Bundling may pressure pricing." }],
+        ]),
+        qualificationVersion: "source-qualification-v3" as const,
+    };
+    const primaryCandidates = [
+        primary("The company competes with bundled products."),
+    ];
+    const before = prepareSourceComparisonInput({
+        company,
+        target,
+        primaryCandidates,
+    });
+    target.qualification.limitations.push({
+        code: "no_substantive_content",
+        explanation: "Legacy scope is unknown.",
+        passages: [],
+    });
+    expect(
+        prepareSourceComparisonInput({ company, target, primaryCandidates })
+            .inputHash,
+    ).toBe(before.inputHash);
+});
+
+test("stable ranking preserves a bounded comparison when retrieval also names unhydrated captures", () => {
+    const target = makeTarget([
+        [{ passageKey: "p0", quotation: "Bundling may pressure pricing." }],
+        [{ passageKey: "p1", quotation: "Workflow competition may increase." }],
+    ]);
+    const candidate = primary(
+        "The company competes with bundled workflow products.",
+    );
+    const prepared = prepareSourceComparisonInput({
+        company,
+        target,
+        primaryCandidates: [candidate],
+        omittedPrimaryCaptureCount: 1,
+        retrieval: {
+            metadata: {
+                version: "structured-v1",
+                rankingPolicy: "stable-passages-v1",
+                requestedMode: "lexical",
+                effectiveMode: "lexical",
+                selectedPassageKeys: [
+                    "primary-capture:p0",
+                    "omitted-capture:p0",
+                ],
+                omittedCandidateCount: 0,
+            },
+            rankings: [
+                { findingIndex: 0, passageKeys: ["primary-capture:p0"] },
+                { findingIndex: 1, passageKeys: ["omitted-capture:p0"] },
+            ],
+        },
+    });
+    expect(
+        prepared.request.primaryPassages.map((passage) => passage.captureId),
+    ).toEqual(["primary-capture"]);
+    expect(prepared.request.completeness.omittedPrimaryCaptureCount).toBe(1);
 });

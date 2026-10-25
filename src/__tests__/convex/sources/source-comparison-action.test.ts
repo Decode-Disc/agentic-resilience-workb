@@ -1499,3 +1499,153 @@ test("an exact legacy comparison can be revalidated at the model limit without p
         await t.run((ctx) => ctx.db.query("providerCalls").take(3)),
     ).toHaveLength(1);
 });
+
+test("keeps a conflicted contribution inspectable without dispatching a paid comparison", async () => {
+    const { t, preparationId, sourceCaptureId, qualificationTaskId } =
+        await capturedComparison();
+    await t.run(async (ctx) => {
+        const task = await ctx.db.get(qualificationTaskId);
+        if (task?.output.kind !== "source_qualification")
+            throw new Error("Missing fixture qualification");
+        await ctx.db.patch(qualificationTaskId, {
+            output: {
+                ...task.output,
+                qualification: {
+                    ...task.output.qualification,
+                    limitations: [
+                        {
+                            code: "no_substantive_content",
+                            explanation:
+                                "This passage does not establish a substantive contribution.",
+                            passages:
+                                task.output.qualification.findings[0]
+                                    ?.passages ?? [],
+                            scope: {
+                                kind: "passages",
+                                passageKeys: ["p0"],
+                                roles: null,
+                            },
+                        },
+                    ],
+                },
+            },
+        });
+    });
+    const request = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", request);
+    const result = await t.action(
+        internal.sourcePreparationActions.compareSource,
+        { preparationId, sourceCaptureId, qualificationTaskId },
+    );
+    expect(result.status).toBe("not_run");
+    expect(request).not.toHaveBeenCalled();
+    expect(await t.run((ctx) => ctx.db.query("providerCalls").take(2))).toEqual(
+        [],
+    );
+    const qualification = await t.run((ctx) => ctx.db.get(qualificationTaskId));
+    expect(
+        qualification?.output.kind === "source_qualification" &&
+            qualification.output.qualification.findings,
+    ).toHaveLength(1);
+});
+
+test("a scoped conflict does not add retrieval queries to an independent comparison", async () => {
+    const { t, preparationId, sourceCaptureId, qualificationTaskId, response } =
+        await capturedComparison();
+    await t.run(async (ctx) => {
+        await ctx.db.patch(preparationId, {
+            retrievalVersion: "structured-v1",
+            retrievalMode: "lexical",
+            retrievalRankingPolicy: "stable-passages-v1",
+        });
+        const task = await ctx.db.get(qualificationTaskId);
+        if (task?.output.kind !== "source_qualification")
+            throw new Error("Missing fixture qualification");
+        const first = task.output.qualification.findings[0];
+        if (!first) throw new Error("Missing fixture finding");
+        await ctx.db.patch(qualificationTaskId, {
+            output: {
+                ...task.output,
+                qualification: {
+                    ...task.output.qualification,
+                    findings: [
+                        first,
+                        {
+                            ...first,
+                            role: "independent_analysis_primary",
+                            summary: "Workflow competition may increase.",
+                        },
+                    ],
+                    limitations: [
+                        {
+                            code: "no_substantive_content",
+                            explanation:
+                                "No substantive material for this need.",
+                            passages: first.passages,
+                            scope: { kind: "roles", roles: [first.role] },
+                        },
+                    ],
+                },
+            },
+        });
+    });
+    const original = response.findings[0];
+    if (!original) throw new Error("Missing comparison response");
+    const request = vi.fn<typeof fetch>(async () =>
+        comparisonResponse({
+            findings: [
+                {
+                    ...original,
+                    findingIndex: 1,
+                    targetPassageKeys: ["target:1:p0"],
+                },
+            ],
+        }),
+    );
+    vi.stubGlobal("fetch", request);
+    await t.action(async (ctx) => {
+        const queries = vi.spyOn(ctx, "runQuery");
+        try {
+            const result = await (
+                compareSource as unknown as {
+                    _handler: (
+                        ctx: ActionCtx,
+                        args: FunctionArgs<
+                            typeof internal.sourcePreparationActions.compareSource
+                        >,
+                    ) => Promise<
+                        FunctionReturnType<
+                            typeof internal.sourcePreparationActions.compareSource
+                        >
+                    >;
+                }
+            )._handler(ctx, {
+                preparationId,
+                sourceCaptureId,
+                qualificationTaskId,
+            });
+            expect(result.status).toBe("compared");
+            const envelope = JSON.parse(
+                String(request.mock.calls[0]?.[1]?.body),
+            );
+            const input = JSON.parse(
+                envelope.messages[1].content,
+            ) as PreparedSourceComparisonInput["request"];
+            expect(
+                input.findings.map((finding) => finding.findingIndex),
+            ).toEqual([1]);
+            expect(
+                queries.mock.calls.filter(
+                    ([ref]) =>
+                        getFunctionName(ref) === "sourceRetrieval:searchBatch",
+                ),
+            ).toHaveLength(1);
+        } finally {
+            queries.mockRestore();
+        }
+    });
+    expect(request).toHaveBeenCalledOnce();
+    expect(
+        (await t.run((ctx) => ctx.db.get(preparationId)))?.modelAttemptCount,
+    ).toBe(1);
+});

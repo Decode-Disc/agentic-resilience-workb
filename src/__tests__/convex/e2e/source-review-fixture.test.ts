@@ -932,7 +932,10 @@ test("seeds distinct recorded companies and supplied sources without replacing t
     await t.finishInProgressScheduledFunctions();
 });
 
-test("recorded reading enforces exact input identity and preserves rejected responses without provider I/O", async () => {
+test.each([
+    "source-qualification-v3",
+    "source-qualification-v4",
+] as const)("recorded %s reading enforces exact input identity and preserves rejected responses without provider I/O", async (protocolVersion) => {
     vi.useFakeTimers();
     vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
     vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
@@ -951,6 +954,7 @@ test("recorded reading enforces exact input identity and preserves rejected resp
     const text =
         "Adobe licenses the software under the subscription agreement. The customer may use the service only for the subscription term.";
     const prepared = prepareQualificationInput({
+        protocolVersion,
         company,
         text,
         canonicalUrl: "https://www.adobe.com/terms",
@@ -984,6 +988,9 @@ test("recorded reading enforces exact input identity and preserves rejected resp
         limitations: [],
     };
     const source = {
+        ...(protocolVersion === "source-qualification-v4"
+            ? { protocolVersion }
+            : {}),
         canonicalUrl: "https://www.adobe.com/terms",
         title: "Terms",
         origin: "analyst_url" as const,
@@ -1060,6 +1067,8 @@ test("recorded reading enforces exact input identity and preserves rejected resp
 test.each([
     "source-selection-v10",
     "source-selection-v11",
+    "source-selection-v12",
+    "source-selection-v13",
 ])("refreshes %s from saved candidates without discovery or lost analyst decisions", async (previousPolicy) => {
     vi.useFakeTimers();
     vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
@@ -1118,7 +1127,7 @@ test.each([
     });
     expect(
         await t.run((ctx) => ctx.db.get(refreshed.proposalId)),
-    ).toMatchObject({ policyVersion: "source-selection-v13" });
+    ).toMatchObject({ policyVersion: "source-selection-v14" });
     expect(
         await t.run((ctx) => ctx.db.query("sourceDecisions").collect()),
     ).toEqual(decisionsBefore);

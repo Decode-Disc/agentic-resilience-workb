@@ -19,7 +19,42 @@ import {
     SOURCE_RETRIEVAL_VERSION,
 } from "./sourceRetrievalPolicy";
 
-export const SOURCE_QUALIFICATION_VERSION = "source-qualification-v3";
+export const SOURCE_QUALIFICATION_VERSION = "source-qualification-v4";
+export const SOURCE_QUALIFICATION_EXECUTION_VERSIONS = [
+    "source-qualification-v3",
+    SOURCE_QUALIFICATION_VERSION,
+] as const;
+export type QualificationExecutionVersion =
+    (typeof SOURCE_QUALIFICATION_EXECUTION_VERSIONS)[number];
+
+/** Only these protocols have an executable provider adapter. */
+export function isExecutableQualificationVersion(
+    version: string,
+): version is QualificationExecutionVersion {
+    return SOURCE_QUALIFICATION_EXECUTION_VERSIONS.some(
+        (value) => value === version,
+    );
+}
+
+/** Read compatibility does not authorize dispatch under an older protocol. */
+export function isReadableQualificationVersion(version: string): boolean {
+    return (
+        version === "source-qualification-v2" ||
+        isExecutableQualificationVersion(version)
+    );
+}
+
+/** Resumes keep their recorded protocol; only a first preparation defaults to the current one. */
+export function qualificationExecutionVersion(
+    version: string = SOURCE_QUALIFICATION_VERSION,
+): QualificationExecutionVersion {
+    const supported = SOURCE_QUALIFICATION_EXECUTION_VERSIONS.find(
+        (value) => value === version,
+    );
+    if (!supported)
+        throw new Error("Unsupported qualification execution version");
+    return supported;
+}
 export const SOURCE_QUALIFICATION_INPUT_POLICY = "full_document_first_v1";
 export const qualificationSelectionStrategyValidator = v.union(
     v.literal("full_document"),
@@ -35,6 +70,26 @@ const quotationSchema = z
         quotation: z.string().min(1).max(MAX_QUOTATION_CHARS),
     })
     .strict();
+
+const restrictionRoles = z
+    .array(z.enum(SOURCE_COVERAGE_ROLES))
+    .min(1)
+    .max(SOURCE_COVERAGE_ROLES.length);
+function createRestrictionScopeSchema(passageKey: z.ZodType<string>) {
+    return z.discriminatedUnion("kind", [
+        z.object({ kind: z.literal("document") }).strict(),
+        z
+            .object({ kind: z.literal("roles"), roles: restrictionRoles })
+            .strict(),
+        z
+            .object({
+                kind: z.literal("passages"),
+                passageKeys: z.array(passageKey).min(1).max(3),
+                roles: restrictionRoles.nullable(),
+            })
+            .strict(),
+    ]);
+}
 
 export const sourceQualificationSchema = z
     .object({
@@ -92,6 +147,9 @@ export const sourceQualificationSchema = z
                         ]),
                         explanation: z.string().min(1).max(600),
                         passages: z.array(quotationSchema).max(3),
+                        scope: createRestrictionScopeSchema(
+                            z.string().min(1).max(100),
+                        ).optional(),
                     })
                     .strict(),
             )
@@ -107,6 +165,7 @@ export const sourceQualificationValidator = zodToConvex(
 /** The provider selects choices and input-bound passage IDs; stored evidence stays canonical. */
 export function createQualificationResponseSchema(
     passages: ReadonlyArray<{ passageKey: string }>,
+    protocolVersion: QualificationExecutionVersion = SOURCE_QUALIFICATION_VERSION,
 ) {
     const passageKey = z.enum(passages.map((p) => p.passageKey));
     const references = z.array(passageKey).max(3);
@@ -127,6 +186,12 @@ export function createQualificationResponseSchema(
         .min(1)
         .max(MAX_CONTRIBUTIONS_PER_ROLE)
         .nullable();
+    const limitation = sourceQualificationSchema.shape.limitations.element
+        .omit({ passages: true, scope: true })
+        .extend({ passageKeys: references });
+    const scopedLimitation = limitation.extend({
+        scope: createRestrictionScopeSchema(passageKey),
+    });
     const roleShape = Object.fromEntries(
         SOURCE_COVERAGE_ROLES.map((role) => [role, roleContributions]),
     ) as Record<SourceCoverageRole, typeof roleContributions>;
@@ -143,10 +208,9 @@ export function createQualificationResponseSchema(
             contributions: z.object(roleShape).strict(),
             limitations: z
                 .array(
-                    sourceQualificationSchema.shape.limitations.element
-                        .omit({ passages: true })
-                        .extend({ passageKeys: references })
-                        .strict(),
+                    protocolVersion === SOURCE_QUALIFICATION_VERSION
+                        ? scopedLimitation
+                        : limitation,
                 )
                 .max(8),
         })
@@ -159,6 +223,7 @@ export function materializeQualificationOutput(
 ): ReturnType<typeof validateQualificationOutput> {
     const parsed = createQualificationResponseSchema(
         input.request.document.passages,
+        input.request.protocolVersion,
     ).safeParse(output);
     if (!parsed.success) return { status: "invalid", reason: "schema_invalid" };
     const response = parsed.data;
@@ -219,6 +284,7 @@ export function materializeQualificationOutput(
 }
 
 export type QualificationInput = {
+    protocolVersion?: QualificationExecutionVersion;
     company: { cik: string; legalName: string; ticker: string };
     canonicalUrl: string;
     title: string;
@@ -265,7 +331,7 @@ export function prepareQualificationInput(input: QualificationInput) {
         normalized.normalizedText.slice(cursor),
     );
     const request = {
-        protocolVersion: SOURCE_QUALIFICATION_VERSION,
+        protocolVersion: input.protocolVersion ?? SOURCE_QUALIFICATION_VERSION,
         ...(input.retrieval
             ? {
                   retrieval: {
@@ -323,6 +389,10 @@ export function prepareQualificationInput(input: QualificationInput) {
                 : {}),
         },
     };
+    if (request.protocolVersion === SOURCE_QUALIFICATION_VERSION) {
+        request.instructions +=
+            " Every limitation must explicitly name its scope: document for all contributions, roles for the named roles throughout the document, or passages for the named inspected passage IDs and named roles (null means all roles). Scope is where the restriction applies; limitation passageKeys are the evidence for it and may differ from its scope. no_substantive_content means the scoped material has no positive substantive contribution, not that other documentary roles are missing. Do not mark useful clauses or arguments as non-substantive merely because they contain no financial results.";
+    }
     const terms = new Set(
         `${input.researchAngle ?? ""} pricing terms licensing security architecture integration migration workflow risk competition`
             .toLocaleLowerCase("en")
@@ -337,7 +407,10 @@ export function prepareQualificationInput(input: QualificationInput) {
                 allPassages.length - request.document.passages.length;
         }
         const responseSchema = z.toJSONSchema(
-            createQualificationResponseSchema(request.document.passages),
+            createQualificationResponseSchema(
+                request.document.passages,
+                request.protocolVersion,
+            ),
             { target: "draft-7", io: "input", reused: "inline" },
         );
         return (
@@ -416,6 +489,28 @@ export function prepareQualificationInput(input: QualificationInput) {
     };
 }
 
+/** Checks scope against the same inspected passage identities at parsing and persistence. */
+export function qualificationRestrictionIssue(
+    qualification: SourceQualification,
+    passageKeys: readonly string[],
+    protocolVersion: QualificationExecutionVersion,
+): string | undefined {
+    const inspected = new Set(passageKeys);
+    for (const limitation of qualification.limitations) {
+        if (
+            protocolVersion === SOURCE_QUALIFICATION_VERSION &&
+            !limitation.scope
+        )
+            return "restriction_scope_missing";
+        if (
+            limitation.scope?.kind === "passages" &&
+            limitation.scope.passageKeys.some((key) => !inspected.has(key))
+        )
+            return "restriction_passage_not_inspected";
+    }
+    return undefined;
+}
+
 /** Rejects model findings that cannot be reproduced in the inspected content. */
 export function validateQualificationOutput(
     input: ReturnType<typeof prepareQualificationInput>,
@@ -426,6 +521,13 @@ export function validateQualificationOutput(
     const parsed = sourceQualificationSchema.safeParse(output);
     if (!parsed.success) return { status: "invalid", reason: "schema_invalid" };
     const qualification = parsed.data;
+    const restrictionIssue = qualificationRestrictionIssue(
+        qualification,
+        input.request.document.passages.map((passage) => passage.passageKey),
+        input.request.protocolVersion,
+    );
+    if (restrictionIssue)
+        return { status: "invalid", reason: restrictionIssue };
     if (qualification.reportingPeriodEnd !== null) {
         const period = new Date(
             `${qualification.reportingPeriodEnd}T00:00:00.000Z`,

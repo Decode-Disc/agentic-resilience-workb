@@ -380,6 +380,9 @@ export const getReviewSource = query({
                 run.companyId ? await ctx.db.get(run.companyId) : null,
             ),
         });
+        const proposal = revision.sourceSelectionProposalId
+            ? await ctx.db.get(revision.sourceSelectionProposalId)
+            : null;
         return {
             sourceId: source._id,
             ...(reading ? { readingStatus: reading.status } : {}),
@@ -415,6 +418,12 @@ export const getReviewSource = query({
                 ? {
                       qualification: projectSourceQualificationForReview({
                           ...pinned,
+                          selectionPolicyVersion:
+                              revision.status === "draft" &&
+                              scopedItem?.qualificationTaskId !==
+                                  pinned.qualificationTaskId
+                                  ? undefined
+                                  : proposal?.policyVersion,
                           roleAvailability:
                               currentClassification?.roleAvailability ?? [],
                           comparisonOutcomes: comparisonReview.outcomes,

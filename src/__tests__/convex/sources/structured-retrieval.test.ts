@@ -51,10 +51,10 @@ test("query terms omit claimed values and fusion counts each list once", () => {
         ),
     ).toBe("subscription revenue million usd fiscal 2025");
     expect(
-        fuseRetrievalRanks(
+        fuseRetrievalRanks([
             ["lexical-only", "both", "both"],
             ["both", "semantic-only"],
-        ),
+        ]),
     ).toEqual(["both", "lexical-only", "semantic-only"]);
 });
 
@@ -131,4 +131,41 @@ test("pathological heading expansion fails explicitly before searchable units ca
             preparationVersion: "structured-v1",
         }),
     ).toThrow("searchable_candidate_limit_exceeded");
+});
+
+test("fusion ties use captured passage identities rather than cloned database identifiers", () => {
+    const identities = new Map([
+        [
+            "z",
+            {
+                canonicalUrl: "https://example.com/a",
+                contentHash: "a",
+                order: 2,
+                startOffset: 20,
+                endOffset: 30,
+            },
+        ],
+        [
+            "a",
+            {
+                canonicalUrl: "https://example.com/b",
+                contentHash: "b",
+                order: 1,
+                startOffset: 0,
+                endOffset: 10,
+            },
+        ],
+    ]);
+    expect(fuseRetrievalRanks([["z"], ["a"]], identities)).toEqual(["z", "a"]);
+    const cloned = new Map(
+        [...identities].map(([id, rank]) => [
+            id === "z" ? "a-clone" : "z-clone",
+            rank,
+        ]),
+    );
+    expect(
+        fuseRetrievalRanks([["a-clone"], ["z-clone"]], cloned).map(
+            (id) => cloned.get(id)?.canonicalUrl,
+        ),
+    ).toEqual(["https://example.com/a", "https://example.com/b"]);
 });

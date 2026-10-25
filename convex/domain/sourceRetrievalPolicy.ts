@@ -4,6 +4,28 @@ import { v } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
 import { z } from "zod";
 export const SOURCE_RETRIEVAL_VERSION = "structured-v1";
+export const SOURCE_RETRIEVAL_RANKING_POLICY = "stable-passages-v1";
+export type SourcePassageRankIdentity = {
+    canonicalUrl: string;
+    contentHash: string;
+    order: number;
+    startOffset: number;
+    endOffset: number;
+};
+
+/** Database identities never decide between distinct captured passages. */
+export function compareSourcePassageRanks(
+    a: SourcePassageRankIdentity,
+    b: SourcePassageRankIdentity,
+): number {
+    return (
+        a.canonicalUrl.localeCompare(b.canonicalUrl) ||
+        a.contentHash.localeCompare(b.contentHash) ||
+        a.order - b.order ||
+        a.startOffset - b.startOffset ||
+        a.endOffset - b.endOffset
+    );
+}
 /** Native vector filters cannot combine scope and capture with AND; one key owns both constraints. */
 export function sourceEmbeddingScopeKey(
     scope: string,
@@ -19,6 +41,7 @@ export const retrievalModeValidator = v.union(
 export const retrievalMetadataSchema = z
     .object({
         version: z.literal(SOURCE_RETRIEVAL_VERSION),
+        rankingPolicy: z.literal(SOURCE_RETRIEVAL_RANKING_POLICY).optional(),
         requestedMode: z.enum(["lexical", "hybrid"]),
         effectiveMode: z.enum(["lexical", "hybrid"]),
         degradationReason: z.string().optional(),
@@ -75,7 +98,8 @@ export function sourceComparisonQuery(
 }
 /** Equal-weight RRF avoids comparing incompatible lexical and cosine score scales. */
 export function fuseRetrievalRanks(
-    ...rankings: ReadonlyArray<readonly string[]>
+    rankings: ReadonlyArray<readonly string[]>,
+    identities?: ReadonlyMap<string, SourcePassageRankIdentity>,
 ): string[] {
     const scores = new Map<string, number>();
     for (const ranking of rankings)
@@ -83,7 +107,15 @@ export function fuseRetrievalRanks(
             scores.set(id, (scores.get(id) ?? 0) + 1 / (60 + index + 1));
         });
     return [...scores]
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .sort((a, b) => {
+            if (b[1] !== a[1]) return b[1] - a[1];
+            if (!identities) return a[0].localeCompare(b[0]);
+            const left = identities.get(a[0]),
+                right = identities.get(b[0]);
+            if (!left || !right)
+                throw new Error("Retrieved passage rank identity is missing");
+            return compareSourcePassageRanks(left, right);
+        })
         .map(([id]) => id);
 }
 

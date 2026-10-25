@@ -349,8 +349,11 @@ export async function readPreparationRecovery(
                 },
             });
             if (
-                !reading.qualification.qualification.findings.some(
-                    sourceFindingNeedsComparison,
+                !reading.qualification.qualification.findings.some((finding) =>
+                    sourceFindingNeedsComparison(
+                        finding,
+                        reading.qualification.qualification.limitations,
+                    ),
                 )
             )
                 continue;

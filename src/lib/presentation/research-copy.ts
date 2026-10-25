@@ -1029,6 +1029,22 @@ export function sourceReadingCopy(
                 "Inspect the original before approving the selection. An unreadable source has not been ruled irrelevant.",
         };
     if (!source.qualification) return null;
+    if (
+        source.qualification.findings.some((finding) =>
+            finding.reasonCodes?.some((code) =>
+                [
+                    "qualification_conflict",
+                    "qualification_scope_unknown",
+                ].includes(code),
+            ),
+        )
+    )
+        return {
+            status: "warning" as const,
+            title: "Source reading needs review",
+            description:
+                "Some contributions are on hold. Inspect their passages and restrictions before relying on them. Other contributions retain their stated uses.",
+        };
     const contributions =
         source.roleAvailability?.filter(
             (role) => role.state !== "not_established",
@@ -1073,7 +1089,13 @@ export function sourceUsageCopy(
     usage: NonNullable<ReviewSource["roleAvailability"]>[number]["usage"],
     comparisonOutcome?: SourceQualification["findings"][number]["comparisonOutcome"],
     kind?: SourceQualification["findings"][number]["kind"],
+    reasonCodes: readonly string[] = [],
 ) {
+    if (reasonCodes.includes("qualification_conflict"))
+        return "The reading gives conflicting assessments of this material. This contribution does not count toward coverage.";
+    if (reasonCodes.includes("qualification_scope_unknown"))
+        return "The scope of an earlier reading restriction is unclear. This contribution does not count toward coverage.";
+
     if (comparisonOutcome === "possible_conflict") {
         return "A cited primary passage raises a possible conflict. Review the evidence before relying on this contribution. This concern is not a verified error.";
     }
@@ -1136,6 +1158,21 @@ export function sourceReadingConcernCopy(
     code: SourceQualification["limitations"][number]["code"],
 ) {
     return readingConcernLabels[code];
+}
+
+/** Describes where a recorded restriction applies without interpreting its prose. */
+export function sourceRestrictionScopeCopy(
+    limitation: SourceQualification["limitations"][number],
+): string {
+    const scope = limitation.scope;
+    if (!scope)
+        return "The scope of this earlier restriction was not recorded.";
+    if (scope.kind === "document") return "Applies to the whole document.";
+    const roles = scope.roles?.map(sourceCoverageRoleLabel).join(", ");
+    if (scope.kind === "roles") return `Applies to: ${roles}.`;
+    return roles
+        ? `Applies to the specified passages for: ${roles}.`
+        : "Applies to the specified passages across all needs.";
 }
 
 const readingConcernLabels = {

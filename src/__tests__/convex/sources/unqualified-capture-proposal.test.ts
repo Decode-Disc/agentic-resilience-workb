@@ -3,7 +3,10 @@ import { sha256Hex } from "@convex/domain/sourcePassages";
 import { expect, test } from "vitest";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
 
-test("pins inspected bytes for analyst review when automatic qualification is unavailable", async () => {
+test.each([
+    "source-selection-v12",
+    "source-selection-v13",
+])("pins inspected bytes during an explicit %s draft refresh when qualification is unavailable", async (legacyPolicy) => {
     const { t, runId, corpusRevisionId, sourceId, userId } =
         await seedSourcePreparation();
     const preparationId = await t.mutation(
@@ -63,7 +66,7 @@ test("pins inspected bytes for analyst review when automatic qualification is un
         const proposal = await ctx.db.query("sourceSelectionProposals").first();
         if (!proposal) throw new Error("Missing fixture proposal");
         await ctx.db.patch(proposal._id, {
-            policyVersion: "source-selection-v12",
+            policyVersion: legacyPolicy,
         });
         return proposal;
     });
@@ -85,8 +88,8 @@ test("pins inspected bytes for analyst review when automatic qualification is un
             calls: (await ctx.db.query("providerCalls").collect()).length,
         })),
     ).toEqual({
-        previous: "source-selection-v12",
-        current: "source-selection-v13",
+        previous: legacyPolicy,
+        current: "source-selection-v14",
         captures: [captureId],
         calls: 0,
     });

@@ -54,6 +54,7 @@ const source: Parameters<typeof SourceContextPanel>[0]["source"] = {
         findings: [
             {
                 findingKey: "assessment-argument-0",
+                reasonCodes: [],
                 usage: "attributed_argument_only",
                 role: "counter_evidence_primary",
                 kind: "attributed_argument",
@@ -635,4 +636,39 @@ test("preserves provenance without inventing reading when no preparation exists"
     fireEvent.click(screen.getByRole("tab", { name: "Source details" }));
     expect(await screen.findByText("Reading not prepared")).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Source reading" })).toBeNull();
+});
+
+test("explains a suspended contribution without letting a clean comparison grant coverage", () => {
+    const finding = source.qualification?.findings[0];
+    if (!finding || !source.qualification) throw new Error("Missing fixture");
+    const { container } = render(
+        <SourceContextPanel
+            source={{
+                ...source,
+                qualification: {
+                    ...source.qualification,
+                    findings: [
+                        {
+                            ...finding,
+                            usage: "blocked",
+                            reasonCodes: ["qualification_conflict"],
+                            comparisonOutcome: "no_conflict_observed",
+                        },
+                    ],
+                },
+            }}
+        />,
+    );
+    expect(screen.getByText("Source reading needs review")).toBeTruthy();
+    expect(
+        screen.getByText(
+            "The reading gives conflicting assessments of this material. This contribution does not count toward coverage.",
+        ),
+    ).toBeTruthy();
+    expect(container.textContent).not.toMatch(
+        /qualification_conflict|invalid_output|source_qualification/,
+    );
+    expect(container.textContent).toContain(
+        finding.passages[0]?.quotation ?? "missing quotation",
+    );
 });

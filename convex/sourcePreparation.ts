@@ -5,10 +5,15 @@ import {
     sourceComparisonOutputSchema,
     sourceFindingNeedsComparison,
 } from "@convex/domain/sourceComparison";
-import { SOURCE_QUALIFICATION_VERSION } from "@convex/domain/sourceQualification";
+import {
+    isExecutableQualificationVersion,
+    qualificationExecutionVersion,
+    qualificationRestrictionIssue,
+} from "@convex/domain/sourceQualification";
 import {
     retrievalMetadataValidator,
     SOURCE_RETRIEVAL_VERSION,
+    SOURCE_RETRIEVAL_RANKING_POLICY,
 } from "@convex/domain/sourceRetrievalPolicy";
 import {
     MAX_HISTORICAL_SOURCE_CANDIDATES,
@@ -285,6 +290,15 @@ export async function startReviewPreparation(
         run,
         previous?.kind === "preparation" ? previous : undefined,
     );
+    const qualificationVersion = qualificationExecutionVersion(
+        previous?.kind === "preparation" &&
+            !(
+                previous.qualificationVersion === "source-qualification-v2" &&
+                (args.manualSourceId || args.target)
+            )
+            ? previous.qualificationVersion
+            : undefined,
+    );
     const preparationId = await ctx.db.insert(
         "sourceSelectionProposalRebuilds",
         {
@@ -329,13 +343,24 @@ export async function startReviewPreparation(
                   : {}),
             workflowVersion: run.workflowVersion ?? 1,
             executionGeneration,
-            policyVersion: SOURCE_QUALIFICATION_VERSION,
-            qualificationVersion: SOURCE_QUALIFICATION_VERSION,
+            policyVersion: qualificationVersion,
+            qualificationVersion,
             executionPlanVersion: SOURCE_PREPARATION_EXECUTION_PLAN_VERSION,
             comparisonVersion: SOURCE_COMPARISON_VERSION,
             ...(env.SOURCE_RETRIEVAL_MODE
                 ? {
                       retrievalVersion: SOURCE_RETRIEVAL_VERSION,
+                      ...(previous?.kind === "preparation"
+                          ? previous.retrievalRankingPolicy
+                              ? {
+                                    retrievalRankingPolicy:
+                                        previous.retrievalRankingPolicy,
+                                }
+                              : {}
+                          : {
+                                retrievalRankingPolicy:
+                                    SOURCE_RETRIEVAL_RANKING_POLICY,
+                            }),
                       retrievalMode: env.SOURCE_RETRIEVAL_MODE,
                   }
                 : {}),
@@ -569,7 +594,9 @@ export const getComparisonInput = internalQuery({
             targetSource.runId !== run._id ||
             !qualificationTask ||
             qualificationTask.taskType !== "source_qualification" ||
-            qualificationTask.schemaVersion !== SOURCE_QUALIFICATION_VERSION ||
+            !isExecutableQualificationVersion(
+                qualificationTask.schemaVersion,
+            ) ||
             qualificationTask.runId !== run._id ||
             qualificationTask.corpusRevisionId !== revision._id ||
             qualificationTask.sourceId !== targetSource._id ||
@@ -797,7 +824,7 @@ export const getComparison = internalQuery({
         const qualification = await ctx.db.get(args.qualificationTaskId);
         if (
             qualification?.taskType !== "source_qualification" ||
-            qualification.schemaVersion !== SOURCE_QUALIFICATION_VERSION ||
+            !isExecutableQualificationVersion(qualification.schemaVersion) ||
             qualification.runId !== run._id ||
             qualification.corpusRevisionId !== revision._id ||
             qualification.sourceId !== targetCapture.sourceId ||
@@ -907,7 +934,7 @@ export const validateComparisonAuthority = internalQuery({
         const qualification = await ctx.db.get(args.qualificationTaskId);
         if (
             qualification?.taskType !== "source_qualification" ||
-            qualification.schemaVersion !== SOURCE_QUALIFICATION_VERSION ||
+            !isExecutableQualificationVersion(qualification.schemaVersion) ||
             qualification.runId !== run._id ||
             qualification.corpusRevisionId !== revision._id ||
             qualification.sourceId !== targetCapture.sourceId ||
@@ -988,7 +1015,7 @@ export const saveComparison = internalMutation({
         const output = args.output;
         if (
             qualification?.taskType !== "source_qualification" ||
-            qualification.schemaVersion !== SOURCE_QUALIFICATION_VERSION ||
+            !isExecutableQualificationVersion(qualification.schemaVersion) ||
             qualification.runId !== run._id ||
             qualification.corpusRevisionId !== revision._id ||
             qualification.sourceId !== targetCapture.sourceId ||
@@ -1199,14 +1226,18 @@ export const saveQualification = internalMutation({
         const capture = await ctx.db.get(args.sourceCaptureId);
         if (capture?.status !== "committed" || !capture.contentHash)
             throw sourcePreparationError("capture_unavailable");
-        const { run, revision } = await assertPreparationExecutionFence(
-            ctx.db,
-            {
+        const { run, revision, preparation } =
+            await assertPreparationExecutionFence(ctx.db, {
                 preparationId: args.preparationId,
                 sourceId: capture.sourceId,
                 now: Date.now(),
-            },
+            });
+        const restrictionIssue = qualificationRestrictionIssue(
+            args.qualification,
+            args.selectedPassages.map((passage) => passage.passageKey),
+            qualificationExecutionVersion(preparation.qualificationVersion),
         );
+        if (restrictionIssue) throw sourcePreparationError(restrictionIssue);
         const call = await ctx.db.get(args.providerCallId);
         if (
             capture.runId !== run._id ||
@@ -1254,7 +1285,9 @@ export const saveQualification = internalMutation({
             sourceId: capture.sourceId,
             sourceCaptureId: capture._id,
             executionMode: "live",
-            schemaVersion: SOURCE_QUALIFICATION_VERSION,
+            schemaVersion: qualificationExecutionVersion(
+                preparation.qualificationVersion,
+            ),
             adapterVersion: "openrouter-qualification-v1",
             inputHash: args.inputHash,
             providerCallId: call._id,
@@ -1414,7 +1447,15 @@ export const claimForDiscovery = internalMutation({
             revision.status !== "draft"
         )
             throw new Error("Source preparation execution is not active");
-        const operationKey = `run:${run._id}:corpus:${revision._id}:generation:${run.executionGeneration}:preparation:${SOURCE_QUALIFICATION_VERSION}:comparison:${SOURCE_COMPARISON_VERSION}${env.SOURCE_RETRIEVAL_MODE ? `:retrieval:${SOURCE_RETRIEVAL_VERSION}:${env.SOURCE_RETRIEVAL_MODE}` : ""}`;
+        const previous = run.sourcePreparationId
+            ? await ctx.db.get(run.sourcePreparationId)
+            : null;
+        const qualificationVersion = qualificationExecutionVersion(
+            previous?.kind === "preparation"
+                ? previous.qualificationVersion
+                : undefined,
+        );
+        const operationKey = `run:${run._id}:corpus:${revision._id}:generation:${run.executionGeneration}:preparation:${qualificationVersion}:comparison:${SOURCE_COMPARISON_VERSION}${env.SOURCE_RETRIEVAL_MODE ? `:retrieval:${SOURCE_RETRIEVAL_VERSION}:${env.SOURCE_RETRIEVAL_MODE}` : ""}`;
         const existing = await ctx.db
             .query("sourceSelectionProposalRebuilds")
             .withIndex("by_operation_key", (q) =>
@@ -1423,9 +1464,6 @@ export const claimForDiscovery = internalMutation({
             .unique();
         if (existing) return existing._id;
         const now = Date.now();
-        const previous = run.sourcePreparationId
-            ? await ctx.db.get(run.sourcePreparationId)
-            : null;
         const deadlineAt =
             previous?.kind === "preparation"
                 ? (previous.deadlineAt ??
@@ -1440,13 +1478,24 @@ export const claimForDiscovery = internalMutation({
                 entryPoint: "initial_discovery",
                 workflowVersion: run.workflowVersion ?? 1,
                 executionGeneration: run.executionGeneration,
-                policyVersion: SOURCE_QUALIFICATION_VERSION,
-                qualificationVersion: SOURCE_QUALIFICATION_VERSION,
+                policyVersion: qualificationVersion,
+                qualificationVersion,
                 executionPlanVersion: SOURCE_PREPARATION_EXECUTION_PLAN_VERSION,
                 comparisonVersion: SOURCE_COMPARISON_VERSION,
                 ...(env.SOURCE_RETRIEVAL_MODE
                     ? {
                           retrievalVersion: SOURCE_RETRIEVAL_VERSION,
+                          ...(previous?.kind === "preparation"
+                              ? previous.retrievalRankingPolicy
+                                  ? {
+                                        retrievalRankingPolicy:
+                                            previous.retrievalRankingPolicy,
+                                    }
+                                  : {}
+                              : {
+                                    retrievalRankingPolicy:
+                                        SOURCE_RETRIEVAL_RANKING_POLICY,
+                                }),
                           retrievalMode: env.SOURCE_RETRIEVAL_MODE,
                       }
                     : {}),
@@ -1645,7 +1694,7 @@ export const comparisonTargets = internalQuery({
                 capture.sourceId !== outcome.sourceId ||
                 !capture.contentHash ||
                 task?.taskType !== "source_qualification" ||
-                task.schemaVersion !== SOURCE_QUALIFICATION_VERSION ||
+                !isExecutableQualificationVersion(task.schemaVersion) ||
                 task.runId !== preparation.runId ||
                 task.corpusRevisionId !== preparation.corpusRevisionId ||
                 task.sourceId !== outcome.sourceId ||
@@ -1654,9 +1703,13 @@ export const comparisonTargets = internalQuery({
                 task.output.contentHash !== capture.contentHash
             )
                 continue;
+            const qualification = task.output.qualification;
             if (
-                !task.output.qualification.findings.some(
-                    sourceFindingNeedsComparison,
+                !qualification.findings.some((finding) =>
+                    sourceFindingNeedsComparison(
+                        finding,
+                        qualification.limitations,
+                    ),
                 )
             ) {
                 let recorded = false;
@@ -2074,7 +2127,8 @@ export const recordResult = internalMutation({
             const task = await ctx.db.get(result.taskId);
             if (
                 capture?.status !== "committed" ||
-                task?.schemaVersion !== SOURCE_QUALIFICATION_VERSION ||
+                !task ||
+                !isExecutableQualificationVersion(task.schemaVersion) ||
                 task.runId !== run._id ||
                 task.sourceId !== args.outcome.sourceId ||
                 task.output.kind !== "source_qualification" ||

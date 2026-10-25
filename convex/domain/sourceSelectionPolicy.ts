@@ -3,7 +3,7 @@ import { type Infer, v } from "convex/values";
 import type { SourceComparisonDisposition } from "./sourceComparison";
 import type { SourceQualification } from "./sourceQualification";
 
-export const SOURCE_SELECTION_POLICY_VERSION = "source-selection-v13";
+export const SOURCE_SELECTION_POLICY_VERSION = "source-selection-v14";
 export const SOURCE_PUBLISHER_REGISTRY_VERSION = "source-publishers-v4";
 
 /** These policy updates reuse saved qualification and analyst decisions without provider I/O. */
@@ -14,6 +14,7 @@ export function canRefreshSourceSelectionPolicy(
         policyVersion === "source-selection-v10" ||
         policyVersion === "source-selection-v11" ||
         policyVersion === "source-selection-v12" ||
+        policyVersion === "source-selection-v13" ||
         policyVersion === SOURCE_SELECTION_POLICY_VERSION
     );
 }
@@ -213,58 +214,86 @@ export type SourceRoleAvailability = Infer<
     typeof sourceRoleAvailabilityValidator
 >[number];
 
-/** A role's documentary availability cannot remove an individual finding's restrictions. */
+/** Evaluates a finding once so selection, review and evidence use share its restrictions. */
 export function sourceFindingUsage(
     finding: SourceQualification["findings"][number],
     roleUsage: SourceRoleAvailability["usage"],
     comparisonOutcome?: SourceComparisonDisposition,
     limitations: SourceQualification["limitations"] = [],
-): SourceRoleAvailability["usage"] {
+    policyVersion = SOURCE_SELECTION_POLICY_VERSION,
+): { usage: SourceRoleAvailability["usage"]; reasonCodes: string[] } {
+    const applicable = limitations.filter((limitation) => {
+        const scope = limitation.scope;
+        if (scope?.kind === "document") return true;
+        if (scope?.kind === "roles") return scope.roles.includes(finding.role);
+        const keys =
+            scope?.kind === "passages"
+                ? scope.passageKeys
+                : limitation.passages.map((p) => p.passageKey);
+        return (
+            (scope?.kind !== "passages" ||
+                scope.roles === null ||
+                scope.roles.includes(finding.role)) &&
+            (keys.length === 0 ||
+                finding.passages.some((p) => keys.includes(p.passageKey)))
+        );
+    });
+    if (policyVersion === SOURCE_SELECTION_POLICY_VERSION) {
+        const conflict = applicable.find(
+            (item) => item.code === "no_substantive_content",
+        );
+        if (conflict)
+            return {
+                usage: "blocked",
+                reasonCodes: [
+                    conflict.scope
+                        ? "qualification_conflict"
+                        : "qualification_scope_unknown",
+                ],
+            };
+    }
     if (finding.dependsOnFlaggedAssertion || roleUsage === "blocked")
-        return "blocked";
+        return { usage: "blocked", reasonCodes: [] };
     if (comparisonOutcome === "possible_conflict")
-        return "verification_required";
+        return {
+            usage: "verification_required",
+            reasonCodes: ["possible_conflict"],
+        };
     if (
         ["attributed_argument", "forecast"].includes(finding.kind) &&
         comparisonOutcome !== "no_conflict_observed"
     )
-        return "verification_required";
+        return {
+            usage: "verification_required",
+            reasonCodes: ["comparison_required"],
+        };
     if (finding.period === "historical" || roleUsage === "historical_only")
-        return "historical_only";
-    if (finding.kind === "mixed_or_uncertain") return "verification_required";
+        return { usage: "historical_only", reasonCodes: ["historical"] };
+    if (finding.kind === "mixed_or_uncertain")
+        return {
+            usage: "verification_required",
+            reasonCodes: ["content_nature_uncertain"],
+        };
     if (
         ["asserted_fact", "reported_outcome"].includes(finding.kind) &&
-        sourcePassagesRequireVerification(limitations, finding.passages)
-    )
-        return "verification_required";
-    if (
-        ["attributed_argument", "forecast"].includes(finding.kind) &&
-        ["documentary", "attributed_argument_only"].includes(roleUsage)
-    )
-        return "attributed_argument_only";
-    return roleUsage;
-}
-
-/** A located caveat restricts only its passages; an unlocated caveat applies globally. */
-export function sourcePassagesRequireVerification(
-    limitations: SourceQualification["limitations"],
-    passages: ReadonlyArray<{ passageKey: string }>,
-): boolean {
-    return limitations.some(
-        (limitation) =>
+        applicable.some((item) =>
             [
                 "factual_conflict",
                 "unverified_assertion",
                 "dependency_unclear",
-            ].includes(limitation.code) &&
-            (limitation.passages.length === 0 ||
-                limitation.passages.some((reference) =>
-                    passages.some(
-                        (passage) =>
-                            passage.passageKey === reference.passageKey,
-                    ),
-                )),
-    );
+            ].includes(item.code),
+        )
+    )
+        return {
+            usage: "verification_required",
+            reasonCodes: ["unverified_assertion"],
+        };
+    if (
+        ["attributed_argument", "forecast"].includes(finding.kind) &&
+        ["documentary", "attributed_argument_only"].includes(roleUsage)
+    )
+        return { usage: "attributed_argument_only", reasonCodes: [] };
+    return { usage: roleUsage, reasonCodes: [] };
 }
 
 export type SourceSelectionCompany = {
@@ -1528,36 +1557,46 @@ export function classifySourceCandidate(
                 "regulatory_other",
                 "search_or_index",
             ].includes(kind);
-            const findings =
+            const roleFindings =
                 subject && !unsuitablePurpose && !lowInformation
                     ? (qualification?.findings.filter(
-                          (finding, findingIndex) =>
-                              finding.role === role &&
-                              sourceFindingUsage(
-                                  finding,
-                                  "documentary",
-                                  inspection?.status === "qualified"
-                                      ? inspection.comparisonOutcomes?.[
-                                            findingIndex
-                                        ]
-                                      : undefined,
-                                  qualification?.limitations,
-                              ) !== "blocked",
+                          (finding) => finding.role === role,
                       ) ?? [])
                     : [];
+            const uses = roleFindings.map((finding) =>
+                sourceFindingUsage(
+                    finding,
+                    "documentary",
+                    inspection.status === "qualified"
+                        ? inspection.comparisonOutcomes?.[
+                              qualification?.findings.indexOf(finding) ?? -1
+                          ]
+                        : undefined,
+                    qualification?.limitations,
+                ),
+            );
+            const findings = roleFindings.filter(
+                (_, index) => uses[index]?.usage !== "blocked",
+            );
+            const blockedReasons = [
+                ...new Set(uses.flatMap((use) => use.reasonCodes)),
+            ];
             if (!findings.length)
                 return {
                     role,
                     state: "not_established",
-                    reasonCodes: [
-                        inspection.status === "unavailable"
-                            ? inspection.reasonCode
-                            : !subject
-                              ? "company_not_established"
-                              : inspection.readingCompleteness === "partial"
-                                ? "partial_reading"
-                                : "no_relevant_material",
-                    ],
+                    reasonCodes: blockedReasons.length
+                        ? blockedReasons
+                        : [
+                              inspection.status === "unavailable"
+                                  ? inspection.reasonCode
+                                  : !subject
+                                    ? "company_not_established"
+                                    : inspection.readingCompleteness ===
+                                        "partial"
+                                      ? "partial_reading"
+                                      : "no_relevant_material",
+                          ],
                     usage: "blocked",
                 };
             const current = findings.filter((f) => f.period !== "historical");
@@ -1585,17 +1624,18 @@ export function classifySourceCandidate(
                   : institutional;
             if (allowedAuthority && fitsPurpose)
                 documentaryCoverageRoles.push(role);
-            const findingUsages = current.map((f) =>
-                sourceFindingUsage(
-                    f,
-                    "documentary",
-                    inspection?.status === "qualified"
-                        ? inspection.comparisonOutcomes?.[
-                              qualification?.findings.indexOf(f) ?? -1
-                          ]
-                        : undefined,
-                    qualification?.limitations,
-                ),
+            const findingUsages = current.map(
+                (f) =>
+                    sourceFindingUsage(
+                        f,
+                        "documentary",
+                        inspection?.status === "qualified"
+                            ? inspection.comparisonOutcomes?.[
+                                  qualification?.findings.indexOf(f) ?? -1
+                              ]
+                            : undefined,
+                        qualification?.limitations,
+                    ).usage,
             );
             const hasPossibleConflict = current.some((finding) => {
                 const findingIndex =

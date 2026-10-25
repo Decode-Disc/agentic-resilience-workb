@@ -10,6 +10,7 @@ import {
 } from "@convex/domain/sourcePreparationAuthority";
 import {
     fuseRetrievalRanks,
+    type SourcePassageRankIdentity,
     retrievalMetadataValidator,
     retrievalModeValidator,
     SOURCE_RETRIEVAL_VERSION,
@@ -329,6 +330,7 @@ export async function retrieveSourcePassages(
         internal.sourcePreparation.getForExecution,
         { preparationId: args.preparationId, now: Date.now() },
     );
+    const captureUrls = new Map<string, string>();
     let totalCandidates = 0;
     let reason: string | undefined;
     for (let offset = 0; offset < args.captureIds.length; offset += 8) {
@@ -339,7 +341,11 @@ export async function retrieveSourcePassages(
                 captureIds: args.captureIds.slice(offset, offset + 8),
             },
         );
-        for (const { state } of entries) {
+        for (const { capture, state } of entries) {
+            captureUrls.set(
+                capture._id,
+                capture.resolvedUrl ?? capture.requestedUrl,
+            );
             if (!state)
                 throw sourcePreparationError("retrieval_index_incomplete");
             totalCandidates += state.candidateCount;
@@ -406,6 +412,24 @@ export async function retrieveSourcePassages(
         return result;
     };
     const rows = new Map<string, Doc<"sourceSearchPassages">>();
+    const identities = preparation.retrievalRankingPolicy
+        ? new Map<string, SourcePassageRankIdentity>()
+        : undefined;
+    const retain = (row: Doc<"sourceSearchPassages">) => {
+        rows.set(row._id, row);
+        const canonicalUrl = captureUrls.get(row.captureId);
+        if (identities) {
+            if (!canonicalUrl)
+                throw sourcePreparationError("retrieval_passage_invalid");
+            identities.set(row._id, {
+                canonicalUrl,
+                contentHash: row.contentHash,
+                order: row.order,
+                startOffset: row.startOffset,
+                endOffset: row.endOffset,
+            });
+        }
+    };
     const rankings: Array<Array<Id<"sourceSearchPassages">>> = [];
     for (const [i] of queries.entries()) {
         const captureRankings: string[][] = [];
@@ -416,11 +440,14 @@ export async function retrieveSourcePassages(
         ) {
             const results = await nextLexicalBatch();
             for (const { passages: matches } of results) {
-                for (const row of matches) rows.set(row._id, row);
+                for (const row of matches) retain(row);
                 captureRankings.push(matches.map((row) => row._id));
             }
         }
-        const lexicalIds = fuseRetrievalRanks(...captureRankings).slice(0, 64);
+        const lexicalIds = fuseRetrievalRanks(
+            captureRankings,
+            identities,
+        ).slice(0, 64);
         let semantic: Array<Doc<"sourceSearchPassages">> = [];
         const vector = vectors?.[i];
         if (vector) {
@@ -455,24 +482,29 @@ export async function retrieveSourcePassages(
                 },
             );
         }
-        for (const row of semantic) rows.set(row._id, row);
+        for (const row of semantic) retain(row);
         rankings.push(
             fuseRetrievalRanks(
-                lexicalIds,
-                semantic.map((r) => r._id),
+                [lexicalIds, semantic.map((r) => r._id)],
+                identities,
             ).slice(0, 64) as Id<"sourceSearchPassages">[],
         );
         // Do not retain every capture's candidates across all sixteen queries.
         const retained = new Set(rankings.flat());
         for (const id of rows.keys())
-            if (!retained.has(id as Id<"sourceSearchPassages">))
+            if (!retained.has(id as Id<"sourceSearchPassages">)) {
                 rows.delete(id);
+                identities?.delete(id);
+            }
     }
-    const ordered = fuseRetrievalRanks(...rankings);
+    const ordered = fuseRetrievalRanks(rankings, identities);
     const selected = new Set(ordered);
     return {
         metadata: {
             version: SOURCE_RETRIEVAL_VERSION,
+            ...(preparation.retrievalRankingPolicy
+                ? { rankingPolicy: preparation.retrievalRankingPolicy }
+                : {}),
             requestedMode: args.mode,
             effectiveMode:
                 args.mode === "hybrid" && !reason ? "hybrid" : "lexical",

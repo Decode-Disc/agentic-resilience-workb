@@ -1,4 +1,7 @@
-import { retrievalMetadataValidator } from "@convex/domain/sourceRetrievalPolicy";
+import {
+    retrievalMetadataValidator,
+    SOURCE_RETRIEVAL_RANKING_POLICY,
+} from "@convex/domain/sourceRetrievalPolicy";
 import { authTables } from "@convex-dev/auth/server";
 import { vWorkflowId } from "@convex-dev/workflow";
 import { defineSchema, defineTable } from "convex/server";
@@ -491,6 +494,9 @@ export default defineSchema({
         qualificationVersion: v.optional(v.string()),
         comparisonVersion: v.optional(v.string()),
         retrievalVersion: v.optional(v.string()),
+        retrievalRankingPolicy: v.optional(
+            v.literal(SOURCE_RETRIEVAL_RANKING_POLICY),
+        ),
         retrievalMode: v.optional(
             v.union(v.literal("lexical"), v.literal("hybrid")),
         ),
@@ -930,6 +936,15 @@ export default defineSchema({
         usage: v.optional(v.any()),
         reportedCost: v.optional(v.number()),
         errorCode: v.optional(v.string()),
+        diagnostic: v.optional(
+            v.object({
+                reason: v.string(),
+                finishReason: v.optional(v.string()),
+                output: v.optional(v.string()),
+                originalBytes: v.number(),
+                truncated: v.boolean(),
+            }),
+        ),
         retryable: v.optional(v.boolean()),
         dispatchOutcome: v.optional(preparationDispatchOutcomeValidator),
         httpStatus: v.optional(v.number()),

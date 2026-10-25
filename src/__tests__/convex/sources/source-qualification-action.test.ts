@@ -1249,3 +1249,63 @@ test("an oversized document keeps bounded retrieved passages under the new captu
     expect(task.output.omittedPassageCount).toBeGreaterThan(0);
     expect(task.output.selectedPassages.length).toBeGreaterThan(0);
 });
+
+test("the persistence boundary rejects an unscoped new restriction before saving a qualification", async () => {
+    const {
+        t,
+        runId,
+        corpusRevisionId,
+        sourceId,
+        preparationId,
+        sourceCaptureId,
+        prepared,
+    } = await capturedCandidate();
+    const preparation = await t.run((ctx) => ctx.db.get(preparationId));
+    if (!preparation) throw new Error("Missing preparation");
+    const inputHash = prepared.inputHash;
+    const call = await t.mutation(internal.providerCalls.recordAttempt, {
+        runId,
+        corpusRevisionId,
+        sourceId,
+        preparationId,
+        executionGeneration: 3,
+        workflowVersion: 1,
+        stepKey: "source_preparation",
+        service: "model",
+        operation: "source_qualification",
+        operationKey: `${preparation.operationKey}:step:source_preparation:input:${inputHash}:attempt:1`,
+        inputHash,
+        attempt: 1,
+        status: "started",
+    });
+    await expect(
+        t.mutation(internal.sourcePreparation.saveQualification, {
+            preparationId,
+            sourceCaptureId,
+            providerCallId: call.providerCallId,
+            inputHash,
+            qualification: {
+                ...qualification,
+                limitations: [
+                    {
+                        code: "no_substantive_content",
+                        explanation: "Scope omitted.",
+                        passages: [],
+                    },
+                ],
+            },
+            readingCompleteness: "complete",
+            omittedPassageCount: 0,
+            selectedPassages: prepared.request.document.passages.map(
+                ({ passageKey, startOffset, endOffset }) => ({
+                    passageKey,
+                    startOffset,
+                    endOffset,
+                }),
+            ),
+        }),
+    ).rejects.toThrow("restriction_scope_missing");
+    expect(await t.run((ctx) => ctx.db.query("aiTaskResults").take(1))).toEqual(
+        [],
+    );
+});

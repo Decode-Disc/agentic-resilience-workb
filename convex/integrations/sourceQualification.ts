@@ -14,7 +14,15 @@ import {
     type SourceQualification,
 } from "@convex/domain/sourceQualification";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { APICallError, generateText, NoObjectGeneratedError, Output } from "ai";
+import {
+    APICallError,
+    generateText,
+    JSONParseError,
+    NoObjectGeneratedError,
+    Output,
+} from "ai";
+import type { Doc } from "@convex/_generated/dataModel";
+import { MAX_PREPARATION_DIAGNOSTIC_BYTES } from "@convex/resourceLimits";
 import type { ZodType } from "zod";
 import type { SourceQualificationRoute } from "./sourceQualificationConfig";
 import {
@@ -37,6 +45,7 @@ type AttemptReceipt = {
     dispatchOutcome?: "not_dispatched" | "response_received" | "unknown";
     httpStatus?: number;
     retryAfterAt?: number;
+    outputDiagnostic?: Doc<"providerCalls">["diagnostic"];
 };
 
 type ProviderResponse = {
@@ -54,12 +63,37 @@ type AttemptDependencies = {
 };
 
 type StructuredAttempt<T> =
-    | (AttemptReceipt & { status: "succeeded"; value: T })
+    | (AttemptReceipt & {
+          status: "succeeded";
+          value: T;
+          assistantOutput: string;
+      })
     | (AttemptReceipt & {
           status: "failed";
           errorCode: string;
           retryable: boolean;
       });
+
+/** Retains assistant output only; provider envelopes and hidden reasoning are never persisted. */
+function rejectedOutputDiagnostic(
+    reason: string,
+    text?: string,
+    finishReason?: string,
+): NonNullable<Doc<"providerCalls">["diagnostic"]> {
+    const bytes = new TextEncoder().encode(text ?? "");
+    let end = Math.min(bytes.length, MAX_PREPARATION_DIAGNOSTIC_BYTES);
+    while (end < bytes.length && end > 0 && ((bytes[end] ?? 0) & 0xc0) === 0x80)
+        end--;
+    return {
+        reason,
+        ...(finishReason ? { finishReason } : {}),
+        ...(text !== undefined
+            ? { output: new TextDecoder().decode(bytes.subarray(0, end)) }
+            : {}),
+        originalBytes: bytes.length,
+        truncated: end < bytes.length,
+    };
+}
 
 function readReportedCost(value: unknown): number | undefined {
     if (!value || typeof value !== "object" || !("cost" in value))
@@ -210,8 +244,18 @@ async function runBoundedStructuredAttempt<T>(args: {
                 status: "failed",
                 errorCode: "invalid_output",
                 retryable: true,
+                outputDiagnostic: rejectedOutputDiagnostic(
+                    "finish_reason_invalid",
+                    result.text,
+                    result.finishReason,
+                ),
             };
-        return { ...receipt, status: "succeeded", value: result.output };
+        return {
+            ...receipt,
+            status: "succeeded",
+            value: result.output,
+            assistantOutput: result.text,
+        };
     } catch (error) {
         const receipt: AttemptReceipt = {
             model: route.model,
@@ -241,6 +285,15 @@ async function runBoundedStructuredAttempt<T>(args: {
                 status: "failed",
                 errorCode: "invalid_output",
                 retryable: true,
+                outputDiagnostic: rejectedOutputDiagnostic(
+                    error.finishReason && error.finishReason !== "stop"
+                        ? "finish_reason_invalid"
+                        : JSONParseError.isInstance(error.cause)
+                          ? "json_invalid"
+                          : "schema_invalid",
+                    error.text,
+                    error.finishReason,
+                ),
                 resolvedModel: error.response?.modelId,
                 inputTokens: error.usage?.inputTokens,
                 outputTokens: error.usage?.outputTokens,
@@ -305,20 +358,27 @@ export async function qualifySourceDocument(
         prompt: JSON.stringify(state),
         schema: createQualificationResponseSchema(
             input.request.document.passages,
+            input.request.protocolVersion,
         ),
         schemaName: "source_qualification",
     });
     if (attempt.status === "failed") return attempt;
-    const validation = materializeQualificationOutput(input, attempt.value);
+    const { value, assistantOutput, ...receipt } = attempt;
+    const validation = materializeQualificationOutput(input, value);
     if (validation.status !== "valid")
         return {
-            ...attempt,
+            ...receipt,
             status: "failed",
             errorCode: "invalid_output",
             retryable: true,
+            outputDiagnostic: rejectedOutputDiagnostic(
+                validation.reason,
+                assistantOutput,
+                "stop",
+            ),
         };
     return {
-        ...attempt,
+        ...receipt,
         status: "succeeded",
         qualification: validation.qualification,
     };
@@ -378,16 +438,19 @@ export async function compareSourceContributions(
         schemaName: "source_comparison",
     });
     if (attempt.status === "failed") return attempt;
-    const materialized = materializeSourceComparisonOutput(
-        input,
-        attempt.value,
-    );
+    const { value, assistantOutput, ...receipt } = attempt;
+    const materialized = materializeSourceComparisonOutput(input, value);
     if (materialized.status !== "valid")
         return {
-            ...attempt,
+            ...receipt,
             status: "failed",
             errorCode: "invalid_output",
             retryable: true,
+            outputDiagnostic: rejectedOutputDiagnostic(
+                materialized.reason,
+                assistantOutput,
+                "stop",
+            ),
         };
-    return { ...attempt, status: "succeeded", output: materialized.output };
+    return { ...receipt, status: "succeeded", output: materialized.output };
 }

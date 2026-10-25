@@ -25,7 +25,10 @@ import {
     sourcePreparationError,
     sourcePreparationStopCodeValidator,
 } from "@convex/domain/sourcePreparationAuthority";
-import { prepareQualificationInput } from "@convex/domain/sourceQualification";
+import {
+    prepareQualificationInput,
+    qualificationExecutionVersion,
+} from "@convex/domain/sourceQualification";
 import {
     SOURCE_RETRIEVAL_VERSION,
     sourceComparisonQuery,
@@ -199,7 +202,11 @@ async function executePreparationModel<
             httpStatus: result.httpStatus,
             retryAfterAt: result.retryAfterAt,
             ...(result.status === "failed"
-                ? { errorCode: result.errorCode, retryable: result.retryable }
+                ? {
+                      errorCode: result.errorCode,
+                      retryable: result.retryable,
+                      diagnostic: result.outputDiagnostic,
+                  }
                 : {}),
         });
         if (result.status === "succeeded")
@@ -611,6 +618,9 @@ export const qualifySource = internalAction({
                 },
             );
             const qualificationInput = {
+                protocolVersion: qualificationExecutionVersion(
+                    preparation.qualificationVersion,
+                ),
                 company,
                 canonicalUrl: capture.resolvedUrl ?? source.canonicalUrl,
                 title: source.title,
@@ -811,6 +821,7 @@ export const compareSource = internalAction({
                 captureId: String(input.targetCapture._id),
                 contentHash: input.targetCapture.contentHash,
                 qualificationTaskId: String(input.qualificationTask._id),
+                qualificationVersion: input.qualificationTask.schemaVersion,
                 title: input.targetSource.title,
                 canonicalUrl:
                     input.targetCapture.resolvedUrl ??
@@ -910,8 +921,11 @@ export const compareSource = internalAction({
                 return { status: "cached", taskId: retained._id };
             }
             if (
-                !target.qualification.findings.some(
-                    sourceFindingNeedsComparison,
+                !target.qualification.findings.some((finding) =>
+                    sourceFindingNeedsComparison(
+                        finding,
+                        target.qualification.limitations,
+                    ),
                 )
             ) {
                 const prepared = prepareSourceComparisonInput({
@@ -1017,8 +1031,10 @@ export const compareSource = internalAction({
                 }
                 const findings = target.qualification.findings.flatMap(
                     (finding, findingIndex) =>
-                        ["attributed_argument", "forecast"].includes(
-                            finding.kind,
+                        sourceFindingNeedsComparison(
+                            finding,
+                            target.qualification.limitations,
+                            target.qualificationVersion,
                         )
                             ? [{ finding, findingIndex }]
                             : [],

@@ -43,7 +43,7 @@ import {
     readSourceReview,
     sourceReadingStatusValidator,
 } from "./domain/sourcePreparationReview";
-import { SOURCE_QUALIFICATION_VERSION } from "./domain/sourceQualification";
+import { isReadableQualificationVersion } from "./domain/sourceQualification";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
 import { SourceReviewReads } from "./domain/sourceReviewReads";
 import {
@@ -444,7 +444,7 @@ async function readQualificationInputs(
                       .take(4);
             for (const task of tasks) {
                 if (
-                    task.schemaVersion !== SOURCE_QUALIFICATION_VERSION ||
+                    !isReadableQualificationVersion(task.schemaVersion) ||
                     task.runId !== run._id ||
                     task.output.kind !== "source_qualification"
                 )

@@ -179,6 +179,9 @@ export function comparisonContextForTarget(
         retrieval: [
             target.preparation.retrievalVersion ?? null,
             target.preparation.retrievalMode ?? null,
+            ...(target.preparation.retrievalRankingPolicy
+                ? [target.preparation.retrievalRankingPolicy]
+                : []),
         ],
         company: {
             cik: context.company.cik,
@@ -241,14 +244,18 @@ export function sourceComparisonWork(
     tasks: Doc<"aiTaskResults">[],
     contextHash: string | undefined,
 ) {
+    const output = qualification.output;
     if (
-        qualification.output.kind !== "source_qualification" ||
-        !qualification.output.qualification.findings.some(
-            sourceFindingNeedsComparison,
+        output.kind !== "source_qualification" ||
+        !output.qualification.findings.some((finding) =>
+            sourceFindingNeedsComparison(
+                finding,
+                output.qualification.limitations,
+            ),
         )
     )
         return { kind: "not_needed" as const };
-    const contentHash = qualification.output.contentHash;
+    const contentHash = output.contentHash;
     const current = tasks.find(
         (task) =>
             task.taskType === "source_comparison" &&

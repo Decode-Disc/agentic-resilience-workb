@@ -387,3 +387,41 @@ test("historical technical failures leave the productive allowance available", a
         },
     });
 });
+
+test("retains rejected-output diagnostics without settling an incident twice", async () => {
+    const { t, runId, attempt } = await activePreparation();
+    const input = attempt("invalid-received");
+    const started = await t.mutation(internal.providerCalls.recordAttempt, {
+        ...input,
+        status: "started",
+    });
+    const diagnostic = {
+        reason: "reporting_period_invalid",
+        output: "{}",
+        originalBytes: 2,
+        truncated: false,
+    };
+    const failed = {
+        ...input,
+        status: "failed" as const,
+        errorCode: "invalid_output",
+        retryable: true,
+        dispatchOutcome: "response_received" as const,
+        httpStatus: 200,
+        diagnostic,
+    };
+    await t.mutation(internal.providerCalls.recordAttempt, failed);
+    await t.mutation(internal.providerCalls.recordAttempt, failed);
+    expect(
+        await t.run((ctx) => ctx.db.get(started.providerCallId)),
+    ).toMatchObject({ status: "failed", diagnostic });
+    expect(
+        (await t.run((ctx) => ctx.db.get(runId)))?.sourcePreparationBudget,
+    ).toMatchObject({ work: 0, incidents: 1, reserved: 0, dispatches: 1 });
+    await expect(
+        t.mutation(internal.providerCalls.recordAttempt, {
+            ...failed,
+            diagnostic: { ...diagnostic, output: "x".repeat(65537) },
+        }),
+    ).rejects.toThrow("Invalid provider output diagnostic");
+});

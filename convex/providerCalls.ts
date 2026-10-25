@@ -22,7 +22,9 @@ import {
     sourcePreparationError,
 } from "./domain/sourcePreparationAuthority";
 import { rateLimiter } from "./rateLimiter";
+import schema from "./schema";
 import {
+    MAX_PREPARATION_DIAGNOSTIC_BYTES,
     MAX_CONCURRENT_SOURCE_EMBEDDING_CALLS,
     MAX_SOURCE_EMBEDDING_ATTEMPTS,
     MAX_SOURCE_EMBEDDING_BATCH_TEXTS,
@@ -215,6 +217,7 @@ export const recordAttempt = internalMutation({
         reportedCost: v.optional(v.number()),
         embeddingInputBytes: v.optional(v.number()),
         errorCode: v.optional(v.string()),
+        diagnostic: schema.tables.providerCalls.validator.fields.diagnostic,
         retryable: v.optional(v.boolean()),
         dispatchOutcome: v.optional(preparationDispatchOutcomeValidator),
         httpStatus: v.optional(v.number()),
@@ -226,6 +229,15 @@ export const recordAttempt = internalMutation({
         args,
     ): Promise<Infer<typeof recordAttemptResultValidator>> => {
         const now = Date.now();
+        if (
+            args.diagnostic &&
+            (args.diagnostic.reason.length > 100 ||
+                new TextEncoder().encode(args.diagnostic.output ?? "").length >
+                    MAX_PREPARATION_DIAGNOSTIC_BYTES ||
+                !Number.isSafeInteger(args.diagnostic.originalBytes) ||
+                args.diagnostic.originalBytes < 0)
+        )
+            throw new Error("Invalid provider output diagnostic");
         if (
             args.service === "model" &&
             (!args.preparationId ||
@@ -749,6 +761,7 @@ export const recordAttempt = internalMutation({
             usage: args.usage,
             reportedCost: args.reportedCost,
             errorCode: args.errorCode,
+            ...(args.diagnostic ? { diagnostic: args.diagnostic } : {}),
             retryable: args.retryable,
             dispatchOutcome:
                 args.dispatchOutcome ??

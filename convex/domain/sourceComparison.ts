@@ -8,9 +8,12 @@ import { z } from "zod";
 import type { SourceQualification } from "./sourceQualification";
 import {
     fuseRetrievalRanks,
+    type SourcePassageRankIdentity,
+    compareSourcePassageRanks,
     retrievalMetadataSchema,
     type retrievalMetadataValidator,
 } from "./sourceRetrievalPolicy";
+import { sourceFindingUsage } from "./sourceSelectionPolicy";
 import type {
     SourceAuthorityTier,
     SourceDocumentKind,
@@ -19,11 +22,17 @@ import type {
 /** Only attributed arguments and forecasts require the scoped comparison step. */
 export function sourceFindingNeedsComparison(
     finding: SourceQualification["findings"][number],
+    limitations: SourceQualification["limitations"] = [],
+    qualificationVersion?: string,
 ): finding is SourceQualification["findings"][number] & {
     kind: "attributed_argument" | "forecast";
 } {
     return (
-        finding.kind === "attributed_argument" || finding.kind === "forecast"
+        (finding.kind === "attributed_argument" ||
+            finding.kind === "forecast") &&
+        (qualificationVersion === "source-qualification-v3" ||
+            sourceFindingUsage(finding, "documentary", undefined, limitations)
+                .usage !== "blocked")
     );
 }
 
@@ -192,6 +201,7 @@ export type SourceComparisonOutput = z.infer<
 >;
 
 export type SourceComparisonTarget = {
+    qualificationVersion?: string;
     runId: string;
     corpusRevisionId: string;
     sourceId: string;
@@ -722,10 +732,42 @@ export function prepareSourceComparisonInput(args: {
         aggregateBytes += bytes;
         return true;
     });
+    const stableRanks = args.retrieval?.metadata.rankingPolicy
+        ? new Map<string, SourcePassageRankIdentity>()
+        : undefined;
+    if (stableRanks)
+        for (const candidate of boundedCandidates)
+            for (const passage of candidate.passages) {
+                const rank = {
+                    canonicalUrl: candidate.canonicalUrl,
+                    contentHash: candidate.contentHash,
+                    order: passage.order ?? passage.startOffset,
+                    startOffset: passage.startOffset,
+                    endOffset: passage.endOffset,
+                };
+                stableRanks.set(
+                    `${candidate.captureId}:${passage.passageKey}`,
+                    rank,
+                );
+                stableRanks.set(
+                    `${candidate.sourceId}:${candidate.captureId}:${candidate.contentHash}:${passage.passageKey}`,
+                    rank,
+                );
+            }
     const primaryCandidates = rankPrimaryCandidates(target, boundedCandidates);
     if (args.retrieval) {
+        const capturedIds = new Set(
+            boundedCandidates.map((candidate) => candidate.captureId),
+        );
         const rankedKeys = fuseRetrievalRanks(
-            ...args.retrieval.rankings.map((r) => r.passageKeys),
+            args.retrieval.rankings.map(({ passageKeys }) =>
+                stableRanks
+                    ? passageKeys.filter((key) =>
+                          capturedIds.has(key.slice(0, key.lastIndexOf(":"))),
+                      )
+                    : passageKeys,
+            ),
+            stableRanks,
         );
         const captureRanks = new Map<string, number>();
         for (const [rank, key] of rankedKeys.entries()) {
@@ -752,7 +794,14 @@ export function prepareSourceComparisonInput(args: {
 
     const allTargetFindings = target.qualification.findings.flatMap(
         (finding, findingIndex) => {
-            if (!sourceFindingNeedsComparison(finding)) return [];
+            if (
+                !sourceFindingNeedsComparison(
+                    finding,
+                    target.qualification.limitations,
+                    target.qualificationVersion,
+                )
+            )
+                return [];
             const targetPassages = finding.passages.flatMap((reference) => {
                 const passage = makeTargetPassage(
                     target,
@@ -830,8 +879,14 @@ export function prepareSourceComparisonInput(args: {
                 }),
             )
             .filter((item) => args.retrieval !== undefined || item.score > 0)
-            .sort(
-                (left, right) =>
+            .sort((left, right) => {
+                const leftRank = stableRanks?.get(left.identity);
+                const rightRank = stableRanks?.get(right.identity);
+                if (stableRanks && (!leftRank || !rightRank))
+                    throw new Error(
+                        "Comparison passage rank identity is missing",
+                    );
+                return (
                     right.score - left.score ||
                     purposeRank(left.candidate) -
                         purposeRank(right.candidate) ||
@@ -839,17 +894,20 @@ export function prepareSourceComparisonInput(args: {
                         periodScore(target, left.candidate) ||
                     authorityRank(left.candidate.authorityTier) -
                         authorityRank(right.candidate.authorityTier) ||
-                    left.candidate.sourceId.localeCompare(
-                        right.candidate.sourceId,
-                    ) ||
+                    (leftRank && rightRank
+                        ? compareSourcePassageRanks(leftRank, rightRank)
+                        : left.candidate.sourceId.localeCompare(
+                              right.candidate.sourceId,
+                          )) ||
                     left.candidate.captureId.localeCompare(
                         right.candidate.captureId,
                     ) ||
                     left.passage.startOffset - right.passage.startOffset ||
                     left.passage.passageKey.localeCompare(
                         right.passage.passageKey,
-                    ),
-            );
+                    )
+                );
+            });
         if (args.retrieval) {
             const ranks = new Map(
                 args.retrieval.rankings
@@ -1123,7 +1181,10 @@ export function prepareSourceComparisonInput(args: {
                 .flat()
                 .map((item) => [item.identity, item]),
         );
-        for (const identity of fuseRetrievalRanks(...includedRankings)) {
+        for (const identity of fuseRetrievalRanks(
+            includedRankings,
+            stableRanks,
+        )) {
             if (
                 request.primaryPassages.length >=
                 SOURCE_COMPARISON_MAX_PRIMARY_PASSAGES

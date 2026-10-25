@@ -47,6 +47,43 @@ async function waitingReview() {
     return { ...fixture, proposal, mainHandle };
 }
 
+test("resumes a version-three preparation without adopting the new protocol", async () => {
+    vi.useFakeTimers();
+    const { t, runId, corpusRevisionId, userId, proposal } =
+        await waitingReview();
+    const owned = t.withIdentity({ subject: userId });
+    const args = {
+        runId,
+        corpusRevisionId,
+        expectedProposalId: proposal.proposalId,
+    };
+    const first = await owned.mutation(api.sourcePreparation.startForReview, {
+        ...args,
+        requestId: "legacy-start",
+    });
+    await t.run(async (ctx) => {
+        await ctx.db.patch(first.preparationId, {
+            qualificationVersion: "source-qualification-v3",
+            policyVersion: "source-qualification-v3",
+            status: "complete",
+        });
+        await ctx.db.patch(runId, {
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        });
+    });
+    const resumed = await owned.mutation(api.sourcePreparation.startForReview, {
+        ...args,
+        requestId: "legacy-resume",
+    });
+    expect(
+        await t.run((ctx) => ctx.db.get(resumed.preparationId)),
+    ).toMatchObject({ qualificationVersion: "source-qualification-v3" });
+    expect(await t.run((ctx) => ctx.db.query("providerCalls").take(1))).toEqual(
+        [],
+    );
+});
+
 test("offers explicit reading preparation for a current metadata-only draft without starting work", async () => {
     vi.useFakeTimers();
     const { t, runId, corpusRevisionId, userId } = await waitingReview();
@@ -1210,4 +1247,28 @@ test("an expired started review is fenced before recovery without cancelling the
             now: Date.now(),
         }),
     ).rejects.toThrow("stale_execution");
+});
+
+test("replaying discovery retains the existing version-three preparation identity", async () => {
+    const { t, runId, corpusRevisionId } = await seedSourcePreparation();
+    const args = { runId, corpusRevisionId, expectedExecutionGeneration: 3 };
+    const first = await t.mutation(
+        internal.sourcePreparation.claimForDiscovery,
+        args,
+    );
+    await t.run(async (ctx) => {
+        const preparation = await ctx.db.get(first);
+        if (!preparation) throw new Error("Missing preparation");
+        await ctx.db.patch(first, {
+            qualificationVersion: "source-qualification-v3",
+            policyVersion: "source-qualification-v3",
+            operationKey: preparation.operationKey.replace(
+                "source-qualification-v4",
+                "source-qualification-v3",
+            ),
+        });
+    });
+    expect(
+        await t.mutation(internal.sourcePreparation.claimForDiscovery, args),
+    ).toBe(first);
 });

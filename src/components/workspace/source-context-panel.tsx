@@ -44,6 +44,7 @@ import {
     sourceOriginLabel,
     sourceReadingConcernCopy,
     sourceReadingCopy,
+    sourceRestrictionScopeCopy,
     sourceUsageCopy,
 } from "@/lib/presentation/research-copy";
 import { cn } from "@/lib/utils";
@@ -415,8 +416,11 @@ function SourceReadingDetails({
                 </Empty>
             </section>
         );
-    const concerns = new Set(
-        qualification?.limitations.map((item) => item.code),
+    const concerns = new Map(
+        qualification.limitations.map((limitation) => [
+            JSON.stringify(limitation),
+            limitation,
+        ]),
     );
     return (
         <section aria-label="Source reading" className="mt-5 space-y-4 text-sm">
@@ -464,6 +468,7 @@ function SourceReadingDetails({
                                 finding.usage,
                                 finding.comparisonOutcome,
                                 finding.kind,
+                                finding.reasonCodes,
                             )}
                         </p>
                         {finding.comparisonDetails ? (
@@ -508,20 +513,16 @@ function SourceReadingDetails({
                         Points to verify
                     </summary>
                     <ul className="mt-3 space-y-4">
-                        {[...concerns].map((code) => (
-                            <li key={code}>
+                        {[...concerns].map(([key, limitation]) => (
+                            <li key={key}>
                                 <p className="leading-relaxed text-muted-foreground">
-                                    {sourceReadingConcernCopy(code)}
+                                    {sourceReadingConcernCopy(limitation.code)}
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                    {sourceRestrictionScopeCopy(limitation)}
                                 </p>
                                 <InspectedPassages
-                                    passages={
-                                        qualification?.limitations
-                                            .filter(
-                                                (item) => item.code === code,
-                                            )
-                                            .flatMap((item) => item.passages) ??
-                                        []
-                                    }
+                                    passages={limitation.passages}
                                 />
                             </li>
                         ))}

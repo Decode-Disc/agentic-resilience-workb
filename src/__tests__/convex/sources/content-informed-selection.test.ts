@@ -1,7 +1,9 @@
 import type { SourceQualification } from "@convex/domain/sourceQualification";
 import {
     buildSourceSelectionProposal,
+    classifySourceCandidate,
     evaluateSourceCoverage,
+    sourceFindingUsage,
     type SourceSelectionCandidate,
 } from "@convex/domain/sourceSelectionPolicy";
 import { expect, test } from "vitest";
@@ -76,6 +78,52 @@ test("establishes current commercial terms from inspected content", () => {
             },
         ]),
     });
+});
+
+test("isolates a contradictory contribution without losing a useful contribution in another passage", () => {
+    const q = qualified({ documentKind: "official_product_documentation" });
+    const original = q.findings[0];
+    if (!original) throw new Error("Missing contribution fixture");
+    q.findings[0] = {
+        ...original,
+        role: "official_product_platform",
+        passages: [{ passageKey: "p1", quotation: "Documentation navigation" }],
+    };
+    q.findings.push({
+        ...original,
+        role: "official_product_integration",
+        passages: [
+            { passageKey: "p2", quotation: "The API supports webhooks." },
+        ],
+    });
+    q.limitations.push({
+        code: "no_substantive_content",
+        explanation: "The cited portal passage contains only navigation.",
+        passages: [{ passageKey: "p1", quotation: "Documentation navigation" }],
+        scope: { kind: "passages", passageKeys: ["p1"], roles: null },
+    });
+    const item = build([candidate("mixed-portal", q)]).items[0];
+    expect(item).toMatchObject({
+        disposition: "recommended",
+        eligibleCoverageRoles: ["official_product_integration"],
+        roleAvailability: expect.arrayContaining([
+            expect.objectContaining({
+                role: "official_product_platform",
+                state: "not_established",
+                usage: "blocked",
+                reasonCodes: ["qualification_conflict"],
+            }),
+            expect.objectContaining({
+                role: "official_product_integration",
+                state: "available",
+                usage: "documentary",
+            }),
+        ]),
+    });
+    expect(
+        classifySourceCandidate(candidate("mixed-portal", q), company)
+            .documentaryCoverageRoles,
+    ).toEqual(["official_product_integration"]);
 });
 
 test("mixed content remains useful but does not grant documentary factual use", () => {
@@ -267,4 +315,39 @@ test("cited reporting periods distinguish reports published in the same quarter"
             ],
         },
     });
+});
+
+test("scopes restrictions by role and preserves the frozen policy of an approved legacy proposal", () => {
+    const q = qualified();
+    q.limitations.push({
+        code: "no_substantive_content",
+        explanation: "No product description.",
+        passages: [],
+        scope: { kind: "roles", roles: ["official_product_platform"] },
+    });
+    expect(
+        build([candidate("terms", q)]).items[0]?.eligibleCoverageRoles,
+    ).toEqual(["official_commercial_terms"]);
+    const limitation = q.limitations[0];
+    const finding = q.findings[0];
+    if (!limitation || !finding) throw new Error("Missing restriction fixture");
+    q.limitations[0] = { ...limitation, scope: { kind: "document" } };
+    expect(
+        build([candidate("terms", q)]).items[0]?.eligibleCoverageRoles,
+    ).toEqual([]);
+    q.limitations[0] = { ...limitation };
+    delete q.limitations[0].scope;
+    expect(
+        sourceFindingUsage(finding, "documentary", undefined, q.limitations)
+            .reasonCodes,
+    ).toEqual(["qualification_scope_unknown"]);
+    expect(
+        sourceFindingUsage(
+            finding,
+            "documentary",
+            undefined,
+            q.limitations,
+            "source-selection-v13",
+        ).usage,
+    ).toBe("documentary");
 });

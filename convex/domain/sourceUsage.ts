@@ -22,7 +22,7 @@ import {
 import type { SourceQualification } from "./sourceQualification";
 import {
     MAX_QUALIFICATION_FINDINGS,
-    SOURCE_QUALIFICATION_VERSION,
+    isReadableQualificationVersion,
     sourceQualificationSchema,
 } from "./sourceQualification";
 import type { SourceReviewReads } from "./sourceReviewReads";
@@ -33,7 +33,6 @@ import type {
 import {
     SOURCE_EVIDENCE_USAGES,
     sourceFindingUsage,
-    sourcePassagesRequireVerification,
 } from "./sourceSelectionPolicy";
 
 // A proposal stores comparison references in one Convex array; this is a format capacity, not an attempt allowance.
@@ -114,6 +113,7 @@ export const sourceQualificationReviewValidator = zodToConvex(
                 sourceQualificationSchema.shape.findings.element.extend({
                     findingKey: z.string(),
                     usage: z.enum(SOURCE_EVIDENCE_USAGES),
+                    reasonCodes: z.array(z.string()).optional(),
                     comparisonOutcome:
                         sourceComparisonDispositionSchema.optional(),
                     comparisonDetails:
@@ -129,6 +129,7 @@ export function projectSourceQualificationForReview(input: {
     qualification: SourceQualification;
     qualificationTaskId: Doc<"aiTaskResults">["_id"];
     roleAvailability: Array<Pick<SourceRoleAvailability, "role" | "usage">>;
+    selectionPolicyVersion?: string;
     comparisonOutcomes?: Record<number, SourceComparisonDisposition>;
     comparisonDetails?: Record<number, SourceComparisonReviewDetails>;
 }) {
@@ -137,13 +138,14 @@ export function projectSourceQualificationForReview(input: {
         findings: input.qualification.findings.map((finding, ordinal) => ({
             ...finding,
             findingKey: `${input.qualificationTaskId}:${ordinal}`,
-            usage: sourceFindingUsage(
+            ...sourceFindingUsage(
                 finding,
                 input.roleAvailability.find(
                     (role) => role.role === finding.role,
                 )?.usage ?? "blocked",
                 input.comparisonOutcomes?.[ordinal],
                 input.qualification.limitations,
+                input.selectionPolicyVersion,
             ),
             ...(input.comparisonOutcomes?.[ordinal]
                 ? { comparisonOutcome: input.comparisonOutcomes[ordinal] }
@@ -432,9 +434,7 @@ export async function readPinnedSourceQualification(
         capture.runId !== item.runId ||
         capture.sourceId !== item.sourceId ||
         !task ||
-        ![SOURCE_QUALIFICATION_VERSION, "source-qualification-v2"].includes(
-            task.schemaVersion,
-        ) ||
+        !isReadableQualificationVersion(task.schemaVersion) ||
         task.runId !== item.runId ||
         task.sourceId !== item.sourceId ||
         task.sourceCaptureId !== capture._id ||
@@ -496,6 +496,7 @@ export async function readPreparedSourceUsage(
         comparisonDetails: qualified ? comparisonReview.details : {},
         sourceTitle: source?.title ?? "",
         roleAvailability: item?.roleAvailability ?? [],
+        selectionPolicyVersion: proposal?.policyVersion,
     };
 }
 
@@ -505,6 +506,7 @@ export function constructAttributedHypothesis(input: {
     sourceTitle: string;
     role: SourceCoverageRole;
     findingIndex?: number;
+    selectionPolicyVersion?: string;
     comparisonOutcomes?: Record<number, SourceComparisonDisposition>;
 }) {
     const roleFindings = input.qualification.findings
@@ -521,7 +523,9 @@ export function constructAttributedHypothesis(input: {
                 finding,
                 "attributed_argument_only",
                 input.comparisonOutcomes?.[findingIndex],
-            ) === "attributed_argument_only",
+                input.qualification.limitations,
+                input.selectionPolicyVersion,
+            ).usage === "attributed_argument_only",
     );
     if (input.findingIndex === undefined && eligible.length > 1)
         throw new Error("Attributed finding selection is ambiguous");
@@ -575,6 +579,7 @@ export function validatePreparedEvidenceUse(input: {
     statement: string;
     classification: ClaimClassification;
     relation: EvidenceRelation;
+    selectionPolicyVersion?: string;
     comparisonOutcomes?: Record<number, SourceComparisonDisposition>;
 }):
     | { allowed: true; strengthensFactualSupport: boolean }
@@ -591,11 +596,6 @@ export function validatePreparedEvidenceUse(input: {
                     reference.quotation === input.passage.exactQuotation,
             ),
         ) ?? [];
-    const flagged = qualification
-        ? sourcePassagesRequireVerification(qualification.limitations, [
-              { passageKey },
-          ])
-        : true;
     const usageFor = (finding: SourceQualification["findings"][number]) =>
         sourceFindingUsage(
             finding,
@@ -606,11 +606,11 @@ export function validatePreparedEvidenceUse(input: {
                 qualification?.findings.indexOf(finding) ?? -1
             ],
             qualification?.limitations,
-        );
+            input.selectionPolicyVersion,
+        ).usage;
     const documentary =
         qualification?.companyMatch === "subject" &&
         findings.length > 0 &&
-        !flagged &&
         findings.every((finding) => usageFor(finding) === "documentary");
     if (documentary)
         return {
@@ -638,6 +638,7 @@ export function validatePreparedEvidenceUse(input: {
                 role: finding.role,
                 findingIndex: qualification.findings.indexOf(finding),
                 comparisonOutcomes: input.comparisonOutcomes,
+                selectionPolicyVersion: input.selectionPolicyVersion,
             });
             if (input.statement === constructed.statement)
                 return { allowed: true, strengthensFactualSupport: false };

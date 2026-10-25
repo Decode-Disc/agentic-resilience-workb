@@ -2028,6 +2028,7 @@ export const inspectEvidenceMatrixScenario = internalQuery({
 });
 
 const recordedReadingValidator = v.object({
+    qualificationVersion: v.optional(v.string()),
     ...recordedSourceMetadata,
     storageId: v.id("_storage"),
     contentHash: v.string(),
@@ -2063,6 +2064,12 @@ export const seedRecordedSourceReview = internalAction({
         sources: v.array(
             v.object({
                 ...recordedSourceMetadata,
+                protocolVersion: v.optional(
+                    v.union(
+                        v.literal("source-qualification-v3"),
+                        v.literal("source-qualification-v4"),
+                    ),
+                ),
                 text: v.string(),
                 contentHash: v.string(),
                 originalInputHash: v.string(),
@@ -2090,6 +2097,8 @@ export const seedRecordedSourceReview = internalAction({
             throw new Error("Recorded scenario exceeds fixture bounds");
         const prepared = args.sources.map((source) => {
             const input = prepareQualificationInput({
+                protocolVersion:
+                    source.protocolVersion ?? "source-qualification-v3",
                 company: args.company,
                 canonicalUrl: source.canonicalUrl,
                 title: source.title,
@@ -2121,6 +2130,7 @@ export const seedRecordedSourceReview = internalAction({
                 );
                 stored.push(storageId);
                 readings.push({
+                    qualificationVersion: input.request.protocolVersion,
                     canonicalUrl: source.canonicalUrl,
                     title: source.title,
                     origin: source.origin,
@@ -2332,7 +2342,9 @@ export const commitRecordedSourceReview = internalMutation({
                       sourceCaptureId,
                       taskType: "source_qualification",
                       executionMode: "showcase",
-                      schemaVersion: SOURCE_QUALIFICATION_VERSION,
+                      schemaVersion:
+                          reading.qualificationVersion ??
+                          "source-qualification-v3",
                       adapterVersion: "recorded-utility-v1",
                       inputHash: reading.inputHash,
                       createdAt: now,
