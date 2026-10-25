@@ -23,6 +23,7 @@ import {
     preparationBudgetOutcome,
     preparationFailureCode,
     sourcePreparationError,
+    sourcePreparationOutcomeValidator,
     sourcePreparationStopCodeValidator,
 } from "@convex/domain/sourcePreparationAuthority";
 import {
@@ -585,162 +586,165 @@ const comparisonResultValidator = v.object({
     reasonCode: v.optional(v.string()),
 });
 
-export const qualifySource = internalAction({
-    args: {
-        preparationId: v.id("sourceSelectionProposalRebuilds"),
-        sourceCaptureId: v.id("sourceCaptures"),
-    },
-    returns: qualificationResultValidator,
-    handler: async (
-        ctx,
-        args,
-    ): Promise<Infer<typeof qualificationResultValidator>> => {
-        try {
-            const { capture, source, company, asOfTime, researchAngle } =
-                await ctx.runQuery(
-                    internal.sourcePreparation.getQualificationInput,
-                    { ...args, now: Date.now() },
-                );
-            if (!capture.storageId)
-                throw sourcePreparationError("capture_unavailable");
-            const blob = await ctx.storage.get(capture.storageId);
-            if (!blob || blob.size > 16 * 1024 * 1024)
-                throw sourcePreparationError("capture_unavailable");
-            const text = await blob.text();
-            if (sha256Hex(text) !== capture.contentHash)
-                throw sourcePreparationError("capture_corrupt");
-            const preparation = await ctx.runQuery(
-                internal.sourcePreparation.getForExecution,
-                {
-                    preparationId: args.preparationId,
-                    sourceId: source._id,
-                    now: Date.now(),
-                },
-            );
-            const qualificationInput = {
-                protocolVersion: qualificationExecutionVersion(
-                    preparation.qualificationVersion,
-                ),
-                company,
-                canonicalUrl: capture.resolvedUrl ?? source.canonicalUrl,
-                title: source.title,
-                asOfTime,
-                researchAngle,
-                text,
-                retrievalCompleteness: capture.readingCompleteness,
-                selectionPolicy: capture.qualificationInputPolicy,
-            };
-            const wholeDocument = capture.qualificationInputPolicy
-                ? prepareQualificationInput(qualificationInput)
-                : undefined;
-            let retrieval: Parameters<
-                typeof prepareQualificationInput
-            >[0]["retrieval"];
-            if (
-                preparation.retrievalVersion === SOURCE_RETRIEVAL_VERSION &&
-                preparation.retrievalMode &&
-                !wholeDocument?.retainsAllPassages
-            ) {
-                await ensureSourceCaptureIndex(ctx, {
-                    preparationId: args.preparationId,
-                    captureId: capture._id,
-                    mode: preparation.retrievalMode,
-                });
-                const result = await retrieveSourcePassages(ctx, {
-                    preparationId: args.preparationId,
-                    captureIds: [capture._id],
-                    mode: preparation.retrievalMode,
-                    queries: SOURCE_COVERAGE_ROLES.map(
-                        (role) =>
-                            `${role.replaceAll("_", " ")} ${researchAngle ?? ""} ${SOURCE_ROLE_REQUIREMENTS[role].description}`,
-                    ),
-                });
-                retrieval = {
-                    metadata: result.metadata,
-                    passageOrders: result.passages.map((p) => p.order),
-                };
-            }
-            const prepared = retrieval
-                ? prepareQualificationInput({
-                      ...qualificationInput,
-                      retrieval,
-                  })
-                : (wholeDocument ??
-                  prepareQualificationInput(qualificationInput));
-            const cached = await ctx.runQuery(
-                internal.sourcePreparation.getQualification,
-                {
-                    runId: capture.runId,
-                    inputHash: prepared.inputHash,
-                },
-            );
-            if (cached) return { status: "qualified", taskId: cached._id };
-            if (!process.env.OPENROUTER_API_KEY?.trim())
-                return {
-                    status: "unavailable",
-                    reasonCode: "missing_configuration",
-                };
-
-            const outcome = await executePreparationModel(ctx, {
-                preparation,
-                sourceId: source._id,
-                operation: "source_qualification",
-                inputHash: prepared.inputHash,
-                execute: (route, signal) =>
-                    qualifySourceDocument(prepared, route, {
-                        apiKey: process.env.OPENROUTER_API_KEY ?? "",
-                        signal,
-                    }),
-            });
-            if ("reasonCode" in outcome)
-                return {
-                    status: "unavailable",
-                    reasonCode: outcome.reasonCode,
-                };
-            if (outcome.result.status !== "succeeded")
-                throw sourcePreparationError("qualification_unavailable");
-            const taskId = await ctx.runMutation(
-                internal.sourcePreparation.saveQualification,
-                {
-                    ...args,
-                    receipt: outcome.receipt,
-                    providerCallId: outcome.providerCallId,
-                    inputHash: prepared.inputHash,
-                    qualification: outcome.result.qualification,
-                    ...(prepared.request.document.selectionStrategy
-                        ? {
-                              selectionStrategy:
-                                  prepared.request.document.selectionStrategy,
-                          }
-                        : {}),
-                    readingCompleteness:
-                        capture.readingCompleteness === "partial"
-                            ? "partial"
-                            : prepared.readingCompleteness,
-                    omittedPassageCount: Math.max(
-                        capture.omittedPassageCount ?? 0,
-                        prepared.omittedPassageCount,
-                    ),
-                    ...(prepared.request.retrieval
-                        ? { retrieval: prepared.request.retrieval }
-                        : {}),
-                    selectedPassages: prepared.request.document.passages.map(
-                        (passage) => ({
-                            passageKey: passage.passageKey,
-                            startOffset: passage.startOffset,
-                            endOffset: passage.endOffset,
-                        }),
-                    ),
-                },
-            );
-            return { status: "qualified", taskId };
-        } catch (error) {
-            const reasonCode = preparationFailureCode(error);
-            if (!reasonCode) throw error;
-            return { status: "unavailable", reasonCode };
-        }
-    },
+const qualificationArgsValidator = v.object({
+    preparationId: v.id("sourceSelectionProposalRebuilds"),
+    sourceCaptureId: v.id("sourceCaptures"),
 });
+
+export const qualifySource = internalAction({
+    args: qualificationArgsValidator,
+    returns: qualificationResultValidator,
+    handler: qualifyCapturedSource,
+});
+
+async function qualifyCapturedSource(
+    ctx: ActionCtx,
+    args: Infer<typeof qualificationArgsValidator>,
+): Promise<Infer<typeof qualificationResultValidator>> {
+    try {
+        const { capture, source, company, asOfTime, researchAngle } =
+            await ctx.runQuery(
+                internal.sourcePreparation.getQualificationInput,
+                { ...args, now: Date.now() },
+            );
+        if (!capture.storageId)
+            throw sourcePreparationError("capture_unavailable");
+        const blob = await ctx.storage.get(capture.storageId);
+        if (!blob || blob.size > 16 * 1024 * 1024)
+            throw sourcePreparationError("capture_unavailable");
+        const text = await blob.text();
+        if (sha256Hex(text) !== capture.contentHash)
+            throw sourcePreparationError("capture_corrupt");
+        const preparation = await ctx.runQuery(
+            internal.sourcePreparation.getForExecution,
+            {
+                preparationId: args.preparationId,
+                sourceId: source._id,
+                now: Date.now(),
+            },
+        );
+        const qualificationInput = {
+            protocolVersion: qualificationExecutionVersion(
+                preparation.qualificationVersion,
+            ),
+            company,
+            canonicalUrl: capture.resolvedUrl ?? source.canonicalUrl,
+            title: source.title,
+            asOfTime,
+            researchAngle,
+            text,
+            retrievalCompleteness: capture.readingCompleteness,
+            selectionPolicy: capture.qualificationInputPolicy,
+        };
+        const wholeDocument = capture.qualificationInputPolicy
+            ? prepareQualificationInput(qualificationInput)
+            : undefined;
+        let retrieval: Parameters<
+            typeof prepareQualificationInput
+        >[0]["retrieval"];
+        if (
+            preparation.retrievalVersion === SOURCE_RETRIEVAL_VERSION &&
+            preparation.retrievalMode &&
+            !wholeDocument?.retainsAllPassages
+        ) {
+            await ensureSourceCaptureIndex(ctx, {
+                preparationId: args.preparationId,
+                captureId: capture._id,
+                mode: preparation.retrievalMode,
+            });
+            const result = await retrieveSourcePassages(ctx, {
+                preparationId: args.preparationId,
+                captureIds: [capture._id],
+                mode: preparation.retrievalMode,
+                queries: SOURCE_COVERAGE_ROLES.map(
+                    (role) =>
+                        `${role.replaceAll("_", " ")} ${researchAngle ?? ""} ${SOURCE_ROLE_REQUIREMENTS[role].description}`,
+                ),
+            });
+            retrieval = {
+                metadata: result.metadata,
+                passageOrders: result.passages.map((p) => p.order),
+            };
+        }
+        const prepared = retrieval
+            ? prepareQualificationInput({
+                  ...qualificationInput,
+                  retrieval,
+              })
+            : (wholeDocument ?? prepareQualificationInput(qualificationInput));
+        const cached = await ctx.runQuery(
+            internal.sourcePreparation.getQualification,
+            {
+                runId: capture.runId,
+                inputHash: prepared.inputHash,
+            },
+        );
+        if (cached) return { status: "qualified", taskId: cached._id };
+        if (!process.env.OPENROUTER_API_KEY?.trim())
+            return {
+                status: "unavailable",
+                reasonCode: "missing_configuration",
+            };
+
+        const outcome = await executePreparationModel(ctx, {
+            preparation,
+            sourceId: source._id,
+            operation: "source_qualification",
+            inputHash: prepared.inputHash,
+            execute: (route, signal) =>
+                qualifySourceDocument(prepared, route, {
+                    apiKey: process.env.OPENROUTER_API_KEY ?? "",
+                    signal,
+                }),
+        });
+        if ("reasonCode" in outcome)
+            return {
+                status: "unavailable",
+                reasonCode: outcome.reasonCode,
+            };
+        if (outcome.result.status !== "succeeded")
+            throw sourcePreparationError("qualification_unavailable");
+        const taskId = await ctx.runMutation(
+            internal.sourcePreparation.saveQualification,
+            {
+                ...args,
+                receipt: outcome.receipt,
+                providerCallId: outcome.providerCallId,
+                inputHash: prepared.inputHash,
+                qualification: outcome.result.qualification,
+                ...(prepared.request.document.selectionStrategy
+                    ? {
+                          selectionStrategy:
+                              prepared.request.document.selectionStrategy,
+                      }
+                    : {}),
+                readingCompleteness:
+                    capture.readingCompleteness === "partial"
+                        ? "partial"
+                        : prepared.readingCompleteness,
+                omittedPassageCount: Math.max(
+                    capture.omittedPassageCount ?? 0,
+                    prepared.omittedPassageCount,
+                ),
+                ...(prepared.request.retrieval
+                    ? { retrieval: prepared.request.retrieval }
+                    : {}),
+                selectedPassages: prepared.request.document.passages.map(
+                    (passage) => ({
+                        passageKey: passage.passageKey,
+                        startOffset: passage.startOffset,
+                        endOffset: passage.endOffset,
+                    }),
+                ),
+            },
+        );
+        return { status: "qualified", taskId };
+    } catch (error) {
+        const reasonCode = preparationFailureCode(error);
+        if (!reasonCode) throw error;
+        return { status: "unavailable", reasonCode };
+    }
+}
 
 export const compareSource = internalAction({
     args: {
@@ -1359,297 +1363,333 @@ const inspectionResultValidator = v.object({
 });
 type InspectionResult = Infer<typeof inspectionResultValidator>;
 
+const sourcePreparationArgsValidator = v.object({
+    preparationId: v.id("sourceSelectionProposalRebuilds"),
+    sourceId: v.id("sources"),
+});
+
 export const inspectSource = internalAction({
-    args: {
-        preparationId: v.id("sourceSelectionProposalRebuilds"),
-        sourceId: v.id("sources"),
-    },
+    args: sourcePreparationArgsValidator,
     returns: inspectionResultValidator,
-    handler: async (ctx, args): Promise<InspectionResult> => {
-        let captureId: Id<"sourceCaptures"> | undefined;
+    handler: inspectSourceDocument,
+});
+
+async function inspectSourceDocument(
+    ctx: ActionCtx,
+    args: Infer<typeof sourcePreparationArgsValidator>,
+): Promise<InspectionResult> {
+    let captureId: Id<"sourceCaptures"> | undefined;
+    try {
+        const reservation = await ctx.runMutation(
+            internal.sourceCaptures.reserveUpload,
+            args,
+        );
+        const { capture, source, company } = reservation;
+        captureId = capture._id;
+        if (!reservation.shouldExecute) {
+            return capture.status === "committed"
+                ? {
+                      status: capture.readingCompleteness ?? "partial",
+                      sourceCaptureId: capture._id,
+                  }
+                : {
+                      status: "unavailable",
+                      sourceCaptureId: capture._id,
+                      reasonCode:
+                          capture.failureCode ?? "inspection_in_progress",
+                  };
+        }
+        if (source.origin !== "sec" && !process.env.EXA_API_KEY?.trim()) {
+            throw sourcePreparationError("missing_configuration");
+        }
+        const preparation = await ctx.runQuery(
+            internal.sourcePreparation.getForExecution,
+            { ...args, now: Date.now() },
+        );
+        let canonicalUrl: string;
+        let resolutionTimer: ReturnType<typeof setTimeout> | undefined;
         try {
-            const reservation = await ctx.runMutation(
-                internal.sourceCaptures.reserveUpload,
-                args,
-            );
-            const { capture, source, company } = reservation;
-            captureId = capture._id;
-            if (!reservation.shouldExecute) {
-                return capture.status === "committed"
-                    ? {
-                          status: capture.readingCompleteness ?? "partial",
-                          sourceCaptureId: capture._id,
-                      }
-                    : {
-                          status: "unavailable",
-                          sourceCaptureId: capture._id,
-                          reasonCode:
-                              capture.failureCode ?? "inspection_in_progress",
-                      };
-            }
-            if (source.origin !== "sec" && !process.env.EXA_API_KEY?.trim()) {
-                throw sourcePreparationError("missing_configuration");
-            }
-            const preparation = await ctx.runQuery(
-                internal.sourcePreparation.getForExecution,
-                { ...args, now: Date.now() },
-            );
-            let canonicalUrl: string;
-            let resolutionTimer: ReturnType<typeof setTimeout> | undefined;
-            try {
-                const destination = await Promise.race([
-                    validatePublicSourceUrl(
-                        source.canonicalUrl,
-                        async (hostname) => {
-                            const addresses = await lookup(hostname, {
-                                all: true,
-                                verbatim: true,
-                            });
-                            return addresses.map((record) => record.address);
-                        },
-                    ),
-                    new Promise<never>((_resolve, reject) => {
-                        resolutionTimer = setTimeout(
-                            () =>
-                                reject(
-                                    sourcePreparationError(
-                                        "source_url_unavailable",
-                                    ),
-                                ),
-                            Math.max(
-                                1,
-                                Math.min(
-                                    10_000,
-                                    (preparation.deadlineAt ?? 0) - Date.now(),
+            const destination = await Promise.race([
+                validatePublicSourceUrl(
+                    source.canonicalUrl,
+                    async (hostname) => {
+                        const addresses = await lookup(hostname, {
+                            all: true,
+                            verbatim: true,
+                        });
+                        return addresses.map((record) => record.address);
+                    },
+                ),
+                new Promise<never>((_resolve, reject) => {
+                    resolutionTimer = setTimeout(
+                        () =>
+                            reject(
+                                sourcePreparationError(
+                                    "source_url_unavailable",
                                 ),
                             ),
-                        );
-                    }),
-                ]);
-                canonicalUrl = destination.canonicalUrl;
-            } catch (error) {
-                if (!(error instanceof PublicSourceUrlError)) throw error;
-                throw sourcePreparationError(
-                    error.data.code === "dns_failed"
-                        ? "source_url_unavailable"
-                        : "source_url_not_public",
-                );
-            } finally {
-                clearTimeout(resolutionTimer);
-            }
-            const input: SourceDocumentRetrievalInput = {
-                canonicalUrl:
-                    source.origin === "sec"
-                        ? (capture.resolvedUrl ?? canonicalUrl)
-                        : canonicalUrl,
-                origin: source.origin,
-                companyCik: company.cik,
-                providerReference: source.providerReference,
-                secAccessionNumber: source.secAccessionNumber,
-                secForm: source.secForm,
-                secPrimaryDocument: source.secPrimaryDocument,
-            };
-            const operationScope = `${preparation.operationKey}:step:source_preparation:source:${source._id}:capture:${capture._id}`;
-            const acquisitionOperation =
-                source.origin === "sec"
-                    ? "retrieve_filing_html"
-                    : "get_contents";
-            const acquisitionPlan = await ctx.runQuery(
-                internal.providerCalls.nextPreparationAttemptForInput,
-                {
-                    preparationId: args.preparationId,
-                    sourceId: source._id,
-                    operation: acquisitionOperation,
-                    inputHash: capture.requestInputHash,
-                    now: Date.now(),
-                },
+                        Math.max(
+                            1,
+                            Math.min(
+                                10_000,
+                                (preparation.deadlineAt ?? 0) - Date.now(),
+                            ),
+                        ),
+                    );
+                }),
+            ]);
+            canonicalUrl = destination.canonicalUrl;
+        } catch (error) {
+            if (!(error instanceof PublicSourceUrlError)) throw error;
+            throw sourcePreparationError(
+                error.data.code === "dns_failed"
+                    ? "source_url_unavailable"
+                    : "source_url_not_public",
             );
-            if (!acquisitionPlan.attempt)
-                throw sourcePreparationError(
-                    acquisitionPlan.errorCode ?? "retrieval_unavailable",
-                );
-            const firstAttempt = acquisitionPlan.attempt as 1 | 2 | 3;
-            const maxAttempts = firstAttempt === 3 ? 3 : 2;
-            let boundaryError: unknown;
-            const subrequestAttempts = new Map<string, number>();
-            const recordAttempt = async (attempt: {
-                operation: string;
-                operationKey: string;
-                status: "started" | "succeeded" | "failed";
-                attempt: number;
-                latencyMs?: number;
-                errorCode?: string;
-                usage?: unknown;
-                reportedCost?: number;
-            }) => {
-                try {
-                    const key = `${attempt.operation}:${attempt.attempt}`;
-                    let logicalAttempt =
-                        subrequestAttempts.get(key) ?? attempt.attempt;
-                    if (
-                        attempt.status === "started" &&
-                        attempt.operation !== acquisitionOperation
-                    ) {
-                        const plan = await ctx.runQuery(
-                            internal.providerCalls
-                                .nextPreparationAttemptForInput,
-                            {
-                                preparationId: args.preparationId,
-                                sourceId: source._id,
-                                operation: attempt.operation,
-                                inputHash: capture.requestInputHash,
-                                now: Date.now(),
-                            },
-                        );
-                        if (!plan.attempt)
-                            throw sourcePreparationError(
-                                plan.errorCode ?? "retrieval_unavailable",
-                            );
-                        logicalAttempt = plan.attempt;
-                        subrequestAttempts.set(key, logicalAttempt);
-                    }
-                    const recorded = await ctx.runMutation(
-                        internal.providerCalls.recordAttempt,
+        } finally {
+            clearTimeout(resolutionTimer);
+        }
+        const input: SourceDocumentRetrievalInput = {
+            canonicalUrl:
+                source.origin === "sec"
+                    ? (capture.resolvedUrl ?? canonicalUrl)
+                    : canonicalUrl,
+            origin: source.origin,
+            companyCik: company.cik,
+            providerReference: source.providerReference,
+            secAccessionNumber: source.secAccessionNumber,
+            secForm: source.secForm,
+            secPrimaryDocument: source.secPrimaryDocument,
+        };
+        const operationScope = `${preparation.operationKey}:step:source_preparation:source:${source._id}:capture:${capture._id}`;
+        const acquisitionOperation =
+            source.origin === "sec" ? "retrieve_filing_html" : "get_contents";
+        const acquisitionPlan = await ctx.runQuery(
+            internal.providerCalls.nextPreparationAttemptForInput,
+            {
+                preparationId: args.preparationId,
+                sourceId: source._id,
+                operation: acquisitionOperation,
+                inputHash: capture.requestInputHash,
+                now: Date.now(),
+            },
+        );
+        if (!acquisitionPlan.attempt)
+            throw sourcePreparationError(
+                acquisitionPlan.errorCode ?? "retrieval_unavailable",
+            );
+        const firstAttempt = acquisitionPlan.attempt as 1 | 2 | 3;
+        const maxAttempts = firstAttempt === 3 ? 3 : 2;
+        let boundaryError: unknown;
+        const subrequestAttempts = new Map<string, number>();
+        const recordAttempt = async (attempt: {
+            operation: string;
+            operationKey: string;
+            status: "started" | "succeeded" | "failed";
+            attempt: number;
+            latencyMs?: number;
+            errorCode?: string;
+            usage?: unknown;
+            reportedCost?: number;
+        }) => {
+            try {
+                const key = `${attempt.operation}:${attempt.attempt}`;
+                let logicalAttempt =
+                    subrequestAttempts.get(key) ?? attempt.attempt;
+                if (
+                    attempt.status === "started" &&
+                    attempt.operation !== acquisitionOperation
+                ) {
+                    const plan = await ctx.runQuery(
+                        internal.providerCalls.nextPreparationAttemptForInput,
                         {
-                            ...attempt,
-                            attempt: logicalAttempt,
-                            inputHash: capture.requestInputHash,
-                            runId: capture.runId,
-                            corpusRevisionId: preparation.corpusRevisionId,
-                            sourceId: source._id,
                             preparationId: args.preparationId,
-                            executionGeneration:
-                                preparation.executionGeneration,
-                            workflowVersion: preparation.workflowVersion,
-                            stepKey: "source_preparation",
-                            service: source.origin === "sec" ? "sec" : "exa",
+                            sourceId: source._id,
+                            operation: attempt.operation,
+                            inputHash: capture.requestInputHash,
+                            now: Date.now(),
                         },
                     );
-                    if (
-                        attempt.status === "started" &&
-                        !recorded.shouldExecute
-                    ) {
+                    if (!plan.attempt)
                         throw sourcePreparationError(
-                            recorded.errorCode ?? "attempt_already_recorded",
+                            plan.errorCode ?? "retrieval_unavailable",
                         );
-                    }
-                    return recorded;
-                } catch (error) {
-                    boundaryError = error;
-                    throw error;
+                    logicalAttempt = plan.attempt;
+                    subrequestAttempts.set(key, logicalAttempt);
                 }
-            };
-            const remainingMs = Math.max(
-                1,
-                (preparation.deadlineAt ?? 0) - Date.now(),
-            );
-            const retrieval =
-                source.origin === "sec"
-                    ? await retrieveAndNormalizeSecFiling(
-                          preparationSecResolver(ctx, preparation, {
+                const recorded = await ctx.runMutation(
+                    internal.providerCalls.recordAttempt,
+                    {
+                        ...attempt,
+                        attempt: logicalAttempt,
+                        inputHash: capture.requestInputHash,
+                        runId: capture.runId,
+                        corpusRevisionId: preparation.corpusRevisionId,
+                        sourceId: source._id,
+                        preparationId: args.preparationId,
+                        executionGeneration: preparation.executionGeneration,
+                        workflowVersion: preparation.workflowVersion,
+                        stepKey: "source_preparation",
+                        service: source.origin === "sec" ? "sec" : "exa",
+                    },
+                );
+                if (attempt.status === "started" && !recorded.shouldExecute) {
+                    throw sourcePreparationError(
+                        recorded.errorCode ?? "attempt_already_recorded",
+                    );
+                }
+                return recorded;
+            } catch (error) {
+                boundaryError = error;
+                throw error;
+            }
+        };
+        const remainingMs = Math.max(
+            1,
+            (preparation.deadlineAt ?? 0) - Date.now(),
+        );
+        const retrieval =
+            source.origin === "sec"
+                ? await retrieveAndNormalizeSecFiling(
+                      preparationSecResolver(ctx, preparation, {
+                          recordAttempt,
+                          operationScope,
+                          firstAttempt,
+                          maxAttempts,
+                      }),
+                      input,
+                      async (resolvedUrl) => {
+                          await ctx.runMutation(
+                              internal.sourceCaptures.retainSecDocumentUrl,
+                              {
+                                  preparationId: args.preparationId,
+                                  captureId: capture._id,
+                                  resolvedUrl,
+                              },
+                          );
+                      },
+                  )
+                : await retrieveAndNormalizeExaFiling(
+                      createExaContentsAdapter(
+                          createExaContentsClient(
+                              process.env.EXA_API_KEY?.trim() ?? "",
+                          ),
+                          {
                               recordAttempt,
                               operationScope,
                               firstAttempt,
                               maxAttempts,
-                          }),
-                          input,
-                          async (resolvedUrl) => {
-                              await ctx.runMutation(
-                                  internal.sourceCaptures.retainSecDocumentUrl,
-                                  {
-                                      preparationId: args.preparationId,
-                                      captureId: capture._id,
-                                      resolvedUrl,
-                                  },
-                              );
+                              retryPolicy: "confirmed_response",
+                              timeoutMs: Math.min(120_000, remainingMs),
                           },
-                      )
-                    : await retrieveAndNormalizeExaFiling(
-                          createExaContentsAdapter(
-                              createExaContentsClient(
-                                  process.env.EXA_API_KEY?.trim() ?? "",
-                              ),
-                              {
-                                  recordAttempt,
-                                  operationScope,
-                                  firstAttempt,
-                                  maxAttempts,
-                                  retryPolicy: "confirmed_response",
-                                  timeoutMs: Math.min(120_000, remainingMs),
-                              },
-                          ),
-                          input,
-                      );
-            if (boundaryError !== undefined) throw boundaryError;
-            if (
-                retrieval.status === "failed" ||
-                !retrieval.normalizedText ||
-                !retrieval.retrievalVersion ||
-                !retrieval.normalizerVersion
-            ) {
-                throw sourcePreparationError(
-                    retrieval.errorCode ?? "retrieval_unavailable",
-                );
-            }
-            await ctx.runQuery(internal.sourceCaptures.assertActive, {
-                ...args,
-                now: Date.now(),
-            });
-            const prepared = prepareQualificationInput({
-                company,
-                canonicalUrl: retrieval.canonicalUrl,
-                title: source.title,
-                asOfTime: preparation.asOfTime ?? preparation.createdAt,
-                text: retrieval.normalizedText,
-                retrievalCompleteness:
-                    retrieval.status === "partial" ? "partial" : "complete",
-            });
-            const readingCompleteness =
-                retrieval.status === "partial"
-                    ? "partial"
-                    : prepared.readingCompleteness;
-            const storageId = await ctx.storage.store(
-                new Blob([prepared.normalizedText], {
-                    type: "text/plain; charset=utf-8",
-                }),
+                      ),
+                      input,
+                  );
+        if (boundaryError !== undefined) throw boundaryError;
+        if (
+            retrieval.status === "failed" ||
+            !retrieval.normalizedText ||
+            !retrieval.retrievalVersion ||
+            !retrieval.normalizerVersion
+        ) {
+            throw sourcePreparationError(
+                retrieval.errorCode ?? "retrieval_unavailable",
             );
-            await ctx.runMutation(internal.sourceCaptures.attachStorage, {
+        }
+        await ctx.runQuery(internal.sourceCaptures.assertActive, {
+            ...args,
+            now: Date.now(),
+        });
+        const prepared = prepareQualificationInput({
+            company,
+            canonicalUrl: retrieval.canonicalUrl,
+            title: source.title,
+            asOfTime: preparation.asOfTime ?? preparation.createdAt,
+            text: retrieval.normalizedText,
+            retrievalCompleteness:
+                retrieval.status === "partial" ? "partial" : "complete",
+        });
+        const readingCompleteness =
+            retrieval.status === "partial"
+                ? "partial"
+                : prepared.readingCompleteness;
+        const storageId = await ctx.storage.store(
+            new Blob([prepared.normalizedText], {
+                type: "text/plain; charset=utf-8",
+            }),
+        );
+        await ctx.runMutation(internal.sourceCaptures.attachStorage, {
+            preparationId: args.preparationId,
+            captureId,
+            storageId,
+        });
+        await ctx.runMutation(internal.sourceCaptures.finalize, {
+            preparationId: args.preparationId,
+            captureId,
+            contentHash: prepared.request.document.contentHash,
+            byteCount: new TextEncoder().encode(prepared.normalizedText)
+                .byteLength,
+            resolvedUrl: retrieval.canonicalUrl,
+            retrievalVersion: retrieval.retrievalVersion,
+            normalizerVersion: `${retrieval.normalizerVersion}+${prepared.normalizerVersion}`,
+            retrievedAt: Date.now(),
+            readingCompleteness,
+            omittedPassageCount: Math.max(
+                readingCompleteness === "partial" ? 1 : 0,
+                prepared.omittedPassageCount,
+            ),
+        });
+        return { status: readingCompleteness, sourceCaptureId: captureId };
+    } catch (error) {
+        const reasonCode = preparationFailureCode(error);
+        if (captureId) {
+            await ctx.runMutation(internal.sourceCaptures.markUnavailable, {
                 preparationId: args.preparationId,
                 captureId,
-                storageId,
+                failureCode: reasonCode ?? "inspection_failed",
             });
-            await ctx.runMutation(internal.sourceCaptures.finalize, {
-                preparationId: args.preparationId,
-                captureId,
-                contentHash: prepared.request.document.contentHash,
-                byteCount: new TextEncoder().encode(prepared.normalizedText)
-                    .byteLength,
-                resolvedUrl: retrieval.canonicalUrl,
-                retrievalVersion: retrieval.retrievalVersion,
-                normalizerVersion: `${retrieval.normalizerVersion}+${prepared.normalizerVersion}`,
-                retrievedAt: Date.now(),
-                readingCompleteness,
-                omittedPassageCount: Math.max(
-                    readingCompleteness === "partial" ? 1 : 0,
-                    prepared.omittedPassageCount,
-                ),
-            });
-            return { status: readingCompleteness, sourceCaptureId: captureId };
-        } catch (error) {
-            const reasonCode = preparationFailureCode(error);
-            if (captureId) {
-                await ctx.runMutation(internal.sourceCaptures.markUnavailable, {
-                    preparationId: args.preparationId,
-                    captureId,
-                    failureCode: reasonCode ?? "inspection_failed",
-                });
-            }
-            if (!reasonCode) throw error;
+        }
+        if (!reasonCode) throw error;
+        return {
+            status: "unavailable",
+            ...(captureId ? { sourceCaptureId: captureId } : {}),
+            reasonCode,
+        };
+    }
+}
+
+/** One durable source operation; intermediate captures and receipts remain independently persisted. */
+export const prepareSource = internalAction({
+    args: sourcePreparationArgsValidator,
+    returns: sourcePreparationOutcomeValidator,
+    handler: async (
+        ctx,
+        args,
+    ): Promise<Infer<typeof sourcePreparationOutcomeValidator>> => {
+        const inspection = await inspectSourceDocument(ctx, args);
+        if (inspection.status === "unavailable") {
             return {
-                status: "unavailable",
-                ...(captureId ? { sourceCaptureId: captureId } : {}),
-                reasonCode,
+                sourceId: args.sourceId,
+                result: {
+                    status: "unavailable",
+                    sourceCaptureId: inspection.sourceCaptureId,
+                    reasonCode:
+                        inspection.reasonCode ?? "inspection_unavailable",
+                },
             };
         }
+        if (!inspection.sourceCaptureId)
+            throw new Error("Inspected source has no capture");
+        const qualification = await qualifyCapturedSource(ctx, {
+            preparationId: args.preparationId,
+            sourceCaptureId: inspection.sourceCaptureId,
+        });
+        return {
+            sourceId: args.sourceId,
+            result: {
+                ...qualification,
+                sourceCaptureId: inspection.sourceCaptureId,
+            },
+        };
     },
 });

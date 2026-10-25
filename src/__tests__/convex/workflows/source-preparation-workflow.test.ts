@@ -26,6 +26,136 @@ vi.mock("@convex/sourceActions", async (importOriginal) => ({
 
 const prepareWorkflow = internal.sourcePreparationWorkflow.run;
 
+test("the source-actions plan journals one reading action and replays without another model call", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
+    const { t, preparationId } = await capturedWorkflowCandidate();
+    await t.run((ctx) =>
+        ctx.db.patch(preparationId, {
+            executionPlanVersion: "source_actions_v3",
+        }),
+    );
+    const request = vi.fn<typeof fetch>(async () => uncertainResponse());
+    vi.stubGlobal("fetch", request);
+    const handle = await t.run((ctx) =>
+        workflow.start(ctx, prepareWorkflow, { preparationId }),
+    );
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100));
+    expect(await t.run((ctx) => workflow.status(ctx, handle))).toMatchObject({
+        type: "completed",
+    });
+    const { page } = await t.run((ctx) => workflow.listSteps(ctx, handle));
+    expect(page.filter((s) => s.name.endsWith(":prepareSource"))).toHaveLength(
+        1,
+    );
+    expect(
+        page.filter(
+            (s) =>
+                s.name.endsWith(":inspectSource") ||
+                s.name.endsWith(":qualifySource"),
+        ),
+    ).toHaveLength(0);
+    expect(await t.run((ctx) => ctx.db.get(preparationId))).toMatchObject({
+        sourceOutcomes: [{ result: { status: "qualified" } }],
+    });
+    await t.run((ctx) => workflow.restart(ctx, handle));
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100));
+    expect(request).toHaveBeenCalledOnce();
+});
+
+test("a source qualifies while another source is still being inspected", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("EXA_API_KEY", "test-exa-key");
+    vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
+    const { t, runId, sourceId, preparationId } =
+        await capturedWorkflowCandidate();
+    const slowSourceId = await t.run(async (ctx) => {
+        const slowId = await ctx.db.insert("sources", {
+            runId,
+            canonicalUrl: "https://www.servicenow.com/products/slow.html",
+            title: "Slow source",
+            origin: "exa",
+            category: "official_product",
+            createdAt: Date.now(),
+        });
+        await ctx.db.patch(preparationId, {
+            executionPlanVersion: "source_actions_v3",
+            manualSourceIds: [slowId, sourceId],
+            comparisonVersion: undefined,
+        });
+        return slowId;
+    });
+    let releaseSlowInspection = (_response: Response): void => {
+        throw new Error("Inspection gate not initialized");
+    };
+    const slowInspection = new Promise<Response>((resolve) => {
+        releaseSlowInspection = resolve;
+    });
+    let inspectionPending = false;
+    let qualifiedBeforeInspectionFinished = false;
+    const request = vi.fn<typeof fetch>(async (url) => {
+        if (String(url).includes("api.exa.ai")) {
+            inspectionPending = true;
+            return slowInspection;
+        }
+        qualifiedBeforeInspectionFinished ||= inspectionPending;
+        return uncertainResponse();
+    });
+    vi.stubGlobal("fetch", request);
+    const handle = await t.run((ctx) =>
+        workflow.start(ctx, prepareWorkflow, { preparationId }),
+    );
+    const pumping = t.finishAllScheduledFunctions(() =>
+        vi.advanceTimersByTime(100),
+    );
+    try {
+        await vi.waitFor(() =>
+            expect(qualifiedBeforeInspectionFinished).toBe(true),
+        );
+        expect(
+            await t.run((ctx) =>
+                ctx.db
+                    .query("aiTaskResults")
+                    .withIndex("by_source_and_task_type_and_created_at", (q) =>
+                        q.eq("sourceId", slowSourceId),
+                    )
+                    .take(1),
+            ),
+        ).toEqual([]);
+    } finally {
+        releaseSlowInspection(
+            new Response(
+                JSON.stringify({
+                    results: [
+                        {
+                            id: "slow-source-capture",
+                            url: "https://www.servicenow.com/products/slow.html",
+                            text: "ServiceNow provides workflow software.",
+                        },
+                    ],
+                }),
+                { headers: { "Content-Type": "application/json" } },
+            ),
+        );
+        await pumping;
+    }
+    expect(await t.run((ctx) => workflow.status(ctx, handle))).toMatchObject({
+        type: "completed",
+    });
+    expect(await t.run((ctx) => ctx.db.get(preparationId))).toMatchObject({
+        sourceOutcomes: expect.arrayContaining([
+            {
+                sourceId,
+                result: expect.objectContaining({ status: "qualified" }),
+            },
+            {
+                sourceId: slowSourceId,
+                result: expect.objectContaining({ status: "qualified" }),
+            },
+        ]),
+    });
+});
+
 beforeEach(() => {
     vi.stubEnv("EXA_API_KEY", "");
     vi.stubEnv("SEC_USER_AGENT", "");
@@ -219,6 +349,7 @@ test.each([
 
 test.each([
     "inline_controls_v2",
+    "source_actions_v3",
     "collect_then_compare_v1",
     undefined,
 ] as const)("valid uncertainty finishes without fallback and durable replay repeats no provider request (%s)", async (executionPlanVersion) => {
@@ -253,7 +384,10 @@ test.each([
         nextBatches
             .slice(1)
             .every((entry) => "workId" in entry && Boolean(entry.workId)),
-    ).toBe(executionPlanVersion !== "inline_controls_v2");
+    ).toBe(
+        executionPlanVersion !== "inline_controls_v2" &&
+            executionPlanVersion !== "source_actions_v3",
+    );
     const controls = journal.page.filter((entry) =>
         [":recordProgress", ":recordResult", ":recordComparisonResults"].some(
             (suffix) => entry.name.endsWith(suffix),
@@ -262,7 +396,10 @@ test.each([
     expect(controls.length).toBeGreaterThan(0);
     expect(
         controls.every((entry) => "workId" in entry && Boolean(entry.workId)),
-    ).toBe(executionPlanVersion !== "inline_controls_v2");
+    ).toBe(
+        executionPlanVersion !== "inline_controls_v2" &&
+            executionPlanVersion !== "source_actions_v3",
+    );
     await t.run((ctx) => workflow.restart(ctx, handle));
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100));
     expect(await t.run((ctx) => workflow.status(ctx, handle))).toMatchObject({
@@ -976,97 +1113,113 @@ test("configuration checks are inspectable without inventing a provider attempt"
 });
 
 test.each([
-    2, 4, 8,
-])("reading and comparison share a persisted concurrency of %s", async (concurrency) => {
-    vi.useFakeTimers();
-    vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
-    vi.stubEnv("SOURCE_PREPARATION_MAX_CONCURRENCY", String(concurrency));
-    const { t, preparationId, runId } = await capturedWorkflowCandidate();
-    const ids = await t.run(async (ctx) => {
-        const sources = await ctx.db
-            .query("sources")
-            .withIndex("by_run_and_url", (q) => q.eq("runId", runId))
-            .take(1);
-        const ids = sources.map((s) => s._id);
-        for (let i = 1; i < 9; i++)
-            ids.push(
-                await ctx.db.insert("sources", {
-                    runId,
-                    canonicalUrl: `https://example.com/native-${i}`,
-                    title: `Native ${i}`,
-                    category: "official_product",
-                    origin: "exa",
-                    createdAt: i + 1,
-                }),
+    [2, "inline_controls_v2", ":qualifySource"],
+    [4, "inline_controls_v2", ":qualifySource"],
+    [8, "inline_controls_v2", ":qualifySource"],
+    [2, "source_actions_v3", ":prepareSource"],
+    [4, "source_actions_v3", ":prepareSource"],
+    [8, "source_actions_v3", ":prepareSource"],
+] as const)(
+    "reading and comparison share persisted concurrency %s with %s",
+    async (concurrency, executionPlanVersion, sourceActionName) => {
+        vi.useFakeTimers();
+        vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
+        vi.stubEnv("SOURCE_PREPARATION_MAX_CONCURRENCY", String(concurrency));
+        const { t, preparationId, runId } = await capturedWorkflowCandidate();
+        const ids = await t.run(async (ctx) => {
+            const sources = await ctx.db
+                .query("sources")
+                .withIndex("by_run_and_url", (q) => q.eq("runId", runId))
+                .take(1);
+            const ids = sources.map((s) => s._id);
+            for (let i = 1; i < 9; i++)
+                ids.push(
+                    await ctx.db.insert("sources", {
+                        runId,
+                        canonicalUrl: `https://example.com/native-${i}`,
+                        title: `Native ${i}`,
+                        category: "official_product",
+                        origin: "exa",
+                        createdAt: i + 1,
+                    }),
+                );
+            await ctx.db.patch(preparationId, {
+                manualSourceIds: ids,
+                executionPlanVersion,
+            });
+            return ids;
+        });
+        for (const sourceId of ids.slice(1)) {
+            const { capture, source } = await t.mutation(
+                internal.sourceCaptures.reserveUpload,
+                { preparationId, sourceId },
             );
-        await ctx.db.patch(preparationId, { manualSourceIds: ids });
-        return ids;
-    });
-    for (const sourceId of ids.slice(1)) {
-        const { capture, source } = await t.mutation(
-            internal.sourceCaptures.reserveUpload,
-            { preparationId, sourceId },
+            const text = "ServiceNow provides workflow software.";
+            const storageId = await t.run((ctx) =>
+                ctx.storage.store(new Blob([text])),
+            );
+            await t.mutation(internal.sourceCaptures.attachStorage, {
+                preparationId,
+                captureId: capture._id,
+                storageId,
+            });
+            await t.mutation(internal.sourceCaptures.finalize, {
+                preparationId,
+                captureId: capture._id,
+                contentHash: sha256Hex(text),
+                byteCount: text.length,
+                resolvedUrl: source.canonicalUrl,
+                normalizerVersion: capture.normalizerVersion,
+                retrievalVersion: "workflow-fixture",
+                readingCompleteness: "complete",
+                omittedPassageCount: 0,
+                retrievedAt: Date.now(),
+            });
+        }
+        vi.stubEnv("SOURCE_PREPARATION_MAX_CONCURRENCY", "1");
+        const request = vi.fn<typeof fetch>(async () => uncertainResponse());
+        vi.stubGlobal("fetch", request);
+        const handle = await t.run((ctx) =>
+            workflow.start(ctx, prepareWorkflow, { preparationId }),
         );
-        const text = "ServiceNow provides workflow software.";
-        const storageId = await t.run((ctx) =>
-            ctx.storage.store(new Blob([text])),
+        await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100));
+        expect(
+            await t.run((ctx) => workflow.status(ctx, handle)),
+        ).toMatchObject({
+            type: "completed",
+        });
+        const p = await t.run((ctx) => ctx.db.get(preparationId));
+        expect(p?.sourceOutcomes).toHaveLength(9);
+        expect(
+            p?.sourceOutcomes?.every((o) => o.result.status === "qualified"),
+        ).toBe(true);
+        expect(request).toHaveBeenCalledTimes(9);
+        const { page } = await t.run((ctx) => workflow.listSteps(ctx, handle));
+        const firstSaved = page.findIndex((s) =>
+            s.name.endsWith(":recordResult"),
         );
-        await t.mutation(internal.sourceCaptures.attachStorage, {
-            preparationId,
-            captureId: capture._id,
-            storageId,
-        });
-        await t.mutation(internal.sourceCaptures.finalize, {
-            preparationId,
-            captureId: capture._id,
-            contentHash: sha256Hex(text),
-            byteCount: text.length,
-            resolvedUrl: source.canonicalUrl,
-            normalizerVersion: capture.normalizerVersion,
-            retrievalVersion: "workflow-fixture",
-            readingCompleteness: "complete",
-            omittedPassageCount: 0,
-            retrievedAt: Date.now(),
-        });
-    }
-    vi.stubEnv("SOURCE_PREPARATION_MAX_CONCURRENCY", "1");
-    const request = vi.fn<typeof fetch>(async () => uncertainResponse());
-    vi.stubGlobal("fetch", request);
-    const handle = await t.run((ctx) =>
-        workflow.start(ctx, prepareWorkflow, { preparationId }),
-    );
-    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100));
-    expect(await t.run((ctx) => workflow.status(ctx, handle))).toMatchObject({
-        type: "completed",
-    });
-    const p = await t.run((ctx) => ctx.db.get(preparationId));
-    expect(p?.sourceOutcomes).toHaveLength(9);
-    expect(
-        p?.sourceOutcomes?.every((o) => o.result.status === "qualified"),
-    ).toBe(true);
-    expect(request).toHaveBeenCalledTimes(9);
-    const { page } = await t.run((ctx) => workflow.listSteps(ctx, handle));
-    const firstSaved = page.findIndex((s) => s.name.endsWith(":recordResult"));
-    expect(
-        page
-            .slice(0, firstSaved)
-            .filter((s) => s.name.endsWith(":qualifySource")),
-    ).toHaveLength(concurrency);
-    const saves = page.filter((s) => s.name.endsWith(":recordResult"));
-    expect(saves.filter((s) => "workId" in s && s.workId)).toHaveLength(
-        concurrency === 2 ? 0 : 2,
-    );
-    const comparisonBatches = page.filter((s) =>
-        s.name.endsWith(":recordComparisonResults"),
-    );
-    expect(comparisonBatches).toHaveLength(Math.ceil(9 / concurrency));
-    expect(comparisonBatches.every((s) => !("workId" in s) || !s.workId)).toBe(
-        true,
-    );
-    await t.run((ctx) => workflow.restart(ctx, handle));
-    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100));
-    expect(request).toHaveBeenCalledTimes(9);
-    expect((await t.run((ctx) => ctx.db.get(runId)))?.executionStatus).toBe(
-        "paused",
-    );
-}, 20000);
+        expect(
+            page
+                .slice(0, firstSaved)
+                .filter((s) => s.name.endsWith(sourceActionName)),
+        ).toHaveLength(concurrency);
+        const saves = page.filter((s) => s.name.endsWith(":recordResult"));
+        expect(saves.filter((s) => "workId" in s && s.workId)).toHaveLength(
+            concurrency === 2 ? 0 : 2,
+        );
+        const comparisonBatches = page.filter((s) =>
+            s.name.endsWith(":recordComparisonResults"),
+        );
+        expect(comparisonBatches).toHaveLength(Math.ceil(9 / concurrency));
+        expect(
+            comparisonBatches.every((s) => !("workId" in s) || !s.workId),
+        ).toBe(true);
+        await t.run((ctx) => workflow.restart(ctx, handle));
+        await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100));
+        expect(request).toHaveBeenCalledTimes(9);
+        expect((await t.run((ctx) => ctx.db.get(runId)))?.executionStatus).toBe(
+            "paused",
+        );
+    },
+    20000,
+);

@@ -28,6 +28,7 @@ import {
     preparationBudgetValidator,
     preparationDispatchOutcomeValidator,
     preparationModelLimitsValidator,
+    sourcePreparationExecutionPlanValidator,
     sourcePreparationOutcomeValidator,
     sourcePreparationProgressValidator,
     sourcePreparationStopCodeValidator,
@@ -448,16 +449,16 @@ export default defineSchema({
     ]),
     sourceSelectionProposalRebuilds: defineTable({
         executionPlanVersion: v.optional(
-            v.union(
-                v.literal("collect_then_compare_v1"),
-                v.literal("inline_controls_v2"),
-            ),
+            sourcePreparationExecutionPlanValidator,
         ),
         maxConcurrentSources: v.optional(v.number()),
         preparationStudy: v.optional(
             v.object({
                 manifestSha256: v.string(),
                 sourceRunId: v.id("researchRuns"),
+                qualificationReferencePreparationId: v.optional(
+                    v.id("sourceSelectionProposalRebuilds"),
+                ),
                 phase: v.union(
                     v.literal("replay"),
                     v.literal("reading"),

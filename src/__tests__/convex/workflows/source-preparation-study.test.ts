@@ -12,6 +12,124 @@ afterEach(() => {
 
 const seedStudy = internal.sourcePreparationEvaluation.seed;
 
+test("comparison studies pin qualifications from a completed owned reading study", async () => {
+    vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
+    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
+    const { t, runId, sourceId } = await seedInspectedEvidence({
+        qualification: {
+            companyMatch: "uncertain",
+            companyPassages: [],
+            documentKind: "unknown",
+            reportingPeriodEnd: null,
+            reportingPeriodPassages: [],
+            findings: [],
+            limitations: [],
+        },
+    });
+    await t.run((ctx) => ctx.db.patch(runId, { executionStatus: "paused" }));
+    const reading = await t.mutation(seedStudy, {
+        slotKey: "source-preparation-test",
+        fixtureKey: "reference-reading",
+        sourceRunId: runId,
+        manifestSha256: "1".repeat(64),
+        phase: "reading",
+        concurrency: 2,
+        executionPlanVersion: "source_actions_v3",
+    });
+    const originalTask = await t.run((ctx) =>
+        ctx.db.query("aiTaskResults").first(),
+    );
+    if (originalTask?.output.kind !== "source_qualification")
+        throw new Error("Missing qualification");
+    const copied = await t.mutation(
+        internal.sourcePreparationEvaluation.copySource,
+        {
+            preparationId: reading.preparationId,
+            sourceId,
+            expectedContentHash: originalTask.output.contentHash,
+        },
+    );
+    const args = {
+        slotKey: "source-preparation-test",
+        fixtureKey: "reference-comparison",
+        sourceRunId: runId,
+        manifestSha256: "2".repeat(64),
+        phase: "comparison" as const,
+        concurrency: 4,
+        executionPlanVersion: "source_actions_v3" as const,
+        qualificationReferencePreparationId: reading.preparationId,
+    };
+    await expect(t.mutation(seedStudy, args)).rejects.toThrow(
+        "Completed owned reading study required",
+    );
+    const referenceTaskId = await t.run(async (ctx) => {
+        const {
+            _id: _originalId,
+            _creationTime: _originalTime,
+            ...metadata
+        } = originalTask;
+        if (metadata.output.kind !== "source_qualification")
+            throw new Error("Missing qualification");
+        const readingPreparation = await ctx.db.get(reading.preparationId);
+        if (!readingPreparation) throw new Error("Missing reading preparation");
+        const taskId = await ctx.db.insert("aiTaskResults", {
+            ...metadata,
+            runId: reading.runId,
+            corpusRevisionId: readingPreparation.corpusRevisionId,
+            sourceId: copied.sourceId,
+            sourceCaptureId: copied.captureId,
+            output: { ...metadata.output, sourceCaptureId: copied.captureId },
+        });
+        await ctx.db.patch(reading.preparationId, {
+            status: "complete",
+            completedAt: Date.now(),
+            sourceOutcomes: [
+                {
+                    sourceId: copied.sourceId,
+                    result: {
+                        status: "qualified",
+                        taskId,
+                        sourceCaptureId: copied.captureId,
+                    },
+                },
+            ],
+        });
+        await ctx.db.patch(reading.runId, { executionStatus: "paused" });
+        return taskId;
+    });
+    const comparison = await t.mutation(seedStudy, args);
+    const imported = await t.mutation(
+        internal.sourcePreparationEvaluation.copySource,
+        {
+            preparationId: comparison.preparationId,
+            sourceId,
+            expectedContentHash: originalTask.output.contentHash,
+            qualificationTaskId: referenceTaskId,
+        },
+    );
+    const importedTaskId = imported.taskId;
+    if (!importedTaskId)
+        throw new Error("Reference qualification was not imported");
+    expect(await t.run((ctx) => ctx.db.get(importedTaskId))).toMatchObject({
+        runId: comparison.runId,
+        sourceId: imported.sourceId,
+        sourceCaptureId: imported.captureId,
+        schemaVersion: originalTask.schemaVersion,
+        inputHash: originalTask.inputHash,
+    });
+    await expect(
+        t.mutation(internal.sourcePreparationEvaluation.copySource, {
+            preparationId: comparison.preparationId,
+            sourceId,
+            expectedContentHash: originalTask.output.contentHash,
+            qualificationTaskId: originalTask._id,
+        }),
+    ).rejects.toThrow("Frozen qualification mismatch");
+    expect(await t.run((ctx) => ctx.db.query("providerCalls").take(1))).toEqual(
+        [],
+    );
+});
+
 test("study seeding requires loopback fixtures and preserves the admitted visitor quota", async () => {
     const fixture = await seedInspectedEvidence();
     const { t, runId } = fixture;
@@ -108,6 +226,12 @@ test("frozen imports are idempotent and replay cannot dispatch a cache miss", as
     expect(
         await t.mutation(internal.sourcePreparationEvaluation.copySource, args),
     ).toEqual(imported);
+    await expect(
+        t.mutation(internal.sourcePreparationEvaluation.copySource, {
+            ...args,
+            expectedContentHash: "f".repeat(64),
+        }),
+    ).rejects.toThrow("Frozen copy changed");
     await expect(
         t.mutation(internal.sourcePreparationEvaluation.copySource, {
             ...args,

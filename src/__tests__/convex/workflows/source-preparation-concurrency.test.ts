@@ -21,6 +21,7 @@ test.each([
     );
     expect(await t.run((ctx) => ctx.db.get(preparationId))).toMatchObject({
         maxConcurrentSources: 2,
+        executionPlanVersion: "source_actions_v3",
     });
 });
 

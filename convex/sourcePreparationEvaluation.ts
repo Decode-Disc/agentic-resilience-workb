@@ -3,7 +3,11 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
-import { MAX_QUALIFICATION_INPUT_BYTES } from "./domain/sourceQualification";
+import { sourcePreparationExecutionPlanValidator } from "./domain/sourcePreparationAuthority";
+import {
+    MAX_QUALIFICATION_INPUT_BYTES,
+    SOURCE_QUALIFICATION_VERSION,
+} from "./domain/sourceQualification";
 import {
     QUALIFICATION_MAX_INPUT_PRICE_PER_MILLION,
     QUALIFICATION_MAX_OUTPUT_PRICE_PER_MILLION,
@@ -40,9 +44,9 @@ export const seed = internalMutation({
             v.literal("comparison"),
         ),
         concurrency: v.number(),
-        executionPlanVersion: v.union(
-            v.literal("collect_then_compare_v1"),
-            v.literal("inline_controls_v2"),
+        executionPlanVersion: sourcePreparationExecutionPlanValidator,
+        qualificationReferencePreparationId: v.optional(
+            v.id("sourceSelectionProposalRebuilds"),
         ),
     },
     returns: v.object({
@@ -68,6 +72,27 @@ export const seed = internalMutation({
             : null;
         if (!original || !company)
             throw new Error("Frozen source dossier missing");
+        if (args.qualificationReferencePreparationId) {
+            const reference = await ctx.db.get(
+                args.qualificationReferencePreparationId,
+            );
+            const referenceRun = reference
+                ? await ctx.db.get(reference.runId)
+                : null;
+            if (
+                args.phase !== "comparison" ||
+                reference?.status !== "complete" ||
+                reference.preparationStudy?.phase !== "reading" ||
+                reference.preparationStudy.sourceRunId !== original._id ||
+                referenceRun?.ownerVisitorId !== original.ownerVisitorId ||
+                !reference.sourceOutcomes?.length ||
+                reference.sourceOutcomes.some(
+                    (outcome) => outcome.result.status !== "qualified",
+                )
+            ) {
+                throw new Error("Completed owned reading study required");
+            }
+        }
         const seeded = await ctx.runMutation(
             internal.retrievalEvaluation.seed,
             {
@@ -93,12 +118,16 @@ export const seed = internalMutation({
             manifestSha256: args.manifestSha256,
             sourceRunId: original._id,
             phase: args.phase,
+            qualificationReferencePreparationId:
+                args.qualificationReferencePreparationId,
         };
         if (p.preparationStudy) {
             if (
                 p.preparationStudy.manifestSha256 !== study.manifestSha256 ||
                 p.preparationStudy.sourceRunId !== study.sourceRunId ||
                 p.preparationStudy.phase !== study.phase ||
+                p.preparationStudy.qualificationReferencePreparationId !==
+                    study.qualificationReferencePreparationId ||
                 p.maxConcurrentSources !== args.concurrency ||
                 p.executionPlanVersion !== args.executionPlanVersion
             )
@@ -115,7 +144,12 @@ export const seed = internalMutation({
             lifecycleState: "awaiting_source_review",
         });
         const allowance =
-            args.phase === "replay" ? 0 : args.phase === "reading" ? 24 : 8;
+            args.phase === "replay"
+                ? 0
+                : args.phase === "reading" ||
+                    args.qualificationReferencePreparationId
+                  ? 24
+                  : 8;
         await ctx.db.patch(p._id, {
             preparationStudy: study,
             maxConcurrentSources: args.concurrency,
@@ -162,6 +196,42 @@ export const copySource = internalMutation({
         const source = await ctx.db.get(args.sourceId);
         if (!source || source.runId !== p.preparationStudy.sourceRunId)
             throw new Error("Source outside frozen dossier");
+        const requestedTask = args.qualificationTaskId
+            ? await ctx.db.get(args.qualificationTaskId)
+            : null;
+        const referenceId =
+            p.preparationStudy.qualificationReferencePreparationId;
+        const reference = referenceId ? await ctx.db.get(referenceId) : null;
+        const referenceOutcome = reference?.sourceOutcomes?.find(
+            (outcome) =>
+                outcome.result.status === "qualified" &&
+                outcome.result.taskId === args.qualificationTaskId,
+        );
+        const referenceSource = referenceOutcome
+            ? await ctx.db.get(referenceOutcome.sourceId)
+            : null;
+        const referenceCapture =
+            referenceOutcome?.result.status === "qualified"
+                ? await ctx.db.get(referenceOutcome.result.sourceCaptureId)
+                : null;
+        if (
+            referenceId &&
+            (reference?.status !== "complete" ||
+                !referenceOutcome ||
+                referenceSource?.canonicalUrl !== source.canonicalUrl ||
+                referenceSource.runId !== reference.runId ||
+                referenceCapture?.status !== "committed" ||
+                referenceCapture.runId !== reference.runId ||
+                referenceCapture.corpusRevisionId !==
+                    reference.corpusRevisionId ||
+                referenceCapture.sourceId !== referenceSource._id ||
+                referenceCapture.contentHash !== args.expectedContentHash ||
+                requestedTask?.corpusRevisionId !==
+                    reference.corpusRevisionId ||
+                requestedTask?.schemaVersion !== SOURCE_QUALIFICATION_VERSION)
+        ) {
+            throw new Error("Frozen qualification mismatch");
+        }
         const title =
             args.fixtureIndex === undefined
                 ? source.title
@@ -192,6 +262,7 @@ export const copySource = internalMutation({
                 .first();
             if (
                 !priorCapture ||
+                priorCapture.contentHash !== args.expectedContentHash ||
                 (args.replayInputHash &&
                     task?.inputHash !== args.replayInputHash) ||
                 Boolean(task) !== Boolean(args.qualificationTaskId)
@@ -274,11 +345,14 @@ export const copySource = internalMutation({
         if (args.qualificationTaskId) {
             if (p.preparationStudy.phase === "reading")
                 throw new Error("Reading study cannot import qualifications");
-            const task = await ctx.db.get(args.qualificationTaskId);
+            const task = requestedTask;
             if (
-                task?.runId !== source.runId ||
-                task.sourceId !== source._id ||
-                task.sourceCaptureId !== capture._id ||
+                task?.runId !== (reference?.runId ?? source.runId) ||
+                task.sourceId !== (referenceSource?._id ?? source._id) ||
+                task.sourceCaptureId !==
+                    (referenceOutcome?.result.status === "qualified"
+                        ? referenceOutcome.result.sourceCaptureId
+                        : capture._id) ||
                 task.output.kind !== "source_qualification" ||
                 task.output.contentHash !== capture.contentHash
             )
@@ -366,6 +440,28 @@ export const start = internalMutation({
                 );
         }
         const now = Date.now();
+        if (
+            study.phase === "comparison" &&
+            study.qualificationReferencePreparationId
+        ) {
+            const targets = await ctx.runQuery(
+                internal.sourcePreparation.comparisonTargets,
+                {
+                    preparationId: p._id,
+                    now,
+                },
+            );
+            if (!targets.length)
+                throw new Error("Frozen study has no comparison targets");
+            if (targets.length > 24)
+                throw new Error("Frozen comparison target limit exceeded");
+            await ctx.db.patch(p._id, {
+                modelLimits: {
+                    work: targets.length,
+                    incidents: targets.length,
+                },
+            });
+        }
         await ctx.db.patch(p._id, {
             deadlineAt: now + SOURCE_PREPARATION_DEADLINE_MS,
             leaseExpiresAt: now + SOURCE_PREPARATION_DEADLINE_MS,

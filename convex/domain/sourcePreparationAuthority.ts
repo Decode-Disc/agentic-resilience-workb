@@ -4,6 +4,7 @@ import {
     MAX_HISTORICAL_SOURCE_CANDIDATES,
     preparationMaxConcurrency,
     preparationModelLimits,
+    SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION,
 } from "@convex/resourceLimits";
 import type { GenericDatabaseReader } from "convex/server";
 import { ConvexError, type Infer, v } from "convex/values";
@@ -13,6 +14,12 @@ export const preparationDispatchOutcomeValidator = v.union(
     v.literal("not_dispatched"),
     v.literal("response_received"),
     v.literal("unknown"),
+);
+
+export const sourcePreparationExecutionPlanValidator = v.union(
+    v.literal("collect_then_compare_v1"),
+    v.literal("inline_controls_v2"),
+    v.literal(SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION),
 );
 
 export const sourcePreparationPhaseValidator = v.union(

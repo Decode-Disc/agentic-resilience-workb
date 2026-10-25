@@ -53,7 +53,7 @@ type Snapshot = {
     tasks: Doc<"aiTaskResults">[];
 };
 type Manifest = {
-    version: 1;
+    version: 1 | 2;
     sourceRunId: Doc<"researchRuns">["_id"];
     snapshotFile: string;
     snapshotSha256: string;
@@ -68,8 +68,92 @@ type Manifest = {
     catalog: Catalog;
     maximumAttempts: number;
     maximumReservationUsd: number;
-    conditions: Array<{ phase: "reading" | "comparison"; concurrency: number }>;
+    conditions: Array<StudyCondition>;
+    qualificationReference?: { file: string; sha256: string };
 };
+type StudySeed = FunctionArgs<typeof internal.sourcePreparationEvaluation.seed>;
+type StudyCondition = {
+    phase: StudySeed["phase"];
+    concurrency: number;
+    version?: StudySeed["executionPlanVersion"];
+    warmup?: boolean;
+    repetition?: number;
+};
+type QualificationReference = {
+    sourceRunId: Doc<"researchRuns">["_id"];
+    preparationId: Doc<"sourceSelectionProposalRebuilds">["_id"];
+    qualifications: Array<{
+        sourceId: Doc<"sources">["_id"];
+        taskId: Doc<"aiTaskResults">["_id"];
+        inputHash: string;
+        contentHash: string;
+    }>;
+};
+
+/** Freezes the order before any dispatch; paid repetitions require separately approved lots. */
+export function buildPreparationStudyConditions(input: {
+    phase: StudySeed["phase"];
+    plans: Array<StudySeed["executionPlanVersion"]>;
+    concurrencies: number[];
+    repetitions: number;
+    warmups: number;
+}): StudyCondition[] {
+    assert(
+        input.plans.length && input.concurrencies.length,
+        "Study conditions are empty",
+    );
+    assert(
+        input.plans.every((p) =>
+            [
+                "collect_then_compare_v1",
+                "inline_controls_v2",
+                "source_actions_v3",
+            ].includes(p),
+        ),
+        "Unknown execution plan",
+    );
+    assert(
+        input.concurrencies.every((c) => Number.isSafeInteger(c) && c > 0),
+        "Invalid study concurrency",
+    );
+    assert(
+        Number.isSafeInteger(input.repetitions) &&
+            input.repetitions > 0 &&
+            Number.isSafeInteger(input.warmups) &&
+            input.warmups >= 0,
+        "Invalid study repetitions",
+    );
+    const base = input.plans.flatMap((version) =>
+        input.concurrencies.map((concurrency) => ({
+            phase: input.phase,
+            version,
+            concurrency,
+        })),
+    );
+    assert(
+        base.length * (input.repetitions + input.warmups) <= 64,
+        "Study condition limit exceeded",
+    );
+    if (input.phase !== "replay") {
+        assert(input.warmups === 0, "Paid warmups are not permitted");
+        assert(
+            base.length * input.repetitions * 24 * 2 <= 128,
+            "Split paid conditions into separate approved lots",
+        );
+    }
+    return [
+        ...Array.from({ length: input.warmups }, (_, repetition) =>
+            base.map((c) => ({ ...c, warmup: true, repetition })),
+        ).flat(),
+        ...Array.from({ length: input.repetitions }, (_, repetition) =>
+            (repetition % 2 ? [...base].reverse() : base).map((c) => ({
+                ...c,
+                warmup: false,
+                repetition,
+            })),
+        ).flat(),
+    ];
+}
 type Catalog = {
     observedAt: string;
     models: Array<{
@@ -198,6 +282,12 @@ export async function runPreparationStudy(argv: string[]) {
             slot: { type: "string" },
             authorization: { type: "string" },
             stress: { type: "boolean" },
+            phase: { type: "string" },
+            plans: { type: "string" },
+            concurrencies: { type: "string" },
+            repetitions: { type: "string" },
+            warmups: { type: "string" },
+            "qualification-reference": { type: "string" },
         },
     });
 
@@ -236,6 +326,59 @@ export async function runPreparationStudy(argv: string[]) {
             const snapshot = read(values.snapshot) as Snapshot;
             const p = snapshot.preparations.find(
                 (p) => p._id === snapshot.run.sourcePreparationId,
+            );
+            assert(
+                !values.phase ||
+                    ["replay", "reading", "comparison"].includes(values.phase),
+                "Invalid study phase",
+            );
+            const conditions = values.phase
+                ? buildPreparationStudyConditions({
+                      phase: values.phase as StudySeed["phase"],
+                      plans: (values.plans ?? "source_actions_v3").split(
+                          ",",
+                      ) as StudySeed["executionPlanVersion"][],
+                      concurrencies: (values.concurrencies ?? "2,4")
+                          .split(",")
+                          .map(Number),
+                      repetitions: Number(values.repetitions ?? "1"),
+                      warmups: Number(values.warmups ?? "0"),
+                  })
+                : undefined;
+            const replayOnly =
+                conditions?.every((c) => c.phase === "replay") ?? false;
+            let qualificationReference: Manifest["qualificationReference"];
+            if (values["qualification-reference"]) {
+                assert(
+                    values.phase === "comparison",
+                    "Qualification references are comparison-only",
+                );
+                const file = "qualification-reference.json";
+                const reference = read(
+                    values["qualification-reference"],
+                ) as QualificationReference;
+                assert.equal(
+                    reference.sourceRunId,
+                    snapshot.run._id,
+                    "Reference belongs to another source dossier",
+                );
+                assert.equal(
+                    reference.qualifications.length,
+                    24,
+                    "A complete reading reference is required",
+                );
+                copyFileSync(
+                    values["qualification-reference"],
+                    join(dir, file),
+                );
+                qualificationReference = {
+                    file,
+                    sha256: sha(readFileSync(join(dir, file))),
+                };
+            }
+            assert(
+                values.phase !== "comparison" || qualificationReference,
+                "New comparison lots require a frozen reading reference",
             );
             assert(
                 p && snapshot.run.executionStatus === "paused",
@@ -287,19 +430,18 @@ export async function runPreparationStudy(argv: string[]) {
                 });
                 copyFileSync(file, join(dir, "code", file));
             }
-            const quoted = await catalog(
-                [...settings.sourceQualificationRoutes],
-                {
-                    input:
-                        settings.QUALIFICATION_MAX_INPUT_PRICE_PER_MILLION /
-                        1e6,
-                    output:
-                        settings.QUALIFICATION_MAX_OUTPUT_PRICE_PER_MILLION /
-                        1e6,
-                },
-            );
+            const quoted = replayOnly
+                ? { observedAt: new Date().toISOString(), models: [] }
+                : await catalog([...settings.sourceQualificationRoutes], {
+                      input:
+                          settings.QUALIFICATION_MAX_INPUT_PRICE_PER_MILLION /
+                          1e6,
+                      output:
+                          settings.QUALIFICATION_MAX_OUTPUT_PRICE_PER_MILLION /
+                          1e6,
+                  });
             const manifest: Manifest = {
-                version: 1,
+                version: conditions ? 2 : 1,
                 sourceRunId: snapshot.run._id,
                 snapshotFile: "snapshot.json",
                 snapshotSha256: sha(readFileSync(join(dir, "snapshot.json"))),
@@ -315,10 +457,14 @@ export async function runPreparationStudy(argv: string[]) {
                 captures,
                 code,
                 catalog: quoted,
-                maximumAttempts: study.PREPARATION_STUDY_MAX_ATTEMPTS,
-                maximumReservationUsd:
-                    study.PREPARATION_STUDY_MAX_RESERVATION_USD,
-                conditions: [
+                maximumAttempts: replayOnly
+                    ? 0
+                    : study.PREPARATION_STUDY_MAX_ATTEMPTS,
+                maximumReservationUsd: replayOnly
+                    ? 0
+                    : study.PREPARATION_STUDY_MAX_RESERVATION_USD,
+                qualificationReference,
+                conditions: conditions ?? [
                     { phase: "reading", concurrency: 2 },
                     { phase: "reading", concurrency: 4 },
                     { phase: "comparison", concurrency: 4 },
@@ -326,13 +472,14 @@ export async function runPreparationStudy(argv: string[]) {
                 ],
             };
             save(join(dir, "manifest.json"), manifest);
-            save(join(dir, "grant-template.json"), {
-                manifestSha256: sha(JSON.stringify(manifest)),
-                maximumAttempts: manifest.maximumAttempts,
-                budgetUsd:
-                    Math.ceil(manifest.maximumReservationUsd * 100) / 100,
-                approvedAt: "REQUIRES_EXPLICIT_AUTHORIZATION",
-            });
+            if (!replayOnly)
+                save(join(dir, "grant-template.json"), {
+                    manifestSha256: sha(JSON.stringify(manifest)),
+                    maximumAttempts: manifest.maximumAttempts,
+                    budgetUsd:
+                        Math.ceil(manifest.maximumReservationUsd * 100) / 100,
+                    approvedAt: "REQUIRES_EXPLICIT_AUTHORIZATION",
+                });
             console.log(
                 JSON.stringify({
                     prepared: dir,
@@ -359,6 +506,17 @@ export async function runPreparationStudy(argv: string[]) {
                 sha(readFileSync(join(dir, capture.file))),
                 capture.sha256,
             );
+        const qualificationReference = manifest.qualificationReference
+            ? (() => {
+                  const path = join(dir, manifest.qualificationReference.file);
+                  assert.equal(
+                      sha(readFileSync(path)),
+                      manifest.qualificationReference.sha256,
+                      "Frozen reading reference changed",
+                  );
+                  return read(path) as QualificationReference;
+              })()
+            : undefined;
         const manifestSha256 = sha(JSON.stringify(manifest));
         let approval: FunctionArgs<
             typeof internal.sourcePreparationEvaluation.start
@@ -423,37 +581,56 @@ export async function runPreparationStudy(argv: string[]) {
         assert(p?.sourceOutcomes);
         const company = snapshot.run.companySnapshot;
         assert(company);
-        const conditions = values.offline
-            ? [
-                  {
-                      phase: "replay" as const,
-                      concurrency: 2,
-                      version: "collect_then_compare_v1" as const,
-                  },
-                  {
-                      phase: "replay" as const,
-                      concurrency: 2,
-                      version: "inline_controls_v2" as const,
-                  },
-                  {
-                      phase: "replay" as const,
-                      concurrency: 4,
-                      version: "inline_controls_v2" as const,
-                  },
-                  ...(values.stress
-                      ? [
-                            {
-                                phase: "replay" as const,
-                                concurrency: 60,
-                                version: "inline_controls_v2" as const,
-                            },
-                        ]
-                      : []),
-              ]
-            : manifest.conditions.map((c) => ({
-                  ...c,
-                  version: "inline_controls_v2" as const,
-              }));
+        const conditions =
+            manifest.version === 2
+                ? manifest.conditions.map((c) => ({
+                      ...c,
+                      version: c.version ?? ("inline_controls_v2" as const),
+                  }))
+                : values.offline
+                  ? [
+                        {
+                            phase: "replay" as const,
+                            concurrency: 2,
+                            version: "collect_then_compare_v1" as const,
+                        },
+                        {
+                            phase: "replay" as const,
+                            concurrency: 2,
+                            version: "inline_controls_v2" as const,
+                        },
+                        {
+                            phase: "replay" as const,
+                            concurrency: 4,
+                            version: "inline_controls_v2" as const,
+                        },
+                        ...(values.stress
+                            ? [
+                                  {
+                                      phase: "replay" as const,
+                                      concurrency: 60,
+                                      version: "inline_controls_v2" as const,
+                                  },
+                              ]
+                            : []),
+                    ]
+                  : manifest.conditions.map((c) => ({
+                        ...c,
+                        version: "inline_controls_v2" as const,
+                    }));
+        assert(
+            conditions.every((c) =>
+                values.offline ? c.phase === "replay" : c.phase !== "replay",
+            ),
+            "Study mode does not match frozen conditions",
+        );
+        if (manifest.version === 2 && values.live) {
+            assert(
+                conditions.length * 24 * 2 <= 128 &&
+                    conditions.every((c) => !("warmup" in c && c.warmup)),
+                "Paid conditions exceed the approved lot",
+            );
+        }
         const batchKey = `${values.offline ? "offline" : "live"}-${Date.now()}`;
         const journal = join(dir, `${batchKey}.jsonl`);
         // A live rerun of a partial/unknown batch must never silently create new dossier namespaces.
@@ -482,6 +659,12 @@ export async function runPreparationStudy(argv: string[]) {
                     phase: condition.phase,
                     concurrency: condition.concurrency,
                     executionPlanVersion: condition.version,
+                    ...(qualificationReference
+                        ? {
+                              qualificationReferencePreparationId:
+                                  qualificationReference.preparationId,
+                          }
+                        : {}),
                 });
                 appendFileSync(
                     journal,
@@ -515,14 +698,21 @@ export async function runPreparationStudy(argv: string[]) {
                                   !values.offline ||
                                   manifest.replaySourceIds.includes(c.sourceId),
                           );
+                const originalSourceIds = new Map<
+                    Doc<"sources">["_id"],
+                    Doc<"sources">["_id"]
+                >();
                 for (const [fixtureIndex, capture] of entries.entries()) {
                     const outcome = p.sourceOutcomes?.find(
                         (o) => o.sourceId === capture.sourceId,
                     );
                     assert(outcome?.result.status === "qualified");
-                    const taskId = outcome.result.taskId;
-                    const task = snapshot.tasks.find((t) => t._id === taskId);
-                    assert(task);
+                    const taskId = qualificationReference
+                        ? qualificationReference.qualifications.find(
+                              (q) => q.sourceId === capture.sourceId,
+                          )?.taskId
+                        : outcome.result.taskId;
+                    assert(taskId, "Frozen qualification missing");
                     const source = snapshot.sources.find(
                         (s) => s._id === capture.sourceId,
                     );
@@ -553,7 +743,7 @@ export async function runPreparationStudy(argv: string[]) {
                         sourceId: source._id,
                         expectedContentHash: capture.sha256,
                         ...(condition.phase !== "reading"
-                            ? { qualificationTaskId: task._id }
+                            ? { qualificationTaskId: taskId }
                             : {}),
                         ...(condition.phase === "replay"
                             ? { replayInputHash: input.inputHash }
@@ -562,6 +752,7 @@ export async function runPreparationStudy(argv: string[]) {
                             ? { fixtureIndex }
                             : {}),
                     });
+                    originalSourceIds.set(imported.sourceId, source._id);
                     appendFileSync(
                         journal,
                         `${JSON.stringify({ event: "imported", ...imported, originalSourceId: source._id })}\n`,
@@ -608,6 +799,15 @@ export async function runPreparationStudy(argv: string[]) {
                     condition,
                     ...seeded,
                     elapsedMs: result.preparation.completedAt - startedAt,
+                    readingMs: result.preparation.initialReadingsCompletedAt
+                        ? result.preparation.initialReadingsCompletedAt -
+                          startedAt
+                        : null,
+                    proposalTailMs: result.preparation
+                        .initialReadingsCompletedAt
+                        ? result.preparation.completedAt -
+                          result.preparation.initialReadingsCompletedAt
+                        : null,
                     sources: result.preparation.sourceOutcomes?.length,
                     unavailable: result.preparation.sourceOutcomes?.filter(
                         (o) => o.result.status !== "qualified",
@@ -617,6 +817,12 @@ export async function runPreparationStudy(argv: string[]) {
                         (s) => "workId" in s && s.workId,
                     ).length,
                     providerCalls: result.calls.length,
+                    distinctPaidSources: new Set(
+                        result.calls.map((call) => call.sourceId),
+                    ).size,
+                    logicalModelInputs: new Set(
+                        result.calls.map((call) => call.inputHash),
+                    ).size,
                     reportedCostUsd: result.calls.reduce(
                         (n, c) => n + (c.reportedCost ?? 0),
                         0,
@@ -645,6 +851,56 @@ export async function runPreparationStudy(argv: string[]) {
                     ),
                     "Unresolved provider outcome; stop the batch",
                 );
+                if (condition.phase === "reading") {
+                    assert(
+                        result.preparation.sourceOutcomes?.length ===
+                            entries.length &&
+                            result.preparation.sourceOutcomes.every(
+                                (o) => o.result.status === "qualified",
+                            ),
+                        "Reading lot incomplete; do not continue or silently reduce its workload",
+                    );
+                    const reference: QualificationReference = {
+                        sourceRunId: manifest.sourceRunId,
+                        preparationId: seeded.preparationId,
+                        qualifications: result.preparation.sourceOutcomes.map(
+                            (outcome) => {
+                                assert(outcome.result.status === "qualified");
+                                const taskId = outcome.result.taskId;
+                                const task = result.tasks.find(
+                                    (t) => t._id === taskId,
+                                );
+                                assert(
+                                    task?.output.kind ===
+                                        "source_qualification" &&
+                                        task.schemaVersion ===
+                                            domain.SOURCE_QUALIFICATION_VERSION,
+                                    "Fresh current-version qualifications required",
+                                );
+                                const sourceId = originalSourceIds.get(
+                                    outcome.sourceId,
+                                );
+                                assert(
+                                    sourceId,
+                                    "Original source mapping missing",
+                                );
+                                return {
+                                    sourceId,
+                                    taskId: task._id,
+                                    inputHash: task.inputHash,
+                                    contentHash: task.output.contentHash,
+                                };
+                            },
+                        ),
+                    };
+                    save(
+                        join(
+                            dir,
+                            `${batchKey}-${index}-qualification-reference.json`,
+                        ),
+                        reference,
+                    );
+                }
             }
         } finally {
             await stopLogs();
