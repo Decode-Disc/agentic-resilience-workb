@@ -1,0 +1,84 @@
+{
+  "conditions": [
+    {
+      "event": "completed",
+      "condition": {
+        "phase": "replay",
+        "concurrency": 2,
+        "version": "collect_then_compare_v1"
+      },
+      "preparationId": "ns77qh15vryrjx89d0fcb700f98gygtz",
+      "runId": "k974ybcysmh505e976hh8h61q18gyb3k",
+      "elapsedMs": 50918,
+      "sources": 23,
+      "unavailable": 0,
+      "steps": 97,
+      "scheduledSteps": 97,
+      "providerCalls": 0,
+      "reportedCostUsd": 0
+    },
+    {
+      "event": "completed",
+      "condition": {
+        "phase": "replay",
+        "concurrency": 2,
+        "version": "inline_controls_v2"
+      },
+      "preparationId": "ns78319kz0ayc5amcfgc9fzn8h8gzw17",
+      "runId": "k97cj40hk7dscfh9qyjv9ce7y18gy8wd",
+      "elapsedMs": 39854,
+      "sources": 23,
+      "unavailable": 0,
+      "steps": 97,
+      "scheduledSteps": 49,
+      "providerCalls": 0,
+      "reportedCostUsd": 0
+    },
+    {
+      "event": "completed",
+      "condition": {
+        "phase": "replay",
+        "concurrency": 4,
+        "version": "inline_controls_v2"
+      },
+      "preparationId": "ns7bdt0agm34p17p2zq9n5ss0x8gyjkh",
+      "runId": "k976k6e129cct39csqadz238dx8gypnj",
+      "elapsedMs": 33897,
+      "sources": 23,
+      "unavailable": 0,
+      "steps": 85,
+      "scheduledSteps": 54,
+      "providerCalls": 0,
+      "reportedCostUsd": 0
+    },
+    {
+      "event": "completed",
+      "condition": {
+        "phase": "replay",
+        "concurrency": 60,
+        "version": "inline_controls_v2"
+      },
+      "preparationId": "ns7748qbqmzdvhd9mk8mfwmcts8gycd3",
+      "runId": "k97am21tfq9zn40dk7874vawr18gyzzw",
+      "elapsedMs": 58434,
+      "sources": 60,
+      "unavailable": 0,
+      "steps": 186,
+      "scheduledSteps": 138,
+      "providerCalls": 0,
+      "reportedCostUsd": 0
+    }
+  ],
+  "inlineAtTwoSavingPercent": 21.72905455830944,
+  "fourAdditionalSavingPercent": 14.947056757163647,
+  "fourTotalSavingPercent": 33.42825719784752,
+  "providerCalls": 0,
+  "evidenceBoundary": "One native cached replay per setting; no live inference, fresh retrieval or general performance claim. Earlier incomplete workloads are diagnostic only.",
+  "retainedLogCoverage": "Partial; both standalone collectors timed out during idle intervals. Recovery retains the final1000 native events, mostly stress activity. No full OCC comparison is available.",
+  "observedWorkflowMetrics": {
+    "scope": "Retained final1000 native events only; includes component wrapper transactions",
+    "mutationSamples": 647,
+    "maximumDatabaseReadBytes": 3536135,
+    "maximumDatabaseWrittenBytes": 310439
+  }
+}
