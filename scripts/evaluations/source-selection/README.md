@@ -42,6 +42,16 @@ Use `--summarize --report NEW_NAME.json` with the same study/catalog/selection a
 
 The catalog collection utility makes public metadata GETs only: `node --experimental-strip-types scripts/evaluations/source-selection/catalog.ts OUTPUT.json`. The model catalog includes a separate native-decisions query; its frozen output is not authorization for inference.
 
+## Native preparation concurrency study
+
+`preparation-study.ts` runs the production durable Workflow on local, owned evaluation dossiers. Prepare from the retained 24-source checkpoint with `--prepare --snapshot /path/to/after.json --captures /path/to/captures --out /path/to/new-study`. Preparation freezes captures, qualification results, application code, configured routes and a fresh official provider catalog; it performs no inference.
+
+Run `--offline --out /path/to/new-study --slot ADMITTED_SLOT` to compare queued controls at two with inline controls at two and four on the same 23 cached whole-document qualifications. The retrieved-selection capture remains in the paid corpus; the offline runner did not reproduce its native retrieval-aware request hash. The subsequent live lot matched all 24 primary qualification input hashes across cloned dossiers. Add `--stress` for a 60-source replay. Replays import explicitly precomputed qualifications with zero model allowance: cache misses remain blocked and never authorize inference. Local timings measure coordination and cached reading, not live model latency.
+
+The paid lot is two 24-source qualifications plus two comparisons using the same frozen qualifications, with at most 128 dispatched attempts in total. `--live --out /path/to/new-study --slot ADMITTED_SLOT --authorization /path/to/grant.json` validates the exact manifest grant through the existing study approval gate and refreshes official routes/prices before loading the local administrator credential. The grant template requires an explicit approval timestamp; it is not authorization. Each native dossier retains production reservations, cancellation/generation fences, bounded fallback and the fifteen-minute window. A started paid lot cannot be rerun automatically. No new discovery or acquisition is measured, and two conditions do not establish general robustness.
+
+Both execution modes require the identified running loopback backend and `E2E_FIXTURES_ENABLED=true`; remove the flag after execution and verify removal. The admitted visitor's production analysis quota is not restored or consumed by these explicitly labelled evaluation reservations. The runner polls bounded preparation status and saves the full native journal, normalized task outputs and provider-attempt telemetry once per completed condition. Archive the complete study directory with `evaluation:archive`; archived authorizations cannot authorize another lot.
+
 ## Saved retrieval replay
 
 `check-source-comparison.ts --retrieval-phase replay` reads saved native rankings and captures through the current production preparer. It makes no new ranking, search, embedding or model request and writes a new report. Other retrieval phases may access or mutate the local backend.

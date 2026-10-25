@@ -13,6 +13,7 @@ import {
     type SourceComparisonCheckStatus,
     type SourceComparisonOutput,
     type SourceComparisonPrimaryCandidate,
+    sourceFindingNeedsComparison,
 } from "@convex/domain/sourceComparison";
 import {
     extractPassagesFromNormalizedText,
@@ -62,12 +63,17 @@ import {
     SOURCE_ROLE_REQUIREMENTS,
 } from "./domain/sourceSelectionPolicy";
 import { validateExaCandidates } from "./exaDiscoveryActions";
+import { SOURCE_EMBEDDING_PROFILE } from "./integrations/sourceEmbeddings";
 import { MAX_APPROVED_SOURCE_BYTES } from "./resourceLimits";
 import { requestPinnedPublicSource } from "./sourceActions";
 import {
     secFilingCandidate,
     selectSecFilingsForDiscovery,
 } from "./sourceDiscoveryActions";
+import {
+    ensureSourceCaptureIndex,
+    retrieveSourcePassages,
+} from "./sourceRetrievalActions";
 import { fetchExaSearch } from "./sourceSelectionProposalActions";
 
 type PreparationModelReceipt = {
@@ -604,39 +610,7 @@ export const qualifySource = internalAction({
                     now: Date.now(),
                 },
             );
-            let retrieval: Parameters<
-                typeof prepareQualificationInput
-            >[0]["retrieval"];
-            if (
-                preparation.retrievalVersion === SOURCE_RETRIEVAL_VERSION &&
-                preparation.retrievalMode
-            ) {
-                await ctx.runAction(
-                    internal.sourceRetrievalActions.indexCapture,
-                    {
-                        preparationId: args.preparationId,
-                        captureId: capture._id,
-                        mode: preparation.retrievalMode,
-                    },
-                );
-                const result = await ctx.runAction(
-                    internal.sourceRetrievalActions.retrieve,
-                    {
-                        preparationId: args.preparationId,
-                        captureIds: [capture._id],
-                        mode: preparation.retrievalMode,
-                        queries: SOURCE_COVERAGE_ROLES.map(
-                            (role) =>
-                                `${role.replaceAll("_", " ")} ${researchAngle ?? ""} ${SOURCE_ROLE_REQUIREMENTS[role].description}`,
-                        ),
-                    },
-                );
-                retrieval = {
-                    metadata: result.metadata,
-                    passageOrders: result.passages.map((p) => p.order),
-                };
-            }
-            const prepared = prepareQualificationInput({
+            const qualificationInput = {
                 company,
                 canonicalUrl: capture.resolvedUrl ?? source.canonicalUrl,
                 title: source.title,
@@ -644,8 +618,45 @@ export const qualifySource = internalAction({
                 researchAngle,
                 text,
                 retrievalCompleteness: capture.readingCompleteness,
-                ...(retrieval ? { retrieval } : {}),
-            });
+                selectionPolicy: capture.qualificationInputPolicy,
+            };
+            const wholeDocument = capture.qualificationInputPolicy
+                ? prepareQualificationInput(qualificationInput)
+                : undefined;
+            let retrieval: Parameters<
+                typeof prepareQualificationInput
+            >[0]["retrieval"];
+            if (
+                preparation.retrievalVersion === SOURCE_RETRIEVAL_VERSION &&
+                preparation.retrievalMode &&
+                !wholeDocument?.retainsAllPassages
+            ) {
+                await ensureSourceCaptureIndex(ctx, {
+                    preparationId: args.preparationId,
+                    captureId: capture._id,
+                    mode: preparation.retrievalMode,
+                });
+                const result = await retrieveSourcePassages(ctx, {
+                    preparationId: args.preparationId,
+                    captureIds: [capture._id],
+                    mode: preparation.retrievalMode,
+                    queries: SOURCE_COVERAGE_ROLES.map(
+                        (role) =>
+                            `${role.replaceAll("_", " ")} ${researchAngle ?? ""} ${SOURCE_ROLE_REQUIREMENTS[role].description}`,
+                    ),
+                });
+                retrieval = {
+                    metadata: result.metadata,
+                    passageOrders: result.passages.map((p) => p.order),
+                };
+            }
+            const prepared = retrieval
+                ? prepareQualificationInput({
+                      ...qualificationInput,
+                      retrieval,
+                  })
+                : (wholeDocument ??
+                  prepareQualificationInput(qualificationInput));
             const cached = await ctx.runQuery(
                 internal.sourcePreparation.getQualification,
                 {
@@ -686,6 +697,12 @@ export const qualifySource = internalAction({
                     providerCallId: outcome.providerCallId,
                     inputHash: prepared.inputHash,
                     qualification: outcome.result.qualification,
+                    ...(prepared.request.document.selectionStrategy
+                        ? {
+                              selectionStrategy:
+                                  prepared.request.document.selectionStrategy,
+                          }
+                        : {}),
                     readingCompleteness:
                         capture.readingCompleteness === "partial"
                             ? "partial"
@@ -818,6 +835,107 @@ export const compareSource = internalAction({
                               limitations: [],
                           },
             };
+            const retained = input.retainedComparison;
+            if (
+                retained?.output.kind === "source_comparison" &&
+                (!retained.output.retrieval ||
+                    retained.output.retrieval.effectiveMode ===
+                        input.preparation.retrievalMode)
+            ) {
+                const checked = new Set<string>();
+                let readBytes = targetBlob.size;
+                for (const finding of retained.output.findings) {
+                    for (const passage of finding.targetPassages)
+                        if (
+                            targetText.slice(
+                                passage.startOffset,
+                                passage.endOffset,
+                            ) !== passage.quotation
+                        )
+                            throw sourcePreparationError(
+                                "cached_comparison_invalid",
+                            );
+                    for (const passage of finding.primaryPassages) {
+                        const candidate = input.primaryCandidates.find(
+                            (p) =>
+                                p.capture._id === passage.captureId &&
+                                p.capture.contentHash === passage.contentHash,
+                        );
+                        if (!candidate?.capture.storageId)
+                            throw sourcePreparationError(
+                                "cached_comparison_invalid",
+                            );
+                        if (checked.has(passage.captureId)) continue;
+                        checked.add(passage.captureId);
+                        const blob = await ctx.storage.get(
+                            candidate.capture.storageId,
+                        );
+                        if (
+                            !blob ||
+                            blob.size !== candidate.capture.byteCount ||
+                            blob.size > 16 * 1024 * 1024
+                        )
+                            throw sourcePreparationError("capture_unavailable");
+                        readBytes += blob.size;
+                        if (readBytes > 32 * 1024 * 1024)
+                            throw sourcePreparationError(
+                                "retrieval_read_limit",
+                            );
+                        const text = await blob.text();
+                        if (sha256Hex(text) !== passage.contentHash)
+                            throw sourcePreparationError("capture_corrupt");
+                        for (const check of retained.output.findings
+                            .flatMap((f) => f.primaryPassages)
+                            .filter((p) => p.captureId === passage.captureId))
+                            if (
+                                text.slice(
+                                    check.startOffset,
+                                    check.endOffset,
+                                ) !== check.quotation
+                            )
+                                throw sourcePreparationError(
+                                    "cached_comparison_invalid",
+                                );
+                    }
+                }
+                await ctx.runMutation(
+                    internal.sourcePreparation.confirmComparisonContext,
+                    {
+                        ...args,
+                        taskId: retained._id,
+                        inputHash: retained.inputHash,
+                        comparisonContextHash: input.comparisonContextHash,
+                    },
+                );
+                return { status: "cached", taskId: retained._id };
+            }
+            if (
+                !target.qualification.findings.some(
+                    sourceFindingNeedsComparison,
+                )
+            ) {
+                const prepared = prepareSourceComparisonInput({
+                    company: input.company,
+                    target,
+                    primaryCandidates: [],
+                });
+                const existing = await ctx.runQuery(
+                    internal.sourcePreparation.getComparison,
+                    { ...args, inputHash: prepared.inputHash, now: Date.now() },
+                );
+                if (existing.status === "stale")
+                    throw sourcePreparationError("cached_comparison_invalid");
+                if (existing.status === "cached")
+                    return { status: "cached", taskId: existing.taskId };
+                return {
+                    status: "not_run",
+                    taskId: await persist({
+                        inputHash: prepared.inputHash,
+                        qualificationTaskId: args.qualificationTaskId,
+                        output: makeTerminalOutput(prepared, "not_run"),
+                    }),
+                };
+            }
             const metadata = input.primaryCandidates.map((candidate) => ({
                 sourceId: String(candidate.source._id),
                 captureId: String(candidate.capture._id),
@@ -848,21 +966,44 @@ export const compareSource = internalAction({
             ) {
                 const retrievalMode = retrievalPreparation.retrievalMode;
                 const indexedIds: Id<"sourceCaptures">[] = [];
+                const readyIndexes = new Map<string, boolean>();
+                for (
+                    let offset = 0;
+                    offset < input.primaryCandidates.length;
+                    offset += 8
+                ) {
+                    const entries = await ctx.runQuery(
+                        internal.sourceRetrieval.getCaptureIndexBatch,
+                        {
+                            preparationId: args.preparationId,
+                            captureIds: input.primaryCandidates
+                                .slice(offset, offset + 8)
+                                .map((p) => p.capture._id),
+                        },
+                    );
+                    for (const { capture, state } of entries)
+                        readyIndexes.set(
+                            capture._id,
+                            !!state &&
+                                (retrievalMode === "lexical" ||
+                                    state.embeddingProfile ===
+                                        SOURCE_EMBEDDING_PROFILE.id),
+                        );
+                }
                 for (const candidate of input.primaryCandidates) {
                     try {
-                        const indexed = await ctx.runAction(
-                            internal.sourceRetrievalActions.indexCapture,
-                            {
-                                preparationId: args.preparationId,
-                                captureId: candidate.capture._id,
-                                mode: retrievalMode,
-                                allowProviderCalls: !modelBudgetExhausted,
-                                maxReadBytes:
-                                    32 * 1024 * 1024 -
-                                    targetBlob.size -
-                                    indexReadBytes,
-                            },
-                        );
+                        const indexed = readyIndexes.get(candidate.capture._id)
+                            ? { readBytes: 0 }
+                            : await ensureSourceCaptureIndex(ctx, {
+                                  preparationId: args.preparationId,
+                                  captureId: candidate.capture._id,
+                                  mode: retrievalMode,
+                                  allowProviderCalls: !modelBudgetExhausted,
+                                  maxReadBytes:
+                                      32 * 1024 * 1024 -
+                                      targetBlob.size -
+                                      indexReadBytes,
+                              });
                         indexReadBytes += indexed.readBytes;
                     } catch (error) {
                         if (
@@ -882,21 +1023,18 @@ export const compareSource = internalAction({
                             ? [{ finding, findingIndex }]
                             : [],
                 );
-                const result = await ctx.runAction(
-                    internal.sourceRetrievalActions.retrieve,
-                    {
-                        preparationId: args.preparationId,
-                        captureIds: indexedIds,
-                        mode: retrievalMode,
-                        allowProviderCalls: !modelBudgetExhausted,
-                        queries: findings.map(({ finding }) =>
-                            sourceComparisonQuery(
-                                finding,
-                                target.qualification.reportingPeriodEnd,
-                            ),
+                const result = await retrieveSourcePassages(ctx, {
+                    preparationId: args.preparationId,
+                    captureIds: indexedIds,
+                    mode: retrievalMode,
+                    allowProviderCalls: !modelBudgetExhausted,
+                    queries: findings.map(({ finding }) =>
+                        sourceComparisonQuery(
+                            finding,
+                            target.qualification.reportingPeriodEnd,
                         ),
-                    },
-                );
+                    ),
+                });
                 const byId = new Map(
                     result.passages.map((p) => [
                         p.id,
@@ -1016,6 +1154,16 @@ export const compareSource = internalAction({
                 candidateMetadataLimitReached:
                     input.candidateMetadataLimitReached,
             });
+            const currentInput = await ctx.runQuery(
+                internal.sourcePreparation.getComparisonInput,
+                { ...args, now: Date.now() },
+            );
+            if (
+                currentInput.comparisonBaseContextHash !==
+                input.comparisonBaseContextHash
+            )
+                throw sourcePreparationError("stale_execution");
+            comparisonContextHash = currentInput.comparisonContextHash;
             const cached = await ctx.runQuery(
                 internal.sourcePreparation.getComparison,
                 {
@@ -1032,7 +1180,7 @@ export const compareSource = internalAction({
                         ...args,
                         taskId: cached.taskId,
                         inputHash: prepared.inputHash,
-                        comparisonContextHash: input.comparisonContextHash,
+                        comparisonContextHash,
                     },
                 );
                 return { status: "cached", taskId: cached.taskId };

@@ -1,4 +1,5 @@
 import { api, internal } from "@convex/_generated/api";
+import type { ActionCtx } from "@convex/_generated/server";
 import {
     materializeSourceComparisonOutput,
     type PreparedSourceComparisonInput,
@@ -10,7 +11,12 @@ import {
     type SourceQualification,
 } from "@convex/domain/sourceQualification";
 import { upsertSourceReviewItem } from "@convex/domain/sourceReviewProjection";
-import "@convex/sourcePreparationActions";
+import { compareSource } from "@convex/sourcePreparationActions";
+import {
+    type FunctionArgs,
+    type FunctionReturnType,
+    getFunctionName,
+} from "convex/server";
 import { afterEach, expect, test, vi } from "vitest";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
 
@@ -377,6 +383,166 @@ async function completedComparison() {
         request,
     };
 }
+
+test("a current comparison reuses exact evidence without rebuilding its retrieval input", async () => {
+    const { t, preparationId, sourceCaptureId, qualificationTaskId, response } =
+        await capturedComparison();
+    await t.run((ctx) =>
+        ctx.db.patch(preparationId, {
+            retrievalVersion: "structured-v1",
+            retrievalMode: "lexical",
+        }),
+    );
+    const request = vi.fn<typeof fetch>(async () =>
+        comparisonResponse(response),
+    );
+    vi.stubGlobal("fetch", request);
+    const first = await t.action(
+        internal.sourcePreparationActions.compareSource,
+        { preparationId, sourceCaptureId, qualificationTaskId },
+    );
+    expect(first.status).toBe("compared");
+    await t.action(async (ctx) => {
+        const queries = vi.spyOn(ctx, "runQuery");
+        const actions = vi.spyOn(ctx, "runAction");
+        try {
+            const result = await (
+                compareSource as unknown as {
+                    _handler: (
+                        ctx: ActionCtx,
+                        args: FunctionArgs<
+                            typeof internal.sourcePreparationActions.compareSource
+                        >,
+                    ) => Promise<
+                        FunctionReturnType<
+                            typeof internal.sourcePreparationActions.compareSource
+                        >
+                    >;
+                }
+            )._handler(ctx, {
+                preparationId,
+                sourceCaptureId,
+                qualificationTaskId,
+            });
+            expect(result).toEqual({ status: "cached", taskId: first.taskId });
+            expect(
+                queries.mock.calls.map(([ref]) => getFunctionName(ref)),
+            ).not.toContain("sourceRetrieval:searchBatch");
+            expect(
+                actions.mock.calls.map(([ref]) => getFunctionName(ref)),
+            ).not.toContain("sourceRetrievalActions:indexCapture");
+        } finally {
+            queries.mockRestore();
+            actions.mockRestore();
+        }
+    });
+    expect(request).toHaveBeenCalledOnce();
+    expect(
+        (await t.run((ctx) => ctx.db.get(preparationId)))?.modelAttemptCount,
+    ).toBe(1);
+});
+
+test.each([
+    "missing_primary",
+    "corrupt_target",
+    "cancelled",
+] as const)("cached comparison rejects %s without another provider request", async (change) => {
+    const {
+        t,
+        preparationId,
+        sourceCaptureId,
+        qualificationTaskId,
+        primaryCaptureId,
+        runId,
+        request,
+    } = await completedComparison();
+    await t.run(async (ctx) => {
+        if (change === "cancelled") {
+            await ctx.db.patch(runId, {
+                executionGeneration: 4,
+                executionStatus: "cancelled",
+            });
+        } else if (change === "missing_primary") {
+            const primary = await ctx.db.get(primaryCaptureId);
+            if (!primary?.storageId) throw new Error("Missing primary fixture");
+            await ctx.storage.delete(primary.storageId);
+        } else {
+            const storageId = await ctx.storage.store(
+                new Blob(["corrupt capture"]),
+            );
+            await ctx.db.patch(sourceCaptureId, { storageId });
+        }
+    });
+    expect(
+        await t.action(internal.sourcePreparationActions.compareSource, {
+            preparationId,
+            sourceCaptureId,
+            qualificationTaskId,
+        }),
+    ).toMatchObject({ status: "unavailable" });
+    expect(request).toHaveBeenCalledOnce();
+    expect(
+        (await t.run((ctx) => ctx.db.get(preparationId)))?.modelAttemptCount,
+    ).toBe(1);
+});
+
+test("cancellation during cached evidence validation prevents reuse", async () => {
+    const {
+        t,
+        preparationId,
+        sourceCaptureId,
+        qualificationTaskId,
+        runId,
+        request,
+    } = await completedComparison();
+    await t.action(async (ctx) => {
+        const originalRead = ctx.storage.get.bind(ctx.storage);
+        let reads = 0;
+        const storage = vi
+            .spyOn(ctx.storage, "get")
+            .mockImplementation(async (id) => {
+                const blob = await originalRead(id);
+                if (++reads === 2)
+                    await t.run((tx) =>
+                        tx.db.patch(runId, {
+                            executionGeneration: 4,
+                            executionStatus: "cancelled",
+                        }),
+                    );
+                return blob;
+            });
+        try {
+            const result = await (
+                compareSource as unknown as {
+                    _handler: (
+                        ctx: ActionCtx,
+                        args: FunctionArgs<
+                            typeof internal.sourcePreparationActions.compareSource
+                        >,
+                    ) => Promise<
+                        FunctionReturnType<
+                            typeof internal.sourcePreparationActions.compareSource
+                        >
+                    >;
+                }
+            )._handler(ctx, {
+                preparationId,
+                sourceCaptureId,
+                qualificationTaskId,
+            });
+            expect(result).toMatchObject({
+                status: "unavailable",
+                reasonCode: "stale_execution",
+            });
+        } finally {
+            storage.mockRestore();
+        }
+    });
+    expect(request).toHaveBeenCalledOnce();
+    expect(
+        (await t.run((ctx) => ctx.db.get(preparationId)))?.modelAttemptCount,
+    ).toBe(1);
+});
 
 test.each([
     "lookup",

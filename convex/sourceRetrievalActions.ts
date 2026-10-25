@@ -135,160 +135,158 @@ async function embed(
 }
 
 /** Lazily indexes immutable capture bytes, with independent lexical and embedding completion. */
+const captureIndexArgs = v.object({
+    preparationId: v.id("sourceSelectionProposalRebuilds"),
+    captureId: v.id("sourceCaptures"),
+    mode: retrievalModeValidator,
+    allowProviderCalls: v.optional(v.boolean()),
+    maxReadBytes: v.optional(v.number()),
+});
+
+/** Shares Node preparation work without another action invocation. */
+export async function ensureSourceCaptureIndex(
+    ctx: ActionCtx,
+    args: Infer<typeof captureIndexArgs>,
+): Promise<{
+    candidateCount: number;
+    readBytes: number;
+    embeddingComplete: boolean;
+    degradationReason?: string;
+}> {
+    const capture = await ctx.runQuery(internal.sourceRetrieval.getCapture, {
+        preparationId: args.preparationId,
+        captureId: args.captureId,
+    });
+    const readAllowance = args.maxReadBytes ?? MAX_NORMALIZED_ARTIFACT_BYTES;
+    if (!Number.isSafeInteger(readAllowance) || readAllowance < 0)
+        throw sourcePreparationError("retrieval_read_limit");
+    const state = await ctx.runQuery(internal.sourceRetrieval.getIndexState, {
+        preparationId: args.preparationId,
+        captureId: args.captureId,
+    });
+    if (
+        state &&
+        (args.mode === "lexical" || state.embeddingProfile === PROFILE)
+    )
+        return {
+            candidateCount: state.candidateCount,
+            readBytes: 0,
+            embeddingComplete: state.embeddingProfile === PROFILE,
+        };
+    if (capture.byteCount === undefined)
+        throw sourcePreparationError("capture_unavailable");
+    if (capture.byteCount > readAllowance)
+        throw sourcePreparationError("retrieval_read_limit");
+    const blob = capture.storageId
+        ? await ctx.storage.get(capture.storageId)
+        : null;
+    if (
+        !blob ||
+        blob.size > MAX_NORMALIZED_ARTIFACT_BYTES ||
+        blob.size !== capture.byteCount
+    )
+        throw sourcePreparationError("capture_unavailable");
+    const text = await blob.text();
+    if (sha256Hex(text) !== capture.contentHash)
+        throw sourcePreparationError("capture_corrupt");
+    let candidates: ReturnType<typeof extractPassagesFromNormalizedText>;
+    try {
+        candidates = extractPassagesFromNormalizedText({
+            text,
+            canonicalUrl: capture.resolvedUrl ?? capture.requestedUrl,
+            sourceVersionHash: capture.contentHash,
+            preparationVersion: SOURCE_RETRIEVAL_VERSION,
+        });
+    } catch (error) {
+        if (
+            error instanceof Error &&
+            error.message === "searchable_candidate_limit_exceeded"
+        )
+            throw sourcePreparationError("retrieval_candidate_limit");
+        throw error;
+    }
+    if (!state)
+        for (let start = 0; start < candidates.length; start += 64) {
+            const passages = candidates.slice(start, start + 64).map((p) => ({
+                order: p.order,
+                startOffset: p.locator.startOffset,
+                endOffset: p.locator.endOffset,
+                quotation: p.exactQuotation,
+                headingPath: p.headingPath ?? [],
+            }));
+            await ctx.runMutation(internal.sourceRetrieval.putBatch, {
+                preparationId: args.preparationId,
+                captureId: args.captureId,
+                passages,
+            });
+        }
+    await ctx.runMutation(internal.sourceRetrieval.finishIndex, {
+        preparationId: args.preparationId,
+        captureId: args.captureId,
+        candidateCount: candidates.length,
+    });
+    let reason: string | undefined;
+    if (args.mode === "hybrid")
+        for (
+            let start = 0;
+            start < candidates.length;
+            start += EMBEDDING_BATCH_SIZE
+        ) {
+            const batch = await ctx.runQuery(
+                internal.sourceRetrieval.getEmbeddingBatch,
+                {
+                    preparationId: args.preparationId,
+                    captureId: args.captureId,
+                    orders: candidates
+                        .slice(start, start + EMBEDDING_BATCH_SIZE)
+                        .map((p) => p.order),
+                },
+            );
+            const result = await embed(
+                ctx,
+                args.preparationId,
+                capture.sourceId,
+                batch.map((row) => row.searchText),
+                args.allowProviderCalls,
+            );
+            if (!result.vectors) {
+                reason = result.reason;
+                break;
+            }
+            await ctx.runMutation(internal.sourceRetrieval.commitEmbeddings, {
+                preparationId: args.preparationId,
+                captureId: args.captureId,
+                profile: PROFILE,
+                ids: batch.map((row) => row._id),
+            });
+        }
+    const embeddingComplete = args.mode === "hybrid" && reason === undefined;
+    if (args.mode === "hybrid")
+        await ctx.runMutation(internal.sourceRetrieval.finishIndex, {
+            preparationId: args.preparationId,
+            captureId: args.captureId,
+            candidateCount: candidates.length,
+            ...(embeddingComplete
+                ? { embeddingProfile: PROFILE }
+                : { embeddingDegradationReason: reason }),
+        });
+    return {
+        candidateCount: candidates.length,
+        readBytes: blob.size,
+        embeddingComplete,
+        ...(reason ? { degradationReason: reason } : {}),
+    };
+}
+
 export const indexCapture = internalAction({
-    args: {
-        preparationId: v.id("sourceSelectionProposalRebuilds"),
-        captureId: v.id("sourceCaptures"),
-        mode: retrievalModeValidator,
-        allowProviderCalls: v.optional(v.boolean()),
-        maxReadBytes: v.optional(v.number()),
-    },
+    args: captureIndexArgs,
     returns: v.object({
         candidateCount: v.number(),
         readBytes: v.number(),
         embeddingComplete: v.boolean(),
         degradationReason: v.optional(v.string()),
     }),
-    handler: async (
-        ctx,
-        args,
-    ): Promise<{
-        candidateCount: number;
-        readBytes: number;
-        embeddingComplete: boolean;
-        degradationReason?: string;
-    }> => {
-        const capture = await ctx.runQuery(
-            internal.sourceRetrieval.getCapture,
-            { preparationId: args.preparationId, captureId: args.captureId },
-        );
-        const readAllowance =
-            args.maxReadBytes ?? MAX_NORMALIZED_ARTIFACT_BYTES;
-        if (!Number.isSafeInteger(readAllowance) || readAllowance < 0)
-            throw sourcePreparationError("retrieval_read_limit");
-        const state = await ctx.runQuery(
-            internal.sourceRetrieval.getIndexState,
-            { preparationId: args.preparationId, captureId: args.captureId },
-        );
-        if (
-            state &&
-            (args.mode === "lexical" || state.embeddingProfile === PROFILE)
-        )
-            return {
-                candidateCount: state.candidateCount,
-                readBytes: 0,
-                embeddingComplete: state.embeddingProfile === PROFILE,
-            };
-        if (capture.byteCount === undefined)
-            throw sourcePreparationError("capture_unavailable");
-        if (capture.byteCount > readAllowance)
-            throw sourcePreparationError("retrieval_read_limit");
-        const blob = capture.storageId
-            ? await ctx.storage.get(capture.storageId)
-            : null;
-        if (
-            !blob ||
-            blob.size > MAX_NORMALIZED_ARTIFACT_BYTES ||
-            blob.size !== capture.byteCount
-        )
-            throw sourcePreparationError("capture_unavailable");
-        const text = await blob.text();
-        if (sha256Hex(text) !== capture.contentHash)
-            throw sourcePreparationError("capture_corrupt");
-        let candidates: ReturnType<typeof extractPassagesFromNormalizedText>;
-        try {
-            candidates = extractPassagesFromNormalizedText({
-                text,
-                canonicalUrl: capture.resolvedUrl ?? capture.requestedUrl,
-                sourceVersionHash: capture.contentHash,
-                preparationVersion: SOURCE_RETRIEVAL_VERSION,
-            });
-        } catch (error) {
-            if (
-                error instanceof Error &&
-                error.message === "searchable_candidate_limit_exceeded"
-            )
-                throw sourcePreparationError("retrieval_candidate_limit");
-            throw error;
-        }
-        if (!state)
-            for (let start = 0; start < candidates.length; start += 64) {
-                const passages = candidates
-                    .slice(start, start + 64)
-                    .map((p) => ({
-                        order: p.order,
-                        startOffset: p.locator.startOffset,
-                        endOffset: p.locator.endOffset,
-                        quotation: p.exactQuotation,
-                        headingPath: p.headingPath ?? [],
-                    }));
-                await ctx.runMutation(internal.sourceRetrieval.putBatch, {
-                    preparationId: args.preparationId,
-                    captureId: args.captureId,
-                    passages,
-                });
-            }
-        await ctx.runMutation(internal.sourceRetrieval.finishIndex, {
-            preparationId: args.preparationId,
-            captureId: args.captureId,
-            candidateCount: candidates.length,
-        });
-        let reason: string | undefined;
-        if (args.mode === "hybrid")
-            for (
-                let start = 0;
-                start < candidates.length;
-                start += EMBEDDING_BATCH_SIZE
-            ) {
-                const batch = await ctx.runQuery(
-                    internal.sourceRetrieval.getEmbeddingBatch,
-                    {
-                        preparationId: args.preparationId,
-                        captureId: args.captureId,
-                        orders: candidates
-                            .slice(start, start + EMBEDDING_BATCH_SIZE)
-                            .map((p) => p.order),
-                    },
-                );
-                const result = await embed(
-                    ctx,
-                    args.preparationId,
-                    capture.sourceId,
-                    batch.map((row) => row.searchText),
-                    args.allowProviderCalls,
-                );
-                if (!result.vectors) {
-                    reason = result.reason;
-                    break;
-                }
-                await ctx.runMutation(
-                    internal.sourceRetrieval.commitEmbeddings,
-                    {
-                        preparationId: args.preparationId,
-                        captureId: args.captureId,
-                        profile: PROFILE,
-                        ids: batch.map((row) => row._id),
-                    },
-                );
-            }
-        const embeddingComplete =
-            args.mode === "hybrid" && reason === undefined;
-        if (args.mode === "hybrid")
-            await ctx.runMutation(internal.sourceRetrieval.finishIndex, {
-                preparationId: args.preparationId,
-                captureId: args.captureId,
-                candidateCount: candidates.length,
-                ...(embeddingComplete
-                    ? { embeddingProfile: PROFILE }
-                    : { embeddingDegradationReason: reason }),
-            });
-        return {
-            candidateCount: candidates.length,
-            readBytes: blob.size,
-            embeddingComplete,
-            ...(reason ? { degradationReason: reason } : {}),
-        };
-    },
+    handler: (ctx, args) => ensureSourceCaptureIndex(ctx, args),
 });
 
 const retrieved = v.object({
@@ -308,33 +306,40 @@ const retrieved = v.object({
     ),
 });
 /** Qualification and comparison use the same native search and rank fusion. */
-export const retrieve = internalAction({
-    args: {
-        preparationId: v.id("sourceSelectionProposalRebuilds"),
-        captureIds: v.array(v.id("sourceCaptures")),
-        queries: v.array(v.string()),
-        mode: retrievalModeValidator,
-        allowProviderCalls: v.optional(v.boolean()),
-    },
-    returns: retrieved,
-    handler: async (ctx, args): Promise<Infer<typeof retrieved>> => {
-        if (
-            args.captureIds.length > 60 ||
-            args.queries.length > 16 ||
-            args.queries.some((q) => q.length > 32000)
-        )
-            throw sourcePreparationError("retrieval_query_invalid");
-        const preparation = await ctx.runQuery(
-            internal.sourcePreparation.getForExecution,
-            { preparationId: args.preparationId, now: Date.now() },
+const retrievalArgs = v.object({
+    preparationId: v.id("sourceSelectionProposalRebuilds"),
+    captureIds: v.array(v.id("sourceCaptures")),
+    queries: v.array(v.string()),
+    mode: retrievalModeValidator,
+    allowProviderCalls: v.optional(v.boolean()),
+});
+
+/** Shares Node preparation work without another action invocation. */
+export async function retrieveSourcePassages(
+    ctx: ActionCtx,
+    args: Infer<typeof retrievalArgs>,
+): Promise<Infer<typeof retrieved>> {
+    if (
+        args.captureIds.length > 60 ||
+        args.queries.length > 16 ||
+        args.queries.some((q) => q.length > 32000)
+    )
+        throw sourcePreparationError("retrieval_query_invalid");
+    const preparation = await ctx.runQuery(
+        internal.sourcePreparation.getForExecution,
+        { preparationId: args.preparationId, now: Date.now() },
+    );
+    let totalCandidates = 0;
+    let reason: string | undefined;
+    for (let offset = 0; offset < args.captureIds.length; offset += 8) {
+        const entries = await ctx.runQuery(
+            internal.sourceRetrieval.getCaptureIndexBatch,
+            {
+                preparationId: args.preparationId,
+                captureIds: args.captureIds.slice(offset, offset + 8),
+            },
         );
-        let totalCandidates = 0;
-        let reason: string | undefined;
-        for (const captureId of args.captureIds) {
-            const state = await ctx.runQuery(
-                internal.sourceRetrieval.getIndexState,
-                { preparationId: args.preparationId, captureId },
-            );
+        for (const { state } of entries) {
             if (!state)
                 throw sourcePreparationError("retrieval_index_incomplete");
             totalCandidates += state.candidateCount;
@@ -343,133 +348,160 @@ export const retrieve = internalAction({
                     state.embeddingDegradationReason ??
                     "embedding_index_incomplete";
         }
-        const queries = args.queries.map(shortRetrievalQuery);
-        let vectors: number[][] | undefined;
-        const firstCaptureId = args.captureIds[0];
-        if (
-            args.mode === "hybrid" &&
-            !reason &&
-            queries.length &&
-            firstCaptureId
-        ) {
-            const capture = await ctx.runQuery(
-                internal.sourceRetrieval.getCapture,
-                {
-                    preparationId: args.preparationId,
-                    captureId: firstCaptureId,
-                },
-            );
-            const result = await embed(
-                ctx,
-                args.preparationId,
-                capture.sourceId,
-                queries,
-                args.allowProviderCalls,
-            );
-            if (result.reason) reason = result.reason;
-            else vectors = result.vectors;
-        }
-        const rows = new Map<string, Doc<"sourceSearchPassages">>();
-        const rankings: Array<Array<Id<"sourceSearchPassages">>> = [];
-        for (const [i, query] of queries.entries()) {
-            const captureRankings: string[][] = [];
-            for (const captureId of new Set(args.captureIds)) {
-                const matches = await ctx.runQuery(
-                    internal.sourceRetrieval.search,
-                    {
+    }
+    const queries = args.queries.map(shortRetrievalQuery);
+    let vectors: number[][] | undefined;
+    const firstCaptureId = args.captureIds[0];
+    if (args.mode === "hybrid" && !reason && queries.length && firstCaptureId) {
+        const capture = await ctx.runQuery(
+            internal.sourceRetrieval.getCapture,
+            {
+                preparationId: args.preparationId,
+                captureId: firstCaptureId,
+            },
+        );
+        const result = await embed(
+            ctx,
+            args.preparationId,
+            capture.sourceId,
+            queries,
+            args.allowProviderCalls,
+        );
+        if (result.reason) reason = result.reason;
+        else vectors = result.vectors;
+    }
+    const captureIds = [...new Set(args.captureIds)];
+    const captureBatches: Array<Array<Id<"sourceCaptures">>> = [];
+    for (let offset = 0; offset < captureIds.length; offset += 2)
+        captureBatches.push(captureIds.slice(offset, offset + 2));
+    const jobs = queries.flatMap((query) =>
+        captureBatches.map((captureIds) => ({ query, captureIds })),
+    );
+    let jobOffset = 0;
+    let prefetched: Array<
+        FunctionReturnType<typeof internal.sourceRetrieval.searchBatch>
+    > = [];
+    const nextLexicalBatch = async () => {
+        if (!prefetched.length) {
+            const batch = jobs.slice(jobOffset, jobOffset + 2);
+            jobOffset += batch.length;
+            const results = await Promise.allSettled(
+                batch.map((job) =>
+                    ctx.runQuery(internal.sourceRetrieval.searchBatch, {
                         preparationId: args.preparationId,
-                        captureId,
-                        query,
-                    },
-                );
+                        ...job,
+                    }),
+                ),
+            );
+            const failed = results.find(
+                (result) => result.status === "rejected",
+            );
+            if (failed?.status === "rejected") throw failed.reason;
+            prefetched = results.flatMap((result) =>
+                result.status === "fulfilled" ? [result.value] : [],
+            );
+        }
+        const result = prefetched.shift();
+        if (!result) throw sourcePreparationError("retrieval_query_invalid");
+        return result;
+    };
+    const rows = new Map<string, Doc<"sourceSearchPassages">>();
+    const rankings: Array<Array<Id<"sourceSearchPassages">>> = [];
+    for (const [i] of queries.entries()) {
+        const captureRankings: string[][] = [];
+        for (
+            let batchIndex = 0;
+            batchIndex < captureBatches.length;
+            batchIndex++
+        ) {
+            const results = await nextLexicalBatch();
+            for (const { passages: matches } of results) {
                 for (const row of matches) rows.set(row._id, row);
                 captureRankings.push(matches.map((row) => row._id));
             }
-            const lexicalIds = fuseRetrievalRanks(...captureRankings).slice(
-                0,
-                64,
-            );
-            let semantic: Array<Doc<"sourceSearchPassages">> = [];
-            const vector = vectors?.[i];
-            if (vector) {
-                const hits = await ctx.vectorSearch(
-                    "sourceSearchPassages",
-                    "search_embedding",
-                    {
-                        vector,
-                        limit: 256,
-                        filter: (q) =>
-                            q.or(
-                                ...[...new Set(args.captureIds)].map(
-                                    (captureId) =>
-                                        q.eq(
-                                            "embeddingScopeKey",
-                                            sourceEmbeddingScopeKey(
-                                                `${preparation.runId}:${preparation.corpusRevisionId}:${SOURCE_RETRIEVAL_VERSION}`,
-                                                PROFILE,
-                                                captureId,
-                                            ),
-                                        ),
+        }
+        const lexicalIds = fuseRetrievalRanks(...captureRankings).slice(0, 64);
+        let semantic: Array<Doc<"sourceSearchPassages">> = [];
+        const vector = vectors?.[i];
+        if (vector) {
+            const hits = await ctx.vectorSearch(
+                "sourceSearchPassages",
+                "search_embedding",
+                {
+                    vector,
+                    limit: 256,
+                    filter: (q) =>
+                        q.or(
+                            ...[...new Set(args.captureIds)].map((captureId) =>
+                                q.eq(
+                                    "embeddingScopeKey",
+                                    sourceEmbeddingScopeKey(
+                                        `${preparation.runId}:${preparation.corpusRevisionId}:${SOURCE_RETRIEVAL_VERSION}`,
+                                        PROFILE,
+                                        captureId,
+                                    ),
                                 ),
                             ),
-                    },
-                );
-                semantic = await ctx.runQuery(
-                    internal.sourceRetrieval.getVectorResults,
-                    {
-                        preparationId: args.preparationId,
-                        captureIds: args.captureIds,
-                        ids: hits.map((hit) => hit._id),
-                        profile: PROFILE,
-                    },
-                );
-            }
-            for (const row of semantic) rows.set(row._id, row);
-            rankings.push(
-                fuseRetrievalRanks(
-                    lexicalIds,
-                    semantic.map((r) => r._id),
-                ).slice(0, 64) as Id<"sourceSearchPassages">[],
+                        ),
+                },
             );
-            // Do not retain every capture's candidates across all sixteen queries.
-            const retained = new Set(rankings.flat());
-            for (const id of rows.keys())
-                if (!retained.has(id as Id<"sourceSearchPassages">))
-                    rows.delete(id);
+            semantic = await ctx.runQuery(
+                internal.sourceRetrieval.getVectorResults,
+                {
+                    preparationId: args.preparationId,
+                    captureIds: args.captureIds,
+                    ids: hits.map((hit) => hit._id),
+                    profile: PROFILE,
+                },
+            );
         }
-        const ordered = fuseRetrievalRanks(...rankings);
-        const selected = new Set(ordered);
-        return {
-            metadata: {
-                version: SOURCE_RETRIEVAL_VERSION,
-                requestedMode: args.mode,
-                effectiveMode:
-                    args.mode === "hybrid" && !reason ? "hybrid" : "lexical",
-                ...(reason ? { degradationReason: reason } : {}),
-                selectedPassageKeys: ordered,
-                omittedCandidateCount: Math.max(
-                    0,
-                    totalCandidates - selected.size,
-                ),
-            },
-            rankings,
-            passages: ordered.map((id) => {
-                const row = rows.get(id);
-                if (!row)
-                    throw sourcePreparationError("retrieval_passage_invalid");
-                return {
-                    id: row._id,
-                    captureId: row.captureId,
-                    sourceId: row.sourceId,
-                    order: row.order,
-                    startOffset: row.startOffset,
-                    endOffset: row.endOffset,
-                    quotation: row.quotation,
-                    headingPath: row.headingPath,
-                };
-            }),
-        };
-    },
+        for (const row of semantic) rows.set(row._id, row);
+        rankings.push(
+            fuseRetrievalRanks(
+                lexicalIds,
+                semantic.map((r) => r._id),
+            ).slice(0, 64) as Id<"sourceSearchPassages">[],
+        );
+        // Do not retain every capture's candidates across all sixteen queries.
+        const retained = new Set(rankings.flat());
+        for (const id of rows.keys())
+            if (!retained.has(id as Id<"sourceSearchPassages">))
+                rows.delete(id);
+    }
+    const ordered = fuseRetrievalRanks(...rankings);
+    const selected = new Set(ordered);
+    return {
+        metadata: {
+            version: SOURCE_RETRIEVAL_VERSION,
+            requestedMode: args.mode,
+            effectiveMode:
+                args.mode === "hybrid" && !reason ? "hybrid" : "lexical",
+            ...(reason ? { degradationReason: reason } : {}),
+            selectedPassageKeys: ordered,
+            omittedCandidateCount: Math.max(0, totalCandidates - selected.size),
+        },
+        rankings,
+        passages: ordered.map((id) => {
+            const row = rows.get(id);
+            if (!row) throw sourcePreparationError("retrieval_passage_invalid");
+            return {
+                id: row._id,
+                captureId: row.captureId,
+                sourceId: row.sourceId,
+                order: row.order,
+                startOffset: row.startOffset,
+                endOffset: row.endOffset,
+                quotation: row.quotation,
+                headingPath: row.headingPath,
+            };
+        }),
+    };
+}
+
+export const retrieve = internalAction({
+    args: retrievalArgs,
+    returns: retrieved,
+    handler: (ctx, args) => retrieveSourcePassages(ctx, args),
 });
 
 /** Indexes only the approved stored representation. No provider or execution capability is invoked. */

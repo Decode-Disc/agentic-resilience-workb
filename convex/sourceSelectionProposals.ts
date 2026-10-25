@@ -7,7 +7,6 @@ import {
 import { v } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
 import { internal } from "./_generated/api";
-
 import type { Doc, Id } from "./_generated/dataModel";
 import {
     internalMutation,
@@ -46,6 +45,7 @@ import {
 } from "./domain/sourcePreparationReview";
 import { SOURCE_QUALIFICATION_VERSION } from "./domain/sourceQualification";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
+import { SourceReviewReads } from "./domain/sourceReviewReads";
 import {
     buildSourceSelectionProposal,
     canRefreshSourceSelectionPolicy,
@@ -326,12 +326,17 @@ async function readSelectionCompany(
 async function readProposalCandidates(
     ctx: MutationCtx | QueryCtx,
     run: Doc<"researchRuns">,
+    reads?: SourceReviewReads,
 ): Promise<Array<Doc<"sources">>> {
     const limit = sourceDossierCandidateLimit(run.sourcePreparationId);
-    const candidates = await ctx.db
-        .query("sources")
-        .withIndex("by_run_and_url", (query) => query.eq("runId", run._id))
-        .take(limit + 1);
+    const candidates = reads
+        ? (await reads.sources()).slice(0, limit + 1)
+        : await ctx.db
+              .query("sources")
+              .withIndex("by_run_and_url", (query) =>
+                  query.eq("runId", run._id),
+              )
+              .take(limit + 1);
     if (candidates.length > limit) {
         throw new Error("Source candidate limit exceeded");
     }
@@ -391,16 +396,18 @@ async function readCurrentProposal(
 async function currentFingerprint(
     ctx: MutationCtx | QueryCtx,
     run: Doc<"researchRuns">,
+    reads?: SourceReviewReads,
 ): Promise<string> {
     if (!run.coveragePreset) {
         throw new Error("Research run has no coverage preset");
     }
     const company = await readSelectionCompany(ctx, run);
-    const candidates = await readProposalCandidates(ctx, run);
+    const candidates = await readProposalCandidates(ctx, run, reads);
     const qualificationInputs = await readQualificationInputs(
         ctx,
         run,
         candidates,
+        reads,
     );
     return sourceSelectionFingerprint({
         candidates,
@@ -417,19 +424,24 @@ async function readQualificationInputs(
     ctx: QueryCtx | MutationCtx,
     run: Doc<"researchRuns">,
     candidates: Doc<"sources">[],
+    reads?: SourceReviewReads,
 ) {
     if (!run.sourcePreparationId) return undefined;
     return Promise.all(
         candidates.map(async (source) => {
-            const tasks = await ctx.db
-                .query("aiTaskResults")
-                .withIndex("by_source_and_task_type_and_created_at", (q) =>
-                    q
-                        .eq("sourceId", source._id)
-                        .eq("taskType", "source_qualification"),
-                )
-                .order("desc")
-                .take(4);
+            const tasks = reads
+                ? await reads.qualificationHistory(source._id)
+                : await ctx.db
+                      .query("aiTaskResults")
+                      .withIndex(
+                          "by_source_and_task_type_and_created_at",
+                          (q) =>
+                              q
+                                  .eq("sourceId", source._id)
+                                  .eq("taskType", "source_qualification"),
+                      )
+                      .order("desc")
+                      .take(4);
             for (const task of tasks) {
                 if (
                     task.schemaVersion !== SOURCE_QUALIFICATION_VERSION ||
@@ -437,7 +449,9 @@ async function readQualificationInputs(
                     task.output.kind !== "source_qualification"
                 )
                     continue;
-                const capture = await ctx.db.get(task.output.sourceCaptureId);
+                const capture = await (reads?.capture(
+                    task.output.sourceCaptureId,
+                ) ?? ctx.db.get(task.output.sourceCaptureId));
                 if (
                     capture?.status !== "committed" ||
                     capture.sourceId !== source._id ||
@@ -450,27 +464,37 @@ async function readQualificationInputs(
                     source._id,
                     capture._id,
                     capture.contentHash,
+                    reads,
                 );
-                const comparisonReview = run.activeCorpusRevisionId
-                    ? await readPinnedComparisonReview(
-                          ctx.db,
-                          {
-                              runId: run._id,
-                              sourceId: source._id,
-                              corpusRevisionId: run.activeCorpusRevisionId,
-                              comparisonTaskIds,
-                          },
-                          {
-                              sourceCaptureId: capture._id,
-                              contentHash: capture.contentHash,
-                              qualificationTaskId: task._id,
-                              qualification: task.output.qualification,
-                              readingCompleteness:
-                                  task.output.readingCompleteness,
-                              qualificationExecutionMode: task.executionMode,
-                          },
-                      )
-                    : { outcomes: {}, details: {} };
+                let comparisonReview: Pick<
+                    Awaited<ReturnType<typeof readPinnedComparisonReview>>,
+                    "outcomes" | "details"
+                > = { outcomes: {}, details: {} };
+                if (run.activeCorpusRevisionId) {
+                    const comparisonItem = {
+                        runId: run._id,
+                        sourceId: source._id,
+                        corpusRevisionId: run.activeCorpusRevisionId,
+                        comparisonTaskIds,
+                    };
+                    const pinned = {
+                        sourceCaptureId: capture._id,
+                        contentHash: capture.contentHash,
+                        qualificationTaskId: task._id,
+                        qualification: task.output.qualification,
+                        readingCompleteness: task.output.readingCompleteness,
+                        qualificationExecutionMode: task.executionMode,
+                    };
+                    comparisonReview = await (reads?.comparisonReview(
+                        comparisonItem,
+                        pinned,
+                    ) ??
+                        readPinnedComparisonReview(
+                            ctx.db,
+                            comparisonItem,
+                            pinned,
+                        ));
+                }
                 const comparisonOutcomes = comparisonReview.outcomes;
                 return {
                     sourceId: source._id,
@@ -486,13 +510,17 @@ async function readQualificationInputs(
                     } satisfies SourceSelectionCandidate["inspection"],
                 };
             }
-            const capture = await ctx.db
-                .query("sourceCaptures")
-                .withIndex("by_source_and_status_and_updated_at", (q) =>
-                    q.eq("sourceId", source._id).eq("status", "committed"),
-                )
-                .order("desc")
-                .first();
+            const capture = reads
+                ? (await reads.captureHistory(source._id))[0]
+                : await ctx.db
+                      .query("sourceCaptures")
+                      .withIndex("by_source_and_status_and_updated_at", (q) =>
+                          q
+                              .eq("sourceId", source._id)
+                              .eq("status", "committed"),
+                      )
+                      .order("desc")
+                      .first();
             return {
                 sourceId: source._id,
                 taskId: undefined,
@@ -513,9 +541,12 @@ async function readComparisonTaskIds(
     sourceId: Id<"sources">,
     captureId: Id<"sourceCaptures">,
     contentHash: string,
+    reads?: SourceReviewReads,
 ) {
     const ids: Id<"aiTaskResults">[] = [];
-    for await (const task of readComparisonHistory(ctx.db, { sourceId })) {
+    for await (const task of reads
+        ? await reads.comparisonHistory(sourceId)
+        : readComparisonHistory(ctx.db, { sourceId })) {
         if (
             task.schemaVersion === SOURCE_COMPARISON_VERSION &&
             task.output.kind === "source_comparison" &&
@@ -546,9 +577,11 @@ async function hydrateProposalItem(
     context: ProposalContext & {
         preparations: Doc<"sourceSelectionProposalRebuilds">[];
         company: Awaited<ReturnType<typeof readSelectionCompany>>;
+        reads?: SourceReviewReads;
     },
 ) {
-    const source = await ctx.db.get(item.sourceId);
+    const source = await (context.reads?.source(item.sourceId) ??
+        ctx.db.get(item.sourceId));
     if (!source) {
         throw new Error("Source proposal projection is incomplete");
     }
@@ -745,6 +778,7 @@ export async function createSourceSelectionProposal(
         counts: result.counts,
         gaps: result.gaps,
         coverageGaps: result.coverageGaps,
+        documentaryCoverageGaps: result.documentaryCoverageGaps,
         createdAt: now,
     });
     for (const item of result.items) {
@@ -860,7 +894,7 @@ export const generateForRun = internalMutation({
 async function hydrateProposalItems(
     ctx: QueryCtx | MutationCtx,
     items: Doc<"sourceSelectionProposalItems">[],
-    context: ProposalContext,
+    context: ProposalContext & { reads?: SourceReviewReads },
 ) {
     const [preparations, company] = await Promise.all([
         readPreparationHistory(ctx.db, context.run._id, context.revision._id),
@@ -885,7 +919,7 @@ async function hydrateProposalItems(
 async function readProposalReviews(
     ctx: QueryCtx | MutationCtx,
     proposal: Doc<"sourceSelectionProposals">,
-    context: ProposalContext,
+    context: ProposalContext & { reads?: SourceReviewReads },
 ) {
     const items = await ctx.db
         .query("sourceSelectionProposalItems")
@@ -897,7 +931,10 @@ async function readProposalReviews(
         items.length > sourceDossierCandidateLimit(proposal.sourcePreparationId)
     )
         throw new Error("Source selection proposal exceeds its limit");
-    return hydrateProposalItems(ctx, items, context);
+    const reads =
+        context.reads ?? new SourceReviewReads(ctx.db, context.run._id);
+    await reads.sources();
+    return hydrateProposalItems(ctx, items, { ...context, reads });
 }
 
 export const getCurrent = query({
@@ -1044,6 +1081,8 @@ export const getCurrent = query({
             return null;
         }
         const { run, revision } = context;
+        const reads = new SourceReviewReads(ctx.db, run._id);
+        await reads.sources();
         const preparation = run.sourcePreparationId
             ? await ctx.db.get(run.sourcePreparationId)
             : null;
@@ -1056,7 +1095,7 @@ export const getCurrent = query({
             sources: hydrated,
             readings,
             preparations,
-        } = await readProposalReviews(ctx, proposal, context);
+        } = await readProposalReviews(ctx, proposal, { ...context, reads });
         const eligibleReadings = readings.filter(
             (reading, index) =>
                 reading && hydrated[index]?.decision !== "rejected",
@@ -1151,6 +1190,8 @@ export const getCurrent = query({
                       corpusRevisionId: revision._id,
                       preparation,
                       now: args.now ?? Date.now(),
+                      reads,
+                      preparations,
                   })
                 : null;
         if (preparationSummary && recoveryPlan?.pendingComparisons) {
@@ -1225,7 +1266,7 @@ export const getCurrent = query({
         };
         if (preparationSummary)
             preparationSummary.canResume = preparationAction.available;
-        const fingerprint = await currentFingerprint(ctx, run);
+        const fingerprint = await currentFingerprint(ctx, run, reads);
         const coverageRequirements = evaluateSourceCoverage(
             proposal.coveragePreset,
             hydrated,

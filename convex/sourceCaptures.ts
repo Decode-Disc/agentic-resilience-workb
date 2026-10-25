@@ -8,6 +8,7 @@ import {
     nextPreparationAttempt,
     sourcePreparationError,
 } from "./domain/sourcePreparationAuthority";
+import { SOURCE_QUALIFICATION_INPUT_POLICY } from "./domain/sourceQualification";
 import { companySnapshotValidator } from "./domain/validators";
 import {
     EXA_NORMALIZER_VERSION,
@@ -223,6 +224,12 @@ export const reserveUpload = internalMutation({
             throw sourcePreparationError("capture_limit_reached");
         const now = Date.now();
         const id = await ctx.db.insert("sourceCaptures", {
+            ...(preparation.executionPlanVersion && preparation.retrievalVersion
+                ? {
+                      qualificationInputPolicy:
+                          SOURCE_QUALIFICATION_INPUT_POLICY,
+                  }
+                : {}),
             runId: run._id,
             corpusRevisionId: revision._id,
             sourceId: source._id,

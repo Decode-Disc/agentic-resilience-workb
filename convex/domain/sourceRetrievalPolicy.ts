@@ -1,3 +1,5 @@
+import type { DataModel, Id } from "@convex/_generated/dataModel";
+import type { GenericDatabaseReader } from "convex/server";
 import { v } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
 import { z } from "zod";
@@ -83,4 +85,50 @@ export function fuseRetrievalRanks(
     return [...scores]
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
         .map(([id]) => id);
+}
+
+/** Reads completion and validates vector scope without loading document bodies. */
+export async function readCaptureIndexState(
+    db: GenericDatabaseReader<DataModel>,
+    revision: {
+        runId: Id<"researchRuns">;
+        corpusRevisionId: Id<"corpusRevisions">;
+    },
+    captureId: Id<"sourceCaptures">,
+) {
+    const state = await db
+        .query("sourceSearchCaptures")
+        .withIndex("by_scope_and_capture", (q) =>
+            q
+                .eq(
+                    "scopeKey",
+                    `${revision.runId}:${revision.corpusRevisionId}:${SOURCE_RETRIEVAL_VERSION}`,
+                )
+                .eq("captureId", captureId),
+        )
+        .unique();
+    if (state?.embeddingProfile && state.candidateCount > 0) {
+        // finishIndex publishes completion only after every batch has been linked.
+        const first = await db
+            .query("sourceSearchPassages")
+            .withIndex("by_scope_capture_order", (q) =>
+                q.eq("scopeKey", state.scopeKey).eq("captureId", captureId),
+            )
+            .first();
+        if (
+            first?.embeddingScopeKey !==
+            sourceEmbeddingScopeKey(
+                state.scopeKey,
+                state.embeddingProfile,
+                captureId,
+            )
+        ) {
+            return {
+                ...state,
+                embeddingProfile: undefined,
+                embeddingDegradationReason: "embedding_scope_outdated",
+            };
+        }
+    }
+    return state;
 }

@@ -1,8 +1,10 @@
 import { vResultValidator, vWorkflowId } from "@convex-dev/workflow";
+import type { FunctionReturnType } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { SOURCE_COMPARISON_VERSION } from "./domain/sourceComparison";
+import { SOURCE_PREPARATION_EXECUTION_PLAN_VERSION } from "./resourceLimits";
 import { workflow } from "./workflow";
 
 export const onComplete = internalMutation({
@@ -47,12 +49,24 @@ export const run = workflow
     })
     .handler(async (step, args): Promise<null> => {
         let configurationChecked = false;
+        // Bootstrap through the original scheduled step so historical journals replay unchanged.
+        let inlineControls = false;
         while (true) {
-            const batch = await step.runMutation(
+            const batch: FunctionReturnType<
+                typeof internal.sourcePreparation.nextBatch
+            > = await step.runMutation(
                 internal.sourcePreparation.nextBatch,
                 args,
+                inlineControls ? { inline: true } : {},
             );
             if (batch.completed) return null;
+            inlineControls =
+                batch.executionPlanVersion ===
+                SOURCE_PREPARATION_EXECUTION_PLAN_VERSION;
+            const controlOptions = inlineControls
+                ? { inline: true as const }
+                : {};
+            const concurrency = batch.maxConcurrentSources ?? 2;
             if (
                 !configurationChecked &&
                 (batch.sourceIds.length > 0 || batch.canSupplement)
@@ -73,68 +87,84 @@ export const run = workflow
                 configurationChecked = true;
             }
             if (batch.sourceIds.length === 0) {
-                if (batch.comparisonVersion === SOURCE_COMPARISON_VERSION) {
-                    const targets = await step.runQuery(
-                        internal.sourcePreparation.comparisonTargets,
-                        { ...args, now: Date.now() },
-                    );
-                    if (batch.progressEnabled && targets.length)
-                        await step.runMutation(
-                            internal.sourcePreparation.recordProgress,
-                            {
-                                ...args,
-                                phase: "comparison",
-                                current: 0,
-                                total: targets.length,
-                            },
+                const compareSources = async () => {
+                    if (batch.comparisonVersion === SOURCE_COMPARISON_VERSION) {
+                        const targets = await step.runQuery(
+                            internal.sourcePreparation.comparisonTargets,
+                            { ...args, now: Date.now() },
                         );
-                    for (let offset = 0; offset < targets.length; offset += 2) {
-                        const outcomes = await Promise.all(
-                            targets.slice(offset, offset + 2).map((target) =>
-                                step.runAction(
-                                    internal.sourcePreparationActions
-                                        .compareSource,
-                                    {
-                                        preparationId: args.preparationId,
-                                        sourceCaptureId: target.sourceCaptureId,
-                                        qualificationTaskId:
-                                            target.qualificationTaskId,
-                                    },
-                                    { retry: false },
-                                ),
-                            ),
-                        );
-                        await step.runMutation(
-                            internal.sourcePreparation.recordComparisonResults,
-                            {
-                                ...args,
-                                failures: outcomes.flatMap((outcome) =>
-                                    outcome.status === "unavailable" &&
-                                    outcome.reasonCode
-                                        ? [outcome.reasonCode]
-                                        : [],
-                                ),
-                            },
-                        );
-                        if (batch.progressEnabled)
+                        if (batch.progressEnabled && targets.length)
                             await step.runMutation(
                                 internal.sourcePreparation.recordProgress,
                                 {
                                     ...args,
                                     phase: "comparison",
-                                    current: Math.min(
-                                        offset + 2,
-                                        targets.length,
-                                    ),
+                                    current: 0,
                                     total: targets.length,
                                 },
+                                controlOptions,
                             );
+                        for (
+                            let offset = 0;
+                            offset < targets.length;
+                            offset += concurrency
+                        ) {
+                            const outcomes = await Promise.all(
+                                targets
+                                    .slice(offset, offset + concurrency)
+                                    .map((target) =>
+                                        step.runAction(
+                                            internal.sourcePreparationActions
+                                                .compareSource,
+                                            {
+                                                preparationId:
+                                                    args.preparationId,
+                                                sourceCaptureId:
+                                                    target.sourceCaptureId,
+                                                qualificationTaskId:
+                                                    target.qualificationTaskId,
+                                            },
+                                            { retry: false },
+                                        ),
+                                    ),
+                            );
+                            await step.runMutation(
+                                internal.sourcePreparation
+                                    .recordComparisonResults,
+                                {
+                                    ...args,
+                                    failures: outcomes.flatMap((outcome) =>
+                                        outcome.status === "unavailable" &&
+                                        outcome.reasonCode
+                                            ? [outcome.reasonCode]
+                                            : [],
+                                    ),
+                                },
+                                controlOptions,
+                            );
+                            if (batch.progressEnabled)
+                                await step.runMutation(
+                                    internal.sourcePreparation.recordProgress,
+                                    {
+                                        ...args,
+                                        phase: "comparison",
+                                        current: Math.min(
+                                            offset + concurrency,
+                                            targets.length,
+                                        ),
+                                        total: targets.length,
+                                    },
+                                    controlOptions,
+                                );
+                        }
                     }
-                }
+                };
+                if (!batch.executionPlanVersion) await compareSources();
                 if (batch.progressEnabled && batch.canSupplement)
                     await step.runMutation(
                         internal.sourcePreparation.recordProgress,
                         { ...args, phase: "supplement" },
+                        controlOptions,
                     );
                 const supplement = batch.canSupplement
                     ? await step.runAction(
@@ -144,10 +174,12 @@ export const run = workflow
                       )
                     : null;
                 if (supplement?.status === "searched") continue;
+                if (batch.executionPlanVersion) await compareSources();
                 if (batch.progressEnabled)
                     await step.runMutation(
                         internal.sourcePreparation.recordProgress,
                         { ...args, phase: "proposal" },
+                        controlOptions,
                     );
                 await step.runMutation(internal.sourcePreparation.finish, {
                     ...args,
@@ -165,6 +197,7 @@ export const run = workflow
                 await step.runMutation(
                     internal.sourcePreparation.recordProgress,
                     { ...args, phase: "reading" },
+                    controlOptions,
                 );
             const outcomes = await Promise.all(
                 batch.sourceIds.map(async (sourceId) => {
@@ -203,13 +236,15 @@ export const run = workflow
                     };
                 }),
             );
-            for (const outcome of outcomes) {
+            for (const [index, outcome] of outcomes.entries()) {
                 const recorded = await step.runMutation(
                     internal.sourcePreparation.recordResult,
                     {
                         ...args,
                         outcome,
                     },
+                    // A scheduled fourth save yields before another group of task-document reads.
+                    inlineControls && index % 4 !== 3 ? { inline: true } : {},
                 );
                 if (recorded === "deadline_elapsed") break;
             }

@@ -47,6 +47,7 @@ import type * as domain_sourcePreparationReview from "../domain/sourcePreparatio
 import type * as domain_sourceQualification from "../domain/sourceQualification.js";
 import type * as domain_sourceRetrievalPolicy from "../domain/sourceRetrievalPolicy.js";
 import type * as domain_sourceReviewProjection from "../domain/sourceReviewProjection.js";
+import type * as domain_sourceReviewReads from "../domain/sourceReviewReads.js";
 import type * as domain_sourceSelectionPolicy from "../domain/sourceSelectionPolicy.js";
 import type * as domain_sourceUsage from "../domain/sourceUsage.js";
 import type * as domain_transitions from "../domain/transitions.js";
@@ -93,6 +94,7 @@ import type * as sourceDiscoveryActions from "../sourceDiscoveryActions.js";
 import type * as sourceIntake from "../sourceIntake.js";
 import type * as sourcePreparation from "../sourcePreparation.js";
 import type * as sourcePreparationActions from "../sourcePreparationActions.js";
+import type * as sourcePreparationEvaluation from "../sourcePreparationEvaluation.js";
 import type * as sourcePreparationWorkflow from "../sourcePreparationWorkflow.js";
 import type * as sourceRetrieval from "../sourceRetrieval.js";
 import type * as sourceRetrievalActions from "../sourceRetrievalActions.js";
@@ -149,6 +151,7 @@ declare const fullApi: ApiFromModules<{
   "domain/sourceQualification": typeof domain_sourceQualification;
   "domain/sourceRetrievalPolicy": typeof domain_sourceRetrievalPolicy;
   "domain/sourceReviewProjection": typeof domain_sourceReviewProjection;
+  "domain/sourceReviewReads": typeof domain_sourceReviewReads;
   "domain/sourceSelectionPolicy": typeof domain_sourceSelectionPolicy;
   "domain/sourceUsage": typeof domain_sourceUsage;
   "domain/transitions": typeof domain_transitions;
@@ -195,6 +198,7 @@ declare const fullApi: ApiFromModules<{
   sourceIntake: typeof sourceIntake;
   sourcePreparation: typeof sourcePreparation;
   sourcePreparationActions: typeof sourcePreparationActions;
+  sourcePreparationEvaluation: typeof sourcePreparationEvaluation;
   sourcePreparationWorkflow: typeof sourcePreparationWorkflow;
   sourceRetrieval: typeof sourceRetrieval;
   sourceRetrievalActions: typeof sourceRetrievalActions;

@@ -5,6 +5,7 @@ import {
     sourcePreparationError,
 } from "@convex/domain/sourcePreparationAuthority";
 import {
+    readCaptureIndexState,
     SOURCE_RETRIEVAL_VERSION,
     sourceEmbeddingScopeKey,
 } from "@convex/domain/sourceRetrievalPolicy";
@@ -138,7 +139,27 @@ export const putBatch = internalMutation({
     },
 });
 
-/** One capture per transaction bounds reads and applies eligibility before the native top-k. */
+async function searchCapture(
+    ctx: QueryCtx,
+    preparation: Doc<"sourceSelectionProposalRebuilds">,
+    captureId: Id<"sourceCaptures">,
+    queryText: string,
+) {
+    if (queryText.trim().split(/\s+/).length > 16 || queryText.length > 512)
+        throw sourcePreparationError("retrieval_query_invalid");
+    await eligibleCapture(ctx, preparation, captureId);
+    if (!queryText.trim()) return [];
+    return ctx.db
+        .query("sourceSearchPassages")
+        .withSearchIndex("search_text", (q) =>
+            q
+                .search("searchText", queryText)
+                .eq("scopeKey", scopeKey(preparation))
+                .eq("captureId", captureId),
+        )
+        .take(64);
+}
+
 export const search = internalQuery({
     args: {
         preparationId: v.id("sourceSelectionProposalRebuilds"),
@@ -151,22 +172,41 @@ export const search = internalQuery({
             preparationId: args.preparationId,
             now: Date.now(),
         });
-        if (
-            args.query.trim().split(/\s+/).length > 16 ||
-            args.query.length > 512
-        )
-            throw sourcePreparationError("retrieval_query_invalid");
-        await eligibleCapture(ctx, preparation, args.captureId);
-        if (!args.query.trim()) return [];
-        return ctx.db
-            .query("sourceSearchPassages")
-            .withSearchIndex("search_text", (q) =>
-                q
-                    .search("searchText", args.query)
-                    .eq("scopeKey", scopeKey(preparation))
-                    .eq("captureId", args.captureId),
-            )
-            .take(64);
+        return searchCapture(ctx, preparation, args.captureId, args.query);
+    },
+});
+
+/** Two captures keep native per-capture ranking and bound transaction bytes. */
+export const searchBatch = internalQuery({
+    args: {
+        preparationId: v.id("sourceSelectionProposalRebuilds"),
+        query: v.string(),
+        captureIds: v.array(v.id("sourceCaptures")),
+    },
+    returns: v.array(
+        v.object({
+            captureId: v.id("sourceCaptures"),
+            passages: v.array(schema.doc("sourceSearchPassages")),
+        }),
+    ),
+    handler: async (ctx, args) => {
+        if (args.captureIds.length > 2)
+            throw sourcePreparationError("retrieval_batch_limit");
+        const { preparation } = await assertPreparationExecutionFence(ctx.db, {
+            preparationId: args.preparationId,
+            now: Date.now(),
+        });
+        return Promise.all(
+            args.captureIds.map(async (captureId) => ({
+                captureId,
+                passages: await searchCapture(
+                    ctx,
+                    preparation,
+                    captureId,
+                    args.query,
+                ),
+            })),
+        );
     },
 });
 
@@ -197,40 +237,39 @@ export const getIndexState = internalQuery({
             now: Date.now(),
         });
         await eligibleCapture(ctx, preparation, args.captureId);
-        const state = await ctx.db
-            .query("sourceSearchCaptures")
-            .withIndex("by_scope_and_capture", (q) =>
-                q
-                    .eq("scopeKey", scopeKey(preparation))
-                    .eq("captureId", args.captureId),
-            )
-            .unique();
-        if (state?.embeddingProfile && state.candidateCount > 0) {
-            // finishIndex publishes completion only after every batch has been linked.
-            const first = await ctx.db
-                .query("sourceSearchPassages")
-                .withIndex("by_scope_capture_order", (q) =>
-                    q
-                        .eq("scopeKey", state.scopeKey)
-                        .eq("captureId", args.captureId),
-                )
-                .first();
-            if (
-                first?.embeddingScopeKey !==
-                sourceEmbeddingScopeKey(
-                    state.scopeKey,
-                    state.embeddingProfile,
-                    args.captureId,
-                )
-            ) {
-                return {
-                    ...state,
-                    embeddingProfile: undefined,
-                    embeddingDegradationReason: "embedding_scope_outdated",
-                };
-            }
-        }
-        return state;
+        return readCaptureIndexState(ctx.db, preparation, args.captureId);
+    },
+});
+
+/** Capture metadata and index readiness share one authorization snapshot. */
+export const getCaptureIndexBatch = internalQuery({
+    args: {
+        preparationId: v.id("sourceSelectionProposalRebuilds"),
+        captureIds: v.array(v.id("sourceCaptures")),
+    },
+    returns: v.array(
+        v.object({
+            capture: schema.doc("sourceCaptures"),
+            state: v.union(schema.doc("sourceSearchCaptures"), v.null()),
+        }),
+    ),
+    handler: async (ctx, args) => {
+        if (args.captureIds.length > 8)
+            throw sourcePreparationError("retrieval_batch_limit");
+        const { preparation } = await assertPreparationExecutionFence(ctx.db, {
+            preparationId: args.preparationId,
+            now: Date.now(),
+        });
+        return Promise.all(
+            args.captureIds.map(async (captureId) => ({
+                capture: await eligibleCapture(ctx, preparation, captureId),
+                state: await readCaptureIndexState(
+                    ctx.db,
+                    preparation,
+                    captureId,
+                ),
+            })),
+        );
     },
 });
 

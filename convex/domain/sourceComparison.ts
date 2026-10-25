@@ -472,7 +472,9 @@ function isStructuredPassage(quotation: string): boolean {
 }
 
 function createRequestFindingSchema(
-    finding: RequestFinding,
+    finding: Pick<RequestFinding, "findingIndex"> & {
+        targetPassages: Array<{ referenceKey: string }>;
+    },
     primaryKeys: string[],
 ) {
     const keys = finding.targetPassages.map((passage) => passage.referenceKey);
@@ -584,6 +586,44 @@ export function createSourceComparisonResponseSchema(
                 : z.array(z.never()).max(0),
         })
         .strict();
+}
+
+let preparationPolicyHash: string | undefined;
+
+/** Bump the input policy version when parsing or ranking changes; instructions and schemas are hashed directly. */
+export function sourceComparisonInputPolicyHash(): string {
+    if (preparationPolicyHash) return preparationPolicyHash;
+    preparationPolicyHash = sha256Hex(
+        JSON.stringify({
+            version: "comparison-input-v2",
+            instructions: SYSTEM_INSTRUCTIONS,
+            response: z.toJSONSchema(
+                createRequestFindingSchema(
+                    {
+                        findingIndex: 0,
+                        targetPassages: [{ referenceKey: "target" }],
+                    },
+                    ["primary"],
+                ),
+                { target: "draft-7", io: "input", reused: "inline" },
+            ),
+            output: z.toJSONSchema(sourceComparisonOutputSchema, {
+                target: "draft-7",
+                io: "input",
+                reused: "inline",
+            }),
+            limits: [
+                SOURCE_COMPARISON_MAX_INPUT_BYTES,
+                SOURCE_COMPARISON_MAX_FINDINGS,
+                SOURCE_COMPARISON_MAX_PRIMARY_CAPTURES,
+                SOURCE_COMPARISON_MAX_PASSAGES_PER_FINDING,
+                SOURCE_COMPARISON_MAX_CONTEXT_PASSAGES_PER_FINDING,
+                SOURCE_COMPARISON_MAX_PRIMARY_PASSAGES,
+                SOURCE_COMPARISON_CONTEXT_EXPANSION_BYTES,
+            ],
+        }),
+    );
+    return preparationPolicyHash;
 }
 
 function serializeRequest(preparedRequest: SourceComparisonRequest): {

@@ -26,7 +26,7 @@ import { MAX_PASSAGES_PER_SOURCE } from "./resourceLimits";
 import schema from "./schema";
 import { createSourceSelectionProposal } from "./sourceSelectionProposals";
 
-function assertLocalFixture() {
+export function assertLocalFixture() {
     if (
         env.E2E_FIXTURES_ENABLED !== "true" ||
         !["127.0.0.1", "localhost"].includes(

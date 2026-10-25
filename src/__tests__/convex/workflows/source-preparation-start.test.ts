@@ -1135,8 +1135,10 @@ test.each([
         )?.preparationAction,
     ).toMatchObject({ kind: "resume", available: true });
     expect(previous?.modelLimits).toEqual({ work: 120, incidents: 40 });
+    expect(previous?.maxConcurrentSources).toBe(2);
     vi.stubEnv("SOURCE_PREPARATION_WORK_LIMIT", "140");
     vi.stubEnv("SOURCE_PREPARATION_INCIDENT_LIMIT", "50");
+    vi.stubEnv("SOURCE_PREPARATION_MAX_CONCURRENCY", "4");
     const args = {
         runId,
         corpusRevisionId,
@@ -1155,6 +1157,7 @@ test.each([
     ).toMatchObject({
         deadlineAt: Date.now() + 15 * 60_000,
         modelLimits: { work: 140, incidents: 50 },
+        maxConcurrentSources: 4,
         asOfTime: previous?.asOfTime,
         executionGeneration: (previous?.executionGeneration ?? 0) + 1,
     });

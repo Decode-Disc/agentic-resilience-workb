@@ -2,6 +2,7 @@ import type { DataModel, Doc, Id } from "@convex/_generated/dataModel";
 import {
     LEGACY_PREPARATION_MODEL_ATTEMPT_LIMIT,
     MAX_HISTORICAL_SOURCE_CANDIDATES,
+    preparationMaxConcurrency,
     preparationModelLimits,
 } from "@convex/resourceLimits";
 import type { GenericDatabaseReader } from "convex/server";
@@ -152,6 +153,18 @@ export function readPreparationLimits(
     if (preparation?.modelLimits) return preparation.modelLimits;
     try {
         return preparationModelLimits();
+    } catch {
+        throw sourcePreparationError("preparation_configuration_invalid");
+    }
+}
+
+/** Historical journals retain two; only a new explicit execution adopts configuration. */
+export function readPreparationConcurrency(
+    preparation?: Doc<"sourceSelectionProposalRebuilds">,
+) {
+    if (preparation) return preparation.maxConcurrentSources ?? 2;
+    try {
+        return preparationMaxConcurrency();
     } catch {
         throw sourcePreparationError("preparation_configuration_invalid");
     }

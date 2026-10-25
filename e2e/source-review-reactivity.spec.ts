@@ -23,6 +23,35 @@ test.afterEach(async ({ page }) => {
     await stopSanitizedTraceIfActive(page);
 });
 
+test("a sixty-source inspected proposal loads repeatedly without starting provider work", async ({ page }, info) => {
+    test.setTimeout(120_000);
+    await admitAnalyst(page);
+    const key = "preparation-performance-sixty-v1";
+    const seeded = runConvexJson<FunctionReturnType<typeof internal.e2eFixtures.seedInspectedSourceReviewScenario>>(
+        "e2eFixtures:seedInspectedSourceReviewScenario",
+        { slotKey: "analyst-1", fixtureKey: key, comparisonOutcome: "no_conflict_observed" },
+    );
+    const scaled = runConvexJson<FunctionReturnType<typeof internal.e2eFixtures.scaleSourceReviewFixture>>(
+        "e2eFixtures:scaleSourceReviewFixture", {runId: seeded.runId, fixtureKey: key, slotKey: "analyst-1"},
+    );
+    expect(scaled.sourceCount).toBe(60);
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    page.on("console", message => {if (message.type() === "error") errors.push(message.text());});
+    const durations: number[] = [];
+    for (let attempt = 0; attempt < 5; attempt++) {
+        const started = Date.now();
+        await page.goto(`/workspace/${seeded.runId}?section=sources`);
+        await expect(page.getByRole("heading", {name: "Proposed corpus", exact: true})).toBeVisible({timeout: 30_000});
+        await expect(page.getByRole("region", {name: "Selected source reading"})).toBeVisible();
+        durations.push(Date.now() - started);
+    }
+    await info.attach("sixty-source-navigation-durations", {body: JSON.stringify({milliseconds: durations, sources: scaled.sourceCount}), contentType: "application/json"});
+    expect(inspectSourceReview(seeded.runId, key).providerCallCount).toBe(0);
+    expect(errors).toEqual([]);
+});
+
+
 test("selection explanations refresh a legacy draft without changing decisions or calling providers", async ({ page }) => {
     await admitAnalyst(page);
     const key = fixtureKey("selection-explanations");

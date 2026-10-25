@@ -63,7 +63,9 @@ const success = () =>
         { headers: { "Content-Type": "application/json" } },
     );
 
-async function capturedCandidate() {
+async function capturedCandidate(
+    text = "ServiceNow provides workflow software.",
+) {
     const fixture = await seedSourcePreparation();
     const { t, runId, corpusRevisionId, sourceId } = fixture;
     const preparationId = await t.mutation(
@@ -78,8 +80,9 @@ async function capturedCandidate() {
         company: reserved.company,
         canonicalUrl: reserved.source.canonicalUrl,
         title: reserved.source.title,
+        selectionPolicy: reserved.capture.qualificationInputPolicy,
         asOfTime: Date.now(),
-        text: "ServiceNow provides workflow software.",
+        text,
     });
     const storageId = await t.run((ctx) =>
         ctx.storage.store(new Blob([prepared.normalizedText])),
@@ -459,7 +462,12 @@ test("an attempt timeout keeps an unknown outcome without triggering fallback", 
     expect(request).toHaveBeenCalledOnce();
 });
 
-test("an unknown model outcome is not repeated by a later execution generation", async () => {
+test.each([
+    "legacy",
+    "full_document_first_v1",
+] as const)("an unknown %s model outcome is not repeated by a later execution generation", async (policy) => {
+    if (policy === "full_document_first_v1")
+        vi.stubEnv("SOURCE_RETRIEVAL_MODE", "lexical");
     const {
         t,
         runId,
@@ -511,9 +519,14 @@ test("an unknown model outcome is not repeated by a later execution generation",
     expect(request).not.toHaveBeenCalled();
 });
 
-test("new preparations snapshot hybrid mode and persist explicit lexical degradation without embedding credentials", async () => {
+test("legacy captures retain hybrid mode and explicit lexical degradation without embedding credentials", async () => {
     vi.stubEnv("SOURCE_RETRIEVAL_MODE", "hybrid");
     const fixture = await capturedCandidate();
+    await fixture.t.run((ctx) =>
+        ctx.db.patch(fixture.sourceCaptureId, {
+            qualificationInputPolicy: undefined,
+        }),
+    );
     vi.stubEnv("SOURCE_RETRIEVAL_MODE", undefined);
     vi.stubEnv("OPENROUTER_API_KEY", "test-qualification-key");
     vi.stubGlobal(
@@ -1132,4 +1145,107 @@ test("a historical pre-dispatch block preserves its receipt without consuming th
     expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
         sourceQualificationAttemptCount: 1,
     });
+});
+
+test.each([
+    "complete",
+    "partial",
+] as const)("a full-document qualification retains all %s capture passages without building a retrieval index", async (completeness) => {
+    vi.stubEnv("SOURCE_RETRIEVAL_MODE", "lexical");
+    const fixture = await capturedCandidate();
+    if (completeness === "partial")
+        await fixture.t.run((ctx) =>
+            ctx.db.patch(fixture.sourceCaptureId, {
+                readingCompleteness: "partial",
+                omittedPassageCount: 1,
+            }),
+        );
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    const requests: Array<Record<string, unknown>> = [];
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url, init) => {
+            const body = JSON.parse(String(init?.body));
+            requests.push(JSON.parse(body.messages.at(-1).content));
+            return success();
+        }),
+    );
+    const result = await fixture.t.action(
+        internal.sourcePreparationActions.qualifySource,
+        {
+            preparationId: fixture.preparationId,
+            sourceCaptureId: fixture.sourceCaptureId,
+        },
+    );
+    expect(result.status).toBe("qualified");
+    if (result.status !== "qualified") throw Error("Missing qualification");
+    const state = await fixture.t.run(async (ctx) => ({
+        indexes: await ctx.db.query("sourceSearchCaptures").take(2),
+        passages: await ctx.db.query("sourceSearchPassages").take(2),
+        task: result.taskId ? await ctx.db.get(result.taskId) : null,
+        calls: await ctx.db.query("providerCalls").take(3),
+    }));
+    expect(state.indexes).toEqual([]);
+    expect(state.passages).toEqual([]);
+    expect(state.task?.output).toMatchObject({
+        kind: "source_qualification",
+        selectionStrategy: "full_document",
+        readingCompleteness: completeness,
+        omittedPassageCount: completeness === "partial" ? 1 : 0,
+        selectedPassages: [{ passageKey: "p0", startOffset: 0, endOffset: 38 }],
+    });
+    expect(requests[0]?.document).toMatchObject({
+        selectionStrategy: "full_document",
+        passages: [
+            {
+                passageKey: "p0",
+                text: "ServiceNow provides workflow software.",
+            },
+        ],
+    });
+    expect(state.calls).toHaveLength(1);
+    expect(
+        await fixture.t.action(
+            internal.sourcePreparationActions.qualifySource,
+            {
+                preparationId: fixture.preparationId,
+                sourceCaptureId: fixture.sourceCaptureId,
+            },
+        ),
+    ).toEqual(result);
+});
+
+test("an oversized document keeps bounded retrieved passages under the new capture policy", async () => {
+    vi.stubEnv("SOURCE_RETRIEVAL_MODE", "lexical");
+    const text = Array.from(
+        { length: 80 },
+        (_, i) =>
+            `ServiceNow workflow platform disclosure ${i}. ${"Operational integration capabilities. ".repeat(50)}`,
+    ).join("\n\n");
+    const fixture = await capturedCandidate(text);
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => success()),
+    );
+    const result = await fixture.t.action(
+        internal.sourcePreparationActions.qualifySource,
+        {
+            preparationId: fixture.preparationId,
+            sourceCaptureId: fixture.sourceCaptureId,
+        },
+    );
+    expect(result.status).toBe("qualified");
+    if (result.status !== "qualified") throw Error("Missing qualification");
+    const task = await fixture.t.run((ctx) => ctx.db.get(result.taskId));
+    expect(task?.output).toMatchObject({
+        kind: "source_qualification",
+        selectionStrategy: "retrieved_passages",
+        readingCompleteness: "partial",
+        retrieval: { effectiveMode: "lexical" },
+    });
+    if (task?.output.kind !== "source_qualification")
+        throw Error("Missing qualification");
+    expect(task.output.omittedPassageCount).toBeGreaterThan(0);
+    expect(task.output.selectedPassages.length).toBeGreaterThan(0);
 });

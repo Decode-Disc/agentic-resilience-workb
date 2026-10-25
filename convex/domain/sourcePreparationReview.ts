@@ -13,6 +13,7 @@ import {
 import {
     comparisonContextForTarget,
     readComparisonPrimaryContext,
+    sourceComparisonWork,
 } from "./sourceComparisonContext";
 import { readSupplementalSearchAttempts } from "./sourceDiscoveryRecovery";
 import {
@@ -20,14 +21,14 @@ import {
     preparationBudgetBlock,
     preparationFailureCode,
     readPreparationBudget,
+    readPreparationConcurrency,
     readPreparationLimits,
-    readPreparationSourceDecision,
     sourcePreparationError,
     type sourcePreparationOutcomeValidator,
 } from "./sourcePreparationAuthority";
+import { SourceReviewReads } from "./sourceReviewReads";
 import { classifySourceCandidate } from "./sourceSelectionPolicy";
 import {
-    readComparisonHistory,
     readPinnedComparisonReview,
     readPinnedSourceQualification,
 } from "./sourceUsage";
@@ -69,6 +70,7 @@ export async function readSourceReview(
         item: Doc<"sourceSelectionProposalItems"> | null;
         preparations: Doc<"sourceSelectionProposalRebuilds">[];
         company: Parameters<typeof classifySourceCandidate>[1];
+        reads?: SourceReviewReads;
     },
 ) {
     const { run, revision, source, item, preparations } = input;
@@ -84,18 +86,20 @@ export async function readSourceReview(
                       ? run.sourcePreparationId
                       : undefined,
               approved: revision.status === "approved",
+              reads: input.reads,
           })
         : null;
     const pinned = reading
         ? (reading.qualification ?? null)
         : item
-          ? await readPinnedSourceQualification(db, item)
+          ? await readPinnedSourceQualification(db, item, input.reads)
           : null;
     const comparisonReview =
         item &&
         pinned &&
         item.qualificationTaskId === pinned.qualificationTaskId
-            ? await readPinnedComparisonReview(db, item, pinned)
+            ? await (input.reads?.comparisonReview(item, pinned) ??
+                  readPinnedComparisonReview(db, item, pinned))
             : { outcomes: {}, details: {} };
     const classification =
         revision.status === "draft" &&
@@ -134,6 +138,7 @@ export async function readSourceReading(
         preparations: Doc<"sourceSelectionProposalRebuilds">[];
         activePreparationId?: Id<"sourceSelectionProposalRebuilds">;
         approved?: boolean;
+        reads?: SourceReviewReads;
     },
 ) {
     const outcome = input.preparations
@@ -153,19 +158,27 @@ export async function readSourceReading(
             assessed: false,
         };
     let pinned = input.item
-        ? await readPinnedSourceQualification(db, {
-              ...input.item,
-              runId: input.runId,
-              sourceId: input.sourceId,
-          })
+        ? await readPinnedSourceQualification(
+              db,
+              {
+                  ...input.item,
+                  runId: input.runId,
+                  sourceId: input.sourceId,
+              },
+              input.reads,
+          )
         : null;
     if (!pinned && !input.approved && outcome?.result.status === "qualified") {
-        pinned = await readPinnedSourceQualification(db, {
-            runId: input.runId,
-            sourceId: input.sourceId,
-            sourceCaptureId: outcome.result.sourceCaptureId,
-            qualificationTaskId: outcome.result.taskId,
-        });
+        pinned = await readPinnedSourceQualification(
+            db,
+            {
+                runId: input.runId,
+                sourceId: input.sourceId,
+                sourceCaptureId: outcome.result.sourceCaptureId,
+                qualificationTaskId: outcome.result.taskId,
+            },
+            input.reads,
+        );
     }
     if (pinned)
         return {
@@ -178,19 +191,21 @@ export async function readSourceReading(
             qualification: pinned,
         };
     const capture = input.item?.sourceCaptureId
-        ? await db.get(input.item.sourceCaptureId)
+        ? await (input.reads?.capture(input.item.sourceCaptureId) ??
+              db.get(input.item.sourceCaptureId))
         : input.approved
           ? null
-          : (
-                await db
-                    .query("sourceCaptures")
-                    .withIndex("by_source_and_status_and_updated_at", (q) =>
-                        q
-                            .eq("sourceId", input.sourceId)
-                            .eq("status", "committed"),
-                    )
-                    .order("desc")
-                    .take(4)
+          : (input.reads
+                ? await input.reads.captureHistory(input.sourceId)
+                : await db
+                      .query("sourceCaptures")
+                      .withIndex("by_source_and_status_and_updated_at", (q) =>
+                          q
+                              .eq("sourceId", input.sourceId)
+                              .eq("status", "committed"),
+                      )
+                      .order("desc")
+                      .take(4)
             ).find(
                 (c) =>
                     c.runId === input.runId &&
@@ -261,18 +276,20 @@ export async function readPreparationRecovery(
         corpusRevisionId: Id<"corpusRevisions">;
         preparation: Doc<"sourceSelectionProposalRebuilds">;
         now: number;
+        reads?: SourceReviewReads;
+        preparations?: Doc<"sourceSelectionProposalRebuilds">[];
     },
 ): Promise<PreparationRecovery> {
-    const preparations = await readPreparationHistory(
-        db,
-        input.runId,
-        input.corpusRevisionId,
-    );
+    const reads = input.reads ?? new SourceReviewReads(db, input.runId);
+    const preparations =
+        input.preparations ??
+        (await readPreparationHistory(db, input.runId, input.corpusRevisionId));
     const run = await db.get(input.runId);
     let modelBudgetBlocked:
         | ReturnType<typeof preparationBudgetBlock>
         | "preparation_configuration_invalid";
     try {
+        readPreparationConcurrency();
         modelBudgetBlocked = run
             ? preparationBudgetBlock(
                   await readPreparationBudget(db, run, input.preparation),
@@ -291,13 +308,10 @@ export async function readPreparationRecovery(
         ? input.preparation.readingSourceIds
         : input.preparation.manualSourceIds;
     const sources = scope
-        ? (await Promise.all(scope.map((id) => db.get(id)))).filter(
+        ? (await Promise.all(scope.map((id) => reads.source(id)))).filter(
               (source) => source !== null,
           )
-        : await db
-              .query("sources")
-              .withIndex("by_run_and_url", (q) => q.eq("runId", input.runId))
-              .take(MAX_HISTORICAL_SOURCE_CANDIDATES + 1);
+        : await reads.sources();
     if (sources.length > MAX_HISTORICAL_SOURCE_CANDIDATES)
         throw sourcePreparationError("preparation_scope_invalid");
     const resumableSourceIds: Id<"sources">[] = [];
@@ -312,16 +326,15 @@ export async function readPreparationRecovery(
     for (const source of sources) {
         if (
             source.runId !== input.runId ||
-            (await readPreparationSourceDecision(db, {
-                ...input,
-                sourceId: source._id,
-            })) === "rejected"
+            (await reads.decision(input.corpusRevisionId, source._id)) ===
+                "rejected"
         )
             continue;
         const reading = await readSourceReading(db, {
             ...input,
             sourceId: source._id,
             preparations,
+            reads,
         });
         let comparisonTasks: Doc<"aiTaskResults">[] = [];
         let currentComparisonContext: string | undefined;
@@ -341,21 +354,18 @@ export async function readPreparationRecovery(
                 )
             )
                 continue;
-            const tasks: Doc<"aiTaskResults">[] = [];
-            for await (const task of readComparisonHistory(db, {
-                sourceId: source._id,
-            }))
-                tasks.push(task);
+            const tasks = await reads.comparisonHistory(source._id);
             primaryContext ??= run
                 ? await readComparisonPrimaryContext(
                       db,
                       run,
                       input.corpusRevisionId,
+                      reads,
                   )
                 : undefined;
             const [capture, qualification] = await Promise.all([
-                db.get(reading.qualification.sourceCaptureId),
-                db.get(reading.qualification.qualificationTaskId),
+                reads.capture(reading.qualification.sourceCaptureId),
+                reads.task(reading.qualification.qualificationTaskId),
             ]);
             const currentContext =
                 primaryContext && capture && qualification
@@ -375,26 +385,16 @@ export async function readPreparationRecovery(
                     task.output.qualificationTaskId ===
                         reading.qualification?.qualificationTaskId,
             );
+            const work = qualification
+                ? sourceComparisonWork(
+                      qualification,
+                      comparisonTasks,
+                      currentContext,
+                  )
+                : { kind: "rebuild" as const };
             const currentTask =
-                currentContext &&
-                comparisonTasks.find(
-                    (task) =>
-                        task.schemaVersion === SOURCE_COMPARISON_VERSION &&
-                        task.comparisonContextHash === currentContext &&
-                        task.runId === input.runId &&
-                        task.corpusRevisionId === input.corpusRevisionId &&
-                        task.output.kind === "source_comparison" &&
-                        task.output.targetCaptureId ===
-                            reading.qualification?.sourceCaptureId &&
-                        task.output.qualificationTaskId ===
-                            reading.qualification?.qualificationTaskId,
-                );
-            if (
-                currentTask &&
-                currentTask.output.kind === "source_comparison" &&
-                ["compared", "not_run"].includes(currentTask.output.checkStatus)
-            )
-                continue;
+                work.kind === "reusable" ? work.task : undefined;
+            if (currentTask) continue;
             canValidateRetainedComparison =
                 !currentTask &&
                 comparisonTasks.some(

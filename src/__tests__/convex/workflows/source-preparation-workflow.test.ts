@@ -212,11 +212,16 @@ test.each([
     expect(request).toHaveBeenCalledOnce();
 });
 
-test("valid uncertainty finishes without fallback and durable replay repeats no provider request", async () => {
+test.each([
+    "inline_controls_v2",
+    "collect_then_compare_v1",
+    undefined,
+] as const)("valid uncertainty finishes without fallback and durable replay repeats no provider request (%s)", async (executionPlanVersion) => {
     vi.useFakeTimers();
     vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
     const { t, runId, corpusRevisionId, preparationId } =
         await capturedWorkflowCandidate();
+    await t.run((ctx) => ctx.db.patch(preparationId, { executionPlanVersion }));
     const request = vi.fn<typeof fetch>(async () => uncertainResponse());
     vi.stubGlobal("fetch", request);
     const handle = await t.run((ctx) =>
@@ -233,6 +238,26 @@ test("valid uncertainty finishes without fallback and durable replay repeats no 
         }
     }
     expect(completed).toBe(true);
+    const journal = await t.run((ctx) => workflow.listSteps(ctx, handle));
+    const nextBatches = journal.page.filter((entry) =>
+        entry.name.endsWith(":nextBatch"),
+    );
+    expect(nextBatches.length).toBeGreaterThan(1);
+    expect(nextBatches[0]).toHaveProperty("workId", expect.any(String));
+    expect(
+        nextBatches
+            .slice(1)
+            .every((entry) => "workId" in entry && Boolean(entry.workId)),
+    ).toBe(executionPlanVersion !== "inline_controls_v2");
+    const controls = journal.page.filter((entry) =>
+        [":recordProgress", ":recordResult", ":recordComparisonResults"].some(
+            (suffix) => entry.name.endsWith(suffix),
+        ),
+    );
+    expect(controls.length).toBeGreaterThan(0);
+    expect(
+        controls.every((entry) => "workId" in entry && Boolean(entry.workId)),
+    ).toBe(executionPlanVersion !== "inline_controls_v2");
     await t.run((ctx) => workflow.restart(ctx, handle));
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100));
     expect(await t.run((ctx) => workflow.status(ctx, handle))).toMatchObject({
@@ -291,6 +316,8 @@ test("valid uncertainty finishes without fallback and durable replay repeats no 
 test.each([
     "comparison",
     "work_limit",
+    "supplement_then_comparison",
+    "legacy_supplement_after_comparison",
 ] as const)("compares after the reading pass or reports its %s", async (mode) => {
     if (mode === "work_limit") vi.stubEnv("SOURCE_PREPARATION_WORK_LIMIT", "3");
     vi.useFakeTimers();
@@ -391,6 +418,21 @@ test.each([
         retrievedAt: Date.now(),
     });
 
+    const boundaryOrder: string[] = [];
+    if (mode.includes("supplement")) {
+        vi.stubEnv("EXA_API_KEY", "test-only-exa-key");
+        await t.run((ctx) =>
+            ctx.db.patch(preparationId, {
+                manualSourceIds: undefined,
+                ...(mode === "legacy_supplement_after_comparison"
+                    ? { executionPlanVersion: undefined }
+                    : {}),
+            }),
+        );
+    }
+    let searchCount = 0;
+    const supplementalUrl =
+        "https://www.servicenow.com/products/workflow-pricing.html";
     const comparisonRequests: Array<Record<string, unknown>> = [];
     const request = vi.fn<typeof fetch>(async (url, init) => {
         const requestUrl =
@@ -399,6 +441,34 @@ test.each([
                 : url instanceof URL
                   ? url.href
                   : url.url;
+        if (requestUrl === "https://api.exa.ai/search") {
+            boundaryOrder.push("search");
+            searchCount += 1;
+            return Response.json({
+                results:
+                    mode === "supplement_then_comparison" && searchCount === 1
+                        ? [
+                              {
+                                  id: supplementalUrl,
+                                  url: supplementalUrl,
+                                  title: "ServiceNow official pricing",
+                                  text: primaryText,
+                              },
+                          ]
+                        : [],
+            });
+        }
+        if (requestUrl === "https://api.exa.ai/contents")
+            return Response.json({
+                results: [
+                    {
+                        id: supplementalUrl,
+                        url: supplementalUrl,
+                        title: "ServiceNow official pricing",
+                        text: primaryText,
+                    },
+                ],
+            });
         if (requestUrl.includes("/Archives/edgar/"))
             return new Response(`<h1>Competition</h1><p>${primaryText}</p>`, {
                 headers: { "Content-Type": "text/html" },
@@ -409,6 +479,7 @@ test.each([
         const promptText = body.messages?.at(-1)?.content ?? "{}";
         const prompt = JSON.parse(promptText) as Record<string, unknown>;
         if (prompt.comparisonVersion) {
+            boundaryOrder.push("comparison");
             comparisonRequests.push(prompt);
             const findings = Array.isArray(prompt.findings)
                 ? prompt.findings.map((raw) => {
@@ -479,7 +550,14 @@ test.each([
     );
     let completed = false;
     for (let pump = 0; pump < 100; pump++) {
-        await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100));
+        await (
+            t as typeof t & {
+                finishAllScheduledFunctions(
+                    advance: () => void,
+                    maxIterations: number,
+                ): Promise<void>;
+            }
+        ).finishAllScheduledFunctions(() => vi.advanceTimersByTime(100), 300);
         const status = await t.run((ctx) => workflow.status(ctx, handle));
         if (status.type !== "inProgress") {
             expect(status).toMatchObject({ type: "completed" });
@@ -502,6 +580,40 @@ test.each([
         });
         return;
     }
+    if (mode === "supplement_then_comparison") {
+        expect(boundaryOrder).toEqual([
+            "search",
+            "search",
+            "search",
+            "comparison",
+        ]);
+        const source = await t.run((ctx) =>
+            ctx.db
+                .query("sources")
+                .withIndex("by_run_and_url", (q) =>
+                    q.eq("runId", runId).eq("canonicalUrl", supplementalUrl),
+                )
+                .unique(),
+        );
+        expect(source).not.toBeNull();
+        if (!source) throw new Error("Supplemental source missing");
+        const captures = await t.run((ctx) =>
+            ctx.db
+                .query("sourceCaptures")
+                .withIndex("by_source_and_status_and_updated_at", (q) =>
+                    q.eq("sourceId", source._id).eq("status", "committed"),
+                )
+                .take(2),
+        );
+        expect(captures).toHaveLength(1);
+    }
+    if (mode === "legacy_supplement_after_comparison")
+        expect(boundaryOrder).toEqual([
+            "comparison",
+            "search",
+            "search",
+            "search",
+        ]);
     expect(comparisonRequests).toHaveLength(1);
     const comparedInput = comparisonRequests[0];
     expect(comparedInput?.primaryPassages).toEqual(
@@ -570,7 +682,7 @@ test.each([
                 decisionKey: "approve-after-primary-rejection",
             }),
     ).rejects.toThrow("Source selection proposal is stale");
-});
+}, 15000);
 
 test("legacy preparation journal without a comparison snapshot skips comparison steps", async () => {
     vi.useFakeTimers();
@@ -857,3 +969,99 @@ test("configuration checks are inspectable without inventing a provider attempt"
         [],
     );
 });
+
+test.each([
+    2, 4, 8,
+])("reading and comparison share a persisted concurrency of %s", async (concurrency) => {
+    vi.useFakeTimers();
+    vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
+    vi.stubEnv("SOURCE_PREPARATION_MAX_CONCURRENCY", String(concurrency));
+    const { t, preparationId, runId } = await capturedWorkflowCandidate();
+    const ids = await t.run(async (ctx) => {
+        const sources = await ctx.db
+            .query("sources")
+            .withIndex("by_run_and_url", (q) => q.eq("runId", runId))
+            .take(1);
+        const ids = sources.map((s) => s._id);
+        for (let i = 1; i < 9; i++)
+            ids.push(
+                await ctx.db.insert("sources", {
+                    runId,
+                    canonicalUrl: `https://example.com/native-${i}`,
+                    title: `Native ${i}`,
+                    category: "official_product",
+                    origin: "exa",
+                    createdAt: i + 1,
+                }),
+            );
+        await ctx.db.patch(preparationId, { manualSourceIds: ids });
+        return ids;
+    });
+    for (const sourceId of ids.slice(1)) {
+        const { capture, source } = await t.mutation(
+            internal.sourceCaptures.reserveUpload,
+            { preparationId, sourceId },
+        );
+        const text = "ServiceNow provides workflow software.";
+        const storageId = await t.run((ctx) =>
+            ctx.storage.store(new Blob([text])),
+        );
+        await t.mutation(internal.sourceCaptures.attachStorage, {
+            preparationId,
+            captureId: capture._id,
+            storageId,
+        });
+        await t.mutation(internal.sourceCaptures.finalize, {
+            preparationId,
+            captureId: capture._id,
+            contentHash: sha256Hex(text),
+            byteCount: text.length,
+            resolvedUrl: source.canonicalUrl,
+            normalizerVersion: capture.normalizerVersion,
+            retrievalVersion: "workflow-fixture",
+            readingCompleteness: "complete",
+            omittedPassageCount: 0,
+            retrievedAt: Date.now(),
+        });
+    }
+    vi.stubEnv("SOURCE_PREPARATION_MAX_CONCURRENCY", "1");
+    const request = vi.fn<typeof fetch>(async () => uncertainResponse());
+    vi.stubGlobal("fetch", request);
+    const handle = await t.run((ctx) =>
+        workflow.start(ctx, prepareWorkflow, { preparationId }),
+    );
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100));
+    expect(await t.run((ctx) => workflow.status(ctx, handle))).toMatchObject({
+        type: "completed",
+    });
+    const p = await t.run((ctx) => ctx.db.get(preparationId));
+    expect(p?.sourceOutcomes).toHaveLength(9);
+    expect(
+        p?.sourceOutcomes?.every((o) => o.result.status === "qualified"),
+    ).toBe(true);
+    expect(request).toHaveBeenCalledTimes(9);
+    const { page } = await t.run((ctx) => workflow.listSteps(ctx, handle));
+    const firstSaved = page.findIndex((s) => s.name.endsWith(":recordResult"));
+    expect(
+        page
+            .slice(0, firstSaved)
+            .filter((s) => s.name.endsWith(":qualifySource")),
+    ).toHaveLength(concurrency);
+    const saves = page.filter((s) => s.name.endsWith(":recordResult"));
+    expect(saves.filter((s) => "workId" in s && s.workId)).toHaveLength(
+        concurrency === 2 ? 0 : 2,
+    );
+    const comparisonBatches = page.filter((s) =>
+        s.name.endsWith(":recordComparisonResults"),
+    );
+    expect(comparisonBatches).toHaveLength(Math.ceil(9 / concurrency));
+    expect(comparisonBatches.every((s) => !("workId" in s) || !s.workId)).toBe(
+        true,
+    );
+    await t.run((ctx) => workflow.restart(ctx, handle));
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100));
+    expect(request).toHaveBeenCalledTimes(9);
+    expect((await t.run((ctx) => ctx.db.get(runId)))?.executionStatus).toBe(
+        "paused",
+    );
+}, 20000);

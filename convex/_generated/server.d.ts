@@ -38,6 +38,7 @@ type Env = {
   readonly PREVIEW_CACHE_TTL_MS: string | undefined;
   readonly SOURCE_CANDIDATE_LIMIT: string | undefined;
   readonly SOURCE_PREPARATION_INCIDENT_LIMIT: string | undefined;
+  readonly SOURCE_PREPARATION_MAX_CONCURRENCY: string | undefined;
   readonly SOURCE_PREPARATION_WORK_LIMIT: string | undefined;
   readonly SOURCE_QUALIFICATION_ENABLED: string | undefined;
   readonly SOURCE_RECOMMENDATION_CEILING: string | undefined;

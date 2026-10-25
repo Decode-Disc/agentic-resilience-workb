@@ -3,6 +3,7 @@ import {
     SOURCE_COMPARISON_VERSION,
     type SourceComparisonOutput,
     sourceComparisonOutputSchema,
+    sourceFindingNeedsComparison,
 } from "@convex/domain/sourceComparison";
 import { SOURCE_QUALIFICATION_VERSION } from "@convex/domain/sourceQualification";
 import {
@@ -13,6 +14,7 @@ import {
     MAX_HISTORICAL_SOURCE_CANDIDATES,
     MAX_SUPPLEMENT_SEARCHES,
     SOURCE_PREPARATION_DEADLINE_MS,
+    SOURCE_PREPARATION_EXECUTION_PLAN_VERSION,
     sourcePreparationEnabled,
 } from "@convex/resourceLimits";
 import { getAuthUserId } from "@convex-dev/auth/server";
@@ -37,6 +39,7 @@ import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
 import {
     comparisonContextForTarget,
     readComparisonPrimaryContext,
+    sourceComparisonWork,
 } from "./domain/sourceComparisonContext";
 import {
     type RecoveryTarget,
@@ -56,6 +59,7 @@ import {
     preparationFailureClass,
     readEligiblePreparationSourceIds,
     readPreparationBudget,
+    readPreparationConcurrency,
     readPreparationLimits,
     readPreparationSourceDecision,
     sourcePreparationError,
@@ -64,7 +68,10 @@ import {
     sourcePreparationStopCodeValidator,
 } from "./domain/sourcePreparationAuthority";
 import { readPreparationRecovery } from "./domain/sourcePreparationReview";
-import { sourceQualificationValidator } from "./domain/sourceQualification";
+import {
+    qualificationSelectionStrategyValidator,
+    sourceQualificationValidator,
+} from "./domain/sourceQualification";
 import { SOURCE_DOCUMENT_KINDS } from "./domain/sourceSelectionPolicy";
 import {
     readComparisonHistory,
@@ -132,6 +139,7 @@ export async function startReviewPreparation(
     )
         throw new Error("Source selection proposal changed");
     const modelLimits = readPreparationLimits();
+    const maxConcurrentSources = readPreparationConcurrency();
     let previous = run.sourcePreparationId
         ? await ctx.db.get(run.sourcePreparationId)
         : null;
@@ -323,6 +331,7 @@ export async function startReviewPreparation(
             executionGeneration,
             policyVersion: SOURCE_QUALIFICATION_VERSION,
             qualificationVersion: SOURCE_QUALIFICATION_VERSION,
+            executionPlanVersion: SOURCE_PREPARATION_EXECUTION_PLAN_VERSION,
             comparisonVersion: SOURCE_COMPARISON_VERSION,
             ...(env.SOURCE_RETRIEVAL_MODE
                 ? {
@@ -350,6 +359,7 @@ export async function startReviewPreparation(
                     : now,
             modelAttemptCount: 0,
             modelLimits,
+            maxConcurrentSources,
             ...(recovery ? { sourceOutcomes: recovery.retainedOutcomes } : {}),
             createdAt: now,
         },
@@ -503,6 +513,7 @@ const comparisonCandidateValidator = v.object({
         coverageRole: v.optional(v.string()),
     }),
     reportingPeriodEnd: v.optional(v.union(v.string(), v.null())),
+    retrievalStateHash: v.string(),
 });
 
 export const getComparisonInput = internalQuery({
@@ -524,6 +535,8 @@ export const getComparisonInput = internalQuery({
         candidateMetadataLimitReached: v.boolean(),
         modelBudgetBlocked: v.boolean(),
         comparisonContextHash: v.string(),
+        comparisonBaseContextHash: v.string(),
+        retainedComparison: v.union(schema.doc("aiTaskResults"), v.null()),
     }),
     handler: async (ctx, args) => {
         const targetCapture = await ctx.db.get(args.sourceCaptureId);
@@ -574,14 +587,44 @@ export const getComparisonInput = internalQuery({
             run,
             revision._id,
         );
-        const { primaryCandidates, comparisonContextHash } =
-            comparisonContextForTarget(primaryContext, {
-                source: targetSource,
-                capture: targetCapture,
-                qualification: qualificationTask,
-                preparation,
-            });
+        const {
+            primaryCandidates,
+            comparisonContextHash,
+            comparisonBaseContextHash,
+        } = comparisonContextForTarget(primaryContext, {
+            source: targetSource,
+            capture: targetCapture,
+            qualification: qualificationTask,
+            preparation,
+        });
+        const history: Doc<"aiTaskResults">[] = [];
+        for await (const task of readComparisonHistory(ctx.db, {
+            sourceId: targetSource._id,
+        }))
+            history.push(task);
+        const work = sourceComparisonWork(
+            qualificationTask,
+            history,
+            comparisonContextHash,
+        );
+        const retainedComparison = work.kind === "reusable" ? work.task : null;
+        if (
+            retainedComparison?.output.kind === "source_comparison" &&
+            !(await comparisonReferencesAreCurrent(
+                ctx,
+                {
+                    runId: run._id,
+                    sourceId: targetSource._id,
+                    capture: targetCapture,
+                    qualification: qualificationTask,
+                },
+                retainedComparison.output,
+            ))
+        )
+            throw sourcePreparationError("cached_comparison_invalid");
         return {
+            retainedComparison,
+            comparisonBaseContextHash,
             preparation,
             run,
             revision,
@@ -1136,6 +1179,7 @@ export const saveQualification = internalMutation({
         providerCallId: v.id("providerCalls"),
         inputHash: v.string(),
         qualification: sourceQualificationValidator,
+        selectionStrategy: v.optional(qualificationSelectionStrategyValidator),
         readingCompleteness: v.union(
             v.literal("complete"),
             v.literal("partial"),
@@ -1219,6 +1263,9 @@ export const saveQualification = internalMutation({
                 sourceCaptureId: capture._id,
                 contentHash: capture.contentHash,
                 qualification: args.qualification,
+                ...(args.selectionStrategy
+                    ? { selectionStrategy: args.selectionStrategy }
+                    : {}),
                 readingCompleteness: args.readingCompleteness,
                 omittedPassageCount: args.omittedPassageCount,
                 selectedPassages: args.selectedPassages,
@@ -1395,6 +1442,7 @@ export const claimForDiscovery = internalMutation({
                 executionGeneration: run.executionGeneration,
                 policyVersion: SOURCE_QUALIFICATION_VERSION,
                 qualificationVersion: SOURCE_QUALIFICATION_VERSION,
+                executionPlanVersion: SOURCE_PREPARATION_EXECUTION_PLAN_VERSION,
                 comparisonVersion: SOURCE_COMPARISON_VERSION,
                 ...(env.SOURCE_RETRIEVAL_MODE
                     ? {
@@ -1415,6 +1463,7 @@ export const claimForDiscovery = internalMutation({
                         : now,
                 modelAttemptCount: 0,
                 modelLimits: readPreparationLimits(),
+                maxConcurrentSources: readPreparationConcurrency(),
                 createdAt: now,
             },
         );
@@ -1434,6 +1483,10 @@ export const nextBatch = internalMutation({
     args: { preparationId: v.id("sourceSelectionProposalRebuilds") },
     returns: v.object({
         executionGeneration: v.number(),
+        executionPlanVersion:
+            schema.tables.sourceSelectionProposalRebuilds.validator.fields
+                .executionPlanVersion,
+        maxConcurrentSources: v.optional(v.number()),
         sourceIds: v.array(v.id("sources")),
         canSupplement: v.boolean(),
         comparisonVersion: v.optional(v.string()),
@@ -1450,6 +1503,8 @@ export const nextBatch = internalMutation({
         )
             return {
                 executionGeneration: previous.executionGeneration,
+                executionPlanVersion: previous.executionPlanVersion,
+                maxConcurrentSources: readPreparationConcurrency(previous),
                 sourceIds: [],
                 canSupplement: false,
                 completed: true,
@@ -1463,6 +1518,8 @@ export const nextBatch = internalMutation({
         const sourceIds: Id<"sources">[] = [];
         const result = {
             executionGeneration: preparation.executionGeneration,
+            executionPlanVersion: preparation.executionPlanVersion,
+            maxConcurrentSources: readPreparationConcurrency(preparation),
             sourceIds,
             canSupplement: false,
             completed: false,
@@ -1493,7 +1550,7 @@ export const nextBatch = internalMutation({
             )
                 continue;
             sourceIds.push(sourceId);
-            if (sourceIds.length === 2) break;
+            if (sourceIds.length >= (result.maxConcurrentSources ?? 2)) break;
         }
         return result;
     },
@@ -1597,6 +1654,29 @@ export const comparisonTargets = internalQuery({
                 task.output.contentHash !== capture.contentHash
             )
                 continue;
+            if (
+                !task.output.qualification.findings.some(
+                    sourceFindingNeedsComparison,
+                )
+            ) {
+                let recorded = false;
+                for await (const comparison of readComparisonHistory(ctx.db, {
+                    sourceId: outcome.sourceId,
+                })) {
+                    if (
+                        comparison.schemaVersion ===
+                            SOURCE_COMPARISON_VERSION &&
+                        comparison.output.kind === "source_comparison" &&
+                        comparison.output.checkStatus === "not_run" &&
+                        comparison.output.targetCaptureId === capture._id &&
+                        comparison.output.qualificationTaskId === task._id
+                    ) {
+                        recorded = true;
+                        break;
+                    }
+                }
+                if (recorded) continue;
+            }
             targets.push({
                 sourceId: outcome.sourceId,
                 sourceCaptureId: capture._id,
@@ -1666,7 +1746,12 @@ export const reserveSupplementPlan = internalMutation({
                   target: preparation.target,
                   failedFamilies: preparation.failedDiscoveryFamilies,
               }).queries.slice(0, 1)
-            : (proposal.coverageGaps ?? [])
+            : (preparation.executionPlanVersion
+                  ? (proposal.documentaryCoverageGaps ??
+                    proposal.coverageGaps ??
+                    [])
+                  : (proposal.coverageGaps ?? [])
+              )
                   .flatMap(
                       (role) =>
                           recoverySearchPlan({

@@ -192,3 +192,83 @@ describe("buildSourceSelectionProposal", () => {
         expect(result.coverageGaps).not.toContain("counter_evidence_secondary");
     });
 });
+
+test.each([
+    "pending",
+    "historical",
+    "unrelated",
+    "unverified",
+    "rejected",
+] as const)("documentary supplement gaps preserve %s suitability independently of comparison", (condition) => {
+    const result = build(
+        [
+            candidate("platform-argument", {
+                canonicalUrl:
+                    condition === "unverified"
+                        ? "https://unknown.example/products/platform.html"
+                        : "https://www.servicenow.com/products/platform.html",
+                category: "official_product",
+                inspection: {
+                    status: "qualified",
+                    readingCompleteness: "complete",
+                    qualification: {
+                        companyMatch:
+                            condition === "unrelated" ? "unrelated" : "subject",
+                        companyPassages: [
+                            {
+                                passageKey: "p0",
+                                quotation: "ServiceNow platform workflows.",
+                            },
+                        ],
+                        documentKind: "official_product_documentation",
+                        reportingPeriodEnd: null,
+                        reportingPeriodPassages: [],
+                        findings: [
+                            {
+                                role: "official_product_platform",
+                                kind: "attributed_argument",
+                                summary: "Workflow control",
+                                passages: [
+                                    {
+                                        passageKey: "p0",
+                                        quotation:
+                                            "ServiceNow platform workflows.",
+                                    },
+                                ],
+                                period:
+                                    condition === "historical"
+                                        ? "historical"
+                                        : "current",
+                                periodPassages: [
+                                    {
+                                        passageKey: "p0",
+                                        quotation:
+                                            "ServiceNow platform workflows.",
+                                    },
+                                ],
+                                dependsOnFlaggedAssertion: false,
+                            },
+                        ],
+                        limitations: [],
+                    },
+                },
+            }),
+        ],
+        {
+            rejectedSourceIds:
+                condition === "rejected" ? ["platform-argument"] : [],
+        },
+    );
+    expect(result.coverageGaps).toContain("official_product_platform");
+    expect(
+        result.documentaryCoverageGaps.includes("official_product_platform"),
+    ).toBe(condition !== "pending");
+    if (condition === "pending")
+        expect(result.items[0]?.roleAvailability).toContainEqual(
+            expect.objectContaining({
+                role: "official_product_platform",
+                state: "limited",
+                usage: "verification_required",
+            }),
+        );
+});

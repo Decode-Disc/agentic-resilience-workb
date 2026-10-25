@@ -6,6 +6,7 @@ import type { Id } from "./_generated/dataModel";
 import { action, internalMutation } from "./_generated/server";
 import { manualSourceIntakeError } from "./domain/manualSourceIntake";
 import { assertSourceCandidateRequestFits } from "./domain/sourceCandidateCapacity";
+import { readPreparationConcurrency } from "./domain/sourcePreparationAuthority";
 import { coveragePresetValidator } from "./domain/validators";
 import {
     sourceCandidateLimit,
@@ -78,6 +79,7 @@ export const confirmAndStartReserved = internalMutation({
             };
         }
 
+        if (sourcePreparationEnabled()) readPreparationConcurrency();
         const now = Date.now();
         const manualSources = new Map<
             string,

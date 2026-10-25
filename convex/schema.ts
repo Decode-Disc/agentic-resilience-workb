@@ -1,5 +1,6 @@
 import { retrievalMetadataValidator } from "@convex/domain/sourceRetrievalPolicy";
 import { authTables } from "@convex-dev/auth/server";
+import { vWorkflowId } from "@convex-dev/workflow";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
@@ -28,8 +29,13 @@ import {
     sourcePreparationProgressValidator,
     sourcePreparationStopCodeValidator,
 } from "./domain/sourcePreparationAuthority";
-import { sourceQualificationValidator } from "./domain/sourceQualification";
 import {
+    qualificationSelectionStrategyValidator,
+    SOURCE_QUALIFICATION_INPUT_POLICY,
+    sourceQualificationValidator,
+} from "./domain/sourceQualification";
+import {
+    SOURCE_COVERAGE_ROLES,
     sourceRoleAvailabilityValidator,
     sourceSelectionRationaleValidator,
 } from "./domain/sourceSelectionPolicy";
@@ -288,6 +294,9 @@ export default defineSchema({
             filterFields: ["embeddingScopeKey"],
         }),
     sourceCaptures: defineTable({
+        qualificationInputPolicy: v.optional(
+            v.literal(SOURCE_QUALIFICATION_INPUT_POLICY),
+        ),
         runId: v.id("researchRuns"),
         corpusRevisionId: v.id("corpusRevisions"),
         sourceId: v.id("sources"),
@@ -350,6 +359,13 @@ export default defineSchema({
         createdAt: v.number(),
     }).index("by_run_and_revision", ["runId", "revision"]),
     sourceSelectionProposals: defineTable({
+        documentaryCoverageGaps: v.optional(
+            v.array(
+                v.union(
+                    ...SOURCE_COVERAGE_ROLES.map((role) => v.literal(role)),
+                ),
+            ),
+        ),
         runId: v.id("researchRuns"),
         corpusRevisionId: v.id("corpusRevisions"),
         sourcePreparationId: v.optional(
@@ -428,6 +444,25 @@ export default defineSchema({
         "version",
     ]),
     sourceSelectionProposalRebuilds: defineTable({
+        executionPlanVersion: v.optional(
+            v.union(
+                v.literal("collect_then_compare_v1"),
+                v.literal("inline_controls_v2"),
+            ),
+        ),
+        maxConcurrentSources: v.optional(v.number()),
+        preparationStudy: v.optional(
+            v.object({
+                manifestSha256: v.string(),
+                sourceRunId: v.id("researchRuns"),
+                phase: v.union(
+                    v.literal("replay"),
+                    v.literal("reading"),
+                    v.literal("comparison"),
+                ),
+                workflowId: v.optional(vWorkflowId),
+            }),
+        ),
         progress: v.optional(sourcePreparationProgressValidator),
         initialReadingsCompletedAt: v.optional(v.number()),
         runId: v.id("researchRuns"),
@@ -993,6 +1028,9 @@ export default defineSchema({
         output: v.union(
             v.object({
                 kind: v.literal("source_qualification"),
+                selectionStrategy: v.optional(
+                    qualificationSelectionStrategyValidator,
+                ),
                 retrieval: v.optional(retrievalMetadataValidator),
                 sourceCaptureId: v.id("sourceCaptures"),
                 qualification: sourceQualificationValidator,

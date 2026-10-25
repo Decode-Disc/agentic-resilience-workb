@@ -10,6 +10,36 @@ const modules = import.meta.glob("/convex/**/*.ts");
 const originalFetch = globalThis.fetch;
 const originalSecUserAgent = process.env.SEC_USER_AGENT;
 
+test("invalid preparation concurrency rejects launch before reserving quota or calling providers", async () => {
+    vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "true");
+    vi.stubEnv("SOURCE_PREPARATION_MAX_CONCURRENCY", "0");
+    try {
+        const t = convexTest(schema, modules);
+        workflowTest.register(t);
+        const { userId, preflightId } = await createAdmittedPreflight(t);
+        const request = vi.fn<typeof fetch>(async () => {
+            throw new Error("Unexpected provider call");
+        });
+        globalThis.fetch = request;
+        await expect(
+            t.withIdentity({ subject: userId }).action(confirmAndStart, {
+                preflightId,
+                idempotencyKey: "invalid-concurrency",
+                coveragePreset: "balanced",
+            }),
+        ).rejects.toThrow("preparation_configuration_invalid");
+        expect(
+            await t.run((ctx) => ctx.db.query("researchRuns").take(1)),
+        ).toEqual([]);
+        expect(
+            await t.run((ctx) => ctx.db.query("visitors").first()),
+        ).toMatchObject({ analysesReserved: 0 });
+        expect(request).not.toHaveBeenCalled();
+    } finally {
+        vi.unstubAllEnvs();
+    }
+});
+
 beforeEach(() => {
     vi.useFakeTimers();
 });

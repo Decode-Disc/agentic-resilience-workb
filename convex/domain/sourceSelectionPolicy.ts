@@ -296,6 +296,7 @@ export type SourceSelectionProposalResult = {
     }>;
     gaps: Array<SourceFamily>;
     coverageGaps: Array<SourceCoverageRole>;
+    documentaryCoverageGaps: Array<SourceCoverageRole>;
     counts: {
         recommended: number;
         needsAttention: number;
@@ -319,6 +320,7 @@ type ClassifiedCandidate = SourceSelectionCandidate & {
     needsAttentionReason?: SourceSelectionReasonCode;
     duplicateOfSourceId?: string;
     roleAvailability?: SourceRoleAvailability[];
+    documentaryCoverageRoles?: SourceCoverageRole[];
     inspectionStatus?: "complete" | "partial" | "unavailable";
 };
 
@@ -1509,6 +1511,7 @@ export function classifySourceCandidate(
         "company_hosted_ir",
     ].includes(base.authorityTier);
     const institutional = base.authorityTier === "institutional_independent";
+    const documentaryCoverageRoles: SourceCoverageRole[] = [];
     const roleAvailability: SourceRoleAvailability[] =
         SOURCE_COVERAGE_ROLES.map((role) => {
             const fitsPurpose =
@@ -1575,6 +1578,13 @@ export function classifySourceCandidate(
                     reasonCodes: ["period_unestablished"],
                     usage: "verification_required",
                 };
+            const allowedAuthority = role.startsWith("regulatory_")
+                ? base.authorityTier === "regulator_primary"
+                : role.startsWith("official_") || role.startsWith("investor_")
+                  ? primary
+                  : institutional;
+            if (allowedAuthority && fitsPurpose)
+                documentaryCoverageRoles.push(role);
             const findingUsages = current.map((f) =>
                 sourceFindingUsage(
                     f,
@@ -1627,11 +1637,6 @@ export function classifySourceCandidate(
                         ? "attributed_argument_only"
                         : "verification_required",
                 };
-            const allowedAuthority = role.startsWith("regulatory_")
-                ? base.authorityTier === "regulator_primary"
-                : role.startsWith("official_") || role.startsWith("investor_")
-                  ? primary
-                  : institutional;
             if (!allowedAuthority)
                 return {
                     role,
@@ -1706,6 +1711,7 @@ export function classifySourceCandidate(
                 ? "structural"
                 : "inspected_content"
             : "unverified",
+        documentaryCoverageRoles,
         eligibleCoverageRoles: roleAvailability
             .filter((role) => role.state === "available")
             .map((role) => role.role),
@@ -2135,6 +2141,7 @@ export function buildSourceSelectionProposal(input: {
     company?: SourceSelectionCompany;
     coveragePreset: CoveragePreset;
     researchAngle?: string;
+    rejectedSourceIds?: readonly string[];
     ceiling?: number;
     /** @deprecated v1 compatibility; use ceiling. */
     target?: number;
@@ -2380,8 +2387,32 @@ export function buildSourceSelectionProposal(input: {
         };
     });
 
+    const documentarySources: Array<ClassifiedCandidate> = [];
+    const rejectedSourceIds = new Set(input.rejectedSourceIds);
+    const documentaryCoverageGaps = requiredRoles(input.coveragePreset).filter(
+        (role) => {
+            const match = selectable.find(
+                (candidate) =>
+                    !rejectedSourceIds.has(candidate.sourceId) &&
+                    roleMatches(
+                        {
+                            ...candidate,
+                            eligibleCoverageRoles:
+                                candidate.documentaryCoverageRoles ??
+                                candidate.eligibleCoverageRoles,
+                        },
+                        role,
+                        documentarySources,
+                    ),
+            );
+            if (!match) return true;
+            documentarySources.push(match);
+            return false;
+        },
+    );
     return {
         items,
+        documentaryCoverageGaps,
         gaps: legacyFamilyGaps(coverageGaps),
         coverageGaps,
         counts: {

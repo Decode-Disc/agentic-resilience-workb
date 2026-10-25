@@ -628,6 +628,30 @@ test("source detail validates each pinned capture and qualification only once", 
     });
 });
 
+test("proposal summary shares validated evidence reads without changing approved pins", async () => {
+    const { t, runId, corpusRevisionId, userId, captureId } =
+        await seedInspectedEvidence();
+    await t.withIdentity({ subject: userId }).query(async (ctx) => {
+        const get = vi.spyOn(ctx.db, "get");
+        try {
+            const result = await (
+                getCurrent as unknown as InstrumentedQuery<
+                    typeof api.sourceSelectionProposals.getCurrent
+                >
+            )._handler(ctx, { runId, corpusRevisionId });
+            expect(result).toMatchObject({
+                revisionStatus: "approved",
+                effectiveIncludedCount: 1,
+            });
+            expect(
+                get.mock.calls.filter(([id]) => id === captureId),
+            ).toHaveLength(1);
+        } finally {
+            get.mockRestore();
+        }
+    });
+});
+
 test("retains the established reading milestone when an older preparation returns from supplementation", async () => {
     const { t, runId, corpusRevisionId } = await seedSourcePreparation();
     const preparationId = await t.mutation(

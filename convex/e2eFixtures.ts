@@ -1379,6 +1379,175 @@ export const commitSourceReadingFixture = internalMutation({
     },
 });
 
+/** Expands an admitted illustrative draft for bounded local review-performance checks. */
+export const scaleSourceReviewFixture = internalMutation({
+    args: {
+        runId: v.id("researchRuns"),
+        fixtureKey: v.string(),
+        slotKey: v.string(),
+    },
+    returns: v.object({
+        runId: v.id("researchRuns"),
+        corpusRevisionId: v.id("corpusRevisions"),
+        sourceCount: v.number(),
+    }),
+    handler: async (ctx, args) => {
+        if (
+            env.E2E_FIXTURES_ENABLED !== "true" ||
+            !["127.0.0.1", "localhost"].includes(
+                new URL(env.CONVEX_CLOUD_URL).hostname,
+            )
+        )
+            throw new Error("Local E2E fixtures are disabled");
+        const run = await ctx.db.get(args.runId);
+        const revision = run?.activeCorpusRevisionId
+            ? await ctx.db.get(run.activeCorpusRevisionId)
+            : null;
+        const invitation = await ctx.db
+            .query("invitations")
+            .withIndex("by_slot_key", (q) => q.eq("slotKey", args.slotKey))
+            .unique();
+        const preparation = run?.sourcePreparationId
+            ? await ctx.db.get(run.sourcePreparationId)
+            : null;
+        if (
+            !run ||
+            !revision ||
+            !preparation ||
+            run.reservationKey !== `e2e:${args.fixtureKey}` ||
+            run.companySnapshot?.cik !== `e2e-${args.fixtureKey}` ||
+            invitation?.status !== "claimed" ||
+            !invitation.claimedByVisitorId ||
+            invitation.claimedByVisitorId !== run.ownerVisitorId ||
+            revision.status !== "draft" ||
+            run.executionStatus !== "paused" ||
+            preparation.status === "started"
+        )
+            throw new Error("Editable owned E2E fixture required");
+        const visitor = await ctx.db.get(invitation.claimedByVisitorId);
+        if (
+            visitor?.status !== "active" ||
+            visitor.invitationId !== invitation._id
+        )
+            throw new Error("Active fixture visitor required");
+        const sources = await ctx.db
+            .query("sources")
+            .withIndex("by_run_and_url", (q) => q.eq("runId", run._id))
+            .take(61);
+        if (sources.length === 60)
+            return {
+                runId: run._id,
+                corpusRevisionId: revision._id,
+                sourceCount: 60,
+            };
+        if (sources.length !== 3) throw new Error("Unexpected fixture size");
+        const reading = preparation.sourceOutcomes?.find(
+            (o) => o.result.status === "qualified",
+        );
+        if (reading?.result.status !== "qualified")
+            throw new Error("Inspected fixture required");
+        const source = await ctx.db.get(reading.sourceId);
+        const capture = await ctx.db.get(reading.result.sourceCaptureId);
+        const qualification = await ctx.db.get(reading.result.taskId);
+        if (
+            !source ||
+            !capture ||
+            qualification?.output.kind !== "source_qualification"
+        )
+            throw new Error("Missing fixture evidence");
+        const comparisons = await ctx.db
+            .query("aiTaskResults")
+            .withIndex("by_source_and_task_type_and_created_at", (q) =>
+                q
+                    .eq("sourceId", source._id)
+                    .eq("taskType", "source_comparison"),
+            )
+            .take(1);
+        const outcomes = [...(preparation.sourceOutcomes ?? [])];
+        for (let index = sources.length; index < 60; index++) {
+            const canonicalUrl = `https://www.morningstar.com/e2e/${args.fixtureKey}/illustrative-${index}`;
+            const sourceId = await ctx.db.insert("sources", {
+                runId: run._id,
+                canonicalUrl,
+                title: `Illustrative performance source ${index}`,
+                origin: "exa",
+                category: "counter_evidence",
+                createdAt: source.createdAt + index,
+            });
+            const {
+                _id: _captureId,
+                _creationTime: _captureCreation,
+                ...captureData
+            } = capture;
+            const sourceCaptureId = await ctx.db.insert("sourceCaptures", {
+                ...captureData,
+                sourceId,
+                requestedUrl: canonicalUrl,
+                resolvedUrl: canonicalUrl,
+                captureKey: `e2e:${args.fixtureKey}:performance:${index}`,
+                requestInputHash: sha256Hex(
+                    `e2e:${args.fixtureKey}:performance:${index}`,
+                ),
+            });
+            const {
+                _id: _taskId,
+                _creationTime: _taskCreation,
+                ...qualificationData
+            } = qualification;
+            const taskId = await ctx.db.insert("aiTaskResults", {
+                ...qualificationData,
+                sourceId,
+                sourceCaptureId,
+                inputHash: sha256Hex(`qualification:${sourceId}`),
+                output: { ...qualification.output, sourceCaptureId },
+            });
+            for (const comparison of comparisons) {
+                if (comparison.output.kind !== "source_comparison") continue;
+                const {
+                    _id: _comparisonId,
+                    _creationTime: _comparisonCreation,
+                    ...comparisonData
+                } = comparison;
+                for (let history = 0; history < 4; history++) {
+                    const inputHash = sha256Hex(
+                        `comparison:${sourceId}:${history}`,
+                    );
+                    await ctx.db.insert("aiTaskResults", {
+                        ...comparisonData,
+                        sourceId,
+                        sourceCaptureId,
+                        inputHash,
+                        comparisonContextHash: undefined,
+                        createdAt: comparison.createdAt + history,
+                        output: {
+                            ...comparison.output,
+                            inputHash,
+                            targetSourceId: sourceId,
+                            targetCaptureId: sourceCaptureId,
+                            qualificationTaskId: taskId,
+                            findings: comparison.output.findings.map((f) => ({
+                                ...f,
+                                explanation: f.explanation.repeat(60),
+                            })),
+                        },
+                    });
+                }
+            }
+            outcomes.push({
+                sourceId,
+                result: { status: "qualified", sourceCaptureId, taskId },
+            });
+        }
+        await ctx.db.patch(preparation._id, { sourceOutcomes: outcomes });
+        await createSourceSelectionProposal(ctx, { run, revision });
+        return {
+            runId: run._id,
+            corpusRevisionId: revision._id,
+            sourceCount: 60,
+        };
+    },
+});
+
 /**
  * Local-only E2E seed. Ownership derives exclusively from a claimed invitation
  * slot + bounded fixture key; visitor/auth IDs are never accepted. Showcase

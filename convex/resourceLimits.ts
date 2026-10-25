@@ -15,20 +15,15 @@ function configuredPositiveInteger(
     value: string | undefined,
     fallback: number,
     label: string,
+    maximum = MAX_CONFIGURED_COLLECTION_LIMIT,
 ): number {
     if (value === undefined || value.trim().length === 0) {
         return fallback;
     }
 
     const parsed = Number(value);
-    if (
-        !Number.isInteger(parsed) ||
-        parsed < 1 ||
-        parsed > MAX_CONFIGURED_COLLECTION_LIMIT
-    ) {
-        throw new Error(
-            `${label} must be an integer between 1 and ${MAX_CONFIGURED_COLLECTION_LIMIT}`,
-        );
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > maximum) {
+        throw new Error(`${label} must be an integer between 1 and ${maximum}`);
     }
     return parsed;
 }
@@ -110,6 +105,16 @@ export const MAX_QUOTATION_CHARS = 4000;
 export const MAX_REDIRECTS = 5;
 
 export const SOURCE_PREPARATION_DEADLINE_MS = 15 * 60_000;
+
+/** Source fan-out is independent of the shared Workflow queue and request-size limits. */
+export function preparationMaxConcurrency(): number {
+    return configuredPositiveInteger(
+        env.SOURCE_PREPARATION_MAX_CONCURRENCY,
+        2,
+        "Preparation concurrency",
+        Number.MAX_SAFE_INTEGER,
+    );
+}
 // Legacy envelope used only when reconstructing dossiers without versioned accounting.
 export const LEGACY_PREPARATION_MODEL_ATTEMPT_LIMIT = 120;
 
@@ -144,6 +149,7 @@ export const MAX_CLAIM_INPUT_PASSAGES = 4096;
 
 /** Shared embedding format and conservative input allowance, separate from generative-call quotas. */
 export const SOURCE_EMBEDDING_DIMENSIONS = 1024;
+export const SOURCE_EMBEDDING_PROFILE_VERSION = "evidence-embedding-v1";
 export const MAX_SOURCE_EMBEDDING_BATCH_TEXTS = 32;
 export const MAX_SOURCE_EMBEDDING_TEXT_BYTES = 6000;
 export const SOURCE_EMBEDDING_PRICE_CEILING_PER_MILLION_TOKENS = 0.012;
@@ -155,3 +161,6 @@ export const MAX_CONCURRENT_SOURCE_EMBEDDING_CALLS = 2;
 
 export const MAX_SOURCE_SEARCH_CANDIDATES = 20_000;
 export const MAX_SOURCE_SEARCH_BLOCKS = 100_000;
+
+/** Snapshotted so existing preparation journals retain their recorded step sequence. */
+export const SOURCE_PREPARATION_EXECUTION_PLAN_VERSION = "inline_controls_v2";

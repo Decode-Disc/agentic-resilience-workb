@@ -3,10 +3,11 @@ import {
     MAX_SOURCE_EMBEDDING_TEXT_BYTES,
     SOURCE_EMBEDDING_DIMENSIONS,
     SOURCE_EMBEDDING_PRICE_CEILING_PER_MILLION_TOKENS,
+    SOURCE_EMBEDDING_PROFILE_VERSION,
 } from "@convex/resourceLimits";
 /** Provider details live at this boundary; derived records carry only the opaque profile version. */
 export const SOURCE_EMBEDDING_PROFILE = {
-    id: "evidence-embedding-v1",
+    id: SOURCE_EMBEDDING_PROFILE_VERSION,
     model: "@cf/baai/bge-m3",
     dimensions: SOURCE_EMBEDDING_DIMENSIONS,
     maximumTextBytes: MAX_SOURCE_EMBEDDING_TEXT_BYTES,

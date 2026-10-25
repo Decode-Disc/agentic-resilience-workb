@@ -44,7 +44,7 @@ After confirmation, the system checks public-evidence sufficiency. Insufficiency
 
 ### Source preparation and corpus review
 
-The system builds a company-specific research plan, discovers sources, captures and qualifies bounded public content, compares scoped contributions where needed, and inspects existing alternatives before one finite supplement. It prepares a versioned proposal whose explanations, useful passages and reading limitations can be inspected. Ranking is deterministic; model-assisted preparation cannot itself approve a corpus or establish that a source's assertions are true.
+The system builds a company-specific research plan, discovers sources, captures and qualifies bounded public content, and inspects existing alternatives before one finite supplement. It finishes permitted supplemental reading before comparing scoped contributions against the resulting corpus. Documentary presence guides supplementation without granting factual authority or treating a pending comparison alone as a missing document. It prepares a versioned proposal whose explanations, useful passages and reading limitations can be inspected. Ranking is deterministic; model-assisted preparation cannot itself approve a corpus or establish that a source's assertions are true.
 
 This stage should retain enough useful material for subsequent analysis at bounded cost. It need not answer every research question or make every selection judgment correctly. Prefer useful imperfect sources with explicit attribution and restrictions to unjustified exclusion. Unavailable reading, low ranking, incomplete qualification or a failed model call does not prove irrelevance. Source inclusion, documentary coverage, permitted use and factual support are separate judgments.
 

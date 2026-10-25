@@ -4,7 +4,7 @@ import { SOURCE_EMBEDDING_PROFILE } from "@convex/integrations/sourceEmbeddings"
 import { afterEach, expect, test, vi } from "vitest";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
 
-async function indexedCaptureSubset() {
+async function indexedCaptureSubset(widePassages = false) {
     const fixture = await seedSourcePreparation();
     const { t, runId, corpusRevisionId } = fixture;
     const preparationId = await t.mutation(
@@ -14,12 +14,13 @@ async function indexedCaptureSubset() {
     const captures = [];
     for (const [label, count] of [
         ["distractor", 300],
-        ["primary-a", 1],
-        ["primary-b", 1],
+        ["primary-a", widePassages ? 64 : 1],
+        ["primary-b", widePassages ? 64 : 1],
     ] as const) {
-        const quotations = Array.from(
-            { length: count },
-            (_, i) => `Routing architecture ${label} passage ${i}.`,
+        const quotations = Array.from({ length: count }, (_, i) =>
+            widePassages
+                ? `Routing ${"界".repeat(3992)}`
+                : `Routing architecture ${label} passage ${i}.`,
         );
         const text = quotations.join("\n\n");
         const captureId = await t.run(async (ctx) => {
@@ -59,7 +60,7 @@ async function indexedCaptureSubset() {
                 startOffset,
                 endOffset: startOffset + quotation.length,
                 quotation,
-                headingPath: [],
+                headingPath: widePassages ? ["章".repeat(4000)] : [],
             };
         });
         for (let start = 0; start < passages.length; start += 64)
@@ -97,6 +98,94 @@ test("lexical search retains requested captures behind more than 256 out-of-scop
         "Routing architecture primary-a passage 0.",
         "Routing architecture primary-b passage 0.",
     ]);
+});
+
+test("bounded lexical batches preserve each capture's ranking and eligibility", async () => {
+    const { t, preparationId, captureIds, distractorId } =
+        await indexedCaptureSubset();
+    const expected = await Promise.all(
+        captureIds.map((captureId) =>
+            t.query(internal.sourceRetrieval.search, {
+                preparationId,
+                captureId,
+                query: "routing",
+            }),
+        ),
+    );
+    const batches = await t.query(internal.sourceRetrieval.searchBatch, {
+        preparationId,
+        captureIds,
+        query: "routing",
+    });
+    expect(batches.map((batch) => batch.passages)).toEqual(expected);
+    expect(batches.map((batch) => batch.captureId)).toEqual(captureIds);
+    await expect(
+        t.query(internal.sourceRetrieval.searchBatch, {
+            preparationId,
+            captureIds: [...captureIds, distractorId],
+            query: "routing",
+        }),
+    ).rejects.toThrow("retrieval_batch_limit");
+    await t.run(async (ctx) => {
+        const preparation = await ctx.db.get(preparationId);
+        if (!preparation) throw new Error("Missing preparation");
+        await ctx.db.patch(preparation.runId, { executionGeneration: 4 });
+    });
+    await expect(
+        t.query(internal.sourceRetrieval.searchBatch, {
+            preparationId,
+            captureIds,
+            query: "routing",
+        }),
+    ).rejects.toThrow();
+});
+
+test("index metadata batches return the same validated capture states", async () => {
+    const { t, preparationId, captureIds } = await indexedCaptureSubset();
+    const expected = await Promise.all(
+        captureIds.map((captureId) =>
+            t.query(internal.sourceRetrieval.getIndexState, {
+                preparationId,
+                captureId,
+            }),
+        ),
+    );
+    const result = await t.query(
+        internal.sourceRetrieval.getCaptureIndexBatch,
+        {
+            preparationId,
+            captureIds,
+        },
+    );
+    expect(result.map((entry) => entry.state)).toEqual(expected);
+    expect(result.map((entry) => entry.capture._id)).toEqual(captureIds);
+    const firstCaptureId = captureIds[0];
+    if (!firstCaptureId) throw new Error("Missing capture fixture");
+    await expect(
+        t.query(internal.sourceRetrieval.getCaptureIndexBatch, {
+            preparationId,
+            captureIds: Array.from({ length: 9 }, () => firstCaptureId),
+        }),
+    ).rejects.toThrow("retrieval_batch_limit");
+});
+
+test("lexical batches retain sixty-four maximum-width Unicode passages per capture", async () => {
+    const { t, preparationId, captureIds } = await indexedCaptureSubset(true);
+    const result = await t.query(internal.sourceRetrieval.searchBatch, {
+        preparationId,
+        captureIds,
+        query: "routing",
+    });
+    expect(result.map((entry) => entry.passages.length)).toEqual([64, 64]);
+    expect(
+        result.every((entry) =>
+            entry.passages.every(
+                (passage) =>
+                    passage.quotation.length === 4000 &&
+                    passage.headingPath[0]?.length === 4000,
+            ),
+        ),
+    ).toBe(true);
 });
 
 test("semantic search applies the requested capture scope before its top-k", async () => {
@@ -587,4 +676,94 @@ test("successful hybrid preparation caches exact inputs and repeated retrieval d
             .metadata.effectiveMode,
     ).toBe("hybrid");
     expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+test("retrieval prefetches two bounded searches while preserving ordered evidence", async () => {
+    const { retrieveSourcePassages } = await import(
+        "@convex/sourceRetrievalActions"
+    );
+    const { getFunctionName } = await import("convex/server");
+    const { t, preparationId, captureIds } = await indexedCaptureSubset();
+    let active = 0;
+    let peak = 0;
+    const result = await t.action(async (ctx) =>
+        retrieveSourcePassages(
+            {
+                ...ctx,
+                runQuery: async (reference, ...args) => {
+                    if (
+                        getFunctionName(reference) !==
+                        "sourceRetrieval:searchBatch"
+                    )
+                        return ctx.runQuery(reference, ...args);
+                    active += 1;
+                    peak = Math.max(peak, active);
+                    try {
+                        await new Promise((resolve) => setTimeout(resolve, 0));
+                        return await ctx.runQuery(reference, ...args);
+                    } finally {
+                        active -= 1;
+                    }
+                },
+            },
+            {
+                preparationId,
+                captureIds,
+                queries: ["routing", "architecture", "passage"],
+                mode: "lexical",
+            },
+        ),
+    );
+    expect(peak).toBe(2);
+    expect(active).toBe(0);
+    expect(result.passages.map((p) => p.captureId)).toEqual(captureIds);
+    expect(result.rankings).toHaveLength(3);
+    for (const ranking of result.rankings)
+        expect(ranking).toEqual(result.passages.map((p) => p.id));
+    expect(result.metadata.omittedCandidateCount).toBe(0);
+});
+
+test("a failed prefetched search waits for its sibling and propagates the failure", async () => {
+    const { retrieveSourcePassages } = await import(
+        "@convex/sourceRetrievalActions"
+    );
+    const { getFunctionName } = await import("convex/server");
+    const { t, preparationId, captureIds } = await indexedCaptureSubset();
+    let started = 0;
+    let completed = 0;
+    await expect(
+        t.action(async (ctx) =>
+            retrieveSourcePassages(
+                {
+                    ...ctx,
+                    runQuery: async (reference, ...args) => {
+                        if (
+                            getFunctionName(reference) !==
+                            "sourceRetrieval:searchBatch"
+                        )
+                            return ctx.runQuery(reference, ...args);
+                        const index = started++;
+                        try {
+                            if (index === 0)
+                                throw new Error("bounded_search_failed");
+                            await new Promise((resolve) =>
+                                setTimeout(resolve, 0),
+                            );
+                            return await ctx.runQuery(reference, ...args);
+                        } finally {
+                            completed++;
+                        }
+                    },
+                },
+                {
+                    preparationId,
+                    captureIds,
+                    queries: ["routing", "architecture", "passage"],
+                    mode: "lexical",
+                },
+            ),
+        ),
+    ).rejects.toThrow("bounded_search_failed");
+    expect(started).toBe(2);
+    expect(completed).toBe(2);
 });

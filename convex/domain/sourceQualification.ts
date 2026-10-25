@@ -11,7 +11,7 @@ import {
 } from "@convex/domain/sourceSelectionPolicy";
 import { normalizeQualificationText } from "@convex/integrations/evidenceNormalization";
 import { MAX_QUOTATION_CHARS } from "@convex/resourceLimits";
-import type { Infer } from "convex/values";
+import { type Infer, v } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
 import { z } from "zod";
 import {
@@ -20,6 +20,11 @@ import {
 } from "./sourceRetrievalPolicy";
 
 export const SOURCE_QUALIFICATION_VERSION = "source-qualification-v3";
+export const SOURCE_QUALIFICATION_INPUT_POLICY = "full_document_first_v1";
+export const qualificationSelectionStrategyValidator = v.union(
+    v.literal("full_document"),
+    v.literal("retrieved_passages"),
+);
 export const MAX_QUALIFICATION_INPUT_BYTES = 128 * 1024;
 export const MAX_QUALIFICATION_FINDINGS = 15;
 const MAX_CONTRIBUTIONS_PER_ROLE = 2;
@@ -221,6 +226,7 @@ export type QualificationInput = {
     text: string;
     researchAngle?: string;
     retrievalCompleteness?: "complete" | "partial";
+    selectionPolicy?: typeof SOURCE_QUALIFICATION_INPUT_POLICY;
     retrieval?: {
         metadata: Infer<typeof retrievalMetadataValidator>;
         passageOrders: number[];
@@ -235,7 +241,7 @@ export function prepareQualificationInput(input: QualificationInput) {
         text: normalized.normalizedText,
         canonicalUrl: input.canonicalUrl,
         sourceVersionHash: contentHash,
-        ...(input.retrieval
+        ...(input.retrieval || input.selectionPolicy
             ? { preparationVersion: SOURCE_RETRIEVAL_VERSION }
             : {}),
     }).map((passage) => ({
@@ -308,6 +314,13 @@ export function prepareQualificationInput(input: QualificationInput) {
             passages: [] as typeof allPassages,
             readingCompleteness: "complete" as "complete" | "partial",
             omittedPassageCount: allPassages.length + 1,
+            ...(input.selectionPolicy
+                ? {
+                      selectionStrategy: "retrieved_passages" as
+                          | "full_document"
+                          | "retrieved_passages",
+                  }
+                : {}),
         },
     };
     const terms = new Set(
@@ -381,6 +394,12 @@ export function prepareQualificationInput(input: QualificationInput) {
             : 0);
     const readingCompleteness: "partial" | "complete" =
         omittedPassageCount > 0 ? "partial" : "complete";
+    const retainsAllPassages =
+        request.document.passages.length === allPassages.length;
+    if (input.selectionPolicy)
+        request.document.selectionStrategy = retainsAllPassages
+            ? "full_document"
+            : "retrieved_passages";
     request.document.readingCompleteness = readingCompleteness;
     request.document.omittedPassageCount = omittedPassageCount;
     if (serializedInputBytes() > MAX_QUALIFICATION_INPUT_BYTES) {
@@ -391,6 +410,7 @@ export function prepareQualificationInput(input: QualificationInput) {
         inputHash: sha256Hex(JSON.stringify(request)),
         normalizedText: normalized.normalizedText,
         normalizerVersion: normalized.normalizerVersion,
+        retainsAllPassages,
         readingCompleteness,
         omittedPassageCount,
     };

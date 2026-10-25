@@ -84,6 +84,65 @@ async function createAdmittedVisitor(t: ReturnType<typeof convexTest>) {
     });
 }
 
+test("the sixty-source review fixture is bounded, idempotent, local and owned", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
+    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
+    const t = convexTest(schema, modules);
+    workflowTest.register(t);
+    const { userId } = await createAdmittedVisitor(t);
+    const seeded = await t.action(
+        internal.e2eFixtures.seedInspectedSourceReviewScenario,
+        {
+            slotKey: "e2e-analyst",
+            fixtureKey: "performance-projection",
+            comparisonOutcome: "no_conflict_observed",
+        },
+    );
+    const args = {
+        slotKey: "e2e-analyst",
+        fixtureKey: "performance-projection",
+        runId: seeded.runId,
+    };
+    await expect(
+        t.mutation(internal.e2eFixtures.scaleSourceReviewFixture, {
+            ...args,
+            slotKey: "foreign",
+        }),
+    ).rejects.toThrow("Editable owned E2E fixture required");
+    const result = await t.mutation(
+        internal.e2eFixtures.scaleSourceReviewFixture,
+        args,
+    );
+    expect(result.sourceCount).toBe(60);
+    await expect(
+        t.mutation(internal.e2eFixtures.scaleSourceReviewFixture, args),
+    ).resolves.toEqual(result);
+    expect(
+        await t
+            .withIdentity({ subject: userId })
+            .query(api.sourceSelectionProposals.getCurrent, {
+                runId: seeded.runId,
+                corpusRevisionId: seeded.corpusRevisionId,
+            }),
+    ).toMatchObject({
+        revisionStatus: "draft",
+        preparation: { assessed: 58, total: 60 },
+    });
+    expect(await t.run((ctx) => ctx.db.query("providerCalls").take(1))).toEqual(
+        [],
+    );
+    vi.stubEnv("CONVEX_CLOUD_URL", "https://example.com");
+    await expect(
+        t.mutation(internal.e2eFixtures.scaleSourceReviewFixture, args),
+    ).rejects.toThrow("Local E2E fixtures are disabled");
+    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
+    vi.stubEnv("E2E_FIXTURES_ENABLED", "false");
+    await expect(
+        t.mutation(internal.e2eFixtures.scaleSourceReviewFixture, args),
+    ).rejects.toThrow("Local E2E fixtures are disabled");
+});
+
 test("seeds a historical explanation gap for explicit draft refresh without provider work", async () => {
     vi.useFakeTimers();
     vi.stubEnv("E2E_FIXTURES_ENABLED", "true");

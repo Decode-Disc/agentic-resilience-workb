@@ -25,6 +25,7 @@ import {
     SOURCE_QUALIFICATION_VERSION,
     sourceQualificationSchema,
 } from "./sourceQualification";
+import type { SourceReviewReads } from "./sourceReviewReads";
 import type {
     SourceCoverageRole,
     SourceRoleAvailability,
@@ -161,6 +162,7 @@ export async function readPinnedComparisonReview(
         "runId" | "sourceId" | "corpusRevisionId" | "comparisonTaskIds"
     >,
     qualification: Awaited<ReturnType<typeof readPinnedSourceQualification>>,
+    reads?: SourceReviewReads,
 ) {
     const emptyReview: PinnedSourceComparisonReview = {
         outcomes: {},
@@ -168,7 +170,9 @@ export async function readPinnedComparisonReview(
         requiredPrimaryReferences: [],
     };
     if (!qualification || !item.comparisonTaskIds?.length) return emptyReview;
-    const qualificationTask = await db.get(qualification.qualificationTaskId);
+    const qualificationTask = await (reads?.task(
+        qualification.qualificationTaskId,
+    ) ?? db.get(qualification.qualificationTaskId));
     const currentPassages = new Map(
         qualificationTask?.output.kind === "source_qualification"
             ? qualificationTask.output.selectedPassages.map((passage) => [
@@ -178,7 +182,9 @@ export async function readPinnedComparisonReview(
             : [],
     );
     const tasks = (
-        await Promise.all(item.comparisonTaskIds.map((id) => db.get(id)))
+        await Promise.all(
+            item.comparisonTaskIds.map((id) => reads?.task(id) ?? db.get(id)),
+        )
     )
         .filter(
             (task): task is Doc<"aiTaskResults"> =>
@@ -301,19 +307,20 @@ export async function readPinnedComparisonReview(
             primaryReferenceChecks.set(
                 key,
                 (async () => {
-                    const capture = await db.get(
+                    const capture = await (reads?.capture(
                         reference.captureId as Id<"sourceCaptures">,
-                    );
-                    const source = await db.get(
+                    ) ?? db.get(reference.captureId as Id<"sourceCaptures">));
+                    const source = await (reads?.source(
                         reference.sourceId as Id<"sources">,
-                    );
+                    ) ?? db.get(reference.sourceId as Id<"sources">));
                     if (
                         capture?.status !== "committed" ||
                         capture.runId !== item.runId ||
                         capture.sourceId !== reference.sourceId ||
                         capture.contentHash !== reference.contentHash ||
                         !capture.storageId ||
-                        !(await db.system.get("_storage", capture.storageId)) ||
+                        !(await (reads?.artifact(capture.storageId) ??
+                            db.system.get("_storage", capture.storageId))) ||
                         source?.runId !== item.runId
                     )
                         return null;
@@ -321,11 +328,16 @@ export async function readPinnedComparisonReview(
                         ReturnType<typeof readPreparationSourceDecision>
                     >;
                     try {
-                        decision = await readPreparationSourceDecision(db, {
-                            runId: item.runId,
-                            corpusRevisionId: item.corpusRevisionId,
-                            sourceId: reference.sourceId as Id<"sources">,
-                        });
+                        decision = reads
+                            ? await reads.decision(
+                                  item.corpusRevisionId,
+                                  reference.sourceId as Id<"sources">,
+                              )
+                            : await readPreparationSourceDecision(db, {
+                                  runId: item.runId,
+                                  corpusRevisionId: item.corpusRevisionId,
+                                  sourceId: reference.sourceId as Id<"sources">,
+                              });
                     } catch {
                         return null;
                     }
@@ -407,11 +419,13 @@ export async function readPinnedSourceQualification(
         Doc<"sourceSelectionProposalItems">,
         "runId" | "sourceId" | "sourceCaptureId" | "qualificationTaskId"
     >,
+    reads?: SourceReviewReads,
 ) {
     if (!item.sourceCaptureId || !item.qualificationTaskId) return null;
     const [capture, task] = await Promise.all([
-        db.get(item.sourceCaptureId),
-        db.get(item.qualificationTaskId),
+        reads?.capture(item.sourceCaptureId) ?? db.get(item.sourceCaptureId),
+        reads?.task(item.qualificationTaskId) ??
+            db.get(item.qualificationTaskId),
     ]);
     if (
         capture?.status !== "committed" ||
