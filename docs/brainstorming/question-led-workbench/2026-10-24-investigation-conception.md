@@ -2,7 +2,7 @@
 
 ## Status
 
-Recorded on 2026-10-24. This document describes the retained functioning of Investigation. The [global conception](2026-10-23-question-led-workbench-conception.md) owns the overall sequence, shared inventory rules, and analyst review. Detailed execution rules and analytical quality verification remain open.
+Recorded on 2026-10-24 and updated on 2026-10-25. This document describes the retained functioning of Investigation. The [global conception](2026-10-23-question-led-workbench-conception.md) owns the overall sequence, shared inventory rules, and analyst review. Detailed execution rules and analytical quality verification remain open.
 
 ## Purpose and Simple Workflow
 
@@ -25,6 +25,7 @@ The caller supplies a framed dossier and available evidence. Investigation handl
 | Direction | Information crossing the interface |
 | --- | --- |
 | Input | Company and activity scope, framed questions, existing inventory, prepared documentary material with its provenance and usage restrictions, and applicable research constraints. |
+| Re-examination input | An identified concern about an appraisal or its reasoning, the affected version, and the available evidence to reconsider. |
 | Inventory contributions | Controlled assertions and their question-specific uses, with supporting references, reasoning, and limitations. |
 | Documentary needs | Grouped requests explaining what information is missing, which questions it affects, and why it could change an interpretation. |
 | Appraisals | A proposed appraisal for each framed question, with traceable reasoning and evidence dependencies. |
@@ -63,7 +64,9 @@ Investigation turns the common inquiry into a distinct proposed response for eac
 
 The appraisals explain how their evidence and limitations affect the interpretation. They reuse shared assertions while preserving question-specific reasoning: the same observation may support one interpretation, constrain another, or provide context only. An appraisal about the selected activity remains attached to that scope.
 
-Where the inquiry cannot support a substantive answer, Investigation explains what was examined and why the evidence is insufficient. Unperformed analytical work or an unavailable execution capability remains distinguishable from that outcome under the global completion rule. The proposed appraisals are the output of this brick; their combination and adoption follow the overall workflow.
+Where the inquiry cannot support a substantive answer, Investigation explains what was examined and why the evidence is insufficient. Unperformed analytical work or an unavailable execution capability remains distinguishable from that outcome under the global completion rule. The proposed appraisals are offered for the [grouped review at Investigation output](2026-10-23-question-led-workbench-conception.md#appraisal-grouped-review-and-completion); their use by [Synthesis](2026-10-25-synthesis-conception.md) follows the overall workflow.
+
+When asked to re-examine an appraisal, Investigation revisits the identified reasoning and its evidence, using the same inventory and analytical controls. It returns a proposed revision with an explanation of what changed, or explains why the concern does not warrant a revision. The [cooperation rules](2026-10-23-question-led-workbench-conception.md#synthesis-and-bounded-analytical-rework) own the trigger, bounds, and treatment of retained judgments.
 
 ## Autonomy and Optional Inspection
 
@@ -75,7 +78,7 @@ Optional inspection exposes the assertions reused or introduced, the relationshi
 
 Investigation keeps inventory enrichment and question reasoning together because the assertions worth retaining emerge during the inquiry, and their usefulness depends on their intended analytical use. Its interface exposes contributions, documentary needs, and appraisals rather than asking the caller to orchestrate assertion extraction and separate reasoning passes. The three stages describe the work; they do not select a model-per-question arrangement, call count, or execution partition.
 
-Proposed verification: use a bounded dossier with two questions sharing an assertion, material supporting a rival interpretation, and a missing fact that could affect both questions. Verify that the inquiry reuses the assertion with distinct use rationales, examines the rival interpretation, and expresses one grouped documentary need. Return additional qualified material and inspect whether the resulting appraisals explain its effect without losing their objections or limitations. Analytical usefulness and control quality still need evaluation; this conception does not establish them.
+Proposed verification: use a bounded dossier with two questions sharing an assertion, material supporting a rival interpretation, and a missing fact that could affect both questions. Verify that the inquiry reuses the assertion with distinct use rationales, examines the rival interpretation, and expresses one grouped documentary need. Return additional qualified material and inspect whether the resulting appraisals explain its effect without losing their objections or limitations. Submit a targeted re-examination concern against an existing appraisal and verify that the response explains either the proposed change or the reason to preserve the interpretation. Analytical usefulness and control quality still need evaluation; this conception does not establish them.
 
 ## Open Decisions
 

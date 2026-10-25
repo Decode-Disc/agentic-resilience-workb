@@ -2,9 +2,9 @@
 
 ## Status
 
-Recorded on 2026-10-23 and updated on 2026-10-24. This document preserves the accepted product direction, shared inventory, autonomous preparation, grouped analyst review, and remaining design decisions. The target workflow is not implemented; detailed design decisions remain open.
+Recorded on 2026-10-23 and updated on 2026-10-25. This document preserves the accepted product direction, shared inventory, autonomous preparation, grouped analyst review, and synthesis direction. The target workflow is not implemented; detailed design decisions remain open.
 
-This document owns the overall workflow, cooperation between responsibilities, shared inventory rules, and analyst judgment. The [source ingestion and processing conception](2026-10-24-source-ingestion-and-processing-conception.md) and [Investigation conception](2026-10-24-investigation-conception.md) detail their respective work and interfaces.
+This document owns the overall workflow, cooperation between responsibilities, shared inventory rules, and analyst judgment. The [source ingestion and processing conception](2026-10-24-source-ingestion-and-processing-conception.md), [Investigation conception](2026-10-24-investigation-conception.md), and [Synthesis conception](2026-10-25-synthesis-conception.md) detail their respective work and interfaces.
 
 ## Purpose
 
@@ -52,14 +52,19 @@ Investigate the framed questions
 Prepare reasoned appraisals and expose limitations
                          |
                          v
-PROPOSED RESULTS
-Appraisals by question and synthesis of the scope
-Supporting evidence, objections and unknowns accessible
+GROUPED REVIEW AT INVESTIGATION OUTPUT
+The analyst reviews the proposed appraisals
+Retain reviewed appraisals, correct or leave for follow-up
                          |
                          v
-ANALYST JUDGMENT AND FOLLOW-UP
-Retain, challenge or redirect the proposed interpretation
-The system resumes the affected work
+AUTONOMOUS SYNTHESIS
+Connect the retained appraisals into an economic mechanism diagram
+Develop the reasoned note from that reference
+                         |
+                         v
+RESULT AVAILABLE
+Inspect the diagram, reasoning, evidence and limitations
+Challenge or follow up when useful
 ```
 
 Interventions can occur contextually throughout the workflow rather than becoming a succession of analyst-managed stages. Work that does not depend on the requested decision should remain able to advance within the mandate. The precise exception policy is still open.
@@ -88,8 +93,8 @@ An autonomous operation can also have optional detailed inspection. Optional ins
 | Enriching the shared company inventory | Investigation reuses and enriches the inventory during a common inquiry into the framed questions. Other enrichment mechanisms remain possible. |
 | Checking assertions and their question links | Investigation applies the shared mandatory controls to its contributions and intended uses. Important unresolved exceptions can require human intervention; routine human confirmation of every assertion and link is not required before preparing appraisals. |
 | Examining interpretations and preparing appraisals | Investigation confronts the evidence and counter-evidence, identifies decisive gaps across questions, and prepares distinct appraisals. Sources executes the grouped documentary complement when needed, as described below. |
-| Preparing synthesis, brief, and derived views | Autonomous, with inspectable evidence dependencies and a clear distinction between proposals and retained appraisals. The map's exact place and format remain open. |
-| Retaining analytical judgments | Explicit grouped analyst review, with correction or follow-up possible per question. |
+| Preparing the mechanism diagram and reasoned note | Synthesis advances autonomously after grouped appraisal review. The economic mechanism diagram is the reference result; the note develops its argumentation. Both preserve evidence dependencies and limitations. |
+| Retaining analytical judgments | Explicit grouped analyst review at Investigation output, with correction or follow-up possible per question. Synthesis has no routine final approval checkpoint. |
 | Routine recovery | Autonomous within the mandate and resource allowances. Changing scope or exceeding the mandate requires a decision; technical unavailability remains distinct from evidence insufficiency. |
 
 The old fixed ten-dimension questionnaire and scoring sequence are not the target. Neither is a requirement to finish an exhaustive company inventory before appraisals can be prepared. These changes remove inherited progression requirements, not evidence controls.
@@ -108,13 +113,13 @@ Exact card count, grouping, responsive placement, animation behavior, and the re
 
 ## Reusable Workflow Responsibilities
 
-Sources and Investigation have dedicated conceptions. Synthesis remains a responsibility whose detailed operation is open. Their functional boundaries do not prescribe separate services, agents, model calls, or cards; the technical decomposition and presentation remain to be selected.
+Sources, Investigation, and Synthesis have dedicated functional conceptions. Their boundaries do not prescribe separate services, agents, model calls, or cards; the technical decomposition and presentation remain to be selected.
 
 | Proposed responsibility | Output |
 | --- | --- |
 | Source ingestion and processing | Shared documentary material with qualification, provenance, and limitations; see its dedicated conception. |
 | Investigation | Controlled contributions to the shared inventory, grouped documentary needs, and distinct reasoned appraisals from a common inquiry into the dossier. |
-| Synthesis | An account of how the appraisals relate and what their economic implications and limits are. |
+| Synthesis | A reference diagram of the decisive economic mechanisms and a derived, fully reasoned note, expressing a traceable interpretation across the retained appraisals. |
 
 A workflow capability, an execution of that capability, and its visible card are distinct concepts. The source matrix is a detailed view of source preparation; a research question is not another independent source-collection module. Investigation works across the framed questions with shared material and a common company inventory, then prepares separate appraisals without duplicating the same assertion for each one.
 
@@ -135,10 +140,13 @@ Sources: bounded targeted complement
 Investigation: re-examine and propose appraisals by question
         |
         v
-Synthesis of the investigated scope
+Grouped analyst review at Investigation output
         |
         v
-Grouped analyst adoption
+Synthesis: mechanism diagram and reasoned note
+        |
+        v
+Result available, with optional inspection and challenge
 ```
 
 One source can inform several questions through the relevant passages. Reusing it must preserve its identity, permitted uses, and limitations. Whether cards represent responsibilities, individual investigations, or grouped work remains open; a growing question count should not automatically produce a separate floating source matrix for every question.
@@ -151,6 +159,14 @@ After this first analytical pass, Investigation identifies which missing informa
 
 The prototype allows one autonomous, grouped, bounded complement phase when useful. It may contain several searches or retrievals, rather than exactly one provider call. If no useful request is identified, Investigation proceeds directly to its appraisals. Remaining gaps are disclosed after the phase; they do not automatically initiate another search cycle. Exact prioritization criteria, counts, costs, time limits, and intervention thresholds remain open. This sequence does not require the analyst to coordinate the handoffs.
 
+### Synthesis and Bounded Analytical Rework
+
+After grouped appraisal review, Synthesis connects the retained appraisals and their evidence into an interpretation of the investigated scope. It may propose transversal inferences rather than only condense existing text. The economic mechanism diagram is the reference result, anchored in the actors and workflow; the derived note develops the same interpretation with its reasoning, evidence, objections, and unknowns. The selected direction emphasizes mechanisms of control, dependency, value capture, and possible agentic change. Visual composition and immediate comprehensibility remain to be tested.
+
+Synthesis handles tensions that can be explained from the existing appraisals within its own reasoning. When a problem requires an appraisal itself to be re-examined, it sends Investigation a focused concern tied to the affected interpretation and available evidence. Investigation re-examines the analysis and returns a proposed revision or an explanation of why no change is warranted. Synthesis then revisits its affected reasoning and outputs.
+
+This analytical return is autonomous and bounded, uses the material already available, and does not launch another documentary research phase. Remaining limitations are exposed rather than initiating an open-ended loop. Exact triggering criteria, limits, and stopping rules remain to be specified. Material revisions to retained judgments follow the review and version rules below.
+
 ## Shared Company Inventory and Evidence Matrix
 
 The retained conception preserves a general company inventory, including useful company context and sourced assertions shared across questions. The system can enrich it from the work performed; other enrichment mechanisms remain to be selected. The inventory need not be exhaustive before a useful appraisal can be proposed.
@@ -161,11 +177,13 @@ The evidence matrix makes this inventory and its uses inspectable. The analyst c
 
 Three meanings of validation must remain separate: documentary integrity checks, checks on the permitted use and reasoning of an assertion and its links, and human adoption of an analytical interpretation. System controls remain mandatory. A failed integrity check cannot be waived by a human approval. An unresolved analytical limitation must produce an explicit restriction, uncertainty, exclusion from the affected use, or important exception; it cannot silently become a successful validation.
 
+The same shared control principles apply to the relationships and transversal inferences proposed by Synthesis. A retained appraisal is an input to that reasoning, not automatic validation of every inference drawn from it. Synthesis retains traceable dependencies on the appraisals and evidence it uses.
+
 What is removed from the target is systematic human confirmation of each assertion and link before appraisals can be prepared. Inspection, correction, and important human interventions remain available. The shared inventory and its controls are retained, rather than replaced by repeated independent arguments embedded in each appraisal. Exact persistence, correction propagation, and revision granularity are still to be designed; no complete incremental dependency engine is selected.
 
 ## Appraisal, Grouped Review, and Completion
 
-The accepted assessment format is a reasoned appraisal for each decisive question, followed by a synthesis of the investigated scope. The interpretation, its support, objections, and unknowns should be visible together. Confidence is explained through the evidence and its limitations. An explicit horizon is relevant when an interpretation concerns future change; no replacement categorical confidence scale or fixed horizon was selected.
+The accepted assessment format is a reasoned appraisal for each decisive question. Grouped analyst review takes place at Investigation output, followed by autonomous Synthesis of the investigated scope. The interpretation, its support, objections, and unknowns should be visible together. Confidence is explained through the evidence and its limitations. An explicit horizon is relevant when an interpretation concerns future change; no replacement categorical confidence scale or fixed horizon was selected.
 
 The following wireframe records the selected information organization. All example statements are fictional and illustrate the presentation only; they are not findings about CCC. Its per-question controls are illustrative; grouped review is the retained adoption mechanism, not a requirement to approve each question through this layout.
 
@@ -199,11 +217,13 @@ The following wireframe records the selected information organization. All examp
 └──────────────────────────────────────────────────────┘
 ```
 
-The system prepares appraisals and the proposed synthesis before analyst adoption. The synthesis connects the appraisals while keeping their scope, objections, and limitations visible. The analyst can retain the reviewed appraisals in one grouped action, correct an appraisal, or leave a question for follow-up. The action must make its included appraisals identifiable and cannot imply that unreviewed proposals were retained.
+The system prepares the appraisals, then offers their grouped review at Investigation output. The analyst can retain the reviewed appraisals in one action, correct an appraisal, or leave a question for follow-up. The action must make its included appraisals identifiable and cannot imply that unreviewed proposals were retained. Synthesis uses the retained appraisals as its analytical base and keeps the effect of open or deferred questions visible in its scope and limitations.
 
-Preparation may finish when the framed questions have been investigated, including a question that ends in explicitly justified evidence insufficiency. This means the authorized preparatory work is complete, not that every question is resolved or that the analyst agrees. Interrupted or unperformed work remains incomplete; missing technical capability cannot be relabelled as an evidence-based unknown. The former finalization requirement of ten dimension decisions is not retained.
+The mechanism diagram and reasoned note then become available without another routine approval step. They remain a proposed interpretation based on reviewed appraisals; generation does not imply human adoption of the synthesis. The analyst can inspect or challenge the result without having to repeat the appraisal review to reach it.
 
-Human decisions remain associated with the version reviewed. Later inventory enrichment must not silently rewrite a retained interpretation or imply fresh analyst adoption. Exact freshness indicators, follow-up behavior, and revision mechanics remain open.
+Investigation may finish preparing its appraisals when the framed questions have been investigated, including a question that ends in explicitly justified evidence insufficiency. Synthesis preserves those limitations when preparing its outputs after review. A result becoming available means the relevant preparatory work is complete, not that every question is resolved or the analyst has adopted the overall interpretation. Interrupted or unperformed work remains incomplete; missing technical capability cannot be relabelled as an evidence-based unknown. The former finalization requirement of ten dimension decisions is not retained.
+
+Human decisions remain associated with the version reviewed. Later inventory enrichment or analytical rework must not silently rewrite a retained interpretation or imply fresh analyst adoption. If rework proposes a material change to an appraisal already retained, that change returns as a targeted human exception; it does not require routine reapproval of the whole dossier. Affected synthesis outputs must expose the unresolved change rather than imply they rest on a newly adopted appraisal. Exact freshness indicators, follow-up behavior, and revision mechanics remain open.
 
 Question coverage must not imply that a question is resolved merely because a claim refers to it. Inspection of [claimValidation.ts](../../../convex/domain/claimValidation.ts) found that `deriveQuestionCoverage` counts question-linked claims, including `Unknown`. The [matrix query](../../../convex/evidenceMatrix.ts) uses that count. This is evidence presence, not an established answer. The exact replacement for this projection is undecided.
 
@@ -233,6 +253,8 @@ An earlier preference for simple verifiable calculations was explicitly narrowed
 | Independent appraisals referencing passages without a shared assertion inventory | Not selected. It reduces intermediate objects but repeats common interpretations and corrections across questions. The company inventory and reusable sourced assertions are retained. |
 | Require an exhaustive inventory and routine human confirmation of every assertion and link | Not selected. The system must retain the inventory and mandatory controls while avoiding an analyst-managed inventory-completion workflow. |
 | Individual adoption of every appraisal as the default | Not selected. The user retained grouped review with correction or follow-up per question. |
+| Grouped review of appraisals, diagram, and note at the end | Not selected. The user placed grouped review at Investigation output so Synthesis can finish autonomously without another routine final judgment step. |
+| Remove grouped appraisal review and intervene only for exceptions | Not selected. The user retained grouped review before Synthesis. |
 
 ## Working System Brief
 
@@ -247,13 +269,15 @@ An earlier preference for simple verifiable calculations was explicitly narrowed
 | Operator and maintainer | Reliable, bounded execution and understandable failures. | Optimizing for terminal workflow states or low cost alone can conceal inadequate preparation. |
 | Source producers | Communicate their disclosures, products, reporting, or interpretations. | Publication purposes differ; confidence, volume, and domain diversity do not establish truth or independence. |
 
-**Stocks and flows** — Sources, captures, qualified contributions, shared assertions, unresolved questions, and analyst decisions accumulate. Discovery, reading, qualification, reuse, correction, and adoption move them between states. Analyst attention and execution allowances are finite. Increasing the source stock faster than useful qualification and review can absorb it creates a backlog rather than demonstrated value. No rates or savings have been measured for this direction.
+**Stocks and flows** — Sources, captures, qualified contributions, shared assertions, appraisals, unresolved questions, analyst decisions, and synthesis outputs accumulate. Discovery, reading, qualification, reuse, correction, adoption, and synthesis move them between states. Analyst attention and execution allowances are finite. Increasing the source stock faster than useful qualification and review can absorb it creates a backlog rather than demonstrated value. No rates or savings have been measured for this direction.
 
 **What the change sets off** — A hypothesized reinforcing loop is shared evidence reuse, less repeated preparation, more attention for material judgments, useful corrections, and a better inventory. A harmful reinforcing loop is rewarding source or assertion counts, producing more review work, encouraging superficial confirmation, and accumulating false confidence. A balancing loop is bounded research plus visible unresolved questions, limiting further acquisition while enabling a deliberate follow-up. Delayed feedback matters: an attractive early appraisal can appear successful before source misuse or stale reasoning is discovered. Later enrichment can also invalidate an earlier interpretation; version-bound decisions prevent that change from silently becoming the analyst's new view.
 
+Analytical rework can improve consistency across appraisals while delaying result availability; bounded returns and targeted exceptions constrain that loop. A visually persuasive diagram that hides uncertainty could weaken judgment even when its note preserves the caveat. Diagram-to-note coherence and visible limitations must therefore be examined together.
+
 **Protocol** — Use deterministic checks and focused technical analysis for the reproducible controls. Use the smallest reversible experiment for analytical usefulness and workload, rather than treating a polished interface or a passing schema as validation of the whole system. The proposed leverage point is the handoff from routine evidence preparation to a material human judgment, not raw collection throughput.
 
-**Next smallest test** — Proposed, not executed: use one frozen illustrative dossier with questions sharing an assertion, a contradictory passage, and a documented gap. Walk through framing, source output, appraisals, and grouped review; record whether the analyst can understand and challenge an appraisal without coordinating preparation. If the decisive friction is entirely explained by repeatable ownership or transition defects, classify that slice as Complicated and repair it with focused analysis rather than adding exploratory automation. Repeated inability to judge without deep research coordination would falsify the proposed division of work.
+**Next smallest test** — Proposed, not executed: use one frozen illustrative dossier with questions sharing an assertion, a contradictory passage, and a documented gap. Walk through framing, source output, appraisals, grouped review, and autonomous synthesis; record whether the analyst can understand and challenge the economic interpretation without coordinating preparation. Inspect diagram-to-appraisal traceability, preservation of the gap, and agreement between diagram and note. Exercise a bounded analytical return when an appraisal needs re-examination, keeping any material revision distinct from the earlier judgment. If the decisive friction is entirely explained by repeatable ownership or transition defects, classify that slice as Complicated and repair it with focused analysis rather than adding exploratory automation. Repeated inability to judge without deep research coordination would falsify the proposed division of work.
 
 ## Research Basis and Adaptation
 
@@ -286,10 +310,12 @@ These sources inform the conception. They establish public research themes, not 
 - Define the exact common research foundation, the bounded set of decisive questions, and how the proposed activity or workflow is selected and corrected.
 - Define how framing completes without making optional refinements mandatory, and how later scope changes affect ongoing work and existing results. Research starts only after framing; speculative background research during framing is not part of the prototype.
 - Specify the launch mandate's source-selection rules, resource limits, intervention criteria, and handling of material exceptions, using the source conception for its internal workflow. Delegated selection is accepted; its enforcement and replacement of the current human corpus checkpoint are not implemented.
-- Define the technical realization of Sources and Investigation, the detailed operation of synthesis, card grouping, detail-page navigation, and completed-result presentation. Preserve the accepted composer, timeline, contextual-intervention, and optional-inspection direction without treating an illustrative layout as finished design.
+- Define the technical realization of Sources, Investigation, and Synthesis, card grouping, detail-page navigation, and completed-result presentation. Preserve the accepted composer, timeline, contextual-intervention, and optional-inspection direction without treating an illustrative layout as finished design.
 - Specify the grouped complement's prioritization and resource allocation across questions, and the cooperation outcomes when requested material is unavailable. Its placement after the first shared analytical pass and its single bounded phase are retained.
+- Specify the triggers, limits, and stopping rules for analytical rework between Synthesis and Investigation, including how a proposed material revision becomes a targeted exception. The return uses existing material and does not add a documentary research phase.
 - Specify shared assertion identity, question-to-evidence relationships, inventory correction and enrichment mechanisms, and their presentation in the matrix. Exact records, freshness rules, and navigation are not selected.
-- Define confidence presentation, treatment of future horizons, synthesis composition, and the detailed interaction and audit semantics of grouped review. Grouped adoption is accepted; its controls and persistence shape are not selected.
+- Define confidence presentation, treatment of future horizons, and the detailed interaction and audit semantics of grouped review. Its placement at Investigation output is retained; its controls and persistence shape remain open.
+- Explore the visual composition and inspection of the mechanism diagram and the reading experience of its reasoned note. Immediate comprehension and the intended visual impact require validation with an illustrative dossier.
 - Specify executable completion checks that distinguish investigated-but-insufficient questions from interrupted or unperformed work. Preparation may end with justified insufficiency; the exact projections and transitions remain open.
 - Define the transition from the current ten-dimension model to the question-led workflow, including existing records, policies, fixtures, and dossiers.
 - Decide the exact landing-page matrix example and capability copy after settling the functional design.
