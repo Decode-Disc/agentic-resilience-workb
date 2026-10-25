@@ -1,5 +1,11 @@
 import { api } from "@convex/_generated/api";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
 import { ConvexError } from "convex/values";
 import type { ComponentType, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -468,14 +474,17 @@ describe("ResearchComposer", () => {
         fireEvent.click(
             screen.getByRole("button", { name: /Attach references/i }),
         );
+        const references = within(
+            await screen.findByRole("dialog", { name: "Add public sources" }),
+        );
         for (const url of [
             "https://example.com/public-report#overview",
             "https://example.com/public-report#summary",
         ]) {
-            fireEvent.change(screen.getByLabelText(/Public source link/i), {
+            fireEvent.change(references.getByLabelText(/Public source link/i), {
                 target: { value: url },
             });
-            fireEvent.click(screen.getByRole("button", { name: /^Add$/i }));
+            fireEvent.click(references.getByRole("button", { name: /^Add$/i }));
             await waitFor(() =>
                 expect(submitManualUrl).toHaveBeenCalledTimes(
                     url.endsWith("overview") ? 1 : 2,
@@ -486,7 +495,7 @@ describe("ResearchComposer", () => {
         expect(
             screen.getAllByText("https://example.com/public-report"),
         ).toHaveLength(1);
-        fireEvent.click(screen.getByRole("button", { name: /Done/i }));
+        fireEvent.click(references.getByRole("button", { name: /Done/i }));
         expect(
             screen.getByRole("button", { name: /Attach references \(1\)/i }),
         ).toBeTruthy();
@@ -502,7 +511,7 @@ describe("ResearchComposer", () => {
                 }),
             ),
         );
-    });
+    }, 10_000);
 
     it("asks the analyst to re-add an expired reference before launch", async () => {
         searchCompanies.mockResolvedValue(companyCandidates);

@@ -42,7 +42,13 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
                 ? to.replace("$runId", params.runId)
                 : to;
             return (
-                <a href={href} {...props}>
+                <a
+                    href={href}
+                    {...props}
+                    onClick={(event) => {
+                        props.onClick?.(event);
+                        event.preventDefault();
+                    }}>
                     {children}
                 </a>
             );
@@ -610,16 +616,21 @@ describe("production run workspace", () => {
         expect(selectedDecision.getAttribute("data-status")).toBe("warning");
         expect(selectedDecision.className).toContain("bg-warning/10");
 
-        // The record header keeps provenance and the shared decision status
-        // visible above its detail tabs.
+        // Identification and decision stay in the header; provenance belongs to source details.
         const band = container.querySelector(
             '[data-slot="source-record-header"]',
         );
         expect(band).not.toBeNull();
         expect(band?.textContent).toContain("Independent report");
-        expect(band?.textContent).toContain("Institutional independent source");
-        expect(band?.textContent).toContain("Independent analysis");
-        expect(band?.textContent).not.toContain("Independent web source");
+        const metadata = screen.getByRole("tabpanel", {
+            name: "Source details",
+        });
+        expect(
+            within(metadata).getByRole("button", {
+                name: "Institutional publisher",
+            }),
+        ).toBeTruthy();
+        expect(within(metadata).getByText("Independent analysis")).toBeTruthy();
         expect(band?.textContent).toContain("Pending");
 
         const previewTrigger = screen
@@ -630,8 +641,8 @@ describe("production run workspace", () => {
             .closest('[data-slot="tabs-trigger"]');
         expect(previewTrigger).not.toBeNull();
         expect(detailsTrigger).not.toBeNull();
-        expect(previewTrigger?.getAttribute("aria-selected")).toBe("true");
-        expect(detailsTrigger?.getAttribute("aria-selected")).toBe("false");
+        expect(previewTrigger?.getAttribute("aria-selected")).toBe("false");
+        expect(detailsTrigger?.getAttribute("aria-selected")).toBe("true");
     });
 
     it("renders the source favicon and per-source decision actions", () => {
@@ -745,7 +756,7 @@ describe("production run workspace", () => {
         ).toBe("false");
     });
 
-    it("shows the preview tab by default and lets the analyst open source details", () => {
+    it("opens source details by default and lets the analyst inspect a pending preview", () => {
         render(
             <SourceReview
                 runId={"run-1" as never}
@@ -772,7 +783,12 @@ describe("production run workspace", () => {
             />,
         );
 
-        // Preview opens the selected publisher page externally by default.
+        expect(
+            screen
+                .getByRole("tab", { name: "Source details" })
+                .getAttribute("aria-selected"),
+        ).toBe("true");
+        fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
         expect(
             screen.getByRole("heading", {
                 name: "Open Independent report in a new tab",
@@ -787,7 +803,7 @@ describe("production run workspace", () => {
         // Source details remain available without losing the calibrated copy.
         fireEvent.click(screen.getByRole("tab", { name: /Source details/i }));
         expect(
-            screen.getByText(/Source passages will become available/i),
+            screen.getByText(/This source has not been read yet\./i),
         ).toBeTruthy();
     });
 

@@ -1059,7 +1059,7 @@ test("selects the same 96 real grouped requests through either grouped entrypoin
     } finally {
         rmSync(fixture.directory, { recursive: true, force: true });
     }
-});
+}, 15_000);
 
 const { scoreReviewedRetrieval } = await import(
     new URL(

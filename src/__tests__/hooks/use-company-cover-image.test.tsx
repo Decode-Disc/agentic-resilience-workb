@@ -67,7 +67,9 @@ describe("useCompanyCoverImage", () => {
         await waitFor(() => {
             expect(result.current.src).toBe("data:image/png;base64,SHOT");
         });
-        expect(renderPreview).toHaveBeenCalledWith({ url: "https://example.com/" });
+        expect(renderPreview).toHaveBeenCalledWith({
+            url: "https://example.com/",
+        });
     });
 
     test("falls back to placeholder when both tiers fail", async () => {

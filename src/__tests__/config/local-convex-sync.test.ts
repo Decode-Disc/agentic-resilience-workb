@@ -54,7 +54,7 @@ it("checks backend types without starting or synchronizing a backend", () => {
     );
     const cli = process.env.npm_execpath;
     if (!cli) throw new Error("Run through pnpm test");
-    const result = spawnSync(process.execPath, [cli, "convex:check"], {
+    const result = spawnSync(cli, ["convex:check"], {
         cwd: root,
         encoding: "utf8",
         timeout: 10_000,

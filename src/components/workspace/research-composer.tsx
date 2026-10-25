@@ -499,16 +499,16 @@ function ResearchComposerContent({
                                     <Icon iconNode={ArrowLeft01Icon} />
                                     Back
                                 </Button>
-                                    <LoadErrorBoundary
-                                        title="Workspace access unavailable"
-                                        description="We couldn’t verify your workspace access."
-                                        variant="compact">
-                                        <ResearchLaunchButton
-                                            isSessionReady={isSessionReady}
-                                            isLaunching={isLaunching}
-                                            onStart={startResearch}
+                                <LoadErrorBoundary
+                                    title="Workspace access unavailable"
+                                    description="We couldn’t verify your workspace access."
+                                    variant="compact">
+                                    <ResearchLaunchButton
+                                        isSessionReady={isSessionReady}
+                                        isLaunching={isLaunching}
+                                        onStart={startResearch}
                                     />
-                                    </LoadErrorBoundary>
+                                </LoadErrorBoundary>
                             </div>
                         </motion.div>
                     ) : null}

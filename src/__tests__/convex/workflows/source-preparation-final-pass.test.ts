@@ -232,13 +232,23 @@ test.each([
             maximumIterations: number,
         ): Promise<void>;
     };
-    await scheduler.finishAllScheduledFunctions(
-        () => vi.advanceTimersByTime(100),
-        500,
-    );
-    expect(await t.run((ctx) => workflow.status(ctx, handle))).toMatchObject({
-        type: "completed",
-    });
+    async function finishWorkflow() {
+        for (let pump = 0; pump < 100; pump++) {
+            await scheduler.finishAllScheduledFunctions(
+                () => vi.advanceTimersByTime(100),
+                500,
+            );
+            const status = await t.run((ctx) => workflow.status(ctx, handle));
+            if (status.type !== "inProgress") {
+                expect(status).toMatchObject({ type: "completed" });
+                return;
+            }
+        }
+        throw new Error(
+            "Preparation did not complete within the bounded scheduler window",
+        );
+    }
+    await finishWorkflow();
     expect(order).toEqual([
         ...Array<string>(3).fill("search"),
         ...Array<string>(8).fill("comparison"),
@@ -269,9 +279,6 @@ test.each([
     ).toHaveLength(8);
     expect(state.calls.every((c) => c.status === "succeeded")).toBe(true);
     await t.run((ctx) => workflow.restart(ctx, handle, { from: 0 }));
-    await scheduler.finishAllScheduledFunctions(
-        () => vi.advanceTimersByTime(100),
-        500,
-    );
+    await finishWorkflow();
     expect(order).toHaveLength(11);
 }, 15_000);

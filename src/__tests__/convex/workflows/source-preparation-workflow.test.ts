@@ -5,7 +5,7 @@ import { upsertSourceReviewItem } from "@convex/domain/sourceReviewProjection";
 import { SOURCE_COVERAGE_ROLES } from "@convex/domain/sourceSelectionPolicy";
 import { workflow } from "@convex/workflow";
 import "@convex/sourcePreparationActions";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
 import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
 import workflowTest from "./workflow-test-register.js";
@@ -25,6 +25,11 @@ vi.mock("@convex/sourceActions", async (importOriginal) => ({
 }));
 
 const prepareWorkflow = internal.sourcePreparationWorkflow.run;
+
+beforeEach(() => {
+    vi.stubEnv("EXA_API_KEY", "");
+    vi.stubEnv("SEC_USER_AGENT", "");
+});
 
 afterEach(() => {
     vi.unstubAllGlobals();

@@ -18,7 +18,8 @@ vi.mock("convex/react", async () => {
     return convexReactHarness.module;
 });
 
-vi.mock("@/hooks/use-responsive", () => ({
+vi.mock("@/hooks/use-responsive", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/hooks/use-responsive")>()),
     useResponsive: () => responsive,
 }));
 

@@ -165,7 +165,7 @@ test("comparison history overflow cannot authorize from a truncated history", as
             executionStatus: "running",
             pauseReason: undefined,
         });
-        for (let index = 0; index < 121; index += 1) {
+        for (let index = 0; index < 8193; index += 1) {
             const inputHash = sha256Hex(`unrelated comparison ${index}`);
             await ctx.db.insert("aiTaskResults", {
                 runId,
@@ -203,7 +203,7 @@ test("comparison history overflow cannot authorize from a truncated history", as
             runId,
             expectedExecutionGeneration: 3,
         }),
-    ).rejects.toThrow("Source comparison history exceeds its limit");
+    ).rejects.toThrow("comparison_history_capacity_reached");
 });
 
 test("the owned inspector exposes pinned content while collection responses retain only concise selection metadata", async () => {

@@ -12,18 +12,17 @@ import { useAnonymousSession } from "@/hooks/use-anonymous-session";
 import { getWorkspaceDestination } from "@/lib/workspace/access-destination";
 
 function ProtectedRouteLoading() {
-  return [1, 2, 3].map((index) => (
-    <div
-      key={`loading-card-${index}`}
-      role="status"
-      aria-label="Preparing private workspace"
-      className="surface-panel mx-auto mt-12 w-full max-w-xl space-y-3 rounded-xl p-6"
-    >
-      <Skeleton className="h-4 w-40" />
-      <Skeleton className="h-7 w-72 max-w-full" />
-      <Skeleton className="h-4 w-full" />
-    </div>
-  ));
+    return [1, 2, 3].map((index) => (
+        <div
+            key={`loading-card-${index}`}
+            role="status"
+            aria-label="Preparing private workspace"
+            className="surface-panel mx-auto mt-12 w-full max-w-xl space-y-3 rounded-xl p-6">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-7 w-72 max-w-full" />
+            <Skeleton className="h-4 w-full" />
+        </div>
+    ));
 }
 
 /**
@@ -31,63 +30,71 @@ function ProtectedRouteLoading() {
  * identity is linked to an active visitor through a workspace access code.
  */
 function ProtectedWorkspaceContent() {
-  const navigate = useNavigate();
-  const visitor = useQuery(api.visitors.current, {});
-  const [admissionPending, setAdmissionPending] = useState(false);
-  const { openInvitationDrawer, isOpen } = useInvitationAccess();
+    const navigate = useNavigate();
+    const visitor = useQuery(api.visitors.current, {});
+    const [admissionPending, setAdmissionPending] = useState(false);
+    const { openInvitationDrawer, isOpen } = useInvitationAccess();
 
-  useEffect(() => {
-    if (visitor !== undefined && visitor?.status !== "active" && !admissionPending && !isOpen) {
-      openInvitationDrawer({
-        onSuccess: ({ role }) => {
-          setAdmissionPending(true);
-          void navigate({
-            to: getWorkspaceDestination(role),
-          });
-        },
-        onCancel: () => {
-          void navigate({ to: "/workspace/start" });
-        },
-      });
+    useEffect(() => {
+        if (
+            visitor !== undefined &&
+            visitor?.status !== "active" &&
+            !admissionPending &&
+            !isOpen
+        ) {
+            openInvitationDrawer({
+                onSuccess: ({ role }) => {
+                    setAdmissionPending(true);
+                    void navigate({
+                        to: getWorkspaceDestination(role),
+                    });
+                },
+                onCancel: () => {
+                    void navigate({ to: "/workspace/start" });
+                },
+            });
+        }
+    }, [visitor, admissionPending, isOpen, openInvitationDrawer, navigate]);
+
+    if (
+        visitor === undefined ||
+        (admissionPending && visitor?.status !== "active")
+    ) {
+        return <ProtectedRouteLoading />;
     }
-  }, [visitor, admissionPending, isOpen, openInvitationDrawer, navigate]);
 
-  if (visitor === undefined || (admissionPending && visitor?.status !== "active")) {
+    if (visitor?.status === "active") {
+        return <Outlet />;
+    }
+
     return <ProtectedRouteLoading />;
-  }
-
-  if (visitor?.status === "active") {
-    return <Outlet />;
-  }
-
-  return <ProtectedRouteLoading />;
 }
 
 export function ProtectedWorkspaceRoute() {
-  const { isSessionReady, sessionError, retrySession } = useAnonymousSession();
+    const { isSessionReady, sessionError, retrySession } =
+        useAnonymousSession();
 
-  if (sessionError) {
+    if (sessionError) {
+        return (
+            <LoadErrorAlert
+                className="mx-auto mt-12 w-full max-w-xl"
+                title="Workspace access unavailable"
+                description="We couldn’t prepare the private workspace."
+                onRetry={retrySession}
+            />
+        );
+    }
+
+    if (!isSessionReady) {
+        return <ProtectedRouteLoading />;
+    }
+
     return (
-      <LoadErrorAlert
-        className="mx-auto mt-12 w-full max-w-xl"
-        title="Workspace access unavailable"
-        description="We couldn’t prepare the private workspace."
-        onRetry={retrySession}
-      />
+        <LoadErrorBoundary
+            className="mx-auto mt-12 w-full max-w-xl"
+            title="Workspace access unavailable"
+            description="We couldn’t load your workspace access.">
+            <ProtectedWorkspaceContent />
+        </LoadErrorBoundary>
     );
-  }
-
-  if (!isSessionReady) {
-    return <ProtectedRouteLoading />;
-  }
-
-  return (
-    <LoadErrorBoundary
-      className="mx-auto mt-12 w-full max-w-xl"
-      title="Workspace access unavailable"
-      description="We couldn’t load your workspace access."
-    >
-      <ProtectedWorkspaceContent />
-    </LoadErrorBoundary>
-  );
 }

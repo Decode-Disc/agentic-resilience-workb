@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import { SOURCE_COVERAGE_ROLES } from "@convex/domain/sourceSelectionPolicy";
 import { workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
 import "@convex/researchLaunch";
@@ -42,6 +43,16 @@ vi.mock("node:dns/promises", async (importOriginal) => {
         lookup: lookupMock,
     };
 });
+
+vi.mock("@convex/sourceActions", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@convex/sourceActions")>()),
+    requestPinnedPublicSource: vi.fn(async (url, _address, options) =>
+        globalThis.fetch(url, {
+            headers: options?.headers,
+            signal: options?.signal,
+        }),
+    ),
+}));
 
 const modules = import.meta.glob("/convex/**/*.ts");
 const originalFetch = globalThis.fetch;
@@ -119,7 +130,7 @@ test.each([
         "SOURCE_QUALIFICATION_ENABLED",
         prepareSources ? "true" : "false",
     );
-    vi.stubEnv("OPENROUTER_API_KEY", "");
+    vi.stubEnv("OPENROUTER_API_KEY", prepareSources ? "fixture-model-key" : "");
     vi.useFakeTimers();
     process.env.SEC_USER_AGENT = "Evidence Workbench test@example.com";
     process.env.EXA_API_KEY = "deterministic-test-key";
@@ -134,6 +145,43 @@ test.each([
     });
     let cancelReading: (() => Promise<void>) | undefined;
     globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
+        if (String(input).includes("openrouter.ai"))
+            return new Response(
+                JSON.stringify({
+                    id: "phase4-qualification",
+                    created: 1,
+                    model: "fixture-model",
+                    choices: [
+                        {
+                            index: 0,
+                            message: {
+                                role: "assistant",
+                                content: JSON.stringify({
+                                    companyMatch: "uncertain",
+                                    companyPassageKeys: [],
+                                    documentKind: "unknown",
+                                    reportingPeriodEnd: null,
+                                    reportingPeriodPassageKeys: [],
+                                    contributions: Object.fromEntries(
+                                        SOURCE_COVERAGE_ROLES.map((role) => [
+                                            role,
+                                            null,
+                                        ]),
+                                    ),
+                                    limitations: [],
+                                }),
+                            },
+                            finish_reason: "stop",
+                        },
+                    ],
+                    usage: {
+                        prompt_tokens: 10,
+                        completion_tokens: 10,
+                        total_tokens: 20,
+                    },
+                }),
+                { headers: { "content-type": "application/json" } },
+            );
         if (String(input).endsWith(".htm") && cancelReading)
             await cancelReading();
         return String(input).endsWith(".htm")
@@ -290,7 +338,7 @@ test.each([
             pauseReason: "source_review",
         });
         expect(prepared.run?.workflowId).toBeTruthy();
-        expect(prepared.preparation?.status).toBe("blocked");
+        expect(prepared.preparation?.status).toBe("partial");
         expect(prepared.captures.some((c) => c.status === "committed")).toBe(
             true,
         );

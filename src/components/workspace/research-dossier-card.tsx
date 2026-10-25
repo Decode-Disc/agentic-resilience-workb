@@ -28,7 +28,7 @@ import {
     executionLabel,
     executionStatusColor,
     executionStatusTone,
-    lifecycleLabel
+    lifecycleLabel,
 } from "@/lib/presentation/research-copy";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +41,6 @@ const updatedAtFormatter = new Intl.DateTimeFormat("en", {
     month: "short",
     year: "numeric",
 });
-
 
 function leavesCard(event: FocusEvent<HTMLDivElement>): boolean {
     return !event.currentTarget.contains(event.relatedTarget);
@@ -108,13 +107,15 @@ export function ResearchDossierCard({ dossier }: { dossier: ResearchDossier }) {
                         )}>
                         {executionLabel(dossier.executionStatus)}
                         <CutoutCorner
-                            className={cn('absolute top-0 -left-[23px] -rotate-90',
+                            className={cn(
+                                "absolute top-0 -left-[23px] -rotate-90",
                                 `text-${executionStatusColor(dossier.executionStatus)}`,
                             )}
                             size={24}
                         />
                         <CutoutCorner
-                            className={cn('absolute right-0 -bottom-[23px] -rotate-90',
+                            className={cn(
+                                "absolute right-0 -bottom-[23px] -rotate-90",
                                 `text-${executionStatusColor(dossier.executionStatus)}`,
                             )}
                             size={24}
@@ -147,10 +148,10 @@ export function ResearchDossierCard({ dossier }: { dossier: ResearchDossier }) {
                                             company={dossier.company}
                                         />
                                     ) : (
-                                            <div
-                                        aria-hidden="true"
-                                        className="h-8 w-8 rounded-full bg-linear-to-br from-brand-purple to-brand-green shadow-sm ring-2 ring-card"
-                                    />
+                                        <div
+                                            aria-hidden="true"
+                                            className="h-8 w-8 rounded-full bg-linear-to-br from-brand-purple to-brand-green shadow-sm ring-2 ring-card"
+                                        />
                                     )}
                                     <span className="font-medium text-card-foreground text-sm">
                                         {marketIdentity}

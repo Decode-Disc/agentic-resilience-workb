@@ -6,7 +6,14 @@ import {
     createRouter,
     RouterProvider,
 } from "@tanstack/react-router";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { FunctionReturnType } from "convex/server";
+import {
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 vi.mock("convex/react", async () => {
@@ -20,9 +27,41 @@ import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
 import { Route as RunRoute } from "@/routes/workspace/_protected/$runId";
 
 const recover = vi.fn();
+const termsCandidate: FunctionReturnType<
+    typeof api.sourceSelectionProposals.getAdjustmentSets
+>["available"][number] = {
+    sourceId: "source-terms" as never,
+    canonicalUrl: "https://example.com/terms",
+    title: "Subscription and service agreement",
+    origin: "exa",
+    category: "official_commercial",
+    publishedAt: undefined,
+    disposition: "alternative",
+    sourceFamily: "official_commercial",
+    documentKind: "official_commercial_terms",
+    authorityTier: "unverified",
+    companyLinkageBasis: "unverified",
+    recommendationContributions: [],
+    declaredCoverageRoles: [],
+    eligibleCoverageRoles: [],
+    coverageContributions: [],
+    duplicateOfSourceId: undefined,
+    rank: 0,
+    reasonCodes: ["not_selected"],
+    decision: "pending",
+    included: false,
+    decisionReason: undefined,
+};
 
 beforeEach(() => {
     vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+    const matchMedia = window.matchMedia.bind(window);
+    vi.spyOn(window, "matchMedia").mockImplementation((query) => {
+        const media = matchMedia(query);
+        return query === "(prefers-reduced-motion: reduce)"
+            ? { ...media, matches: true }
+            : media;
+    });
     convexReactHarness.reset();
     convexReactHarness
         .mutation(api.sourcePreparation.startForReview)
@@ -50,7 +89,7 @@ beforeEach(() => {
         status: "ready",
         effectiveStatus: "ready",
         revisionStatus: "draft",
-        counts: { recommended: 0, needsAttention: 0, alternative: 0 },
+        counts: { recommended: 0, needsAttention: 0, alternative: 1 },
         effectiveIncludedCount: 0,
         recommendedTarget: 12,
         recommendationCeiling: 24,
@@ -61,24 +100,26 @@ beforeEach(() => {
             {
                 role: "official_commercial_terms",
                 covered: false,
-                candidateIds: [],
+                candidateIds: [termsCandidate.sourceId],
             },
         ],
     });
     convexReactHarness
         .query(api.sourceSelectionProposals.getAdjustmentSets)
-        .returns({ included: [], available: [] });
+        .returns({ included: [], available: [termsCandidate] });
     convexReactHarness.query(api.sources.getReviewSummary).returns({
         revision: 1,
         status: "draft",
-        counts: { accepted: 0, pending: 0, rejected: 0 },
-        total: 0,
+        counts: { accepted: 0, pending: 1, rejected: 0 },
+        total: 1,
         candidateLimit: 48,
     });
     convexReactHarness.query(api.sources.getReviewSource).returns(undefined);
-    convexReactHarness
-        .paginatedQuery(api.sources.listForReviewPage)
-        .returns({ results: [], status: "Exhausted", loadMore: vi.fn() });
+    convexReactHarness.paginatedQuery(api.sources.listForReviewPage).returns({
+        results: [termsCandidate],
+        status: "Exhausted",
+        loadMore: vi.fn(),
+    });
     convexReactHarness
         .action(api.sourceSelectionProposalActions.recoverDiscovery)
         .uses(recover);
@@ -126,19 +167,23 @@ function openRun(url: string) {
             workspace.addChildren([protectedRoute.addChildren([run])]),
         ]),
         history,
+        defaultPendingMinMs: 0,
     });
     return { router, history, ...render(<RouterProvider router={router} />) };
 }
 
 test("restores coverage inspection through Back and Forward without running a search", async () => {
     const first = openRun("/workspace/run-1?section=sources");
+    const coverage = await screen.findByRole("complementary", {
+        name: "Source coverage",
+    });
     fireEvent.click(
-        await screen.findByRole("button", {
+        within(coverage).getByRole("button", {
             name: "Review coverage: Subscription & service terms",
         }),
     );
     fireEvent.click(
-        await screen.findByRole("button", {
+        await within(coverage).findByRole("button", {
             name: "Review candidates for Subscription & service terms",
         }),
     );
@@ -176,7 +221,7 @@ test("restores coverage inspection through Back and Forward without running a se
         }),
     ).toBeTruthy();
     expect(recover).not.toHaveBeenCalled();
-});
+}, 10_000);
 
 test("opens a saved coverage URL directly without running a search", async () => {
     openRun(

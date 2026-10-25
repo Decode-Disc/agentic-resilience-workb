@@ -1,14 +1,18 @@
+import { api } from "@convex/_generated/api";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SourceBrowserView } from "@/components/workspace/source-browser-view";
 
-const { useAction, useQuery } = vi.hoisted(() => ({
-    useAction: vi.fn(),
-    useQuery: vi.fn(),
-}));
+import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
 
-vi.mock(import("convex/react"), () => ({ useAction, useQuery }));
+vi.mock(
+    "convex/react",
+    async () =>
+        (await import("@/__tests__/helpers/convex-react-harness"))
+            .convexReactHarness.module,
+);
+beforeEach(() => convexReactHarness.reset());
 
 const SAMPLE = {
     sourceId: "source-1" as never,
@@ -23,9 +27,13 @@ const SAMPLE = {
 
 describe("SourceBrowserView", () => {
     it("maps source context to the external browser destination", () => {
-        useAction.mockReturnValue(vi.fn());
-        useQuery.mockReturnValue({ dataUrl: "data:image/png;base64,aW1hZ2U=" });
-        render(<SourceBrowserView source={SAMPLE} />);
+        convexReactHarness
+            .action(api.browserPreview.renderPreview)
+            .uses(vi.fn());
+        convexReactHarness
+            .query(api.browserPreviewInternals.getPreview)
+            .returns({ dataUrl: "data:image/png;base64,aW1hZ2U=" });
+        render(<SourceBrowserView source={SAMPLE} runId={"run-1" as never} />);
 
         const link = screen.getByRole("link", {
             name: "Open original",

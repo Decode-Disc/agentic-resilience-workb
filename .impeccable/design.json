@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-22T02:26:02.614Z",
+  "generatedAt": "2026-10-25T12:03:29.813Z",
   "title": "Design System: Agentic Resilience Evidence Workbench",
   "extensions": {
     "colorMeta": {
@@ -855,7 +855,7 @@
       },
       {
         "name": "surface-shadow-floating",
-        "value": "inset 0 1px 0 oklch(1 0 0 / 90%), inset 0 0 0 1px oklch(1 0 0 / 20%), 0 6px 16px -12px oklch(0.2 0.01 308 / 16%), 0 32px 64px -40px oklch(0.2 0.015 308 / 30%)",
+        "value": "inset 0 1px 0 oklch(1 0 0 / 90%), inset 0 0 0 1px oklch(1 0 0 / 20%), 0 6px 16px -12px oklch(0.2 0.01 308 / 16%), 0 32px 64px -40px oklch( 0.2 0.015 308 / 30% )",
         "purpose": "Theme-owned surface depth."
       },
       {
@@ -865,7 +865,7 @@
       },
       {
         "name": "dark-surface-shadow-floating",
-        "value": "inset 0 1px 0 oklch(1 0 0 / 12%), inset 0 0 0 1px oklch(1 0 0 / 5%), 0 6px 16px -12px oklch(0 0 0 / 40%), 0 32px 64px -40px oklch(0 0 0 / 62%)",
+        "value": "inset 0 1px 0 oklch(1 0 0 / 12%), inset 0 0 0 1px oklch(1 0 0 / 5%), 0 6px 16px -12px oklch(0 0 0 / 40%), 0 32px 64px -40px oklch( 0 0 0 / 62% )",
         "purpose": "Theme-owned surface depth."
       }
     ],

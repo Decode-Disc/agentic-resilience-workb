@@ -36,7 +36,9 @@ const InvitationAccessContext = (() => {
         (globalThis as Record<string, unknown>)[key] =
             createContext<InvitationAccessContextValue | null>(null);
     }
-    return (globalThis as Record<string, unknown>)[key] as Context<InvitationAccessContextValue | null>;
+    return (globalThis as Record<string, unknown>)[
+        key
+    ] as Context<InvitationAccessContextValue | null>;
 })();
 
 export function InvitationAccessProvider({
