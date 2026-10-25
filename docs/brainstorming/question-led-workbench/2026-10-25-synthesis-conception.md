@@ -20,17 +20,19 @@ DEVELOP THE REASONED NOTE
 
 ## Interface
 
-Synthesis takes an analytical base and returns a coherent visual and written interpretation. The caller does not coordinate separate operations for every relationship or paragraph. Exact records and execution partition remain to be designed.
+A specialized Synthesis agent takes the analytical base and returns a coherent visual and written interpretation using the [shared business operations](2026-10-23-question-led-workbench-conception.md#minimum-shared-operation-catalogue). Its diagram and note form a joint submission; a re-examination concern is conditional. Exact records and execution integration remain to be designed.
 
 | Direction | Information crossing the interface |
 | --- | --- |
 | Input | Company and activity scope, framed questions, retained appraisal versions, their reasoning and evidence dependencies, objections, and identified open or deferred questions. |
-| Reference result | An economic mechanism diagram with meaningful relationships, traceable reasoning, supporting appraisals and evidence, conditions, and limitations. |
-| Derived result | An argued note explaining the diagram's interpretation, economic implications, support, objections, unknowns, and conditions that could change the reading. |
-| Re-examination concern | The affected appraisal and interpretation, the reasoning problem, and the existing elements that motivate reconsideration. |
+| Reference artifact in the joint submission | An economic mechanism diagram with meaningful relationships, traceable reasoning, supporting appraisals and evidence, conditions, and limitations. |
+| Derived artifact in the joint submission | A fully reasoned note explaining the diagram's interpretation, economic implications, support, objections, unknowns, and conditions that could change the reading. |
+| Re-examination concern, when needed | The affected appraisal and interpretation, the reasoning problem, and the existing elements that motivate reconsideration, retained with the outcome. |
 | Progress and inspection | Actual advancement, relationship explanations and control results, unresolved limitations, and affected outputs when an input changes. |
 
 [Investigation](2026-10-24-investigation-conception.md) supplies the question-level appraisals. The [global cooperation rules](2026-10-23-question-led-workbench-conception.md#synthesis-and-bounded-analytical-rework) determine how retained inputs and analytical returns are handled.
+
+The agent develops the diagram as its reference and the note from that reasoning, then submits both through one synthesis operation. The operation checks their coherence, versions, and evidence dependencies together. Joint submission preserves the diagram's reference role while making the visual and argued outputs available as one coherent result.
 
 ## Internal Work by Principal Stage
 
@@ -68,7 +70,7 @@ The reader should be able to move from an economic implication to the relevant m
 
 ## Autonomy and Optional Inspection
 
-The three stages advance autonomously under the [review and completion rules](2026-10-23-question-led-workbench-conception.md#appraisal-grouped-review-and-completion). System work checks the diagram's relationships and the note's fidelity rather than asking the analyst to confirm every connection or paragraph.
+The mission agent chooses its approach and useful inspections within the [system frame](2026-10-23-question-led-workbench-conception.md#agent-missions-within-the-system-frame). The [mission completion contract](2026-10-23-question-led-workbench-conception.md#mission-completion-contract) governs when its joint submission allows progression. System work checks the diagram's relationships and the note's fidelity rather than asking the analyst to confirm every connection or paragraph.
 
 The available result supports a quick overall reading, then optional inspection of a mechanism and its evidence. The analyst can challenge a relationship or interpretation. The precise navigation, correction interactions, and visual treatment of changing inputs remain to be designed.
 
@@ -85,7 +87,7 @@ The available result supports a quick overall reading, then optional inspection 
 
 Relationship reasoning, diagram construction, and note development belong together because they express one interpretation. The reference diagram and its explanation must preserve that meaning while presenting different levels of detail. Their coherence is part of the brick's responsibility.
 
-Proposed functional verification: use retained appraisals sharing evidence, a dependency that qualifies an apparent advantage, a contested relationship, and an identified gap. Inspect whether the proposed diagram explains the economic mechanism, preserves conditions and objections, and exposes a traceable path to its inputs. Compare the note with that reference and check that its added depth does not introduce an unsupported or conflicting interpretation. Exercise a returned appraisal outcome and inspect its effect on the synthesis. These checks remain to be designed and run.
+Proposed functional verification: use retained appraisals sharing evidence, a dependency that qualifies an apparent advantage, a contested relationship, and an identified gap. Inspect whether the proposed diagram explains the economic mechanism, preserves conditions and objections, and exposes a traceable path to its inputs. Exercise the joint submission with a note that contradicts or uses a different basis from the diagram, and inspect the resulting diagnostic and correction path. Exercise a returned appraisal outcome and inspect its effect on the synthesis. These checks remain to be designed and run.
 
 Proposed visual exploration: use a frozen illustrative dossier to compare compositions. Check whether a reader can identify the principal mechanism, a decisive dependency, and a relevant uncertainty from the overview, then inspect their explanations and evidence. This must test the combined reading rather than appearance alone. Exact composition and detailed interactions remain open; no measured comprehension result is established.
 
@@ -96,3 +98,4 @@ Proposed visual exploration: use a frozen illustrative dossier to compare compos
 - Define executable quality checks for transversal reasoning and diagram-to-note fidelity, using the shared control principles.
 - Explore the diagram's composition, accessible inspection, responsive behavior, and the note's reading experience.
 - Specify the relationship between input versions, changing reasoning, and affected synthesis outputs within the shared revision model.
+- Define the joint submission's detailed result contract and its correction outcomes within the shared operation catalogue.

@@ -2,7 +2,7 @@
 
 ## Status
 
-Recorded on 2026-10-23 and updated on 2026-10-25. This document preserves the accepted product direction, shared inventory, autonomous preparation, grouped analyst review, and synthesis direction. The target workflow is not implemented; detailed design decisions remain open.
+Recorded on 2026-10-23 and updated on 2026-10-25. This document preserves the accepted product direction, shared inventory and operations, agent missions, grouped analyst review, and synthesis direction. The target workflow is not implemented; detailed design decisions remain open.
 
 This document owns the overall workflow, cooperation between responsibilities, shared inventory rules, and analyst judgment. The [source ingestion and processing conception](2026-10-24-source-ingestion-and-processing-conception.md), [Investigation conception](2026-10-24-investigation-conception.md), and [Synthesis conception](2026-10-25-synthesis-conception.md) detail their respective work and interfaces.
 
@@ -113,7 +113,7 @@ Exact card count, grouping, responsive placement, animation behavior, and the re
 
 ## Reusable Workflow Responsibilities
 
-Sources, Investigation, and Synthesis have dedicated functional conceptions. Their boundaries do not prescribe separate services, agents, model calls, or cards; the technical decomposition and presentation remain to be selected.
+Sources, Investigation, and Synthesis have dedicated functional conceptions. Investigation and Synthesis each use a specialized mission agent within the system's execution frame. Their service boundaries, model routes, detailed execution integration, and card presentation remain to be selected.
 
 | Proposed responsibility | Output |
 | --- | --- |
@@ -151,6 +151,45 @@ Result available, with optional inspection and challenge
 
 One source can inform several questions through the relevant passages. Reusing it must preserve its identity, permitted uses, and limitations. Whether cards represent responsibilities, individual investigations, or grouped work remains open; a growing question count should not automatically produce a separate floating source matrix for every question.
 
+### Agent Missions Within the System Frame
+
+Each Investigation or Synthesis mission starts with its specialized agent in control of the analytical approach. The system supplies the mission, expected artifacts, authorized scope, resource allowances, versions, and progression conditions. The agent chooses useful hypotheses, inspections, operations, and re-examinations within that frame. It can invoke a complete standard treatment when appropriate, or adapt its next action to intermediate findings. The principal stages explain the work; internal analytical steps may be revisited as needed.
+
+Executable constraints govern authority, resources, provenance, and transitions. They do not require every possible contradiction or analytical path to be enumerated in advance. The agent's reasoning remains a proposal subject to the applicable controls. Routine work advances autonomously; the shared intervention policy governs important exceptions.
+
+### Shared Business Operations and Agent Tools
+
+A business operation owns its domain input contract, controls, version handling, persistence, and meaningful outcome. Authorized system code calls that operation directly. An agent tool supplies a description, an input schema derived from the same contract, and an execution binding to the operation. Mission authority and dossier context come from the system. Domain rules remain in the shared operation rather than being reimplemented in the agent binding.
+
+```text
+Authorized system call -----------------------+
+                                              |
+Agent --> Tool description, schema, binding ---+--> Shared business operation
+                                                       |
+                                                       v
+                                               Controls and execution
+                                               Result, scope and limits
+```
+
+Operations can encapsulate substantial processing, including bounded model-assisted work when their task requires it. Each returns the useful result, what was examined, applicable control outcomes, and limitations or failure information. This lets an agent reconsider the next action without treating every local restriction as a dossier-wide stop. Exact operation signatures and semantic control criteria remain to be defined.
+
+### Minimum Shared Operation Catalogue
+
+The following eight business operations are retained as the functional catalogue. Every operation is reusable from authorized system code; the final column defines its retained exposure to the two mission agents. Shared implementation does not automatically grant access to every mission. Context already available at launch should be supplied with the mission rather than require redundant inspection calls.
+
+| Business operation | Responsibility and useful result | Agent exposure |
+| --- | --- | --- |
+| Consult the dossier | Return a bounded view of the scope, questions, inventory, appraisals, versions, and relevant limitations accessible to the mission. | Investigation, Synthesis |
+| Search available material | Retrieve potentially relevant passages from prepared documents, with reproducible references and search limitations. | Investigation, Synthesis |
+| Examine evidence in context | Return the exact passage, its context, and relevant documentary qualifications or use restrictions. A search match alone does not establish analytical support. | Investigation, Synthesis |
+| Contribute to the inventory | Control and record proposed assertions, corrections, and question-specific uses while preserving reusable references and history. This operation belongs to the inventory domain. | Investigation |
+| Request a documentary complement | Submit grouped decisive needs to Sources, including their expected effect and material already examined, under the workflow's permitted phase and allowances. | Investigation |
+| Submit appraisals | Control and record proposed reasoned appraisals by question for grouped review. | Investigation |
+| Request analytical re-examination | Submit a specific concern about an appraisal and its available evidence to Investigation under the bounded rework rules. | Synthesis |
+| Submit synthesis | Submit the reference mechanism diagram and its fully reasoned note together, checking their coherence, versions, and common evidence dependencies. | Synthesis |
+
+These names describe business capabilities, not installed agent APIs. The catalogue retains complete domain operations alongside targeted inspection. Mission completion uses the response contract below rather than an additional business tool.
+
 ### Cooperation and Documentary Complement
 
 Sources first prepares a shared documentary foundation with research targeted at the framed questions, under a bounded initial plan. Investigation then conducts a common inquiry: it exploits the prepared material and inventory, enriches the inventory with controlled assertions, and tests the interpretations across questions. This shares evidence and documentary needs across questions rather than launching independent inquiries with separate inventories for each one.
@@ -171,7 +210,7 @@ This analytical return is autonomous and bounded, uses the material already avai
 
 The retained conception preserves a general company inventory, including useful company context and sourced assertions shared across questions. The system can enrich it from the work performed; other enrichment mechanisms remain to be selected. The inventory need not be exhaustive before a useful appraisal can be proposed.
 
-Sources supplies qualified documentary material. Investigation transforms relevant material into controlled assertions and enriches the inventory during the inquiry. Admission to the analytical inventory requires the assertion and its intended use to satisfy the shared controls; Investigation applies these rules rather than defining a separate validation policy. Finding, reading, selecting, and quoting a source do not themselves establish an assertion's truth. A common assertion can serve several questions while each use retains its own scope, rationale, and supporting, opposing, or contextual relationship.
+Sources supplies qualified documentary material. Investigation transforms relevant material into controlled assertions and enriches the inventory during the inquiry through the shared inventory-contribution operation. That operation belongs to the inventory domain and applies the same admission rules for every authorized caller; it is not owned by the Investigation agent. Finding, reading, selecting, and quoting a source do not themselves establish an assertion's truth. A common assertion can serve several questions while each use retains its own scope, rationale, and supporting, opposing, or contextual relationship.
 
 The evidence matrix makes this inventory and its uses inspectable. The analyst can connect a research question to the relevant assertions, passages, objections, unknowns, control results, and corrections. It need not occupy the main progress view or require supervision of every operation. The distinctions between `Fact`, `Inference`, `Hypothesis`, and `Unknown` remain useful.
 
@@ -221,6 +260,12 @@ The system prepares the appraisals, then offers their grouped review at Investig
 
 The mechanism diagram and reasoned note then become available without another routine approval step. They remain a proposed interpretation based on reviewed appraisals; generation does not imply human adoption of the synthesis. The analyst can inspect or challenge the result without having to repeat the appraisal review to reach it.
 
+### Mission Completion Contract
+
+The agent proposes that its mission is complete by returning the references of the expected artifacts and explicit remaining limitations. The system verifies the artifact set, relevant versions, references, and applicable control outcomes before advancing the workflow. A failed condition returns an actionable result for further work within the mandate or an explicit incomplete outcome. The agent's completion declaration alone cannot authorize the transition.
+
+Artifact-specific semantic criteria remain to be defined; the completion check is not a universal guarantee of truth. A justified insufficiency can be an analytical result. Conditional documentary or re-examination requests are retained with their justification and outcome when used, rather than required for every mission.
+
 Investigation may finish preparing its appraisals when the framed questions have been investigated, including a question that ends in explicitly justified evidence insufficiency. Synthesis preserves those limitations when preparing its outputs after review. A result becoming available means the relevant preparatory work is complete, not that every question is resolved or the analyst has adopted the overall interpretation. Interrupted or unperformed work remains incomplete; missing technical capability cannot be relabelled as an evidence-based unknown. The former finalization requirement of ten dimension decisions is not retained.
 
 Human decisions remain associated with the version reviewed. Later inventory enrichment or analytical rework must not silently rewrite a retained interpretation or imply fresh analyst adoption. If rework proposes a material change to an appraisal already retained, that change returns as a targeted human exception; it does not require routine reapproval of the whole dossier. Affected synthesis outputs must expose the unresolved change rather than imply they rest on a newly adopted appraisal. Exact freshness indicators, follow-up behavior, and revision mechanics remain open.
@@ -255,6 +300,9 @@ An earlier preference for simple verifiable calculations was explicitly narrowed
 | Individual adoption of every appraisal as the default | Not selected. The user retained grouped review with correction or follow-up per question. |
 | Grouped review of appraisals, diagram, and note at the end | Not selected. The user placed grouped review at Investigation output so Synthesis can finish autonomously without another routine final judgment step. |
 | Remove grouped appraisal review and intervene only for exceptions | Not selected. The user retained grouped review before Synthesis. |
+| A fully prescribed analytical path as the sole approach | Not selected. Specialized mission agents adapt the inquiry using shared controlled operations; complete standard treatments remain reusable from code. |
+| Activate agents only after a recognized conflict or blockage | Not selected. Each Investigation or Synthesis agent chooses its approach from the start of its mission. |
+| Separate business implementations for system calls and agent tools | Not selected. A common operation owns the contract and rules; the agent interface supplies the description, schema, and execution binding. |
 
 ## Working System Brief
 
@@ -277,7 +325,7 @@ Analytical rework can improve consistency across appraisals while delaying resul
 
 **Protocol** — Use deterministic checks and focused technical analysis for the reproducible controls. Use the smallest reversible experiment for analytical usefulness and workload, rather than treating a polished interface or a passing schema as validation of the whole system. The proposed leverage point is the handoff from routine evidence preparation to a material human judgment, not raw collection throughput.
 
-**Next smallest test** — Proposed, not executed: use one frozen illustrative dossier with questions sharing an assertion, a contradictory passage, and a documented gap. Walk through framing, source output, appraisals, grouped review, and autonomous synthesis; record whether the analyst can understand and challenge the economic interpretation without coordinating preparation. Inspect diagram-to-appraisal traceability, preservation of the gap, and agreement between diagram and note. Exercise a bounded analytical return when an appraisal needs re-examination, keeping any material revision distinct from the earlier judgment. If the decisive friction is entirely explained by repeatable ownership or transition defects, classify that slice as Complicated and repair it with focused analysis rather than adding exploratory automation. Repeated inability to judge without deep research coordination would falsify the proposed division of work.
+**Next smallest test** — Proposed, not executed: use one frozen illustrative dossier with questions sharing an assertion, a contradictory passage, and a documented gap. Walk through framing, source output, appraisals, grouped review, and autonomous synthesis; record whether the analyst can understand and challenge the economic interpretation without coordinating preparation. Inspect diagram-to-appraisal traceability, preservation of the gap, and agreement between diagram and note. Exercise a bounded analytical return when an appraisal needs re-examination, keeping any material revision distinct from the earlier judgment. With fixed inputs and controlled semantic-verifier results, exercise an inventory contribution through both system and agent-tool entry points under equivalent authority and inspect their control outcomes. If the decisive friction is entirely explained by repeatable ownership or transition defects, classify that slice as Complicated and repair it with focused analysis rather than adding exploratory automation. Repeated inability to judge without deep research coordination would falsify the proposed division of work.
 
 ## Research Basis and Adaptation
 
@@ -285,8 +333,8 @@ These sources inform the conception. They establish public research themes, not 
 
 ### Source Coverage
 
-- [Anthropic interview, Silicon Carne](https://youtu.be/wZ4Fq6lrnbE): metadata and French timed transcript retrieved through YouTube Transcript in Executor. Relevant passages were examined, including the discussion of durable advantage and value migration around 25:00–33:00. The description was read; no sponsor or social-profile link was used as analytical evidence.
-- [OpenAI interview, Silicon Carne](https://youtu.be/vjANwplght0): metadata and French timed transcript retrieved through the same connection. Relevant passages were examined, including the reconciliation of revenue projections, model usage, routing, and pricing around 4:20–10:50. The description links to the Decoding Discontinuity homepage, which was read through Exa.
+- [Raphaëlle intervention on podcast about Anthropic, Silicon Carne](https://youtu.be/wZ4Fq6lrnbE): metadata and French timed transcript retrieved through YouTube Transcript in Executor. Relevant passages were examined, including the discussion of durable advantage and value migration around 25:00–33:00. The description was read; no sponsor or social-profile link was used as analytical evidence.
+- [Raphaëlle intervention on podcast about OpenAI, Silicon Carne](https://youtu.be/vjANwplght0): metadata and French timed transcript retrieved through the same connection. Relevant passages were examined, including the reconciliation of revenue projections, model usage, routing, and pricing around 4:20–10:50. The description links to the Decoding Discontinuity homepage, which was read through Exa.
 - [The Investor's Edge Lives in Their Head, Anekha Sokhal, Moshi](https://youtu.be/UHbODjuviAU): English transcript read through Exa; metadata, description, and transcript retrieved through Firecrawl on 2026-10-24. Executor was not exposed in that session, and the available transcript connector returned no text. The chapter beginning at 10:28 distinguishes preparatory reading, gathering, and cross-checking from human judgment. The description's [Moshi link](https://hellomoshi.ai) was read through Exa; the event-promotion link was not used. This informs the division of work, not a claim that the prototype delivers continuous market monitoring, trading decisions, a quant team, or Moshi's advertised performance.
 - The user-supplied [Questionnaire documentation](https://ui.shadcn.com/docs/components/base/questionnaire) was read through Exa. It describes single and multiple choices, freeform answers, optional questions, and host-owned persistence and branching. This supports the selected interaction direction without establishing installation or compatibility in the prototype.
 - External content read through Exa includes [About Decoding Discontinuity](https://www.decodingdiscontinuity.com/about), [Institutional Research](https://www.decodingdiscontinuity.com/p/institutional-research), and the [public ARAF presentation](https://www.decodingdiscontinuity.com/p/araf-architectural-resilience-assessment-framework).
@@ -310,7 +358,8 @@ These sources inform the conception. They establish public research themes, not 
 - Define the exact common research foundation, the bounded set of decisive questions, and how the proposed activity or workflow is selected and corrected.
 - Define how framing completes without making optional refinements mandatory, and how later scope changes affect ongoing work and existing results. Research starts only after framing; speculative background research during framing is not part of the prototype.
 - Specify the launch mandate's source-selection rules, resource limits, intervention criteria, and handling of material exceptions, using the source conception for its internal workflow. Delegated selection is accepted; its enforcement and replacement of the current human corpus checkpoint are not implemented.
-- Define the technical realization of Sources, Investigation, and Synthesis, card grouping, detail-page navigation, and completed-result presentation. Preserve the accepted composer, timeline, contextual-intervention, and optional-inspection direction without treating an illustrative layout as finished design.
+- Define the technical integration of the two specialized mission agents with the existing execution frame, including context, bounded execution, and recovery. Select the signatures, domain result contracts, permissions, and artifact-specific controls for the eight shared operations. Their catalogue and mission exposure are retained; their APIs and detailed implementation remain open.
+- Define card grouping, detail-page navigation, and completed-result presentation. Preserve the accepted composer, timeline, contextual-intervention, and optional-inspection direction without treating an illustrative layout as finished design.
 - Specify the grouped complement's prioritization and resource allocation across questions, and the cooperation outcomes when requested material is unavailable. Its placement after the first shared analytical pass and its single bounded phase are retained.
 - Specify the triggers, limits, and stopping rules for analytical rework between Synthesis and Investigation, including how a proposed material revision becomes a targeted exception. The return uses existing material and does not add a documentary research phase.
 - Specify shared assertion identity, question-to-evidence relationships, inventory correction and enrichment mechanisms, and their presentation in the matrix. Exact records, freshness rules, and navigation are not selected.

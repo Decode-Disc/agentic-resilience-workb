@@ -20,15 +20,16 @@ PROPOSE THE APPRAISALS
 
 ## Interface
 
-The caller supplies a framed dossier and available evidence. Investigation handles the analytical work across questions without requiring a separate analyst-managed inquiry for each one.
+The caller supplies a framed dossier and available evidence. A specialized Investigation agent conducts the common inquiry using the [shared business operations](2026-10-23-question-led-workbench-conception.md#minimum-shared-operation-catalogue). The two artifact families below form the mission result; documentary requests and re-examination outcomes apply when needed.
 
 | Direction | Information crossing the interface |
 | --- | --- |
 | Input | Company and activity scope, framed questions, existing inventory, prepared documentary material with its provenance and usage restrictions, and applicable research constraints. |
 | Re-examination input | An identified concern about an appraisal or its reasoning, the affected version, and the available evidence to reconsider. |
-| Inventory contributions | Controlled assertions and their question-specific uses, with supporting references, reasoning, and limitations. |
-| Documentary needs | Grouped requests explaining what information is missing, which questions it affects, and why it could change an interpretation. |
-| Appraisals | A proposed appraisal for each framed question, with traceable reasoning and evidence dependencies. |
+| Inventory artifact | References to controlled assertions reused, added, or corrected in the shared inventory and their question-specific uses, with evidence, reasoning, and limitations. |
+| Documentary needs, when required | Grouped requests explaining what information is missing, which questions it affects, and why it could change an interpretation, retained with their outcome. |
+| Appraisal artifact | A proposed reasoned appraisal for each framed question, including justified insufficiency where necessary, with traceable reasoning and evidence dependencies. |
+| Re-examination outcome, when requested | A proposed revision or a justification for maintaining the appraisal, tied to the examined version. |
 | Progress and inspection | Actual advancement, inspectable interpretations and control results, unresolved needs, and exceptions affecting the inquiry. |
 
 The [cooperation sequence](2026-10-23-question-led-workbench-conception.md#cooperation-and-documentary-complement) governs documentary requests and returned material. [Sources](2026-10-24-source-ingestion-and-processing-conception.md) supplies the qualified material; Investigation expresses the analytical need without specifying retrieval operations.
@@ -70,13 +71,13 @@ When asked to re-examine an appraisal, Investigation revisits the identified rea
 
 ## Autonomy and Optional Inspection
 
-Investigation performs the three stages proactively. Routine interpretation work, inventory contributions, and identification of documentary needs do not require the analyst to coordinate internal operations. Exceptions are surfaced under the [shared intervention policy](2026-10-23-question-led-workbench-conception.md#launch-mandate-and-contextual-intervention).
+The mission agent uses its available operations to adapt the inquiry and revisit interpretations as evidence requires, within the [system frame](2026-10-23-question-led-workbench-conception.md#agent-missions-within-the-system-frame). Exceptions follow the shared intervention policy; the [mission completion contract](2026-10-23-question-led-workbench-conception.md#mission-completion-contract) governs when the submitted artifacts allow progression.
 
 Optional inspection exposes the assertions reused or introduced, the relationship between evidence and interpretation, relevant alternatives, objections, and the reasons for requesting more material. The analyst can challenge a use, correct an assertion, or redirect a question. The precise correction and revision mechanics remain to be designed with the shared inventory, rather than introduced as an Investigation-only policy.
 
 ## Design and Verification Direction
 
-Investigation keeps inventory enrichment and question reasoning together because the assertions worth retaining emerge during the inquiry, and their usefulness depends on their intended analytical use. Its interface exposes contributions, documentary needs, and appraisals rather than asking the caller to orchestrate assertion extraction and separate reasoning passes. The three stages describe the work; they do not select a model-per-question arrangement, call count, or execution partition.
+Investigation keeps inventory enrichment and question reasoning together because the assertions worth retaining emerge during the inquiry, and their usefulness depends on their intended analytical use. Its interface exposes contributions, documentary needs, and appraisals rather than asking the caller to orchestrate assertion extraction and separate reasoning passes. The specialized agent is assigned to the common mission across questions; detailed tool and model execution remain to be selected.
 
 Proposed verification: use a bounded dossier with two questions sharing an assertion, material supporting a rival interpretation, and a missing fact that could affect both questions. Verify that the inquiry reuses the assertion with distinct use rationales, examines the rival interpretation, and expresses one grouped documentary need. Return additional qualified material and inspect whether the resulting appraisals explain its effect without losing their objections or limitations. Submit a targeted re-examination concern against an existing appraisal and verify that the response explains either the proposed change or the reason to preserve the interpretation. Analytical usefulness and control quality still need evaluation; this conception does not establish them.
 
@@ -86,4 +87,4 @@ Proposed verification: use a bounded dossier with two questions sharing an asser
 - Specify analytical control criteria for assertion uses, causal reasoning, rival interpretations, and evidence-based explanations of appraisal strength.
 - Define how documentary needs are prioritized by their potential effect on the framed questions and expressed without prescribing source-retrieval mechanics.
 - Specify the inspection and correction interactions for reasoning and question-specific evidence uses, in coordination with the shared revision model.
-- Choose the execution partition and meaningful progress states for the common inquiry, and define executable quality checks through its interface.
+- Specify how the Investigation mission uses its shared operations and artifact contracts, including meaningful progress and executable quality checks through the interface.
