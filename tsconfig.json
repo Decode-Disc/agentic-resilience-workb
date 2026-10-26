@@ -3,6 +3,7 @@
         "src/**/*.ts",
         "src/**/*.tsx",
         "scripts/**/*.ts",
+        "e2e/**/*.ts",
         "vite.config.ts",
         "vitest.config.ts"
     ],

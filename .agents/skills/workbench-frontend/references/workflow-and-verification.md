@@ -31,6 +31,8 @@ For new or recomposed views, inspect desktop and narrow mobile with realistic co
 
 Exercise relevant tabs, disclosures, search, clear, navigation, and recovery. Inspect keyboard/focus, touch operation, loading geometry, empty/error outcomes, long text, and console errors. Check reduced motion when animations change and both themes when colors or surfaces change. Measure the actual scrolling element when investigating overflow; a screenshot of the top of a list does not establish correct scrolling.
 
+For presentation claims, headless browser probes establish the specific fact where a screenshot only shows a possible one: scan the built CSSOM to confirm a generated class actually resolves, read computed styles before and after a real `:hover` to prove a hover claim (assert `matches(":hover")` when using a mouse probe), compute luminance ratios for reading-surface separation against a gradient backdrop, and sweep distinct radii across a surface after consolidating a shared utility. Screenshots still record the accepted look; these probes answer the named question when the eyeball check would pass an unchanged defect.
+
 ## Keep evidence levels distinct
 
 Controlled examples can establish correctness without establishing live availability or analytical usefulness. Keep the observed evidence level explicit so the handoff does not promise more than the checks demonstrate. Use the distinctions below when selecting a check and reporting its result.

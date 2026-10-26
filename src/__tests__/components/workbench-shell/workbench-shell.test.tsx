@@ -209,7 +209,7 @@ describe("WorkbenchShell", () => {
         );
     });
 
-    it("sends an admin to operations after workspace access", async () => {
+    it("sends an admin to administration after workspace access", async () => {
         convexReactHarness.query(api.visitors.current).returns(null);
         claimInvitation.mockResolvedValue({
             visitorId: "visitor-admin",
@@ -239,7 +239,7 @@ describe("WorkbenchShell", () => {
         );
     });
 
-    it("lets an admitted analyst sign out without exposing admin operations", async () => {
+    it("lets an admitted analyst sign out without exposing administration", async () => {
         convexReactHarness.query(api.visitors.current).returns({
             role: "analyst",
             status: "active",
@@ -261,7 +261,7 @@ describe("WorkbenchShell", () => {
         fireEvent.click(
             screen.getByRole("button", { name: /Workspace menu/i }),
         );
-        expect(screen.queryByText("Operations")).toBeNull();
+        expect(screen.queryByText("Administration")).toBeNull();
 
         fireEvent.click(await screen.findByText("Logout"));
 
@@ -269,7 +269,7 @@ describe("WorkbenchShell", () => {
         expect(navigate).toHaveBeenCalledWith({ to: "/workspace/start" });
     });
 
-    it("keeps Operations in the session menu for an admitted admin", async () => {
+    it("keeps Administration in the session menu for an admitted admin", async () => {
         convexReactHarness.query(api.visitors.current).returns({
             role: "admin",
             status: "active",
@@ -287,7 +287,7 @@ describe("WorkbenchShell", () => {
             screen.getByRole("button", { name: /Workspace menu/i }),
         );
         fireEvent.click(
-            await screen.findByRole("button", { name: "Operations" }),
+            await screen.findByRole("button", { name: "Administration" }),
         );
 
         expect(navigate).toHaveBeenCalledWith({ to: "/workspace/admin" });

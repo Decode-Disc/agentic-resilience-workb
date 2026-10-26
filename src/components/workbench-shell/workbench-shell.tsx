@@ -33,7 +33,7 @@ export interface WorkbenchShellProps {
     activeRunId?: string;
 }
 
-function OperationsMenuIcon({ className }: { className?: string }) {
+function AdministrationMenuIcon({ className }: { className?: string }) {
     return <Icon iconNode={Settings02Icon} className={className} />;
 }
 
@@ -94,9 +94,9 @@ function WorkbenchHeader({ activeRunId }: { activeRunId?: string }) {
                 ...(visitor?.role === "admin"
                     ? [
                           {
-                              key: "operations",
-                              label: "Operations",
-                              icon: OperationsMenuIcon,
+                              key: "administration",
+                              label: "Administration",
+                              icon: AdministrationMenuIcon,
                               onSelect: () => {
                                   void navigate({
                                       to: "/workspace/admin",

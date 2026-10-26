@@ -109,7 +109,7 @@ test("protected administration separates and pages technical dossiers", async ({
         page.getByRole("dialog", { name: "Protected access" }),
     ).toBeHidden();
     await expect(
-        page.getByRole("heading", { name: "Operations control" }),
+        page.getByRole("heading", { name: "Administration" }),
     ).toBeVisible();
     const validationContext = await browser.newContext({
         baseURL: test.info().project.use.baseURL,
@@ -125,9 +125,7 @@ test("protected administration separates and pages technical dossiers", async ({
         >("e2eFixtures:seedAdministrationPaginationScenario", {
             fixtureKey: "admin-pagination",
         });
-        await page
-            .getByRole("button", { name: "Benchmarks", exact: true })
-            .click();
+        await page.getByRole("tab", { name: "Benchmarks", exact: true }).click();
         await expect(
             page.getByRole("button", { name: "Inspect dossier", exact: true }),
         ).toHaveCount(20);
@@ -162,14 +160,13 @@ test("protected administration separates and pages technical dossiers", async ({
         await page.keyboard.press("Escape");
         await expect(dialog).toBeHidden();
         await page.setViewportSize({ width: 390, height: 844 });
-        await page
-            .getByRole("button", { name: "Browser tests", exact: true })
-            .click();
+        await page.getByRole("tab", { name: "Browser tests", exact: true }).click();
         await expect(
             page.getByRole("button", { name: "Inspect dossier", exact: true }),
         ).toHaveCount(20);
         for (const id of population.browserRunIds)
             await expect(page.getByText(id, { exact: true })).toBeVisible();
+        await page.getByRole("tab", { name: "Reservations", exact: true }).click();
         await expect(
             page.getByText("Reserved for validation", { exact: true }),
         ).toBeVisible();

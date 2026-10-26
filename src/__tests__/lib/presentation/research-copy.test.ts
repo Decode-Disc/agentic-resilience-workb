@@ -1,5 +1,7 @@
 import { expect, test } from "vitest";
 import {
+    checkpointDecisionLabel,
+    checkpointLabel,
     eventLabel,
     sourceAssessmentExplanationCopy,
     sourceCompanyLinkageLabel,
@@ -163,6 +165,30 @@ test("explains comparison scope and uncertainty without presenting a model conce
     ).toBe(
         "No completed comparison with applicable captured primary passages is available. Verify this contribution before using it even as an attributed hypothesis.",
     );
+});
+
+test("names human review checkpoints and their decisions without raw keys", () => {
+    expect(checkpointLabel("source_review")).toBe("Source review");
+    expect(checkpointLabel("evidence_sufficiency_review")).toBe(
+        "Evidence coverage review",
+    );
+    expect(checkpointLabel("assessment_review")).toBe("Assessment review");
+    expect(checkpointDecisionLabel("approved")).toBe("Approved");
+    expect(checkpointDecisionLabel("recheck")).toBe("Recheck requested");
+    expect(checkpointDecisionLabel("force_continue")).toBe(
+        "Continued despite missing evidence",
+    );
+    expect(checkpointDecisionLabel("complete_insufficient")).toBe(
+        "Closed as insufficient",
+    );
+    for (const decision of [
+        "approved",
+        "recheck",
+        "force_continue",
+        "complete_insufficient",
+    ] as const) {
+        expect(checkpointDecisionLabel(decision)).not.toMatch(/_/);
+    }
 });
 
 test("keeps internal comparison references out of analyst-facing explanations", () => {

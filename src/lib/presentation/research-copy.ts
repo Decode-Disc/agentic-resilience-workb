@@ -28,6 +28,9 @@ type ReviewSource = NonNullable<
     FunctionReturnType<typeof api.sources.getReviewSource>
 >;
 type SourceQualification = NonNullable<ReviewSource["qualification"]>;
+type AdminCheckpointEvent = FunctionReturnType<
+    typeof api.adminOperations.get
+>["checkpoints"][number];
 
 export type SourceRecoveryState = {
     target: FunctionArgs<
@@ -1399,6 +1402,36 @@ export function providerOperationLabel(operation: string): string {
 
 export function providerErrorLabel(errorCode: string): string {
     return providerErrorLabels[errorCode] ?? "Provider attempt needs review";
+}
+
+const checkpointLabels: Record<AdminCheckpointEvent["checkpoint"], string> = {
+    evidence_sufficiency_review: "Evidence coverage review",
+    source_review: "Source review",
+    assessment_review: "Assessment review",
+};
+
+const checkpointDecisionLabels: Record<
+    AdminCheckpointEvent["decision"],
+    string
+> = {
+    approved: "Approved",
+    recheck: "Recheck requested",
+    force_continue: "Continued despite missing evidence",
+    complete_insufficient: "Closed as insufficient",
+};
+
+/** Names the human review checkpoint recorded for a dossier. */
+export function checkpointLabel(
+    checkpoint: AdminCheckpointEvent["checkpoint"],
+): string {
+    return checkpointLabels[checkpoint];
+}
+
+/** Names a recorded human decision without exposing its stored key. */
+export function checkpointDecisionLabel(
+    decision: AdminCheckpointEvent["decision"],
+): string {
+    return checkpointDecisionLabels[decision];
 }
 
 /** Describes recovery consequences without exposing transport or workflow diagnostics. */

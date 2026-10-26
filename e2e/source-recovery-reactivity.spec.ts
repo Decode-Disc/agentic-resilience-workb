@@ -14,7 +14,7 @@ for (const viewport of [
         test.use({
             hasTouch: viewport.name === "mobile",
             isMobile: viewport.name === "mobile",
-            reducedMotion: "reduce",
+            contextOptions: { reducedMotion: "reduce" },
         });
         test("opens contextual help by keyboard or tap and preserves source inspection", async ({
             page,
