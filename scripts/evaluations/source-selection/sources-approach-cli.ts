@@ -4,12 +4,17 @@ import {
     copyFileSync,
     existsSync,
     mkdirSync,
+    readdirSync,
     readFileSync,
     writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs, parseEnv } from "node:util";
 import { z } from "zod";
+import {
+    EvaluationBudget,
+    type EvaluationBudgetPolicy,
+} from "./evaluation-records.ts";
 import { buildSourcesApproachReport } from "./sources-approach-report.ts";
 import {
     runSourcesMission,
@@ -24,6 +29,7 @@ import {
     SOURCES_INSPECTION_PROTOCOL,
     type SourcesApproach,
     type SourcesApproachResult,
+    type SourcesCallReceipt,
     type SourcesInspectionBaseline,
     SourcesPreparation,
     type SourcesReasoning,
@@ -160,6 +166,8 @@ type Manifest = {
         }>;
     } | null;
     maximumAttempts: number;
+    budgetPolicy?: EvaluationBudgetPolicy;
+    indicativeUncachedUsd?: number | null;
     maximumReservationUsd: number | null;
     limits: typeof SOURCES_APPROACH_LIMITS;
     evidenceBoundary: string;
@@ -362,6 +370,7 @@ export function freezeSourcesStudy(args: {
     scenarios: SourcesScenario[];
     repetitions: number;
     maximumAttempts?: number;
+    budgetPolicy?: EvaluationBudgetPolicy;
     approach?: SourcesApproach;
     reasoning?: SourcesReasoning;
     catalog: Manifest["catalog"];
@@ -370,6 +379,11 @@ export function freezeSourcesStudy(args: {
     assert(
         !existsSync(args.out),
         "Use a new output directory; retained evidence is immutable",
+    );
+    assert(
+        args.budgetPolicy === undefined ||
+            ["whole_lot", "stop_at_budget"].includes(args.budgetPolicy),
+        "Invalid budget policy",
     );
     const scenarios = z.array(scenarioSchema).min(1).parse(args.scenarios);
     assert(
@@ -463,6 +477,8 @@ export function freezeSourcesStudy(args: {
         profile,
         catalog: args.catalog,
         maximumAttempts,
+        budgetPolicy: args.budgetPolicy ?? "whole_lot",
+        indicativeUncachedUsd: null,
         maximumReservationUsd: profile
             ? maximumAttempts *
               (Math.min(
@@ -565,6 +581,7 @@ export async function runSourcesApproachCli(
             approach: { type: "string" },
             reasoning: { type: "string" },
             "maximum-attempts": { type: "string" },
+            "budget-policy": { type: "string" },
             authorization: { type: "string" },
             phase: { type: "string" },
             execution: { type: "string" },
@@ -573,7 +590,7 @@ export async function runSourcesApproachCli(
     });
     if (values.help) {
         console.log(
-            "Sources evaluation: --prepare --out NEW_DIR [--scenarios FILE | --servicenow-input FILE | --inspection-baseline PREVIOUS_RUN --mandates FILE [--inspection-focus FILE]] [--model ID --provider ROUTE] [--approach fixed|agent] [--reasoning off|on]; --offline --out DIR --responses FILE [--search-responses FILE]; --live --out DIR --authorization FILE --phase development|validation [--slot-key CLAIMED_SLOT]; --summarize --out DIR [--report NEW_NAME]. No inference in prepare/offline/summarize. See README.md.",
+            "Sources evaluation: --prepare --out NEW_DIR [--scenarios FILE | --servicenow-input FILE | --inspection-baseline PREVIOUS_RUN --mandates FILE [--inspection-focus FILE]] [--model ID --provider ROUTE] [--approach fixed|agent] [--reasoning off|on] [--budget-policy whole_lot|stop_at_budget]; --offline --out DIR --responses FILE [--search-responses FILE]; --live --out DIR --authorization FILE --phase development|validation [--slot-key CLAIMED_SLOT]; --summarize --out DIR [--report NEW_NAME]. No inference in prepare/offline/summarize. See README.md.",
         );
         return;
     }
@@ -722,6 +739,10 @@ export async function runSourcesApproachCli(
                 values["maximum-attempts"] === undefined
                     ? undefined
                     : Number(values["maximum-attempts"]),
+            budgetPolicy: z
+                .enum(["whole_lot", "stop_at_budget"])
+                .optional()
+                .parse(values["budget-policy"]),
             catalog,
             inspection,
         });
@@ -740,6 +761,10 @@ export async function runSourcesApproachCli(
             JSON.stringify({
                 out,
                 missions: manifest.missions.length,
+                budgetPolicy: manifest.budgetPolicy ?? "whole_lot",
+                indicativeUncachedUsd: manifest.indicativeUncachedUsd ?? null,
+                estimateUnavailableReason:
+                    "downstream_requests_depend_on_model_responses",
                 maximumAttempts: manifest.maximumAttempts,
                 maximumReservationUsd: manifest.maximumReservationUsd,
             }),
@@ -783,13 +808,35 @@ export async function runSourcesApproachCli(
         const notRunMissionIds = manifest.missions
             .filter((m) => !results.some((r) => r.missionId === m.missionId))
             .map((m) => m.missionId);
+        const authorizedBudgetsUsd =
+            execution === "live"
+                ? readdirSync(out)
+                      .filter(
+                          (file) =>
+                              file !== "authorization-template.json" &&
+                              /^authorization-.+\.json$/.test(file),
+                      )
+                      .map((file) => ({
+                          file,
+                          budgetUsd: (
+                              read(join(out, file)) as { budgetUsd: number }
+                          ).budgetUsd,
+                      }))
+                : [];
+        const budgetPresentation = {
+            budgetPolicy: manifest.budgetPolicy ?? "whole_lot",
+            indicativeUncachedUsd: manifest.indicativeUncachedUsd ?? null,
+            maximumReservationUsd: manifest.maximumReservationUsd,
+            authorizedBudgetsUsd,
+        };
         writeFileSync(
             join(out, `${name}.md`),
-            `${report.markdown}\nNot run: ${notRunMissionIds.join(", ") || "none"}.\n`,
+            `${report.markdown}\nBudget policy: ${budgetPresentation.budgetPolicy}. Indicative uncached estimate: ${budgetPresentation.indicativeUncachedUsd ?? "unavailable (downstream requests depend on model responses)"}. Conservative lot maximum: ${budgetPresentation.maximumReservationUsd ?? "unavailable"} USD. Authorized cumulative ceilings: ${authorizedBudgetsUsd.map((entry) => `${entry.file}: ${entry.budgetUsd} USD`).join(", ") || "none (offline)"}.\nNot run: ${notRunMissionIds.join(", ") || "none"}.\n`,
             { flag: "wx" },
         );
         save(join(out, `${name}.json`), {
             ...report.summary,
+            budget: budgetPresentation,
             plannedMissionCount: manifest.missions.length,
             notRunMissionIds,
         });
@@ -886,6 +933,7 @@ export async function runSourcesApproachCli(
             ),
             maximumAttempts: manifest.maximumAttempts,
             maximumReservationUsd: manifest.maximumReservationUsd,
+            budgetPolicy: manifest.budgetPolicy,
             catalog: manifest.catalog,
             currentCatalog: current,
             approval: read(values.authorization),
@@ -973,11 +1021,18 @@ export async function runSourcesApproachCli(
             ),
         "Started mission has no retained result: inspect before continuation",
     );
-    let attempts = starts.length;
-    let charged = starts.reduce(
-        (sum, e) => sum + (settled.get(e.id)?.costUsd ?? e.reservationUsd),
-        0,
-    );
+    const accounting = values.live
+        ? new EvaluationBudget({
+              budgetUsd: budget,
+              maximumAttempts: manifest.maximumAttempts,
+              history: starts.map((entry) => ({
+                  id: entry.id,
+                  reservationUsd: entry.reservationUsd,
+                  costUsd: settled.get(entry.id)?.costUsd,
+                  settled: settled.has(entry.id),
+              })),
+          })
+        : undefined;
     writeFileSync(
         join(out, `${execution}-${segment}.started`),
         new Date().toISOString(),
@@ -1076,30 +1131,27 @@ export async function runSourcesApproachCli(
                           });
                       }
                     : undefined,
-                authorizeCall: values.live
-                    ? (reservation) => {
-                          assert(
-                              attempts < manifest.maximumAttempts &&
-                                  charged + reservation <= budget,
-                              "Approved lot exhausted",
-                          );
-                          attempts++;
-                          charged += reservation;
-                      }
+                authorizeCall: accounting
+                    ? (reservation, id) =>
+                          accounting.reserve(id, reservation, controller.signal)
                     : undefined,
-                journal: (entry) =>
-                    appendFileSync(callsFile, `${JSON.stringify(entry)}\n`),
+                journal: (entry) => {
+                    appendFileSync(callsFile, `${JSON.stringify(entry)}\n`);
+                    if (
+                        accounting &&
+                        (entry.event === "response" || entry.event === "result")
+                    ) {
+                        const receipt = entry.receipt as SourcesCallReceipt;
+                        accounting.settle(receipt.id, receipt.costUsd);
+                    }
+                },
             });
             appendFileSync(resultsFile, `${JSON.stringify(result)}\n`);
-            if (values.live)
-                charged -= result.calls.reduce(
-                    (sum, c) =>
-                        sum +
-                        (c.costUsd === undefined
-                            ? 0
-                            : c.reservationUsd - c.costUsd),
-                    0,
-                );
+            if (
+                result.stopReason === "budget_exhausted" ||
+                result.stopReason === "attempt_limit"
+            )
+                break;
             if (
                 result.status === "unknown" ||
                 result.calls.some((c) => c.status === "failed")

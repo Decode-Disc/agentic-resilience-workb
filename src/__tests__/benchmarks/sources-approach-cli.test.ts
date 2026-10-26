@@ -420,3 +420,184 @@ test("inspection freeze preserves the baseline and creates only fixed/off and ag
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test("live budget stopping preserves completed calls and settles each receipt before the next qualification", async () => {
+    const { freezeSourcesStudy } = await import(
+        "../../../scripts/evaluations/source-selection/sources-approach-cli"
+    );
+    const { sourcesDigest } = await import(
+        "../../../scripts/evaluations/source-selection/sources-approach-study"
+    );
+    const dir = mkdtempSync(join(tmpdir(), "sources-budget-contract-"));
+    const text = "Acme publishes this public document.";
+    const scenarios = [
+        {
+            id: "acme",
+            phase: "development" as const,
+            company: { cik: "123", legalName: "Acme", ticker: "ACME" },
+            asOfTime: 0,
+            researchAngle: "",
+            sources: [1, 2].map((index) => ({
+                candidate: {
+                    sourceId: `source-${index}`,
+                    title: `Document ${index}`,
+                    canonicalUrl: `https://acme.example/${index}`,
+                    origin: "exa" as const,
+                    category: "captured",
+                    createdAt: 0,
+                },
+                text,
+                contentHash: sourcesDigest(text),
+            })),
+        },
+    ];
+    const catalog = {
+        observedAt: new Date().toISOString(),
+        models: [
+            {
+                id: "fixture/model",
+                provider: "fixture",
+                inputPricePerToken: 0,
+                outputPricePerToken: 0.000001,
+                contextLength: 1000000,
+                sourceUrl:
+                    "https://openrouter.ai/api/v1/models/fixture/model/endpoints",
+            },
+        ],
+    };
+    let dispatches = 0;
+    const request = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async (url) => {
+            if (String(url).endsWith("/endpoints"))
+                return Response.json({
+                    data: {
+                        endpoints: [
+                            {
+                                provider_name: "fixture",
+                                status: 0,
+                                context_length: 1000000,
+                                supported_parameters: [
+                                    "tools",
+                                    "structured_outputs",
+                                    "reasoning",
+                                ],
+                                pricing: { prompt: 0, completion: 0.000001 },
+                            },
+                        ],
+                    },
+                });
+            expect(String(url)).toBe(
+                "https://openrouter.ai/api/v1/chat/completions",
+            );
+            dispatches++;
+            return Response.json({
+                id: `synthetic-${dispatches}`,
+                model: "fixture/model",
+                created: 0,
+                choices: [
+                    {
+                        index: 0,
+                        finish_reason: "stop",
+                        message: {
+                            role: "assistant",
+                            content: JSON.stringify({
+                                companyMatch: "uncertain",
+                                companyPassageKeys: [],
+                                documentKind: "unknown",
+                                reportingPeriodEnd: null,
+                                reportingPeriodPassageKeys: [],
+                                contributions: Object.fromEntries(
+                                    SOURCE_COVERAGE_ROLES.map((role) => [
+                                        role,
+                                        null,
+                                    ]),
+                                ),
+                                limitations: [],
+                            }),
+                        },
+                    },
+                ],
+                usage: {
+                    prompt_tokens: 100,
+                    completion_tokens: 50,
+                    total_tokens: 150,
+                    cost: 0.001,
+                },
+            });
+        });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.stubEnv("OPENROUTER_API_KEY", "synthetic-budget-test-key");
+    try {
+        for (const [budgetUsd, expectedCalls, status] of [
+            [0.0175, 2, "complete"],
+            [0.0165, 1, "partial"],
+        ] as const) {
+            dispatches = 0;
+            const out = join(dir, `run-${expectedCalls}`);
+            freezeSourcesStudy({
+                root: process.cwd(),
+                out,
+                scenarios,
+                repetitions: 1,
+                approach: "fixed",
+                reasoning: "off",
+                maximumAttempts: 4,
+                budgetPolicy: "stop_at_budget",
+                catalog,
+            });
+            const authorization = join(dir, `approval-${expectedCalls}.json`);
+            writeFileSync(
+                authorization,
+                JSON.stringify({
+                    manifestSha256: sourcesDigest(
+                        readFileSync(join(out, "manifest.json"), "utf8"),
+                    ),
+                    maximumAttempts: 4,
+                    budgetUsd,
+                    approvedAt: new Date().toISOString(),
+                }),
+            );
+            await runSourcesApproachCli([
+                "--live",
+                "--out",
+                out,
+                "--authorization",
+                authorization,
+                "--phase",
+                "development",
+            ]);
+            const result = JSON.parse(
+                readFileSync(join(out, "live-results.jsonl"), "utf8").trim(),
+            );
+            expect(result.status).toBe(status);
+            expect(dispatches).toBe(expectedCalls);
+            expect(result.calls).toHaveLength(expectedCalls);
+            if (status === "partial")
+                expect(result.stopReason).toBe("budget_exhausted");
+            const journal = readFileSync(join(out, "live-calls.jsonl"), "utf8");
+            expect(journal).not.toContain("synthetic-budget-test-key");
+            await runSourcesApproachCli([
+                "--summarize",
+                "--out",
+                out,
+                "--report",
+                "budget-summary",
+            ]);
+            const summary = JSON.parse(
+                readFileSync(join(out, "budget-summary.json"), "utf8"),
+            );
+            expect(summary.budget.authorizedBudgetsUsd).toEqual([
+                { file: "authorization-development.json", budgetUsd },
+            ]);
+            expect(summary.budget.maximumReservationUsd).toBeGreaterThan(
+                budgetUsd,
+            );
+        }
+    } finally {
+        request.mockRestore();
+        log.mockRestore();
+        vi.unstubAllEnvs();
+        rmSync(dir, { recursive: true, force: true });
+    }
+}, 30_000);

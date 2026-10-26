@@ -10,7 +10,10 @@ import {
     tool,
 } from "ai";
 import { z } from "zod";
-import { redactEvaluationResponse } from "./evaluation-records.ts";
+import {
+    EvaluationBudgetStop,
+    redactEvaluationResponse,
+} from "./evaluation-records.ts";
 import {
     createEvaluationQualificationSchema,
     qualificationCorrectionSchema,
@@ -58,7 +61,10 @@ export type SourcesRunOptions = SourcesMission & {
     fetch?: typeof fetch;
     signal?: AbortSignal;
     journal?: (entry: Record<string, unknown>) => void;
-    authorizeCall?: (reservationUsd: number) => void;
+    authorizeCall?: (
+        reservationUsd: number,
+        id: string,
+    ) => void | Promise<void>;
 };
 
 export async function runSourcesMission(
@@ -115,11 +121,13 @@ export async function runSourcesMission(
         }
     } catch (error) {
         stopReason =
-            error instanceof assert.AssertionError
-                ? error.message
-                : error instanceof Error
-                  ? error.name
-                  : "mission_failed";
+            error instanceof EvaluationBudgetStop
+                ? error.reason
+                : error instanceof assert.AssertionError
+                  ? error.message
+                  : error instanceof Error
+                    ? error.name
+                    : "mission_failed";
         journal({ event: "stopped", reason: stopReason });
     }
     const result: SourcesApproachResult = {
@@ -194,9 +202,11 @@ function createMissionModel(
                 bytes * options.profile.inputPricePerToken +
                 SOURCES_APPROACH_LIMITS.outputTokens *
                     options.profile.outputPricePerToken;
-            options.authorizeCall?.(reservationUsd);
+            const id = `${options.missionId}:${calls.length + 1}`;
+            await options.authorizeCall?.(reservationUsd, id);
+            signal.throwIfAborted();
             const receipt: SourcesCallReceipt = {
-                id: `${options.missionId}:${calls.length + 1}`,
+                id,
                 status: "unknown",
                 requestHash: sourcesDigest(body),
                 reservationUsd,

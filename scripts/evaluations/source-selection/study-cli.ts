@@ -16,6 +16,10 @@ import { parseEnv } from "node:util";
 import { createServer } from "vite";
 import { evaluationTransport, validateAnswers } from "./decision-protocol.ts";
 import {
+    EvaluationBudget,
+    EvaluationBudgetStop,
+    estimateUncachedEvaluation,
+    knownEvaluationCharge,
     readEvaluationHistory,
     redactEvaluationResponse,
 } from "./evaluation-records.ts";
@@ -112,6 +116,7 @@ type Entry = {
     response?: Record<string, unknown>;
     costUsd?: number;
     costBasis?: string;
+    estimatedCostUsd?: number;
     latencyMs?: number;
     output?: unknown;
     at: string;
@@ -159,6 +164,8 @@ export async function runStudyCli(
         "--replacements",
         "--models",
         "--tasks",
+        "--budget-policy",
+        "--cost-reference",
     ]);
     const switches = new Set([
         "--prepare",
@@ -575,8 +582,46 @@ export async function runStudyCli(
                     price.inputPricePerToken +
                 outputLimit * price.outputPricePerToken;
         }
+        const name = option("--run");
+        assert(
+            !name || /^[a-zA-Z0-9_-]+$/.test(name),
+            "Supply a bounded run name",
+        );
+        const run = name
+            ? resolve(dirname(resolve(path)), "runs", name)
+            : undefined;
+        const manifestPath = run ? join(run, "manifest.json") : undefined;
+        const retained =
+            manifestPath && existsSync(manifestPath)
+                ? (read(manifestPath) as { budgetPolicy?: string })
+                : undefined;
+        const costReferencePath =
+            option("--cost-reference") ??
+            (run && existsSync(join(run, "cost-reference.jsonl"))
+                ? join(run, "cost-reference.jsonl")
+                : undefined);
+        const forecast = estimateUncachedEvaluation({
+            calls: manifest.calls,
+            catalog,
+            referenceFile: costReferencePath,
+        });
+        const budgetMetadata: {
+            budgetPolicy?: string;
+            indicativeUncachedUsd?: number | null;
+            costReferenceSha256?: string | null;
+        } =
+            !retained || retained.budgetPolicy !== undefined
+                ? {
+                      budgetPolicy:
+                          option("--budget-policy") ??
+                          retained?.budgetPolicy ??
+                          "whole_lot",
+                      ...forecast,
+                  }
+                : {};
         const frozen = {
             ...manifest,
+            ...budgetMetadata,
             maximumAttempts: manifest.calls.length,
             selectedCaseIds,
             selectedModelIds: selectedModels?.map((model) => model.id) ?? null,
@@ -608,16 +653,19 @@ export async function runStudyCli(
                       0,
                   ),
         };
-        const manifestSha256 = sha(JSON.stringify(frozen));
-        const name = option("--run");
         assert(
-            !name || /^[a-zA-Z0-9_-]+$/.test(name),
-            "Supply a bounded run name",
+            frozen.budgetPolicy === undefined ||
+                ["whole_lot", "stop_at_budget"].includes(frozen.budgetPolicy),
+            "Invalid budget policy",
         );
-        const run = name
-            ? resolve(dirname(resolve(path)), "runs", name)
-            : undefined;
-        const manifestPath = run ? join(run, "manifest.json") : undefined;
+        assert(
+            !retained ||
+                retained.budgetPolicy !== undefined ||
+                !option("--budget-policy") ||
+                option("--budget-policy") === "whole_lot",
+            "Historical lots retain whole-lot approval",
+        );
+        const manifestSha256 = sha(JSON.stringify(frozen));
         if (manifestPath && existsSync(manifestPath))
             assert.equal(
                 sha(JSON.stringify(read(manifestPath))),
@@ -627,7 +675,15 @@ export async function runStudyCli(
         if (args.includes("--prepare")) {
             assert(run && manifestPath, "Preparation requires --run NAME");
             mkdirSync(run, { recursive: true });
-            if (!existsSync(manifestPath)) save(manifestPath, frozen);
+            if (!existsSync(manifestPath)) {
+                save(manifestPath, frozen);
+                if (costReferencePath)
+                    writeFileSync(
+                        join(run, "cost-reference.jsonl"),
+                        readFileSync(costReferencePath),
+                        { flag: "wx" },
+                    );
+            }
         }
         const journal = run ? join(run, "calls.jsonl") : undefined;
         if (live) {
@@ -667,11 +723,18 @@ export async function runStudyCli(
             ),
             "Journal contains a foreign study request",
         );
-        let exposure =
+        let liveAccounting: EvaluationBudget | undefined;
+        let approvedBudgetUsd: number | undefined;
+        let budgetStopReason: string | undefined;
+        const historicalCosts =
             events.length && run && name
                 ? readEvaluationHistory(dirname(run), [name])
-                      .conservativeCostUsd
-                : 0;
+                : {
+                      reportedCostUsd: 0,
+                      unknownChargeReservedUsd: 0,
+                      conservativeCostUsd: 0,
+                  };
+        let exposure = historicalCosts.conservativeCostUsd;
         const phase = option("--phase") ?? "development";
         assert(
             ["development", "holdout", "regression"].includes(phase),
@@ -695,6 +758,9 @@ export async function runStudyCli(
                 manifestSha256,
                 maximumAttempts: frozen.maximumAttempts,
                 maximumReservationUsd: frozen.maximumReservationUsd,
+                budgetPolicy: frozen.budgetPolicy as
+                    | "whole_lot"
+                    | "stop_at_budget",
                 catalog,
                 currentCatalog: currentCatalogPath
                     ? (read(currentCatalogPath) as Catalog)
@@ -740,6 +806,27 @@ export async function runStudyCli(
             process.once("SIGTERM", stop);
             const record = (entry: Entry) =>
                 appendFileSync(journal, `${JSON.stringify(entry)}\n`);
+            const accounting = new EvaluationBudget({
+                budgetUsd: approval.budgetUsd,
+                maximumAttempts: approval.maximumAttempts,
+                history: starts.map((start) => {
+                    const result = results.find(
+                        (entry) => entry.key === start.key,
+                    );
+                    assert(
+                        typeof start.reservation === "number",
+                        "Missing historical reservation",
+                    );
+                    return {
+                        id: start.key,
+                        reservationUsd: start.reservation,
+                        costUsd: knownEvaluationCharge(result),
+                        settled: !!result,
+                    };
+                }),
+            });
+            liveAccounting = accounting;
+            approvedBudgetUsd = approval.budgetUsd;
             let index = 0;
             let dispatchBlocked = false;
             try {
@@ -749,11 +836,23 @@ export async function runStudyCli(
                         if (!call) return;
                         const reservation = call.reservationUsd;
                         assert(reservation !== undefined);
-                        assert(
-                            exposure + reservation <= approval.budgetUsd,
-                            "Study budget exhausted",
-                        );
-                        exposure += reservation;
+                        try {
+                            await accounting.reserve(
+                                call.key,
+                                reservation,
+                                controller.signal,
+                            );
+                        } catch (error) {
+                            if (!(error instanceof EvaluationBudgetStop))
+                                throw error;
+                            dispatchBlocked = true;
+                            budgetStopReason = error.reason;
+                            appendFileSync(
+                                journal,
+                                `${JSON.stringify({ event: "stopped", key: call.key, reason: error.reason, at: new Date().toISOString() })}\n`,
+                            );
+                            return;
+                        }
                         record({
                             event: "started",
                             key: call.key,
@@ -837,12 +936,13 @@ export async function runStudyCli(
                                         (p) => p.id === call.model,
                                     );
                                     assert(price);
-                                    saved.costUsd =
+                                    saved.estimatedCostUsd =
                                         usage.input_tokens *
                                             price.inputPricePerToken +
                                         (usage.output_tokens ?? 0) *
                                             price.outputPricePerToken;
-                                    saved.costBasis = "usage_at_frozen_tariff";
+                                    saved.costBasis =
+                                        "unknown_charge_reservation";
                                 }
                                 assert(
                                     response.ok,
@@ -981,9 +1081,15 @@ export async function runStudyCli(
                             };
                         }
                         saved.latencyMs = Date.now() - began;
-                        exposure +=
-                            (saved.costUsd ?? reservation) - reservation;
                         record(saved);
+                        accounting.settle(
+                            call.key,
+                            knownEvaluationCharge(saved),
+                        );
+                        const currentExposure = accounting.summary();
+                        exposure =
+                            currentExposure.reportedCostUsd +
+                            currentExposure.unknownChargeReservedUsd;
                         results.push(saved);
                     }
                 };
@@ -1100,8 +1206,19 @@ export async function runStudyCli(
                     controls: loaded.study.controls.length,
                     blockers: frozen.blockers,
                     quoteBlockers: frozen.quoteBlockers,
+                    budgetPolicy: frozen.budgetPolicy,
+                    indicativeUncachedUsd: frozen.indicativeUncachedUsd,
                     maximumReservationUsd: frozen.maximumReservationUsd,
-                    actualAttempts: starts.length,
+                    approvedBudgetUsd: approvedBudgetUsd ?? null,
+                    stopReason: budgetStopReason,
+                    reportedCostUsd:
+                        liveAccounting?.summary().reportedCostUsd ??
+                        historicalCosts.reportedCostUsd,
+                    unknownChargeReservedUsd:
+                        liveAccounting?.summary().unknownChargeReservedUsd ??
+                        historicalCosts.unknownChargeReservedUsd,
+                    actualAttempts:
+                        liveAccounting?.summary().attempts ?? starts.length,
                     unresolvedAttempts: unresolved.length,
                     conservativeCostUsd: exposure,
                     providerRequests: live ? "see_journal" : 0,
@@ -1186,11 +1303,17 @@ export function validateStudyApproval(args: {
     manifestSha256: string;
     maximumAttempts?: number;
     maximumReservationUsd: number | null;
+    budgetPolicy?: "whole_lot" | "stop_at_budget";
     catalog: Catalog | undefined;
     approval: unknown;
     currentCatalog?: Catalog;
     now?: number;
 }) {
+    assert(
+        args.budgetPolicy === undefined ||
+            ["whole_lot", "stop_at_budget"].includes(args.budgetPolicy),
+        "Invalid budget policy",
+    );
     const now = args.now ?? Date.now();
     const catalog = args.currentCatalog ?? args.catalog;
     assert(
@@ -1228,16 +1351,22 @@ export function validateStudyApproval(args: {
     assert(
         approval.maximumAttempts === (args.maximumAttempts ?? 416) &&
             Number.isSafeInteger(approval.maximumAttempts) &&
-            approval.maximumAttempts > 0 &&
+            approval.maximumAttempts >= 0 &&
+            (approval.maximumAttempts > 0 ||
+                args.maximumReservationUsd === 0) &&
             approval.maximumAttempts <= 416 &&
             Number.isFinite(approval.budgetUsd) &&
-            approval.budgetUsd > 0 &&
+            (approval.budgetUsd > 0 ||
+                (approval.budgetUsd === 0 && approval.maximumAttempts === 0)) &&
             Number.isFinite(Date.parse(approval.approvedAt)),
         "Invalid explicit study authorization",
     );
     assert(
         args.maximumReservationUsd !== null &&
-            args.maximumReservationUsd <= approval.budgetUsd,
+            Number.isFinite(args.maximumReservationUsd) &&
+            args.maximumReservationUsd >= 0 &&
+            (args.budgetPolicy === "stop_at_budget" ||
+                args.maximumReservationUsd <= approval.budgetUsd),
         "Whole approved lot exceeds its budget",
     );
     return approval;

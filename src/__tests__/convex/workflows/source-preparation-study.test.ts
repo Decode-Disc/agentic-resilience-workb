@@ -332,3 +332,164 @@ test("paid study rejects a grant below the full lot reservation", async () => {
         [],
     );
 });
+
+test("native study seeding freezes the eligible-call envelope rather than an eight-source allowance", async () => {
+    vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
+    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
+    const { t, runId } = await seedInspectedEvidence();
+    await t.run((ctx) => ctx.db.patch(runId, { executionStatus: "paused" }));
+    const args = {
+        slotKey: "source-preparation-test",
+        fixtureKey: "quoted-comparison",
+        sourceRunId: runId,
+        manifestSha256: "a".repeat(64),
+        phase: "comparison" as const,
+        concurrency: 4,
+        executionPlanVersion: "source_actions_v3" as const,
+        envelope: {
+            version: 1 as const,
+            conditionIndex: 0,
+            conditions: [
+                { phase: "comparison" as const, modelSources: 7 },
+                { phase: "comparison" as const, modelSources: 7 },
+            ],
+            maximumAttempts: 28,
+            maximumReservationUsd: 0.6709248,
+        },
+    };
+    const seeded = await t.mutation(seedStudy, args);
+    expect(
+        await t.run((ctx) => ctx.db.get(seeded.preparationId)),
+    ).toMatchObject({
+        modelLimits: { work: 7, incidents: 7 },
+        preparationStudy: { envelope: args.envelope },
+    });
+    await expect(
+        t.mutation(seedStudy, {
+            ...args,
+            envelope: { ...args.envelope, maximumReservationUsd: 0.1 },
+        }),
+    ).rejects.toThrow("envelope mismatch");
+    expect(await t.run((ctx) => ctx.db.query("providerCalls").take(1))).toEqual(
+        [],
+    );
+});
+
+test("native quotes include only possible attempts and preserve the global protocol cap", async () => {
+    const { quotePreparationStudy } = await import(
+        "@convex/sourcePreparationStudyPolicy"
+    );
+    expect(
+        quotePreparationStudy([
+            { phase: "comparison", modelSources: 7 },
+            { phase: "comparison", modelSources: 7 },
+        ]),
+    ).toEqual({ maximumAttempts: 28, maximumReservationUsd: 0.6709248 });
+    expect(
+        quotePreparationStudy([
+            { phase: "reading", modelSources: 24 },
+            { phase: "reading", modelSources: 24 },
+        ]),
+    ).toEqual({ maximumAttempts: 96, maximumReservationUsd: 2.3003136 });
+    expect(
+        quotePreparationStudy([{ phase: "comparison", modelSources: 0 }]),
+    ).toEqual({ maximumAttempts: 0, maximumReservationUsd: 0 });
+    expect(() =>
+        quotePreparationStudy(
+            Array.from({ length: 3 }, () => ({
+                phase: "reading",
+                modelSources: 24,
+            })),
+        ),
+    ).toThrow("Split paid conditions");
+});
+
+test("native start accepts a lot-specific grant below the historical flat floor", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
+    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
+    const { t, runId, sourceId, captureId } = await seedInspectedEvidence();
+    workflowTest.register(t);
+    const originals = await t.run(async (ctx) => {
+        await ctx.db.patch(runId, { executionStatus: "paused" });
+        const source = await ctx.db.get(sourceId);
+        const capture = await ctx.db.get(captureId);
+        if (!source || !capture?.contentHash)
+            throw new Error("Missing capture fixture");
+        const {
+            _id: _sourceId,
+            _creationTime: _sourceTime,
+            ...sourceFields
+        } = source;
+        const {
+            _id: _captureId,
+            _creationTime: _captureTime,
+            ...captureFields
+        } = capture;
+        const sources = [sourceId];
+        for (let i = 1; i < 24; i++) {
+            const id = await ctx.db.insert("sources", {
+                ...sourceFields,
+                canonicalUrl: `https://www.servicenow.com/fixture/${i}`,
+                title: `Frozen document ${i}`,
+            });
+            await ctx.db.insert("sourceCaptures", {
+                ...captureFields,
+                sourceId: id,
+                captureKey: `frozen-${i}`,
+            });
+            sources.push(id);
+        }
+        return { sources, contentHash: capture.contentHash };
+    });
+    const manifestSha256 = "d".repeat(64);
+    const study = await t.mutation(seedStudy, {
+        slotKey: "source-preparation-test",
+        fixtureKey: "bounded-native-start",
+        sourceRunId: runId,
+        manifestSha256,
+        phase: "reading",
+        concurrency: 4,
+        executionPlanVersion: "source_actions_v3",
+        envelope: {
+            version: 1,
+            conditionIndex: 0,
+            conditions: [{ phase: "reading", modelSources: 24 }],
+            maximumAttempts: 48,
+            maximumReservationUsd: 1.1501568,
+        },
+    });
+    for (const id of originals.sources)
+        await t.mutation(internal.sourcePreparationEvaluation.copySource, {
+            preparationId: study.preparationId,
+            sourceId: id,
+            expectedContentHash: originals.contentHash,
+        });
+    const args = {
+        preparationId: study.preparationId,
+        manifestSha256,
+        approval: {
+            manifestSha256,
+            maximumAttempts: 48,
+            budgetUsd: 1.15,
+            approvedAt: new Date().toISOString(),
+        },
+    };
+    await expect(
+        t.mutation(internal.sourcePreparationEvaluation.start, args),
+    ).rejects.toThrow("Explicit study authorization required");
+    const handle = await t.mutation(
+        internal.sourcePreparationEvaluation.start,
+        { ...args, approval: { ...args.approval, budgetUsd: 1.16 } },
+    );
+    expect(await t.run((ctx) => ctx.db.get(study.preparationId))).toMatchObject(
+        { workflowId: handle, modelLimits: { work: 24, incidents: 24 } },
+    );
+    await t.run((ctx) =>
+        workflow.cancel(ctx, handle as Parameters<typeof workflow.cancel>[1]),
+    );
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100));
+    expect(await t.run((ctx) => ctx.db.query("providerCalls").take(1))).toEqual(
+        [],
+    );
+});

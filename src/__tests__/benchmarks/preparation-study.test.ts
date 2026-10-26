@@ -60,3 +60,15 @@ test("paid preparation lots cannot silently exceed their existing attempt envelo
         }).map((c: { concurrency: number }) => c.concurrency),
     ).toEqual([4, 2]);
 });
+
+test("comparison lots count only sources that can dispatch model work", () => {
+    const conditions = buildPreparationStudyConditions({
+        phase: "comparison",
+        plans: ["source_actions_v3"],
+        concurrencies: [2, 4],
+        repetitions: 2,
+        warmups: 0,
+        modelSourceCount: 7,
+    });
+    expect(conditions).toHaveLength(4);
+});

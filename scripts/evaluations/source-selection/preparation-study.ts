@@ -53,7 +53,12 @@ type Snapshot = {
     tasks: Doc<"aiTaskResults">[];
 };
 type Manifest = {
-    version: 1 | 2;
+    version: 1 | 2 | 3;
+    envelope?: Omit<
+        NonNullable<StudySeed["envelope"]>,
+        "version" | "conditionIndex"
+    >;
+    indicativeUncachedUsd?: number | null;
     sourceRunId: Doc<"researchRuns">["_id"];
     snapshotFile: string;
     snapshotSha256: string;
@@ -87,6 +92,8 @@ type QualificationReference = {
         taskId: Doc<"aiTaskResults">["_id"];
         inputHash: string;
         contentHash: string;
+        qualification?: import("@convex/domain/sourceQualification").SourceQualification;
+        schemaVersion?: string;
     }>;
 };
 
@@ -97,6 +104,7 @@ export function buildPreparationStudyConditions(input: {
     concurrencies: number[];
     repetitions: number;
     warmups: number;
+    modelSourceCount?: number;
 }): StudyCondition[] {
     assert(
         input.plans.length && input.concurrencies.length,
@@ -134,10 +142,18 @@ export function buildPreparationStudyConditions(input: {
         base.length * (input.repetitions + input.warmups) <= 64,
         "Study condition limit exceeded",
     );
+    const modelSourceCount = input.modelSourceCount ?? 24;
+    assert(
+        Number.isSafeInteger(modelSourceCount) &&
+            modelSourceCount >= 0 &&
+            modelSourceCount <= 24 &&
+            (input.phase !== "reading" || modelSourceCount === 24),
+        "Invalid model source count",
+    );
     if (input.phase !== "replay") {
         assert(input.warmups === 0, "Paid warmups are not permitted");
         assert(
-            base.length * input.repetitions * 24 * 2 <= 128,
+            base.length * input.repetitions * modelSourceCount * 2 <= 128,
             "Split paid conditions into separate approved lots",
         );
     }
@@ -288,6 +304,7 @@ export async function runPreparationStudy(argv: string[]) {
             repetitions: { type: "string" },
             warmups: { type: "string" },
             "qualification-reference": { type: "string" },
+            "qualification-results": { type: "string" },
         },
     });
 
@@ -310,9 +327,9 @@ export async function runPreparationStudy(argv: string[]) {
         const settings = (await server.ssrLoadModule(
             "/convex/integrations/sourceQualificationConfig.ts",
         )) as typeof import("@convex/integrations/sourceQualificationConfig");
-        const study = (await server.ssrLoadModule(
-            "/convex/sourcePreparationEvaluation.ts",
-        )) as typeof import("@convex/sourcePreparationEvaluation");
+        const studyPolicy = (await server.ssrLoadModule(
+            "/convex/sourcePreparationStudyPolicy.ts",
+        )) as typeof import("@convex/sourcePreparationStudyPolicy");
         if (values.prepare) {
             assert(
                 values.snapshot && values.captures,
@@ -332,21 +349,7 @@ export async function runPreparationStudy(argv: string[]) {
                     ["replay", "reading", "comparison"].includes(values.phase),
                 "Invalid study phase",
             );
-            const conditions = values.phase
-                ? buildPreparationStudyConditions({
-                      phase: values.phase as StudySeed["phase"],
-                      plans: (values.plans ?? "source_actions_v3").split(
-                          ",",
-                      ) as StudySeed["executionPlanVersion"][],
-                      concurrencies: (values.concurrencies ?? "2,4")
-                          .split(",")
-                          .map(Number),
-                      repetitions: Number(values.repetitions ?? "1"),
-                      warmups: Number(values.warmups ?? "0"),
-                  })
-                : undefined;
-            const replayOnly =
-                conditions?.every((c) => c.phase === "replay") ?? false;
+            let referenceModelSources: number | undefined;
             let qualificationReference: Manifest["qualificationReference"];
             if (values["qualification-reference"]) {
                 assert(
@@ -367,15 +370,70 @@ export async function runPreparationStudy(argv: string[]) {
                     24,
                     "A complete reading reference is required",
                 );
+                const retained = values["qualification-results"]
+                    ? (read(values["qualification-results"]) as {
+                          tasks: Snapshot["tasks"];
+                      })
+                    : undefined;
+                for (const entry of reference.qualifications) {
+                    if (!entry.qualification || !entry.schemaVersion) {
+                        const task = retained?.tasks.find(
+                            (task) => task._id === entry.taskId,
+                        );
+                        assert(
+                            task?.output.kind === "source_qualification" &&
+                                task.inputHash === entry.inputHash &&
+                                task.output.contentHash === entry.contentHash,
+                            "Older reading references require --qualification-results with the matching retained native result",
+                        );
+                        entry.qualification = task.output.qualification;
+                        entry.schemaVersion = task.schemaVersion;
+                    }
+                    entry.qualification =
+                        domain.sourceQualificationSchema.parse(
+                            entry.qualification,
+                        );
+                }
+                referenceModelSources = reference.qualifications.filter(
+                    (entry) => {
+                        assert(
+                            entry.qualification && entry.schemaVersion,
+                            "Frozen qualification payload missing",
+                        );
+                        return studyPolicy.qualificationNeedsStudyComparison(
+                            entry.qualification,
+                            entry.schemaVersion,
+                        );
+                    },
+                ).length;
                 copyFileSync(
                     values["qualification-reference"],
-                    join(dir, file),
+                    join(dir, "qualification-reference-original.json"),
                 );
+                save(join(dir, file), reference);
                 qualificationReference = {
                     file,
                     sha256: sha(readFileSync(join(dir, file))),
                 };
             }
+            const conditions = values.phase
+                ? buildPreparationStudyConditions({
+                      phase: values.phase as StudySeed["phase"],
+                      plans: (values.plans ?? "source_actions_v3").split(
+                          ",",
+                      ) as StudySeed["executionPlanVersion"][],
+                      concurrencies: (values.concurrencies ?? "2,4")
+                          .split(",")
+                          .map(Number),
+                      repetitions: Number(values.repetitions ?? "1"),
+                      warmups: Number(values.warmups ?? "0"),
+                      modelSourceCount: referenceModelSources,
+                  })
+                : undefined;
+            const replayOnly =
+                conditions?.every(
+                    (condition) => condition.phase === "replay",
+                ) ?? false;
             assert(
                 values.phase !== "comparison" || qualificationReference,
                 "New comparison lots require a frozen reading reference",
@@ -440,8 +498,51 @@ export async function runPreparationStudy(argv: string[]) {
                           settings.QUALIFICATION_MAX_OUTPUT_PRICE_PER_MILLION /
                           1e6,
                   });
+            const frozenConditions = conditions ?? [
+                { phase: "reading" as const, concurrency: 2 },
+                { phase: "reading" as const, concurrency: 4 },
+                { phase: "comparison" as const, concurrency: 4 },
+                { phase: "comparison" as const, concurrency: 2 },
+            ];
+            const comparisonModelSources =
+                referenceModelSources ??
+                sources.filter((sourceId) => {
+                    const outcome = p.sourceOutcomes?.find(
+                        (entry) => entry.sourceId === sourceId,
+                    );
+                    const taskId =
+                        outcome?.result.status === "qualified"
+                            ? outcome.result.taskId
+                            : undefined;
+                    const task = snapshot.tasks.find(
+                        (task) => task._id === taskId,
+                    );
+                    assert(
+                        task?.output.kind === "source_qualification",
+                        "Frozen qualification missing",
+                    );
+                    return studyPolicy.qualificationNeedsStudyComparison(
+                        task.output.qualification,
+                        task.schemaVersion,
+                    );
+                }).length;
+            const conditionEnvelopes = frozenConditions.map((condition) => ({
+                phase: condition.phase,
+                modelSources:
+                    condition.phase === "replay"
+                        ? 0
+                        : condition.phase === "reading"
+                          ? 24
+                          : comparisonModelSources,
+            }));
+            const envelope = {
+                conditions: conditionEnvelopes,
+                ...studyPolicy.quotePreparationStudy(conditionEnvelopes),
+            };
             const manifest: Manifest = {
-                version: conditions ? 2 : 1,
+                version: 3,
+                envelope,
+                indicativeUncachedUsd: null,
                 sourceRunId: snapshot.run._id,
                 snapshotFile: "snapshot.json",
                 snapshotSha256: sha(readFileSync(join(dir, "snapshot.json"))),
@@ -457,19 +558,10 @@ export async function runPreparationStudy(argv: string[]) {
                 captures,
                 code,
                 catalog: quoted,
-                maximumAttempts: replayOnly
-                    ? 0
-                    : study.PREPARATION_STUDY_MAX_ATTEMPTS,
-                maximumReservationUsd: replayOnly
-                    ? 0
-                    : study.PREPARATION_STUDY_MAX_RESERVATION_USD,
+                maximumAttempts: envelope.maximumAttempts,
+                maximumReservationUsd: envelope.maximumReservationUsd,
                 qualificationReference,
-                conditions: conditions ?? [
-                    { phase: "reading", concurrency: 2 },
-                    { phase: "reading", concurrency: 4 },
-                    { phase: "comparison", concurrency: 4 },
-                    { phase: "comparison", concurrency: 2 },
-                ],
+                conditions: frozenConditions,
             };
             save(join(dir, "manifest.json"), manifest);
             if (!replayOnly)
@@ -483,6 +575,10 @@ export async function runPreparationStudy(argv: string[]) {
             console.log(
                 JSON.stringify({
                     prepared: dir,
+                    indicativeUncachedUsd:
+                        manifest.indicativeUncachedUsd ?? null,
+                    estimateUnavailableReason:
+                        "exact_provider_requests_not_frozen",
                     manifestSha256: sha(JSON.stringify(manifest)),
                     maximumAttempts: manifest.maximumAttempts,
                     maximumReservationUsd: manifest.maximumReservationUsd,
@@ -582,7 +678,7 @@ export async function runPreparationStudy(argv: string[]) {
         const company = snapshot.run.companySnapshot;
         assert(company);
         const conditions =
-            manifest.version === 2
+            manifest.version >= 2
                 ? manifest.conditions.map((c) => ({
                       ...c,
                       version: c.version ?? ("inline_controls_v2" as const),
@@ -656,6 +752,15 @@ export async function runPreparationStudy(argv: string[]) {
                     fixtureKey: `prep-${manifestSha256.slice(0, 12)}-${batchKey}-${index}`,
                     sourceRunId: manifest.sourceRunId,
                     manifestSha256,
+                    ...(manifest.envelope
+                        ? {
+                              envelope: {
+                                  version: 1 as const,
+                                  conditionIndex: index,
+                                  ...manifest.envelope,
+                              },
+                          }
+                        : {}),
                     phase: condition.phase,
                     concurrency: condition.concurrency,
                     executionPlanVersion: condition.version,
@@ -889,6 +994,8 @@ export async function runPreparationStudy(argv: string[]) {
                                     taskId: task._id,
                                     inputHash: task.inputHash,
                                     contentHash: task.output.contentHash,
+                                    qualification: task.output.qualification,
+                                    schemaVersion: task.schemaVersion,
                                 };
                             },
                         ),

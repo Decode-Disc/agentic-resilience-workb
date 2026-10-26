@@ -95,6 +95,7 @@ import type * as sourceIntake from "../sourceIntake.js";
 import type * as sourcePreparation from "../sourcePreparation.js";
 import type * as sourcePreparationActions from "../sourcePreparationActions.js";
 import type * as sourcePreparationEvaluation from "../sourcePreparationEvaluation.js";
+import type * as sourcePreparationStudyPolicy from "../sourcePreparationStudyPolicy.js";
 import type * as sourcePreparationWorkflow from "../sourcePreparationWorkflow.js";
 import type * as sourceRetrieval from "../sourceRetrieval.js";
 import type * as sourceRetrievalActions from "../sourceRetrievalActions.js";
@@ -199,6 +200,7 @@ declare const fullApi: ApiFromModules<{
   sourcePreparation: typeof sourcePreparation;
   sourcePreparationActions: typeof sourcePreparationActions;
   sourcePreparationEvaluation: typeof sourcePreparationEvaluation;
+  sourcePreparationStudyPolicy: typeof sourcePreparationStudyPolicy;
   sourcePreparationWorkflow: typeof sourcePreparationWorkflow;
   sourceRetrieval: typeof sourceRetrieval;
   sourceRetrievalActions: typeof sourceRetrievalActions;

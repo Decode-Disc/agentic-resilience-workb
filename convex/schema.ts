@@ -57,6 +57,7 @@ import {
     workflowStepStateValidator,
 } from "./domain/validators";
 import { SOURCE_EMBEDDING_DIMENSIONS } from "./resourceLimits";
+import { preparationStudyEnvelopeValidator } from "./sourcePreparationStudyPolicy";
 
 const sourceDiscoveryQueriesValidator = v.array(
     v.object({
@@ -454,6 +455,7 @@ export default defineSchema({
         maxConcurrentSources: v.optional(v.number()),
         preparationStudy: v.optional(
             v.object({
+                envelope: v.optional(preparationStudyEnvelopeValidator),
                 manifestSha256: v.string(),
                 sourceRunId: v.id("researchRuns"),
                 qualificationReferencePreparationId: v.optional(

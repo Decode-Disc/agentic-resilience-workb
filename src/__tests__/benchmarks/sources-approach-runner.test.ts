@@ -936,3 +936,24 @@ test.each([
     expect(baseline.sources[0]?.qualification?.findings).toHaveLength(1);
     expect(search).toHaveBeenCalledOnce();
 });
+
+test("waits for asynchronous budget authorization before any provider request", async () => {
+    let release = () => {};
+    const authorized = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const request = vi.fn(async () => envelope(proposal()));
+    const running = runSourcesMission({
+        ...options(),
+        execution: "live",
+        authorizeCall: () => authorized,
+        fetch: request,
+    });
+    try {
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(request).not.toHaveBeenCalled();
+    } finally {
+        release();
+        await running;
+    }
+});

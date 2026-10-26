@@ -4,36 +4,32 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { sourcePreparationExecutionPlanValidator } from "./domain/sourcePreparationAuthority";
-import {
-    MAX_QUALIFICATION_INPUT_BYTES,
-    SOURCE_QUALIFICATION_VERSION,
-} from "./domain/sourceQualification";
-import {
-    QUALIFICATION_MAX_INPUT_PRICE_PER_MILLION,
-    QUALIFICATION_MAX_OUTPUT_PRICE_PER_MILLION,
-    QUALIFICATION_MAX_OUTPUT_TOKENS,
-} from "./integrations/sourceQualificationConfig";
+import { SOURCE_QUALIFICATION_VERSION } from "./domain/sourceQualification";
 import {
     MAX_HISTORICAL_SOURCE_CANDIDATES,
     SOURCE_PREPARATION_DEADLINE_MS,
 } from "./resourceLimits";
 import { assertLocalFixture } from "./retrievalEvaluation";
 import schema from "./schema";
-import { workflow } from "./workflow";
+import {
+    PREPARATION_STUDY_MAX_ATTEMPTS,
+    PREPARATION_STUDY_MAX_RESERVATION_USD,
+    preparationStudyEnvelopeValidator,
+    qualificationNeedsStudyComparison,
+    validatePreparationStudyEnvelope,
+} from "./sourcePreparationStudyPolicy";
 
-export const PREPARATION_STUDY_MAX_ATTEMPTS = 128;
-// The SDK envelope allowance is additional to the preparer's bounded input and response schema.
-export const PREPARATION_STUDY_MAX_RESERVATION_USD =
-    (PREPARATION_STUDY_MAX_ATTEMPTS *
-        ((MAX_QUALIFICATION_INPUT_BYTES + 4096) *
-            QUALIFICATION_MAX_INPUT_PRICE_PER_MILLION +
-            QUALIFICATION_MAX_OUTPUT_TOKENS *
-                QUALIFICATION_MAX_OUTPUT_PRICE_PER_MILLION)) /
-    1_000_000;
+export {
+    PREPARATION_STUDY_MAX_ATTEMPTS,
+    PREPARATION_STUDY_MAX_RESERVATION_USD,
+} from "./sourcePreparationStudyPolicy";
+
+import { workflow } from "./workflow";
 
 /** Native preparation experiments reuse admitted local fixtures; none of these operations fetch sources. */
 export const seed = internalMutation({
     args: {
+        envelope: v.optional(preparationStudyEnvelopeValidator),
         slotKey: v.string(),
         fixtureKey: v.string(),
         sourceRunId: v.id("researchRuns"),
@@ -66,6 +62,11 @@ export const seed = internalMutation({
             args.concurrency < 1
         )
             throw new Error("Invalid preparation study");
+        if (args.envelope) {
+            const condition = validatePreparationStudyEnvelope(args.envelope);
+            if (condition.phase !== args.phase)
+                throw new Error("Frozen study phase mismatch");
+        }
         const original = await ctx.db.get(args.sourceRunId);
         const company = original?.companyId
             ? await ctx.db.get(original.companyId)
@@ -115,6 +116,7 @@ export const seed = internalMutation({
         const p = await ctx.db.get(seeded.preparationId);
         if (!p) throw new Error("Missing study preparation");
         const study = {
+            envelope: args.envelope,
             manifestSha256: args.manifestSha256,
             sourceRunId: original._id,
             phase: args.phase,
@@ -123,6 +125,8 @@ export const seed = internalMutation({
         };
         if (p.preparationStudy) {
             if (
+                JSON.stringify(p.preparationStudy.envelope) !==
+                    JSON.stringify(study.envelope) ||
                 p.preparationStudy.manifestSha256 !== study.manifestSha256 ||
                 p.preparationStudy.sourceRunId !== study.sourceRunId ||
                 p.preparationStudy.phase !== study.phase ||
@@ -143,13 +147,14 @@ export const seed = internalMutation({
             coveragePreset: original.coveragePreset,
             lifecycleState: "awaiting_source_review",
         });
-        const allowance =
-            args.phase === "replay"
-                ? 0
-                : args.phase === "reading" ||
-                    args.qualificationReferencePreparationId
-                  ? 24
-                  : 8;
+        const allowance = args.envelope
+            ? validatePreparationStudyEnvelope(args.envelope).modelSources
+            : args.phase === "replay"
+              ? 0
+              : args.phase === "reading" ||
+                  args.qualificationReferencePreparationId
+                ? 24
+                : 8;
         await ctx.db.patch(p._id, {
             preparationStudy: study,
             maxConcurrentSources: args.concurrency,
@@ -428,9 +433,13 @@ export const start = internalMutation({
             if (
                 !grant ||
                 grant.manifestSha256 !== study.manifestSha256 ||
-                grant.maximumAttempts !== PREPARATION_STUDY_MAX_ATTEMPTS ||
+                grant.maximumAttempts !==
+                    (study.envelope?.maximumAttempts ??
+                        PREPARATION_STUDY_MAX_ATTEMPTS) ||
                 !Number.isFinite(grant.budgetUsd) ||
-                grant.budgetUsd < PREPARATION_STUDY_MAX_RESERVATION_USD ||
+                grant.budgetUsd <
+                    (study.envelope?.maximumReservationUsd ??
+                        PREPARATION_STUDY_MAX_RESERVATION_USD) ||
                 !Number.isFinite(Date.parse(grant.approvedAt))
             )
                 throw new Error("Explicit study authorization required");
@@ -460,6 +469,35 @@ export const start = internalMutation({
                     work: targets.length,
                     incidents: targets.length,
                 },
+            });
+        }
+        if (study.envelope) {
+            const condition = validatePreparationStudyEnvelope(study.envelope);
+            let actualSources =
+                study.phase === "reading" ? p.manualSourceIds.length : 0;
+            if (study.phase === "comparison") {
+                for (const outcome of p.sourceOutcomes ?? []) {
+                    if (outcome.result.status !== "qualified")
+                        throw new Error("Frozen qualification missing");
+                    const task = await ctx.db.get(outcome.result.taskId);
+                    if (task?.output.kind !== "source_qualification")
+                        throw new Error("Frozen qualification missing");
+                    if (
+                        qualificationNeedsStudyComparison(
+                            task.output.qualification,
+                            task.schemaVersion,
+                        )
+                    )
+                        actualSources++;
+                }
+            }
+            if (
+                condition.phase !== study.phase ||
+                actualSources !== condition.modelSources
+            )
+                throw new Error("Frozen model source count mismatch");
+            await ctx.db.patch(p._id, {
+                modelLimits: { work: actualSources, incidents: actualSources },
             });
         }
         await ctx.db.patch(p._id, {

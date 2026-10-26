@@ -1275,3 +1275,111 @@ test("reviewed recall requires complete substantive coverage and valid capture s
         ),
     ).toThrow("Invalid reviewed span");
 });
+
+test("a frozen stop-at-budget policy accepts a smaller explicit budget without weakening whole-lot approval", () => {
+    const request = {
+        manifestSha256: "exact-manifest",
+        maximumReservationUsd: 3.01,
+        catalog: quotedCatalog,
+        approval: approvedLot,
+        now: approvalTime,
+    };
+    expect(() => validateStudyApproval(request)).toThrow("exceeds its budget");
+    expect(
+        validateStudyApproval({ ...request, budgetPolicy: "stop_at_budget" }),
+    ).toMatchObject({ budgetUsd: 3 });
+});
+
+test("prepare can retain an uncached estimate from exact historical request usage", async () => {
+    const fixture = studyFixture();
+    try {
+        const selected = join(fixture.directory, "cases.json");
+        const catalogPath = join(fixture.directory, "prices.json");
+        writeFileSync(selected, JSON.stringify(["control:adobe-numeric"]));
+        writeFileSync(catalogPath, JSON.stringify(quotedCatalog));
+        const base = [
+            "--study",
+            fixture.path,
+            "--cases",
+            selected,
+            "--catalog",
+            catalogPath,
+            "--models",
+            "jev-1.14.0",
+            "--prepare",
+        ];
+        await runStudyCli("choices", [...base, "--run", "first"]);
+        const manifest = JSON.parse(
+            readFileSync(
+                join(fixture.directory, "runs/first/manifest.json"),
+                "utf8",
+            ),
+        );
+        const reference = join(fixture.directory, "usage.jsonl");
+        const call = manifest.calls[0];
+        writeFileSync(
+            reference,
+            [
+                {
+                    event: "started",
+                    key: call.key,
+                    requestHash: call.requestHash,
+                },
+                {
+                    event: "result",
+                    key: call.key,
+                    response: {
+                        model: call.model,
+                        usage: {
+                            prompt_tokens: 100,
+                            completion_tokens: 50,
+                            prompt_tokens_details: { cached_tokens: 100 },
+                        },
+                    },
+                },
+            ]
+                .map((entry) => JSON.stringify(entry))
+                .join("\n"),
+        );
+        await runStudyCli("choices", [
+            ...base,
+            "--run",
+            "estimated",
+            "--cost-reference",
+            reference,
+        ]);
+        const quoted = JSON.parse(
+            readFileSync(
+                join(fixture.directory, "runs/estimated/manifest.json"),
+                "utf8",
+            ),
+        );
+        expect(quoted.indicativeUncachedUsd).toBeCloseTo(0.0000042, 12);
+        expect(quoted.costReferenceSha256).toBe(
+            digest(readFileSync(reference, "utf8")),
+        );
+        expect(quoted.maximumReservationUsd).toBeGreaterThan(
+            quoted.indicativeUncachedUsd,
+        );
+    } finally {
+        rmSync(fixture.directory, { recursive: true, force: true });
+    }
+}, 30_000);
+
+test("an explicitly authorized zero-call lot needs no monetary reservation", () => {
+    expect(
+        validateStudyApproval({
+            manifestSha256: "empty-lot",
+            maximumAttempts: 0,
+            maximumReservationUsd: 0,
+            catalog: quotedCatalog,
+            now: approvalTime,
+            approval: {
+                ...approvedLot,
+                manifestSha256: "empty-lot",
+                maximumAttempts: 0,
+                budgetUsd: 0,
+            },
+        }),
+    ).toMatchObject({ maximumAttempts: 0, budgetUsd: 0 });
+});
