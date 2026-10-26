@@ -127,6 +127,24 @@
             oklch(0.9407 0.0026 308) 58%,
             oklch(0.9271 0.003 308) 100%
         );
+
+    /* Tiled hairline grid for the workbench shell, a quieter sibling of the
+     * landing grid at a larger cell (the shell tiles at 28px, the landing at
+     * 22px – matching the GridCard decorative-grid scale). Lines derive from
+     * the foreground token so light and dark modes adapt without a second
+     * rule; the shell's fixed overlay fades the grid toward the bottom via
+     * its own mask so long pages keep a calm reading floor. */
+    --workspace-grid:
+        linear-gradient(
+            to right,
+            color-mix(in oklab, var(--muted-foreground) 7%, transparent) 1px,
+            transparent 1px
+        ),
+        linear-gradient(
+            to bottom,
+            color-mix(in oklab, var(--muted-foreground) 7%, transparent) 1px,
+            transparent 1px
+        );
 }
 
 .dark {
