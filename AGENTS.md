@@ -2,7 +2,7 @@
 
 ## Mission
 
-Build the Agentic Resilience Evidence Workbench as a useful contribution in an unsolicited application to join Decoding Discontinuity. The private prototype helps Raphaëlle d'Ornano and analysts investigate the economic position and architectural resilience of a US-listed technology company through a relevant activity or workflow.
+Build the Agentic Resilience Workbench as a useful contribution in an unsolicited application to join Decoding Discontinuity. The private prototype helps Raphaëlle d'Ornano and analysts investigate the economic position and architectural resilience of a US-listed technology company through a relevant activity or workflow.
 
 This is not a generic AI chat application, an autonomous investment analyst, or a reproduction of Decoding Discontinuity's proprietary methodology. The system accelerates research and structures judgment; the analyst remains the final authority.
 

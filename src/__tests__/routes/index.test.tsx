@@ -41,7 +41,7 @@ describe("IndexPage", () => {
         ).toBeTruthy();
         expect(screen.getByText("Counter-evidence")).toBeTruthy();
         expect(
-            screen.getByLabelText("Agentic Resilience Evidence Workbench"),
+            screen.getByLabelText("Agentic Resilience Workbench"),
         ).toBeTruthy();
         expect(
             screen

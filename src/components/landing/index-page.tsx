@@ -44,6 +44,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { PRODUCT_NAME, PRODUCT_SHORT_NAME } from "@/config/product";
 import { cn } from "@/lib/utils";
 
 const easeOrganic = [0.32, 0.72, 0, 1] as const;
@@ -190,7 +191,7 @@ function LandingHeader() {
         <div className="flex min-w-0 items-center gap-2.5">
           <AppLogo />
           <span className="text-sm sm:text-base font-semibold tracking-tight">
-            Agentic Resilience
+            {PRODUCT_SHORT_NAME}
           </span>
         </div>
 
@@ -443,7 +444,7 @@ export function IndexPage() {
             className="rounded-none p-2 font-mono font-medium tracking-[0.12em] uppercase"
           >
             <Icon iconNode={Sparkles} className="size-8" />
-            Agentic Resilience Evidence Workbench
+            {PRODUCT_NAME}
           </Badge>
           <h1
             id="index-title"

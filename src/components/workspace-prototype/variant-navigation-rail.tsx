@@ -18,6 +18,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { WorkbenchShell } from "@/components/workbench-shell/workbench-shell";
+import { PRODUCT_SHORT_NAME } from "@/config/product";
 import { useResponsive } from "@/hooks/use-responsive";
 import { prototypeClaims, prototypeDimensions } from "./prototype-data";
 import {
@@ -54,7 +55,7 @@ export function VariantNavigationRail() {
                             <ScrollArea className="h-full">
                                 <div className="p-4">
                                     <p className="mb-5 text-sm font-medium">
-                                        Evidence Workbench
+                                        {PRODUCT_SHORT_NAME}
                                     </p>
                                     <nav aria-label="Research dossier">
                                         <ul className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-1">

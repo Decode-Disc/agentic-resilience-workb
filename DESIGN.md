@@ -1,6 +1,6 @@
 ---
 {
-  "name": "Agentic Resilience Evidence Workbench",
+  "name": "Agentic Resilience Workbench",
   "description": "An understated, modern and precise visual system for evidence-led research.",
   "colors": {
     "primary": "oklch(0.29 0.04 307.99)",
@@ -220,7 +220,7 @@
 }
 ---
 
-# Design System: Agentic Resilience Evidence Workbench
+# Design System: Agentic Resilience Workbench
 
 ## Overview
 

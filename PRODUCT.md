@@ -143,7 +143,7 @@ Explain relevance and documentary contribution without converting them into trut
 
 ## Brand Commitments
 
-Keep the existing Agentic Resilience Evidence Workbench name and identity. Application copy is in English and written for an institutional research audience. Explain evidence, uncertainty, consequences and the next action. Internal architecture, credentials, configuration, admission inventory, quotas' implementation, persistence and workflow internals, roadmap phases and raw errors do not belong on analyst-facing surfaces. Protected administration may expose operational detail behind readable statuses.
+Use Agentic Resilience Workbench as the product name and preserve its visual identity. Application copy is in English and written for an institutional research audience. Explain evidence, uncertainty, consequences and the next action. Internal architecture, credentials, configuration, admission inventory, quotas' implementation, persistence and workflow internals, roadmap phases and raw errors do not belong on analyst-facing surfaces. Protected administration may expose operational detail behind readable statuses.
 
 Preserve clear `curated`, `illustrative`, `showcase` and `not live` disclosures. Never invent testimonials, customers, endorsements, investment outcomes, benchmarks or time savings. Visual guidance belongs in [DESIGN.md](DESIGN.md).
 

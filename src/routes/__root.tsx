@@ -4,6 +4,7 @@ import {
     Scripts,
 } from "@tanstack/react-router";
 import { lazy, type ReactNode, Suspense } from "react";
+import { PRODUCT_NAME } from "@/config/product";
 import favicon from "@/favicon.svg?url";
 import type { AppRouterContext } from "@/integrations/convex/router-context";
 import appCss from "@/styles.css?url";
@@ -21,7 +22,7 @@ export const Route = createRootRouteWithContext<AppRouterContext>()({
                 content: "width=device-width, initial-scale=1",
             },
             {
-                title: "Agentic Resilience Evidence Workbench",
+                title: PRODUCT_NAME,
             },
             {
                 name: "description",

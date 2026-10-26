@@ -1,5 +1,5 @@
 {
-    "name": "agentic-resilience-evidence-workbench",
+    "name": "agentic-resilience-workbench",
     "private": true,
     "type": "module",
     "packageManager": "pnpm@10.20.0",

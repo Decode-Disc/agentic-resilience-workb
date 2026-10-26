@@ -1,6 +1,7 @@
 import imgDark from "@assets/logos/logo-bgdark.png";
 import imgLight from "@assets/logos/logo-bgwhite.png";
 import type { ImgHTMLAttributes, SVGProps } from "react";
+import { PRODUCT_NAME } from "@/config/product";
 
 /** Original evidence-matrix mark crossed by a research orbit. */
 function LogoIconSVG({
@@ -51,7 +52,7 @@ function LogoIconSVG({
 }
 
 function LogoIconIMG({
-    alt = "Agentic Resilience Evidence Workbench",
+    alt = PRODUCT_NAME,
     dark = false,
     ...props
 }: ImgHTMLAttributes<HTMLImageElement> & { dark?: boolean }) {
@@ -62,7 +63,7 @@ function AppLogo() {
     return (
         <span
             role="img"
-            aria-label="Agentic Resilience Evidence Workbench"
+            aria-label={PRODUCT_NAME}
             className="grid size-8 place-items-center rounded-full bg-primary text-primary-foreground">
             <LogoIconIMG className="size-8 rounded-full" dark />
         </span>

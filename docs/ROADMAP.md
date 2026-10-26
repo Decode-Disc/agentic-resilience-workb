@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This living checklist sequences the smallest coherent vertical slices needed to build the Agentic Resilience Evidence Workbench prototype.
+This living checklist sequences the smallest coherent vertical slices needed to build the Agentic Resilience Workbench prototype.
 
 This document owns delivery state and sequence. [PRODUCT.md](../PRODUCT.md) owns product requirements and acceptance, [context/TECH.md](../context/TECH.md) owns technical contracts, and [AGENTS.md](../AGENTS.md) owns working and verification rules. A checked item records delivery within its stated verification boundary; it does not imply activation, remote deployment or completion of the entire phase.
 
