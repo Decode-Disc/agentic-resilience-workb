@@ -12,14 +12,21 @@
 @theme inline {
     --app-max-width: var(--container-8xl, 100rem);
 
-    --color-info: var(--color-sky-500);
-    --color-info-foreground: var(--color-sky-950);
-    --color-success: var(--color-green-500);
-    --color-success-foreground: var(--color-green-950);
-    --color-danger: var(--color-red-500);
-    --color-danger-foreground: var(--color-red-950);
-    --color-warning: var(--color-amber-400);
-    --color-warning-foreground: var(--color-amber-950);
+    /* Operational feedback roles, distinct from the evidence and approval
+     * vocabulary owned by the theme: these report whether a technical step
+     * succeeded, not what an analyst decided. Chroma is held near the theme's
+     * 0.09-0.12 band so they read as part of the near-neutral canvas instead
+     * of the raw Tailwind palette. The base value tints fills and carries
+     * dark-mode text; the -foreground value is the dark ink used on those
+     * fills and as light-mode text. */
+    --color-info: oklch(0.7 0.105 250);
+    --color-info-foreground: oklch(0.33 0.09 250);
+    --color-success: oklch(0.72 0.105 152);
+    --color-success-foreground: oklch(0.34 0.085 152);
+    --color-danger: oklch(0.71 0.11 22);
+    --color-danger-foreground: oklch(0.34 0.135 22);
+    --color-warning: oklch(0.8 0.105 70);
+    --color-warning-foreground: oklch(0.38 0.083 70);
     --color-source-selection-accent: var(--accent-foreground);
 
     --radius-badge: calc(var(--radius) - 0.25rem);
@@ -80,12 +87,15 @@
     }
 }
 
+/* Radii match what these surfaces are actually given at their call sites, so
+ * the utility carries the silhouette instead of being overridden everywhere.
+ * A consumer that needs a different corner still states it explicitly. */
 @utility surface-panel {
-    @apply rounded-3xl border border-border/60 bg-card text-card-foreground shadow-soft;
+    @apply rounded-xl border border-border/60 bg-card text-card-foreground shadow-soft;
 }
 
 @utility surface-floating {
-    @apply rounded-3xl border border-border/50 bg-card/80 text-card-foreground shadow-floating backdrop-blur-md;
+    @apply rounded-2xl border border-border/50 bg-card/80 text-card-foreground shadow-floating backdrop-blur-md;
 }
 
 @utility text-display {

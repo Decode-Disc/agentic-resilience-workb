@@ -355,7 +355,7 @@ export function SourceProposalReview({
                     aria-label="Inspect all source candidates"
                     className="space-y-3">
                     {addSourceDialog}
-                    <div className="surface-panel flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 p-3">
+                    <div className="surface-panel flex flex-wrap items-center justify-between gap-3 p-3">
                         <div className="flex flex-wrap items-center gap-3">
                             <Button
                                 type="button"
@@ -388,7 +388,7 @@ export function SourceProposalReview({
                             onReview={reviewCoverage}
                         />
                         <div className="min-w-0 space-y-3">
-                            <header className="surface-panel space-y-3 rounded-xl border border-border/60 p-4">
+                            <header className="surface-panel space-y-3 p-4">
                                 <div className="flex flex-wrap items-start justify-between gap-3">
                                     <div>
                                         <h2 className="text-xl font-medium tracking-tight">
@@ -771,7 +771,7 @@ export function SourceProposalReview({
                         }
                     />
                 ) : null}
-                <div className="surface-panel space-y-3 rounded-xl border border-border/60 p-4">
+                <div className="surface-panel space-y-3 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
                             <Icon iconNode={CheckListIcon} size={24} />
@@ -1036,7 +1036,7 @@ function SecondaryViewHeader({
     onBack: () => void;
 }) {
     return (
-        <header className="surface-panel mb-4 flex flex-col gap-3 rounded-xl border border-border/60 p-4 sm:flex-row sm:items-center">
+        <header className="surface-panel mb-4 flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
             <Button
                 type="button"
                 variant="secondary"

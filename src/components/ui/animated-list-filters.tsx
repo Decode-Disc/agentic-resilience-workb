@@ -213,7 +213,7 @@ export default function AnimatedListFilter<TValue extends string>({
                             duration: shouldReduceMotion ? 0 : 0.18,
                             ease: [0.32, 0.72, 0, 1],
                         }}
-                        className="surface-floating absolute z-30 w-64 rounded-2xl border border-border/60 p-1.5">
+                        className="surface-floating absolute z-30 w-64 p-1.5">
                         <div className="flex items-center justify-between px-2 py-1.5 text-xs text-muted-foreground">
                             <span>{label}</span>
                             <button

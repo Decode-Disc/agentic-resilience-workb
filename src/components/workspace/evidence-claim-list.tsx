@@ -125,7 +125,7 @@ export function EvidenceClaimList({
                     ))}
                 </div>
             ) : isSparse ? (
-                <Empty className="surface-panel min-h-40 rounded-xl p-6">
+                <Empty className="surface-panel min-h-40 p-6">
                     <EmptyHeader>
                         <EmptyTitle>
                             More evidence claims may be available
@@ -138,7 +138,7 @@ export function EvidenceClaimList({
                     </EmptyHeader>
                 </Empty>
             ) : isEmpty ? (
-                <Empty className="surface-panel min-h-40 rounded-xl p-6">
+                <Empty className="surface-panel min-h-40 p-6">
                     <EmptyHeader>
                         <EmptyTitle>No evidence claims</EmptyTitle>
                         <EmptyDescription>{emptyDescription}</EmptyDescription>

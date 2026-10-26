@@ -166,13 +166,25 @@ const executionLabels = {
     completed: "Complete",
 } satisfies Record<ExecutionStatus, string>;
 
-const executionStatusColors = {
-    idle: "secondary",
-    running: "info",
-    paused: "warning",
-    failed: "danger",
-    cancelled: "muted",
-    completed: "success",
+// Tailwind resolves utilities from literal source text, so these class names
+// are written out in full. Composing them from a color name at runtime emits
+// classes that never reach the stylesheet.
+const executionStatusTones = {
+    idle: "bg-secondary text-secondary-foreground ring-secondary/25",
+    running: "bg-info text-info-foreground ring-info/25",
+    paused: "bg-warning text-warning-foreground ring-warning/25",
+    failed: "bg-danger text-danger-foreground ring-danger/25",
+    cancelled: "bg-muted text-muted-foreground ring-muted/25",
+    completed: "bg-success text-success-foreground ring-success/25",
+} satisfies Record<ExecutionStatus, string>;
+
+const executionStatusEdges = {
+    idle: "text-secondary",
+    running: "text-info",
+    paused: "text-warning",
+    failed: "text-danger",
+    cancelled: "text-muted",
+    completed: "text-success",
 } satisfies Record<ExecutionStatus, string>;
 
 const eventLabels = {
@@ -349,15 +361,16 @@ export function executionLabel(status: ExecutionStatus): string {
  * hardcoding colors at each call site.
  */
 export function executionStatusTone(status: ExecutionStatus): string {
-    return `bg-${executionStatusColors[status]} text-${executionStatusColors[status]}-foreground ring-${executionStatusColors[status]}/25`;
+    return executionStatusTones[status];
 }
 
-/** Returns a Tailwind color name for an execution status,
- * so a badge or pin can carry the status's semantic tone
- * without hardcoding colors at each call site.
+/**
+ * Returns the text-color class that paints a shape bleeding out of a tinted
+ * surface, such as the cutout corners beside a status pin. It matches the fill
+ * that `executionStatusTone` applies as a background.
  */
-export function executionStatusColor(status: ExecutionStatus): string {
-    return executionStatusColors[status];
+export function executionStatusEdgeClass(status: ExecutionStatus): string {
+    return executionStatusEdges[status];
 }
 
 /** Returns a stable milestone label without exposing event keys. */

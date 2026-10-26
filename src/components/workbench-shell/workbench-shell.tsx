@@ -43,7 +43,7 @@ function LogoutMenuIcon({ className }: { className?: string }) {
 
 export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
     return (
-        <div className="min-h-svh bg-background text-foreground">
+        <div className="min-h-svh bg-(image:--workspace-gradient) bg-fixed text-foreground">
             <LoadErrorBoundary
                 title="Workspace navigation unavailable"
                 description="We couldn’t load the workspace navigation. Try again."
@@ -53,7 +53,7 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                 <WorkbenchHeader activeRunId={activeRunId} />
             </LoadErrorBoundary>
 
-            <BackgroundImageTexture opacity={0.9} variant="fabric-of-squares">
+            <BackgroundImageTexture opacity={0.25} variant="fabric-of-squares">
                 <main className="max-width-container min-h-screen py-4">
                     {children}
                 </main>

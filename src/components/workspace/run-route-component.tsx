@@ -5,7 +5,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { useNavigate } from "@tanstack/react-router";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
-
+import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
 import {
     Empty,
     EmptyDescription,
@@ -13,12 +13,11 @@ import {
     EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EvidenceSufficiencyReview } from "@/components/workspace/evidence-sufficiency-review";
 import { EvidenceMatrix } from "@/components/workspace/evidence-matrix";
+import { EvidenceSufficiencyReview } from "@/components/workspace/evidence-sufficiency-review";
 import { LiveSourceReview } from "@/components/workspace/live-source-review";
-import type { SourceReviewNavigation } from "@/components/workspace/source-proposal-review";
 import { RunProgress } from "@/components/workspace/run-progress";
-import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
+import type { SourceReviewNavigation } from "@/components/workspace/source-proposal-review";
 import {
     WorkspaceNavigationRail,
     type WorkspaceSection,
@@ -135,7 +134,7 @@ export function RunRouteComponent({
                         company={run.company}
                         size="default"
                     />
-                    <h1 className="text-2xl font-medium">
+                    <h1 className="text-section text-2xl">
                         {run.company.legalName}
                     </h1>
                 </div>
@@ -212,10 +211,8 @@ export function RunRouteComponent({
                             onAddManualUrl={handleAddManualUrl}
                         />
                     ) : section === "sources" ? (
-                        <div className="surface-panel rounded-xl p-6">
-                            <h2 className="text-lg font-medium">
-                                Source discovery
-                            </h2>
+                        <div className="surface-panel p-6">
+                            <h2 className="text-section">Source discovery</h2>
                             <p className="mt-2 text-sm text-muted-foreground">
                                 {run.lifecycleState === "discovering_sources"
                                     ? "We’re gathering public sources for your review."
@@ -225,8 +222,8 @@ export function RunRouteComponent({
                     ) : section === "evidence" ? (
                         <EvidenceMatrix runId={runId} />
                     ) : (
-                        <div className="surface-panel rounded-xl p-6">
-                            <h2 className="text-lg font-medium capitalize">
+                        <div className="surface-panel p-6">
+                            <h2 className="text-section capitalize">
                                 {section}
                             </h2>
                             <p className="mt-2 text-sm text-muted-foreground">

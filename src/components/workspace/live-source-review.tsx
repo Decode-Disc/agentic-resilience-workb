@@ -733,7 +733,7 @@ function LiveSourceReviewSkeleton() {
             className="space-y-4">
             <section
                 aria-label="Loading source proposal summary"
-                className="surface-floating space-y-4 rounded-2xl p-4 sm:p-5">
+                className="surface-floating space-y-4 p-4 sm:p-5">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     <div className="space-y-2">
                         <Skeleton className="h-4 w-36" />
@@ -774,7 +774,7 @@ function LiveSourceReviewSkeleton() {
             <div className="grid min-h-168 gap-4 md:grid-cols-[minmax(18rem,36%)_minmax(26rem,1fr)]">
                 <section
                     aria-label="Loading source list"
-                    className="surface-panel space-y-4 rounded-xl p-4">
+                    className="surface-panel space-y-4 p-4">
                     <Skeleton className="h-8 w-full" />
                     {["first", "second", "third"].map((key) => (
                         <Skeleton
@@ -785,7 +785,7 @@ function LiveSourceReviewSkeleton() {
                 </section>
                 <section
                     aria-label="Loading source detail"
-                    className="surface-panel min-h-168 space-y-5 rounded-xl p-6">
+                    className="surface-panel min-h-168 space-y-5 p-6">
                     <Skeleton className="h-5 w-28" />
                     <Skeleton className="h-9 w-3/4" />
                     <Skeleton className="h-4 w-1/2" />
@@ -804,7 +804,7 @@ function ApprovedRevisionBanner({
     canStartNewRevision: boolean;
 }) {
     return (
-        <div className="surface-floating rounded-2xl border border-border/60 p-5">
+        <div className="surface-floating p-5">
             <p className="text-micro text-accent-foreground">Corpus approved</p>
             <h2 className="mt-1 text-lg font-medium">
                 Source set is approved and read-only

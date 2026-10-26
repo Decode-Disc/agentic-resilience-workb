@@ -26,7 +26,7 @@ import {
 import { useCompanyCoverImage } from "@/hooks/use-company-cover-image";
 import {
     executionLabel,
-    executionStatusColor,
+    executionStatusEdgeClass,
     executionStatusTone,
     lifecycleLabel,
 } from "@/lib/presentation/research-copy";
@@ -109,14 +109,18 @@ export function ResearchDossierCard({ dossier }: { dossier: ResearchDossier }) {
                         <CutoutCorner
                             className={cn(
                                 "absolute top-0 -left-[23px] -rotate-90",
-                                `text-${executionStatusColor(dossier.executionStatus)}`,
+                                executionStatusEdgeClass(
+                                    dossier.executionStatus,
+                                ),
                             )}
                             size={24}
                         />
                         <CutoutCorner
                             className={cn(
                                 "absolute right-0 -bottom-[23px] -rotate-90",
-                                `text-${executionStatusColor(dossier.executionStatus)}`,
+                                executionStatusEdgeClass(
+                                    dossier.executionStatus,
+                                ),
                             )}
                             size={24}
                         />

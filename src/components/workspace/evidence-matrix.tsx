@@ -6,7 +6,6 @@ import { usePaginatedQuery, useQuery } from "convex/react";
 import { useState } from "react";
 
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
     Drawer,
     DrawerContent,
@@ -20,6 +19,7 @@ import {
     ResizablePanel,
     ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import { Skeleton } from "@/components/ui/skeleton";
 import { EvidenceClaimDetail } from "@/components/workspace/evidence-claim-detail";
 import {
     EvidenceClaimList,
@@ -227,7 +227,7 @@ function EvidenceMatrixSkeleton() {
             className="space-y-4">
             <section
                 aria-label="Loading evidence coverage"
-                className="surface-floating h-40 space-y-4 rounded-2xl p-5">
+                className="surface-floating h-40 space-y-4 p-5">
                 <Skeleton className="h-4 w-32" />
                 <Skeleton className="h-8 w-56" />
                 <Skeleton className="h-4 w-3/4" />
@@ -240,7 +240,7 @@ function EvidenceMatrixSkeleton() {
             <div className="grid min-h-168 gap-4 md:grid-cols-[minmax(16rem,40%)_minmax(24rem,1fr)]">
                 <section
                     aria-label="Loading evidence claims"
-                    className="surface-panel space-y-4 rounded-xl p-4">
+                    className="surface-panel space-y-4 p-4">
                     <Skeleton className="h-8 w-full" />
                     {["first", "second", "third"].map((key) => (
                         <Skeleton
@@ -251,7 +251,7 @@ function EvidenceMatrixSkeleton() {
                 </section>
                 <section
                     aria-label="Loading claim detail"
-                    className="surface-panel min-h-168 space-y-5 rounded-xl p-6">
+                    className="surface-panel min-h-168 space-y-5 p-6">
                     <Skeleton className="h-5 w-28" />
                     <Skeleton className="h-9 w-3/4" />
                     <Skeleton className="h-4 w-1/2" />

@@ -15,7 +15,7 @@ interface LoadErrorAlertProps
 }
 
 const variantClasses: Record<LoadErrorAlertVariant, string> = {
-    panel: "surface-panel mx-auto max-w-xl rounded-xl p-6",
+    panel: "surface-panel mx-auto max-w-xl p-6",
     inline: "rounded-lg border-destructive/30 bg-destructive/5 p-3",
     compact:
         "flex w-auto items-center gap-2 rounded-none border-0 bg-transparent p-0 text-xs text-muted-foreground",

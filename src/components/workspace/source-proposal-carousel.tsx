@@ -122,7 +122,7 @@ export function SourceProposalCarousel({
         <div className="min-w-0 space-y-4">
             <section
                 aria-label="Source carousel"
-                className="surface-panel min-w-0 overflow-hidden rounded-xl border border-border/60">
+                className="surface-panel min-w-0 overflow-hidden">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
                     <div className="min-w-0 flex-1">{toolbar}</div>
                     <div className="relative w-full sm:w-64">

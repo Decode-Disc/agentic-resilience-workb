@@ -267,7 +267,7 @@ export function SourceReview({
                     </EmptyHeader>
                 </Empty>
                 {canAddSource ? (
-                    <div className="surface-panel flex flex-col items-center justify-center rounded-xl p-5 text-center">
+                    <div className="surface-panel flex flex-col items-center justify-center p-5 text-center">
                         <AddSourceDialog
                             trigger={
                                 <Button type="button">

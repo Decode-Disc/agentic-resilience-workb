@@ -1,0 +1,41 @@
+{
+    "lsp": {
+        "serverOverrides": {
+            "css": {
+                "command": [
+                    "./node_modules/.bin/css-language-server",
+                    "--stdio"
+                ]
+            }
+        },
+        "servers": {
+            "tailwindcss": {
+                "name": "Tailwind CSS",
+                "extensions": [".css", ".html", ".tsx", ".jsx"],
+                "command": "./node_modules/.bin/tailwindcss-language-server",
+                "args": ["--stdio"],
+                "rootMarkers": ["package.json"],
+                "initializationOptions": {
+                    "userLanguages": {},
+                    "editor": {
+                        "tabSize": 4
+                    },
+                    "tailwindCSS": {
+                        "validate": true,
+                        "classAttributes": ["class", "className"],
+                        "experimental": {
+                            "configFile": "src/styles.css"
+                        },
+                        "lint": {
+                            "cssConflict": "warning",
+                            "invalidConfigPath": "error",
+                            "invalidTailwindDirective": "error",
+                            "invalidApply": "error"
+                        }
+                    }
+                }
+            }
+        },
+        "warmFiles": ["src/styles.css"]
+    }
+}

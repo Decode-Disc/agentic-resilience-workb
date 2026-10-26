@@ -81,7 +81,7 @@ export function OperationsPage() {
         return (
             <>
                 {queryBridge}
-                <div className="surface-panel rounded-xl p-8 text-center">
+                <div className="surface-panel p-8 text-center">
                     <h1 className="text-xl font-medium">
                         Admin access required
                     </h1>
@@ -265,7 +265,7 @@ export function OperationsPage() {
                             ))}
                         </ul>
                     </section>
-                    <section className="surface-panel rounded-xl p-5 lg:col-span-2">
+                    <section className="surface-panel p-5 lg:col-span-2">
                         <h2 className="text-base font-medium">
                             Recent provider attempts
                         </h2>

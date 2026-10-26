@@ -29,15 +29,13 @@ export function EvidenceCoverageSummary({
 
     return (
         <section aria-label="Evidence coverage summary" className="space-y-3">
-            <div className="surface-floating rounded-2xl border border-border/60 p-5">
+            <div className="surface-floating p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                         <p className="text-micro text-brand-purple">
                             {status.eyebrow}
                         </p>
-                        <h2 className="mt-1 text-lg font-medium">
-                            {status.title}
-                        </h2>
+                        <h2 className="mt-1 text-section">{status.title}</h2>
                         <p className="mt-1 text-sm text-muted-foreground">
                             {status.description}
                         </p>
@@ -84,7 +82,7 @@ export function EvidenceCoverageSummary({
             ) : null}
 
             <dl className="grid gap-3 sm:grid-cols-3">
-                <div className="surface-panel rounded-xl p-4">
+                <div className="surface-panel p-4">
                     <dt className="text-xs text-muted-foreground">
                         Claims available
                     </dt>
@@ -92,7 +90,7 @@ export function EvidenceCoverageSummary({
                         {summary.claimCount}
                     </dd>
                 </div>
-                <div className="surface-panel rounded-xl p-4">
+                <div className="surface-panel p-4">
                     <dt className="text-xs text-muted-foreground">
                         Questions covered
                     </dt>
@@ -101,7 +99,7 @@ export function EvidenceCoverageSummary({
                         {summary.questionCoverage.total}
                     </dd>
                 </div>
-                <div className="surface-panel rounded-xl p-4">
+                <div className="surface-panel p-4">
                     <dt className="text-xs text-muted-foreground">
                         Sources reviewed
                     </dt>
@@ -117,7 +115,7 @@ export function EvidenceCoverageSummary({
 
             {summary.claimCount === 0 &&
             summary.lifecycleState === "evidence_ready" ? (
-                <Empty className="surface-panel min-h-36 rounded-xl p-6">
+                <Empty className="surface-panel min-h-36 p-6">
                     <EmptyHeader>
                         <EmptyTitle>No evidence claims</EmptyTitle>
                         <EmptyDescription>

@@ -308,6 +308,8 @@ Use shared [DiscreteTabs](src/components/ui/discrete-tabs.tsx), [Accordion](src/
 
 Readable layering, discreet structural shadows and selective glass establish depth. Near-neutral fills and hairline borders separate ordinary regions. Frosted floating layers add translucency, an inset highlight and a fine inner rim. The evidence surface remains the focal working area rather than becoming a decorative glass showcase.
 
+The backdrop vocabulary spans two theme gradients. `--landing-gradient` anchors its brand-colored radial accent at the bottom and belongs to the project home page. `--workspace-gradient` reuses the same recognition hues at roughly half their strength, anchors the radial accent at the top of the scrolling workbench shell, and ramps vertically from the canvas toward a softer floor so reading surfaces gain separation as the analyst descends. A workspace texture layer may sit on top of it only at a restrained opacity (around 0.25); both gradients stay in the active theme, and the spotlight, orbit rings, grid mask and animated noise remain landing-only consumers.
+
 ### Shadow Vocabulary
 
 - **Soft surface** (`--surface-shadow-soft`): the named panel shadow, including its inset highlight. Used by the shared opaque-panel utility and selected content groups.

@@ -169,7 +169,7 @@ function CoverageContainer({
             onOpenChange={setMobileOpen}
             aria-label="Source coverage"
             className={cn(
-                "surface-panel w-full min-w-0 self-start overflow-hidden rounded-xl border border-border/60 xl:sticky xl:top-20 xl:w-76",
+                "surface-panel w-full min-w-0 self-start overflow-hidden xl:sticky xl:top-20 xl:w-76",
                 className,
             )}>
             <header className="border-b border-border/60 px-4 py-2">

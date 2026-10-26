@@ -17,7 +17,7 @@ function ProtectedRouteLoading() {
             key={`loading-card-${index}`}
             role="status"
             aria-label="Preparing private workspace"
-            className="surface-panel mx-auto mt-12 w-full max-w-xl space-y-3 rounded-xl p-6">
+            className="surface-panel mx-auto mt-12 w-full max-w-xl space-y-3 p-6">
             <Skeleton className="h-4 w-40" />
             <Skeleton className="h-7 w-72 max-w-full" />
             <Skeleton className="h-4 w-full" />

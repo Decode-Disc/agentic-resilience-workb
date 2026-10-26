@@ -31,9 +31,11 @@ function DossiersLoading() {
                 <Skeleton className="h-10 w-48" />
                 <Skeleton className="h-4 w-full max-w-md" />
             </div>
-            <div className="grid justify-items-center gap-5 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-5 md:grid-cols-2 xl:grid-cols-3">
                 {[0, 1, 2].map((item) => (
-                    <ResearchDossierCardSkeleton key={item} />
+                    <div className="mx-auto w-full max-w-md" key={item}>
+                        <ResearchDossierCardSkeleton />
+                    </div>
                 ))}
             </div>
         </div>
@@ -78,9 +80,7 @@ function DossiersContent() {
                     <p className="text-micro text-brand-purple">
                         Research workspace
                     </p>
-                    <h1
-                        id="dossiers-heading"
-                        className="text-display text-3xl sm:text-4xl">
+                    <h1 id="dossiers-heading" className="text-display">
                         Dossiers
                     </h1>
                     <p className="max-w-xl text-sm text-muted-foreground sm:text-base">
@@ -101,9 +101,11 @@ function DossiersContent() {
             {dossiers.length === 0 ? (
                 <DossiersEmpty />
             ) : (
-                <ul className="grid justify-items-center gap-5 md:grid-cols-2 xl:grid-cols-3">
+                <ul className="grid grid-cols-[minmax(0,1fr)] gap-5 md:grid-cols-2 xl:grid-cols-3">
                     {dossiers.map((dossier) => (
-                        <li className="w-full max-w-md" key={dossier.runId}>
+                        <li
+                            className="mx-auto w-full max-w-md"
+                            key={dossier.runId}>
                             <ResearchDossierCard dossier={dossier} />
                         </li>
                     ))}

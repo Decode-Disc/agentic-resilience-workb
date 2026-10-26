@@ -43,7 +43,7 @@ export function RunProgress({
 
     return (
         <section className="space-y-5" aria-label="Research progress">
-            <div className="surface-panel rounded-xl p-5">
+            <div className="surface-panel p-5">
                 <p className="text-micro text-brand-purple">Current state</p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                     <Badge variant="secondary">
@@ -94,7 +94,7 @@ export function RunProgress({
                 </div>
             ) : null}
             {events.length === 0 ? (
-                <Empty className="surface-panel min-h-40 rounded-xl p-6">
+                <Empty className="surface-panel min-h-40 p-6">
                     <EmptyHeader>
                         <EmptyTitle>No progress events yet</EmptyTitle>
                         <EmptyDescription>
