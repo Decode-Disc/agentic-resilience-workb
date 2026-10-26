@@ -8,7 +8,7 @@ This document owns delivery state and sequence. [PRODUCT.md](../PRODUCT.md) owns
 
 ## Current Delivery State
 
-The phases follow the current [source-preparation contract](../context/TECH.md#source-preparation-and-selection); [ADR-024](decisions/024-qualify-source-content-before-corpus-approval.md) and [ADR-025](decisions/025-use-versioned-scoped-evidence-retrieval.md) retain the rationale. The outcomes below distinguish implementation, local verification and live acceptance. No completed live invitation-to-brief journey is certified.
+The accepted [question-led conception](brainstorming/question-led-workbench/2026-10-23-question-led-workbench-conception.md), its three mission designs and shared execution architecture are promoted into the product and technical references. This is a design baseline, not implementation evidence. Phases 0–5 retain the installed corpus-approval and dimension-based delivery record; phases 6–10 sequence the transition and remaining target. [ADR-024](decisions/024-qualify-source-content-before-corpus-approval.md) and [ADR-025](decisions/025-use-versioned-scoped-evidence-retrieval.md) preserve earlier rationale. No completed live end-to-end analytical journey is certified.
 
 | Capability | Recorded delivery | Remaining boundary |
 | --- | --- | --- |
@@ -19,14 +19,17 @@ The phases follow the current [source-preparation contract](../context/TECH.md#s
 | Source review and decisions | Local checks cover phase-specific progress, reactive coverage and source readings, explicit partial outcomes, targeted search, saved selection reasons, legacy-draft recomputation and preparation recovery after expiry. Protected desktop/mobile fixtures cover live updates, reconnection and retained readings, decisions and cumulative limits. | Fixture checks and inspection of an interrupted dossier do not establish fresh usefulness or user visual acceptance. |
 | Corpus approval and saved-source search | Exact capture materialization, required-reference handoff and search beyond initial passage selection have protected desktop/mobile coverage. Earlier [source-review checks](verification/2026-10-22-source-review-corrections.md) remain dated evidence. | General live analytical retrieval is not established; the remote preview-service correction remains undeployed. |
 | Claims and Evidence Matrix | The hash-gated deterministic showcase path is implemented; [Phase 5 verification](verification/2026-08-15-phase-5-evidence-matrix-provenance.md) records its scope. | Arbitrary live dossiers pause before claim generation. Real analytical generation and verification remain unfinished. |
-| Administration | Purpose-scoped dossier lists and technical inspection use native pagination; benchmarks and historical browser fixtures are isolated from human workspaces. Local purpose migration preserves all 407 dossiers and their existing business fields. Deterministic checks cover authorization, private browser contexts, provider blocking and research-only quota restoration. | Protected local desktop/mobile journeys verify isolated validation data, administrator pagination and read-only inspection, context closure, and explicit rebinding after real readmission. The [migration and verification record](verification/2026-10-26-research-workspace-isolation.md) records the passing global tests and the pre-existing import-lint limitation. The visitor inventory remains bounded by the five stable access slots; broader Phase 8 work remains open. |
-| Dimension review, map and brief | Required later slices. | No completed analytical review or final derived-output journey is certified. |
+| Administration | Purpose-scoped dossier lists and technical inspection use native pagination; benchmarks and historical browser fixtures are isolated from human workspaces. Local purpose migration preserves all 407 dossiers and their existing business fields. Deterministic checks cover authorization, private browser contexts, provider blocking and research-only quota restoration. | Protected local desktop/mobile journeys verify isolated validation data, administrator pagination and read-only inspection, context closure, and explicit rebinding after real readmission. The [migration and verification record](verification/2026-10-26-research-workspace-isolation.md) records the passing global tests and the pre-existing import-lint limitation. The visitor inventory remains bounded by the five stable access slots; remaining administrative operations and guards are tracked under end-to-end demo readiness. |
+| Question-led framing and three-mission execution | Accepted conception; reference contracts updated. | Explicit Start research, delegated selection, shared controlled operations and new mission artifacts are not certified as implemented. |
+| Investigation, grouped appraisal review and Synthesis | Required target slices, replacing planned fixed-dimension review and secondary map/brief generation. | No completed common inquiry, retained-appraisal handoff or joint diagram-and-note journey is certified. |
 
 ### Next Preparation Gate
 
+This remaining acceptance gate concerns the installed preparation path under the [transition contract](../context/TECH.md#implementation-transition). It preserves its unresolved evidence without making a further paid trial a prerequisite to documenting or starting the target transition in Phase 6.
+
 Local preparation was activated on 2026-10-23. The first analyst-launched dossier saved two captures from 48 sources, then stopped before qualification; its subsequent annual-report search also failed before provider I/O. Configuration, regulatory-search routing, recovery and review-state corrections were verified locally without rerunning that dossier or renewing its elapsed preparation window. An analyst-triggered recovery on 2026-10-24 subsequently reached qualification and comparison and returned a partial proposal for review. This processing progress does not establish analytical usefulness.
 
-Bounded explicit recovery in the same editable dossier is implemented and locally verified, including protected desktop/mobile fixtures, preserved readings and decisions, and unchanged cumulative allowances. Local verification does not replay the real dossier. The next smallest slice is analyst review of its retained material and limitations, followed by the protected approval and capture handoff. An authorized [live comparison](verification/2026-10-25-source-preparation-live-comparison.md) observes a revised preparation reaching review in 5 min 24 s against 9 min 16 s, with 24 rather than 25 qualified sources and the same five unavailable SEC documents. This establishes one elapsed-time observation, not analytical usefulness or general performance. Inspect useful retained material, visible omissions, exact provenance and the protected handoff within the existing allowance. Further checks must cover different companies and dossier needs before any general quality claim. The historical 32 retrieval conditions are not a completion target, and no additional paid benchmark is required before this trial.
+Bounded explicit recovery in the same editable dossier is implemented and locally verified, including protected desktop/mobile fixtures, preserved readings and decisions, and unchanged cumulative allowances. Local verification does not replay the real dossier. Within that path, remaining acceptance concerns analyst review of retained material and limitations, followed by the protected approval and capture handoff. An authorized [live comparison](verification/2026-10-25-source-preparation-live-comparison.md) observes a revised preparation reaching review in 5 min 24 s against 9 min 16 s, with 24 rather than 25 qualified sources and the same five unavailable SEC documents. This establishes one elapsed-time observation, not analytical usefulness or general performance. Inspect useful retained material, visible omissions, exact provenance and the protected handoff within the existing allowance. Further checks must cover different companies and dossier needs before any general quality claim. The historical 32 retrieval conditions are not a completion target, and no additional paid benchmark is required before this trial.
 
 ### Open Verification Limits
 
@@ -35,6 +38,8 @@ Bounded explicit recovery in the same editable dossier is implemented and locall
 - Some grouped tests timed out and passed in focused reruns without increased timeouts; those results do not establish a cause for the grouped instability. The recorded slices do not certify a passing aggregate check; earlier lint/format failures and unrun full-suite checks remain part of the record.
 
 Detailed historical verification notes, including local-only evidence locations, remain recoverable at `bd07b1bf756d8538547477a700c15aeb6391675d:docs/ROADMAP.md`. The linked reports and raw artifacts are unchanged.
+
+The records in phases 0–5 describe installed behavior and its remaining verification limits. Checked legacy checkpoints and dimension-related contracts do not become target requirements; keep their safeguards until a verified replacement.
 
 ## Phase 0 — Application Foundation
 
@@ -110,7 +115,7 @@ Outcome: approved sources become inspectable, precisely cited evidence rather th
 
 - [x] Materialize the exact inspected captures selected by corpus approval, validating stored content and pinned references; missing or corrupt captures fail explicitly without silent replacement retrieval.
 - [x] Retain real SEC and Exa Contents retrieval for legacy approved sources without preparation captures, with visible partial failures.
-- [x] Reuse captured normalized text for prepared sources. Page-aware PDF normalization remains a deterministic fixture contract until real Unstructured is integrated in Phase 8.
+- [x] Reuse captured normalized text for prepared sources. Page-aware PDF normalization remains a deterministic fixture contract until the real Unstructured adapter is integrated.
 - [x] Create stable, reproducible source passages and locators.
 - [x] Extract typed atomic `Fact`, `Inference`, `Hypothesis`, and `Unknown` claim proposals through a hash-gated deterministic showcase adapter.
 - [x] Apply non-overridable structural validation and versioned deterministic policy evaluation.
@@ -119,92 +124,87 @@ Outcome: approved sources become inspectable, precisely cited evidence rather th
 - [x] Preserve supporting evidence, counter-evidence, and critical unknowns.
 - [x] Exclude rejected sources from every downstream artifact.
 - [x] End successful Phase 5 work at the `evidence_ready + idle` handoff.
-- [x] Preserve arbitrary live retrieval provenance but pause honestly at `claim_generation_unavailable` without fabricated claims or Phase 6 unlock.
+- [x] Preserve arbitrary live retrieval provenance but pause honestly at `claim_generation_unavailable` without fabricated claims or access to legacy dimension assessment.
 
-Note: [Phase 5 deterministic/local certification](verification/2026-08-15-phase-5-evidence-matrix-provenance.md) and [real SEC/Exa retrieval checks](verification/2026-10-20-source-recovery-contract-repairs.md) are dated evidence. Earlier failures remain recorded. Real Unstructured, general live claim generation and semantic-verifier integration remain Phase 8 work. Preparation already has separate real model adapters and bounded experiments. Later analytical stages are not yet an available recovery mechanism for every preparation omission.
+Note: [Phase 5 deterministic/local certification](verification/2026-08-15-phase-5-evidence-matrix-provenance.md) and [real SEC/Exa retrieval checks](verification/2026-10-20-source-recovery-contract-repairs.md) are dated evidence. Earlier failures remain recorded. Real Unstructured, general live claim generation and semantic-verifier integration remain unfinished delivery work. Preparation already has separate real model adapters and bounded experiments. Later analytical stages are not yet an available recovery mechanism for every preparation omission.
 
 - [x] Verify the local handoff for useful content beyond the initial selection: qualification and applicable comparison references reach analytical input with exact provenance; approved saved-source search retrieves a previously unselected passage through the protected desktop/mobile interface and after reconnection. The 512-passage limit is unchanged. These checks use labelled fixtures and do not complete general live claim generation.
 - [x] Correct source-retention regressions across multiple companies and version the reviewed retrieval references to accept explicitly adjudicated equivalent passages. Historical raw scores remain unchanged; neither retrieval mode is declared a general winner.
 
-## Phase 6 — Dimension Assessment and Human Review
+## Phase 6 — Framing and Controlled Transition
 
-Outcome: analysts can inspect and revise evidence-backed proposals across all ten dimensions.
+Outcome: the analyst can establish a useful scope and launch the question-led workflow without weakening existing dossier authority.
 
-- [ ] Propose separate position, confidence, and three-year direction outputs.
-- [ ] Derive confidence from inspectable evidence characteristics.
-- [ ] Present exception-driven grouped claim review while persisting individual append-only decisions.
-- [ ] Unlock dimension review when its claims and dimension links have decisions.
-- [ ] Record one atomic assessment decision per dimension with justified field overrides.
-- [ ] Support AI-assisted cited replacement claims without mutating original proposals.
-- [ ] Preserve proposals, analyst decisions, overrides, and revision history append-only.
-- [ ] Verify weak-evidence outcomes without forcing certainty or an aggregate score.
+- [ ] Define concrete framing, mandate and revision contracts, common research questions, case-specific needs and contextual-intervention thresholds within the accepted scope.
+- [ ] Specify compatibility for current dossiers, approved corpora, claims, dimension decisions and in-flight executions before replacing any installed checkpoint or schema.
+- [ ] Preserve company identity, optional angle and public references through confirmation, proposed framing and optional Questionnaire refinement.
+- [ ] Persist explicit Start research as the event that fixes framing and launches Sources; prevent documentary preparation or question investigation while framing remains open.
+- [ ] Make the proposed company/activity scope and intended question useful immediately without reconstructing activity revenue or introducing financial calculations.
+- [ ] Evolve the existing workspace within the accepted timeline, compact composer and contextual-intervention direction. Settle remaining layout choices before changing the affected surfaces.
 
-## Phase 7 — Derived Analyst Outputs
+## Phase 7 — Shared Execution and Sources
 
-Outcome: validated evidence produces useful secondary views without introducing unsupported assertions.
+Outcome: one controlled execution mechanism supports adaptive documentary inquiry and preserves useful work across interruptions.
 
-- [ ] Build a progressively updated evidence-backed architecture map with uncertainty and coverage cues.
-- [ ] Require validated supporting claims for every map relationship.
-- [ ] Incrementally compose a draft brief from analyst-approved claims only.
-- [ ] Preserve brief revisions and their evidence inputs.
-- [ ] Show the persisted map and brief contribution after each dimension decision.
-- [ ] Keep incomplete coverage explicit until all ten dimensions are decided.
-- [ ] Add the methodology and limitations surface.
+- [ ] Implement the shared access and Sources operations needed by this slice through existing domain owners, callable by authorized native code and mission-specific agent bindings under equivalent rules. Add the Investigation and Synthesis operations in their respective phases when their behavior is needed.
+- [ ] Assemble compact mission context with on-demand search and reading; retain inspected evidence independently from model history and avoid corpus-sized tool schemas.
+- [ ] Support targeted artifact changes, resulting-artifact controls, precise diagnostics and system execution of known required dependent checks.
+- [ ] Define current mission artifacts, progression checks, unfinished obligations and cumulative accounting for all reasoning, operation and verifier provider calls. Set bounded execution parameters before activation without resetting previous consumption.
+- [ ] Preserve confirmed work during authorized automatic recovery; fence cancellation, stale versions and unknown provider outcomes without crossing human prerequisites.
+- [ ] Reuse the implemented bounded OpenRouter preparation adapters, exact captures, scoped retrieval, provider receipts, source-use policy and resource protections rather than duplicating them.
+- [ ] Give Sources adaptive documentary inquiry, authorized observed-link acquisition, qualification submission and targeted documentary checking under system-organized preparation.
+- [ ] Integrate mandatory targeted semantic controls at qualification submission, explicit unchanged-control reuse and precise contribution/use restrictions. Preserve useful independent contributions.
+- [ ] Implement delegated source selection under the agreed mandate and typed exceptions. Keep the later Investigation-driven complement available instead of spending it on initial role coverage.
+- [ ] Complete the provider routing, output validation and operational guards needed by this slice; retain the existing preparation acceptance limitations until fresh bounded evaluation resolves them.
 
-## Phase 8 — Real Providers and Operational Guards
+## Phase 8 — Investigation and Grouped Appraisal Review
 
-Outcome: the deterministic workflow can use real services safely through provider-independent boundaries.
+Outcome: a common inquiry produces reasoned appraisals with inspectable evidence, objections and unknowns for meaningful human judgment.
 
-- [x] Implement the bounded OpenRouter preparation adapters, configuration-owned qualification/comparison routes, output validation, application-owned fallback and telemetry under ADR-024.
-- [ ] Complete capability-based routing for remaining analytical tasks and the approved Codex subscription transport.
-- [ ] Add the real Unstructured Pipeline Jobs HTTP adapter for page-aware PDF normalization.
-- [ ] Integrate real model-provider claim generation, semantic verification, and fallback routing.
-- [ ] Keep retries and explicit fallback application-controlled and fully audited.
-- [ ] Validate structured provider output before it becomes usable evidence.
-- [ ] Record best-effort usage, latency, status, retries, and reported cost.
-- [ ] Enforce configurable breadth limits, bounded retries, and the paid-work emergency switch.
-- [ ] Add the minimal admin operations surface for runs, checkpoints, provider calls, quota restoration, and paid-work shutdown.
-- [ ] Verify partial failures and late results cannot corrupt or advance cancelled runs.
+- [ ] Enrich one reusable company inventory through controlled assertions and separate question-specific uses; admit each contribution before use without routine human confirmation of every assertion/link.
+- [ ] Preserve exact evidence, permitted use, attribution, temporal scope, corrections and earlier judgments. Distinguish evidence presence from an answered question.
+- [ ] Conduct one common inquiry across questions and compare rival interpretations. Group decisive missing information into at most one bounded autonomous documentary complement, then re-examine the returned material without another search cycle.
+- [ ] Submit an appraisal or justified insufficiency for every assigned question, controlling the reasoning from assertions and assumptions through mechanisms to economic consequences.
+- [ ] Keep sourced figures and ratios with definitions and limitations; produce no new financial calculations or dedicated financial collection.
+- [ ] Implement grouped review with identifiable appraisal versions, per-question correction or deferral, and append-only decisions. An empty retained set stays at review and cannot start Synthesis.
+- [ ] Handle material exceptions contextually while independent work continues; preserve source inspection, matrix access and decisions after reconnection.
+- [ ] Evaluate admission and appraisal semantics separately from documentary preparation, including incorrect use, competing interpretations, decisive unknowns and revisions of retained judgments.
 
-Source acquisition now belongs to pre-approval preparation for new prepared dossiers, with post-approval retrieval retained for legacy corpora. Phase 8 completes real analytical model integration, page-aware PDF normalization and the remaining operational guards. Existing preparation adapters and experiments do not establish acceptance of those future tasks. The unchecked cross-cutting items above concern the remaining analytical workflow, even where preparation already implements equivalent safeguards.
+## Phase 9 — Synthesis, CCC Showcase and Evaluation
 
-## Phase 9 — CCC Showcase and Evaluation
+Outcome: retained appraisals support an immediately useful economic interpretation, with its diagram and fully reasoned note controlled together.
 
-Outcome: one carefully curated dossier demonstrates original, contested, and measurable analytical judgment.
-
-- [ ] Freeze the CCC source cutoff date and bounded workflow scope.
-- [ ] Curate and approve a corpus with suitable independent evidence.
-- [ ] Define expected claims, known contradictions, and deliberate unknowns after manual review.
-- [ ] Resolve open evaluation questions: extraction and locator quality, whether the bounded CCC corpus discriminates the competing interpretations, and the minimum evidence questions needed per dimension.
-- [ ] Reuse the curated CCC dossier as the first regression corpus instead of creating a parallel golden dossier.
-- [ ] Add small deterministic fixtures for isolated policy rules.
-- [ ] Include at least one material, justified analyst override.
-- [ ] Evaluate citation validity, entailment, classification, contradiction retrieval, and unsupported-claim rate.
-- [ ] Record duration, available provider usage or cost, and analyst corrections.
-- [ ] Label the completed dossier and all fixtures as curated or precomputed.
-- [ ] Allow the curated Phase 5 dossier to demonstrate the read-only Evidence Matrix while keeping showcase labelling in Phase 9.
-- [ ] Evaluate source preparation across several companies, source families and dossier types, separately from the curated showcase. Include broad research, targeted questions, supplied references and uncertain arguments without requiring multiple completed showcase dossiers.
-- [ ] Distinguish exact-reference retention, useful equivalent evidence, displayed qualification and downstream answer quality. Report corpus reuse, reference authorship, known controls and unverified transfer explicitly.
+- [ ] Produce a reference economic mechanism diagram anchored in the investigated actors and workflow, with traceable relationships, conditions and uncertainty; derive the note from the same interpretation.
+- [ ] Control new transversal inferences and joint diagram-to-note fidelity. Retaining the inputs cannot automatically validate a proposed relationship.
+- [ ] Route a necessary uninstructed premise or appraisal concern through bounded Investigation re-examination of available material, without another documentary phase.
+- [ ] Preserve targeted human review of material changes to retained appraisals. Deliver a limited joint result only from a coherent unaffected base; wait when the overall interpretation depends on a contested premise.
+- [ ] Submit justified non-establishment when an instructed retained base supports no mechanism, distinguishing it from no retained appraisal, pending judgment and technical interruption. Do not add a routine final approval stop.
+- [ ] Freeze the CCC source cutoff and photo-led auto physical damage scope; curate the evidence, expected assertions, competing interpretations, known contradictions and deliberate unknowns. Examine whether that bounded material discriminates between the interpretations without predetermining the conclusion.
+- [ ] Reuse the curated CCC dossier as the first regression corpus, with small deterministic fixtures for isolated rules and at least one material justified analyst correction or override.
+- [ ] Evaluate citation validity, entailment, classification, contradiction retrieval, appraisal reasoning, unsupported assertions and diagram-note coherence. Record duration, available usage/cost and analyst corrections.
+- [ ] Evaluate source preparation across companies, source families and dossier needs separately from the curated showcase. Distinguish exact-reference retention, useful equivalent evidence, qualification and downstream analytical quality; record reuse, authorship, known controls and unverified transfer.
+- [ ] Label curated, precomputed and fixture results explicitly and provide methodology with measured limitations.
 
 ### Demonstration Checkpoint B — Completed Showcase
 
-- [ ] The evidence matrix makes provenance, counter-evidence, and uncertainty immediately legible.
-- [ ] The assessment demonstrates technical-economic judgment rather than vendor-message synthesis.
-- [ ] The architecture map and brief contain no unsupported material.
-- [ ] Infrastructure remains secondary to the analyst value demonstrated.
+- [ ] A decisive economic question and its scoped interpretation are immediately useful to Raphaëlle and her analysts.
+- [ ] Appraisals expose the shared evidence, objections and unknowns, with identifiable retained human judgments.
+- [ ] The mechanism diagram and note express the same supported interpretation, or the alternative finding explains non-establishment honestly.
+- [ ] Provenance remains inspectable while infrastructure and routine coordination remain secondary.
 
 ## Phase 10 — End-to-End Demo Readiness
 
-Outcome: the complete invitation-to-brief journey is reliable, honest, and ready for the candidature demonstration.
+Outcome: the complete question-led journey is reliable, honest and ready for the candidature demonstration.
 
-- [ ] Verify the full invited-analyst journey against [MVP acceptance](../PRODUCT.md#mvp-acceptance).
-- [ ] Run focused, affected, full, type, lint, format, and critical browser checks.
-- [ ] Verify responsive, keyboard-accessible, and non-color-dependent critical screens.
-- [ ] Exercise empty, loading, partial-failure, needs-review, cancelled, and insufficient-evidence states.
-- [ ] Rehearse the separate live-run and curated-showcase paths.
-- [ ] Publish only measured methodology, limitations, duration, and provider usage.
-- [ ] Document remaining risks, deployment constraints, and known gaps before recording the demo.
+- [ ] Complete remaining capability-based analytical routing, semantic verification and application-controlled fallback, including the approved experimental Codex subscription transport and real Unstructured Pipeline Jobs adapter. Their current unfinished status cannot be presented as live delivery.
+- [ ] Verify all exposed I/O authorization, validation, idempotency, bounded retry, telemetry, cancellation and late-result protections for the new mission paths.
+- [ ] Complete and verify protected administrative inspection, audited quota restoration and the emergency switch for new paid work; preserve existing purpose-scoped workspace isolation.
+- [ ] Verify the full admitted-analyst journey against [MVP acceptance](../PRODUCT.md#mvp-acceptance), including Start research, grouped review, synthesis outcomes and preserved state after reconnection.
+- [ ] Run applicable focused checks and the CI aggregate at final readiness, with protected desktop/mobile, keyboard/focus, non-color cues and relevant reduced-motion checks.
+- [ ] Exercise empty, loading, partial, unfinished-check, pending-judgment, cancelled and insufficient-evidence states, including limited synthesis and waiting on a central contested premise.
+- [ ] Rehearse genuinely live and clearly curated paths; publish only measured methodology, limitations, duration and provider usage.
+- [ ] Record remaining risks, deployment constraints and incomplete gates before recording the demonstration.
 
 ## MVP Completion Gate
 
-- [ ] Record evidence against every criterion in [MVP acceptance](../PRODUCT.md#mvp-acceptance), with incomplete gates and remaining risks explicit. No completed invitation-to-brief journey is certified by the present roadmap.
+- [ ] Record evidence against every criterion in [MVP acceptance](../PRODUCT.md#mvp-acceptance), with incomplete gates and remaining risks explicit. The accepted conception and reference update alone certify no completed end-to-end journey.

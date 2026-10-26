@@ -10,7 +10,92 @@ Keep domain records, persistence, orchestration, acquisition/normalization, mode
 
 No second workflow engine, PostgreSQL, separate object store or custom realtime transport is part of the baseline. Eve and Vercel Workflow remain alternatives requiring demonstrated need and an explicit decision. Vercel Hobby is an acceptable hosting option only when its verified limits support the prototype; the technical baseline does not promise a free deployment. Model routes, access credentials, resource configuration, showcase identity and deployment URLs remain configuration data.
 
+## Agentic Missions and Shared Operations
+
+Three specialized mission agents work within system-owned execution: Sources conducts documentary inquiry; Investigation contributes assertions and investigates the framed questions; Synthesis connects retained appraisals. The system fixes each mission's authority, scope, applicable versions, permitted operations, resource bounds, expected artifacts and progression conditions. The agent chooses useful readings, confrontations and proposals from mission start; it is not activated only after a predicted risk. No new orchestration engine or general capability framework is selected.
+
+Authorized native calls and agent tools reach the same deep business operations. The domain implementation owns validation, policy, versions, persistence and known dependent work; the tool binding supplies description, schema and execution. Mission exposure is least-privilege, not a separate implementation or unrestricted access to the catalogue.
+
+| Business operation | Domain responsibility | Agent exposure | Controlled result |
+| --- | --- | --- | --- |
+| Consult mission state | Dossier and preparation | All three | Compact scope, versions, references, progress, restrictions and pending work. |
+| Search available material | Documentary material | All three | Candidate passages, reproducible references and search limitations. |
+| Read in context | Documentary material | All three | Exact passages, surrounding context, observed links and applicable restrictions. |
+| Make a source consultable | Sources | Sources | Acquired or reused content with its own capture and provenance. |
+| Submit documentary qualification | Sources | Sources | Document contributions and restrictions with targeted diagnostics. |
+| Request a targeted documentary check | Sources | Sources | A statement's documentary support, scope and limits, including before qualification. |
+| Contribute to the inventory | Shared inventory | Investigation | Assertions, corrections and question-specific uses admitted under shared rules. |
+| Request a documentary complement | Workflow | Investigation | Grouped decisive needs transmitted within the single permitted phase. |
+| Submit appraisals | Investigation | Investigation | Controlled responses by question, proposed for grouped analyst review. |
+| Request analytical re-examination | Workflow | Synthesis | A concern or necessary new premise routed to Investigation for available-material examination. |
+| Submit synthesis | Synthesis | Synthesis | Jointly controlled mechanism diagram and argued note, or reasoned non-establishment. |
+
+These are functional entries, not frozen SDK signatures or a generic all-purpose API. Consultation, explicit-query search, exact reading and handoff authorization need deterministic boundary checks, not a generative intermediary. Search and reading respect mission-specific access and permitted uses. Completion uses artifact references rather than another coordination tool.
+
+Making a source consultable targets an authorized candidate or actually observed link with its recorded origin, and requires the destination's own retained content. A URL, index label or guide does not establish that its destination was read or qualified. Sources returns qualified documentary material; it does not directly create analytical inventory assertions.
+
+## Workflow and Revision Contract
+
+```text
+Company, optional angle and public references → proposed framing and mandate
+→ optional refinement → explicit Start research
+→ Sources: shared documentary preparation
+→ Investigation: common inquiry and shared inventory contributions
+→ when useful: one grouped bounded documentary complement by Sources
+→ Investigation: re-examination and appraisals
+→ grouped analyst review of identifiable appraisal versions
+→ at least one retained appraisal → autonomous Synthesis
+→ jointly controlled diagram and note, or reasoned non-establishment
+```
+
+Start research fixes the framing before Sources or question investigation starts. Source selection operates under the product mandate instead of the target requiring a routine corpus-approval stop. Authority and permitted-use records remain versioned and inspectable; removing the human stop does not remove source admission, rejection, integrity or audit. The exact mandate, exception thresholds and replacement persistence transition must be specified before activating that authority.
+
+Initial Sources preparation cannot spend the later documentary complement merely to fill source roles. Investigation first groups decisive needs across questions; one complement phase may contain multiple bounded searches and readings. It is optional, shared and dossier-wide. Synthesis re-examination uses available material only and cannot initiate another documentary phase. Initial observed-link following stays within initial preparation authority.
+
+A grouped review binds each human decision to the identifiable appraisals and versions included. No unreviewed proposal becomes retained by default. An empty retained set remains at review, without Synthesis or a documentary-insufficiency outcome. Material proposed changes to retained judgments require targeted human intervention; recovery and favorable later controls cannot adopt them automatically.
+
+Completion checks current expected artifacts, references, control outcomes, versions and prerequisites, not model-turn termination or an agent's success message. Each assigned need and engaged check has an explicit outcome. Finding a passage does not finish its required examination. An unfinished check blocks its conditioned use while independent work may continue. Useful partial work, justified analytical insufficiency, pending judgment, technical incompleteness and reasoned synthesis non-establishment remain distinct; no guarantee of exhaustive omission detection is implied. Concrete lifecycle and completion schemas remain implementation work.
+
+## Semantic Controls and Analytical Outputs
+
+Structural checks at every domain boundary establish authority, schema, references, hashes, versions and reproducible quotations. Mandatory targeted semantic controls attach to known submissions: documentary qualification, inventory assertions and their uses, appraisals, and synthesis. They do not depend on first detecting a semantic risk. Consultation, search, reading and handoff do not each require another verifier. Sources also has the targeted documentary-check operation.
+
+The system executes verification as bounded targeted model work under shared capability and policy, not a permanent critic agent or a second dossier-wide research pass. A result records the examined object and use, evidence versions, applicable rules, scope, conclusion and limitations. Incomplete execution differs from insufficient support. Precise field, reference, version and execution diagnostics return to the responsible mission; the verifier does not silently rewrite proposals in an internal correction loop. A plausible unexamined remainder cannot inherit a successful partial check.
+
+| Boundary | Semantic responsibility |
+| --- | --- |
+| Documentary qualification/check | Passage fidelity, period, modality and attribution; coherence of contributions and restrictions; comparison of genuinely comparable statements. Distinguish supported, documentary conflict, not established and technically unfinished. No economic interpretation is established merely by qualification. |
+| Inventory contribution | Evidence and permitted use; Fact/Inference/Hypothesis/Unknown classification and company/activity/temporal scope; rationale for each supporting, opposing or contextual question use. Admission precedes use, not appraisal submission. |
+| Appraisal submission | Reasoning from assertions through assumptions and mechanisms to possible economic consequences; rival interpretations, objections and decisive unknowns genuinely constrain the conclusion. Every assigned question receives an appraisal or justified insufficiency after inquiry. |
+| Synthesis submission | Justification of new relationships and transversal inferences; fidelity between the reference diagram and the fully reasoned note; scope, conditions, evidence and limits of an alternative non-establishment finding. |
+
+Reuse a control only for an explicitly referenced unchanged object and use whose evidence versions, rules and current restrictions remain valid. Revalidate authority and references deterministically. A new use needs its own use examination; a modified assertion needs its own examination; resulting-artifact coherence still applies. Do not ask another model whether differently worded assertions are equivalent. Documentary support does not validate a new inference, and retained appraisals do not validate new synthesis arrows. An unrelated revision does not require all earlier controls to run again.
+
+The company inventory is shared, with canonical assertions and separate question-specific uses; useful context need not have a forced question link. Evidence presence, including an Unknown link, does not establish an answered question. Documentary integrity, admissible analytical use and human adoption are separate authorities. Exact assertion identity, correction propagation and freshness schemas remain open; no complete incremental dependency engine is selected.
+
+A targeted change preserves unaffected content, reconstructs the resulting artifact and executes known required dependent checks through the operation owner. It is not arbitrary JSON patching or whole-artifact rewriting by the caller. Adverse findings restrict affected uses and flag known dependents for re-examination without declaring the entire dossier false. Later positive findings preserve prior objections and explain their resolution.
+
+Synthesis can verify existing evidence and explain new relationships, but a necessary uninstructed premise is routed through Investigation for inventory admission and appraisal effects. Investigation returns a proposed revision or a reasoned maintenance of the appraisal. Pending material human revision remains explicit. Joint limited diagram-and-note delivery is permitted only when the unaffected base supports a coherent useful scope; delivery waits when the overall interpretation depends on the contested premise. Synthesis non-establishment requires an instructed retained base, not an empty review, technical interruption or pending judgment. There is no routine final synthesis-approval checkpoint.
+
+## Context, Recovery and Resource Accounting
+
+Supply compact initial mission context and references, with on-demand search and reading. Keep evidence and completed work outside the model working context; later requests must not accumulate every previous reading window. A work summary never replaces exact evidence. Tool schemas cannot enumerate a whole corpus. Reading-window sizes, context assembly and history mechanics remain implementation choices; cross-dossier learning and institutional memory are outside scope.
+
+Preserve each operation's confirmed results and pending obligations. Bounded model work within an operation is not one atomic database transaction across external I/O. Continuation uses retained domain state and compact context rather than replaying the complete conversation. The system organizes required follow-up checks so the mission agent need not remember to schedule them.
+
+Automatically continue a confirmed recoverable interruption only while mandate, execution authority, versions, cancellation fences and remaining bounds permit it. Reuse confirmed work; unknown provider outcomes authorize no blind repetition. Recovery cannot cross a human prerequisite or adopt a revised judgment. Persist explicit unfinished work when continuation is unavailable. The generation, lease, idempotency, telemetry and public-address safeguards below continue to apply.
+
+Protect resources cumulatively across the dossier and count all actual provider calls, including agent reasoning, model-assisted operations and semantic controls. Tool counts do not substitute for call accounting; continuation never resets consumption. No arbitrary per-agent quota or reserved finalization share is selected. Hard time and resource ceilings may leave work incomplete. New mission parameters and numerical limits remain to be set before activation; the installed limits below continue to govern existing execution.
+
+## Implementation Transition
+
+The following sections retain legacy storage, workflow, source-preparation and provider contracts while the target above is implemented. The roadmap distinguishes delivered behavior from former requirements that were never completed. These contracts do not make fixed dimensions, routine human source approval or selectively triggered semantic checks requirements for the target. Existing authorization, approved-membership checks, checkpoint waits and limits remain enforced until their replacement has explicit semantics, compatibility handling and verification. Documentation alone cannot bypass them or migrate persisted data.
+
+Reuse existing Convex records, Workflow execution, acquisition, retrieval, accounting and policy owners before adding concepts. Decide concrete framing, mandate, assertion/use, appraisal, review, synthesis and revision schemas in the affected slice; do not assume current dimension records already express them. Preserve immutable evidence, decisions, receipts, unresolved provider outcomes and readable historical results. Legacy fixture regressions remain applicable within their original boundary. The roadmap owns migration sequence and verified delivery.
+
 ## Domain and Persistence
+
+The table records legacy persistence contracts and compatibility invariants, not the final question-led schema or a delivery inventory.
 
 | Records | Ownership and invariants |
 | --- | --- |
@@ -38,15 +123,21 @@ Protected source-review navigation uses validated `view` and `coverage` search p
 
 Large artifacts live in Convex File Storage. An upload lease records `reserved`, `uploaded`, `committed` or `orphaned`, attaching the storage ID as soon as available. Upload and database commit are not atomic: require one committed referenced artifact per logical operation, not zero transient uploads. Failed finalization marks an orphan and attempts deletion. Protected paginated cleanup reconciles old leases and storage after a safety interval, covering crashes before lease attachment and protecting both preparation captures and analytical versions.
 
-## Workflow and Revision Contract
+## Legacy Workflow and Revision Contract
+
+The delivered path includes the human source checkpoint and the fixture-gated evidence handoff. The later dimension review and derived outputs were planned but are not certified as delivered; they are superseded by the question-led target. The legacy lifecycle values below do not certify that every declared stage has an implemented path.
 
 ```text
+Existing path (claim generation is fixture-gated):
 Explicit company selection → preflight confirmation → atomic analysis reservation
 → authoritative identity revalidation → public-evidence sufficiency review when needed
 → research plan → discovery → bounded capture/qualification/comparison
 → inspect alternatives and one finite supplement → source proposal → corpus approval
 → exact approved materialization → analytical claims → structural/policy validation
-→ counter-evidence within approved corpus → dimension review → derived views
+→ evidence_ready (arbitrary live inputs pause before claim generation)
+
+Formerly planned continuation (not certified as delivered; superseded):
+Counter-evidence within approved corpus → dimension review → derived views
 → finalization after all ten dimension decisions
 ```
 
@@ -72,6 +163,8 @@ Store an active workflow ID only while execution runs. Completion compare-and-cl
 If a live dossier has passages but no claim adapter authorized for their hashes, pause at `extracting_evidence + paused + claim_generation_unavailable`, set the claim step to `needs_review`, and release execution and the visitor slot. Do not fabricate `Unknown`, success or assessment access. Owner/administrator retry first checks capability; if unavailable, change no state or generation, claim no slot and issue no call. A valid retry claims the slot, advances generation and starts a current-version workflow scheduling only incomplete claim/policy steps from persisted artifacts. Cancellation prevents retry until explicit resume reclaims the run.
 
 ## Source Preparation and Selection
+
+These installed preparation policies, protocols and explicit recovery controls remain applicable to existing executions. Their pre-Investigation supplement is a compatibility mechanism, not the target analytical complement phase. Reuse their integrity and accounting mechanisms without carrying forward obsolete progression or human stops.
 
 ### Captures and qualification
 
@@ -139,6 +232,8 @@ Rebuild has a durable run/revision/generation/proposal/policy lease, serializes 
 
 ## Acquisition, Validation and Providers
 
+Acquisition safety and provider isolation apply across the transition. References to accepted-decision authority and fixture-only analytical execution below describe installed paths; their replacement follows the transition contract.
+
 ### Public URL intake and analytical materialization
 
 All analyst URLs pass through one public intake owner before or after launch. Authorize target and applicable limits before DNS/HTTP. Pre-launch metadata inspection creates a short-lived owned receipt, not a source or evidence. Launch consumes valid receipt IDs atomically with initial pending sources; missing, expired, foreign or invalid receipts create no run or quota consumption. Active-run persistence atomically creates source, pending decision, review projection and audit after rechecking revision/generation.
@@ -151,9 +246,9 @@ The real Unstructured page-aware normalizer and general live analytical model ad
 
 ### Typed analytical tasks and policy
 
-Workflow requests capabilities, not models: source relevance, claim extraction, contradiction search, entailment, contradiction verification, dimension relevance, claim correction, dimension assessment and brief generation. Deterministic source composition does not call source relevance. Qualification/comparison are separate preparation tasks; their output cannot own inclusion or analyst authority.
+The installed workflow requests capabilities, not models: source relevance, claim extraction, contradiction search, entailment, contradiction verification, dimension relevance, claim correction, dimension assessment and brief generation. Target mission operations extend the existing application-owned routing and validation rather than preserving this dimension-based task list as the final model. Deterministic source composition does not call source relevance. Qualification/comparison are separate preparation tasks; their output cannot own inclusion or analyst authority.
 
-Each task has versioned application-owned input/output schemas. Generated results cannot set approved status, final confidence, quality or workflow permission. Non-overridable structural checks enforce schema, approved membership, provenance and locators. Code-defined versioned policy combines observable evidence and selectively triggered, separately recorded semantic-verifier labels into `pass`, `needs_review` or `blocked` with explicit reasons. It does not verify every result with another model by default. Persist normalized inputs, executed rules, verifier references and outcomes. Policy changes create explicit evaluation revisions, never rewrite history. Product assessment outputs and justified overrides are governed by the product contract, with structural failures remaining non-overridable.
+Each task has versioned application-owned input/output schemas. Generated results cannot set approved status, final confidence, quality or workflow permission. Non-overridable structural checks enforce schema, approved membership, provenance and locators. Installed code-defined versioned policy combines observable evidence and selectively triggered, separately recorded semantic-verifier labels into `pass`, `needs_review` or `blocked` with explicit reasons. This legacy trigger policy remains for existing paths; target submissions use the mandatory boundary controls above, with explicit reuse instead of verification of every action. Persist normalized inputs, executed rules, verifier references and outcomes. Policy changes create explicit evaluation revisions, never rewrite history. Product assessment outputs and justified overrides are governed by the product contract, with structural failures remaining non-overridable.
 
 ### Provider boundaries
 
@@ -165,7 +260,7 @@ SEC uses identifying direct HTTP and a shared aggregate limiter below the SEC ma
 
 Configuration owns primary route, allowed fallback, hard limits and retry policy. Provider-internal routing may preserve the configured model under explicit privacy/parameter constraints, but cannot silently change model, task semantics or authority. Persist logical operation/idempotency before I/O. Each retry/fallback has its own provider-call record with capability, task/prompt/schema versions, exact input/output references, resolved route, attempt, latency, usage, available reported cost and typed outcome. Received invalid structured output retains its exact parsing, schema, documentary-validation or termination reason separately from the retry category. Provider receipts may retain only the rejected assistant output, bounded to 64 KiB UTF-8 with original size and explicit truncation. The administrative summary exposes the reason, never the full output; analyst projections expose neither. Historical failures without retained output remain undiagnosed. Do not record secrets or hidden reasoning. Missing configuration, disabled work and availability failures are explicit blocked/reviewable outcomes, not empty success.
 
-Preparation disables automatic SDK/workflow model retries, permits a primary plus one technical fallback initially, and preserves structured-output and route-price ceilings. Each explicit recovery permits one additional attempt per operation and exact logical input after confirmed transient HTTP failure or a received invalid model output. Further explicit recoveries remain admissible while the dossier allowances permit them. Each recovered input uses the configured primary route without fallback; never-dispatched inputs retain their initial primary and one fallback policy. Valid uncertainty, missing configuration, cancellation, disabled paid work and account billing errors do not trigger fallback. Comparison shares the preparation allowances, concurrency, telemetry and execution fences. `inline_controls_v2` and `source_actions_v3` preparations use journaled inline control mutations; the first batch lookup, comparison-target reads and final proposal stay scheduled. At most three consecutive source-result saves run inline before a scheduled fourth save yields the transaction. Earlier journals retain their step sequence. Transaction/request payload bounds remain independent of source fan-out. Recovery eligibility distinguishes never-dispatched work, confirmed transient responses (HTTP 408, 429, 500, 502, 503 or 504), received invalid output, terminal failure and unknown outcome. Timeouts after dispatch, ambiguous disconnects and expired started receipts authorize no automatic or additional attempt. Historical generic transport errors remain unknown unless their receipts prove otherwise. Persist a minimum fifteen-second cooldown and respect a longer valid Retry-After. Attempt identity excludes generation, request and route position; reservations are atomic and never reset by recovery. Preparation acquisition permits two initial attempts plus one explicit admissible recovery attempt; other acquisition consumers and embeddings keep their existing policies. A failed supplemental query may be retried once using an unconsumed search-call reservation, never exceeding three cumulative calls. Configuration checks occur before I/O and are recorded on the preparation rather than as fictitious provider calls. Validate changed transport contracts deterministically before an explicitly authorized local trial. Assess fresh analytical usefulness across different companies and dossier types before claiming general preparation acceptance; synthetic annotation of old outputs cannot establish it. A recorded experiment never selects a runtime model or authorizes activation by itself. Deployment-scoped activation enables the existing preparation controls without starting existing drafts; the initial local trial uses structured lexical retrieval.
+Installed preparation disables automatic SDK/workflow model retries, permits a primary plus one technical fallback initially, and preserves structured-output and route-price ceilings. Each explicit recovery permits one additional attempt per operation and exact logical input after confirmed transient HTTP failure or a received invalid model output. Further explicit recoveries remain admissible while the dossier allowances permit them. Each recovered input uses the configured primary route without fallback; never-dispatched inputs retain their initial primary and one fallback policy. Valid uncertainty, missing configuration, cancellation, disabled paid work and account billing errors do not trigger fallback. Comparison shares the preparation allowances, concurrency, telemetry and execution fences. `inline_controls_v2` and `source_actions_v3` preparations use journaled inline control mutations; the first batch lookup, comparison-target reads and final proposal stay scheduled. At most three consecutive source-result saves run inline before a scheduled fourth save yields the transaction. Earlier journals retain their step sequence. Transaction/request payload bounds remain independent of source fan-out. Recovery eligibility distinguishes never-dispatched work, confirmed transient responses (HTTP 408, 429, 500, 502, 503 or 504), received invalid output, terminal failure and unknown outcome. Timeouts after dispatch, ambiguous disconnects and expired started receipts authorize no automatic or additional attempt. Historical generic transport errors remain unknown unless their receipts prove otherwise. Persist a minimum fifteen-second cooldown and respect a longer valid Retry-After. Attempt identity excludes generation, request and route position; reservations are atomic and never reset by recovery. Preparation acquisition permits two initial attempts plus one explicit admissible recovery attempt; other acquisition consumers and embeddings keep their existing policies. A failed supplemental query may be retried once using an unconsumed search-call reservation, never exceeding three cumulative calls. Configuration checks occur before I/O and are recorded on the preparation rather than as fictitious provider calls. Validate changed transport contracts deterministically before an explicitly authorized local trial. Assess fresh analytical usefulness across different companies and dossier types before claiming general preparation acceptance; synthetic annotation of old outputs cannot establish it. A recorded experiment never selects a runtime model or authorizes activation by itself. Deployment-scoped activation enables the existing preparation controls without starting existing drafts; the initial local trial uses structured lexical retrieval.
 
 ## Access, Resources and Security
 
@@ -190,6 +285,8 @@ Preparation accounting uses a versioned dossier summary of valid responses, conf
 `SOURCE_PREPARATION_WORK_LIMIT` and `SOURCE_PREPARATION_INCIDENT_LIMIT` default to 120 and 40. Read current invocation configuration at explicit execution start and persist its snapshot; reject non-positive or unsafe integer values and an unsafe sum. Running executions retain their snapshot. A later explicit start or recovery may adopt changed ceilings without resetting consumption; the absolute dispatch ceiling is their sum. Existing editable dossiers derive initial accounting from bounded historical receipts and the conservative maximum of legacy counters. Missing identity or unexplained consumption remains reserved. Initialize the summary once before dispatch without rewriting receipts or approved revisions; review uses the same historical interpretation without writing. Acquisition, supplement search and embedding allowances are separate and unchanged.
 
 ### Locked resource limits
+
+These are the accepted installed limits, not chosen numerical parameters for the new three-mission execution. Target accounting must include reasoning and controls before activation; existing consumption and safety ceilings remain binding during transition.
 
 | Boundary | Accepted limit |
 | --- | --- |

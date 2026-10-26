@@ -2,17 +2,17 @@
 
 ## Why This Project Exists
 
-This prototype is part of an original unsolicited application to Raphaëlle d'Ornano.
+This prototype is part of an unsolicited application to join Decoding Discontinuity, through a directly useful contribution to Raphaëlle d'Ornano and her analysts.
 
-The goal is not to launch a SaaS product or prove that the author can assemble many AI tools. The goal is to demonstrate that a technical entrepreneur can understand Raphaëlle's thesis on discontinuity, contribute original judgment, and turn an abstract strategic question into a useful research system.
+The purpose is to turn the public research problem behind her vision into a useful analysis tool. Its relevance and practical value should make the author's contribution evident, rather than organizing the experience around an evaluation of the author. The candidature is served by usefulness, not the breadth of AI tooling or a speculative SaaS business.
 
 The application should be framed around the value brought to Raphaëlle and her team, not around what the author hopes to learn, a future fintech project, or access to business opportunities.
 
 ## Who It Is For
 
-The primary audience is Raphaëlle d'Ornano, as the person evaluating the application.
+The primary audience is Raphaëlle d'Ornano as a potential user of the analytical contribution.
 
-The secondary audience is the analysts working around Decoding Discontinuity and D'Ornano + Co. The prototype should show how their preparation work could be accelerated without replacing their judgment or claiming to reproduce their proprietary methodology.
+Analysts working around Decoding Discontinuity and D'Ornano + Co. are also intended users. The system should take responsibility for preparatory research so they can concentrate on economic interpretation and judgment. Its usefulness and any acceleration require demonstration; it does not reproduce their proprietary methodology.
 
 ## What Decoding Discontinuity Means
 
@@ -55,7 +55,7 @@ Primary public references:
 
 The prototype is an independent, evidence-first technical contribution to the public research problem described above. It does not claim to calculate ARAF™, reproduce Durable Growth Moat™, predict an investment outcome, or automate Raphaëlle's judgment.
 
-Its purpose is narrower and directly useful: accelerate the work required to assemble, locate, classify, challenge, and review public evidence about a company's architectural position. The analyst should be able to evaluate where intent originates, who owns operational context, who controls outcome-producing workflows, which systems can act, what could be abstracted, and how those observations may affect future value capture.
+Its purpose is narrower and directly useful: situate a company, investigate an economically relevant activity or workflow, and prepare reasoned appraisals of the decisive questions using public evidence. The analyst should be able to understand where intent originates, who owns operational context, who controls execution, what could be abstracted, and how those observations may affect value capture. Findings remain attached to the investigated scope.
 
 The product therefore demonstrates two different capabilities:
 
@@ -76,7 +76,7 @@ More specifically, it must show that the system can:
 - connect technical architecture signals to their possible economic consequences;
 - distinguish facts, inferences, hypotheses, contradictions, and unresolved questions;
 - let the analyst inspect, challenge, and override every proposed conclusion;
-- produce an evidence-backed assessment as the central deliverable, with the architecture map and brief as secondary projections.
+- prepare inspectable appraisals and connect retained judgments into an economic mechanism diagram with a fully reasoned note, or explain why no defensible synthesis can be established.
 
 The intended first-minute conclusion is:
 
@@ -88,9 +88,9 @@ The prototype does not encode or claim to reproduce Decoding Discontinuity's pro
 
 The prototype helps prepare an architectural assessment of a US-listed technology company from public sources.
 
-It discovers relevant sources, lets an analyst approve the corpus, extracts precisely cited claims, surfaces counter-evidence and unknowns, and proposes dimension-level assessments for human review.
+The analyst supplies an intention and can refine a proposed framing. The system then prepares shared documentary material, investigates the framed questions and proposes reasoned appraisals for grouped human review. Retained judgments support an autonomous synthesis of the investigated scope. The current product and technical references own the precise workflow and its transition from the earlier corpus-approval model.
 
-The evidence matrix is the main artifact. The architecture map and brief are secondary views derived from validated evidence.
+The evidence matrix is the inspectable foundation. For a supported synthesis, the economic mechanism diagram is the reference result and the note develops its argumentation. A justified absence of support remains a useful finding rather than a reason to force a diagram.
 
 The strongest moment in the demonstration should not be “the AI produced an answer.” It should be:
 
@@ -98,11 +98,11 @@ The strongest moment in the demonstration should not be “the AI produced an an
 
 ## Definition Of Success
 
-Within the first minute, Raphaëlle should understand that the author is not applying as a generic developer. He can translate between technical architecture and economic consequences, and he can build tools that make this analysis more systematic and useful to analysts.
+Within the first minute, Raphaëlle should recognize a tool relevant to her research: it makes an economic interpretation understandable, exposes its supporting evidence and objections, and prepares useful work without requiring her to coordinate internal execution.
 
 The prototype succeeds if it produces a credible, inspectable research dossier faster than manual preparation while preserving uncertainty and human control.
 
-It fails if it looks like a generic AI research interface, a shallow report generator with citations, or an overengineered technical demonstration that says little about the author's judgment.
+It fails if it produces generic cited narrative, obscures uncertainty or economic meaning, makes the analyst manage routine research, or substitutes infrastructure display for useful analysis.
 
 ## Prototype Mindset
 
@@ -117,6 +117,6 @@ This is a narrow but deep candidature prototype, not a production SaaS platform.
 
 Every implementation choice should therefore pass a simple test:
 
-> Does this materially help Raphaëlle see the author's judgment, rigor, or ability to accelerate analyst research?
+> Does this materially help Raphaëlle and her analysts understand, examine, or challenge the economic position under investigation?
 
 If not, it should not delay the candidature prototype.

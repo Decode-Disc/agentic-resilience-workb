@@ -8,51 +8,67 @@ web
 
 ## Document Authority
 
-This directly maintained product contract owns users, purpose, workflow, scope, analytical invariants and MVP acceptance. Impeccable uses it as the product brief. [AGENTS.md](AGENTS.md) owns working instructions, [technical context](context/TECH.md) owns architecture and enforcement contracts, [DESIGN.md](DESIGN.md) owns visual guidance, and the [roadmap](docs/ROADMAP.md) records delivery and remaining work. Historical designs and ADRs explain earlier decisions without adding current requirements. Product requirements below do not certify implementation, activation or completed live analysis.
+This directly maintained contract owns users, purpose, analyst workflow, scope, analytical invariants and MVP acceptance. [AGENTS.md](AGENTS.md) owns agent conduct, [context/TECH.md](context/TECH.md) owns enforcement and execution contracts, [DESIGN.md](DESIGN.md) owns visual guidance, and [docs/ROADMAP.md](docs/ROADMAP.md) owns verified delivery and remaining work. The question-led target below incorporates the accepted conception; it does not certify runtime implementation. Existing source-review behavior remains a compatibility surface until its controlled transition.
 
 ## Users
 
-Raphaëlle d'Ornano is the primary audience evaluating this original unsolicited application. The prototype must make the author's analytical judgment, rigor and ability to execute visible within the first minute.
+Raphaëlle d'Ornano and analysts working around Decoding Discontinuity and D'Ornano + Co. need to examine how generative and agentic AI changes companies' economic positions. The prototype is a useful contribution in an unsolicited application to join Decoding Discontinuity. Its value to the candidature follows from its direct usefulness and alignment with that research, rather than a product organized to evaluate its author.
 
-Its intended operators are strategy, finance and investment analysts working around Decoding Discontinuity and D'Ornano + Co. They assess US-listed technology companies and need to assemble, locate, classify, challenge and review public evidence while retaining judgment over conclusions.
+The analyst supplies an intention, can inspect and orient the preparation, and retains final authority over analytical judgment. The system takes responsibility for routine collection, reading, confrontation and preparation rather than asking the analyst to coordinate successive internal operations.
 
 ## Product Purpose
 
-The Agentic Resilience Evidence Workbench accelerates preparation of inspectable architectural assessments. The evidence matrix is its primary artifact. Architecture maps and briefs are derived views.
+Prepare an inspectable analysis dossier that situates a US-listed technology company, investigates one economically relevant activity or workflow, confronts a precise question with evidence and competing interpretations, and identifies what deserves further investigation. Choose the scope with qualitative source-based justification; do not reconstruct its share of company revenue or generalize the finding to every activity.
 
-Success means preparing a credible dossier faster while keeping sources, uncertainty, reasoning and analyst decisions inspectable. Measure acceleration before claiming it. The candidature must demonstrate useful analytical work, rather than the breadth of AI tooling or infrastructure.
+| Principal capability | Useful result |
+| --- | --- |
+| Understand where value resides | A situated activity, its participants, dependencies, and the distinction between what the company supplies, recommends, executes and controls. |
+| Examine resilience to the agentic transition | Interpretations of what agents could strengthen, weaken, bypass or redistribute, confronted with technical, commercial and financial evidence. |
+| Prepare an actionable assessment | Reasoned appraisals by decisive question, their support, objections and unknowns, followed by a coherent synthesis where the retained base permits it. |
+
+The shared evidence inventory and its matrix are the inspectable analytical foundation. For a supported synthesis, the economic mechanism diagram is the reference result; a derived, fully reasoned note develops the same interpretation. Success is useful economic understanding with traceable evidence and less analyst coordination. Measure acceleration and usefulness before claiming them.
 
 ## Positioning
 
-The workbench connects technical architecture to economic consequences: who receives user intent, owns operational context, controls workflows, can act across systems and may retain or lose value as agents change the unit of execution.
+Connect technical architecture to economic consequences: who receives intent, owns operational context, directs workflows, can act across systems and may retain or lose value as agents change the unit of execution. A technical harness makes intelligence operational through tools, context, memory, state, routing, evaluation and recovery. Its sophistication does not establish the company's economic orchestration position.
 
-A **technical harness** makes intelligence operational through routing, tools, retrieval, memory, state, delegation, evaluation and recovery. **Economic orchestration** concerns control of the relationship between intent, operational context, workflow execution and business outcomes. Internal harness sophistication does not establish a company's durable economic orchestration position.
-
-This is an independent contribution to a public research problem. It does not reproduce ARAF™, Durable Growth Moat™ or another proprietary methodology. It is neither an autonomous investment analyst nor a generic chat application. Auditable evidence, contested interpretations and human judgment must remain more prominent than fluent narrative.
+This is an independent contribution to a public research problem, not a reproduction of ARAF™, Durable Growth Moat™ or another proprietary methodology. It is neither an autonomous investment analyst nor a generic chat application. Economic interpretation, evidence, uncertainty and human judgment remain more important than infrastructure breadth or fluent narrative.
 
 ## Operating Context
 
 ### Company and research direction
 
-The analyst searches by partial company name, ticker, CIK or SEC URL and explicitly selects a matching company. A research angle can prioritize discovery and presentation, but cannot change assessment dimensions, evidence rules or deliverables. Coverage presets are `Balanced` by default, `First-party depth` and `Independent scrutiny`; they adjust bounded search priorities, not mandatory stages or provenance rules.
+The analyst searches by partial name, ticker, CIK or SEC URL and explicitly selects the company. Preserve the populated composer, optional angle and public HTTPS references through preflight and confirmation. Website enrichment improves recognition only; it cannot change legal identity or block a valid selection. References are research inputs, not evidence merely because the server received them. Restoring an unlaunched composer draft after reload remains outside the MVP.
 
-Preflight keeps the populated composer available for completing the angle and public HTTPS references. Only explicit Continue opens the in-place confirmation surface with legal entity, ticker, exchange and SEC identity. The interface does not add numbered steps or explanatory headings where the controls already communicate the action. Website enrichment improves recognition only and never changes company identity or blocks a valid confirmation.
+Preserve the existing preflight interaction: explicit Continue opens the in-place company confirmation with legal entity, ticker, exchange and SEC identity. Do not add numbered steps or explanatory headings where the controls already communicate the action. The later framing proposal does not authorize replacing that established interaction.
+
+A launch mandate authorizes bounded preparation under explicit source-selection rules, resource allowances and contextual-intervention conditions. The system proposes an activity scope and a useful set of research questions from a common foundation plus case-specific needs. Refinements are optional; the analyst is not required to write the research plan. Exact common questions and the policy for material later scope changes remain design work.
+
+Explicit `Start research` fixes the framing and starts Sources. Keeping the proposal unchanged still requires this action. Source preparation and question investigations do not run in the background while framing remains open. The fixed ten-dimension questionnaire, uniform scoring and compulsory three-year direction are not the target assessment model.
 
 Search and preflight are available before workspace admission. Non-billable preflight means no dossier or analysis reservation, not a promise of zero provider-credit use. Confirmation or direct entry to a protected workspace requests the reusable four-digit access code through the existing top drawer. Durable admission preserves access to the visitor's dossiers, role, quota and decisions across sessions. Dossiers and administration require the appropriate active access. Human research dossiers are separate from technical evaluations and browser validation. Benchmarks remain inspectable only in protected administration, including through direct links. The prototype reserves three analyst accounts for human research and one for local browser validation; validation data is explicitly labelled and never consumes or restores human research capacity.
 
-After confirmation, the system checks public-evidence sufficiency. Insufficiency is a reviewable outcome: add public HTTPS references and recheck, complete with insufficient evidence, or continue with a required audited rationale. Continuation cannot relax later evidence rules. References can be prepared before company selection; their accepted receipt must be verified by the server, not treated as evidence. Restoring a pre-launch composer draft after reload remains outside the MVP.
-
 ### Source preparation and corpus review
 
-The system builds a company-specific research plan, discovers sources, captures and qualifies bounded public content, and inspects existing alternatives before one finite supplement. It finishes permitted supplemental reading before comparing scoped contributions against the resulting corpus. Documentary presence guides supplementation without granting factual authority or treating a pending comparison alone as a missing document. It prepares a versioned proposal whose explanations, useful passages and reading limitations can be inspected. Ranking is deterministic; model-assisted preparation cannot itself approve a corpus or establish that a source's assertions are true.
+Sources collects material, reads and checks its contributions, and organizes usable material under the launch mandate. The system organizes preparation; its specialized agent conducts documentary inquiry across the captured corpus, choosing useful readings and confrontations. The output includes source identity, exact captures and passages, qualifications, permitted uses, selection reasons, gaps and an explicit preparation outcome. One shared documentary foundation serves the framed questions.
 
-This stage should retain enough useful material for subsequent analysis at bounded cost. It need not answer every research question or make every selection judgment correctly. Prefer useful imperfect sources with explicit attribution and restrictions to unjustified exclusion. Unavailable reading, low ranking, incomplete qualification or a failed model call does not prove irrelevance. Source inclusion, documentary coverage, permitted use and factual support are separate judgments.
+Prioritize distinct useful contributions, relevant periods and genuinely independent producers rather than filling a source-count target. Unavailable reading or qualification does not prove irrelevance. Inclusion, reading availability, documentary coverage and factual support remain separate judgments, with useful imperfect material retaining explicit attribution and restrictions.
 
-The proposal prioritizes distinct documentary contributions without filling a numerical target. Valid analyst-supplied references are recommended by default with `Added by analyst`, including when inspection is unavailable. The analyst can remove them. Preserve relevant reporting periods, genuinely independent producers, counter-evidence and research-angle contributions. Missing roles remain visible gaps; two domains alone do not establish independent corroboration.
+Integrate the initial availability check into planned discovery. Absence of an initial filing, investor-relations address or supplied reference does not itself require the analyst to justify continuing before those searches. A completed search with no result differs from unavailable discovery; a candidate differs from a successful reading, useful contribution or factual support. Preserve these distinctions through partial failures.
 
-An editable metadata-only draft offers explicit source reading preparation before approval, including drafts discovered before preparation was enabled. After interruption or expiry, the analyst can explicitly resume preparation in the same editable dossier. Each new execution receives fifteen minutes without resetting cumulative consumption or repeating completed work. Productive model results and confirmed technical incidents have separate finite dossier allowances. Multiple explicit recoveries may retry admissible unfinished work while capacity remains; ambiguous outcomes and exhausted or terminal failures remain visible without blocking unrelated work. Deployment configuration sets the ceilings for each new execution, including explicit recovery, without changing recorded consumption. Availability and blocked outcomes remain visible without implying that merely enabling preparation has already read the dossier.
+Delegated source selection is explainable and versioned. Routine selection does not require a separate human corpus-approval stop in the target workflow. Inclusion does not establish truth, erase restrictions or imply analyst endorsement. Important exceptions require contextual intervention; ordinary gaps can remain explicit while independent work continues. Exact mandate and intervention thresholds remain to be specified before activation.
 
-Interrupted preparation shows retained content, assessed sources and sources not yet processed, with a visible consequence and next action. A saved capture with unavailable assessment differs from a failed reading and from a source never processed. Subsequent searches cannot erase this progress. `Included` means membership in the proposed corpus; it does not establish reading success or documentary coverage. Coverage remains not yet assessed when included matching documents have not been assessed, and not established when inspected contributions do not establish it. Documents merely sharing a source family remain accessible without being counted as matches for the requested document type.
+Reading preserves the representation actually consulted, reproducible passage references and actually observed link destinations with their origin. An index or guide label does not establish that linked material was read. A partial reading cannot establish absence from a whole document. Comparisons preserve differences in period, scope, units, definitions, assumptions and inconclusive outcomes, without discarding independent useful contributions because another use is restricted.
+
+Investigation first examines the prepared material and groups missing information that could materially change its appraisals. When useful, Sources performs one autonomous bounded complement phase for these shared needs; it may contain several searches or retrievals. Initial preparation does not consume that phase merely to fill documentary roles. Remaining gaps do not automatically open another research cycle. Counts, costs and time limits are implementation decisions within the technical resource contract.
+
+### Existing source-review transition
+
+The current source-inspection composition and controls remain available until a separately implemented transition. This compatibility behavior retains the explicit corpus checkpoint and manual recovery required by existing dossiers; it is not the target analyst-managed sequence. Its execution guards are owned by [the transition contract](context/TECH.md#implementation-transition).
+
+Coverage presets remain `Balanced`, `First-party depth` and `Independent scrutiny` on this existing path; they adjust bounded priorities, not evidence rules. Valid analyst references are recommended with `Added by analyst` even when reading is unavailable, and remain removable. An editable metadata-only draft offers explicit preparation; interruption exposes retained readings, unavailable assessments and unprocessed sources with an actionable recovery state. Recovery in the same dossier preserves completed work and cumulative consumption under the technical limits.
+
+`Included` denotes membership, not reading success or coverage. Coverage is not yet assessed when matching included documents remain unassessed, and not established when inspected contributions fail to establish it. Other documents from the same source family remain accessible without being counted as matches for the requested type. Later searches cannot erase retained reading progress or these distinctions.
 
 The review overview combines documentary coverage, a source carousel and one selected source reader. Source details are the default and explain contributions, inspectable quotations, permitted use and limitations. Preview is a visual reference for pending candidates only and keeps the original document and source details accessible when unavailable. `Recommended` shows the effective included set. `Needs attention` shows undecided excluded candidates originally flagged for review. `Alternatives` contains the other excluded candidates, including explicit removals. Original recommendations and reasons remain inspectable after an override; including a warning-bearing source does not erase its warning.
 
@@ -66,63 +82,64 @@ Multiple additions can share one editable draft. Changing the membership of an a
 
 ### Evidence matrix and analytical review
 
-Approved prepared sources reuse the exact inspected captures and required qualification and applicable comparison references. Missing or corrupt content cannot be silently replaced with a fresh download. Legacy approved sources without captures retain their established retrieval path. The matrix exposes atomic claims, precise passages, source status, counter-evidence, unknowns and decision history.
+A shared company inventory retains useful context and atomic sourced assertions across the dossier. It need not be exhaustive before useful appraisals can be prepared. Sources supplies qualified documentary material; Investigation enriches the inventory through controlled contributions and reuses the same assertion with distinct question-specific rationales.
 
 | Claim class | Meaning |
 | --- | --- |
-| `Fact` | An assertion explicitly established by cited source evidence. |
-| `Inference` | A reasoned conclusion derived from cited facts. |
+| `Fact` | An assertion explicitly established by cited evidence. |
+| `Inference` | A reasoned conclusion derived from cited facts, with its reasoning exposed. |
 | `Hypothesis` | A plausible proposition requiring investigation. |
-| `Unknown` | A material research question without sufficient evidence. |
+| `Unknown` | A material question not established by the examined evidence. |
 
-One canonical claim may inform several dimensions. Claim approval and dimension-link decisions remain separate. The default review is exception-driven: an analyst may approve a reviewed group, with an individual decision persisted for every claim and link. Correcting a claim creates a cited replacement and visible diff, preserving the original.
+Assertions and their intended uses receive mandatory controls when contributed, before reuse. Documentary integrity, admissible analytical use and human adoption of an interpretation are distinct. Routine human confirmation of every assertion and link is not a prerequisite for preparing appraisals. Failed integrity cannot be waived by an analyst decision. Limitations must restrict the affected use or remain explicit, rather than silently becoming successful validation.
 
-Captures, search candidates, model-selected context and analytical passages have distinct purposes and limits. Later extraction, counter-evidence search, policy checks and review can refine only material those stages can actually access. Analysts can search an approved saved source from its existing details panel, including passages outside the initial selection. Results retain exact quotations and capture provenance without creating claims, changing corpus membership or granting factual authority. Sources without a prepared capture keep their established retrieval path and show that saved-source search is unavailable. Required references must reach analytical input or fail explicitly. General live claim generation remains unfinished.
+The evidence matrix makes assertions, question uses, passages, supporting and opposing relations, unknowns, controls and corrections inspectable. A linked assertion establishes evidence presence, not that a question has been answered. Useful company context need not be forced into a decisive-question link. Correction and enrichment preserve earlier versions and identify affected uses; exact identity and freshness presentation remain to be specified.
+
+Retained content, search candidates, model context and analytical passages are different artifacts. Missing or corrupt content cannot be silently replaced. Required references must reach the intended analytical use or fail explicitly. Saved-source search preserves exact quotations and provenance without itself creating assertions or granting factual authority; unsupported captures expose their reading limitation.
 
 ### Assessment and review
 
-The framework has ten dimensions: context ownership, workflow control, system-of-action capability, orchestration position, model and platform dependency, data defensibility, switching costs, pricing resilience, learning loops, and abstraction exposure. The summary may emphasize at most five priority dimensions while preserving access to all ten.
+Investigation conducts one common inquiry across the framed questions. It tests alternative interpretations, connects observations to possible economic mechanisms, examines objections and decisive gaps, and proposes a distinct reasoned appraisal for each question. It can conclude justified insufficiency after investigation; unperformed work or unavailable technical capability cannot be presented as that analytical outcome.
 
-Each dimension has separate position, confidence and three-year direction outputs:
+Each appraisal exposes its scope, interpretation, support, assumptions, objections, unknowns and confidence explanation together. Confidence depends on inspectable evidence and its limitations, never model self-confidence. An explicit horizon is relevant to future claims; no replacement categorical confidence scale or uniform horizon is selected.
 
-| Output | Values |
-| --- | --- |
-| Position | `-2 / Strongly exposed`, `-1 / Exposed`, `0 / Mixed or unclear`, `+1 / Resilient`, `+2 / Strongly resilient`. |
-| Confidence | `Low`, `Medium`, `High`. |
-| Three-year direction | `Declining`, `Stable`, `Improving`. |
-
-Confidence comes from question coverage, source authority, recency, independent corroboration, unresolved counter-evidence and the fact-to-inference balance, never model self-confidence. Supporting claims, counter-evidence and critical unknowns must be visible before review. A dimension becomes reviewable when its supporting claims and dimension links have decisions, even if other dimensions remain locked.
-
-One atomic analyst decision records the three outputs and any justified field overrides. The original proposal, policy inputs and outcomes, overrides and revision history remain visible. Structural provenance failures cannot be overridden; permitted analytical-policy overrides require a recorded reason.
+The analyst reviews Investigation output as a group, with the included appraisal versions identifiable. They can retain reviewed appraisals in one action, correct an appraisal or leave a question for follow-up. Unreviewed proposals cannot become retained through a default or later generation. Decisions remain audited and tied to the version examined. If none is retained, stay at appraisal review with an explanation and a way to continue; do not start Synthesis or call this documentary insufficiency.
 
 ### Derived views and workspace
 
-The architecture map and draft brief update progressively from validated evidence after dimension decisions. Only affected relationships and sections change; their persisted contribution and incomplete coverage stay visible. They cannot add unsupported entities, relationships or assertions and become final only after all ten dimension decisions. A profile visualization may compare dimensions but must not imply a meaningful aggregate score or complete knowledge of internal architecture.
+After grouped appraisal review, Synthesis autonomously connects retained appraisals into an economic interpretation. It can propose new relationships and transversal inferences, explaining how the inputs support them. An arrow is an analytical statement, not a connection created because two concepts appear in the dossier. Actors and workflow anchor the mechanism without becoming an unsupported claim of complete internal architecture.
 
-The workspace keeps `Progress`, `Sources`, `Evidence`, `Assessment`, `Map` and `Brief` visible. Completed sections remain revisitable; locked sections explain their persisted prerequisite. A desktop contextual panel becomes a drawer on smaller screens. Source review has its own summary-first workspace mode and does not show a matrix as if unapproved sources had already produced evidence. The product also includes access, company confirmation, methodology and limitations, and a minimal protected administration surface.
+For a supported interpretation, the reference mechanism diagram and derived reasoned note are submitted and controlled together. The overview exposes relevant conditions and uncertainty; relationship details connect the explanation to appraisals, passages, objections and limitations. The note develops the same interpretation at greater depth. Retaining input appraisals does not validate new synthesis relationships automatically.
 
-A pending candidate may offer a screenshot preview with `Preview — for visual reference only`. It is visually distinct from evidence, carries no factual authority and never feeds extraction, claims or derived outputs. Accepted and rejected candidates do not offer this preview. Unavailable rendering falls back to `Open original` without blocking review. Its short-lived cache is not a documentary capture or durable evidence record.
+When retained, instructed appraisals support no defensible mechanism, return a reasoned non-establishment finding with its examined basis, limits and missing information instead of forcing a diagram. No retained appraisals, pending human judgment, technical interruption and justified non-establishment remain distinct. A result becoming available does not imply human adoption of the synthesis. There is no routine final synthesis-approval checkpoint.
+
+Synthesis can request bounded analytical re-examination of an appraisal or a necessary uninstructed premise found in already available material. Investigation examines its inventory contribution and appraisal effects; Synthesis cannot directly establish that new premise. This return does not open another documentary phase. A material proposed change to a retained appraisal returns as a targeted human exception. Independent work continues. A limited diagram and note can be delivered together if the unaffected base supports a coherent, useful reduced scope; delivery waits if the overall reading depends on the contested premise. Earlier decisions and adverse controls remain visible with the explanation of their resolution.
+
+The workspace centers actual progress and a meaningful timeline, with contextual interventions and optional dedicated Sources, Investigation, inventory and Synthesis detail views. The composer becomes compact and floats at the bottom center after launch, available for orientation and follow-up. Work cards remain inactive until actual execution starts, then activate with animation. A question does not automatically create its own source matrix. Card count, grouping, responsive placement, completed-result composition and detailed navigation remain design work.
+
+Use the selected Questionnaire interaction for proposed-framing refinements and contextual answers; persistence, branching and authority belong to the application. Preserve source readers, reference inputs, useful inspection affordances and loading geometry when evolving the interface. A visual preview is labelled `Preview — for visual reference only`, separate from documentary captures and analytical input; unavailable preview retains access to the original and source details.
 
 ## Capabilities and Constraints
 
-The following analytical invariants govern the completed MVP:
+- Sources are selected under an explicit bounded mandate. Rejected or inadmissible material cannot support downstream outputs; selection alone never establishes factual authority.
+- Reuse exact, versioned evidence with atomic assertions and explicit intended uses. Attribution, uncertainty, opposing evidence and restrictions survive every handoff.
+- Admission, appraisal and synthesis controls examine their own contributions. Prior valid controls can be reused without repeating all earlier work; a new interpretation still needs its own justification.
+- Grouped appraisal review records identifiable human judgments before Synthesis. Later revisions, retries or favorable controls cannot overwrite those judgments or erase earlier objections.
+- Progress reflects persisted work. Retry, continuation and recovery do not duplicate evidence, reservations or external effects, reset cumulative consumption, bypass a human prerequisite or revive cancelled work.
+- Every assigned need and engaged check has an explicit outcome. Useful partial work, justified insufficiency, unfinished checks, pending judgment and reasoned synthesis non-establishment remain distinguishable. Missing configuration or model capability is not an analytical finding.
+- Final availability follows controlled mission artifacts and review prerequisites, not completion of ten dimension decisions, source counts, schema acceptance or an agent declaring success. It does not guarantee that every possible omission was discovered.
 
-- The evidence matrix is primary. Claims are atomic and precisely locatable; maps and briefs are derived from validated evidence.
-- A durable human corpus checkpoint separates bounded source preparation from analytical materialization and claim extraction. Only accepted sources in the approved revision can contribute downstream. Pending and rejected sources cannot support analytical outputs.
-- Attributed arguments and forecasts retain their period, dependencies, uncertainty and restricted uses. A contribution relying on an identified false premise is excluded for that use. Contextual, opposing and restricted argument citations cannot inflate factual support or corroboration; useful independent contributions remain available.
-- Analyst decisions and justified overrides are append-only and audited. Model output, retries and later revisions cannot overwrite them. Briefs use only analyst-approved claims, and map entities and relationships require validated supporting claims.
-- Progress comes from persisted workflow events. No simulated progress, hidden chain-of-thought or theatrical agent conversations are exposed. Retry and resume cannot duplicate evidence, reservations, provider-call records or external side effects.
-- Insufficient evidence may remain mixed, hypothetical, unknown or insufficient. A missing model capability is a visible operational limitation, not fabricated evidence or successful completion. Source failures stay visible and do not erase a source or stop unrelated acquisition.
+Sourced economic figures, ratios and projections retain definitions, period, attribution and limitations. The prototype produces no new financial calculations, reconstructs no activity revenue share and performs no dedicated financial collection or quantitative modeling.
 
-The MVP includes private admission and persistent quotas, US-listed technology company resolution, bounded research planning and source discovery, public HTTPS references including public PDFs, corpus approval, cited claims, counter-evidence, dimension review, overrides, derived map and brief, reactive durable progress, provider-independent routing, one completed showcase and methodology with measured limitations. Administration supports operation inspection, audited quota restoration and stopping new paid work; it is not a dynamic provider or policy configuration console.
+The MVP includes durable private admission, company resolution and framing, bounded shared documentary preparation, common Investigation, a reusable evidence inventory, grouped appraisal review, autonomous Synthesis, provider-independent execution, one curated case and methodology with measured limits. Administration supports inspection, audited quota restoration and stopping new paid work, rather than a general policy configuration console.
 
-Excluded without a new explicit decision: investment recommendations or trade execution, an aggregate resilience score, non-US markets, continuous monitoring, simultaneous analyst collaboration, local file/PDF upload, pasted-text ingestion without public provenance, fine-tuning, general-purpose crawling, autonomous publication, proprietary-methodology reproduction, and chat as the primary interface. Automatic translation is deferred until the English MVP is complete and verified. A second workflow engine or persistence authority is outside the technical baseline.
+Excluded without a new decision: investment recommendations or trading, aggregate resilience scoring, non-US markets, continuous monitoring, simultaneous analyst collaboration, local file/PDF upload, pasted text without public provenance, fine-tuning, general crawling, autonomous publication, proprietary-methodology reproduction, chat as the primary interface, cross-dossier learning and institutional memory. Automatic translation remains deferred until the English MVP is complete. No second workflow or persistence authority is selected.
 
 ## Source Policy
 
 Prioritize regulatory filings and financial results, investor-relations and earnings material, official product/API/security/integration documentation, official pricing/terms/contracts/support, company-owned source repositories, executive interviews and official communications, reputable secondary reporting and analysis, then other pages as research leads.
 
-Relevance is an estimate, not a truth score. The source checkpoint explains recommendation or deferral, likely documentary contribution, date and provenance authority, duplicate or superseding versions, extraction restrictions and analyst overrides. Discovery-metadata linkage must be identified separately from structural company identity, document kind, declared role capability and automatic role eligibility. Analyst acceptance does not rewrite a linkage basis or promote publisher authority. Inspected content may establish relevance and purpose while factual assertions still need claim-level evidence.
+Explain relevance and documentary contribution without converting them into truth scores. Preserve company linkage, document purpose, period, authority, independent producers, source identity, exact inspected material, comparison scope and permitted uses. An analyst-supplied reference is not exempt from preparation controls. A material false premise restricts the affected contribution or use while independent useful material remains available. Domain diversity alone does not establish independence.
 
 ## Brand Commitments
 
@@ -140,34 +157,32 @@ A showcase selection, existing interface, deterministic fixture or historical su
 
 ## Evaluation and Demonstration
 
-Demonstrate two clearly separated paths: a completed curated dossier showing the matrix, assessment, derived views and a material analyst decision or override; and a genuinely new company run showing live resolution, discovery, persisted progress and the corpus checkpoint. Freeze and display the showcase source cutoff date. The approved showcase remains the reference dossier for analytical regression.
+Separate a curated, labelled dossier from genuinely new live work. The curated case demonstrates appraisals, grouped judgment and the mechanism diagram with its note, or an honestly justified alternative finding. Display its source cutoff. A live demonstration exposes only actually available framing, preparation and analytical work; preserve present capability stops until implementation and acceptance establish more.
 
-Evaluate preparation separately across different companies, source families and dossier types. Judge useful retained material, visible omissions, exact provenance, bounded cost and ability to continue the analytical workflow. Useful preparation does not require perfect selection or multiple completed showcase dossiers.
+Evaluate preparation across companies, source families and research needs separately from the curated case. Judge useful retained contributions, omissions, provenance and bounded cost, not exhaustive source selection. Shared assertion reuse, competing interpretations, decisive gaps, human revisions and diagram-to-note coherence need their own tests and semantic evaluation. Sources experiments do not establish Investigation or Synthesis quality.
 
-Claims of quality and robustness must remain within the demonstrated scope. Preserve inspectable evidence, the authorship of evaluation judgments, unresolved disagreements and interpretation corrections. New acceptance thresholds and definitive model or retrieval choices require an explicit decision.
+Measure citation validity, entailment, classification, treatment of counter-evidence, question investigation, unsupported assertions, elapsed time, provider usage and analyst corrections. Preserve historical failures, interpretation corrections and reference authorship. The methodology surface publishes measured results only; no savings, confidence or general readiness claim follows from a plausible output or valid schema.
 
-Measure citation validity, entailment, classification, contradiction retrieval, question coverage, unsupported-claim rate, elapsed time, available provider usage/cost and analyst corrections. The Methodology & Limitations page presents measured results only; detailed observations belong in dated reports and remaining evaluation work in the roadmap.
+New acceptance thresholds and definitive model or retrieval choices require an explicit decision.
 
 ## MVP Acceptance
 
-Acceptance requires the intended analyst to complete and inspect the following protected journey:
+The intended admitted analyst must be able to:
 
-1. Obtain durable workspace access, select and confirm a supported company, and retain the research direction and references through confirmation.
-2. Resolve an evidence-sufficiency exception through added references, justified continuation or explicit insufficient-evidence completion.
-3. Observe real persisted discovery/preparation progress, review a useful proposed corpus and its limitations, adjust it if necessary, then approve it in one action while leaving unselected candidates pending.
-4. Continue the durable workflow after approval and inspect exact source provenance, typed policy-evaluated claims, counter-evidence and unknowns.
-5. Review separate claim and dimension-link decisions, then atomic dimension outputs, correcting or overriding proposals with audited rationale.
-6. Observe map and brief updates based only on validated evidence, with incomplete coverage visible until finalization.
-7. Inspect methodology, measured limitations and duration. An authorized administrator can inspect operations and available provider usage, restore quota with a reason, and stop new paid work.
+1. Select and confirm a supported company with the angle and public references preserved, then receive a proposed framing under an explicit mandate.
+2. Optionally refine that proposal and use `Start research` to fix it; source preparation and Investigation begin only after this event.
+3. Observe actual shared preparation and Investigation progress, inspect useful material and limitations optionally, and handle material exceptions without coordinating internal operations.
+4. Examine distinct appraisals of the framed questions through shared assertions, exact passages, control outcomes, counter-evidence and decisive unknowns. Inspect the effect of the single bounded grouped documentary complement when used.
+5. Retain identifiable reviewed appraisals in a grouped action, correct or defer a question with history preserved, and remain at review if nothing is retained.
+6. Inspect the autonomous reference diagram and argued note from the retained base, or the justified non-establishment finding. Trace a relationship to its inputs and distinguish limited delivery from waiting on a central contested premise.
+7. Reconnect to preserved scope, evidence, decisions and progress. Inspect methodology and measured limits; an administrator can inspect operations, restore research quota with a reason and stop new paid work.
 
-A plausible unauditable narrative, generic web-answer experience, misleading confidence, simulated live work, hidden contradictions, loss of analyst authority or an infrastructure demonstration that obscures analytical judgment fails the product purpose. A successful intermediate slice remains useful but does not certify this completed journey.
+A generic cited narrative, hidden contradictions, misleading certainty, simulated progress, forced diagram, loss of analyst authority or infrastructure display that obscures economic usefulness fails the product purpose. Intermediate slices remain useful without certifying the full journey.
 
 ## Product Principles
 
-Make the author's judgment and economic reasoning legible. Preserve provenance, uncertainty, counter-evidence and human control. Prepare routine work proactively, request human decisions at required checkpoints or material exceptions, and demonstrate the smallest honest end-to-end slice before adding breadth.
-
-At each stage, analysts should understand what is available, what remains uncertain, and which decision or action is useful next, without understanding the internal workflow. Show distinctions and metadata when they help assess evidence or make a decision, rather than merely reflecting the underlying data model.
+Prioritize usefulness to Raphaëlle and her analysts. Prepare routine work proactively, explain the economic interpretation and its limitations, and preserve inspectable evidence and contextual human judgment. At each stage, make the available result, uncertainty and useful next action understandable without requiring knowledge of execution internals.
 
 ## Accessibility & Inclusion
 
-Support desktop and mobile web, keyboard navigation, semantic HTML, visible focus, explicit labels, sufficient contrast and non-color status cues. Respect reduced motion. Loading, empty, partial-failure, review, cancellation and insufficient-evidence states must remain understandable and actionable. Loading placeholders preserve the loaded surface's geometry.
+Support desktop and mobile web, keyboard navigation, semantic HTML, visible focus, explicit labels, sufficient contrast and non-color cues. Respect reduced motion. Preserve meaningful loading geometry and understandable empty, partial, blocked, review, recovery and insufficient-evidence states.

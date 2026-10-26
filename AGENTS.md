@@ -2,11 +2,11 @@
 
 ## Mission
 
-Build the Agentic Resilience Evidence Workbench as the central proof in an original unsolicited application to Raphaëlle d'Ornano. The product is a private, evidence-first research prototype that helps analysts assess the architectural resilience of US-listed technology companies.
+Build the Agentic Resilience Evidence Workbench as a useful contribution in an unsolicited application to join Decoding Discontinuity. The private prototype helps Raphaëlle d'Ornano and analysts investigate the economic position and architectural resilience of a US-listed technology company through a relevant activity or workflow.
 
 This is not a generic AI chat application, an autonomous investment analyst, or a reproduction of Decoding Discontinuity's proprietary methodology. The system accelerates research and structures judgment; the analyst remains the final authority.
 
-The first-minute objective is to make the author's judgment, rigor, and execution visible to Raphaëlle. Work that does not materially improve that demonstration must not delay the prototype.
+Make the economic question, useful interpretation and inspectable evidence immediately understandable. The author's credibility follows from usefulness to Raphaëlle and her analysts. Work that does not improve that usefulness or preserve its integrity must not delay the prototype.
 
 ## Document Authority and Required Reading
 
@@ -58,9 +58,9 @@ Read `PRODUCT.md` before product planning or implementation, relevant sections o
 
 Prioritize work in this order:
 
-1. make the author's analytical judgment legible;
+1. make the prepared economic analysis directly useful to Raphaëlle and her analysts;
 2. make evidence provenance, uncertainty, and human control credible;
-3. demonstrate concrete acceleration of analyst preparation work;
+3. let the system prepare routine research so analyst attention remains available for judgment, measuring acceleration before claiming it;
 4. make the demonstrated path reliable enough for the five-visitor prototype;
 5. add breadth, secondary integrations, and hardening only when required by a documented invariant, the next vertical slice, or measured risk.
 
@@ -73,10 +73,12 @@ Curated, clearly labelled showcase dossier
 +
 Genuinely live company resolution and source discovery
 +
-Persisted progress and explicit corpus approval checkpoint
+Persisted progress and the human prerequisites of the implemented path
 ```
 
 Later stages remain required for the completed MVP, but must not prevent earlier slices from being runnable and demonstrable. This proportionality rule never permits fake progress, client-side bypasses, weakened evidence integrity, or deferred controls required by an exposed feature.
+
+Implement the [question-led product workflow](PRODUCT.md#operating-context) through the [technical transition contract](context/TECH.md#implementation-transition). Preserve existing dossier authorization and checkpoints until their replacement is implemented and verified. Accepted target autonomy is not permission to bypass a runtime guard. Detailed agent missions and operation rules belong in the technical contract, not another framework or a duplicate tool implementation.
 
 ## Product Contract
 
@@ -145,7 +147,7 @@ These rules govern the React + TanStack Start + Convex + shadcn/ui (`base-luma` 
 - The current interface does not yet meet the intended standard for restraint, ergonomics or ease of learning. Within authorized UX changes, progressively make the workflow calmer, easier to understand and less demanding of the analyst's attention.
 - Use clear defaults, progressive disclosure and an obvious next action. Keep secondary detail accessible without making it compete with the current task. Each control, confirmation or review step must serve an analyst decision or a documented invariant.
 - Let the system prepare and organize work proactively, resolve routine steps autonomously within the evidence rules, and advance work that does not require analyst judgment. Do not make the analyst coordinate internal execution or confirm every internal step.
-- Request human review for required checkpoints, material decisions and unresolved exceptions. Group related review where appropriate while preserving the mandatory corpus approval, individually audited decisions and final analyst authority defined by the product contract. These principles do not authorize changing those requirements or redesigning an unrelated surface.
+- Apply the [product's judgment boundaries](PRODUCT.md#assessment-and-review): grouped appraisal review and targeted material exceptions, with final analyst authority. Keep routine preparation system-owned and detailed inspection optional. Preserve the implemented checkpoints during transition and retain individually traceable decisions within grouped actions.
 
 ### User-facing product copy
 
@@ -218,7 +220,7 @@ Select the verification layers needed for the changed contract: React integratio
 
 Browser scenarios use local Convex only, real anonymous sign-in and access-code admission. Internal fixtures derive ownership from a claimed invitation slot and never accept fabricated browser identities. Their inspection is bounded and read-only; setup reuses production authorization-sensitive operations and persisted workflow events. Local fixture keys are deterministic and idempotent. Remove `E2E_FIXTURES_ENABLED` at teardown; leaving it enabled makes the verification incomplete. Evaluation fixtures that require loopback deployment must enforce both that check and the fixture flag. No cloud deployment, public fixture endpoint, CLI identity impersonation, client-side access bypass or manually edited generated Convex type is permitted.
 
-Coverage must protect concurrent quota reservations and access attempts, transitions and resumes, preparation/approval separation, source and passage integrity, source selection and revision freshness, rejected-source exclusion, typed provider failures, claim and dimension-link decisions, analyst history, derived outputs, partial failures and one-running-workflow enforcement. Use fast deterministic tests for these rules; reserve live contract checks for explicitly authorized, bounded experiments. Critical browser gates exercise the intended protected role, desktop/mobile states, keyboard/focus, relevant hover behavior, reduced motion and fresh post-action state, including console errors.
+Coverage must protect concurrent quota reservations and access attempts, framing and research-start separation, delegated selection authority, source and passage integrity, assertion admission and question-specific uses, grouped appraisal decisions, revision freshness, rejected-use exclusion, mission completion, synthesis coherence and outcomes, analyst history, partial failures, recovery and one-running-workflow enforcement. Preserve existing corpus and dimension-decision regressions for paths still using those contracts. Use fast deterministic checks for these rules; reserve live experiments for explicit bounded authorization. Critical browser gates exercise the intended protected role, desktop/mobile states, keyboard/focus, relevant hover behavior, reduced motion and fresh post-action state, including console errors.
 
 ## Demo Integrity and Human Authority
 
