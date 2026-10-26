@@ -63,9 +63,17 @@ An operation can contain bounded model-assisted work. Logical completeness does 
 
 Structural controls at domain boundaries remain mandatory. They establish properties such as valid references and versions, not that a passage supports the proposed interpretation.
 
-A distinct targeted semantic examination can be imposed by the system in defined situations or requested by the agent for an unforeseen difficulty. Its result remains an input to the applicable domain policy, not authority to approve the work. This does not require another permanent agent or a second model call for every result.
+A semantic control belongs to the submission operation for the object being proposed: documentary qualification, inventory contribution and uses, appraisals, or synthesis. The submission is a known execution event; the system does not first need to recognize a semantic risk to decide whether that control applies. The shared inventory rules and mission conceptions define what their respective controls examine. Consultation, search, reading, and handoff authorization retain their deterministic boundary checks without adding a semantic verifier to every action.
 
-Controls concern the affected contribution or interpretation, its evidence, scope, and limitations. A partially examined argument cannot become fully supported because another part is plausible. Exact triggers, semantic result contracts, model routing, and correction criteria remain open. Self-review, a verifier response, and schema acceptance are each fallible; none supplies a universal truth guarantee.
+Sources also exposes a [targeted documentary check](2026-10-24-source-ingestion-and-processing-conception.md#documentary-controls), sharing the verification capability and documentary policy used by qualification. The system executes the verifier as a targeted model call, not a permanent parallel research agent. Its result informs domain policy rather than granting approval authority. When evidence is insufficient, the operation returns a precise diagnostic to the mission agent; the verifier does not silently rewrite the proposal through an internal correction loop.
+
+A control records its examined object and scope, evidence references, conclusion, and limitations. An unfinished execution is distinct from an analytical conclusion of insufficient support. A partially examined argument cannot become fully supported because another part is plausible. Adverse results follow the [targeted re-examination and judgment rules](2026-10-23-question-led-workbench-conception.md#retained-judgments-and-pending-revisions). Self-review, verifier output, and schema acceptance remain fallible; none guarantees universal truth.
+
+### Reuse of Controlled Results
+
+Reuse an existing control when the same explicitly referenced object and use are taken unchanged, its evidence versions and applicable rules remain valid, and current restrictions still permit that use. The system revalidates authority, references, and applicable restrictions. Reusing a documentary result does not establish a new analytical inference, and a retained appraisal does not establish a new synthesis relationship.
+
+The agent can reuse a controlled reference or submit a changed assertion or new use. The system need not ask another model whether differently worded proposals are equivalent. A new use of an existing assertion receives its own use control; a modified assertion receives its own examination. Required controls of a new submission, including resulting-artifact coherence, still apply while valid prior results can be reused. An unrelated dossier change does not by itself require every earlier control to be repeated.
 
 ## Preserved Work, Recovery, and Resources
 
@@ -75,7 +83,7 @@ Continue automatically after a recoverable technical interruption while the mand
 
 Resource protection is cumulative at the dossier level under the applicable operation policies. Count actual provider calls, including agent reasoning, model-assisted business work, and semantic controls. A tool invocation is not a reliable substitute for that accounting. Continuation does not reset consumption or create another allowance.
 
-The selected architecture does not add an arbitrary call quota for each agent or reserve a fraction of calls for a finalization phase. Normal completion follows the expected artifacts and controls. Hard resource and time limits still protect execution; they can leave work incomplete. Their numerical values and operation-specific application remain to be selected during technical integration.
+The selected architecture does not add an arbitrary call quota for each agent or reserve a fraction of calls for a finalization phase. Normal completion follows the expected artifacts and controls. Hard resource and time limits still protect execution; they can leave work incomplete. Numerical values, reading-window sizes, concurrency, and operation-specific parameters are deferred to implementation against the then-current conditions; exploratory values are not retained configuration requirements.
 
 Recovery cannot cross a human checkpoint or imply fresh adoption of a revised judgment. Those boundaries remain governed by the global conception rather than by the shared execution mechanism.
 
@@ -123,7 +131,8 @@ Session `01a17291-bc90-7833-9c34-1ffb9b9e6ab9` contains successive Sources exper
 | Reserve a predicted final share of agent calls | Not retained. It introduces another calibration policy without resolving the demonstrated reading and correction defects. |
 | Rely only on an agent-specific hard call ceiling | Not retained as the working model. Combine cumulative protection, complete operations, preserved work, and authorized recovery. |
 | Build a new multi-session orchestration framework | Not required. Reuse existing execution and persistence owners; retain the benefits of resumable work without introducing another engine. |
-| Add a complete second semantic review or permanent critic agent | Not selected. A distinct targeted control can be required or requested; exact criteria remain open. |
+| Add a complete second dossier-wide semantic review or permanent critic agent | Not selected. Submission operations control their own new contributions; Sources can also receive a targeted documentary check. |
+| Detect a semantic risk before deciding whether to verify a submission | Not selected. Recognizing the case already requires semantic interpretation. The retained controls attach to known submission boundaries. |
 
 ## Verification Direction and Open Decisions
 
@@ -131,4 +140,4 @@ Proposed checks, not performed by documenting this conception: retrieve several 
 
 Semantic evaluation must separately judge useful contributions retained, spontaneous omission detection, corrections, regressions, and completed obligations. Frozen failures are regression cases; exposed dossiers are not unseen holdouts. Structural success and lower call counts do not establish better analytical work.
 
-Remaining design work concerns operation signatures and mission exposure, compact-context assembly, retained inspection and revision records, semantic-control criteria, bounded recovery conditions, resource values, and executable artifact-specific exit checks. These details belong to the shared execution and domain owners.
+Implementation work remains for concrete operation schemas and bindings, compact-context assembly, inspection and revision records, verifier routing and executable quality checks, bounded recovery conditions, and resource parameters. The transversal catalogue, semantic control boundaries, explicit reuse, and artifact-specific criteria are retained conception decisions; exact interfaces and parameter values remain adaptable.

@@ -23,7 +23,7 @@ DEVELOP THE REASONED NOTE
 
 ## Interface
 
-A specialized Synthesis agent takes the retained analytical base and uses the [shared business operations](2026-10-23-question-led-workbench-conception.md#minimum-shared-operation-catalogue) to prepare its result. A supported synthesis submits its diagram and note together; the alternative result is the reasoned non-establishment finding below. A re-examination concern is conditional. Exact records and execution integration remain to be designed.
+A specialized Synthesis agent takes the retained analytical base and uses the [transversal operation catalogue](2026-10-23-question-led-workbench-conception.md#transversal-operation-catalogue) to prepare its result. A supported synthesis submits its diagram and note together; the alternative result is the reasoned non-establishment finding below. A re-examination concern is conditional. Exact records and execution integration remain to be designed.
 
 | Direction | Information crossing the interface |
 | --- | --- |
@@ -36,7 +36,7 @@ A specialized Synthesis agent takes the retained analytical base and uses the [s
 
 [Investigation](2026-10-24-investigation-conception.md) supplies the question-level appraisals. The [global cooperation rules](2026-10-23-question-led-workbench-conception.md#synthesis-and-bounded-analytical-rework) determine how retained inputs and analytical returns are handled.
 
-For a supported synthesis, the agent develops the diagram as its reference and the note from that reasoning, then submits both through one synthesis operation. The operation checks their coherence, versions, and evidence dependencies together. The same operation receives the alternative finding under the global outcome rules. The [pending-revision rules](2026-10-23-question-led-workbench-conception.md#retained-judgments-and-pending-revisions) determine when a limited result can become available or delivery must wait.
+For a supported synthesis, the agent develops the diagram as its reference and the note from that reasoning, then submits both through one synthesis operation. The operation applies the [submission controls](#submission-controls) to their coherence, versions, and evidence dependencies together. The same operation receives the alternative finding under the global outcome rules. The [pending-revision rules](2026-10-23-question-led-workbench-conception.md#retained-judgments-and-pending-revisions) determine when a limited result can become available or delivery must wait.
 
 ## Internal Work by Principal Stage
 
@@ -72,6 +72,16 @@ The note can develop nuances and evidence that do not fit in the visual overview
 
 The reader should be able to move from an economic implication to the relevant mechanism, appraisal, and evidence. A visually concise diagram and a detailed note therefore express the same analysis at different levels of depth.
 
+## Submission Controls
+
+Synthesis submission owns structural and semantic controls of the proposed result. It reuses valid input controls under the [common reuse rules](2026-10-26-agentic-execution-architecture.md#reuse-of-controlled-results), then examines its new analytical contribution:
+
+- New relationships and transversal inferences are justified from admissible retained appraisals and their evidence. Retaining those inputs does not establish the proposed connection automatically.
+- The diagram and argued note express the same interpretation, scope, and conditions. The note can develop nuances while preserving the diagram's underlying meaning.
+- Conditions, objections, and unknowns remain visible and limit the interpretation, including in the visual overview. A necessary new premise follows the existing Investigation re-examination route.
+
+For the alternative non-establishment finding, the control examines the stated analytical basis, reasons, and limitations rather than requiring a forced diagram. Diagnostics return to the Synthesis agent for targeted reconsideration; delivery and affected-result handling follow the global outcome and revision rules.
+
 ## Autonomy and Optional Inspection
 
 The mission agent chooses its approach and useful inspections under the [common execution contract](2026-10-26-agentic-execution-architecture.md#shared-mission-contract). The [mission completion contract](2026-10-23-question-led-workbench-conception.md#mission-completion-contract) governs when the applicable result allows progression. System work checks the result against its artifact requirements; for a supported synthesis, this includes the diagram's relationships and the note's fidelity.
@@ -100,7 +110,7 @@ Proposed visual exploration: use a frozen illustrative dossier to compare compos
 
 - Define how to select the decisive mechanisms and an appropriate level of visual detail for the investigated case.
 - Specify the representation and explanation of dependencies, conditions, opposing mechanisms, and unresolved relationships.
-- Define executable quality checks for transversal reasoning and diagram-to-note fidelity, using the shared control principles.
+- Specify executable quality checks and evaluation for the retained submission criteria, including transversal reasoning and diagram-to-note fidelity.
 - Explore the diagram's composition, accessible inspection, responsive behavior, and the note's reading experience.
 - Specify the relationship between input versions, changing reasoning, and affected synthesis outputs within the shared revision model.
-- Define the detailed contracts and correction outcomes for the joint synthesis submission and alternative finding within the shared operation catalogue.
+- Define the detailed contracts and correction records for the joint synthesis submission and alternative finding within the transversal operation catalogue.

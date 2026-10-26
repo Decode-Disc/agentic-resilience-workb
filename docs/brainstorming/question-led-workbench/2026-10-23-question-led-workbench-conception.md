@@ -174,24 +174,29 @@ Agent --> Tool description, schema, binding ---+--> Shared business operation
                                                Result, scope and limits
 ```
 
-Operations can encapsulate substantial processing, including bounded model-assisted work when their task requires it. Each returns the useful result, what was examined, applicable control outcomes, and limitations or failure information. This lets an agent reconsider the next action without treating every local restriction as a dossier-wide stop. Exact operation signatures and semantic control criteria remain to be defined.
+Operations can encapsulate substantial processing, including bounded model-assisted work when their task requires it. Each returns the useful result, what was examined, applicable control outcomes, and limitations or failure information. This lets an agent reconsider the next action without treating every local restriction as a dossier-wide stop. The functional catalogue and control responsibilities record the retained conception; operation names, input examples, and result formats remain revisable during implementation rather than freezing SDK interfaces.
 
-### Minimum Shared Operation Catalogue
+### Transversal Operation Catalogue
 
-The following eight business operations are retained as the functional catalogue for Investigation and Synthesis. Every operation is reusable from authorized system code; the final column defines its retained exposure to those two mission agents. Shared implementation does not automatically grant access to every mission. Sources' operation contracts and exposure remain to be specified under its documentary responsibility. Useful launch context is supplied compactly; detailed material remains retrievable on demand under the shared execution contract.
+The single catalogue below groups eleven functional entries across Sources, Investigation, and Synthesis. Domain responsibility identifies the business knowledge an operation owns; agent exposure identifies which mission agents can use it. Every operation remains callable by authorized system code. Exposure to one agent does not make the implementation private to that agent.
 
-| Business operation | Responsibility and useful result | Agent exposure |
-| --- | --- | --- |
-| Consult the dossier | Return a bounded view of the scope, questions, inventory, appraisals, versions, and relevant limitations accessible to the mission. | Investigation, Synthesis |
-| Search available material | Retrieve potentially relevant passages from prepared documents, with reproducible references and search limitations. | Investigation, Synthesis |
-| Examine evidence in context | Return the exact passage, its context, and relevant documentary qualifications or use restrictions. A search match alone does not establish analytical support. | Investigation, Synthesis |
-| Contribute to the inventory | Control and record proposed assertions, corrections, and question-specific uses while preserving reusable references and history. This operation belongs to the inventory domain. | Investigation |
-| Request a documentary complement | Submit grouped decisive needs to Sources, including their expected effect and material already examined, under the workflow's permitted phase and allowances. | Investigation |
-| Submit appraisals | Control and record proposed reasoned appraisals by question for grouped review. | Investigation |
-| Request analytical re-examination | Submit a concern about an appraisal or a material new premise needed for the interpretation, with references to existing material, under the bounded rework rules. | Synthesis |
-| Submit synthesis | Submit the reference mechanism diagram and reasoned note together, including a limited synthesis when justified, or the reasoned non-establishment finding. Check the requirements of the applicable outcome. | Synthesis |
+| Business operation | Domain responsibility | Agent exposure | Useful result |
+| --- | --- | --- | --- |
+| Consult mission state | Dossier and preparation | Sources, Investigation, Synthesis | Bounded scope, questions, relevant inventory and appraisal references, versions, progress, available material, pending work, and restrictions. |
+| Search available material | Documentary material | Sources, Investigation, Synthesis | Candidate passages with excerpts, reproducible references, and search limitations. A match alone does not establish analytical support. |
+| Read in context | Documentary material | Sources, Investigation, Synthesis | Exact retained passages, surrounding context, observed links, and applicable documentary qualifications or restrictions. |
+| Make a source consultable | Sources | Sources | Acquired or reused content with its own capture and provenance, available for search and reading. |
+| Submit a documentary qualification | Sources | Sources | Controlled contributions and restrictions for one document, preserving useful material and returning targeted diagnostics. |
+| Request a targeted documentary check | Sources | Sources | Examination of a referenced statement, including before qualification, with its conclusion, evidence, scope, and limitations. |
+| Contribute to the inventory | Shared inventory | Investigation | Controlled assertions, corrections, and question-specific uses with reusable references and preserved history. |
+| Request a documentary complement | Workflow | Investigation | Grouped decisive needs transmitted to Sources under the permitted phase and mandate. |
+| Submit appraisals | Investigation | Investigation | Controlled reasoned responses by question, proposed for grouped analyst review. |
+| Request analytical re-examination | Workflow | Synthesis | A concern about an appraisal or a necessary new premise transmitted to Investigation for targeted examination of available material. |
+| Submit synthesis | Synthesis | Synthesis | The reference mechanism diagram and reasoned note controlled together, or the justified non-establishment finding. |
 
-These names describe business capabilities, not installed agent APIs. The catalogue retains complete domain operations alongside targeted inspection. Mission completion uses the response contract below rather than an additional business tool.
+The first three entries are shared access families, not a requirement for a generic all-purpose API. Sources consults its documentary preparation; Investigation and Synthesis consult the analytical dossier. Search and reading respect each mission's accessible material and usage restrictions. Consultation assembles stored state, search receives an explicit query, and reading returns exact content; these intents do not require a generative intermediary. Lexical or hybrid retrieval remains an implementation choice, with any embedding work identified separately.
+
+The applicable criteria belong to the [Sources conception](2026-10-24-source-ingestion-and-processing-conception.md#documentary-controls), [shared inventory rules](#shared-company-inventory-and-evidence-matrix), [appraisal controls](2026-10-24-investigation-conception.md#appraisal-submission-controls), and [Synthesis conception](2026-10-25-synthesis-conception.md#submission-controls). Request transmission checks authority, phase, scope, and versions without requiring another model merely to authorize a handoff. Useful context is supplied compactly at launch and after operations; consulting state is not a mandatory extra step after every action. Mission completion uses the response contract below rather than an additional coordination tool.
 
 ### Cooperation and Documentary Complement
 
@@ -217,11 +222,21 @@ The retained conception preserves a general company inventory, including useful 
 
 Sources supplies qualified documentary material. Investigation transforms relevant material into controlled assertions and enriches the inventory during the inquiry through the shared inventory-contribution operation. That operation belongs to the inventory domain and applies the same admission rules for every authorized caller; it is not owned by the Investigation agent. Finding, reading, selecting, and quoting a source do not themselves establish an assertion's truth. A common assertion can serve several questions while each use retains its own scope, rationale, and supporting, opposing, or contextual relationship.
 
+New assertions and question-specific uses receive their semantic admission control when contributed to the inventory, before becoming usable in that scope. The control does not wait for appraisal submission. The inventory domain applies the same criteria to every authorized contributor:
+
+| Admission criterion | Required justification |
+| --- | --- |
+| Evidence and permitted use | The assertion follows from its referenced basis and respects documentary restrictions, reusing applicable Sources controls rather than qualifying the documents again. |
+| Nature and scope | Its nature as a fact, inference, hypothesis, or unknown matches the available support; its company, activity, and temporal scope remain explicit. |
+| Question-specific rationale | Each use explains why the assertion supports, opposes, or provides context for an interpretation, without duplicating the shared assertion. |
+
+A hypothesis or unknown can be admitted as such; admission does not turn it into an established fact. Useful company context does not require a forced question link. The shared execution conception defines [reuse of controlled results](2026-10-26-agentic-execution-architecture.md#reuse-of-controlled-results).
+
 The evidence matrix makes this inventory and its uses inspectable. The analyst can connect a research question to the relevant assertions, passages, objections, unknowns, control results, and corrections. It need not occupy the main progress view or require supervision of every operation. The distinctions between `Fact`, `Inference`, `Hypothesis`, and `Unknown` remain useful.
 
 Three meanings of validation must remain separate: documentary integrity checks, checks on the permitted use and reasoning of an assertion and its links, and human adoption of an analytical interpretation. System controls remain mandatory. A failed integrity check cannot be waived by a human approval. An unresolved analytical limitation must produce an explicit restriction, uncertainty, exclusion from the affected use, or important exception; it cannot silently become a successful validation.
 
-The same shared control principles apply to the relationships and transversal inferences proposed by Synthesis. A retained appraisal is an input to that reasoning, not automatic validation of every inference drawn from it. Synthesis retains traceable dependencies on the appraisals and evidence it uses.
+Appraisal submission controls the reasoning from inventory assertions to a question-level interpretation, rather than repeating documentary preparation. Synthesis submission controls its new relationships and transversal inferences together with diagram-to-note fidelity. A retained appraisal is an input to that reasoning, not automatic validation of every inference drawn from it. Synthesis retains traceable dependencies on the appraisals and evidence it uses.
 
 What is removed from the target is systematic human confirmation of each assertion and link before appraisals can be prepared. Inspection, correction, and important human interventions remain available. The shared inventory and its controls are retained, rather than replaced by repeated independent arguments embedded in each appraisal. Exact persistence, correction propagation, and revision granularity are still to be designed; no complete incremental dependency engine is selected.
 
@@ -271,7 +286,18 @@ A supported synthesis makes its mechanism diagram and reasoned note available wi
 
 The agent proposes that its mission is complete by returning the references of the expected artifacts and explicit remaining limitations. The system verifies the artifact set, relevant versions, references, and applicable control outcomes before advancing the workflow. A failed condition returns an actionable result for further work within the mandate or an explicit incomplete outcome. The agent's completion declaration alone cannot authorize the transition.
 
-Artifact-specific semantic criteria remain to be defined; the completion check is not a universal guarantee of truth. A justified insufficiency can be an analytical result. Conditional documentary or re-examination requests are retained with their justification and outcome when used, rather than required for every mission.
+Completion uses the artifact-specific controls in the three mission conceptions. A justified insufficiency can be an analytical result. Conditional documentary or re-examination requests are retained with their justification and outcome when used, rather than required for every mission.
+
+The system retains an explicit outcome for each need assigned to the mission and each documentary or analytical check engaged:
+
+| Expected work | Required account of its outcome |
+| --- | --- |
+| Documentary need assigned to Sources | Prepared material, a justified documentary gap, or explicitly unfinished preparation. |
+| Framed question assigned to Investigation | A reasoned appraisal or justified insufficiency after investigation. |
+| Engaged control | A conclusion with evidence and limitations, or an explicitly unfinished check. |
+| Expected Synthesis result | The joint diagram and note, a justified non-establishment finding, or an identified pending or incomplete outcome. |
+
+Finding a passage does not complete a check of the statement it addresses. A required unfinished control prevents the use it conditions, while independent usable work can continue. The system maintains this account through operation outcomes rather than asking the analyst to coordinate it. Tracking assigned and engaged work does not guarantee detection of every omission never identified during inquiry, nor require qualification of every candidate or traversal of every observed link. Exact records and executable completion checks remain implementation work.
 
 Investigation may finish preparing its appraisals when the framed questions have been investigated, including a question that ends in explicitly justified evidence insufficiency. Synthesis preserves those limitations when preparing its outputs after review. A result becoming available means the relevant preparatory work is complete, not that every question is resolved or the analyst has adopted the overall interpretation. Interrupted or unperformed work remains incomplete; missing technical capability cannot be relabelled as an evidence-based unknown. The former finalization requirement of ten dimension decisions is not retained.
 
@@ -283,7 +309,9 @@ When those appraisals permit no sufficiently supported mechanism, Synthesis retu
 
 ### Retained Judgments and Pending Revisions
 
-Human decisions remain associated with the version reviewed. Later inventory enrichment or analytical rework must not silently rewrite a retained interpretation or imply fresh analyst adoption. If rework proposes a material change to an appraisal already retained, that change returns as a targeted human exception; it does not require routine reapproval of the whole dossier. Affected synthesis outputs must expose the unresolved change rather than imply they rest on a newly adopted appraisal. Exact freshness indicators, follow-up behavior, and revision mechanics remain open.
+A later adverse control restricts the use it calls into question and flags explicitly dependent results for re-examination; it does not automatically declare those results false. The responsible mission agent examines the effect and proposes a reasoned decision to retain the result, a controlled correction, or an explicit unresolved limitation. Independent work can continue. Previous results and control history remain inspectable, and a new favorable verdict cannot silently erase the earlier objection: the resolution must explain how it was addressed using the examined material. This is targeted re-examination of available material, not an automatic new documentary research phase.
+
+Human decisions remain associated with the version reviewed. Later inventory enrichment or analytical rework must not silently rewrite a retained interpretation or imply fresh analyst adoption. If rework proposes a material change to an appraisal already retained, that change returns as a targeted human exception; it does not require routine reapproval of the whole dossier. Affected synthesis outputs must expose the unresolved change rather than imply they rest on a newly adopted appraisal. Detailed freshness representation and revision mechanics remain open.
 
 While the targeted judgment is pending, independent work continues. A limited synthesis may become available if the unaffected analytical base supports a coherent and useful reading on an explicit reduced scope. Its diagram and note are submitted together, identify the limitation, and do not present relations depending on a contested premise as settled support. Availability of this result leaves the exception open.
 
@@ -317,6 +345,8 @@ An earlier preference for simple verifiable calculations was explicitly narrowed
 | Require a contextual corpus approval before every analysis | Not selected as the target workflow. The user selected delegated source selection under an initial mandate, with important exceptions raised contextually. |
 | Independent appraisals referencing passages without a shared assertion inventory | Not selected. It reduces intermediate objects but repeats common interpretations and corrections across questions. The company inventory and reusable sourced assertions are retained. |
 | Require an exhaustive inventory and routine human confirmation of every assertion and link | Not selected. The system must retain the inventory and mandatory controls while avoiding an analyst-managed inventory-completion workflow. |
+| Delay semantic inventory admission until appraisal submission | Not selected. Controlling assertions and uses at contribution localizes defects before reuse; appraisal controls examine their own reasoning. |
+| Recheck all documentary and analytical inputs at every stage | Not selected. Reuse controls that remain valid in their scope and examine the new contribution or use at the relevant submission boundary. |
 | Individual adoption of every appraisal as the default | Not selected. The user retained grouped review with correction or follow-up per question. |
 | Grouped review of appraisals, diagram, and note at the end | Not selected. The user placed grouped review at Investigation output so Synthesis can finish autonomously without another routine final judgment step. |
 | Remove grouped appraisal review and intervene only for exceptions | Not selected. The user retained grouped review before Synthesis. |
@@ -380,11 +410,11 @@ The [Sources evaluation from 2026-10-25 and 2026-10-26](../../../scripts/evaluat
 - Define the exact common research foundation, the bounded set of decisive questions, and how the proposed activity or workflow is selected and corrected.
 - Define how later scope changes affect ongoing work and existing results. Start research is the retained framing-completion event; speculative background research during framing is not part of the prototype.
 - Specify the launch mandate's source-selection rules, resource limits, intervention criteria, and handling of material exceptions, using the source conception for its internal workflow. Delegated selection is accepted; its enforcement and replacement of the current human corpus checkpoint are not implemented.
-- Integrate the three specialized mission roles through the retained common execution contract. Select operation signatures, domain result contracts, permissions, and artifact-specific controls. The eight-operation Investigation/Synthesis catalogue remains retained; Sources' operation contracts, APIs, and detailed runtime integration remain open.
+- Integrate the three specialized mission roles through the retained common execution contract and transversal operation catalogue. Translate the accepted control responsibilities into concrete interfaces, permissions, result records, and executable checks. Functional contract examples remain revisable; numerical limits and runtime parameters are deferred to implementation against the then-current state.
 - Define card grouping, detail-page navigation, and completed-result presentation. Preserve the accepted composer, timeline, contextual-intervention, and optional-inspection direction without treating an illustrative layout as finished design.
 - Specify the grouped complement's prioritization and resource allocation across questions, and the cooperation outcomes when requested material is unavailable. Its placement after the first shared analytical pass and its single bounded phase are retained.
 - Specify the detailed limits and stopping rules for analytical rework, and executable checks for the retained delivery conditions during a targeted human exception. New-premise instruction, limited delivery when coherent and useful, and waiting when the overall reading depends on a contested premise are retained.
-- Specify shared assertion identity, question-to-evidence relationships, inventory correction and enrichment mechanisms, and their presentation in the matrix. Exact records, freshness rules, and navigation are not selected.
+- Specify shared assertion identity, question-to-evidence relationships, inventory correction and enrichment mechanisms, and their presentation in the matrix. Admission timing and targeted re-examination are retained; exact records, freshness presentation, and navigation remain open.
 - Define confidence presentation, treatment of future horizons, and the detailed interaction and audit semantics of grouped review. Its placement at Investigation output is retained; its controls and persistence shape remain open.
 - Explore the visual composition and inspection of the mechanism diagram and the reading experience of its reasoned note. Immediate comprehension and the intended visual impact require validation with an illustrative dossier.
 - Specify executable completion checks and projections for justified insufficiency, a synthesis non-establishment finding, pending human judgment, and interrupted or unperformed work. The functional outcomes and the requirement for at least one retained appraisal before Synthesis are settled; their technical states remain open.

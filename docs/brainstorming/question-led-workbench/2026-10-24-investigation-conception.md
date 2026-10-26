@@ -20,7 +20,7 @@ PROPOSE THE APPRAISALS
 
 ## Interface
 
-The caller supplies a framed dossier and available evidence. A specialized Investigation agent conducts the common inquiry using the [shared business operations](2026-10-23-question-led-workbench-conception.md#minimum-shared-operation-catalogue). The two artifact families below form the mission result; documentary requests and re-examination outcomes apply when needed.
+The caller supplies a framed dossier and available evidence. A specialized Investigation agent conducts the common inquiry using the [transversal operation catalogue](2026-10-23-question-led-workbench-conception.md#transversal-operation-catalogue). The two artifact families below form the mission result; documentary requests and re-examination outcomes apply when needed.
 
 | Direction | Information crossing the interface |
 | --- | --- |
@@ -47,6 +47,12 @@ Investigation starts from the existing inventory and the prepared documentary ma
 
 Investigation uses the documentary qualification and comparison results attached to the material. It does not repeat source preparation as a separate analytical pipeline. When material cannot support the intended use, the inquiry limits that use or identifies the missing information rather than treating source inclusion as sufficient support.
 
+#### Inventory Admission Controls
+
+The inventory-contribution operation applies the [shared admission criteria](2026-10-23-question-led-workbench-conception.md#shared-company-inventory-and-evidence-matrix) to new assertions and question-specific uses arising from the inquiry. Investigation reuses valid documentary controls while justifying its new analytical contribution; it does not rerun Sources' preparation.
+
+The [common reuse rules](2026-10-26-agentic-execution-architecture.md#reuse-of-controlled-results) distinguish an unchanged reference from a modified assertion or new use. Admission of a shared assertion does not establish the later economic reasoning of every appraisal that cites it.
+
 ### Test the Interpretations
 
 Investigation examines what the evidence permits it to say about the economic question. It connects observations to a proposed mechanism, tests that interpretation against objections, and distinguishes a plausible account from a supported one. Questions about control, dependencies, substitution, or value capture may be relevant depending on the case; they do not form a new mandatory grid.
@@ -69,9 +75,13 @@ Where the inquiry cannot support a substantive answer, Investigation explains wh
 
 When receiving a targeted request, Investigation examines the identified reasoning or new premise against the available evidence and shared controls. It submits an inventory contribution when justified, assesses the effect on the relevant appraisals, and returns a proposed revision with an explanation of what changed or why no revision is warranted. The [cooperation rules](2026-10-23-question-led-workbench-conception.md#synthesis-and-bounded-analytical-rework) own the trigger, bounds, and treatment of retained judgments.
 
+#### Appraisal Submission Controls
+
+At submission, semantic control examines the reasoning from assertions through assumptions and mechanisms to the economic conclusion, the treatment of examined objections and alternative interpretations, and whether unknowns actually limit the conclusion. It reuses valid inventory and documentary controls rather than repeating their earlier work. A justified insufficiency remains a possible analytical result after instruction; it is not a substitute for unfinished investigation.
+
 ## Autonomy and Optional Inspection
 
-The mission agent uses its available operations to adapt the inquiry and revisit interpretations as evidence requires, under the [common execution contract](2026-10-26-agentic-execution-architecture.md#shared-mission-contract). Exceptions follow the global intervention policy; the [mission completion contract](2026-10-23-question-led-workbench-conception.md#mission-completion-contract) governs when the submitted artifacts allow progression.
+The mission agent uses its available operations to adapt the inquiry and revisit interpretations as evidence requires, under the [common execution contract](2026-10-26-agentic-execution-architecture.md#shared-mission-contract). Exceptions follow the global intervention policy; the [mission completion contract](2026-10-23-question-led-workbench-conception.md#mission-completion-contract) governs when the submitted artifacts allow progression. Challenged uses and dependent appraisals follow the [global re-examination rules](2026-10-23-question-led-workbench-conception.md#retained-judgments-and-pending-revisions).
 
 Optional inspection exposes the assertions reused or introduced, the relationship between evidence and interpretation, relevant alternatives, objections, and the reasons for requesting more material. The analyst can challenge a use, correct an assertion, or redirect a question. The precise correction and revision mechanics remain to be designed with the shared inventory, rather than introduced as an Investigation-only policy.
 
@@ -84,7 +94,7 @@ Proposed verification: use a bounded dossier with two questions sharing an asser
 ## Open Decisions
 
 - Define how to select useful inventory contributions and recognize reusable assertions without erasing meaningful differences in scope or interpretation.
-- Specify analytical control criteria for assertion uses, causal reasoning, rival interpretations, and evidence-based explanations of appraisal strength.
+- Translate the retained inventory-admission and appraisal-reasoning criteria into executable checks and analytical quality evaluation.
 - Define how documentary needs are prioritized by their potential effect on the framed questions and expressed without prescribing source-retrieval mechanics.
 - Specify the inspection and correction interactions for reasoning and question-specific evidence uses, in coordination with the shared revision model.
 - Specify how the Investigation mission uses its shared operations and artifact contracts, including meaningful progress and executable quality checks through the interface.
