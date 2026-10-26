@@ -17,7 +17,6 @@ import {
 
 import Icon from "@/components/icon";
 import AnimatedListFilter from "@/components/ui/animated-list-filters";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
     Drawer,
@@ -55,6 +54,7 @@ import {
     compareSourceReviewDecisions,
     sourceDecisionDefinitions,
 } from "@/components/workspace/source-decision";
+import { SourceInclusionBadge } from "@/components/workspace/source-inclusion-badge";
 import {
     SourceMasterList,
     toSourceContext,
@@ -63,7 +63,6 @@ import { SourceAdjustmentActions } from "@/components/workspace/source-proposal-
 import { useResponsive } from "@/hooks/use-responsive";
 import {
     sourceDocumentKindLabel,
-    sourceInclusionLabel,
     sourceMatchesSearch,
 } from "@/lib/presentation/research-copy";
 
@@ -346,17 +345,7 @@ export function SourceReview({
                                   candidate.sourceId === source.sourceId,
                           );
                           return (
-                              <Badge
-                                  variant="outline"
-                                  className={
-                                      item?.included
-                                          ? "border-approved/30 text-approved"
-                                          : undefined
-                                  }>
-                                  {sourceInclusionLabel(
-                                      item?.included ?? false,
-                                  )}
-                              </Badge>
+                              <SourceInclusionBadge included={item?.included} />
                           );
                       }
                     : undefined

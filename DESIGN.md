@@ -345,7 +345,9 @@ Focus uses the semantic ring and a three-pixel halo. Pressing a regular non-popu
 
 ### Chips and badges
 
-Compact classifications and secondary metadata. The [shared badge](src/components/ui/badge.tsx) offers default, regular, secondary, destructive, outline and fancy variants, plus optional family-color and dot treatments. Evidence surfaces may override these with domain-semantic colors or use neutral outlines. Keep labels explicit and preserve the distinction between a badge and an action.
+Compact classifications and secondary metadata. The [shared badge](src/components/ui/badge.tsx) offers default, regular, secondary, destructive, outline and fancy variants, plus optional family-color and dot treatments. Evidence surfaces may override these with domain-semantic colors or use neutral outlines.
+
+A badge is non-interactive metadata: it never carries a hover state of its own, and an interactive container (filter button, selectable row, link chip) owns whatever hover treatment applies. The shared primitive exposes no hover classes; consumers that deliberately restyle a badge into an interactive-looking control apply that treatment themselves. The fancy radial-chrome variant is a landing-owned composition retained for the project home page, not a workspace surface default. Keep labels explicit and preserve the distinction between a badge and an action.
 
 ### Cards and containers
 

@@ -1,7 +1,6 @@
 import type { Id } from "@convex/_generated/dataModel";
 import {
     ArrowRight01Icon,
-    CheckmarkCircle02Icon,
     File02Icon,
     InformationCircleIcon,
     LinkSquare01Icon,
@@ -32,6 +31,7 @@ import { ApprovedSourceSearch } from "@/components/workspace/approved-source-sea
 import { SourceBrowserView } from "@/components/workspace/source-browser-view";
 import { SourceDecisionStatus } from "@/components/workspace/source-decision";
 import { SourceDocumentKindBadge } from "@/components/workspace/source-family-badge";
+import { SourceInclusionBadge } from "@/components/workspace/source-inclusion-badge";
 import type { SourceReviewSource } from "@/components/workspace/source-review";
 import {
     sourceAssessmentExplanationCopy,
@@ -40,7 +40,6 @@ import {
     sourceCoverageRoleLabel,
     sourceFindingContributionCopy,
     sourceFindingKindLabel,
-    sourceInclusionLabel,
     sourceOriginLabel,
     sourceReadingConcernCopy,
     sourceReadingCopy,
@@ -60,6 +59,17 @@ const sourceDateFormatter = new Intl.DateTimeFormat("en", {
  * Shared source reader with metadata, reading and pending-candidate visual previews.
  * Decision actions stay outside the scrollable reading region.
  */
+function displayHostname(canonicalUrl: string): string {
+    try {
+        return new URL(canonicalUrl).hostname;
+    } catch {
+        // Corpus sources carry a validated canonical URL from the domain
+        // layer; an unparseable value renders as the raw string rather than
+        // crashing the panel.
+        return canonicalUrl;
+    }
+}
+
 export function SourceContextPanel({
     source,
     runId,
@@ -80,6 +90,7 @@ export function SourceContextPanel({
     annotation?: ReactNode;
 }) {
     const [tab, setTab] = useState<"details" | "preview">("details");
+    const hostnameOrUrl = displayHostname(source.canonicalUrl);
     return (
         <article
             className={cn(
@@ -102,9 +113,7 @@ export function SourceContextPanel({
                     </h3>
                     <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                         <span className="inline-flex min-w-0 items-center gap-1">
-                            <span className="break-all">
-                                {new URL(source.canonicalUrl).hostname}
-                            </span>
+                            <span className="break-all">{hostnameOrUrl}</span>
                             <SourceAddress
                                 key={source.sourceId}
                                 url={source.canonicalUrl}
@@ -130,21 +139,7 @@ export function SourceContextPanel({
 
                 <div className="col-span-2 flex max-w-full flex-wrap items-center justify-end gap-1.5 self-end justify-self-end @max-[36rem]/source-reader:[&>button]:px-1.5 @min-[36rem]/source-reader:col-span-1 @min-[36rem]/source-reader:col-start-3 @min-[36rem]/source-reader:row-start-1">
                     {included !== undefined ? (
-                        <Badge
-                            variant="outline"
-                            className={
-                                included
-                                    ? "border-approved/30 text-approved"
-                                    : undefined
-                            }>
-                            {included ? (
-                                <Icon
-                                    iconNode={CheckmarkCircle02Icon}
-                                    size={14}
-                                />
-                            ) : null}
-                            {sourceInclusionLabel(included)}
-                        </Badge>
+                        <SourceInclusionBadge included={included} />
                     ) : (
                         <SourceDecisionStatus decision={source.decision} />
                     )}
