@@ -1,10 +1,8 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import type { FunctionReference } from "convex/server";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
-
 import {
     internalMutation,
     type MutationCtx,
@@ -18,6 +16,7 @@ import {
 } from "./domain/executionClaim";
 import { lookupShowcaseManifest } from "./domain/showcaseManifest";
 import { sourceDossierCandidateLimit } from "./resourceLimits";
+import { requireWorkspaceRun } from "./runWorkspace";
 import { workflow } from "./workflow";
 
 type InternalMutationRef = FunctionReference<"mutation", "internal">;
@@ -153,23 +152,7 @@ export const start = mutation({
         executionGeneration: v.number(),
     }),
     handler: async (ctx, args) => {
-        const authUserId = await getAuthUserId(ctx);
-        if (!authUserId) {
-            throw new Error("Not authenticated");
-        }
-        const visitor = await ctx.db
-            .query("visitors")
-            .withIndex("by_auth_user_id", (query) =>
-                query.eq("authUserId", authUserId),
-            )
-            .unique();
-        const run = await ctx.db.get(args.runId);
-        if (
-            visitor?.status !== "active" ||
-            run?.ownerVisitorId !== visitor._id
-        ) {
-            throw new Error("Unauthorized");
-        }
+        const { visitor, run } = await requireWorkspaceRun(ctx, args.runId);
         const requestKey = args.requestKey.trim();
         if (requestKey.length === 0 || requestKey.length > 128) {
             throw new Error("Invalid request key");
@@ -247,23 +230,7 @@ export const retryClaimGeneration = mutation({
         executionGeneration: v.number(),
     }),
     handler: async (ctx, args) => {
-        const authUserId = await getAuthUserId(ctx);
-        if (!authUserId) {
-            throw new Error("Not authenticated");
-        }
-        const visitor = await ctx.db
-            .query("visitors")
-            .withIndex("by_auth_user_id", (query) =>
-                query.eq("authUserId", authUserId),
-            )
-            .unique();
-        const run = await ctx.db.get(args.runId);
-        if (
-            visitor?.status !== "active" ||
-            run?.ownerVisitorId !== visitor._id
-        ) {
-            throw new Error("Unauthorized");
-        }
+        const { visitor, run } = await requireWorkspaceRun(ctx, args.runId);
 
         // Run must be at the exact unavailable pause tuple
         if (
@@ -459,23 +426,7 @@ export const retryEvidenceExtraction = mutation({
         executionGeneration: v.number(),
     }),
     handler: async (ctx, args) => {
-        const authUserId = await getAuthUserId(ctx);
-        if (!authUserId) {
-            throw new Error("Not authenticated");
-        }
-        const visitor = await ctx.db
-            .query("visitors")
-            .withIndex("by_auth_user_id", (query) =>
-                query.eq("authUserId", authUserId),
-            )
-            .unique();
-        const run = await ctx.db.get(args.runId);
-        if (
-            visitor?.status !== "active" ||
-            run?.ownerVisitorId !== visitor._id
-        ) {
-            throw new Error("Unauthorized");
-        }
+        const { visitor, run } = await requireWorkspaceRun(ctx, args.runId);
         if (
             run.lifecycleState !== "extracting_evidence" ||
             run.executionStatus !== "failed"

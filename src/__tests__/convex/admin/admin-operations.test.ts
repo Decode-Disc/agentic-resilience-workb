@@ -136,6 +136,7 @@ test("reads the 50 latest events within a fixed document budget as history grows
             .unique();
         if (!visitor) throw new Error("Missing administrator fixture");
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             executionGeneration: 1,
             lifecycleState: "draft",
             executionStatus: "idle",
@@ -181,8 +182,27 @@ test("reads the 50 latest events within a fixed document budget as history grows
         errorCode: "exa_not_configured",
     });
     expect(result.reservations).toHaveLength(2);
-    expect(result.runs).toEqual([]);
-    expect(result.restorableRuns).toEqual([]);
+    const admin = t.withIdentity({ subject: `${adminUserId}|admin-ops` });
+    expect(
+        (
+            await admin.query(api.adminOperations.listRunsPage, {
+                purpose: "research",
+                paginationOpts: { numItems: 20, cursor: null },
+            })
+        ).page,
+    ).toEqual([
+        expect.objectContaining({
+            purpose: "research",
+            lifecycleState: "draft",
+        }),
+    ]);
+    expect(
+        (
+            await admin.query(api.adminOperations.listRestorableRunsPage, {
+                paginationOpts: { numItems: 20, cursor: null },
+            })
+        ).page,
+    ).toEqual([]);
 });
 
 test("requires an authenticated active administrator to read operational history", async () => {
@@ -262,7 +282,14 @@ test("admin can inspect preparation configuration and dispatch evidence without 
     const operations = await t
         .withIdentity({ subject: adminUserId })
         .query(getOperations, {});
-    expect(operations.runs.find((run) => run.runId === runId)).toMatchObject({
+    await t.run((ctx) => ctx.db.patch(runId, { purpose: "research" }));
+    const runs = await t
+        .withIdentity({ subject: adminUserId })
+        .query(api.adminOperations.listRunsPage, {
+            purpose: "research",
+            paginationOpts: { numItems: 20, cursor: null },
+        });
+    expect(runs.page.find((run) => run.runId === runId)).toMatchObject({
         preparation: {
             configurationCheck: { available: false },
             failures: [{ sourceId, reasonCode: "transport_unavailable" }],

@@ -590,6 +590,7 @@ test("another running dossier prevents preparation and unauthorized calls write 
     ).rejects.toThrow("Not authenticated");
     await t.run((ctx) =>
         ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             coveragePreset: "balanced",
             lifecycleState: "discovering_sources",
@@ -831,6 +832,7 @@ test.each([
         await waitingReview();
     const busyId = await t.run((ctx) =>
         ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             lifecycleState: "discovering_sources",
             executionStatus: "running",
@@ -1090,6 +1092,7 @@ test("several new links retained during another dossier are all read on continua
         await waitingReview();
     const busyId = await t.run((ctx) =>
         ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             lifecycleState: "discovering_sources",
             executionStatus: "running",

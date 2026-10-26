@@ -15,7 +15,7 @@ import { lookup } from "node:dns/promises";
 import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
 import workflowTest from "../workflows/workflow-test-register.js";
 
@@ -46,6 +46,10 @@ const inspectSourceReviewScenario = makeFunctionReference<
     }
 >("e2eFixtures:inspectSourceReviewScenario");
 
+beforeEach(() => {
+    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
+});
+
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
@@ -62,7 +66,7 @@ async function createAdmittedVisitor(t: ReturnType<typeof convexTest>) {
     return t.run(async (ctx) => {
         const userId = await ctx.db.insert("users", { isAnonymous: true });
         const invitationId = await ctx.db.insert("invitations", {
-            slotKey: "e2e-analyst",
+            slotKey: "analyst-4",
             role: "analyst",
             codeDigest: "e2e-digest",
             status: "claimed",
@@ -80,6 +84,14 @@ async function createAdmittedVisitor(t: ReturnType<typeof convexTest>) {
             claimedByVisitorId: visitorId,
             claimedAt: 1,
         });
+        await ctx.db.insert("browserTestContexts", {
+            ownerVisitorId: visitorId,
+            authUserId: userId,
+            contextKey: "source-review-unit",
+            status: "active",
+            expiresAt: Date.now() + 2 * 60 * 60 * 1000,
+            createdAt: Date.now(),
+        });
         return { visitorId, userId };
     });
 }
@@ -94,13 +106,13 @@ test("the sixty-source review fixture is bounded, idempotent, local and owned", 
     const seeded = await t.action(
         internal.e2eFixtures.seedInspectedSourceReviewScenario,
         {
-            slotKey: "e2e-analyst",
+            slotKey: "analyst-4",
             fixtureKey: "performance-projection",
             comparisonOutcome: "no_conflict_observed",
         },
     );
     const args = {
-        slotKey: "e2e-analyst",
+        slotKey: "analyst-4",
         fixtureKey: "performance-projection",
         runId: seeded.runId,
     };
@@ -151,7 +163,7 @@ test("seeds a historical explanation gap for explicit draft refresh without prov
     workflowTest.register(t);
     const { userId } = await createAdmittedVisitor(t);
     const seeded = await t.mutation(seedSourceReviewScenario, {
-        slotKey: "e2e-analyst",
+        slotKey: "analyst-4",
         fixtureKey: "legacy-explanation",
         legacySelectionReasons: true,
     });
@@ -196,7 +208,7 @@ test("keeps the retrieval fixture compact while preserving evidence beyond the i
     workflowTest.register(t);
     await createAdmittedVisitor(t);
     const runId = await t.action(internal.retrievalEvaluation.seedReview, {
-        slotKey: "e2e-analyst",
+        slotKey: "analyst-4",
         fixtureKey: "retrieval-review-compact",
     });
     const saved = await t.run(async (ctx) => {
@@ -291,7 +303,7 @@ test("recognizes retained late evidence by candidate order rather than document 
     workflowTest.register(t);
     const { visitorId } = await createAdmittedVisitor(t);
     const seeded = await t.mutation(seedSourceReviewScenario, {
-        slotKey: "e2e-analyst",
+        slotKey: "analyst-4",
         fixtureKey: "retrieval-review-ordinal-inspection",
     });
     const quotation = "The author argues that operational context matters.";
@@ -371,7 +383,7 @@ test("seeds an explicitly illustrative inspected source for the admitted owner's
     const seeded = await t.action(
         internal.e2eFixtures.seedInspectedSourceReviewScenario,
         {
-            slotKey: "e2e-analyst",
+            slotKey: "analyst-4",
             fixtureKey: "illustrative-reading",
         },
     );
@@ -393,7 +405,7 @@ test("seeds an explicitly illustrative inspected source for the admitted owner's
     });
     expect(
         await t.action(internal.e2eFixtures.seedInspectedSourceReviewScenario, {
-            slotKey: "e2e-analyst",
+            slotKey: "analyst-4",
             fixtureKey: "illustrative-reading",
         }),
     ).toEqual(seeded);
@@ -418,14 +430,14 @@ test("rejects source review fixtures unless E2E mode is enabled", async () => {
     await createAdmittedVisitor(t);
 
     const seeded = await t.mutation(seedSourceReviewScenario, {
-        slotKey: "e2e-analyst",
+        slotKey: "analyst-4",
         fixtureKey: "disabled",
     });
     delete process.env.E2E_FIXTURES_ENABLED;
 
     await expect(
         t.mutation(seedSourceReviewScenario, {
-            slotKey: "e2e-analyst",
+            slotKey: "analyst-4",
             fixtureKey: "disabled",
         }),
     ).rejects.toThrow("E2E fixtures are disabled");
@@ -451,7 +463,7 @@ test.each([
     workflowTest.register(t);
     const { userId } = await createAdmittedVisitor(t);
     const input = {
-        slotKey: "e2e-analyst",
+        slotKey: "analyst-4",
         fixtureKey: `illustrative-comparison-${comparisonOutcome}`,
         comparisonOutcome,
     };
@@ -547,7 +559,7 @@ test("source approval starts real extraction with explicit fixture failures and 
     rateLimiterTest.register(t);
     const { userId } = await createAdmittedVisitor(t);
     const seeded = await t.mutation(seedSourceReviewScenario, {
-        slotKey: "e2e-analyst",
+        slotKey: "analyst-4",
         fixtureKey: "automatic-evidence-continuation",
     });
     await t.finishAllScheduledFunctions(vi.runAllTimers);
@@ -613,6 +625,7 @@ test("seeds an owned source review checkpoint through production projections", a
         });
         for (let index = 0; index < 101; index += 1) {
             await ctx.db.insert("researchRuns", {
+                purpose: "research",
                 ownerVisitorId: visitorId,
                 reservationKey: `e2e:noise-${index}`,
                 reservationStatus: "consumed",
@@ -636,7 +649,7 @@ test("seeds an owned source review checkpoint through production projections", a
     });
 
     const seeded = await t.mutation(seedSourceReviewScenario, {
-        slotKey: "e2e-analyst",
+        slotKey: "analyst-4",
         fixtureKey: "source-review-reactivity",
     });
 
@@ -662,7 +675,8 @@ test("seeds an owned source review checkpoint through production projections", a
 
     expect(snapshot.run).toMatchObject({
         ownerVisitorId: visitorId,
-        reservationKey: "e2e:source-review-reactivity",
+        purpose: "browser_test",
+        reservationKey: `e2e:${snapshot.run?.browserTestContextId}:source-review-reactivity`,
         lifecycleState: "awaiting_source_review",
         executionStatus: "paused",
         pauseReason: "source_review",
@@ -720,7 +734,7 @@ test("source recovery fixture exercises capacity and reactive coverage without p
     const { userId } = await createAdmittedVisitor(t);
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const seeded = await t.mutation(seedSourceReviewScenario, {
-        slotKey: "e2e-analyst",
+        slotKey: "analyst-4",
         fixtureKey: "recovery-capacity",
         recoveryScenario: true,
     });
@@ -776,7 +790,7 @@ test("approving an illustrative inspected corpus materializes the same captured 
     const seeded = await t.action(
         internal.e2eFixtures.seedInspectedSourceReviewScenario,
         {
-            slotKey: "e2e-analyst",
+            slotKey: "analyst-4",
             fixtureKey: "inspected-approval-materialization",
         },
     );
@@ -873,7 +887,7 @@ test("seeds distinct recorded companies and supplied sources without replacing t
     workflowTest.register(t);
     const { userId } = await createAdmittedVisitor(t);
     const seeded = await t.mutation(seedSourceReviewScenario, {
-        slotKey: "e2e-analyst",
+        slotKey: "analyst-4",
         fixtureKey: "recorded-terms",
         recordedScenario: {
             companyName: "Adobe — recorded review",
@@ -1003,7 +1017,7 @@ test.each([
         responseJson: JSON.stringify(response),
     };
     const args = {
-        slotKey: "e2e-analyst",
+        slotKey: "analyst-4",
         fixtureKey: "recorded-identity",
         company,
         websiteUrl: "https://www.adobe.com/",
@@ -1078,7 +1092,7 @@ test.each([
     workflowTest.register(t);
     const { userId } = await createAdmittedVisitor(t);
     const seeded = await t.mutation(seedSourceReviewScenario, {
-        slotKey: "e2e-analyst",
+        slotKey: "analyst-4",
         fixtureKey: "ordering-policy-refresh",
     });
     const sourceId = seeded.sourceIds[0];
@@ -1148,9 +1162,9 @@ test("local progress fixtures advance real review projections without providers 
     const fixtureKey = "live-progress";
     const seeded = await t.action(
         internal.e2eFixtures.seedInspectedSourceReviewScenario,
-        { slotKey: "e2e-analyst", fixtureKey },
+        { slotKey: "analyst-4", fixtureKey },
     );
-    const args = { runId: seeded.runId, fixtureKey, slotKey: "e2e-analyst" };
+    const args = { runId: seeded.runId, fixtureKey, slotKey: "analyst-4" };
     const before = await t.query(
         internal.e2eFixtures.inspectSourceReviewScenario,
         { runId: seeded.runId, fixtureKey },
@@ -1232,13 +1246,13 @@ test("recovery fixtures retain the inspected capture and require an owned local 
     const fixtureKey = "bounded-recovery";
     const seeded = await t.action(
         internal.e2eFixtures.seedInspectedSourceReviewScenario,
-        { slotKey: "e2e-analyst", fixtureKey },
+        { slotKey: "analyst-4", fixtureKey },
     );
     const before = await t.query(
         internal.e2eFixtures.inspectSourceReviewScenario,
         { runId: seeded.runId, fixtureKey },
     );
-    const args = { runId: seeded.runId, fixtureKey, slotKey: "e2e-analyst" };
+    const args = { runId: seeded.runId, fixtureKey, slotKey: "analyst-4" };
     const staged = await t.mutation(
         internal.e2eFixtures.stageSourcePreparationRecoveryFixture,
         args,

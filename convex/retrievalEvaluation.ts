@@ -77,11 +77,16 @@ export const seed = internalMutation({
                     .eq("reservationKey", reservationKey),
             )
             .unique();
-        if (existing?.sourcePreparationId)
+        if (existing?.sourcePreparationId) {
+            if (existing.purpose && existing.purpose !== "evaluation")
+                throw new Error(
+                    "Evaluation reservation belongs to another purpose",
+                );
             return {
                 runId: existing._id,
                 preparationId: existing.sourcePreparationId,
             };
+        }
         if (
             await ctx.db
                 .query("researchRuns")
@@ -107,6 +112,7 @@ export const seed = internalMutation({
             company = await ctx.db.get(id);
         }
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "evaluation",
             ownerVisitorId: visitor._id,
             companyId: company?._id,
             reservationKey,

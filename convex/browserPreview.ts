@@ -58,6 +58,13 @@ export const renderPreview = action({
             return { status: "ok", base64: cached.dataUrl };
         }
 
+        if (
+            !(await ctx.runQuery(internal.runWorkspace.authorizeProvider, {
+                runId: args.runId,
+            }))
+        )
+            return { status: "unavailable", error: "test_data" };
+
         // Rate-limit only the expensive render path: max 2 renders per
         // (visitor, run, source) in a 30s window.
         const rateLimitKey = `preview:${visitorId}:${args.runId}:${args.sourceId}`;

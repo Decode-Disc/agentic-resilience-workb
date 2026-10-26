@@ -1,3 +1,4 @@
+import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
@@ -10,9 +11,6 @@ const getMine = makeFunctionReference<
     { runId: Id<"researchRuns"> },
     unknown
 >("researchRuns:getMine");
-const listMine = makeFunctionReference<"query", Record<string, never>, unknown>(
-    "researchRuns:listMine",
-);
 
 test("projects only the current visitor runs with canonical company data", async () => {
     const t = convexTest(schema, modules);
@@ -59,6 +57,7 @@ test("projects only the current visitor runs with canonical company data", async
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             companySnapshot: {
@@ -79,6 +78,7 @@ test("projects only the current visitor runs with canonical company data", async
             updatedAt: 2,
         });
         await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: otherVisitorId,
             companyId,
             reservationKey: "other",
@@ -108,7 +108,14 @@ test("projects only the current visitor runs with canonical company data", async
         lifecycleState: "awaiting_source_review",
         executionStatus: "paused",
     });
-    await expect(analyst.query(listMine, {})).resolves.toEqual([
-        expect.objectContaining({ runId: fixture.runId }),
-    ]);
+    const visitor = await analyst.query(api.visitors.current, {});
+    if (!visitor?.workspace) throw new Error("Expected admitted workspace");
+    await expect(
+        analyst.query(api.researchRuns.listMine, {
+            workspaceKey: visitor.workspace.key,
+            paginationOpts: { numItems: 12, cursor: null },
+        }),
+    ).resolves.toMatchObject({
+        page: [expect.objectContaining({ runId: fixture.runId })],
+    });
 });

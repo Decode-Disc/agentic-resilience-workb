@@ -34,6 +34,7 @@ async function seedApprovedSource(
             analysesReserved: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             lifecycleState: "extracting_evidence",
             executionStatus: "running",

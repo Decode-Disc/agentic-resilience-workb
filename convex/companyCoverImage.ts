@@ -40,6 +40,9 @@ export const renderCompanyPreview = action({
             return { status: "unavailable", error: "unauthorized" };
         }
 
+        if (!(await ctx.runQuery(internal.runWorkspace.authorizeProvider, {})))
+            return { status: "unavailable", error: "test_data" };
+
         const validatedUrl = validateCoverImageUrl(args.url);
         if (!validatedUrl) {
             return { status: "unavailable", error: "invalid_url" };

@@ -2,10 +2,11 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { expect, type Page } from "@playwright/test";
+import { expect, type Page, type Request } from "@playwright/test";
 import type { internal } from "@convex/_generated/api";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 
+import { BROWSER_TEST_SLOT, bindBrowserTestContext } from "./browser-workspace";
 import { runConvexJson } from "./convex-cli";
 
 type InvitationMaterial = {
@@ -36,7 +37,7 @@ const invitation = (() => {
         ),
     ) as InvitationMaterial;
     const analystInvitation = material.invitations.find(
-        ({ slotKey }) => slotKey === "analyst-1",
+        ({ slotKey }) => slotKey === BROWSER_TEST_SLOT,
     );
     if (!analystInvitation) {
         throw new Error("Local analyst invitation is not configured");
@@ -44,11 +45,19 @@ const invitation = (() => {
     return analystInvitation;
 })();
 
+const externalImageFixtureRequests = new WeakSet<Request>();
+
+/** Identifies exact requests fulfilled by this fixture, without allowing a host's real network traffic. */
+export function isExternalImageFixtureRequest(request: Request) {
+    return externalImageFixtureRequests.has(request);
+}
+
 /** Uses deterministic external image fixtures before real local authentication and admission. */
 export async function admitAnalyst(page: Page): Promise<void> {
     // Dossier URL metadata stays inside the test browser instead of reaching the image proxy.
-    await page.route("https://api.poly.io/og**", (route) =>
-        route.fulfill({
+    await page.route("https://api.poly.io/og**", (route) => {
+        externalImageFixtureRequests.add(route.request());
+        return route.fulfill({
             headers: { "access-control-allow-origin": "*" },
             json: {
                 ok: true,
@@ -56,14 +65,15 @@ export async function admitAnalyst(page: Page): Promise<void> {
                 imageUrl:
                     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E",
             },
-        }),
-    );
-    await page.route("https://www.google.com/s2/favicons**", (route) =>
-        route.fulfill({
+        });
+    });
+    await page.route("https://www.google.com/s2/favicons**", (route) => {
+        externalImageFixtureRequests.add(route.request());
+        return route.fulfill({
             contentType: "image/svg+xml",
             body: '<svg xmlns="http://www.w3.org/2000/svg"/>',
-        }),
-    );
+        });
+    });
     await page.goto("/workspace/dossiers");
     // Cold-auth bootstrap: the workspace shell can paint before the access-code
     // admission surface is interactive. Wait for the input to be visible before
@@ -76,6 +86,7 @@ export async function admitAnalyst(page: Page): Promise<void> {
     await expect(
         page.getByRole("dialog", { name: "Protected access" }),
     ).toBeHidden();
+    bindBrowserTestContext(page);
     await expect(
         page.getByRole("heading", { name: "Dossiers", exact: true }),
     ).toBeVisible({ timeout: 30_000 });

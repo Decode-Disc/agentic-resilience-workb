@@ -40,9 +40,22 @@ import {
     sourceCandidateLimit,
     sourcePreparationEnabled,
 } from "./resourceLimits";
+import {
+    BROWSER_TEST_SLOT,
+    requireBrowserFixtureContext,
+    requireBrowserTestOwner,
+} from "./runWorkspace";
 import schema from "./schema";
 import { createSourceSelectionProposal } from "./sourceSelectionProposals";
 import { corpusRevisionApproved, workflow } from "./workflow";
+
+/** Context-scoped identity prevents another browser session from adopting a prior fixture. */
+function fixtureReservationKey(
+    fixtureKey: string,
+    contextId?: Id<"browserTestContexts">,
+) {
+    return `e2e:${contextId ? `${contextId}:` : ""}${fixtureKey}`;
+}
 
 const sourceReviewFixtureResultValidator = v.object({
     runId: v.id("researchRuns"),
@@ -92,7 +105,7 @@ export const completeSourceReviewScenario = internalMutation({
             !fixtureRun?.reservationKey?.startsWith("e2e:") ||
             !(
                 fixtureRun.companySnapshot?.cik.startsWith("e2e-") ||
-                (fixtureRun.reservationKey.startsWith("e2e:utility-") &&
+                (fixtureRun.reservationKey.includes(":utility-") &&
                     fixtureRun.companySnapshot?.legalName.endsWith(
                         "· Recorded review",
                     ))
@@ -218,7 +231,14 @@ export const seedSourceReviewScenario = internalMutation({
         ) {
             throw new Error("Active E2E visitor not found");
         }
-        const reservationKey = `e2e:${fixtureKey}`;
+        const browserTestContextId = await requireBrowserFixtureContext(
+            ctx,
+            visitor,
+        );
+        const reservationKey = fixtureReservationKey(
+            fixtureKey,
+            browserTestContextId,
+        );
         const existingRun = await ctx.db
             .query("researchRuns")
             .withIndex("by_owner_and_reservation_key", (query) =>
@@ -228,6 +248,13 @@ export const seedSourceReviewScenario = internalMutation({
             )
             .unique();
         if (existingRun?.activeCorpusRevisionId) {
+            if (
+                existingRun.purpose !== "browser_test" ||
+                existingRun.browserTestContextId !== browserTestContextId
+            )
+                throw new Error(
+                    "Fixture belongs to another browser test context",
+                );
             const revision = await ctx.db.get(
                 existingRun.activeCorpusRevisionId,
             );
@@ -314,6 +341,8 @@ export const seedSourceReviewScenario = internalMutation({
                 canonicalizedAt: now,
             }));
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "browser_test",
+            browserTestContextId,
             ownerVisitorId: visitor._id,
             reservationKey,
             reservationStatus: "consumed",
@@ -507,8 +536,11 @@ export const inspectSourceReviewScenario = internalQuery({
         if (env.E2E_FIXTURES_ENABLED !== "true") {
             throw new Error("E2E fixtures are disabled");
         }
-        const reservationKey = `e2e:${args.fixtureKey.trim()}`;
         const run = await ctx.db.get(args.runId);
+        const reservationKey = fixtureReservationKey(
+            args.fixtureKey.trim(),
+            run?.browserTestContextId,
+        );
         if (
             !run?.activeCorpusRevisionId ||
             run.reservationKey !== reservationKey
@@ -700,6 +732,7 @@ async function findSeededRun(
     visitorId: Id<"visitors">,
     fixtureKey: string,
     scenarioKind: "showcase" | "unavailable",
+    contextId: Id<"browserTestContexts">,
 ): Promise<{
     runId: Id<"researchRuns">;
     sourceIds: Array<Id<"sources">>;
@@ -708,7 +741,10 @@ async function findSeededRun(
 } | null> {
     const oppositeKind =
         scenarioKind === "showcase" ? "unavailable" : "showcase";
-    const oppositeReservationKey = `e2e:${fixtureKey}:${oppositeKind}`;
+    const oppositeReservationKey = fixtureReservationKey(
+        `${fixtureKey}:${oppositeKind}`,
+        contextId,
+    );
     const oppositeRun = await ctx.db
         .query("researchRuns")
         .withIndex("by_owner_and_reservation_key", (query) =>
@@ -723,7 +759,10 @@ async function findSeededRun(
         );
     }
 
-    const sameReservationKey = `e2e:${fixtureKey}:${scenarioKind}`;
+    const sameReservationKey = fixtureReservationKey(
+        `${fixtureKey}:${scenarioKind}`,
+        contextId,
+    );
     const existing = await ctx.db
         .query("researchRuns")
         .withIndex("by_owner_and_reservation_key", (query) =>
@@ -1414,7 +1453,11 @@ export const scaleSourceReviewFixture = internalMutation({
             !run ||
             !revision ||
             !preparation ||
-            run.reservationKey !== `e2e:${args.fixtureKey}` ||
+            run.reservationKey !==
+                fixtureReservationKey(
+                    args.fixtureKey,
+                    run.browserTestContextId,
+                ) ||
             run.companySnapshot?.cik !== `e2e-${args.fixtureKey}` ||
             invitation?.status !== "claimed" ||
             !invitation.claimedByVisitorId ||
@@ -1645,6 +1688,10 @@ export const commitEvidenceMatrixSeed = internalMutation({
             throw new Error("Active E2E visitor not found");
         }
 
+        const browserTestContextId = await requireBrowserFixtureContext(
+            ctx,
+            visitor,
+        );
         // Idempotent replay: same slot + fixture key returns the existing run
         // and never duplicates runs, artifacts, claims, events, or workflows.
         const seededRun = await findSeededRun(
@@ -1652,8 +1699,17 @@ export const commitEvidenceMatrixSeed = internalMutation({
             visitor._id,
             fixtureKey,
             args.scenarioKind,
+            browserTestContextId,
         );
         if (seededRun) {
+            const stored = await ctx.db.get(seededRun.runId);
+            if (
+                stored?.purpose !== "browser_test" ||
+                stored.browserTestContextId !== browserTestContextId
+            )
+                throw new Error(
+                    "Fixture belongs to another browser test context",
+                );
             return {
                 runId: seededRun.runId,
                 corpusRevisionId: (await ctx.db.get(seededRun.runId))
@@ -1666,7 +1722,10 @@ export const commitEvidenceMatrixSeed = internalMutation({
         }
 
         const now = Date.now();
-        const reservationKey = `e2e:${fixtureKey}:${args.scenarioKind}`;
+        const reservationKey = fixtureReservationKey(
+            `${fixtureKey}:${args.scenarioKind}`,
+            browserTestContextId,
+        );
         const companyId = await ctx.db.insert("companies", {
             cik: `e2e-${fixtureKey}`,
             legalName: "CCC Intelligent Solutions Holdings Inc.",
@@ -1676,6 +1735,8 @@ export const commitEvidenceMatrixSeed = internalMutation({
             canonicalizedAt: now,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "browser_test",
+            browserTestContextId,
             ownerVisitorId: visitor._id,
             reservationKey,
             reservationStatus: "consumed",
@@ -1958,9 +2019,15 @@ export const inspectEvidenceMatrixScenario = internalQuery({
             throw new Error("E2E fixtures are disabled");
         }
         const fixtureKey = args.fixtureKey.trim();
-        const expectedShowcaseKey = `e2e:${fixtureKey}:showcase`;
-        const expectedUnavailableKey = `e2e:${fixtureKey}:unavailable`;
         const run = await ctx.db.get(args.runId);
+        const expectedShowcaseKey = fixtureReservationKey(
+            `${fixtureKey}:showcase`,
+            run?.browserTestContextId,
+        );
+        const expectedUnavailableKey = fixtureReservationKey(
+            `${fixtureKey}:unavailable`,
+            run?.browserTestContextId,
+        );
         if (
             !run?.activeCorpusRevisionId ||
             (run.reservationKey !== expectedShowcaseKey &&
@@ -2416,7 +2483,11 @@ export const inspectRecordedSourceReview = internalQuery({
         const run = await ctx.db.get(args.runId);
         if (
             !run?.activeCorpusRevisionId ||
-            run.reservationKey !== `e2e:${args.fixtureKey}` ||
+            run.reservationKey !==
+                fixtureReservationKey(
+                    args.fixtureKey,
+                    run.browserTestContextId,
+                ) ||
             !run.companySnapshot?.legalName.endsWith("· Recorded review")
         )
             throw new Error("Recorded fixture not found");
@@ -2484,7 +2555,11 @@ export const stageSourcePreparationRecoveryFixture = internalMutation({
             : null;
         if (
             !run ||
-            run.reservationKey !== `e2e:${args.fixtureKey.trim()}` ||
+            run.reservationKey !==
+                fixtureReservationKey(
+                    args.fixtureKey.trim(),
+                    run.browserTestContextId,
+                ) ||
             invitation?.status !== "claimed" ||
             invitation.claimedByVisitorId !== run.ownerVisitorId ||
             revision?.status !== "draft" ||
@@ -2612,7 +2687,11 @@ export const advanceSourcePreparationFixture = internalMutation({
             : null;
         if (
             !run ||
-            run.reservationKey !== `e2e:${args.fixtureKey.trim()}` ||
+            run.reservationKey !==
+                fixtureReservationKey(
+                    args.fixtureKey.trim(),
+                    run.browserTestContextId,
+                ) ||
             invitation?.status !== "claimed" ||
             invitation.claimedByVisitorId !== run.ownerVisitorId ||
             visitor?.status !== "active" ||
@@ -2750,5 +2829,80 @@ export const advanceSourcePreparationFixture = internalMutation({
                 phase: "proposal",
             });
         return true;
+    },
+});
+
+/** Supplies pagination data on a fresh deployment without starting work or reserving research. */
+export const seedAdministrationPaginationScenario = internalMutation({
+    args: { fixtureKey: v.string() },
+    returns: v.object({
+        evaluationRunIds: v.array(v.id("researchRuns")),
+        browserRunIds: v.array(v.id("researchRuns")),
+    }),
+    handler: async (ctx, args) => {
+        const visitor = await requireBrowserTestOwner(ctx, BROWSER_TEST_SLOT);
+        const contextId = await requireBrowserFixtureContext(ctx, visitor);
+        const key = args.fixtureKey.trim();
+        if (!/^[a-zA-Z0-9._:-]{1,80}$/.test(key))
+            throw new Error("Invalid pagination fixture key");
+        const result: {
+            evaluationRunIds: Array<Id<"researchRuns">>;
+            browserRunIds: Array<Id<"researchRuns">>;
+        } = { evaluationRunIds: [], browserRunIds: [] };
+        const now = Date.now();
+        for (const purpose of ["evaluation", "browser_test"] as const) {
+            const ids =
+                purpose === "evaluation"
+                    ? result.evaluationRunIds
+                    : result.browserRunIds;
+            for (
+                let index = 0;
+                index < (purpose === "evaluation" ? 40 : 20);
+                index++
+            ) {
+                const reservationKey = fixtureReservationKey(
+                    `${key}:${purpose}:${index}`,
+                    contextId,
+                );
+                const existing = await ctx.db
+                    .query("researchRuns")
+                    .withIndex("by_owner_and_reservation_key", (q) =>
+                        q
+                            .eq("ownerVisitorId", visitor._id)
+                            .eq("reservationKey", reservationKey),
+                    )
+                    .unique();
+                if (existing) {
+                    if (
+                        existing.purpose !== purpose ||
+                        existing.browserTestContextId !== contextId
+                    )
+                        throw new Error("Pagination fixture identity mismatch");
+                    ids.push(existing._id);
+                    continue;
+                }
+                ids.push(
+                    await ctx.db.insert("researchRuns", {
+                        purpose,
+                        browserTestContextId: contextId,
+                        ownerVisitorId: visitor._id,
+                        reservationKey,
+                        companySnapshot: {
+                            cik: `e2e-pagination-${index}`,
+                            legalName: `Pagination fixture ${purpose} ${index + 1} · Not live`,
+                            ticker: "TEST",
+                            exchange: "TEST",
+                        },
+                        lifecycleState: "draft",
+                        executionStatus: "idle",
+                        executionGeneration: 0,
+                        nextEventSequence: 0,
+                        createdAt: now,
+                        updatedAt: now,
+                    }),
+                );
+            }
+        }
+        return result;
     },
 });

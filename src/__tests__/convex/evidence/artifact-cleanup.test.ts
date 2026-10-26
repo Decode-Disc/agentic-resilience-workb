@@ -110,6 +110,7 @@ test("expired unreferenced storage is deleted; referenced object is kept", async
     const referencedId = await t.run(async (ctx) => {
         const now = Date.now();
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             lifecycleState: "corpus_approved",
             executionStatus: "idle",
             executionGeneration: 1,

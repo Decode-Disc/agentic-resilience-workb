@@ -3,8 +3,8 @@ import "@convex/evidenceActions";
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import {
-    LOCATOR_VERSION,
     extractPassagesFromNormalizedText,
+    LOCATOR_VERSION,
     reproducePassage,
     sha256Hex,
 } from "@convex/domain/sourcePassages";
@@ -142,6 +142,7 @@ async function createSecApprovedCorpusScenario(
         });
 
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             coveragePreset: "balanced",

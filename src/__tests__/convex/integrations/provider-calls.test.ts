@@ -124,6 +124,7 @@ test("separates runs and retry attempts", async () => {
     const [runA, runB] = await t.run(async (ctx) =>
         Promise.all([
             ctx.db.insert("researchRuns", {
+                purpose: "research",
                 lifecycleState: "discovering_sources",
                 executionStatus: "running",
                 executionGeneration: 1,
@@ -132,6 +133,7 @@ test("separates runs and retry attempts", async () => {
                 updatedAt: 1,
             }),
             ctx.db.insert("researchRuns", {
+                purpose: "research",
                 lifecycleState: "discovering_sources",
                 executionStatus: "running",
                 executionGeneration: 1,
@@ -182,6 +184,7 @@ test("refuses a new provider lease after execution cancellation", async () => {
     const t = convexTest(schema, modules);
     const runId = await t.run((ctx) =>
         ctx.db.insert("researchRuns", {
+            purpose: "research",
             lifecycleState: "discovering_sources",
             executionStatus: "cancelled",
             executionGeneration: 2,
@@ -394,6 +397,7 @@ test("H1: recordAttempt atomically enforces execution fence for extracting_evide
             canonicalizedAt: 100,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             coveragePreset: "balanced",
@@ -527,6 +531,7 @@ test("Task5: recordAttempt runs execution fence BEFORE paidWorkControls check an
             canonicalizedAt: 100,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             coveragePreset: "balanced",
@@ -710,6 +715,7 @@ test("Task5: recordAttempt prevents expired-lease reclaim on unauthorized or rev
             canonicalizedAt: 100,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             coveragePreset: "balanced",
@@ -872,6 +878,7 @@ test("Task5 defect 1: terminal telemetry unchanged after run cancellation", asyn
             canonicalizedAt: 100,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             coveragePreset: "balanced",
@@ -1018,6 +1025,7 @@ test("Task5 defect 1: terminal telemetry unchanged after decision revocation", a
             canonicalizedAt: 100,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             coveragePreset: "balanced",

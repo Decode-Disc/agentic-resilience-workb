@@ -10,6 +10,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { BROWSER_TEST_SLOT } from "./browser-workspace";
 import { runConvexJson } from "./convex-cli";
 
 export type EvidenceMatrixScenarioKind = "showcase" | "unavailable";
@@ -47,7 +48,7 @@ type InvitationMaterial = {
     }>;
 };
 
-/** The analyst-1 invitation used by the existing admission helper. */
+/** The analyst-4 invitation used by the existing admission helper. */
 const analystSlot = (() => {
     const material = JSON.parse(
         readFileSync(
@@ -56,7 +57,7 @@ const analystSlot = (() => {
         ),
     ) as InvitationMaterial;
     const analystInvitation = material.invitations.find(
-        ({ slotKey }) => slotKey === "analyst-1",
+        ({ slotKey }) => slotKey === BROWSER_TEST_SLOT,
     );
     if (!analystInvitation) {
         throw new Error("Local analyst invitation is not configured");
@@ -93,7 +94,7 @@ export function inspectEvidenceMatrix(
 }
 
 /**
- * Reads the reusable analyst-1 access code from the shared local material.
+ * Reads the reusable analyst-4 access code from the shared local material.
  * Admission through the real UI drawer is the only use; tests never print it.
  */
 export function analystAccessCode(): string {

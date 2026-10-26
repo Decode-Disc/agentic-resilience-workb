@@ -1,6 +1,11 @@
+import { test } from "./support/browser-workspace";
 import { readFileSync, writeFileSync } from "node:fs";
 import type { internal } from "@convex/_generated/api";
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
+import {
+    recordedUtilityScenarios,
+    seedRecordedUtilityScenario,
+} from "./support/recorded-utility-fixture";
 import type { FunctionReturnType } from "convex/server";
 import { runConvexJson } from "./support/convex-cli";
 import {
@@ -11,26 +16,7 @@ import {
 type Snapshot = FunctionReturnType<
     typeof internal.e2eFixtures.inspectRecordedSourceReview
 >;
-type Seed = FunctionReturnType<
-    typeof internal.e2eFixtures.seedRecordedSourceReview
-> & {
-    id: string;
-    kind: string;
-    companyId: string;
-    companyName: string;
-    fixtureKey: string;
-    mobile: boolean;
-    viewport: "desktop" | "mobile";
-    suppliedDocumentId: string | null;
-    snapshot: Snapshot;
-};
-const scenarios = JSON.parse(
-    readFileSync(
-        process.env.UTILITY_SEEDED_FILE ??
-            "/tmp/source-utility-20261021/isolated-previews/seeded.json",
-        "utf8",
-    ),
-) as Seed[];
+const scenarios = recordedUtilityScenarios();
 const study = JSON.parse(
     readFileSync(
         "scripts/evaluations/source-selection/fixtures/cross-company-20261020/study.json",
@@ -40,9 +26,9 @@ const study = JSON.parse(
 const thumbnail =
     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'/%3E";
 
-for (const scenario of scenarios) {
-    const mobile = scenario.viewport === "mobile";
-    test(`${scenario.id} ${mobile ? "mobile" : "desktop"}: inspect, adjust, approve and reconnect`, async ({
+for (const definition of scenarios) {
+    const mobile = definition.viewport === "mobile";
+    test(`${definition.id} ${mobile ? "mobile" : "desktop"}: inspect, adjust, approve and reconnect`, async ({
         page,
     }, info) => {
         await page.setViewportSize(
@@ -66,8 +52,12 @@ for (const scenario of scenarios) {
             }),
         );
         await admitAnalyst(page);
+        const scenario = seedRecordedUtilityScenario(definition, info);
         const start = Date.now();
         await page.goto(`/workspace/${scenario.runId}?section=sources`);
+        await expect(
+            page.getByRole("heading", { name: "Proposed corpus", exact: true }),
+        ).toBeVisible();
         await expect(
             page.getByRole("heading", {
                 name: scenario.companyName,
@@ -90,6 +80,11 @@ for (const scenario of scenarios) {
             })
             .click();
         await expect(page).toHaveURL(/[?&]view=inspect(?:&|$)/);
+        const inspection = page.getByRole("region", {
+            name: "Inspect all source candidates",
+            exact: true,
+        });
+        await expect(inspection).toBeVisible();
         const selectedDocId =
             scenario.suppliedDocumentId ??
             `${scenario.companyId}-${scenario.kind === "uncertain" ? "analysis" : scenario.kind === "targeted" ? "integration" : "quarterly"}`;
@@ -102,20 +97,26 @@ for (const scenario of scenarios) {
         );
         if (!source || task?.output.kind !== "source_qualification")
             throw new Error("Recorded reading missing");
-        await page
+        await inspection
             .getByRole("region", { name: "Source set 1", exact: true })
             .getByRole("button", {
                 name: `Open ${source.title} for review`,
                 exact: true,
             })
             .click();
+        const sourceReader = mobile
+            ? page.getByRole("dialog", { name: "Source detail", exact: true })
+            : inspection;
         await expect(
-            page.getByRole("heading", { name: source.title, exact: true }),
+            sourceReader.getByRole("heading", {
+                name: source.title,
+                exact: true,
+            }),
         ).toBeVisible();
-        await page
+        await sourceReader
             .getByRole("tab", { name: "Source details", exact: true })
             .click();
-        const reading = page.getByRole("region", {
+        const reading = sourceReader.getByRole("region", {
             name: "Source reading",
             exact: true,
         });
@@ -137,18 +138,26 @@ for (const scenario of scenarios) {
                     )
                   : 0;
         expect(findingIndex).toBeGreaterThanOrEqual(0);
-        const summary = reading.locator("details summary").nth(findingIndex);
-        await summary.click();
+        const finding = reading.locator("details").nth(findingIndex);
+        if ((await finding.getAttribute("open")) === null)
+            await finding.locator("summary").click();
+        await expect(finding.locator("blockquote").first()).toBeVisible();
         const quotation =
             task.output.qualification.findings[findingIndex]?.passages[0]
                 ?.quotation;
         if (!quotation) throw new Error("No recorded passage");
         await expect(reading).toContainText(quotation);
         await expect(
-            page.getByRole("tabpanel", { name: "Preview", exact: true }),
+            sourceReader.getByRole("tabpanel", {
+                name: "Preview",
+                exact: true,
+            }),
         ).toHaveCount(0);
         await expect(
-            page.getByRole("tab", { name: "Source details", exact: true }),
+            sourceReader.getByRole("tab", {
+                name: "Source details",
+                exact: true,
+            }),
         ).toHaveAttribute("aria-selected", "true");
         await page.screenshot({
             path: info.outputPath("reading.png"),
@@ -163,13 +172,6 @@ for (const scenario of scenarios) {
         );
         if (!excludedSource) throw new Error("Missing excluded-source control");
         await page
-            .getByRole("region", { name: "Source set 1", exact: true })
-            .getByRole("button", {
-                name: `Reject ${excludedSource.title} as rejected`,
-                exact: true,
-            })
-            .click();
-        await page
             .getByRole("button", { name: "Back to proposal", exact: true })
             .click();
         let current = runConvexJson<Snapshot>(
@@ -183,6 +185,17 @@ for (const scenario of scenarios) {
         if (mobile) await actions.click();
         await page
             .getByRole("button", { name: "Adjust proposal", exact: true })
+            .click();
+        const includeExcluded = page.getByRole("button", {
+            name: `Include ${excludedSource.title}`,
+            exact: true,
+        });
+        await includeExcluded.click();
+        await page
+            .getByRole("button", {
+                name: `Remove ${excludedSource.title} from proposal`,
+                exact: true,
+            })
             .click();
         const remove = page.getByRole("button", {
             name: `Remove ${source.title} from proposal`,
@@ -200,7 +213,7 @@ for (const scenario of scenarios) {
             .getByRole("button", { name: "Back to proposal", exact: true })
             .click();
         const approve = page.getByRole("button", {
-            name: "Approve source set",
+            name: "Approve proposed corpus",
             exact: true,
         });
         await expect(approve).toBeEnabled();
@@ -241,28 +254,28 @@ for (const scenario of scenarios) {
             decisions.decisions.find((d) => d.title === excludedSource.title)
                 ?.decision,
         ).toBe("rejected");
-        const geometry = await page
-            .getByRole("alert")
-            .filter({ hasText: "Source coverage needs review" })
-            .evaluateAll((nodes) =>
-                nodes.map((node) => ({
-                    width: node.getBoundingClientRect().width,
-                    right: node.getBoundingClientRect().right,
-                    scrollWidth: node.scrollWidth,
-                    clientWidth: node.clientWidth,
-                    children: [
-                        ...node.querySelectorAll(
-                            "[data-slot=alert-description], li",
-                        ),
-                    ].map((child) => ({
+        const coverage = page.getByRole("complementary", {
+            name: "Source coverage",
+            exact: true,
+        });
+        await expect(coverage).toBeVisible();
+        const geometry = await coverage.evaluateAll((nodes) =>
+            nodes.map((node) => ({
+                width: node.getBoundingClientRect().width,
+                right: node.getBoundingClientRect().right,
+                scrollWidth: node.scrollWidth,
+                clientWidth: node.clientWidth,
+                children: [...node.querySelectorAll("header p, li")].map(
+                    (child) => ({
                         text: child.textContent?.slice(0, 100),
                         width: child.getBoundingClientRect().width,
                         right: child.getBoundingClientRect().right,
                         scrollWidth: child.scrollWidth,
                         clientWidth: child.clientWidth,
-                    })),
-                })),
-            );
+                    }),
+                ),
+            })),
+        );
         writeFileSync(
             info.outputPath("observed-path.json"),
             JSON.stringify(
@@ -292,13 +305,13 @@ for (const scenario of scenarios) {
     });
 }
 
-test("approved mobile coverage remains readable inside its notice", async ({
+test("approved mobile coverage remains readable after expansion", async ({
     page,
 }, info) => {
-    const scenario = scenarios.find(
+    const definition = scenarios.find(
         (s) => s.id === "adobe-overview" && s.viewport === "mobile",
     );
-    if (!scenario) throw new Error("Missing approved mobile scenario");
+    if (!definition) throw new Error("Missing approved mobile scenario");
     await page.setViewportSize({ width: 390, height: 844 });
     await page.route("https://api.poly.io/og**", (r) =>
         r.fulfill({ json: { ok: true, imageOk: true, imageUrl: thumbnail } }),
@@ -310,39 +323,65 @@ test("approved mobile coverage remains readable inside its notice", async ({
         }),
     );
     await admitAnalyst(page);
+    const scenario = seedRecordedUtilityScenario(definition, info);
     await page.goto(`/workspace/${scenario.runId}?section=sources`);
+    await expect(
+        page.getByRole("heading", { name: "Proposed corpus", exact: true }),
+    ).toBeVisible();
+    await page
+        .getByRole("button", { name: "Approve proposed corpus", exact: true })
+        .click();
     await expect(
         page.getByText("Corpus approved", { exact: true }),
     ).toBeVisible();
-    const notice = page
-        .getByRole("alert")
-        .filter({ hasText: "Source coverage needs review" });
-    await expect(notice).toBeVisible();
-    await expect
-        .poll(() =>
-            notice.evaluate(
-                (node) => getComputedStyle(node.parentElement ?? node).opacity,
-            ),
-        )
-        .toBe("1");
+    const coverage = page.getByRole("complementary", {
+        name: "Source coverage",
+        exact: true,
+    });
+    await expect(coverage).toBeVisible();
+    const toggle = coverage.getByRole("button", {
+        name: "Coverage",
+        exact: true,
+    });
+    await toggle.focus();
+    await page.keyboard.press("Enter");
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const requirement = coverage.getByRole("button", {
+        name: "Review coverage: Annual regulatory report",
+        exact: true,
+    });
+    await requirement.click();
+    await expect(requirement).toHaveAttribute("aria-expanded", "true");
     await page.screenshot({
         path: info.outputPath("coverage.png"),
         fullPage: false,
     });
-    const sizes = await notice.evaluate((node) => ({
+    const sizes = await coverage.evaluate((node) => ({
         client: node.clientWidth,
         scroll: node.scrollWidth,
+        right: node.getBoundingClientRect().right,
+        children: [...node.querySelectorAll("p, button")]
+            .filter((child) => child.getBoundingClientRect().width > 0)
+            .map((child) => ({
+                right: child.getBoundingClientRect().right,
+                client: child.clientWidth,
+                scroll: child.scrollWidth,
+            })),
     }));
     expect(sizes.scroll).toBeLessThanOrEqual(sizes.client);
+    for (const child of sizes.children) {
+        expect(child.right).toBeLessThanOrEqual(sizes.right);
+        expect(child.scroll).toBeLessThanOrEqual(child.client);
+    }
 });
 
 test("approved recorded source reading remains open after selection", async ({
     page,
 }, info) => {
-    const scenario = scenarios.find(
+    const definition = scenarios.find(
         (s) => s.id === "snowflake-architecture" && s.viewport === "desktop",
     );
-    if (!scenario) throw new Error("Missing recorded architecture scenario");
+    if (!definition) throw new Error("Missing recorded architecture scenario");
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.route("https://api.poly.io/og**", (r) =>
         r.fulfill({ json: { ok: true, imageOk: true, imageUrl: thumbnail } }),
@@ -354,15 +393,36 @@ test("approved recorded source reading remains open after selection", async ({
         }),
     );
     await admitAnalyst(page);
+    const scenario = seedRecordedUtilityScenario(definition, info);
     await page.goto(`/workspace/${scenario.runId}?section=sources`);
-    await page
-        .getByRole("button", { name: "Inspect all candidates", exact: true })
-        .click();
+    await expect(
+        page.getByRole("heading", { name: "Proposed corpus", exact: true }),
+    ).toBeVisible();
     const doc = study.documents.find((d) => d.id === "snowflake-integration");
     const source = scenario.snapshot.sources.find(
         (s) => s.canonicalUrl === doc?.url,
     );
     if (!source) throw new Error("Missing recorded integration source");
+    await page
+        .getByRole("button", { name: "Adjust proposal", exact: true })
+        .click();
+    const include = page.getByRole("button", {
+        name: `Include ${source.title}`,
+        exact: true,
+    });
+    if (await include.count()) await include.click();
+    await page
+        .getByRole("button", { name: "Back to proposal", exact: true })
+        .click();
+    await page
+        .getByRole("button", { name: "Approve proposed corpus", exact: true })
+        .click();
+    await expect(
+        page.getByText("Corpus approved", { exact: true }),
+    ).toBeVisible();
+    await page
+        .getByRole("button", { name: "Inspect all candidates", exact: true })
+        .click();
     await page
         .getByRole("region", { name: "Source set 1", exact: true })
         .getByRole("button", {
@@ -383,7 +443,9 @@ test("approved recorded source reading remains open after selection", async ({
         name: "Source reading",
         exact: true,
     });
-    await reading.locator("details summary").first().click();
+    const firstFinding = reading.locator("details").first();
+    if ((await firstFinding.getAttribute("open")) === null)
+        await firstFinding.locator("summary").click();
     await expect(reading.locator("blockquote").first()).toBeVisible();
     await page.screenshot({
         path: info.outputPath("reading-settled.png"),

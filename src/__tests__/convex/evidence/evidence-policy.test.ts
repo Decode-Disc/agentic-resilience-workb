@@ -137,6 +137,7 @@ async function createPolicyScenario(
         });
 
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             coveragePreset: "balanced",

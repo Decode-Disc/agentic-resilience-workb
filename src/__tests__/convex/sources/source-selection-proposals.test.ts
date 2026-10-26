@@ -104,6 +104,7 @@ test("persists one versioned source-selection proposal after discovery", async (
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             companyId,
             coveragePreset: "balanced",
             researchAngle: "workflow migration",
@@ -219,6 +220,7 @@ test("uses current company website metadata when a legacy run snapshot is stale"
             canonicalizedAt: 2,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             companyId,
             companySnapshot: {
                 cik: "1373715",
@@ -304,6 +306,7 @@ test("marks and refreshes a proposal after current company website enrichment", 
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             companySnapshot: {
@@ -445,6 +448,7 @@ test("rejects proposal generation for a stale execution generation", async () =>
     const t = convexTest(schema, modules);
     const runId = await t.run(async (ctx) =>
         ctx.db.insert("researchRuns", {
+            purpose: "research",
             coveragePreset: "balanced",
             lifecycleState: "discovering_sources",
             executionStatus: "running",
@@ -486,6 +490,7 @@ test("returns no current proposal for an authorized legacy approved revision", a
             admittedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             coveragePreset: "balanced",
             lifecycleState: "corpus_approved",
@@ -547,6 +552,7 @@ test("creates a missing proposal for an authorized legacy draft idempotently", a
             admittedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             coveragePreset: "balanced",
             lifecycleState: "awaiting_source_review",
@@ -633,6 +639,7 @@ test("hydrates legacy proposal items without automatic role metadata", async () 
             admittedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             coveragePreset: "balanced",
             lifecycleState: "awaiting_source_review",
@@ -762,6 +769,7 @@ test("projects recommendation pages and adjustment sets through analyst decision
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             coveragePreset: "balanced",
@@ -936,6 +944,7 @@ test("backfills a missing draft proposal idempotently without touching approved 
             admittedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             coveragePreset: "balanced",
             lifecycleState: "awaiting_source_review",
             executionStatus: "paused",
@@ -1018,6 +1027,7 @@ test("creates a new draft revision and reopens the source checkpoint", async () 
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             coveragePreset: "balanced",
@@ -1106,6 +1116,7 @@ test("rejects starting a new revision when the current corpus is not approved", 
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             coveragePreset: "balanced",
@@ -1170,6 +1181,7 @@ test("rejects an unauthorized visitor", async () => {
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: ownerVisitorId,
             companyId,
             coveragePreset: "balanced",

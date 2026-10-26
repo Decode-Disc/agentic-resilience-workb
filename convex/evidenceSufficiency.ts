@@ -1,10 +1,9 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { v } from "convex/values";
-
 import { internalMutation, mutation } from "./_generated/server";
 import { evaluatePublicEvidenceAvailability } from "./domain/evidenceAvailabilityPolicy";
 import { claimPausedRunExecution } from "./domain/executionClaim";
+import { requireWorkspaceRun } from "./runWorkspace";
 import { evidenceSufficiencyDecided, workflow } from "./workflow";
 
 const evaluationResultValidator = v.object({
@@ -150,23 +149,7 @@ export const decide = mutation({
     },
     returns: v.object({ accepted: v.boolean() }),
     handler: async (ctx, args) => {
-        const authUserId = await getAuthUserId(ctx);
-        if (!authUserId) {
-            throw new Error("Not authenticated");
-        }
-        const visitor = await ctx.db
-            .query("visitors")
-            .withIndex("by_auth_user_id", (query) =>
-                query.eq("authUserId", authUserId),
-            )
-            .unique();
-        const run = await ctx.db.get(args.runId);
-        if (
-            visitor?.status !== "active" ||
-            run?.ownerVisitorId !== visitor._id
-        ) {
-            throw new Error("Unauthorized");
-        }
+        const { visitor, run } = await requireWorkspaceRun(ctx, args.runId);
         if (
             !run.workflowId ||
             run.lifecycleState !== "awaiting_evidence_sufficiency_review" ||

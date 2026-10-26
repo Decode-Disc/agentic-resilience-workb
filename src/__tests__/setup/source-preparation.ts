@@ -10,13 +10,21 @@ import {
 } from "@convex/domain/sourceQualification";
 import { upsertSourceReviewItem } from "@convex/domain/sourceReviewProjection";
 import schema from "@convex/schema";
+import { defineSchema } from "convex/server";
 import { convexTest } from "convex-test";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 
 /** Creates owned public candidates without corpus approval or analytical artifacts. */
-export async function seedSourcePreparation() {
-    const t = convexTest(schema, modules);
+export async function seedSourcePreparation(
+    options: { legacyRunPurposes?: boolean } = {},
+) {
+    const t = convexTest(
+        options.legacyRunPurposes
+            ? defineSchema(schema.tables, { schemaValidation: false })
+            : schema,
+        modules,
+    );
     const fixture = await t.run(async (ctx) => {
         const userId = await ctx.db.insert("users", { isAnonymous: true });
         const invitationId = await ctx.db.insert("invitations", {
@@ -44,6 +52,7 @@ export async function seedSourcePreparation() {
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             coveragePreset: "balanced",

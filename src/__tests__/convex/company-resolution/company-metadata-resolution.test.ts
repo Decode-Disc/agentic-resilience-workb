@@ -72,6 +72,7 @@ async function seedRun(lifecycleState: "draft" | "discovering_sources") {
             canonicalizedAt: 2,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             companyId,
             companySnapshot: staleSnapshot,
             coveragePreset: "balanced",

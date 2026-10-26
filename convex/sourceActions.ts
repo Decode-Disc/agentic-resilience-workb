@@ -765,6 +765,15 @@ export const submitManualUrl = action({
             );
         }
         try {
+            if (
+                !(await ctx.runQuery(
+                    internal.runWorkspace.authorizeProvider,
+                    {},
+                ))
+            )
+                throw new ConvexError(
+                    manualSourceIntakeError("not_authorized").data,
+                );
             return await submitManualUrlWithInspector(
                 ctx,
                 authUserId,

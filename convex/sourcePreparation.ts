@@ -83,6 +83,7 @@ import {
     readPinnedSourceQualification,
 } from "./domain/sourceUsage";
 import { companySnapshotValidator } from "./domain/validators";
+import { requireWorkspaceRun } from "./runWorkspace";
 import schema from "./schema";
 import { createSourceSelectionProposal } from "./sourceSelectionProposals";
 import { workflow } from "./workflow";
@@ -424,6 +425,7 @@ export const startForReview = mutation({
         retryAt: v.optional(v.number()),
     }),
     handler: async (ctx, args) => {
+        await requireWorkspaceRun(ctx, args.runId);
         const authUserId = await getAuthUserId(ctx);
         if (!authUserId) throw new Error("Not authenticated");
         const visitor = await ctx.db

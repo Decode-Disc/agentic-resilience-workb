@@ -29,6 +29,8 @@ export const restoreQuota = mutation({
         if (!run?.ownerVisitorId || !run.reservationStatus) {
             throw new Error("Reserved research run not found");
         }
+        if (run.purpose !== "research")
+            throw new Error("Only research reservations can be restored");
         if (run.reservationStatus === "restored") {
             return { restored: false };
         }

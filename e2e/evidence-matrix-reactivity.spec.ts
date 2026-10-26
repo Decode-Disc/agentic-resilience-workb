@@ -1,7 +1,8 @@
+import { test, bindBrowserTestContext } from "./support/browser-workspace";
 // Deterministic protected browser gate for the Phase 5 evidence matrix.
 //
 // Drives the real local Convex + Vite stack on 127.0.0.1 through anonymous
-// auth and a normal analyst-1 invitation admission. Server state is polled
+// auth and a reserved analyst-4 invitation admission. Server state is polled
 // through the internal e2eFixtures:inspectEvidenceMatrixScenario query and
 // then verified reactively in the browser; there are no fixed sleeps, no
 // client timers, no localStorage injection, and no --identity impersonation.
@@ -11,9 +12,9 @@
 // external host is intercepted below and its requests are aborted so no real
 // socket opens and no fake response content is ever injected; the attempted
 // host stays recorded. Every other non-127.0.0.1/localhost host fails the test.
-import { expect, test, type Page, type Request } from "@playwright/test";
+import { expect, type Page, type Request } from "@playwright/test";
 
-import { admitAnalyst } from "./support/source-review-fixture";
+import { admitAnalyst, isExternalImageFixtureRequest } from "./support/source-review-fixture";
 import {
     startSanitizedTrace,
     stopSanitizedTrace,
@@ -40,7 +41,7 @@ const EXHIBIT_PASSAGES = {
 
 type EvidenceGate = {
     issues: Array<string>;
-    hosts: Set<string>;
+    requests: Array<Request>;
     /** Exact Request objects this gate chose to abort. */
     abortedRequests: WeakSet<Request>;
     initiatedAbortCount: number;
@@ -58,7 +59,7 @@ function fixtureKey(name: string): string {
 // the shared FaviconAvatar (source: src/components/favicon-avatar.tsx). All
 // requests to that host are aborted, so no external socket opens and no fake
 // image response is injected; the attempted host remains explicitly recorded
-// in the gate below. Any other external host fails the test.
+// in the gate below. Any other real external request fails; exact image requests fulfilled by the shared fixture are verified separately.
 const ALLOWED_EXTERNAL_HOST = "www.google.com";
 
 // Chromium logs one resource-load failure console error per network request
@@ -68,7 +69,7 @@ const ABORTED_RESOURCE_FAILURE = "Failed to load resource: net::ERR_FAILED";
 function attachEvidenceGate(page: Page): EvidenceGate {
     const gate: EvidenceGate = {
         issues: [],
-        hosts: new Set<string>(),
+        requests: [],
         abortedRequests: new WeakSet<Request>(),
         initiatedAbortCount: 0,
         matchedAbortFailureCount: 0,
@@ -85,15 +86,7 @@ function attachEvidenceGate(page: Page): EvidenceGate {
         await route.abort();
     });
 
-    page.on("request", (request) => {
-        try {
-            // Compare hostnames only: URL.host includes the port (:3000/:3210),
-            // which would make exact 127.0.0.1/localhost matching fail.
-            gate.hosts.add(new URL(request.url()).hostname);
-        } catch {
-            gate.hosts.add("unparseable");
-        }
-    });
+    page.on("request", request => gate.requests.push(request));
     // Only the exact aborted baseline Requests may fail. Every other request
     // failure becomes an explicit issue instead of being swallowed by the
     // generic console allowance.
@@ -102,7 +95,7 @@ function attachEvidenceGate(page: Page): EvidenceGate {
             gate.matchedAbortFailureCount += 1;
             return;
         }
-        gate.issues.push(`requestfailed: ${request.url()}`);
+        gate.issues.push(`requestfailed: ${request.url()} (${request.failure()?.errorText ?? "unknown"})`);
     });
     page.on("pageerror", (error) => {
         gate.issues.push(`pageerror: ${String(error)}`);
@@ -138,12 +131,11 @@ function assertCleanEvidenceGate(gate: EvidenceGate) {
     expect(gate.genericResourceFailureCount).toBeLessThanOrEqual(
         gate.matchedAbortFailureCount,
     );
-    const unexpected = [...gate.hosts].filter(
-        (host) =>
-            host !== "127.0.0.1" &&
-            host !== "localhost" &&
-            host !== ALLOWED_EXTERNAL_HOST,
-    );
+    const unexpected = gate.requests.filter(request => {
+        if (isExternalImageFixtureRequest(request)) return false;
+        const host = new URL(request.url()).hostname;
+        return host !== "127.0.0.1" && host !== "localhost" && host !== ALLOWED_EXTERNAL_HOST;
+    }).map(request => new URL(request.url()).hostname);
     expect(unexpected).toEqual([]);
 }
 
@@ -486,6 +478,7 @@ test.describe("evidence matrix deterministic browser gate", () => {
         await expect(page.getByLabel("Access code")).not.toBeVisible({
             timeout: 20_000,
         });
+        bindBrowserTestContext(page);
         await page.goto(`/workspace/${runId}?section=evidence`);
         await expect(page.getByText("Evidence is ready for review")).toBeVisible();
         // Only after the recovered dossier document is fully loaded and its

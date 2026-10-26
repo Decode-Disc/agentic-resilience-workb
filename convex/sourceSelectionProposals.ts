@@ -66,6 +66,7 @@ import {
     sourcePreparationEnabled,
     sourceRecommendedTarget,
 } from "./resourceLimits";
+import { requireWorkspaceRun } from "./runWorkspace";
 import schema from "./schema";
 import { corpusRevisionApproved, workflow } from "./workflow";
 
@@ -353,25 +354,9 @@ async function authorizeProposalContext(
     run: Doc<"researchRuns">;
     revision: Doc<"corpusRevisions">;
 }> {
-    const authUserId = await getAuthUserId(ctx);
-    if (!authUserId) {
-        throw new Error("Not authenticated");
-    }
-    const visitor = await ctx.db
-        .query("visitors")
-        .withIndex("by_auth_user_id", (query) =>
-            query.eq("authUserId", authUserId),
-        )
-        .unique();
-    const run = await ctx.db.get(args.runId);
+    const { run } = await requireWorkspaceRun(ctx, args.runId);
     const revision = await ctx.db.get(args.corpusRevisionId);
-    if (
-        visitor?.status !== "active" ||
-        run?.ownerVisitorId !== visitor._id ||
-        revision?.runId !== run._id
-    ) {
-        throw new Error("Unauthorized");
-    }
+    if (revision?.runId !== run._id) throw new Error("Unauthorized");
     return { run, revision };
 }
 
@@ -1503,6 +1488,7 @@ export const recompute = mutation({
         status: v.union(v.literal("ready"), v.literal("failed")),
     }),
     handler: async (ctx, args) => {
+        await requireWorkspaceRun(ctx, args.runId);
         const authUserId = await getAuthUserId(ctx);
         if (!authUserId) {
             throw new Error("Not authenticated");
@@ -2139,6 +2125,7 @@ export const approveProposedCorpus = mutation({
     },
     returns: v.object({ accepted: v.boolean() }),
     handler: async (ctx, args) => {
+        await requireWorkspaceRun(ctx, args.runId);
         const authUserId = await getAuthUserId(ctx);
         if (!authUserId) {
             throw new Error("Not authenticated");
@@ -2346,6 +2333,7 @@ export const startNewCorpusRevision = mutation({
         proposalId: v.id("sourceSelectionProposals"),
     }),
     handler: async (ctx, args) => {
+        await requireWorkspaceRun(ctx, args.runId);
         const authUserId = await getAuthUserId(ctx);
         if (!authUserId) {
             throw new Error("Not authenticated");

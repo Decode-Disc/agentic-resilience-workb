@@ -1,9 +1,9 @@
 import type { Id } from "@convex/_generated/dataModel";
-import schema from "@convex/schema";
 import type {
     ExecutionStatus,
     ResearchRunLifecycle,
 } from "@convex/domain/transitions";
+import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
@@ -58,6 +58,7 @@ async function createDiscoveringRun(t: ReturnType<typeof convexTest>) {
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             companyId,
             coveragePreset: "balanced",
             lifecycleState: "discovering_sources",
@@ -114,6 +115,7 @@ test("generates exact research-angle prompt and defensible dimension mapping", a
     );
     const runId = await t.run(async (ctx) =>
         ctx.db.insert("researchRuns", {
+            purpose: "research",
             companyId,
             coveragePreset: "balanced",
             researchAngle: "agentic revenue orchestration",

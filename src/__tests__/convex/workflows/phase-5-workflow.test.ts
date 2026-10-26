@@ -112,6 +112,7 @@ async function createScenarioWithPlan(
             canonicalizedAt: 100,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             coveragePreset: "balanced",

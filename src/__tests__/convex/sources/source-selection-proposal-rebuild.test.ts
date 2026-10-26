@@ -1,6 +1,6 @@
 import "@convex/sourceSelectionProposalActions";
-import type { Id } from "@convex/_generated/dataModel";
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import { SOURCE_SELECTION_POLICY_VERSION } from "@convex/domain/sourceSelectionPolicy";
 import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
@@ -128,6 +128,7 @@ async function seedDraft() {
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             coveragePreset: "balanced",

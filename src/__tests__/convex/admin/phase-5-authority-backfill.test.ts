@@ -1,5 +1,5 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { internal } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import {
     extractPassagesFromNormalizedText,
     sha256Hex,
@@ -76,6 +76,7 @@ async function seedApprovedPlanWithoutQuestions(
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             companyId,
             coveragePreset: "balanced",
             researchAngle: "agentic revenue",

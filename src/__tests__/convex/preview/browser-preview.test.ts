@@ -1,5 +1,5 @@
-import schema from "@convex/schema";
 import { api } from "@convex/_generated/api";
+import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -56,6 +56,7 @@ async function seedVisitorAndRun(t: TestCtx) {
             canonicalizedAt: Date.now(),
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             executionGeneration: 1,
@@ -94,6 +95,7 @@ describe("browserPreviewInternals", () => {
     it.each([
         "visitor",
         "invitation",
+        "evaluation",
     ] as const)("denies cached and rendered previews after %s revocation", async (revoked) => {
         const t = convexTest(schema, modules);
         rateLimiterTest.register(t);
@@ -108,7 +110,9 @@ describe("browserPreviewInternals", () => {
         await t.run((ctx) =>
             revoked === "visitor"
                 ? ctx.db.patch(fixture.visitorId, { status: "revoked" })
-                : ctx.db.patch(fixture.invitationId, { status: "revoked" }),
+                : revoked === "invitation"
+                  ? ctx.db.patch(fixture.invitationId, { status: "revoked" })
+                  : ctx.db.patch(fixture.runId, { purpose: "evaluation" }),
         );
         const fetch = vi.fn();
         vi.stubGlobal("fetch", fetch);
@@ -233,6 +237,7 @@ describe("browserPreviewInternals", () => {
                     canonicalizedAt: Date.now(),
                 });
                 return await ctx.db.insert("researchRuns", {
+                    purpose: "research",
                     ownerVisitorId: visitorId,
                     companyId: c,
                     executionGeneration: 1,

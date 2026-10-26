@@ -5,16 +5,23 @@ import {
     paginationResultValidator,
 } from "convex/server";
 import { v } from "convex/values";
-
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { mutation, query } from "./_generated/server";
+import {
+    env,
+    internalMutation,
+    internalQuery,
+    mutation,
+    query,
+} from "./_generated/server";
 import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
 import {
     ASSESSMENT_DIMENSION_KEYS,
     buildResearchPlanQuestions,
 } from "./domain/researchPlan";
+import { classifyRunPurpose, runPurposeValidator } from "./domain/runPurpose";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
 import { sourceDossierCandidateLimit } from "./resourceLimits";
+import { BROWSER_TEST_SLOT } from "./runWorkspace";
 import schema from "./schema";
 import { createSourceSelectionProposal } from "./sourceSelectionProposals";
 import { workflow } from "./workflow";
@@ -23,6 +30,36 @@ const RECENT_EVENT_LIMIT = 50;
 const runFields = schema.tables.researchRuns.validator.fields;
 const checkpointFields = schema.tables.checkpointDecisions.validator.fields;
 const providerCallFields = schema.tables.providerCalls.validator.fields;
+
+const runOverviewValidator = v.object({
+    runId: v.id("researchRuns"),
+    purpose: runPurposeValidator,
+    ownerVisitorId: runFields.ownerVisitorId,
+    lifecycleState: runFields.lifecycleState,
+    executionStatus: runFields.executionStatus,
+    pauseReason: runFields.pauseReason,
+    updatedAt: runFields.updatedAt,
+    preparation: v.optional(
+        v.object({
+            preparationId: v.id("sourceSelectionProposalRebuilds"),
+            status: schema.tables.sourceSelectionProposalRebuilds.validator
+                .fields.status,
+            stopCode:
+                schema.tables.sourceSelectionProposalRebuilds.validator.fields
+                    .stopCode,
+            configurationCheck:
+                schema.tables.sourceSelectionProposalRebuilds.validator.fields
+                    .configurationCheck,
+            deadlineAt: v.optional(v.number()),
+            failures: v.array(
+                v.object({
+                    sourceId: v.id("sources"),
+                    reasonCode: v.string(),
+                }),
+            ),
+        }),
+    ),
+});
 
 async function requireAdmin(ctx: QueryCtx | MutationCtx) {
     const authUserId = await getAuthUserId(ctx);
@@ -49,35 +86,6 @@ export const get = query({
             reason: v.optional(v.string()),
             updatedAt: v.optional(v.number()),
         }),
-        runs: v.array(
-            v.object({
-                runId: v.id("researchRuns"),
-                lifecycleState: runFields.lifecycleState,
-                executionStatus: runFields.executionStatus,
-                pauseReason: runFields.pauseReason,
-                updatedAt: runFields.updatedAt,
-                preparation: v.optional(
-                    v.object({
-                        preparationId: v.id("sourceSelectionProposalRebuilds"),
-                        status: schema.tables.sourceSelectionProposalRebuilds
-                            .validator.fields.status,
-                        stopCode:
-                            schema.tables.sourceSelectionProposalRebuilds
-                                .validator.fields.stopCode,
-                        configurationCheck:
-                            schema.tables.sourceSelectionProposalRebuilds
-                                .validator.fields.configurationCheck,
-                        deadlineAt: v.optional(v.number()),
-                        failures: v.array(
-                            v.object({
-                                sourceId: v.id("sources"),
-                                reasonCode: v.string(),
-                            }),
-                        ),
-                    }),
-                ),
-            }),
-        ),
         checkpoints: v.array(
             v.object({
                 runId: checkpointFields.runId,
@@ -112,21 +120,15 @@ export const get = query({
                 visitorId: v.id("visitors"),
                 role: schema.tables.visitors.validator.fields.role,
                 remaining: v.number(),
-            }),
-        ),
-        restorableRuns: v.array(
-            v.object({
-                runId: v.id("researchRuns"),
-                ownerVisitorId: runFields.ownerVisitorId,
-                createdAt: runFields.createdAt,
+                slotKey: v.string(),
+                reservedForTesting: v.boolean(),
             }),
         ),
     }),
     handler: async (ctx) => {
         await requireAdmin(ctx);
-        const [runs, checkpoints, providerCalls, visitors, paidWork] =
+        const [checkpoints, providerCalls, visitors, paidWork] =
             await Promise.all([
-                ctx.db.query("researchRuns").collect(),
                 ctx.db
                     .query("checkpointDecisions")
                     .withIndex("by_occurred_at")
@@ -151,54 +153,6 @@ export const get = query({
                 reason: paidWork?.reason,
                 updatedAt: paidWork?.updatedAt,
             },
-            runs: await Promise.all(
-                runs
-                    .filter(({ executionStatus }) =>
-                        ["running", "paused", "failed"].includes(
-                            executionStatus,
-                        ),
-                    )
-                    .sort((left, right) => right.updatedAt - left.updatedAt)
-                    .map(async (run) => {
-                        const preparation = run.sourcePreparationId
-                            ? await ctx.db.get(run.sourcePreparationId)
-                            : null;
-                        return {
-                            runId: run._id,
-                            lifecycleState: run.lifecycleState,
-                            executionStatus: run.executionStatus,
-                            pauseReason: run.pauseReason,
-                            updatedAt: run.updatedAt,
-                            preparation:
-                                preparation?.kind === "preparation"
-                                    ? {
-                                          preparationId: preparation._id,
-                                          status: preparation.status,
-                                          stopCode: preparation.stopCode,
-                                          configurationCheck:
-                                              preparation.configurationCheck,
-                                          deadlineAt: preparation.deadlineAt,
-                                          failures: (
-                                              preparation.sourceOutcomes ?? []
-                                          ).flatMap((outcome) =>
-                                              outcome.result.status ===
-                                              "unavailable"
-                                                  ? [
-                                                        {
-                                                            sourceId:
-                                                                outcome.sourceId,
-                                                            reasonCode:
-                                                                outcome.result
-                                                                    .reasonCode,
-                                                        },
-                                                    ]
-                                                  : [],
-                                          ),
-                                      }
-                                    : undefined,
-                        };
-                    }),
-            ),
             checkpoints: checkpoints.map((checkpoint) => ({
                 runId: checkpoint.runId,
                 checkpoint: checkpoint.checkpoint,
@@ -223,25 +177,22 @@ export const get = query({
                 recoveryOfProviderCallId: call.recoveryOfProviderCallId,
                 createdAt: call.createdAt,
             })),
-            reservations: visitors.map((visitor) => ({
-                visitorId: visitor._id,
-                role: visitor.role,
-                remaining: Math.max(0, 3 - visitor.analysesReserved),
-            })),
-            restorableRuns: runs
-                .filter(
-                    (run) =>
-                        run.lifecycleState === "draft" &&
-                        run.executionStatus === "idle" &&
-                        run.reservationStatus === "consumed" &&
-                        run.ownerVisitorId !== undefined,
-                )
-                .sort((left, right) => right.createdAt - left.createdAt)
-                .map((run) => ({
-                    runId: run._id,
-                    ownerVisitorId: run.ownerVisitorId,
-                    createdAt: run.createdAt,
-                })),
+            reservations: await Promise.all(
+                visitors.map(async (visitor) => {
+                    const invitation = await ctx.db.get(visitor.invitationId);
+                    const reservedForTesting =
+                        invitation?.slotKey === BROWSER_TEST_SLOT;
+                    return {
+                        visitorId: visitor._id,
+                        role: visitor.role,
+                        slotKey: invitation?.slotKey ?? "Unassigned",
+                        reservedForTesting,
+                        remaining: reservedForTesting
+                            ? 0
+                            : Math.max(0, 3 - visitor.analysesReserved),
+                    };
+                }),
+            ),
         };
     },
 });
@@ -569,5 +520,213 @@ export const backfillPhase5Authority = mutation({
             });
         }
         return { ...revisions, page };
+    },
+});
+
+function assertLocalPurposeMigration() {
+    if (
+        !["127.0.0.1", "localhost"].includes(
+            new URL(env.CONVEX_CLOUD_URL).hostname,
+        )
+    )
+        throw new Error("Run purpose migration requires the local deployment");
+}
+
+/** Read-only preview; ambiguous legacy markers never silently acquire technical authority. */
+export const previewRunPurposes = internalQuery({
+    args: { paginationOpts: paginationOptsValidator },
+    returns: paginationResultValidator(
+        v.object({
+            runId: v.id("researchRuns"),
+            oldPurpose: v.optional(runPurposeValidator),
+            purpose: runPurposeValidator,
+            reason: v.string(),
+            requiresReview: v.boolean(),
+        }),
+    ),
+    handler: async (ctx, args) => {
+        assertLocalPurposeMigration();
+        const page = await ctx.db
+            .query("researchRuns")
+            .paginate(args.paginationOpts);
+        return {
+            ...page,
+            page: page.page.map((run) => {
+                const classified = classifyRunPurpose(run);
+                return {
+                    runId: run._id,
+                    oldPurpose: run.purpose,
+                    purpose: classified.purpose,
+                    reason: classified.reason,
+                    requiresReview: classified.requiresReview ?? false,
+                };
+            }),
+        };
+    },
+});
+
+/** Assigns metadata only, preserving business timestamps, ownership, evidence and accounting. */
+export const migrateRunPurposes = internalMutation({
+    args: { runIds: v.array(v.id("researchRuns")) },
+    returns: v.object({ changed: v.number() }),
+    handler: async (ctx, args) => {
+        assertLocalPurposeMigration();
+        if (
+            args.runIds.length > 50 ||
+            new Set(args.runIds).size !== args.runIds.length
+        )
+            throw new Error("Supply at most fifty distinct runs");
+        let changed = 0;
+        for (const id of args.runIds) {
+            const run = await ctx.db.get(id);
+            if (!run) throw new Error("Research run missing");
+            if (run.purpose) continue;
+            const classified = classifyRunPurpose(run);
+            if (classified.requiresReview)
+                throw new Error(`Run purpose requires review: ${id}`);
+            await ctx.db.patch(id, { purpose: classified.purpose });
+            await ctx.db.insert("auditEvents", {
+                actor: { type: "system" },
+                action: "run_purpose_classified",
+                targetType: "research_run",
+                targetId: id,
+                reason: `run-purpose-v1: ${classified.purpose}; ${classified.reason}`,
+                occurredAt: Date.now(),
+            });
+            changed++;
+        }
+        return { changed };
+    },
+});
+
+async function projectOperationsRun(
+    ctx: QueryCtx,
+    run: import("./_generated/dataModel").Doc<"researchRuns">,
+) {
+    const preparation = run.sourcePreparationId
+        ? await ctx.db.get(run.sourcePreparationId)
+        : null;
+    return {
+        runId: run._id,
+        purpose: run.purpose,
+        ownerVisitorId: run.ownerVisitorId,
+        lifecycleState: run.lifecycleState,
+        executionStatus: run.executionStatus,
+        pauseReason: run.pauseReason,
+        updatedAt: run.updatedAt,
+        preparation:
+            preparation?.kind === "preparation"
+                ? {
+                      preparationId: preparation._id,
+                      status: preparation.status,
+                      stopCode: preparation.stopCode,
+                      configurationCheck: preparation.configurationCheck,
+                      deadlineAt: preparation.deadlineAt,
+                      failures: (preparation.sourceOutcomes ?? []).flatMap(
+                          (outcome) =>
+                              outcome.result.status === "unavailable"
+                                  ? [
+                                        {
+                                            sourceId: outcome.sourceId,
+                                            reasonCode:
+                                                outcome.result.reasonCode,
+                                        },
+                                    ]
+                                  : [],
+                      ),
+                  }
+                : undefined,
+    };
+}
+
+export const listRunsPage = query({
+    args: {
+        purpose: runPurposeValidator,
+        paginationOpts: paginationOptsValidator,
+    },
+    returns: paginationResultValidator(runOverviewValidator),
+    handler: async (ctx, args) => {
+        await requireAdmin(ctx);
+        const result = await ctx.db
+            .query("researchRuns")
+            .withIndex("by_purpose_and_updated_at", (q) =>
+                q.eq("purpose", args.purpose),
+            )
+            .order("desc")
+            .paginate(args.paginationOpts);
+        return {
+            ...result,
+            page: await Promise.all(
+                result.page.map((run) => projectOperationsRun(ctx, run)),
+            ),
+        };
+    },
+});
+
+export const listRestorableRunsPage = query({
+    args: { paginationOpts: paginationOptsValidator },
+    returns: paginationResultValidator(
+        v.object({
+            runId: v.id("researchRuns"),
+            ownerVisitorId: runFields.ownerVisitorId,
+            createdAt: v.number(),
+        }),
+    ),
+    handler: async (ctx, args) => {
+        await requireAdmin(ctx);
+        const result = await ctx.db
+            .query("researchRuns")
+            .withIndex(
+                "by_purpose_lifecycle_execution_reservation_created_at",
+                (q) =>
+                    q
+                        .eq("purpose", "research")
+                        .eq("lifecycleState", "draft")
+                        .eq("executionStatus", "idle")
+                        .eq("reservationStatus", "consumed"),
+            )
+            .order("desc")
+            .paginate(args.paginationOpts);
+        return {
+            ...result,
+            page: result.page.map((run) => ({
+                runId: run._id,
+                ownerVisitorId: run.ownerVisitorId,
+                createdAt: run.createdAt,
+            })),
+        };
+    },
+});
+
+export const inspectRun = query({
+    args: { runId: v.id("researchRuns") },
+    returns: v.object({
+        run: schema.doc("researchRuns"),
+        company: v.union(schema.doc("companies"), v.null()),
+    }),
+    handler: async (ctx, args) => {
+        await requireAdmin(ctx);
+        const run = await ctx.db.get(args.runId);
+        if (!run) throw new Error("Run not found");
+        return {
+            run,
+            company: run.companyId ? await ctx.db.get(run.companyId) : null,
+        };
+    },
+});
+
+export const listRunProviderCallsPage = query({
+    args: {
+        runId: v.id("researchRuns"),
+        paginationOpts: paginationOptsValidator,
+    },
+    returns: paginationResultValidator(schema.doc("providerCalls")),
+    handler: async (ctx, args) => {
+        await requireAdmin(ctx);
+        return ctx.db
+            .query("providerCalls")
+            .withIndex("by_run", (q) => q.eq("runId", args.runId))
+            .order("desc")
+            .paginate(args.paginationOpts);
     },
 });

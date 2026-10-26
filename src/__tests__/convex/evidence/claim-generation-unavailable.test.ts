@@ -2,11 +2,11 @@
 import type { Id } from "@convex/_generated/dataModel";
 import { ASSESSMENT_DIMENSION_KEYS } from "@convex/domain/researchPlan";
 import {
-    clearShowcaseManifests,
     CLAIM_SCHEMA_VERSION,
+    clearShowcaseManifests,
+    registerShowcaseManifest,
     SHOWCASE_ADAPTER_VERSION,
     SHOWCASE_FIXTURE_VERSION,
-    registerShowcaseManifest,
     type ShowcaseClaimOutput,
 } from "@convex/domain/showcaseManifest";
 import { computePassageKey } from "@convex/domain/sourcePassages";
@@ -121,6 +121,7 @@ async function createUnavailablePauseScenario(
         });
 
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             coveragePreset: "balanced",

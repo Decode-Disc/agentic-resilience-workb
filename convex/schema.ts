@@ -14,6 +14,7 @@ import {
     evidenceRelationValidator,
 } from "./domain/claims";
 import { assessmentDimensionKeyValidator } from "./domain/researchPlan";
+import { runPurposeValidator } from "./domain/runPurpose";
 import { showcaseClaimOutputValidator } from "./domain/showcaseManifest";
 import {
     sourceComparisonOutcomesSchema,
@@ -141,7 +142,20 @@ export default defineSchema({
             "ownerAuthUserId",
             "canonicalUrl",
         ]),
+    browserTestContexts: defineTable({
+        ownerVisitorId: v.id("visitors"),
+        authUserId: v.id("users"),
+        contextKey: v.string(),
+        status: v.union(v.literal("active"), v.literal("closed")),
+        expiresAt: v.number(),
+        createdAt: v.number(),
+        closedAt: v.optional(v.number()),
+    })
+        .index("by_owner_and_context_key", ["ownerVisitorId", "contextKey"])
+        .index("by_auth_user_id_and_status", ["authUserId", "status"]),
     researchRuns: defineTable({
+        purpose: runPurposeValidator,
+        browserTestContextId: v.optional(v.id("browserTestContexts")),
         ownerVisitorId: v.optional(v.id("visitors")),
         reservationKey: v.optional(v.string()),
         reservationStatus: v.optional(
@@ -189,6 +203,20 @@ export default defineSchema({
         createdAt: v.number(),
         updatedAt: v.number(),
     })
+        .index("by_owner_and_purpose_and_context_and_updated_at", [
+            "ownerVisitorId",
+            "purpose",
+            "browserTestContextId",
+            "updatedAt",
+        ])
+        .index("by_purpose_and_updated_at", ["purpose", "updatedAt"])
+        .index("by_purpose_lifecycle_execution_reservation_created_at", [
+            "purpose",
+            "lifecycleState",
+            "executionStatus",
+            "reservationStatus",
+            "createdAt",
+        ])
         .index("by_owner_and_reservation_key", [
             "ownerVisitorId",
             "reservationKey",

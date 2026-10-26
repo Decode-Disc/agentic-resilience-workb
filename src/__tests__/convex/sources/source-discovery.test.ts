@@ -56,6 +56,7 @@ test("persists unique candidates with pending decisions", async () => {
     const t = convexTest(schema, modules);
     const { runId, corpusRevisionId } = await t.run(async (ctx) => {
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             lifecycleState: "discovering_sources",
             executionStatus: "running",
             executionGeneration: 1,
@@ -126,6 +127,7 @@ test("rejects candidates from a stale or cancelled generation", async () => {
     const t = convexTest(schema, modules);
     const { runId, corpusRevisionId } = await t.run(async (ctx) => {
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             lifecycleState: "discovering_sources",
             executionStatus: "cancelled",
             executionGeneration: 2,
@@ -169,6 +171,7 @@ test("atomically truncates new discovery candidates to the remaining dossier cap
     const t = convexTest(schema, modules);
     const { runId, corpusRevisionId } = await t.run(async (ctx) => {
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             lifecycleState: "discovering_sources",
             executionStatus: "running",
             executionGeneration: 1,
@@ -241,6 +244,7 @@ test("persists an actionable failure when Exa is not configured", async () => {
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             companyId,
             lifecycleState: "discovering_sources",
             executionStatus: "running",
@@ -300,6 +304,7 @@ test("stops discovery before the next provider call when the dossier is full", a
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             companyId,
             lifecycleState: "discovering_sources",
             executionStatus: "running",
@@ -371,6 +376,7 @@ test("prioritizes material SEC filings over recent ownership and equity forms", 
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             companyId,
             coveragePreset: "balanced",
             lifecycleState: "discovering_sources",
@@ -443,6 +449,7 @@ test("admits relevant specialized SEC forms only for an explicit research angle"
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             companyId,
             coveragePreset: "balanced",
             researchAngle: "governance, executive compensation and ownership",

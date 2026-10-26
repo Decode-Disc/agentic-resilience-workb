@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { test } from "./support/browser-workspace";
+import { expect } from "@playwright/test";
 import type { internal } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { runConvexJson } from "./support/convex-cli";
@@ -88,7 +89,7 @@ test("a scoped qualification conflict preserves independent coverage through des
     const seeded = runConvexJson<
         FunctionReturnType<typeof internal.e2eFixtures.seedRecordedSourceReview>
     >("e2eFixtures:seedRecordedSourceReview", {
-        slotKey: "analyst-1",
+        slotKey: "analyst-4",
         fixtureKey: key,
         company,
         websiteUrl: "https://qualification.example",

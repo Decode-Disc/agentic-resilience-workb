@@ -59,6 +59,7 @@ async function createDiscoveryFixture(t: ReturnType<typeof convexTest>) {
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             companyId,
             lifecycleState: "discovering_sources",
             executionStatus: "running",

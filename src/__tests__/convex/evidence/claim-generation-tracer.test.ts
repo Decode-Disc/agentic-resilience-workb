@@ -7,10 +7,10 @@ import type {
 import { ASSESSMENT_DIMENSION_KEYS } from "@convex/domain/researchPlan";
 import {
     CLAIM_SCHEMA_VERSION,
-    SHOWCASE_ADAPTER_VERSION,
-    SHOWCASE_FIXTURE_VERSION,
     clearShowcaseManifests,
     registerShowcaseManifest,
+    SHOWCASE_ADAPTER_VERSION,
+    SHOWCASE_FIXTURE_VERSION,
 } from "@convex/domain/showcaseManifest";
 import { computePassageKey } from "@convex/domain/sourcePassages";
 import schema from "@convex/schema";
@@ -176,6 +176,7 @@ async function createShowcaseClaimScenario(
         });
 
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             coveragePreset: "balanced",

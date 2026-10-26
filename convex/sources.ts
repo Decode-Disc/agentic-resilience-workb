@@ -4,7 +4,6 @@ import {
     paginationResultValidator,
 } from "convex/server";
 import { ConvexError, v } from "convex/values";
-
 import type { Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import {
@@ -37,6 +36,7 @@ import {
     sourceDossierCandidateLimit,
     sourcePreparationEnabled,
 } from "./resourceLimits";
+import { requireWorkspaceRun } from "./runWorkspace";
 import schema from "./schema";
 import { startReviewPreparation } from "./sourcePreparation";
 import { createSourceSelectionProposal } from "./sourceSelectionProposals";
@@ -180,25 +180,10 @@ export async function authorizeReviewRead(
     },
     denied?: (code: "not_authenticated" | "not_authorized") => Error,
 ) {
-    const authUserId = await getAuthUserId(ctx);
-    if (!authUserId) {
-        throw denied?.("not_authenticated") ?? new Error("Not authenticated");
-    }
-    const visitor = await ctx.db
-        .query("visitors")
-        .withIndex("by_auth_user_id", (builder) =>
-            builder.eq("authUserId", authUserId),
-        )
-        .unique();
-    const run = await ctx.db.get(args.runId);
+    const { run } = await requireWorkspaceRun(ctx, args.runId, denied);
     const revision = await ctx.db.get(args.corpusRevisionId);
-    if (
-        visitor?.status !== "active" ||
-        run?.ownerVisitorId !== visitor._id ||
-        revision?.runId !== run._id
-    ) {
+    if (revision?.runId !== run._id)
         throw denied?.("not_authorized") ?? new Error("Unauthorized");
-    }
     return { run, revision };
 }
 
@@ -448,6 +433,11 @@ export const decide = mutation({
     },
     returns: v.object({ accepted: v.boolean() }),
     handler: async (ctx, args) => {
+        await requireWorkspaceRun(
+            ctx,
+            args.runId,
+            (code) => new ConvexError(manualSourceIntakeError(code).data),
+        );
         const authUserId = await getAuthUserId(ctx);
         if (!authUserId) {
             throw new ConvexError(

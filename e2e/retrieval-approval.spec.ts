@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { test } from "./support/browser-workspace";
+import { expect } from "@playwright/test";
 import type { FunctionReturnType } from "convex/server";
 import type { internal } from "@convex/_generated/api";
 import { runConvexJson } from "./support/convex-cli";
@@ -50,7 +51,7 @@ for (const viewport of [
         await admitAnalyst(page);
         const key = `retrieval-review-${viewport.name}-${Date.now()}`;
         const runId = runConvexJson<string>("retrievalEvaluation:seedReview", {
-            slotKey: "analyst-1",
+            slotKey: "analyst-4",
             fixtureKey: key,
         });
         const pending = new Map<object, string>();

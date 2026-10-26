@@ -75,6 +75,7 @@ async function createFixture(
         });
 
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             coveragePreset: "balanced",
@@ -727,6 +728,7 @@ describe("Evidence matrix projection", () => {
                 canonicalizedAt: 1,
             });
             const foreignRunId = await ctx.db.insert("researchRuns", {
+                purpose: "research",
                 ownerVisitorId: otherVisitorId,
                 companyId,
                 coveragePreset: "balanced",
@@ -800,6 +802,7 @@ describe("Evidence matrix projection", () => {
                 canonicalizedAt: 1,
             });
             const foreignRunId = await ctx.db.insert("researchRuns", {
+                purpose: "research",
                 ownerVisitorId: undefined,
                 companyId,
                 coveragePreset: "balanced",

@@ -22,6 +22,12 @@ beforeEach(() => {
     setPaidWorkEnabled.mockReset();
     restoreQuota.mockReset();
     convexReactHarness
+        .paginatedQuery(api.adminOperations.listRunsPage)
+        .returns({ results: [], status: "Exhausted", loadMore: vi.fn() });
+    convexReactHarness
+        .paginatedQuery(api.adminOperations.listRestorableRunsPage)
+        .returns({ results: [], status: "Exhausted", loadMore: vi.fn() });
+    convexReactHarness
         .mutation(api.adminOperations.setPaidWorkEnabled)
         .uses(setPaidWorkEnabled);
     convexReactHarness.mutation(api.admin.restoreQuota).uses(restoreQuota);
@@ -68,6 +74,20 @@ test("renders the bounded admin projection and confirms paid-work changes", asyn
     };
     convexReactHarness.query(api.visitors.current).returns(visitor);
     convexReactHarness.query(api.adminOperations.get).returns(operations);
+    convexReactHarness
+        .paginatedQuery(api.adminOperations.listRunsPage)
+        .returns({
+            results: operations.runs,
+            status: "Exhausted",
+            loadMore: vi.fn(),
+        });
+    convexReactHarness
+        .paginatedQuery(api.adminOperations.listRestorableRunsPage)
+        .returns({
+            results: operations.restorableRuns,
+            status: "Exhausted",
+            loadMore: vi.fn(),
+        });
     setPaidWorkEnabled.mockResolvedValue({ enabled: false });
     render(<OperationsPage />);
 

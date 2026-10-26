@@ -33,9 +33,13 @@ for (let i = 2; i < process.argv.length; i += 2) {
         value = process.argv[i + 1];
     assert(
         key &&
-            ["--phase", "--out-dir", "--scenario", "--scenarios"].includes(
-                key,
-            ) &&
+            [
+                "--phase",
+                "--out-dir",
+                "--scenario",
+                "--scenarios",
+                "--viewport",
+            ].includes(key) &&
             value &&
             !options.has(key),
         "Invalid utility option",
@@ -44,6 +48,11 @@ for (let i = 2; i < process.argv.length; i += 2) {
 }
 const phase = options.get("--phase") ?? "audit";
 assert(["audit", "seed"].includes(phase), "Unknown utility phase");
+const viewport = options.get("--viewport");
+assert(
+    !viewport || ["desktop", "mobile"].includes(viewport),
+    "Unknown utility viewport",
+);
 const out = resolve(options.get("--out-dir") ?? "/tmp/source-utility-20261021");
 mkdirSync(out, { recursive: true });
 const scenarios = read(
@@ -52,8 +61,23 @@ const scenarios = read(
 const study = read(`${root}/study.json`);
 const manifest = read(`${run}/manifest.json`);
 const results = read(`${run}/final-results.json`);
+const selected = scenarios.scenarios.filter(
+    (s: { id: string }) =>
+        !options.get("--scenario") ||
+        options.get("--scenario")?.split(",").includes(s.id),
+);
+assert(selected.length > 0, "No scenarios selected");
+for (const id of options.get("--scenario")?.split(",") ?? [])
+    assert(
+        selected.some((s: { id: string }) => s.id === id),
+        `Unknown scenario: ${id}`,
+    );
 const server = await createServer({
-    server: { middlewareMode: true },
+    configFile: false,
+    cacheDir: resolve(out, ".vite-cache"),
+    resolve: { tsconfigPaths: true },
+    optimizeDeps: { noDiscovery: true },
+    server: { middlewareMode: true, watch: null },
     appType: "custom",
 });
 try {
@@ -62,7 +86,12 @@ try {
             "/convex/domain/sourceQualification.ts",
         )) as typeof import("@convex/domain/sourceQualification");
     const preparedDocuments = new Map();
-    for (const doc of study.documents) {
+    for (const doc of study.documents.filter((doc: { companyId: string }) =>
+        selected.some(
+            (scenario: { companyId: string }) =>
+                scenario.companyId === doc.companyId,
+        ),
+    )) {
         const call = manifest.calls.find(
             (c: { key: string }) =>
                 c.key ===
@@ -80,7 +109,14 @@ try {
             "Historical wire request changed",
         );
         const request = call.prepared.request;
+        assert(
+            ["source-qualification-v3", "source-qualification-v4"].includes(
+                request.protocolVersion,
+            ),
+            "Unsupported recorded qualification protocol",
+        );
         const input = prepareQualificationInput({
+            protocolVersion: request.protocolVersion,
             company: request.company,
             canonicalUrl: doc.url,
             title: doc.title,
@@ -103,6 +139,7 @@ try {
             qualification,
             observed,
             source: {
+                protocolVersion: input.request.protocolVersion,
                 canonicalUrl: doc.url,
                 title: doc.title,
                 category: ["annual", "quarterly"].includes(doc.category)
@@ -127,17 +164,6 @@ try {
             },
         });
     }
-    const selected = scenarios.scenarios.filter(
-        (s: { id: string }) =>
-            !options.get("--scenario") ||
-            options.get("--scenario")?.split(",").includes(s.id),
-    );
-    assert(selected.length > 0, "No scenarios selected");
-    for (const id of options.get("--scenario")?.split(",") ?? [])
-        assert(
-            selected.some((s: { id: string }) => s.id === id),
-            `Unknown scenario: ${id}`,
-        );
     const audit = selected.map(
         (scenario: {
             id: string;
@@ -195,9 +221,9 @@ try {
         const seeded = [];
         for (const scenario of selected.flatMap(
             (scenario: { mobile: boolean }) =>
-                (scenario.mobile ? ["desktop", "mobile"] : ["desktop"]).map(
-                    (viewport) => ({ ...scenario, viewport }),
-                ),
+                (scenario.mobile ? ["desktop", "mobile"] : ["desktop"])
+                    .filter((value) => !viewport || viewport === value)
+                    .map((viewport) => ({ ...scenario, viewport })),
         )) {
             const company = study.companies.find(
                 (c: { id: string }) => c.id === scenario.companyId,
@@ -214,7 +240,7 @@ try {
                         : {}),
                 }));
             const payload = {
-                slotKey: "analyst-1",
+                slotKey: "analyst-4",
                 company: {
                     cik: company.cik,
                     legalName: company.legalName,

@@ -2,6 +2,10 @@ import { api } from "@convex/_generated/api";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+    mockDossierList,
+    mockResearchWorkspace,
+} from "@/__tests__/setup/workspace-dossiers";
 
 vi.mock("convex/react", async () => {
     const { convexReactHarness } = await import(
@@ -43,13 +47,14 @@ import { ResearchDossiersPage } from "@/components/workspace/research-dossiers-p
 describe("ResearchDossiersPage", () => {
     beforeEach(() => {
         convexReactHarness.reset();
+        mockResearchWorkspace();
         convexReactHarness
             .action(api.companyCoverImage.renderCompanyPreview)
             .uses(vi.fn());
     });
 
     it("lists each research dossier in a cutout card", () => {
-        convexReactHarness.query(api.researchRuns.listMine).returns([
+        mockDossierList().returns([
             {
                 runId: "run-1",
                 company: {
@@ -115,7 +120,7 @@ describe("ResearchDossiersPage", () => {
     });
 
     it("preserves the page layout while dossiers load", () => {
-        convexReactHarness.query(api.researchRuns.listMine).returns(undefined);
+        mockDossierList().returns(undefined);
 
         render(<ResearchDossiersPage />);
 
@@ -147,7 +152,7 @@ describe("ResearchDossiersPage", () => {
     });
 
     it("offers a clear first action when no dossier exists", () => {
-        convexReactHarness.query(api.researchRuns.listMine).returns([]);
+        mockDossierList().returns([]);
 
         render(<ResearchDossiersPage />);
 
@@ -163,9 +168,7 @@ describe("ResearchDossiersPage", () => {
         const consoleError = vi
             .spyOn(console, "error")
             .mockImplementation(() => undefined);
-        const dossiersQuery = convexReactHarness.query(
-            api.researchRuns.listMine,
-        );
+        const dossiersQuery = mockDossierList();
         dossiersQuery.throws(new Error("Unavailable"));
 
         render(<ResearchDossiersPage />);
@@ -178,4 +181,24 @@ describe("ResearchDossiersPage", () => {
         expect(screen.getByText("No research dossiers yet")).toBeTruthy();
         consoleError.mockRestore();
     });
+});
+
+it("test workspace discloses its origin and does not offer real dossier creation", () => {
+    convexReactHarness.query(api.visitors.current).returns({
+        workspace: {
+            key: "browser_test:one",
+            isTestData: true,
+            canStartDossier: false,
+        },
+    });
+    mockDossierList().returns([]);
+    convexReactHarness
+        .paginatedQuery(api.researchRuns.listMine)
+        .returns({ results: [], status: "Exhausted", loadMore: vi.fn() });
+    render(<ResearchDossiersPage />);
+    expect(screen.getByText("Test data — not live")).toBeTruthy();
+    expect(
+        screen.queryByRole("button", { name: "Start a dossier" }),
+    ).toBeNull();
+    expect(screen.queryByRole("link", { name: "New dossier" })).toBeNull();
 });

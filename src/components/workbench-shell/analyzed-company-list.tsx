@@ -6,7 +6,7 @@ import {
     Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useAction, useQuery } from "convex/react";
+import { useAction } from "convex/react";
 import React, { useEffect, useRef } from "react";
 import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
 import Icon from "@/components/icon";
@@ -19,6 +19,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useResponsive } from "@/hooks/use-responsive";
+import { useWorkspaceDossiers } from "@/hooks/use-workspace-dossiers";
 import { cn } from "@/lib/utils";
 
 export interface AnalyzedCompanyListProps {
@@ -82,7 +83,11 @@ function AnalyzedCompanyListContent({
 }: AnalyzedCompanyListProps) {
     const { isMobile } = useResponsive();
     const navigate = useNavigate();
-    const runs = useQuery(api.researchRuns.listMine, enabled ? {} : "skip");
+    const {
+        results: runs,
+        workspace,
+        isLoading,
+    } = useWorkspaceDossiers(enabled);
     const ensureRunCompanyWebsite = useAction(
         api.companyResolution.ensureRunCompanyWebsite,
     );
@@ -90,7 +95,12 @@ function AnalyzedCompanyListContent({
     const availableRuns = runs ?? [];
 
     useEffect(() => {
-        if (!enabled || isAdmissionLoading || runs === undefined) {
+        if (
+            !enabled ||
+            isAdmissionLoading ||
+            isLoading ||
+            workspace?.isTestData
+        ) {
             return;
         }
         const legacyRun = availableRuns.find(
@@ -113,10 +123,11 @@ function AnalyzedCompanyListContent({
         enabled,
         ensureRunCompanyWebsite,
         isAdmissionLoading,
-        runs,
+        isLoading,
+        workspace?.isTestData,
     ]);
 
-    if (isAdmissionLoading || (enabled && runs === undefined)) {
+    if (isAdmissionLoading || (enabled && isLoading)) {
         return (
             <div
                 role="status"
@@ -215,27 +226,35 @@ function AnalyzedCompanyListContent({
                               ]
                             : [],
                     ),
-                    {
-                        key: "start-new-analysis",
-                        label: "Start a company dossier",
-                        className: buttonVariants({
-                            variant: "secondary",
-                            size: "sm",
-                            className: "my-1 w-full",
-                        }),
-                        icon: ({ className: iconClassName }) => (
-                            <span
-                                className={cn(
-                                    "start-double-slash",
-                                    iconClassName,
-                                )}>
-                                {"//"}
-                            </span>
-                        ),
-                        onSelect: () => {
-                            void navigate({ to: "/workspace/start" });
-                        },
-                    },
+                    ...(workspace?.canStartDossier
+                        ? [
+                              {
+                                  key: "start-new-analysis",
+                                  label: "Start a company dossier",
+                                  className: buttonVariants({
+                                      variant: "secondary",
+                                      size: "sm",
+                                      className: "my-1 w-full",
+                                  }),
+                                  icon: ({
+                                      className: iconClassName,
+                                  }: {
+                                      className?: string;
+                                  }) => (
+                                      <span
+                                          className={cn(
+                                              "start-double-slash",
+                                              iconClassName,
+                                          )}>
+                                          {"//"}
+                                      </span>
+                                  ),
+                                  onSelect: () => {
+                                      void navigate({ to: "/workspace/start" });
+                                  },
+                              },
+                          ]
+                        : []),
                 ],
             },
         ];

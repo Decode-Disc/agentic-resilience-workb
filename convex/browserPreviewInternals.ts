@@ -1,11 +1,11 @@
-import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
-
+import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./_generated/server";
 import { purgePreviewCacheForSource } from "./domain/previewCache";
 import { rateLimiter } from "./rateLimiter";
+import { runMatchesWorkspace, workspaceForVisitor } from "./runWorkspace";
 
 // ─── Internal query: validate source ownership and return decision ────────────
 
@@ -49,7 +49,12 @@ async function readSourceForPreview(
     const source = await ctx.db.get(args.sourceId);
     if (!source || (args.runId && source.runId !== args.runId)) return null;
     const run = await ctx.db.get(source.runId);
-    if (!run || run.ownerVisitorId !== args.visitorId) return null;
+    if (
+        !run ||
+        run.ownerVisitorId !== args.visitorId ||
+        !runMatchesWorkspace(run, await workspaceForVisitor(ctx, visitor))
+    )
+        return null;
     return {
         canonicalUrl: source.canonicalUrl,
         title: source.title,

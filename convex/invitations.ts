@@ -11,6 +11,7 @@ import {
 import { digestInvitationCode } from "./domain/invitationCodes";
 import { visitorRoleValidator } from "./domain/validators";
 import { rateLimiter } from "./rateLimiter";
+import { BROWSER_TEST_SLOT, localBrowserFixturesEnabled } from "./runWorkspace";
 
 const seedEntryValidator = v.object({
     slotKey: v.string(),
@@ -260,6 +261,11 @@ export const claimDigest = internalMutation({
                 existingVisitor.invitationId,
             );
             if (
+                existingInvitation?.slotKey === BROWSER_TEST_SLOT &&
+                !localBrowserFixturesEnabled()
+            )
+                throw new Error("Access code is not available");
+            if (
                 existingInvitation?.codeDigest === args.codeDigest &&
                 existingVisitor.status === "active"
             ) {
@@ -279,7 +285,11 @@ export const claimDigest = internalMutation({
                 query.eq("codeDigest", args.codeDigest),
             )
             .unique();
-        if (!invitation) {
+        if (
+            !invitation ||
+            (invitation.slotKey === BROWSER_TEST_SLOT &&
+                !localBrowserFixturesEnabled())
+        ) {
             throw new Error("Access code is not available");
         }
 

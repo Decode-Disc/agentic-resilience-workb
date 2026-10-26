@@ -1,10 +1,8 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import {
     paginationOptsValidator,
     paginationResultValidator,
 } from "convex/server";
 import { v } from "convex/values";
-
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { query } from "./_generated/server";
@@ -24,6 +22,7 @@ import {
     MAX_EVIDENCE_PER_CLAIM,
     sourceDossierCandidateLimit,
 } from "./resourceLimits";
+import { requireWorkspaceRun } from "./runWorkspace";
 
 const MAX_RESEARCH_PLAN_QUESTIONS = 11;
 const MAX_EXTRACTION_TASK_SCAN = 16;
@@ -187,35 +186,12 @@ type ResolvedEvidence = {
  * Returns the active analyst visitor for the authenticated caller.
  * Throws when unauthenticated or when no active visitor exists.
  */
-async function requireVisitor(ctx: QueryCtx): Promise<Doc<"visitors">> {
-    const authUserId = await getAuthUserId(ctx);
-    if (!authUserId) {
-        throw new Error("Not authenticated");
-    }
-    const visitor = await ctx.db
-        .query("visitors")
-        .withIndex("by_auth_user_id", (q) => q.eq("authUserId", authUserId))
-        .unique();
-    if (visitor?.status !== "active") {
-        throw new Error("Unauthorized");
-    }
-    return visitor;
-}
-
 /** Returns the run owned by the active visitor, else throws. */
 async function getOwnedRun(
     ctx: QueryCtx,
     runId: Id<"researchRuns">,
 ): Promise<Doc<"researchRuns">> {
-    const visitor = await requireVisitor(ctx);
-    const run = await ctx.db.get(runId);
-    if (!run) {
-        throw new Error("Research run not found");
-    }
-    if (run.ownerVisitorId !== visitor._id) {
-        throw new Error("Unauthorized");
-    }
-    return run;
+    return (await requireWorkspaceRun(ctx, runId)).run;
 }
 
 /** Loads research plan questions of the latest plan, bounded by the limit. */

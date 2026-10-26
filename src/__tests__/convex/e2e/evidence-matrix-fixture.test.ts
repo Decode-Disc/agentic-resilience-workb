@@ -6,7 +6,7 @@ import { executeEvidenceMatrixSeedPipeline } from "@convex/e2eFixtures";
 import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { buildCccShowcaseManifest } from "../../fixtures/evidence/ccc-showcase-manifest";
 import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
@@ -85,7 +85,12 @@ const getNormalizedClaimInput = makeFunctionReference<
     { normalizedInput: any; inputHash: string } | null
 >("claimGeneration:getNormalizedClaimInput");
 
+beforeEach(() => {
+    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
+});
+
 afterEach(() => {
+    vi.unstubAllEnvs();
     clearShowcaseManifests();
     if (originalE2eFixturesEnabled === undefined) {
         delete process.env.E2E_FIXTURES_ENABLED;
@@ -124,6 +129,15 @@ async function createAdmittedVisitor(
                 claimedAt: 1,
             });
         }
+        if (slotKey === "analyst-4" && options.claimed)
+            await ctx.db.insert("browserTestContexts", {
+                ownerVisitorId: visitorId,
+                authUserId: userId,
+                contextKey: "evidence-unit",
+                status: "active",
+                expiresAt: Date.now() + 2 * 60 * 60 * 1000,
+                createdAt: Date.now(),
+            });
         return { userId, invitationId, visitorId };
     });
 }
@@ -139,10 +153,10 @@ test("rejects evidence matrix fixtures when the E2E gate is disabled", async () 
     vi.useFakeTimers();
     process.env.E2E_FIXTURES_ENABLED = "true";
     const t = createHarness();
-    await createAdmittedVisitor(t, "e2e-evidence-disabled");
+    await createAdmittedVisitor(t, "analyst-4");
 
     const seeded = await t.action(seedEvidenceMatrixScenario, {
-        slotKey: "e2e-evidence-disabled",
+        slotKey: "analyst-4",
         fixtureKey: "evidence-matrix-disabled",
         scenarioKind: "showcase",
     });
@@ -153,7 +167,7 @@ test("rejects evidence matrix fixtures when the E2E gate is disabled", async () 
 
     await expect(
         t.action(seedEvidenceMatrixScenario, {
-            slotKey: "e2e-evidence-disabled",
+            slotKey: "analyst-4",
             fixtureKey: "evidence-matrix-disabled",
             scenarioKind: "showcase",
         }),
@@ -169,13 +183,13 @@ test("rejects evidence matrix fixtures when the E2E gate is disabled", async () 
 test("rejects an unknown or unclaimed invitation slot", async () => {
     process.env.E2E_FIXTURES_ENABLED = "true";
     const t = createHarness();
-    await createAdmittedVisitor(t, "e2e-evidence-unclaimed", {
+    await createAdmittedVisitor(t, "analyst-4", {
         claimed: false,
     });
 
     await expect(
         t.action(seedEvidenceMatrixScenario, {
-            slotKey: "e2e-evidence-unclaimed",
+            slotKey: "analyst-4",
             fixtureKey: "evidence-matrix-unclaimed",
             scenarioKind: "unavailable",
         }),
@@ -195,10 +209,10 @@ test("showcase scenario runs the real Phase 5 workflow to evidence_ready with pe
     const t = createHarness();
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
-    await createAdmittedVisitor(t, "e2e-evidence-showcase");
+    await createAdmittedVisitor(t, "analyst-4");
 
     const seeded = await t.action(seedEvidenceMatrixScenario, {
-        slotKey: "e2e-evidence-showcase",
+        slotKey: "analyst-4",
         fixtureKey: "evidence-matrix-showcase",
         scenarioKind: "showcase",
     });
@@ -313,10 +327,10 @@ test("idempotent replay does not duplicate runs, artifacts, claims, policy, even
     vi.useFakeTimers();
     process.env.E2E_FIXTURES_ENABLED = "true";
     const t = createHarness();
-    await createAdmittedVisitor(t, "e2e-evidence-replay");
+    await createAdmittedVisitor(t, "analyst-4");
 
     const args = {
-        slotKey: "e2e-evidence-replay",
+        slotKey: "analyst-4",
         fixtureKey: "evidence-matrix-replay",
         scenarioKind: "showcase" as const,
     };
@@ -335,7 +349,7 @@ test("idempotent replay does not duplicate runs, artifacts, claims, policy, even
                         .eq("ownerVisitorId", firstRun.ownerVisitorId)
                         .eq(
                             "reservationKey",
-                            "e2e:evidence-matrix-replay:showcase",
+                            `e2e:${firstRun.browserTestContextId}:evidence-matrix-replay:showcase`,
                         ),
                 )
                 .collect();
@@ -412,10 +426,10 @@ test("unavailable scenario pauses at claim_generation_unavailable with zero clai
     const t = createHarness();
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
-    await createAdmittedVisitor(t, "e2e-evidence-unavailable");
+    await createAdmittedVisitor(t, "analyst-4");
 
     const seeded = await t.action(seedEvidenceMatrixScenario, {
-        slotKey: "e2e-evidence-unavailable",
+        slotKey: "analyst-4",
         fixtureKey: "evidence-matrix-unavailable",
         scenarioKind: "unavailable",
     });
@@ -495,12 +509,11 @@ test("rejects conflicting scenario replay in both directions", async () => {
     vi.useFakeTimers();
     process.env.E2E_FIXTURES_ENABLED = "true";
     const t = createHarness();
-    await createAdmittedVisitor(t, "e2e-mismatch-a");
-    await createAdmittedVisitor(t, "e2e-mismatch-b");
+    await createAdmittedVisitor(t, "analyst-4");
 
     // Direction 1: showcase then unavailable
     const firstShowcase = await t.action(seedEvidenceMatrixScenario, {
-        slotKey: "e2e-mismatch-a",
+        slotKey: "analyst-4",
         fixtureKey: "evidence-matrix-mismatch-1",
         scenarioKind: "showcase",
     });
@@ -509,7 +522,7 @@ test("rejects conflicting scenario replay in both directions", async () => {
 
     await expect(
         t.action(seedEvidenceMatrixScenario, {
-            slotKey: "e2e-mismatch-a",
+            slotKey: "analyst-4",
             fixtureKey: "evidence-matrix-mismatch-1",
             scenarioKind: "unavailable",
         }),
@@ -517,7 +530,7 @@ test("rejects conflicting scenario replay in both directions", async () => {
 
     // Direction 2: unavailable then showcase
     const firstUnavailable = await t.action(seedEvidenceMatrixScenario, {
-        slotKey: "e2e-mismatch-b",
+        slotKey: "analyst-4",
         fixtureKey: "evidence-matrix-mismatch-2",
         scenarioKind: "unavailable",
     });
@@ -526,7 +539,7 @@ test("rejects conflicting scenario replay in both directions", async () => {
 
     await expect(
         t.action(seedEvidenceMatrixScenario, {
-            slotKey: "e2e-mismatch-b",
+            slotKey: "analyst-4",
             fixtureKey: "evidence-matrix-mismatch-2",
             scenarioKind: "showcase",
         }),
@@ -647,11 +660,11 @@ test("validator rejects an extra testFailureSeam field instead of executing it",
     vi.useFakeTimers();
     process.env.E2E_FIXTURES_ENABLED = "true";
     const t = createHarness();
-    await createAdmittedVisitor(t, "e2e-evidence-extra-field");
+    await createAdmittedVisitor(t, "analyst-4");
 
     await expect(
         t.action(seedEvidenceMatrixScenarioWithForbiddenField, {
-            slotKey: "e2e-evidence-extra-field",
+            slotKey: "analyst-4",
             fixtureKey: "evidence-matrix-extra-field",
             scenarioKind: "showcase",
             testFailureSeam: "post_upload_commit_failure",
@@ -702,29 +715,28 @@ test("ownership derives only from the claimed invitation slot; inspector rejects
     vi.useFakeTimers();
     process.env.E2E_FIXTURES_ENABLED = "true";
     const t = createHarness();
-    const slotA = await createAdmittedVisitor(t, "e2e-evidence-owner-a");
+    const slotA = await createAdmittedVisitor(t, "analyst-4");
     const slotB = await createAdmittedVisitor(t, "e2e-evidence-owner-b");
 
     const seeded = await t.action(seedEvidenceMatrixScenario, {
-        slotKey: "e2e-evidence-owner-a",
+        slotKey: "analyst-4",
         fixtureKey: "evidence-matrix-owner",
         scenarioKind: "showcase",
     });
     const run = await t.run(async (ctx) => ctx.db.get(seeded.runId));
     expect(run?.ownerVisitorId).toBe(slotA.visitorId);
-    expect(run?.reservationKey).toBe("e2e:evidence-matrix-owner:showcase");
-
-    const other = await t.action(seedEvidenceMatrixScenario, {
-        slotKey: "e2e-evidence-owner-b",
-        fixtureKey: "evidence-matrix-owner-b",
-        scenarioKind: "unavailable",
-    });
-    const otherRun = await t.run(async (ctx) => ctx.db.get(other.runId));
-    expect(otherRun?.ownerVisitorId).toBe(slotB.visitorId);
-    expect(otherRun?.ownerVisitorId).not.toBe(slotA.visitorId);
-    expect(otherRun?.reservationKey).toBe(
-        "e2e:evidence-matrix-owner-b:unavailable",
+    expect(run?.reservationKey).toBe(
+        `e2e:${run?.browserTestContextId}:evidence-matrix-owner:showcase`,
     );
+
+    await expect(
+        t.action(seedEvidenceMatrixScenario, {
+            slotKey: "e2e-evidence-owner-b",
+            fixtureKey: "evidence-matrix-owner-b",
+            scenarioKind: "unavailable",
+        }),
+    ).rejects.toThrow("Active browser test context required");
+    expect(slotA.visitorId).not.toBe(slotB.visitorId);
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
     await expect(
@@ -733,12 +745,16 @@ test("ownership derives only from the claimed invitation slot; inspector rejects
             fixtureKey: "evidence-matrix-owner-b",
         }),
     ).rejects.toThrow(/not found/i);
-    await expect(
-        t.query(inspectEvidenceMatrixScenario, {
-            runId: other.runId,
-            fixtureKey: "evidence-matrix-owner",
-        }),
-    ).rejects.toThrow(/not found/i);
+    expect(
+        await t.run((ctx) =>
+            ctx.db
+                .query("researchRuns")
+                .withIndex("by_owner_and_execution_status", (q) =>
+                    q.eq("ownerVisitorId", slotB.visitorId),
+                )
+                .collect(),
+        ),
+    ).toEqual([]);
 });
 
 test("reuse cleanup failure is observable and throws explicit cleanup error", async () => {

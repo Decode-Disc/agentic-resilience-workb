@@ -1,20 +1,25 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
+import {
+    paginationOptsValidator,
+    paginationResultValidator,
+} from "convex/server";
 import { v } from "convex/values";
-
 import type { Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./_generated/server";
-import { applyEvidenceExtractionFailed } from "./domain/evidenceFailure";
 import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
+import { applyEvidenceExtractionFailed } from "./domain/evidenceFailure";
 import {
     assertLifecycleTransition,
     canStartNewCorpusRevision,
 } from "./domain/transitions";
 import {
+    companySnapshotValidator,
     executionStatusValidator,
     researchRunLifecycleValidator,
     workflowStepKeyValidator,
 } from "./domain/validators";
+import { readWorkspace, requireWorkspaceRun } from "./runWorkspace";
+import schema from "./schema";
 
 export const createDraft = internalMutation({
     args: {},
@@ -22,6 +27,7 @@ export const createDraft = internalMutation({
     handler: async (ctx) => {
         const now = Date.now();
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             executionGeneration: 0,
             lifecycleState: "draft",
             executionStatus: "idle",
@@ -248,23 +254,7 @@ export const listSteps = internalQuery({
 export const listMyEvents = query({
     args: { runId: v.id("researchRuns") },
     handler: async (ctx, args) => {
-        const authUserId = await getAuthUserId(ctx);
-        if (!authUserId) {
-            throw new Error("Not authenticated");
-        }
-        const visitor = await ctx.db
-            .query("visitors")
-            .withIndex("by_auth_user_id", (builder) =>
-                builder.eq("authUserId", authUserId),
-            )
-            .unique();
-        const run = await ctx.db.get(args.runId);
-        if (
-            visitor?.status !== "active" ||
-            run?.ownerVisitorId !== visitor._id
-        ) {
-            throw new Error("Unauthorized");
-        }
+        const { run } = await requireWorkspaceRun(ctx, args.runId);
         return ctx.db
             .query("runEvents")
             .withIndex("by_run_and_sequence", (builder) =>
@@ -273,23 +263,6 @@ export const listMyEvents = query({
             .collect();
     },
 });
-
-async function getActiveVisitor(ctx: QueryCtx) {
-    const authUserId = await getAuthUserId(ctx);
-    if (!authUserId) {
-        throw new Error("Not authenticated");
-    }
-    const visitor = await ctx.db
-        .query("visitors")
-        .withIndex("by_auth_user_id", (builder) =>
-            builder.eq("authUserId", authUserId),
-        )
-        .unique();
-    if (visitor?.status !== "active") {
-        throw new Error("Unauthorized");
-    }
-    return visitor;
-}
 
 async function projectRun(ctx: QueryCtx, run: Doc<"researchRuns">) {
     const company = run.companyId ? await ctx.db.get(run.companyId) : null;
@@ -340,11 +313,7 @@ async function projectRun(ctx: QueryCtx, run: Doc<"researchRuns">) {
 export const getMine = query({
     args: { runId: v.id("researchRuns") },
     handler: async (ctx, args) => {
-        const visitor = await getActiveVisitor(ctx);
-        const run = await ctx.db.get(args.runId);
-        if (run?.ownerVisitorId !== visitor._id) {
-            throw new Error("Unauthorized");
-        }
+        const { run } = await requireWorkspaceRun(ctx, args.runId);
         const projection = await projectRun(ctx, run);
         const revision = run.activeCorpusRevisionId
             ? await ctx.db.get(run.activeCorpusRevisionId)
@@ -360,21 +329,58 @@ export const getMine = query({
     },
 });
 
+const runProjectionValidator = v.object({
+    runId: v.id("researchRuns"),
+    company: v.union(companySnapshotValidator, v.null()),
+    lifecycleState: researchRunLifecycleValidator,
+    executionStatus: executionStatusValidator,
+    pauseReason: schema.tables.researchRuns.validator.fields.pauseReason,
+    coveragePreset: schema.tables.researchRuns.validator.fields.coveragePreset,
+    researchAngle: v.optional(v.string()),
+    activeCorpusRevisionId: v.optional(v.id("corpusRevisions")),
+    completionOutcome:
+        schema.tables.researchRuns.validator.fields.completionOutcome,
+    updatedAt: v.number(),
+    providerFailures: v.array(
+        v.object({
+            service: schema.tables.providerCalls.validator.fields.service,
+            operation: v.string(),
+            errorCode: schema.tables.providerCalls.validator.fields.errorCode,
+            occurredAt: v.number(),
+        }),
+    ),
+});
+
 export const listMine = query({
-    args: {},
-    handler: async (ctx) => {
-        const visitor = await getActiveVisitor(ctx);
-        const runs = await ctx.db
+    args: { workspaceKey: v.string(), paginationOpts: paginationOptsValidator },
+    returns: paginationResultValidator(runProjectionValidator),
+    handler: async (ctx, args) => {
+        const { visitor, workspace } = await readWorkspace(ctx);
+        if (
+            args.workspaceKey !== workspace.key ||
+            (workspace.isTestData && !workspace.contextId)
+        ) {
+            return { page: [], isDone: true, continueCursor: "" };
+        }
+        const result = await ctx.db
             .query("researchRuns")
-            .withIndex("by_owner_and_execution_status", (builder) =>
-                builder.eq("ownerVisitorId", visitor._id),
+            .withIndex("by_owner_and_purpose_and_context_and_updated_at", (q) =>
+                q
+                    .eq("ownerVisitorId", visitor._id)
+                    .eq("purpose", workspace.purpose)
+                    .eq(
+                        "browserTestContextId",
+                        workspace.contextId ?? undefined,
+                    ),
             )
-            .collect();
-        return Promise.all(
-            runs
-                .sort((left, right) => right.updatedAt - left.updatedAt)
-                .map((run) => projectRun(ctx, run)),
-        );
+            .order("desc")
+            .paginate(args.paginationOpts);
+        return {
+            ...result,
+            page: await Promise.all(
+                result.page.map((run) => projectRun(ctx, run)),
+            ),
+        };
     },
 });
 

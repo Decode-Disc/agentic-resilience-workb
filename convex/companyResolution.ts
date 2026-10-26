@@ -368,6 +368,8 @@ export const search = action({
         if (!authUserId) {
             throw new Error("Not authenticated");
         }
+        if (!(await ctx.runQuery(internal.runWorkspace.authorizeProvider, {})))
+            throw new Error("paid_work_disabled");
         const results = [
             ...(await searchCompaniesWithResolver(args, {
                 resolver: createPublicCompanyResolver(
@@ -423,6 +425,8 @@ export const preflight = action({
         if (!authUserId) {
             throw new Error("Not authenticated");
         }
+        if (!(await ctx.runQuery(internal.runWorkspace.authorizeProvider, {})))
+            throw new Error("paid_work_disabled");
         const resolver = createPublicCompanyResolver(
             ctx,
             `preflight:${authUserId}:${args.cik}:${Date.now()}`,
@@ -482,6 +486,12 @@ export const ensureRunCompanyWebsite = action({
     args: { runId: v.id("researchRuns") },
     returns: websiteBackfillResultValidator,
     handler: async (ctx, args): Promise<WebsiteBackfillResult> => {
+        if (
+            !(await ctx.runQuery(internal.runWorkspace.authorizeProvider, {
+                runId: args.runId,
+            }))
+        )
+            throw new Error("paid_work_disabled");
         const authUserId = await getAuthUserId(ctx);
         if (!authUserId) {
             throw new Error("Not authenticated");

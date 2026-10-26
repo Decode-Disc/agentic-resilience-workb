@@ -1,6 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
-
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { action, internalMutation } from "./_generated/server";
@@ -12,6 +11,7 @@ import {
     sourceCandidateLimit,
     sourcePreparationEnabled,
 } from "./resourceLimits";
+import { workspaceForVisitor } from "./runWorkspace";
 import { insertPendingManualSource } from "./sources";
 import { workflow } from "./workflow";
 
@@ -45,6 +45,9 @@ export const confirmAndStartReserved = internalMutation({
             throw new Error("Unauthorized");
         }
 
+        const workspace = await workspaceForVisitor(ctx, visitor);
+        if (!workspace.canStartDossier)
+            throw new Error("New research is unavailable for this workspace");
         const idempotencyKey = args.idempotencyKey.trim();
         if (idempotencyKey.length === 0 || idempotencyKey.length > 128) {
             throw new Error("Invalid idempotency key");
@@ -159,6 +162,7 @@ export const confirmAndStartReserved = internalMutation({
         };
 
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitor._id,
             reservationKey: idempotencyKey,
             reservationStatus: "consumed",

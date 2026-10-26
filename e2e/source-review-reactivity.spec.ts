@@ -1,4 +1,5 @@
-import { expect, test, type WebSocketRoute } from "@playwright/test";
+import { test } from "./support/browser-workspace";
+import { expect, type WebSocketRoute } from "@playwright/test";
 import type { internal } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { runConvexJson } from "./support/convex-cli";
@@ -29,10 +30,10 @@ test("a sixty-source inspected proposal loads repeatedly without starting provid
     const key = "preparation-performance-sixty-v1";
     const seeded = runConvexJson<FunctionReturnType<typeof internal.e2eFixtures.seedInspectedSourceReviewScenario>>(
         "e2eFixtures:seedInspectedSourceReviewScenario",
-        { slotKey: "analyst-1", fixtureKey: key, comparisonOutcome: "no_conflict_observed" },
+        { slotKey: "analyst-4", fixtureKey: key, comparisonOutcome: "no_conflict_observed" },
     );
     const scaled = runConvexJson<FunctionReturnType<typeof internal.e2eFixtures.scaleSourceReviewFixture>>(
-        "e2eFixtures:scaleSourceReviewFixture", {runId: seeded.runId, fixtureKey: key, slotKey: "analyst-1"},
+        "e2eFixtures:scaleSourceReviewFixture", {runId: seeded.runId, fixtureKey: key, slotKey: "analyst-4"},
     );
     expect(scaled.sourceCount).toBe(60);
     const errors: string[] = [];
@@ -57,7 +58,7 @@ test("selection explanations refresh a legacy draft without changing decisions o
     const key = fixtureKey("selection-explanations");
     const seeded = runConvexJson<FunctionReturnType<typeof internal.e2eFixtures.seedSourceReviewScenario>>(
         "e2eFixtures:seedSourceReviewScenario",
-        { slotKey: "analyst-1", fixtureKey: key, legacySelectionReasons: true,
+        { slotKey: "analyst-4", fixtureKey: key, legacySelectionReasons: true,
           recordedScenario: { companyName: "ServiceNow, Inc.", companyCik: "1373715", ticker: "NOW", websiteUrl: "https://www.servicenow.com/", researchAngle: "Source explanation verification",
             sources: [{ canonicalUrl: "https://www.sec.gov/Archives/edgar/data/1373715/000137371526000001/now-20251231.htm", title: "Annual report for explanation verification", origin: "sec", category: "regulatory", secForm: "10-K" },
                 { canonicalUrl: "https://www.servicenow.com/products/pricing.html", title: "Product pricing", origin: "exa", category: "official_commercial" },
@@ -311,8 +312,8 @@ for (const viewport of [
         page.on("console", (message) => {if (message.type() === "error") errors.push(message.text());});
         await admitAnalyst(page);
         const key = fixtureKey(`preparation-expiry-${viewport.name}`);
-        const inspected = runConvexJson<FunctionReturnType<typeof internal.e2eFixtures.seedInspectedSourceReviewScenario>>("e2eFixtures:seedInspectedSourceReviewScenario", {slotKey: "analyst-1", fixtureKey: key});
-        const seeded = runConvexJson<FunctionReturnType<typeof internal.e2eFixtures.stageSourcePreparationRecoveryFixture>>("e2eFixtures:stageSourcePreparationRecoveryFixture", {runId: inspected.runId, slotKey: "analyst-1", fixtureKey: key});
+        const inspected = runConvexJson<FunctionReturnType<typeof internal.e2eFixtures.seedInspectedSourceReviewScenario>>("e2eFixtures:seedInspectedSourceReviewScenario", {slotKey: "analyst-4", fixtureKey: key});
+        const seeded = runConvexJson<FunctionReturnType<typeof internal.e2eFixtures.stageSourcePreparationRecoveryFixture>>("e2eFixtures:stageSourcePreparationRecoveryFixture", {runId: inspected.runId, slotKey: "analyst-4", fixtureKey: key});
         await page.goto(`/workspace/${seeded.runId}?section=sources`);
         if (viewport.name === "desktop")
             await page.getByRole("button", {name: "Collapse navigation", exact: true}).click();
@@ -368,7 +369,7 @@ for (const viewport of [
                     typeof internal.e2eFixtures.seedInspectedSourceReviewScenario
                 >
             >("e2eFixtures:seedInspectedSourceReviewScenario", {
-                slotKey: "analyst-1",
+                slotKey: "analyst-4",
                 fixtureKey: key,
             });
             const seeded = runConvexJson<
@@ -377,7 +378,7 @@ for (const viewport of [
                 >
             >("e2eFixtures:stageSourcePreparationRecoveryFixture", {
                 runId: inspected.runId,
-                slotKey: "analyst-1",
+                slotKey: "analyst-4",
                 fixtureKey: key,
                 exhaustedBudget,
             });
@@ -449,8 +450,8 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 900 }, { name: "
         });
         await admitAnalyst(page);
         const key = fixtureKey(`live-progress-${viewport.name}`);
-        const seeded = runConvexJson<FunctionReturnType<typeof internal.e2eFixtures.seedInspectedSourceReviewScenario>>("e2eFixtures:seedInspectedSourceReviewScenario", { slotKey: "analyst-1", fixtureKey: key });
-        const advance = (phase: "reading" | "comparison" | "comparison_progress" | "supplement" | "additional_reading" | "proposal" | "complete") => runConvexJson("e2eFixtures:advanceSourcePreparationFixture", { runId: seeded.runId, fixtureKey: key, slotKey: "analyst-1", phase });
+        const seeded = runConvexJson<FunctionReturnType<typeof internal.e2eFixtures.seedInspectedSourceReviewScenario>>("e2eFixtures:seedInspectedSourceReviewScenario", { slotKey: "analyst-4", fixtureKey: key });
+        const advance = (phase: "reading" | "comparison" | "comparison_progress" | "supplement" | "additional_reading" | "proposal" | "complete") => runConvexJson("e2eFixtures:advanceSourcePreparationFixture", { runId: seeded.runId, fixtureKey: key, slotKey: "analyst-4", phase });
         const before = inspectSourceReview(seeded.runId, key);
         try {
             advance("reading");

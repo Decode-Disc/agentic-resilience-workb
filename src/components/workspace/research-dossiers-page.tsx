@@ -1,10 +1,7 @@
 "use client";
 
-import { api } from "@convex/_generated/api";
 import { Add01Icon, Folder02Icon } from "@hugeicons/core-free-icons";
 import { Link } from "@tanstack/react-router";
-import { useQuery } from "convex/react";
-
 import Icon from "@/components/icon";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { Button } from "@/components/ui/button";
@@ -19,6 +16,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ResearchDossierCard } from "@/components/workspace/research-dossier-card";
 import { ResearchDossierCardSkeleton } from "@/components/workspace/research-dossier-card-skeleton";
+import { useWorkspaceDossiers } from "@/hooks/use-workspace-dossiers";
 
 function DossiersLoading() {
     return (
@@ -42,34 +40,48 @@ function DossiersLoading() {
     );
 }
 
-function DossiersEmpty() {
+function DossiersEmpty({ isTestData = false }: { isTestData?: boolean }) {
     return (
         <Empty className="surface-panel min-h-96 border border-border/60">
             <EmptyHeader>
                 <EmptyMedia variant="icon">
                     <Icon iconNode={Folder02Icon} />
                 </EmptyMedia>
-                <EmptyTitle>No research dossiers yet</EmptyTitle>
+                <EmptyTitle>
+                    {isTestData
+                        ? "No test dossiers in this session"
+                        : "No research dossiers yet"}
+                </EmptyTitle>
                 <EmptyDescription>
-                    Choose a company to begin your first research dossier.
+                    {isTestData
+                        ? "A validation scenario will appear here when it is prepared."
+                        : "Choose a company to begin your first research dossier."}
                 </EmptyDescription>
             </EmptyHeader>
-            <EmptyContent>
-                <Button
-                    render={<Link to="/workspace/start" />}
-                    nativeButton={false}>
-                    <Icon iconNode={Add01Icon} />
-                    Start a dossier
-                </Button>
-            </EmptyContent>
+            {!isTestData ? (
+                <EmptyContent>
+                    <Button
+                        render={<Link to="/workspace/start" />}
+                        nativeButton={false}>
+                        <Icon iconNode={Add01Icon} />
+                        Start a dossier
+                    </Button>
+                </EmptyContent>
+            ) : null}
         </Empty>
     );
 }
 
 function DossiersContent() {
-    const dossiers = useQuery(api.researchRuns.listMine);
+    const {
+        results: dossiers,
+        workspace,
+        isLoading,
+        status,
+        loadMore,
+    } = useWorkspaceDossiers();
 
-    if (dossiers === undefined) {
+    if (isLoading) {
         return <DossiersLoading />;
     }
 
@@ -78,7 +90,9 @@ function DossiersContent() {
             <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
                 <div className="space-y-2">
                     <p className="text-micro text-brand-purple">
-                        Research workspace
+                        {workspace?.isTestData
+                            ? "Test data — not live"
+                            : "Research workspace"}
                     </p>
                     <h1 id="dossiers-heading" className="text-display">
                         Dossiers
@@ -87,7 +101,7 @@ function DossiersContent() {
                         Continue active research or revisit a completed dossier.
                     </p>
                 </div>
-                {dossiers.length > 0 ? (
+                {dossiers.length > 0 && workspace?.canStartDossier ? (
                     <Button
                         render={<Link to="/workspace/start" />}
                         nativeButton={false}
@@ -99,7 +113,7 @@ function DossiersContent() {
             </div>
 
             {dossiers.length === 0 ? (
-                <DossiersEmpty />
+                <DossiersEmpty isTestData={workspace?.isTestData} />
             ) : (
                 <ul className="grid grid-cols-[minmax(0,1fr)] gap-5 md:grid-cols-2 xl:grid-cols-3">
                     {dossiers.map((dossier) => (
@@ -111,6 +125,16 @@ function DossiersContent() {
                     ))}
                 </ul>
             )}
+            {status === "CanLoadMore" || status === "LoadingMore" ? (
+                <Button
+                    variant="outline"
+                    disabled={status === "LoadingMore"}
+                    onClick={() => loadMore(12)}>
+                    {status === "LoadingMore"
+                        ? "Loading…"
+                        : "Load more dossiers"}
+                </Button>
+            ) : null}
         </section>
     );
 }

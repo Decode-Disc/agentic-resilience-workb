@@ -162,6 +162,7 @@ async function createSourceReviewFixture(t: ReturnType<typeof convexTest>) {
             admittedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             coveragePreset: "balanced",
             lifecycleState: "discovering_sources",
@@ -521,6 +522,7 @@ test("does not resume source review while another owner run is running", async (
             throw new Error("Fixture owner was not found");
         }
         await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: paused.ownerVisitorId,
             lifecycleState: "discovering_sources",
             executionStatus: "running",

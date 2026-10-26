@@ -106,6 +106,7 @@ async function createApprovedCorpusScenario(
         });
 
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             coveragePreset: "balanced",
@@ -455,6 +456,7 @@ test.each([
             });
         if (condition === "occupied slot")
             await ctx.db.insert("researchRuns", {
+                purpose: "research",
                 ownerVisitorId: scenario.visitorId,
                 lifecycleState: "discovering_sources",
                 executionStatus: "running",
@@ -652,6 +654,7 @@ test("rejects start when active revision is stale or mismatched", async () => {
 
     await t.run(async (ctx) => {
         const otherRunId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: scenario.visitorId,
             lifecycleState: "corpus_approved",
             executionStatus: "idle",
@@ -725,6 +728,7 @@ test("rejects and writes no frozen sources when decision belongs to foreign run 
 
     await t.run(async (ctx) => {
         const foreignRunId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: scenario.visitorId,
             lifecycleState: "corpus_approved",
             executionStatus: "idle",
@@ -818,6 +822,7 @@ test("rejects and writes no frozen sources when source does not belong to resear
 
     await t.run(async (ctx) => {
         const foreignRunId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: scenario.visitorId,
             lifecycleState: "corpus_approved",
             executionStatus: "idle",
@@ -1027,6 +1032,7 @@ test("rejects start when visitor already has another running run", async () => {
     // Insert another running run for the same visitor
     await t.run(async (ctx) => {
         await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: scenario.visitorId,
             lifecycleState: "discovering_sources",
             executionStatus: "running",

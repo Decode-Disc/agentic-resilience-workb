@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { test } from "./support/browser-workspace";
+import { expect } from "@playwright/test";
 import { runConvexJson } from "./support/convex-cli";
 import {
     admitAnalyst,
@@ -22,7 +23,7 @@ for (const viewport of [
         await admitAnalyst(page);
         const fixtureKey = `retrieval-review-approved-search-${viewport.name}-${Date.now()}`;
         const runId = runConvexJson<string>("retrievalEvaluation:seedReview", {
-            slotKey: "analyst-1",
+            slotKey: "analyst-4",
             fixtureKey,
         });
         console.log(

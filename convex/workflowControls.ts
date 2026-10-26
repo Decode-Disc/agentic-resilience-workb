@@ -1,10 +1,10 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { v } from "convex/values";
-
 import { internal } from "./_generated/api";
 import { internalMutation, mutation } from "./_generated/server";
+import { cancelRunExecution } from "./domain/runCancellation";
 import { sourcePreparationEnabled } from "./resourceLimits";
+import { requireWorkspaceRun } from "./runWorkspace";
 import {
     assessmentReviewApproved,
     sourceReviewApproved,
@@ -80,23 +80,7 @@ export const approveCheckpoint = mutation({
     },
     returns: v.object({ accepted: v.boolean() }),
     handler: async (ctx, args) => {
-        const authUserId = await getAuthUserId(ctx);
-        if (!authUserId) {
-            throw new Error("Not authenticated");
-        }
-        const visitor = await ctx.db
-            .query("visitors")
-            .withIndex("by_auth_user_id", (query) =>
-                query.eq("authUserId", authUserId),
-            )
-            .unique();
-        const run = await ctx.db.get(args.runId);
-        if (
-            visitor?.status !== "active" ||
-            run?.ownerVisitorId !== visitor._id
-        ) {
-            throw new Error("Unauthorized");
-        }
+        const { visitor, run } = await requireWorkspaceRun(ctx, args.runId);
         if (
             !run.workflowId ||
             run.executionStatus !== "paused" ||
@@ -165,76 +149,8 @@ export const cancel = mutation({
     args: { runId: v.id("researchRuns") },
     returns: v.object({ cancelled: v.boolean() }),
     handler: async (ctx, args) => {
-        const authUserId = await getAuthUserId(ctx);
-        if (!authUserId) {
-            throw new Error("Not authenticated");
-        }
-        const visitor = await ctx.db
-            .query("visitors")
-            .withIndex("by_auth_user_id", (query) =>
-                query.eq("authUserId", authUserId),
-            )
-            .unique();
-        const run = await ctx.db.get(args.runId);
-        if (
-            visitor?.status !== "active" ||
-            run?.ownerVisitorId !== visitor._id
-        ) {
-            throw new Error("Unauthorized");
-        }
-        if (run.executionStatus === "cancelled") {
-            return { cancelled: false };
-        }
-        if (run.executionStatus === "completed") {
-            throw new Error("Research run cannot be cancelled");
-        }
-
-        const preparation = run.sourcePreparationId
-            ? await ctx.db.get(run.sourcePreparationId)
-            : null;
-        const now = Date.now();
-        // Fence callbacks before component cancellation: completion callbacks can run in this transaction.
-        await ctx.db.patch(run._id, {
-            executionStatus: "cancelled",
-            workflowId: undefined,
-            executionGeneration: run.executionGeneration + 1,
-            nextEventSequence: run.nextEventSequence + 1,
-            updatedAt: now,
-        });
-        if (
-            preparation?.kind === "preparation" &&
-            preparation.runId === run._id &&
-            preparation.executionGeneration === run.executionGeneration &&
-            (preparation.status === "started" ||
-                preparation.stopCode === "execution_slot_unavailable")
-        ) {
-            await ctx.db.patch(preparation._id, {
-                status: "blocked",
-                stopCode: "cancelled",
-                completedAt: now,
-                workflowId: undefined,
-            });
-        }
-        if (run.workflowId)
-            await workflow.cancel(ctx, run.workflowId as WorkflowId);
-        if (
-            preparation?.kind === "preparation" &&
-            preparation.executionGeneration === run.executionGeneration &&
-            preparation.status === "started" &&
-            preparation.workflowId &&
-            preparation.workflowId !== run.workflowId
-        ) {
-            await workflow.cancel(ctx, preparation.workflowId as WorkflowId);
-        }
-        await ctx.db.insert("runEvents", {
-            runId: run._id,
-            sequence: run.nextEventSequence + 1,
-            type: "run_cancelled",
-            lifecycleState: run.lifecycleState,
-            executionStatus: "cancelled",
-            occurredAt: now,
-        });
-        return { cancelled: true };
+        const { run } = await requireWorkspaceRun(ctx, args.runId);
+        return cancelRunExecution(ctx, run);
     },
 });
 
@@ -274,23 +190,7 @@ export const retry = mutation({
     args: { runId: v.id("researchRuns") },
     returns: v.object({ retryCount: v.number() }),
     handler: async (ctx, args) => {
-        const authUserId = await getAuthUserId(ctx);
-        if (!authUserId) {
-            throw new Error("Not authenticated");
-        }
-        const visitor = await ctx.db
-            .query("visitors")
-            .withIndex("by_auth_user_id", (query) =>
-                query.eq("authUserId", authUserId),
-            )
-            .unique();
-        const run = await ctx.db.get(args.runId);
-        if (
-            visitor?.status !== "active" ||
-            run?.ownerVisitorId !== visitor._id
-        ) {
-            throw new Error("Unauthorized");
-        }
+        const { run } = await requireWorkspaceRun(ctx, args.runId);
         if (
             run.executionStatus !== "failed" ||
             !run.workflowId ||

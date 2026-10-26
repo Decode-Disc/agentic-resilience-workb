@@ -22,15 +22,15 @@ import {
     sourcePreparationError,
 } from "./domain/sourcePreparationAuthority";
 import { rateLimiter } from "./rateLimiter";
-import schema from "./schema";
 import {
-    MAX_PREPARATION_DIAGNOSTIC_BYTES,
     MAX_CONCURRENT_SOURCE_EMBEDDING_CALLS,
+    MAX_PREPARATION_DIAGNOSTIC_BYTES,
     MAX_SOURCE_EMBEDDING_ATTEMPTS,
     MAX_SOURCE_EMBEDDING_BATCH_TEXTS,
     MAX_SOURCE_EMBEDDING_INPUT_BYTES,
     MAX_SOURCE_EMBEDDING_TEXT_BYTES,
 } from "./resourceLimits";
+import schema from "./schema";
 
 const serviceValidator = v.union(
     v.literal("model"),
@@ -229,6 +229,11 @@ export const recordAttempt = internalMutation({
         args,
     ): Promise<Infer<typeof recordAttemptResultValidator>> => {
         const now = Date.now();
+        if (args.status === "started" && args.runId) {
+            const run = await ctx.db.get(args.runId);
+            if (run && run.purpose === "browser_test")
+                throw sourcePreparationError("paid_work_disabled");
+        }
         if (
             args.diagnostic &&
             (args.diagnostic.reason.length > 100 ||

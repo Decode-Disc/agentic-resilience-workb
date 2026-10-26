@@ -1,5 +1,5 @@
-import { evaluatePublicEvidenceAvailability } from "@convex/domain/evidenceAvailabilityPolicy";
 import type { Id } from "@convex/_generated/dataModel";
+import { evaluatePublicEvidenceAvailability } from "@convex/domain/evidenceAvailabilityPolicy";
 import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
@@ -173,6 +173,7 @@ test("does not resume while another visitor workflow is running", async () => {
             admittedAt: 1,
         });
         const pausedRunId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             lifecycleState: "awaiting_evidence_sufficiency_review",
             executionStatus: "paused",
@@ -184,6 +185,7 @@ test("does not resume while another visitor workflow is running", async () => {
             updatedAt: 1,
         });
         await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             lifecycleState: "discovering_sources",
             executionStatus: "running",

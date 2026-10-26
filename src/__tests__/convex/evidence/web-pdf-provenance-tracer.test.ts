@@ -1,11 +1,12 @@
 /// <reference types="vite/client" />
-import { internal } from "@convex/_generated/api";
+
 import { lookup } from "node:dns/promises";
+import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { reproducePassage } from "@convex/domain/sourcePassages";
 import {
-    registerPdfFixture,
     clearPdfFixtures,
+    registerPdfFixture,
     retrieveAndNormalizePublicPdf,
 } from "@convex/integrations/publicPdfEvidence";
 import schema from "@convex/schema";
@@ -174,6 +175,7 @@ async function createApprovedCorpusScenario(
         });
 
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             companyId,
             coveragePreset: "balanced",

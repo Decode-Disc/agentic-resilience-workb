@@ -34,7 +34,7 @@ import { cn } from "@/lib/utils";
 
 type ResearchDossier = FunctionReturnType<
     typeof api.researchRuns.listMine
->[number];
+>["page"][number];
 
 const updatedAtFormatter = new Intl.DateTimeFormat("en", {
     day: "numeric",

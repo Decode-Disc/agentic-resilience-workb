@@ -118,6 +118,9 @@ export const auditActorValidator = v.union(
 );
 
 export const auditEventActionValidator = v.union(
+    v.literal("browser_test_context_opened"),
+    v.literal("browser_test_context_closed"),
+    v.literal("run_purpose_classified"),
     v.literal("invitation_seeded"),
     v.literal("invitation_claimed"),
     v.literal("invitation_revoked"),

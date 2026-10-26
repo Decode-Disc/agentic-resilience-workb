@@ -2,6 +2,10 @@ import { api } from "@convex/_generated/api";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import {
+    mockDossierList,
+    mockResearchWorkspace,
+} from "@/__tests__/setup/workspace-dossiers";
 
 const { ensureRunCompanyWebsite, navigate, useResponsive } = vi.hoisted(() => ({
     ensureRunCompanyWebsite: vi.fn(async () => ({})),
@@ -44,6 +48,7 @@ beforeEach(() => {
     ensureRunCompanyWebsite.mockReset();
     navigate.mockReset();
     convexReactHarness.reset();
+    mockResearchWorkspace();
     useResponsive.mockReset();
     convexReactHarness
         .action(api.companyResolution.ensureRunCompanyWebsite)
@@ -56,7 +61,7 @@ afterEach(() => {
 });
 
 test("keeps horizontal company navigation on desktop", () => {
-    convexReactHarness.query(api.researchRuns.listMine).returns([
+    mockDossierList().returns([
         {
             runId: "run-1",
             company: {
@@ -111,7 +116,7 @@ test("keeps horizontal company navigation on desktop", () => {
 
 test("keeps the compact company menu on mobile", async () => {
     useResponsive.mockReturnValue({ isMobile: true, isDesktop: false });
-    convexReactHarness.query(api.researchRuns.listMine).returns([
+    mockDossierList().returns([
         {
             runId: "run-1",
             company: {
@@ -163,7 +168,7 @@ test("keeps the compact company menu on mobile", async () => {
 });
 
 test("distinguishes loading from the empty state", () => {
-    convexReactHarness.query(api.researchRuns.listMine).returns(undefined);
+    mockDossierList().returns(undefined);
     const { rerender } = render(<AnalyzedCompanyList />);
     const loading = screen.getByRole("status", {
         name: /Loading research dossiers/i,
@@ -171,13 +176,13 @@ test("distinguishes loading from the empty state", () => {
     expect(loading.getAttribute("aria-busy")).toBe("true");
     expect(loading.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(3);
 
-    convexReactHarness.query(api.researchRuns.listMine).returns([]);
+    mockDossierList().returns([]);
     rerender(<AnalyzedCompanyList />);
     expect(screen.getByText(/No research dossiers yet/i)).toBeTruthy();
 });
 
 test("skips the owner query when no admitted visitor is available", () => {
-    convexReactHarness.query(api.researchRuns.listMine).returns(undefined);
+    mockDossierList().returns(undefined);
     const { container } = render(<AnalyzedCompanyList enabled={false} />);
 
     expect(convexReactHarness.module.useQuery.mock.calls.at(-1)?.[1]).toBe(
@@ -187,7 +192,7 @@ test("skips the owner query when no admitted visitor is available", () => {
 });
 
 test("backfills one legacy company website without re-resolving known URLs", async () => {
-    convexReactHarness.query(api.researchRuns.listMine).returns([
+    mockDossierList().returns([
         {
             runId: "legacy-run",
             company: {
@@ -229,7 +234,7 @@ test("backfills one legacy company website without re-resolving known URLs", asy
 
 test("keeps a compact error state when company runs fail", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const runsQuery = convexReactHarness.query(api.researchRuns.listMine);
+    const runsQuery = mockDossierList();
     runsQuery.throws(new Error("Company runs unavailable"));
 
     render(<AnalyzedCompanyList />);
