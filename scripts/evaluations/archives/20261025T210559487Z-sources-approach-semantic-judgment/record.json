@@ -1,0 +1,221 @@
+{
+    "schemaVersion": 1,
+    "id": "20261025T210559487Z-sources-approach-semantic-judgment",
+    "createdAt": "2026-10-25T21:05:59.487Z",
+    "git": {
+        "head": "4a9ffbcb26bc1dfcbc406da1dba63a2c8bf76200",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/scripts/evaluations/source-selection/SOURCES-APPROACH-EVALUATION-20261025.md",
+            "archivePath": "repository/scripts/evaluations/source-selection/SOURCES-APPROACH-EVALUATION-20261025.md"
+        },
+        {
+            "origin": "/tmp/sources-approach-final-20261025",
+            "archivePath": "external/experiment"
+        },
+        {
+            "origin": "/tmp/sources-approach-semantic-review-20261025",
+            "archivePath": "external/semantic-review"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/experiment/authorization-development-continuation-3.json",
+            "bytes": 606,
+            "sha256": "19d6d1fad29c935615029ff773043c0691f8ab608e90854954cb4f2b5ac1d0ec"
+        },
+        {
+            "path": "external/experiment/authorization-template.json",
+            "bytes": 167,
+            "sha256": "39201714adac730bebb267654a0d2a158ab55d20382039dae5257fd469ada762"
+        },
+        {
+            "path": "external/experiment/authorization-validation.json",
+            "bytes": 606,
+            "sha256": "19d6d1fad29c935615029ff773043c0691f8ab608e90854954cb4f2b5ac1d0ec"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourceComparison.ts",
+            "bytes": 56129,
+            "sha256": "7d32d8eaba6693dab72eac0494de35ede51acc82df542679790342ce721cc454"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourcePassages.ts",
+            "bytes": 31546,
+            "sha256": "275d170f27e3751192ed313b25345176186b66c5275ecdda86ce6e9fcbc76404"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourceQualification.ts",
+            "bytes": 26987,
+            "sha256": "3aa97e6e4f238a287bbab12fcc89e5f490d619a7214321468926771d059d1639"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourceRetrievalPolicy.ts",
+            "bytes": 6239,
+            "sha256": "6dfeea31e9b272e2cbcad093fb56d5aa971a9bac45294725a08dff88833e5244"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourceSelectionPolicy.ts",
+            "bytes": 84131,
+            "sha256": "7ec56df0b342c44bdafda7d6aea268bba1025b040b2bb54a07b3ed13ec706271"
+        },
+        {
+            "path": "external/experiment/code/convex/integrations/evidenceNormalization.ts",
+            "bytes": 9303,
+            "sha256": "91c1152c5ffde7fbd6b094820575267c634d00031c8d2f4e97031142accf0eb0"
+        },
+        {
+            "path": "external/experiment/code/convex/resourceLimits.ts",
+            "bytes": 6532,
+            "sha256": "63684d31a3d981135a050cc89457094cd346ea1990008a4adfe561263c532470"
+        },
+        {
+            "path": "external/experiment/code/package.json",
+            "bytes": 4919,
+            "sha256": "a2738b04d5fd3fce489a8a34c933cb2fda7c8ad6b6e62c44bf3dd260b2deb1d8"
+        },
+        {
+            "path": "external/experiment/code/pnpm-lock.yaml",
+            "bytes": 239499,
+            "sha256": "d9cb806af863182c4caab874a102336db82cc1fe24c8adf4944d65dcb7b8489c"
+        },
+        {
+            "path": "external/experiment/code/scripts/evaluations/source-selection/evaluation-records.ts",
+            "bytes": 3406,
+            "sha256": "7b78b947434337a5132fc3408a0575af977075bdf7d0ad18e8b909ab7a750531"
+        },
+        {
+            "path": "external/experiment/code/scripts/evaluations/source-selection/sources-approach-cli.ts",
+            "bytes": 31241,
+            "sha256": "ec1f851b35bb1690d01dafa15b32e36c6decbeaac9c947369a2b8b709a01c938"
+        },
+        {
+            "path": "external/experiment/code/scripts/evaluations/source-selection/sources-approach-report.ts",
+            "bytes": 29137,
+            "sha256": "159835333480773c44f57ad4f730b59eb69763206599724fa741522282ea4dd7"
+        },
+        {
+            "path": "external/experiment/code/scripts/evaluations/source-selection/sources-approach-runner.ts",
+            "bytes": 22323,
+            "sha256": "c670418cfe602473d0c4e44fe11cc5ba600dcb3534bf75e00788cdc4007f4a47"
+        },
+        {
+            "path": "external/experiment/code/scripts/evaluations/source-selection/sources-approach-study.ts",
+            "bytes": 22832,
+            "sha256": "dd8e8ee47200656faf78527e90d4948175fc2b8a32e357ea5735014ac52f0fd2"
+        },
+        {
+            "path": "external/experiment/code/scripts/evaluations/source-selection/sources-approach.ts",
+            "bytes": 654,
+            "sha256": "f88864d9982f8039b5e2483a6abf2a5302aeaa9454d1d3b45542c43e9c558a05"
+        },
+        {
+            "path": "external/experiment/code/scripts/evaluations/source-selection/study-cli.ts",
+            "bytes": 53742,
+            "sha256": "21b76c6b4e1300b5d8359e1954997682630ed331fea6d88745ba1229ed9bd851"
+        },
+        {
+            "path": "external/experiment/continuation-provenance.json",
+            "bytes": 603,
+            "sha256": "465693c4d0ace9d2422898a15f3d730bdbc0502625c6720973dd231ac9d597cf"
+        },
+        {
+            "path": "external/experiment/investigator-inputs/cross-company-original.json",
+            "bytes": 27419,
+            "sha256": "b44639265de2f4c519a4fdaff65b9a643ad67ac997759425283194de5ec84825"
+        },
+        {
+            "path": "external/experiment/investigator-inputs/servicenow-original.json",
+            "bytes": 663503,
+            "sha256": "e84b55bd7f12981b643a08902d264adda61a2e49791a2639be3e0da946ca7b48"
+        },
+        {
+            "path": "external/experiment/live-calls.jsonl",
+            "bytes": 47535777,
+            "sha256": "162022cced1391df26f49d0f6fd1eca9eb7a01a183b88fd6cd5f8214a12f0746"
+        },
+        {
+            "path": "external/experiment/live-comparison-review.json",
+            "bytes": 164788,
+            "sha256": "c314d7e4ee9a8f50bce6f789c173e52b8b57b48b7687549ea388677ac6b9a31c"
+        },
+        {
+            "path": "external/experiment/live-comparison.json",
+            "bytes": 738899,
+            "sha256": "05fae1a43230b592069f3cd0622aebe01fba949e6d20e0de9933078362364445"
+        },
+        {
+            "path": "external/experiment/live-comparison.md",
+            "bytes": 120432,
+            "sha256": "96f6eda2df5076dd12729f7a511dafcf707754ce5c3d305e2a2f642fb80ed259"
+        },
+        {
+            "path": "external/experiment/live-development-continuation-3.started",
+            "bytes": 24,
+            "sha256": "5952b65a9f669e5a3327eb0568c00060fd535c54d49dc1547f38a32c43c8989f"
+        },
+        {
+            "path": "external/experiment/live-grant.json",
+            "bytes": 606,
+            "sha256": "19d6d1fad29c935615029ff773043c0691f8ab608e90854954cb4f2b5ac1d0ec"
+        },
+        {
+            "path": "external/experiment/live-results.jsonl",
+            "bytes": 5162871,
+            "sha256": "3127de661650c786e22e0aa4f2a25468bcd026f3af62b09f737f735c6cae6fad"
+        },
+        {
+            "path": "external/experiment/live-validation.started",
+            "bytes": 24,
+            "sha256": "a60427d40712f4fff5ec3fbb647f65ea16a4881a05a450d368c744b4b25e6369"
+        },
+        {
+            "path": "external/experiment/manifest.json",
+            "bytes": 7679,
+            "sha256": "b1776a20928bc554f490a2b8f25bc557b984f4b9524d236a808e5011dfa90279"
+        },
+        {
+            "path": "external/experiment/preflight-development-continuation-3.json",
+            "bytes": 347,
+            "sha256": "a7fe1af4d8460bb9ff8726f3876981642b52843d7e97200331f34b4a0cb6d173"
+        },
+        {
+            "path": "external/experiment/preflight-validation.json",
+            "bytes": 347,
+            "sha256": "04737c44e46d576f53ec7a781dee3ff6da04d5dad0b0f13809dc18cdf5bcdf41"
+        },
+        {
+            "path": "external/experiment/prepared-inputs.json",
+            "bytes": 3297226,
+            "sha256": "54485a9d20657f41d343ba503847ebaacf4ea6b9695324ec6301a54c5562974f"
+        },
+        {
+            "path": "external/experiment/scenarios.json",
+            "bytes": 2114538,
+            "sha256": "17fc99c16745fa337a85a85dffaf407a76f750a5a79dd3f2d9fdaedbb15c333b"
+        },
+        {
+            "path": "external/semantic-review/retention-check.py",
+            "bytes": 2329,
+            "sha256": "59543447fc931751ccca10524cb633c6411d14a149bd8ba70204ca7114c38c88"
+        },
+        {
+            "path": "external/semantic-review/retention-evidence.json",
+            "bytes": 13534,
+            "sha256": "83df86830c6c121a69d1698ef169781927b6d877a54da531069a41ec5c9b3fd1"
+        },
+        {
+            "path": "repository/scripts/evaluations/source-selection/SOURCES-APPROACH-EVALUATION-20261025.md",
+            "bytes": 30624,
+            "sha256": "7062cd3324b65c2a20703666590e2ef054b345085e74a1d5f67fd79a229d7b89"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261025T210559487Z-sources-approach-semantic-judgment.tar.gz",
+        "bytes": 9115806,
+        "sha256": "69aec01a52eab4bf9dc14821b0ef7d316756e136adc66a1c0f2e27c820c0db89"
+    },
+    "verification": "restored_and_verified"
+}

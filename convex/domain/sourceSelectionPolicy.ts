@@ -214,6 +214,18 @@ export type SourceRoleAvailability = Infer<
     typeof sourceRoleAvailabilityValidator
 >[number];
 
+/** Explicit secondary-source assertions need the same premise check as arguments. */
+export function sourceFindingRequiresComparison(
+    finding: SourceQualification["findings"][number],
+): boolean {
+    return (
+        ["attributed_argument", "forecast"].includes(finding.kind) ||
+        (Boolean(finding.relevance && finding.scope) &&
+            finding.role.startsWith("independent_analysis_") &&
+            ["asserted_fact", "reported_outcome"].includes(finding.kind))
+    );
+}
+
 /** Evaluates a finding once so selection, review and evidence use share its restrictions. */
 export function sourceFindingUsage(
     finding: SourceQualification["findings"][number],
@@ -260,7 +272,7 @@ export function sourceFindingUsage(
             reasonCodes: ["possible_conflict"],
         };
     if (
-        ["attributed_argument", "forecast"].includes(finding.kind) &&
+        sourceFindingRequiresComparison(finding) &&
         comparisonOutcome !== "no_conflict_observed"
     )
         return {
@@ -1650,9 +1662,7 @@ export function classifySourceCandidate(
                 const findingIndex =
                     qualification?.findings.indexOf(finding) ?? -1;
                 return (
-                    ["attributed_argument", "forecast"].includes(
-                        finding.kind,
-                    ) &&
+                    sourceFindingRequiresComparison(finding) &&
                     (inspection?.status !== "qualified" ||
                         inspection.comparisonOutcomes?.[findingIndex] !==
                             "no_conflict_observed")

@@ -1,0 +1,597 @@
+{
+    "schemaVersion": 1,
+    "id": "20261025T220533226Z-sources-assertions-recheck",
+    "createdAt": "2026-10-25T22:05:33.226Z",
+    "git": {
+        "head": "4a9ffbcb26bc1dfcbc406da1dba63a2c8bf76200",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/context/TECH.md",
+            "archivePath": "repository/context/TECH.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/ROADMAP.md",
+            "archivePath": "repository/docs/ROADMAP.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/domain/sourceQualification.ts",
+            "archivePath": "repository/convex/domain/sourceQualification.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/domain/sourceComparison.ts",
+            "archivePath": "repository/convex/domain/sourceComparison.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/domain/sourceComparisonContext.ts",
+            "archivePath": "repository/convex/domain/sourceComparisonContext.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/domain/sourceRetrievalPolicy.ts",
+            "archivePath": "repository/convex/domain/sourceRetrievalPolicy.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/domain/sourceSelectionPolicy.ts",
+            "archivePath": "repository/convex/domain/sourceSelectionPolicy.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/sourcePreparation.ts",
+            "archivePath": "repository/convex/sourcePreparation.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/scripts/evaluations/source-selection/sources-approach.ts",
+            "archivePath": "repository/scripts/evaluations/source-selection/sources-approach.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/scripts/evaluations/source-selection/sources-approach-cli.ts",
+            "archivePath": "repository/scripts/evaluations/source-selection/sources-approach-cli.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/scripts/evaluations/source-selection/sources-approach-runner.ts",
+            "archivePath": "repository/scripts/evaluations/source-selection/sources-approach-runner.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/scripts/evaluations/source-selection/sources-approach-study.ts",
+            "archivePath": "repository/scripts/evaluations/source-selection/sources-approach-study.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/scripts/evaluations/source-selection/sources-approach-report.ts",
+            "archivePath": "repository/scripts/evaluations/source-selection/sources-approach-report.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/scripts/evaluations/source-selection/README.md",
+            "archivePath": "repository/scripts/evaluations/source-selection/README.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/scripts/evaluations/source-selection/SOURCES-APPROACH-EVALUATION-20261025.md",
+            "archivePath": "repository/scripts/evaluations/source-selection/SOURCES-APPROACH-EVALUATION-20261025.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/sources/source-qualification.test.ts",
+            "archivePath": "repository/src/__tests__/convex/sources/source-qualification.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/sources/source-qualification-action.test.ts",
+            "archivePath": "repository/src/__tests__/convex/sources/source-qualification-action.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/sources/source-comparison.test.ts",
+            "archivePath": "repository/src/__tests__/convex/sources/source-comparison.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/sources/source-comparison-action.test.ts",
+            "archivePath": "repository/src/__tests__/convex/sources/source-comparison-action.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/integrations/source-qualification-transport.test.ts",
+            "archivePath": "repository/src/__tests__/convex/integrations/source-qualification-transport.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/benchmarks/sources-approach-study.test.ts",
+            "archivePath": "repository/src/__tests__/benchmarks/sources-approach-study.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/benchmarks/sources-approach-runner.test.ts",
+            "archivePath": "repository/src/__tests__/benchmarks/sources-approach-runner.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/benchmarks/sources-approach-cli.test.ts",
+            "archivePath": "repository/src/__tests__/benchmarks/sources-approach-cli.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/benchmarks/sources-approach-report.test.ts",
+            "archivePath": "repository/src/__tests__/benchmarks/sources-approach-report.test.ts"
+        },
+        {
+            "origin": "/tmp/sources-assertions-20261025",
+            "archivePath": "external/experiment"
+        },
+        {
+            "origin": "/tmp/sources-assertions-analysis-20261025",
+            "archivePath": "external/analysis"
+        },
+        {
+            "origin": "/tmp/sources-approach-final-20261025",
+            "archivePath": "external/baseline"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/analysis/activation-and-input-audit.json",
+            "bytes": 3969,
+            "sha256": "fda786618ea27e3ab0731b5ad47228545ac9e0b8b0e8b7481478c43228f9f69e"
+        },
+        {
+            "path": "external/analysis/metrics-and-receipts.json",
+            "bytes": 1373,
+            "sha256": "c08ff8b3149e933d9ebfbf1bad0ea3a3987a7d467174619455350373e8ea4440"
+        },
+        {
+            "path": "external/baseline/authorization-development-continuation-3.json",
+            "bytes": 606,
+            "sha256": "19d6d1fad29c935615029ff773043c0691f8ab608e90854954cb4f2b5ac1d0ec"
+        },
+        {
+            "path": "external/baseline/authorization-template.json",
+            "bytes": 167,
+            "sha256": "39201714adac730bebb267654a0d2a158ab55d20382039dae5257fd469ada762"
+        },
+        {
+            "path": "external/baseline/authorization-validation.json",
+            "bytes": 606,
+            "sha256": "19d6d1fad29c935615029ff773043c0691f8ab608e90854954cb4f2b5ac1d0ec"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/sourceComparison.ts",
+            "bytes": 56129,
+            "sha256": "7d32d8eaba6693dab72eac0494de35ede51acc82df542679790342ce721cc454"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/sourcePassages.ts",
+            "bytes": 31546,
+            "sha256": "275d170f27e3751192ed313b25345176186b66c5275ecdda86ce6e9fcbc76404"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/sourceQualification.ts",
+            "bytes": 26987,
+            "sha256": "3aa97e6e4f238a287bbab12fcc89e5f490d619a7214321468926771d059d1639"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/sourceRetrievalPolicy.ts",
+            "bytes": 6239,
+            "sha256": "6dfeea31e9b272e2cbcad093fb56d5aa971a9bac45294725a08dff88833e5244"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/sourceSelectionPolicy.ts",
+            "bytes": 84131,
+            "sha256": "7ec56df0b342c44bdafda7d6aea268bba1025b040b2bb54a07b3ed13ec706271"
+        },
+        {
+            "path": "external/baseline/code/convex/integrations/evidenceNormalization.ts",
+            "bytes": 9303,
+            "sha256": "91c1152c5ffde7fbd6b094820575267c634d00031c8d2f4e97031142accf0eb0"
+        },
+        {
+            "path": "external/baseline/code/convex/resourceLimits.ts",
+            "bytes": 6532,
+            "sha256": "63684d31a3d981135a050cc89457094cd346ea1990008a4adfe561263c532470"
+        },
+        {
+            "path": "external/baseline/code/package.json",
+            "bytes": 4919,
+            "sha256": "a2738b04d5fd3fce489a8a34c933cb2fda7c8ad6b6e62c44bf3dd260b2deb1d8"
+        },
+        {
+            "path": "external/baseline/code/pnpm-lock.yaml",
+            "bytes": 239499,
+            "sha256": "d9cb806af863182c4caab874a102336db82cc1fe24c8adf4944d65dcb7b8489c"
+        },
+        {
+            "path": "external/baseline/code/scripts/evaluations/source-selection/evaluation-records.ts",
+            "bytes": 3406,
+            "sha256": "7b78b947434337a5132fc3408a0575af977075bdf7d0ad18e8b909ab7a750531"
+        },
+        {
+            "path": "external/baseline/code/scripts/evaluations/source-selection/sources-approach-cli.ts",
+            "bytes": 31241,
+            "sha256": "ec1f851b35bb1690d01dafa15b32e36c6decbeaac9c947369a2b8b709a01c938"
+        },
+        {
+            "path": "external/baseline/code/scripts/evaluations/source-selection/sources-approach-report.ts",
+            "bytes": 29137,
+            "sha256": "159835333480773c44f57ad4f730b59eb69763206599724fa741522282ea4dd7"
+        },
+        {
+            "path": "external/baseline/code/scripts/evaluations/source-selection/sources-approach-runner.ts",
+            "bytes": 22323,
+            "sha256": "c670418cfe602473d0c4e44fe11cc5ba600dcb3534bf75e00788cdc4007f4a47"
+        },
+        {
+            "path": "external/baseline/code/scripts/evaluations/source-selection/sources-approach-study.ts",
+            "bytes": 22832,
+            "sha256": "dd8e8ee47200656faf78527e90d4948175fc2b8a32e357ea5735014ac52f0fd2"
+        },
+        {
+            "path": "external/baseline/code/scripts/evaluations/source-selection/sources-approach.ts",
+            "bytes": 654,
+            "sha256": "f88864d9982f8039b5e2483a6abf2a5302aeaa9454d1d3b45542c43e9c558a05"
+        },
+        {
+            "path": "external/baseline/code/scripts/evaluations/source-selection/study-cli.ts",
+            "bytes": 53742,
+            "sha256": "21b76c6b4e1300b5d8359e1954997682630ed331fea6d88745ba1229ed9bd851"
+        },
+        {
+            "path": "external/baseline/continuation-provenance.json",
+            "bytes": 603,
+            "sha256": "465693c4d0ace9d2422898a15f3d730bdbc0502625c6720973dd231ac9d597cf"
+        },
+        {
+            "path": "external/baseline/investigator-inputs/cross-company-original.json",
+            "bytes": 27419,
+            "sha256": "b44639265de2f4c519a4fdaff65b9a643ad67ac997759425283194de5ec84825"
+        },
+        {
+            "path": "external/baseline/investigator-inputs/servicenow-original.json",
+            "bytes": 663503,
+            "sha256": "e84b55bd7f12981b643a08902d264adda61a2e49791a2639be3e0da946ca7b48"
+        },
+        {
+            "path": "external/baseline/live-calls.jsonl",
+            "bytes": 47535777,
+            "sha256": "162022cced1391df26f49d0f6fd1eca9eb7a01a183b88fd6cd5f8214a12f0746"
+        },
+        {
+            "path": "external/baseline/live-comparison-review.json",
+            "bytes": 164788,
+            "sha256": "c314d7e4ee9a8f50bce6f789c173e52b8b57b48b7687549ea388677ac6b9a31c"
+        },
+        {
+            "path": "external/baseline/live-comparison.json",
+            "bytes": 738899,
+            "sha256": "05fae1a43230b592069f3cd0622aebe01fba949e6d20e0de9933078362364445"
+        },
+        {
+            "path": "external/baseline/live-comparison.md",
+            "bytes": 120432,
+            "sha256": "96f6eda2df5076dd12729f7a511dafcf707754ce5c3d305e2a2f642fb80ed259"
+        },
+        {
+            "path": "external/baseline/live-development-continuation-3.started",
+            "bytes": 24,
+            "sha256": "5952b65a9f669e5a3327eb0568c00060fd535c54d49dc1547f38a32c43c8989f"
+        },
+        {
+            "path": "external/baseline/live-grant.json",
+            "bytes": 606,
+            "sha256": "19d6d1fad29c935615029ff773043c0691f8ab608e90854954cb4f2b5ac1d0ec"
+        },
+        {
+            "path": "external/baseline/live-results.jsonl",
+            "bytes": 5162871,
+            "sha256": "3127de661650c786e22e0aa4f2a25468bcd026f3af62b09f737f735c6cae6fad"
+        },
+        {
+            "path": "external/baseline/live-validation.started",
+            "bytes": 24,
+            "sha256": "a60427d40712f4fff5ec3fbb647f65ea16a4881a05a450d368c744b4b25e6369"
+        },
+        {
+            "path": "external/baseline/manifest.json",
+            "bytes": 7679,
+            "sha256": "b1776a20928bc554f490a2b8f25bc557b984f4b9524d236a808e5011dfa90279"
+        },
+        {
+            "path": "external/baseline/preflight-development-continuation-3.json",
+            "bytes": 347,
+            "sha256": "a7fe1af4d8460bb9ff8726f3876981642b52843d7e97200331f34b4a0cb6d173"
+        },
+        {
+            "path": "external/baseline/preflight-validation.json",
+            "bytes": 347,
+            "sha256": "04737c44e46d576f53ec7a781dee3ff6da04d5dad0b0f13809dc18cdf5bcdf41"
+        },
+        {
+            "path": "external/baseline/prepared-inputs.json",
+            "bytes": 3297226,
+            "sha256": "54485a9d20657f41d343ba503847ebaacf4ea6b9695324ec6301a54c5562974f"
+        },
+        {
+            "path": "external/baseline/scenarios.json",
+            "bytes": 2114538,
+            "sha256": "17fc99c16745fa337a85a85dffaf407a76f750a5a79dd3f2d9fdaedbb15c333b"
+        },
+        {
+            "path": "external/experiment/assertions-comparison-review.json",
+            "bytes": 65248,
+            "sha256": "abd0fe5b971e0665d8fd446574826d01981d1e2d5e8e048fe446501524b96831"
+        },
+        {
+            "path": "external/experiment/assertions-comparison.json",
+            "bytes": 263688,
+            "sha256": "9514302b68f53608012a6b6522c16c8d4739459a6f52bddb6908159b4e2dad8d"
+        },
+        {
+            "path": "external/experiment/assertions-comparison.md",
+            "bytes": 35309,
+            "sha256": "bcb401bf10b5fbafde7ed67b3027d77771cd12ac4d781614ed27acf1ced81b19"
+        },
+        {
+            "path": "external/experiment/authorization-development.json",
+            "bytes": 414,
+            "sha256": "bacd48140048bba8da29cbcc59365ca0dc2066778d3fe65611b78bb6b7350879"
+        },
+        {
+            "path": "external/experiment/authorization-template.json",
+            "bytes": 165,
+            "sha256": "2de14b4f4a6fe7527aa5c7a2d51dc573b78765090a9646f98388efd73bb0414b"
+        },
+        {
+            "path": "external/experiment/authorization-validation.json",
+            "bytes": 414,
+            "sha256": "bacd48140048bba8da29cbcc59365ca0dc2066778d3fe65611b78bb6b7350879"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourceComparison.ts",
+            "bytes": 68252,
+            "sha256": "2efbdca37a19b483e090d96e140e552f5878e9a414ceea99047f01accad9ab62"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourcePassages.ts",
+            "bytes": 31546,
+            "sha256": "275d170f27e3751192ed313b25345176186b66c5275ecdda86ce6e9fcbc76404"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourceQualification.ts",
+            "bytes": 32186,
+            "sha256": "ead55655b18606513cd2ad15492d6c21998ff29616d6733953a82e923ae035fd"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourceRetrievalPolicy.ts",
+            "bytes": 6488,
+            "sha256": "1ab622308c069cf339ee6fef27a774ea16a65e02813819f0196f294afdece302"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourceSelectionPolicy.ts",
+            "bytes": 84537,
+            "sha256": "fd32d89eeaf232c07ba564a6ade62cce332200e488ffecf7dc3a9b175e91df31"
+        },
+        {
+            "path": "external/experiment/code/convex/integrations/evidenceNormalization.ts",
+            "bytes": 9303,
+            "sha256": "91c1152c5ffde7fbd6b094820575267c634d00031c8d2f4e97031142accf0eb0"
+        },
+        {
+            "path": "external/experiment/code/convex/resourceLimits.ts",
+            "bytes": 6532,
+            "sha256": "63684d31a3d981135a050cc89457094cd346ea1990008a4adfe561263c532470"
+        },
+        {
+            "path": "external/experiment/code/package.json",
+            "bytes": 4919,
+            "sha256": "a2738b04d5fd3fce489a8a34c933cb2fda7c8ad6b6e62c44bf3dd260b2deb1d8"
+        },
+        {
+            "path": "external/experiment/code/pnpm-lock.yaml",
+            "bytes": 239499,
+            "sha256": "d9cb806af863182c4caab874a102336db82cc1fe24c8adf4944d65dcb7b8489c"
+        },
+        {
+            "path": "external/experiment/code/scripts/evaluations/source-selection/evaluation-records.ts",
+            "bytes": 3406,
+            "sha256": "7b78b947434337a5132fc3408a0575af977075bdf7d0ad18e8b909ab7a750531"
+        },
+        {
+            "path": "external/experiment/code/scripts/evaluations/source-selection/sources-approach-cli.ts",
+            "bytes": 31883,
+            "sha256": "4c292ef715cd43c303bb0a28cf8b153a1ff83d50d2a1fdc688e58b919436aa01"
+        },
+        {
+            "path": "external/experiment/code/scripts/evaluations/source-selection/sources-approach-report.ts",
+            "bytes": 29137,
+            "sha256": "159835333480773c44f57ad4f730b59eb69763206599724fa741522282ea4dd7"
+        },
+        {
+            "path": "external/experiment/code/scripts/evaluations/source-selection/sources-approach-runner.ts",
+            "bytes": 22323,
+            "sha256": "c670418cfe602473d0c4e44fe11cc5ba600dcb3534bf75e00788cdc4007f4a47"
+        },
+        {
+            "path": "external/experiment/code/scripts/evaluations/source-selection/sources-approach-study.ts",
+            "bytes": 23639,
+            "sha256": "c17d424f10a4a2a5d57a52cd2f6ea42d4b1a24d7db61017602c1016c24832879"
+        },
+        {
+            "path": "external/experiment/code/scripts/evaluations/source-selection/sources-approach.ts",
+            "bytes": 654,
+            "sha256": "f88864d9982f8039b5e2483a6abf2a5302aeaa9454d1d3b45542c43e9c558a05"
+        },
+        {
+            "path": "external/experiment/code/scripts/evaluations/source-selection/study-cli.ts",
+            "bytes": 53742,
+            "sha256": "21b76c6b4e1300b5d8359e1954997682630ed331fea6d88745ba1229ed9bd851"
+        },
+        {
+            "path": "external/experiment/executor-receipts.json",
+            "bytes": 52582,
+            "sha256": "367c65a35a7d969f52cdcdca84e49f62d84d7756eb3ba3ef359c15219c53ef45"
+        },
+        {
+            "path": "external/experiment/live-approval.json",
+            "bytes": 413,
+            "sha256": "cccf42bd0ac9e90ac54ba9cd9181337918344ff7d88b6f2f016e60a9fd5b5602"
+        },
+        {
+            "path": "external/experiment/live-calls.jsonl",
+            "bytes": 5447004,
+            "sha256": "2f034389f860d68ae52ac119439857ccb34f525f86641468e1aa76c315ee6084"
+        },
+        {
+            "path": "external/experiment/live-development.started",
+            "bytes": 24,
+            "sha256": "cbdc4b2796acf27cc16b3f5e3116ee1f1c0dff255c6f0a244f77497a580134e6"
+        },
+        {
+            "path": "external/experiment/live-results.jsonl",
+            "bytes": 3669939,
+            "sha256": "7053660264057c872f8da6afe819b1e047c998e1981feb7b4444eef386f8a1c6"
+        },
+        {
+            "path": "external/experiment/live-validation.started",
+            "bytes": 24,
+            "sha256": "6db6ff4f64bd478e18025d712c9168cddb0bd4d336a65078e40d0a29df8d6732"
+        },
+        {
+            "path": "external/experiment/manifest.json",
+            "bytes": 4447,
+            "sha256": "da4e40dee283e03c344aa90dfed94865af39ad2840188f6a482bbcb07c2ce09c"
+        },
+        {
+            "path": "external/experiment/preflight-development.json",
+            "bytes": 347,
+            "sha256": "5fcba2eb5b6043fc6707ef4aad253995628639228b72b38feed55902b87acdc5"
+        },
+        {
+            "path": "external/experiment/preflight-validation.json",
+            "bytes": 347,
+            "sha256": "c37ac9c4b18c18a1d6ea1be7239aa0b47dd4b15078174d8f7b5b51d28caf6de8"
+        },
+        {
+            "path": "external/experiment/prepared-inputs.json",
+            "bytes": 4278161,
+            "sha256": "c1c434c6ad4adda0482e30d0f0c212a22cb55cb4fdfabeb262f8f4742b35201d"
+        },
+        {
+            "path": "external/experiment/scenarios.json",
+            "bytes": 2840730,
+            "sha256": "1ba5f1e305950174e06f8a161042c6ad3cd37232deb1e5663305ca711e7d075d"
+        },
+        {
+            "path": "repository/context/TECH.md",
+            "bytes": 55367,
+            "sha256": "3eecbbacf325c4e666280e5de751c1c92099b2f54addda811567bc0421e7a003"
+        },
+        {
+            "path": "repository/convex/domain/sourceComparison.ts",
+            "bytes": 68330,
+            "sha256": "2b71b524c732447fef0438cc8e2dafd3602277de2a5b61298221963e89d2345f"
+        },
+        {
+            "path": "repository/convex/domain/sourceComparisonContext.ts",
+            "bytes": 10718,
+            "sha256": "97b946bf663ef1c76297a056ec6672360ed7cc95e22a370b26c64748ad7da5fa"
+        },
+        {
+            "path": "repository/convex/domain/sourceQualification.ts",
+            "bytes": 32320,
+            "sha256": "51c6fd2be7ca9445f1c4e8721f8854bbe32c2b4e24379225cacdeda6000bcbde"
+        },
+        {
+            "path": "repository/convex/domain/sourceRetrievalPolicy.ts",
+            "bytes": 6488,
+            "sha256": "1ab622308c069cf339ee6fef27a774ea16a65e02813819f0196f294afdece302"
+        },
+        {
+            "path": "repository/convex/domain/sourceSelectionPolicy.ts",
+            "bytes": 84537,
+            "sha256": "fd32d89eeaf232c07ba564a6ade62cce332200e488ffecf7dc3a9b175e91df31"
+        },
+        {
+            "path": "repository/convex/sourcePreparation.ts",
+            "bytes": 94204,
+            "sha256": "cb67776b2f819e4df7ef4effc79a5f8ce563e27f3abceccaea0528909c3c1918"
+        },
+        {
+            "path": "repository/docs/ROADMAP.md",
+            "bytes": 23469,
+            "sha256": "8f44d53b4047391fb775f3a0c333489ae958858b19e93129bd9f41e60c03b854"
+        },
+        {
+            "path": "repository/scripts/evaluations/source-selection/README.md",
+            "bytes": 18720,
+            "sha256": "03af0e09840816d8aa04f9741c91455f668c09d40f6baceeee2e3887a9091158"
+        },
+        {
+            "path": "repository/scripts/evaluations/source-selection/sources-approach-cli.ts",
+            "bytes": 31883,
+            "sha256": "4c292ef715cd43c303bb0a28cf8b153a1ff83d50d2a1fdc688e58b919436aa01"
+        },
+        {
+            "path": "repository/scripts/evaluations/source-selection/SOURCES-APPROACH-EVALUATION-20261025.md",
+            "bytes": 45143,
+            "sha256": "df70bc12c9d8fa4409969e868de51e008fae95622fabc159581358483ccc740d"
+        },
+        {
+            "path": "repository/scripts/evaluations/source-selection/sources-approach-report.ts",
+            "bytes": 29137,
+            "sha256": "159835333480773c44f57ad4f730b59eb69763206599724fa741522282ea4dd7"
+        },
+        {
+            "path": "repository/scripts/evaluations/source-selection/sources-approach-runner.ts",
+            "bytes": 22323,
+            "sha256": "c670418cfe602473d0c4e44fe11cc5ba600dcb3534bf75e00788cdc4007f4a47"
+        },
+        {
+            "path": "repository/scripts/evaluations/source-selection/sources-approach-study.ts",
+            "bytes": 23875,
+            "sha256": "59841c03653a3513ada98b378480a8d4df70894e3f1f7f380d22692751a52715"
+        },
+        {
+            "path": "repository/scripts/evaluations/source-selection/sources-approach.ts",
+            "bytes": 654,
+            "sha256": "f88864d9982f8039b5e2483a6abf2a5302aeaa9454d1d3b45542c43e9c558a05"
+        },
+        {
+            "path": "repository/src/__tests__/benchmarks/sources-approach-cli.test.ts",
+            "bytes": 11772,
+            "sha256": "e77487205811a62e3605ed18b17c1e075d9d6858bc13d339b39d6bd871143c6e"
+        },
+        {
+            "path": "repository/src/__tests__/benchmarks/sources-approach-report.test.ts",
+            "bytes": 14789,
+            "sha256": "1137fa62698d05f33fc2c6783d3bf9d3ba706f6371b8a9df8f64a7de65c96885"
+        },
+        {
+            "path": "repository/src/__tests__/benchmarks/sources-approach-runner.test.ts",
+            "bytes": 19558,
+            "sha256": "575593ade5175ce3f14aa266382feda57a853c73f0feedf3f27a5a265dd3b9bb"
+        },
+        {
+            "path": "repository/src/__tests__/benchmarks/sources-approach-study.test.ts",
+            "bytes": 9944,
+            "sha256": "e7ad3efcc81d47a494b195af0905d5dfcd068deb4986f8c99d143e69ef91e048"
+        },
+        {
+            "path": "repository/src/__tests__/convex/integrations/source-qualification-transport.test.ts",
+            "bytes": 17748,
+            "sha256": "ab7f8bc72a311ee69a0c5426f24ee07ef19d72e5bce03ec2b3943648d9a50ba3"
+        },
+        {
+            "path": "repository/src/__tests__/convex/sources/source-comparison-action.test.ts",
+            "bytes": 63923,
+            "sha256": "74b7b18cef027c3a3d33d55a53651648c3fa82e1e7a9ac7c4554abfa99fcb181"
+        },
+        {
+            "path": "repository/src/__tests__/convex/sources/source-comparison.test.ts",
+            "bytes": 44587,
+            "sha256": "72cb7c25c3470de773a4e235c9041ac37b47ddbe59bb58ad23b20decbef8c90e"
+        },
+        {
+            "path": "repository/src/__tests__/convex/sources/source-qualification-action.test.ts",
+            "bytes": 46567,
+            "sha256": "bd0c97c81450fe335c612b4691fe8059785f379d240419eedb68006caa83b4bc"
+        },
+        {
+            "path": "repository/src/__tests__/convex/sources/source-qualification.test.ts",
+            "bytes": 32886,
+            "sha256": "7e1c87303a262eebd5f1d3ff319137d07341ad20c95ff3a9a892d3c3ffc544e9"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261025T220533226Z-sources-assertions-recheck.tar.gz",
+        "bytes": 12926127,
+        "sha256": "7cbd0cdf336fc87bb549f2fb533e890866cb7e293363d2d4ff205ce73507da61"
+    },
+    "verification": "restored_and_verified"
+}

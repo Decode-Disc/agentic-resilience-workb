@@ -150,6 +150,12 @@ async function capturedComparison(
         internal.sourcePreparation.claimForDiscovery,
         { runId, corpusRevisionId, expectedExecutionGeneration: 3 },
     );
+    // These fixtures preserve the previous response contract; the version-five action is covered separately.
+    await t.run((ctx) =>
+        ctx.db.patch(preparationId, {
+            qualificationVersion: "source-qualification-v4",
+        }),
+    );
     const targetText =
         "Management argues that customers can rely on a unified workflow platform combining service management, automation and employee experiences instead of assembling separate point solutions, helping the company defend its competitive position.";
     const {
@@ -210,7 +216,7 @@ async function capturedComparison(
             sourceCaptureId,
             taskType: "source_qualification",
             executionMode: "live",
-            schemaVersion: SOURCE_QUALIFICATION_VERSION,
+            schemaVersion: "source-qualification-v4",
             adapterVersion: "fixture",
             inputHash: sha256Hex("argument-qualification-input"),
             output: {
@@ -327,9 +333,7 @@ async function capturedComparison(
     };
 }
 
-function comparisonResponse(
-    response: Awaited<ReturnType<typeof capturedComparison>>["response"],
-) {
+function comparisonResponse(response: unknown) {
     return new Response(
         JSON.stringify({
             id: "comparison-action-test",
@@ -383,6 +387,130 @@ async function completedComparison() {
         request,
     };
 }
+
+test("the current action persists individual premises and an unresolved overall comparison", async () => {
+    const fixture = await capturedComparison();
+    const { t, preparationId, sourceCaptureId, qualificationTaskId } = fixture;
+    await t.run(async (ctx) => {
+        const task = await ctx.db.get(qualificationTaskId);
+        if (task?.output.kind !== "source_qualification")
+            throw new Error("Missing qualification");
+        await ctx.db.patch(preparationId, {
+            qualificationVersion: "source-qualification-v5",
+        });
+        await ctx.db.patch(qualificationTaskId, {
+            schemaVersion: "source-qualification-v5",
+            output: {
+                ...task.output,
+                qualification: {
+                    ...task.output.qualification,
+                    findings: task.output.qualification.findings.map((f) => ({
+                        ...f,
+                        relevance:
+                            "Examines workflow control and competitive position.",
+                        scope: "An attributed thesis about the platform, not an established moat.",
+                    })),
+                },
+            },
+        });
+    });
+    const request = vi.fn<typeof fetch>(async () =>
+        comparisonResponse({
+            findings: [
+                {
+                    findingIndex: 0,
+                    targetPassageKeys: ["target:0:p0"],
+                    premises: [
+                        {
+                            statement:
+                                "Workflow competitors may bundle products.",
+                            disposition: "no_conflict_observed",
+                            explanation:
+                                "The issuer describes competing bundles.",
+                            comparableDimensions: [
+                                "entity",
+                                "concept",
+                                "period",
+                                "unit_basis",
+                                "argument_effect",
+                            ],
+                            primaryPassageKeys: ["primary:0"],
+                        },
+                        {
+                            statement:
+                                "A unified platform durably defends competitive position.",
+                            disposition: "inconclusive",
+                            explanation:
+                                "The supplied evidence does not establish durable control or economics.",
+                            comparableDimensions: [],
+                            primaryPassageKeys: [],
+                        },
+                    ],
+                },
+            ],
+        }),
+    );
+    vi.stubGlobal("fetch", request);
+    const args = { preparationId, sourceCaptureId, qualificationTaskId };
+    const result = await t.action(
+        internal.sourcePreparationActions.compareSource,
+        args,
+    );
+    expect(result.status).toBe("compared");
+    const saved = await t.run(async (ctx) =>
+        result.taskId ? ctx.db.get(result.taskId) : null,
+    );
+    expect(saved?.output).toMatchObject({
+        kind: "source_comparison",
+        findings: [
+            {
+                disposition: "inconclusive",
+                premises: [
+                    {
+                        statement: "Workflow competitors may bundle products.",
+                        disposition: "no_conflict_observed",
+                        primaryPassages: [
+                            { sourceId: fixture.primarySourceId },
+                        ],
+                    },
+                    {
+                        statement:
+                            "A unified platform durably defends competitive position.",
+                        disposition: "inconclusive",
+                    },
+                ],
+            },
+        ],
+    });
+    expect(
+        (await t.action(internal.sourcePreparationActions.compareSource, args))
+            .taskId,
+    ).toBe(result.taskId);
+    expect(request).toHaveBeenCalledOnce();
+    if (saved?.output.kind !== "source_comparison")
+        throw new Error("Missing persisted comparison");
+    await expect(
+        t.mutation(internal.sourcePreparation.saveComparison, {
+            ...args,
+            inputHash: saved.inputHash,
+            providerCallId: saved.providerCallId,
+            output: {
+                ...saved.output,
+                findings: saved.output.findings.map((finding) => ({
+                    ...finding,
+                    disposition: "no_conflict_observed" as const,
+                    comparableDimensions: [
+                        "entity",
+                        "concept",
+                        "period",
+                        "unit_basis",
+                        "argument_effect",
+                    ] satisfies typeof finding.comparableDimensions,
+                })),
+            },
+        }),
+    ).rejects.toThrow("comparison_output_invalid");
+});
 
 test("a current comparison reuses exact evidence without rebuilding its retrieval input", async () => {
     const { t, preparationId, sourceCaptureId, qualificationTaskId, response } =

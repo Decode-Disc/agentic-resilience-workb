@@ -4,12 +4,13 @@ import {
     createQualificationResponseSchema,
     materializeQualificationOutput,
     prepareQualificationInput,
-    validateQualificationOutput,
+    qualificationExecutionVersion,
     sourceQualificationSchema,
+    validateQualificationOutput,
 } from "@convex/domain/sourceQualification";
 import {
-    SOURCE_COVERAGE_ROLES,
     classifySourceCandidate,
+    SOURCE_COVERAGE_ROLES,
 } from "@convex/domain/sourceSelectionPolicy";
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
@@ -25,12 +26,88 @@ const company = {
     ticker: "NOW",
 };
 const input = {
+    protocolVersion: "source-qualification-v4" as const,
     company,
     canonicalUrl: "https://example.com/research",
     title: "Workflow economics",
     asOfTime: Date.UTC(2026, 9, 20),
     text: "ServiceNow may face pressure from bundled workflow products.",
 };
+
+test("keeps the accepted default while the assertion candidate remains explicitly executable", () => {
+    expect(qualificationExecutionVersion()).toBe("source-qualification-v4");
+    expect(
+        prepareQualificationInput({ ...input, protocolVersion: undefined })
+            .request.protocolVersion,
+    ).toBe("source-qualification-v4");
+    expect(qualificationExecutionVersion("source-qualification-v5")).toBe(
+        "source-qualification-v5",
+    );
+});
+
+test("retains distinct useful assertions from one mixed passage with their relevance and scope", () => {
+    const prepared = prepareQualificationInput({
+        ...input,
+        protocolVersion: "source-qualification-v5",
+        text: "Acme reports a margin of 71% for 2026. It expects margins to fluctuate as AI investment increases.",
+    });
+    const result = materializeQualificationOutput(prepared, {
+        companyMatch: "subject",
+        companyPassageKeys: ["p0"],
+        documentKind: "regulatory_interim",
+        reportingPeriodEnd: null,
+        reportingPeriodPassageKeys: [],
+        contributions: {
+            ...Object.fromEntries(
+                SOURCE_COVERAGE_ROLES.map((role) => [role, null]),
+            ),
+            regulatory_interim: [
+                {
+                    summary: "Acme reports a 71% margin for 2026.",
+                    relevance:
+                        "Provides an observed baseline for pricing resilience.",
+                    scope: "Issuer-reported margin for 2026; not a future margin guarantee.",
+                    kind: "reported_outcome",
+                    period: "historical",
+                    periodPassageKeys: ["p0"],
+                    passageKeys: ["p0"],
+                    dependsOnFlaggedAssertion: false,
+                },
+                {
+                    summary:
+                        "Acme expects margins to fluctuate as AI investment increases.",
+                    relevance:
+                        "Identifies a prospective cost pressure on the business model.",
+                    scope: "Management expectation; no realized future outcome is established.",
+                    kind: "forecast",
+                    period: "unspecified",
+                    periodPassageKeys: [],
+                    passageKeys: ["p0"],
+                    dependsOnFlaggedAssertion: false,
+                },
+            ],
+        },
+        limitations: [],
+    });
+    expect(result).toMatchObject({
+        status: "valid",
+        qualification: {
+            findings: [
+                {
+                    summary: "Acme reports a 71% margin for 2026.",
+                    kind: "reported_outcome",
+                    relevance:
+                        "Provides an observed baseline for pricing resilience.",
+                },
+                {
+                    summary:
+                        "Acme expects margins to fluctuate as AI investment increases.",
+                    kind: "forecast",
+                },
+            ],
+        },
+    });
+});
 
 describe("source qualification protocol", () => {
     test("requires a scoped restriction on new qualifications without changing the version-three request", () => {

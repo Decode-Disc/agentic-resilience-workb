@@ -1,11 +1,18 @@
 import {
-    type SourceComparisonTarget,
     createSourceComparisonResponseSchema,
     materializeSourceComparisonOutput,
     prepareSourceComparisonInput,
     SOURCE_COMPARISON_MAX_INPUT_BYTES,
+    type SourceComparisonTarget,
+    sourceComparisonInputPolicyHash,
+    sourceComparisonOutputSchema,
 } from "@convex/domain/sourceComparison";
 import { sha256Hex } from "@convex/domain/sourcePassages";
+import {
+    shortRetrievalQuery,
+    sourceComparisonQuery,
+} from "@convex/domain/sourceRetrievalPolicy";
+import { sourceFindingUsage } from "@convex/domain/sourceSelectionPolicy";
 import { expect, test } from "vitest";
 
 const company = {
@@ -13,6 +20,15 @@ const company = {
     legalName: "ServiceNow, Inc.",
     ticker: "NOW",
 };
+
+test("preserves the recorded comparison policy for version-four executions", () => {
+    expect(sourceComparisonInputPolicyHash("source-qualification-v4")).toBe(
+        "d92c82a25eff5fd2da33bf33d7efa1ee43a8643029bc3f7476121a9bcca07b42",
+    );
+    expect(sourceComparisonInputPolicyHash("source-qualification-v5")).not.toBe(
+        sourceComparisonInputPolicyHash("source-qualification-v4"),
+    );
+});
 
 const makeTarget = (
     findings: Array<{ passageKey: string; quotation: string }[]>,
@@ -116,6 +132,221 @@ const primary = (text: string) => ({
             headingPath: ["Competition"],
         },
     ],
+});
+
+test("keeps an argument inconclusive when a documented product tier leaves monetization unresolved", () => {
+    const target = makeTarget([
+        [
+            {
+                passageKey: "p0",
+                quotation:
+                    "Premium AI tiers will drive meaningful incremental revenue.",
+            },
+        ],
+    ]);
+    target.qualificationVersion = "source-qualification-v5";
+    const finding = target.qualification.findings[0];
+    if (!finding) throw new Error("Missing target finding");
+    Object.assign(finding, {
+        relevance: "Examines AI pricing resilience.",
+        scope: "An attributed monetization thesis, not realized revenue.",
+    });
+    const prepared = prepareSourceComparisonInput({
+        company,
+        target,
+        primaryCandidates: [
+            primary(
+                "AI products are offered in Standard, Pro and Premium subscription tiers.",
+            ),
+        ],
+    });
+    const result = materializeSourceComparisonOutput(prepared, {
+        findings: [
+            {
+                findingIndex: 0,
+                targetPassageKeys: ["target:0:p0"],
+                premises: [
+                    {
+                        statement: "Premium AI subscription tiers exist.",
+                        disposition: "no_conflict_observed",
+                        explanation: "The issuer describes the three tiers.",
+                        comparableDimensions: [
+                            "entity",
+                            "concept",
+                            "period",
+                            "unit_basis",
+                            "argument_effect",
+                        ],
+                        primaryPassageKeys: ["primary:0"],
+                    },
+                    {
+                        statement:
+                            "Premium tiers generate meaningful incremental revenue.",
+                        disposition: "inconclusive",
+                        explanation:
+                            "No adoption, conversion or incremental revenue is disclosed in the supplied evidence.",
+                        comparableDimensions: [],
+                        primaryPassageKeys: [],
+                    },
+                ],
+            },
+        ],
+    });
+    expect(result).toMatchObject({
+        status: "valid",
+        output: {
+            findings: [
+                {
+                    disposition: "inconclusive",
+                    premises: [
+                        {
+                            statement: "Premium AI subscription tiers exist.",
+                            disposition: "no_conflict_observed",
+                            primaryPassages: [{ sourceId: "primary-source" }],
+                        },
+                        {
+                            statement:
+                                "Premium tiers generate meaningful incremental revenue.",
+                            disposition: "inconclusive",
+                        },
+                    ],
+                },
+            ],
+        },
+    });
+    if (result.status !== "valid")
+        throw new Error("Expected a valid premise assessment");
+    const assessment = result.output.findings[0];
+    if (!assessment) throw new Error("Missing assessment");
+    expect(
+        sourceComparisonOutputSchema.safeParse({
+            ...result.output,
+            findings: [
+                {
+                    ...assessment,
+                    disposition: "no_conflict_observed",
+                    comparableDimensions: [
+                        "entity",
+                        "concept",
+                        "period",
+                        "unit_basis",
+                        "argument_effect",
+                    ],
+                },
+            ],
+        }).success,
+    ).toBe(false);
+});
+
+test("checks an author-reported financial result against the captured issuer table", () => {
+    const target = makeTarget([
+        [
+            {
+                passageKey: "p0",
+                quotation: "FY2025 total revenue was USD 22,500 million.",
+            },
+        ],
+    ]);
+    target.qualificationVersion = "source-qualification-v5";
+    const finding = target.qualification.findings[0];
+    if (!finding) throw new Error("Missing target finding");
+    Object.assign(finding, {
+        kind: "reported_outcome",
+        role: "independent_analysis_primary",
+        relevance: "A numerical premise for an economic thesis.",
+        scope: "Author-reported consolidated FY2025 revenue, USD millions.",
+    });
+    const prepared = prepareSourceComparisonInput({
+        company,
+        target,
+        primaryCandidates: [
+            primary("| USD millions | FY2025 |\n| Total revenue | 23,769 |"),
+        ],
+    });
+    expect(prepared.request.findings).toHaveLength(1);
+    const result = materializeSourceComparisonOutput(prepared, {
+        findings: [
+            {
+                findingIndex: 0,
+                targetPassageKeys: ["target:0:p0"],
+                premises: [
+                    {
+                        statement:
+                            "FY2025 consolidated revenue was USD 22,500 million.",
+                        disposition: "possible_conflict",
+                        explanation:
+                            "The issuer reports USD 23,769 million for the same period and basis.",
+                        comparableDimensions: [
+                            "entity",
+                            "concept",
+                            "period",
+                            "unit_basis",
+                            "argument_effect",
+                        ],
+                        primaryPassageKeys: ["primary:0"],
+                    },
+                ],
+            },
+        ],
+    });
+    expect(result).toMatchObject({
+        status: "valid",
+        output: { findings: [{ disposition: "possible_conflict" }] },
+    });
+});
+
+test("an unresolved secondary-source financial premise cannot regain unrestricted use", () => {
+    const finding = {
+        role: "independent_analysis_primary" as const,
+        kind: "reported_outcome" as const,
+        summary: "FY2025 revenue was USD 22,500 million.",
+        relevance: "A financial premise for the thesis.",
+        scope: "Author-reported revenue; not verified against the issuer.",
+        passages: [
+            {
+                passageKey: "p0",
+                quotation: "FY2025 revenue was USD 22,500 million.",
+            },
+        ],
+        period: "unspecified" as const,
+        periodPassages: [],
+        dependsOnFlaggedAssertion: false,
+    };
+    expect(
+        sourceFindingUsage(finding, "documentary", "inconclusive"),
+    ).toMatchObject({
+        usage: "verification_required",
+        reasonCodes: ["comparison_required"],
+    });
+    expect(
+        sourceFindingUsage(finding, "documentary", "no_conflict_observed")
+            .usage,
+    ).toBe("documentary");
+});
+
+test("searches the qualified revenue assertion instead of unrelated margin context", () => {
+    const query = shortRetrievalQuery(
+        sourceComparisonQuery(
+            {
+                summary: "FY2025 total revenue was USD 22,500 million.",
+                relevance:
+                    "Checks the financial premise of a resilience thesis.",
+                scope: "Consolidated annual revenue, USD millions.",
+                period: "historical",
+                passages: [
+                    {
+                        quotation:
+                            "Gross margin forecasts for 2030. Other content. FY2025 total revenue was USD 22,500 million.",
+                    },
+                ],
+            },
+            "2025-11-28",
+        ),
+    );
+    expect(query).toContain("revenue");
+    expect(query).toContain("2025");
+    expect(query).not.toContain("margin");
+    expect(query).not.toContain("2030");
 });
 
 test("builds grouped input from exact target and captured primary passages", () => {

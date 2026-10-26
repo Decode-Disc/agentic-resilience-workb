@@ -10,6 +10,7 @@ const unspecifiedPeriod = {
 };
 const preparedExample = () =>
     prepareQualificationInput({
+        protocolVersion: "source-qualification-v5",
         company: {
             cik: "1373715",
             legalName: "ServiceNow, Inc.",
@@ -31,6 +32,7 @@ test.each([
     const route = sourceQualificationRoutes[index];
     if (!route) throw new Error("Missing qualification route");
     const input = prepareQualificationInput({
+        protocolVersion: "source-qualification-v5",
         company: {
             cik: "1373715",
             legalName: "ServiceNow, Inc.",
@@ -56,6 +58,8 @@ test.each([
                 role: "official_product_platform",
                 kind: "asserted_fact",
                 summary: "ServiceNow provides workflow software.",
+                relevance: "Describes the company's workflow offering.",
+                scope: "Issuer product description, not independent proof of adoption.",
                 passages: [
                     {
                         passageKey: "p0",
@@ -81,6 +85,10 @@ test.each([
                 role === "official_product_platform"
                     ? [
                           {
+                              summary: "ServiceNow provides workflow software.",
+                              relevance:
+                                  "Describes the company's workflow offering.",
+                              scope: "Issuer product description, not independent proof of adoption.",
                               kind: "asserted_fact",
                               passageKeys: ["p0"],
                               period: "unspecified",

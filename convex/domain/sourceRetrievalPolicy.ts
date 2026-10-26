@@ -91,10 +91,20 @@ export function shortRetrievalQuery(text: string): string {
 }
 /** Shared comparison query input; retrieval applies the same bounded normalization in every caller. */
 export function sourceComparisonQuery(
-    finding: { passages: readonly { quotation: string }[]; period: string },
+    finding: {
+        passages: readonly { quotation: string }[];
+        period: string;
+        summary?: string;
+        relevance?: string;
+        scope?: string;
+    },
     reportingPeriodEnd: string | null,
 ): string {
-    return `${finding.passages.map((p) => p.quotation).join(" ")} ${finding.period} ${reportingPeriodEnd ?? ""}`;
+    const assertion =
+        finding.relevance && finding.summary
+            ? `${finding.summary} ${finding.scope ?? ""}`
+            : finding.passages.map((p) => p.quotation).join(" ");
+    return `${assertion} ${finding.period} ${reportingPeriodEnd ?? ""}`;
 }
 /** Equal-weight RRF avoids comparing incompatible lexical and cosine score scales. */
 export function fuseRetrievalRanks(

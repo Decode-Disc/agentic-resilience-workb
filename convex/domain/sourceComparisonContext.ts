@@ -170,7 +170,9 @@ export function comparisonContextForTarget(
     );
     const identity = {
         version: SOURCE_COMPARISON_VERSION,
-        preparationPolicy: sourceComparisonInputPolicyHash(),
+        preparationPolicy: sourceComparisonInputPolicyHash(
+            target.qualification.schemaVersion,
+        ),
         retrievalPolicy: SOURCE_RETRIEVAL_VERSION,
         embeddingProfile:
             target.preparation.retrievalMode === "hybrid"

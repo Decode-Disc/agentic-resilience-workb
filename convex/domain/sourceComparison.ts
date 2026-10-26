@@ -5,31 +5,44 @@ import {
 } from "@convex/resourceLimits";
 import type { Infer } from "convex/values";
 import { z } from "zod";
-import type { SourceQualification } from "./sourceQualification";
 import {
-    fuseRetrievalRanks,
-    type SourcePassageRankIdentity,
+    SOURCE_QUALIFICATION_CANDIDATE_VERSION,
+    type SourceQualification,
+} from "./sourceQualification";
+import {
     compareSourcePassageRanks,
+    fuseRetrievalRanks,
     retrievalMetadataSchema,
     type retrievalMetadataValidator,
+    type SourcePassageRankIdentity,
 } from "./sourceRetrievalPolicy";
-import { sourceFindingUsage } from "./sourceSelectionPolicy";
 import type {
     SourceAuthorityTier,
     SourceDocumentKind,
 } from "./sourceSelectionPolicy";
+import {
+    sourceFindingRequiresComparison,
+    sourceFindingUsage,
+} from "./sourceSelectionPolicy";
 
-/** Only attributed arguments and forecasts require the scoped comparison step. */
+/** New secondary-source factual premises are checked alongside arguments and forecasts. */
 export function sourceFindingNeedsComparison(
     finding: SourceQualification["findings"][number],
     limitations: SourceQualification["limitations"] = [],
     qualificationVersion?: string,
 ): finding is SourceQualification["findings"][number] & {
-    kind: "attributed_argument" | "forecast";
+    kind:
+        | "attributed_argument"
+        | "forecast"
+        | "asserted_fact"
+        | "reported_outcome";
 } {
     return (
-        (finding.kind === "attributed_argument" ||
-            finding.kind === "forecast") &&
+        (qualificationVersion === "source-qualification-v3" ||
+        qualificationVersion === "source-qualification-v4"
+            ? finding.kind === "attributed_argument" ||
+              finding.kind === "forecast"
+            : sourceFindingRequiresComparison(finding)) &&
         (qualificationVersion === "source-qualification-v3" ||
             sourceFindingUsage(finding, "documentary", undefined, limitations)
                 .usage !== "blocked")
@@ -117,7 +130,17 @@ const sourceComparisonPassageSchema = z
     .strict()
     .refine((passage) => passage.endOffset > passage.startOffset);
 
-export const sourceComparisonFindingSchema = z
+const comparisonPremiseSchema = z
+    .object({
+        statement: z.string().trim().min(1).max(600),
+        disposition: sourceComparisonDispositionSchema,
+        explanation: comparisonExplanationSchema,
+        comparableDimensions: z.array(z.enum(COMPARABLE_DIMENSIONS)).max(5),
+        primaryPassages: z.array(sourceComparisonPassageSchema).max(8),
+    })
+    .strict();
+
+const historicalComparisonFindingSchema = z
     .object({
         findingIndex: z.number().int().nonnegative(),
         disposition: sourceComparisonDispositionSchema,
@@ -162,6 +185,64 @@ export const sourceComparisonFindingSchema = z
                     path: ["comparableDimensions"],
                 });
             }
+        }
+    });
+
+function dispositionFromPremises(
+    premises: readonly {
+        disposition: z.infer<typeof sourceComparisonDispositionSchema>;
+    }[],
+): z.infer<typeof sourceComparisonDispositionSchema> {
+    if (premises.some((premise) => premise.disposition === "possible_conflict"))
+        return "possible_conflict";
+    return premises.some((premise) => premise.disposition === "inconclusive")
+        ? "inconclusive"
+        : "no_conflict_observed";
+}
+
+export const sourceComparisonFindingSchema = historicalComparisonFindingSchema
+    .safeExtend({
+        premises: z.array(comparisonPremiseSchema).min(1).max(4).optional(),
+    })
+    .superRefine((finding, context) => {
+        if (!finding.premises) return;
+        if (finding.disposition !== dispositionFromPremises(finding.premises))
+            context.addIssue({
+                code: "custom",
+                message:
+                    "The overall disposition must follow every material premise",
+                path: ["disposition"],
+            });
+        const primaryReferences = new Set(
+            finding.primaryPassages.map((passage) => JSON.stringify(passage)),
+        );
+        for (const [index, premise] of finding.premises.entries()) {
+            if (
+                premise.primaryPassages.some(
+                    (passage) =>
+                        !primaryReferences.has(JSON.stringify(passage)),
+                )
+            )
+                context.addIssue({
+                    code: "custom",
+                    message:
+                        "Premise references must belong to the checked primary evidence",
+                    path: ["premises", index, "primaryPassages"],
+                });
+            if (
+                premise.disposition !== "inconclusive" &&
+                (premise.primaryPassages.length === 0 ||
+                    COMPARABLE_DIMENSIONS.some(
+                        (dimension) =>
+                            !premise.comparableDimensions.includes(dimension),
+                    ))
+            )
+                context.addIssue({
+                    code: "custom",
+                    message:
+                        "Comparable premises require exact evidence and every comparison dimension",
+                    path: ["premises", index],
+                });
         }
     });
 
@@ -273,8 +354,14 @@ type RequestPrimaryPassage = z.infer<typeof sourceComparisonPassageSchema> & {
 };
 type RequestFinding = {
     findingIndex: number;
-    kind: "attributed_argument" | "forecast";
+    kind:
+        | "attributed_argument"
+        | "forecast"
+        | "asserted_fact"
+        | "reported_outcome";
     summary: string;
+    relevance?: string;
+    scope?: string;
     period: "current" | "historical" | "unspecified";
     targetPassages: TargetPassage[];
     primaryPassageKeys: string[];
@@ -299,6 +386,7 @@ function requestPrimaryPassage(
 }
 
 export type SourceComparisonRequest = {
+    assessmentPolicy?: "explicit-premises-v1";
     retrieval?: Infer<typeof retrievalMetadataValidator>;
     instructions: string;
     comparisonVersion: typeof SOURCE_COMPARISON_VERSION;
@@ -572,7 +660,12 @@ function createRequestFindingSchema(
 
 export function createSourceComparisonResponseSchema(
     prepared: PreparedSourceComparisonInput,
-) {
+): z.ZodType<
+    | z.infer<typeof providerOutputSchema>
+    | z.infer<ReturnType<typeof createPremiseResponseSchema>>
+> {
+    if (prepared.request.assessmentPolicy)
+        return createPremiseResponseSchema(prepared);
     const primaryKeys = prepared.request.primaryPassages.map(
         (passage) => passage.referenceKey,
     );
@@ -598,15 +691,33 @@ export function createSourceComparisonResponseSchema(
         .strict();
 }
 
-let preparationPolicyHash: string | undefined;
+const preparationPolicyHashes = new Map<boolean, string>();
 
 /** Bump the input policy version when parsing or ranking changes; instructions and schemas are hashed directly. */
-export function sourceComparisonInputPolicyHash(): string {
-    if (preparationPolicyHash) return preparationPolicyHash;
-    preparationPolicyHash = sha256Hex(
+export function sourceComparisonInputPolicyHash(
+    qualificationVersion?: string,
+): string {
+    const explicitPremises =
+        qualificationVersion === SOURCE_QUALIFICATION_CANDIDATE_VERSION;
+    const cached = preparationPolicyHashes.get(explicitPremises);
+    if (cached) return cached;
+    const preparationPolicyHash = sha256Hex(
         JSON.stringify({
-            version: "comparison-input-v2",
+            version: explicitPremises
+                ? "comparison-input-v3"
+                : "comparison-input-v2",
             instructions: SYSTEM_INSTRUCTIONS,
+            ...(explicitPremises
+                ? {
+                      premiseInstructions: PREMISE_INSTRUCTIONS,
+                      premiseResponse: z.toJSONSchema(
+                          createPremiseResponseSchema({
+                              request: { primaryPassages: [], findings: [] },
+                          }),
+                          { target: "draft-7", io: "input", reused: "inline" },
+                      ),
+                  }
+                : {}),
             response: z.toJSONSchema(
                 createRequestFindingSchema(
                     {
@@ -617,11 +728,20 @@ export function sourceComparisonInputPolicyHash(): string {
                 ),
                 { target: "draft-7", io: "input", reused: "inline" },
             ),
-            output: z.toJSONSchema(sourceComparisonOutputSchema, {
-                target: "draft-7",
-                io: "input",
-                reused: "inline",
-            }),
+            output: z.toJSONSchema(
+                explicitPremises
+                    ? sourceComparisonOutputSchema
+                    : sourceComparisonOutputSchema.extend({
+                          findings: z
+                              .array(historicalComparisonFindingSchema)
+                              .max(15),
+                      }),
+                {
+                    target: "draft-7",
+                    io: "input",
+                    reused: "inline",
+                },
+            ),
             limits: [
                 SOURCE_COMPARISON_MAX_INPUT_BYTES,
                 SOURCE_COMPARISON_MAX_FINDINGS,
@@ -633,6 +753,7 @@ export function sourceComparisonInputPolicyHash(): string {
             ],
         }),
     );
+    preparationPolicyHashes.set(explicitPremises, preparationPolicyHash);
     return preparationPolicyHash;
 }
 
@@ -817,13 +938,22 @@ export function prepareSourceComparisonInput(args: {
                     findingIndex,
                     kind: finding.kind,
                     summary: finding.summary,
+                    ...(finding.relevance
+                        ? { relevance: finding.relevance, scope: finding.scope }
+                        : {}),
                     period: finding.period,
                     targetPassages,
                     eligible: completeReferences && targetPassages.length > 0,
-                    scoringText: [
-                        finding.summary,
-                        ...finding.passages.map((passage) => passage.quotation),
-                    ].join(" "),
+                    scoringText:
+                        target.qualificationVersion ===
+                        SOURCE_QUALIFICATION_CANDIDATE_VERSION
+                            ? `${finding.summary} ${finding.scope ?? ""}`
+                            : [
+                                  finding.summary,
+                                  ...finding.passages.map(
+                                      (passage) => passage.quotation,
+                                  ),
+                              ].join(" "),
                 },
             ];
         },
@@ -1074,6 +1204,9 @@ export function prepareSourceComparisonInput(args: {
                 findingIndex: finding.findingIndex,
                 kind: finding.kind,
                 summary: finding.summary,
+                ...(finding.relevance
+                    ? { relevance: finding.relevance, scope: finding.scope }
+                    : {}),
                 period: finding.period,
                 targetPassages: finding.targetPassages,
                 primaryPassageKeys: ranked.map(
@@ -1097,7 +1230,15 @@ export function prepareSourceComparisonInput(args: {
             totalCandidatePassages - usedPrimaryPassages.size;
         const request: SourceComparisonRequest = {
             ...(args.retrieval ? { retrieval: args.retrieval.metadata } : {}),
-            instructions: SYSTEM_INSTRUCTIONS,
+            ...(target.qualificationVersion ===
+            SOURCE_QUALIFICATION_CANDIDATE_VERSION
+                ? { assessmentPolicy: "explicit-premises-v1" as const }
+                : {}),
+            instructions:
+                target.qualificationVersion ===
+                SOURCE_QUALIFICATION_CANDIDATE_VERSION
+                    ? `${SYSTEM_INSTRUCTIONS} ${PREMISE_INSTRUCTIONS}`
+                    : SYSTEM_INSTRUCTIONS,
             comparisonVersion: SOURCE_COMPARISON_VERSION,
             runId: target.runId,
             corpusRevisionId: target.corpusRevisionId,
@@ -1270,6 +1411,57 @@ const providerOutputSchema = z
     })
     .strict();
 
+const PREMISE_INSTRUCTIONS =
+    "Assess the precise assertion in each finding's summary within its stated scope; surrounding quoted context is not itself the assertion. Identify every material premise needed for that assertion, including claimed superiority, contractual eligibility, adoption and realized economics when relevant. Return 1-4 premises with a precise statement, disposition, explanation, comparison dimensions and exact primary reference keys. Do not return an overall disposition: the application derives it. An unresolved premise is inconclusive even when another premise is aligned. A product's existence does not establish adoption, incremental revenue or superiority. A scoped protection does not establish a universal guarantee. State the narrower overlap separately from an unresolved broader claim. Do not invent a premise or evidence to avoid uncertainty. Keep all supplied material premises visible. At most eight distinct primary passages may be cited across the premises of one finding.";
+
+function createPremiseResponseSchema(prepared: {
+    request: Pick<SourceComparisonRequest, "primaryPassages" | "findings">;
+}) {
+    const primaryKeys = prepared.request.primaryPassages.map(
+        (p) => p.referenceKey,
+    );
+    const targetKeys = prepared.request.findings.flatMap((f) =>
+        f.targetPassages.map((p) => p.referenceKey),
+    );
+    return z
+        .object({
+            findings: z
+                .array(
+                    z
+                        .object({
+                            findingIndex: z.number().int().nonnegative(),
+                            targetPassageKeys: z
+                                .array(
+                                    targetKeys.length
+                                        ? z.enum(targetKeys)
+                                        : z.never(),
+                                )
+                                .min(1)
+                                .max(3),
+                            premises: z
+                                .array(
+                                    comparisonPremiseSchema
+                                        .omit({ primaryPassages: true })
+                                        .extend({
+                                            primaryPassageKeys: z
+                                                .array(
+                                                    primaryKeys.length
+                                                        ? z.enum(primaryKeys)
+                                                        : z.never(),
+                                                )
+                                                .max(8),
+                                        }),
+                                )
+                                .min(1)
+                                .max(4),
+                        })
+                        .strict(),
+                )
+                .max(SOURCE_COMPARISON_MAX_FINDINGS),
+        })
+        .strict();
+}
+
 export function materializeSourceComparisonOutput(
     prepared: PreparedSourceComparisonInput,
     output: unknown,
@@ -1280,7 +1472,91 @@ export function materializeSourceComparisonOutput(
           status: "invalid";
           reason: "schema_invalid" | "reference_invalid" | "output_too_large";
       } {
-    const parsed = providerOutputSchema.safeParse(output);
+    const primaryByKey = new Map(
+        prepared.request.primaryPassages.map((passage) => [
+            passage.referenceKey,
+            passage,
+        ]),
+    );
+    const premisesByIndex = new Map<
+        number,
+        z.infer<typeof comparisonPremiseSchema>[]
+    >();
+    let providerOutput = output;
+    if (prepared.request.assessmentPolicy) {
+        const assessed =
+            createPremiseResponseSchema(prepared).safeParse(output);
+        if (!assessed.success)
+            return { status: "invalid", reason: "schema_invalid" };
+        const normalized: SourceComparisonProviderFinding[] = [];
+        for (const finding of assessed.data.findings) {
+            if (premisesByIndex.has(finding.findingIndex))
+                return { status: "invalid", reason: "reference_invalid" };
+            const premises: z.infer<typeof comparisonPremiseSchema>[] = [];
+            for (const premise of finding.premises) {
+                if (
+                    new Set(premise.primaryPassageKeys).size !==
+                        premise.primaryPassageKeys.length ||
+                    (premise.disposition !== "inconclusive" &&
+                        (premise.primaryPassageKeys.length === 0 ||
+                            COMPARABLE_DIMENSIONS.some(
+                                (dimension) =>
+                                    !premise.comparableDimensions.includes(
+                                        dimension,
+                                    ),
+                            )))
+                )
+                    return { status: "invalid", reason: "reference_invalid" };
+                const primaryPassages: z.infer<
+                    typeof sourceComparisonPassageSchema
+                >[] = [];
+                for (const key of premise.primaryPassageKeys) {
+                    const passage = primaryByKey.get(key);
+                    if (!passage)
+                        return {
+                            status: "invalid",
+                            reason: "reference_invalid",
+                        };
+                    const {
+                        referenceKey: _referenceKey,
+                        headingPath: _headingPath,
+                        ...canonical
+                    } = passage;
+                    primaryPassages.push(canonical);
+                }
+                premises.push({
+                    statement: premise.statement,
+                    disposition: premise.disposition,
+                    explanation: premise.explanation,
+                    comparableDimensions: [
+                        ...new Set(premise.comparableDimensions),
+                    ],
+                    primaryPassages,
+                });
+            }
+            const disposition = dispositionFromPremises(premises);
+            normalized.push({
+                findingIndex: finding.findingIndex,
+                disposition,
+                explanation: premises
+                    .map((p) => `${p.statement} ${p.explanation}`)
+                    .join("\n\n"),
+                comparableDimensions:
+                    disposition === "inconclusive"
+                        ? []
+                        : [...COMPARABLE_DIMENSIONS],
+                targetPassageKeys: finding.targetPassageKeys,
+                primaryPassageKeys: [
+                    ...new Set(
+                        finding.premises.flatMap((p) => p.primaryPassageKeys),
+                    ),
+                ],
+            });
+            premisesByIndex.set(finding.findingIndex, premises);
+        }
+        providerOutput = { findings: normalized };
+    }
+    const parsed = providerOutputSchema.safeParse(providerOutput);
     if (!parsed.success) return { status: "invalid", reason: "schema_invalid" };
     const requestFindings = new Map(
         prepared.request.findings.map((finding) => [
@@ -1309,12 +1585,6 @@ export function materializeSourceComparisonOutput(
         prepared.request.findings.map((finding) => [
             finding.findingIndex,
             finding.targetPassages,
-        ]),
-    );
-    const primaryByKey = new Map(
-        prepared.request.primaryPassages.map((passage) => [
-            passage.referenceKey,
-            passage,
         ]),
     );
     for (const findingIndex of [...allFindingIndexes].sort((a, b) => a - b)) {
@@ -1407,6 +1677,9 @@ export function materializeSourceComparisonOutput(
             comparableDimensions,
             targetPassages,
             primaryPassages,
+            ...(premisesByIndex.has(findingIndex)
+                ? { premises: premisesByIndex.get(findingIndex) }
+                : {}),
         });
     }
     const outputValue: SourceComparisonOutput = {

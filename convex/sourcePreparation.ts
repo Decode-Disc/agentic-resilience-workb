@@ -8,12 +8,12 @@ import {
 import {
     isExecutableQualificationVersion,
     qualificationExecutionVersion,
-    qualificationRestrictionIssue,
+    qualificationOutputIssue,
 } from "@convex/domain/sourceQualification";
 import {
     retrievalMetadataValidator,
-    SOURCE_RETRIEVAL_VERSION,
     SOURCE_RETRIEVAL_RANKING_POLICY,
+    SOURCE_RETRIEVAL_VERSION,
 } from "@convex/domain/sourceRetrievalPolicy";
 import {
     MAX_HISTORICAL_SOURCE_CANDIDATES,
@@ -682,6 +682,11 @@ async function comparisonReferencesAreCurrent(
     output: SourceComparisonOutput,
 ): Promise<boolean> {
     if (
+        output.findings.some((finding) => finding.premises) &&
+        !sourceComparisonOutputSchema.safeParse(output).success
+    )
+        return false;
+    if (
         target.qualification.output.kind !== "source_qualification" ||
         target.qualification.output.sourceCaptureId !== target.capture._id ||
         target.qualification.output.contentHash !==
@@ -1232,7 +1237,7 @@ export const saveQualification = internalMutation({
                 sourceId: capture.sourceId,
                 now: Date.now(),
             });
-        const restrictionIssue = qualificationRestrictionIssue(
+        const restrictionIssue = qualificationOutputIssue(
             args.qualification,
             args.selectedPassages.map((passage) => passage.passageKey),
             qualificationExecutionVersion(preparation.qualificationVersion),

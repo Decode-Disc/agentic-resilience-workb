@@ -1250,7 +1250,10 @@ test("an oversized document keeps bounded retrieved passages under the new captu
     expect(task.output.selectedPassages.length).toBeGreaterThan(0);
 });
 
-test("the persistence boundary rejects an unscoped new restriction before saving a qualification", async () => {
+test.each([
+    "restriction_scope_missing",
+    "contribution_basis_missing",
+])("the persistence boundary rejects %s before saving a qualification", async (reason) => {
     const {
         t,
         runId,
@@ -1262,6 +1265,12 @@ test("the persistence boundary rejects an unscoped new restriction before saving
     } = await capturedCandidate();
     const preparation = await t.run((ctx) => ctx.db.get(preparationId));
     if (!preparation) throw new Error("Missing preparation");
+    if (reason === "contribution_basis_missing")
+        await t.run((ctx) =>
+            ctx.db.patch(preparationId, {
+                qualificationVersion: "source-qualification-v5",
+            }),
+        );
     const inputHash = prepared.inputHash;
     const call = await t.mutation(internal.providerCalls.recordAttempt, {
         runId,
@@ -1284,16 +1293,39 @@ test("the persistence boundary rejects an unscoped new restriction before saving
             sourceCaptureId,
             providerCallId: call.providerCallId,
             inputHash,
-            qualification: {
-                ...qualification,
-                limitations: [
-                    {
-                        code: "no_substantive_content",
-                        explanation: "Scope omitted.",
-                        passages: [],
-                    },
-                ],
-            },
+            qualification:
+                reason === "restriction_scope_missing"
+                    ? {
+                          ...qualification,
+                          limitations: [
+                              {
+                                  code: "no_substantive_content",
+                                  explanation: "Scope omitted.",
+                                  passages: [],
+                              },
+                          ],
+                      }
+                    : {
+                          ...qualification,
+                          findings: [
+                              {
+                                  role: "official_product_platform",
+                                  kind: "asserted_fact",
+                                  summary:
+                                      "ServiceNow provides workflow software.",
+                                  passages: [
+                                      {
+                                          passageKey: "p0",
+                                          quotation:
+                                              "ServiceNow provides workflow software.",
+                                      },
+                                  ],
+                                  period: "unspecified",
+                                  periodPassages: [],
+                                  dependsOnFlaggedAssertion: false,
+                              },
+                          ],
+                      },
             readingCompleteness: "complete",
             omittedPassageCount: 0,
             selectedPassages: prepared.request.document.passages.map(
@@ -1304,7 +1336,7 @@ test("the persistence boundary rejects an unscoped new restriction before saving
                 }),
             ),
         }),
-    ).rejects.toThrow("restriction_scope_missing");
+    ).rejects.toThrow(reason);
     expect(await t.run((ctx) => ctx.db.query("aiTaskResults").take(1))).toEqual(
         [],
     );
