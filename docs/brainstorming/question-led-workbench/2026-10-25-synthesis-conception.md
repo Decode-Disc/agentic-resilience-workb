@@ -2,7 +2,7 @@
 
 ## Status
 
-Recorded on 2026-10-25. The functional direction and three principal stages are accepted. Visual composition and immediate comprehensibility remain to be tested. The [global conception](2026-10-23-question-led-workbench-conception.md) owns workflow order, shared controls, analyst judgment, and cooperation between bricks.
+Recorded on 2026-10-25 and updated on 2026-10-26. The functional direction and three principal stages are accepted. Visual composition and immediate comprehensibility remain to be tested. The [global conception](2026-10-23-question-led-workbench-conception.md) owns workflow order, shared analytical controls, analyst judgment, and cooperation between bricks. The [agentic execution conception](2026-10-26-agentic-execution-architecture.md) owns the shared execution contract.
 
 ## Purpose and Simple Workflow
 
@@ -74,7 +74,7 @@ The reader should be able to move from an economic implication to the relevant m
 
 ## Autonomy and Optional Inspection
 
-The mission agent chooses its approach and useful inspections within the [system frame](2026-10-23-question-led-workbench-conception.md#agent-missions-within-the-system-frame). The [mission completion contract](2026-10-23-question-led-workbench-conception.md#mission-completion-contract) governs when the applicable result allows progression. System work checks the result against its artifact requirements; for a supported synthesis, this includes the diagram's relationships and the note's fidelity.
+The mission agent chooses its approach and useful inspections under the [common execution contract](2026-10-26-agentic-execution-architecture.md#shared-mission-contract). The [mission completion contract](2026-10-23-question-led-workbench-conception.md#mission-completion-contract) governs when the applicable result allows progression. System work checks the result against its artifact requirements; for a supported synthesis, this includes the diagram's relationships and the note's fidelity.
 
 An available diagram supports a quick overall reading, then optional inspection of a mechanism and its evidence. The alternative finding explains why that reading could not be established. The analyst can challenge the interpretation or its stated limits. The precise navigation, correction interactions, and visual treatment of changing inputs remain to be designed.
 

@@ -2,9 +2,9 @@
 
 ## Status
 
-Recorded on 2026-10-23 and updated on 2026-10-25. This document preserves the accepted product direction, shared inventory and operations, agent missions, grouped analyst review, and synthesis direction. The target workflow is not implemented; detailed design decisions remain open.
+Recorded on 2026-10-23 and updated on 2026-10-26. This document preserves the accepted product direction, shared inventory and operations, agent missions, grouped analyst review, and synthesis direction. The target workflow is not implemented; detailed design decisions remain open.
 
-This document owns the overall workflow, cooperation between responsibilities, shared inventory rules, and analyst judgment. The [source ingestion and processing conception](2026-10-24-source-ingestion-and-processing-conception.md), [Investigation conception](2026-10-24-investigation-conception.md), and [Synthesis conception](2026-10-25-synthesis-conception.md) detail their respective work and interfaces.
+This document owns the overall workflow, cooperation between responsibilities, shared inventory rules, and analyst judgment. The [source ingestion and processing conception](2026-10-24-source-ingestion-and-processing-conception.md), [Investigation conception](2026-10-24-investigation-conception.md), and [Synthesis conception](2026-10-25-synthesis-conception.md) detail their respective work and interfaces. The [agentic execution conception](2026-10-26-agentic-execution-architecture.md) owns their common context access, controlled operations, preservation, recovery, and resource-protection model.
 
 ## Purpose
 
@@ -156,7 +156,7 @@ One source can inform several questions through the relevant passages. Reusing i
 
 ### Agent Missions Within the System Frame
 
-Each Investigation or Synthesis mission starts with its specialized agent in control of the analytical approach. The system supplies the mission, expected artifacts, authorized scope, resource allowances, versions, and progression conditions. The agent chooses useful hypotheses, inspections, operations, and re-examinations within that frame. It can invoke a complete standard treatment when appropriate, or adapt its next action to intermediate findings. The principal stages explain the work; internal analytical steps may be revisited as needed.
+Sources delegates documentary inquiry across the available corpus to its specialized agent within system-organized preparation. Each Investigation or Synthesis mission starts with its specialized agent in control of the analytical approach. Their [shared execution contract](2026-10-26-agentic-execution-architecture.md#shared-mission-contract) governs the mission frame and controlled progress. The principal stages explain the work; internal documentary or analytical steps may be revisited as needed.
 
 Executable constraints govern authority, resources, provenance, and transitions. They do not require every possible contradiction or analytical path to be enumerated in advance. The agent's reasoning remains a proposal subject to the applicable controls. Routine work advances autonomously; the shared intervention policy governs important exceptions.
 
@@ -178,7 +178,7 @@ Operations can encapsulate substantial processing, including bounded model-assis
 
 ### Minimum Shared Operation Catalogue
 
-The following eight business operations are retained as the functional catalogue. Every operation is reusable from authorized system code; the final column defines its retained exposure to the two mission agents. Shared implementation does not automatically grant access to every mission. Context already available at launch should be supplied with the mission rather than require redundant inspection calls.
+The following eight business operations are retained as the functional catalogue for Investigation and Synthesis. Every operation is reusable from authorized system code; the final column defines its retained exposure to those two mission agents. Shared implementation does not automatically grant access to every mission. Sources' operation contracts and exposure remain to be specified under its documentary responsibility. Useful launch context is supplied compactly; detailed material remains retrievable on demand under the shared execution contract.
 
 | Business operation | Responsibility and useful result | Agent exposure |
 | --- | --- | --- |
@@ -351,6 +351,8 @@ Analytical rework can improve consistency across appraisals while delaying resul
 
 These sources inform the conception. They establish public research themes, not confirmed internal requirements or usability validation from Decoding Discontinuity.
 
+The [Sources evaluation from 2026-10-25 and 2026-10-26](../../../scripts/evaluations/source-selection/SOURCES-APPROACH-EVALUATION-20261025.md#live-inspection-comparison-and-semantic-adjudication) preserves fixed and agent outcomes, documentary judgments, and reproduced harness failures. Those frozen experiments and the external sources are mapped to the retained choices in the [agentic execution conception](2026-10-26-agentic-execution-architecture.md#evidence-and-architectural-lessons); they do not establish quality or implementation of the target missions.
+
 ### Source Coverage
 
 - [Raphaëlle intervention on podcast about Anthropic, Silicon Carne](https://youtu.be/wZ4Fq6lrnbE): metadata and French timed transcript retrieved through YouTube Transcript in Executor. Relevant passages were examined, including the discussion of durable advantage and value migration around 25:00–33:00. The description was read; no sponsor or social-profile link was used as analytical evidence.
@@ -378,7 +380,7 @@ These sources inform the conception. They establish public research themes, not 
 - Define the exact common research foundation, the bounded set of decisive questions, and how the proposed activity or workflow is selected and corrected.
 - Define how later scope changes affect ongoing work and existing results. Start research is the retained framing-completion event; speculative background research during framing is not part of the prototype.
 - Specify the launch mandate's source-selection rules, resource limits, intervention criteria, and handling of material exceptions, using the source conception for its internal workflow. Delegated selection is accepted; its enforcement and replacement of the current human corpus checkpoint are not implemented.
-- Define the technical integration of the two specialized mission agents with the existing execution frame, including context, bounded execution, and recovery. Select the signatures, domain result contracts, permissions, and artifact-specific controls for the eight shared operations. Their catalogue and mission exposure are retained; their APIs and detailed implementation remain open.
+- Integrate the three specialized mission roles through the retained common execution contract. Select operation signatures, domain result contracts, permissions, and artifact-specific controls. The eight-operation Investigation/Synthesis catalogue remains retained; Sources' operation contracts, APIs, and detailed runtime integration remain open.
 - Define card grouping, detail-page navigation, and completed-result presentation. Preserve the accepted composer, timeline, contextual-intervention, and optional-inspection direction without treating an illustrative layout as finished design.
 - Specify the grouped complement's prioritization and resource allocation across questions, and the cooperation outcomes when requested material is unavailable. Its placement after the first shared analytical pass and its single bounded phase are retained.
 - Specify the detailed limits and stopping rules for analytical rework, and executable checks for the retained delivery conditions during a targeted human exception. New-premise instruction, limited delivery when coherent and useful, and waiting when the overall reading depends on a contested premise are retained.

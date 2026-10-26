@@ -2,7 +2,7 @@
 
 ## Status
 
-Recorded on 2026-10-24 and updated on 2026-10-25. This document describes the retained functioning of Investigation. The [global conception](2026-10-23-question-led-workbench-conception.md) owns the overall sequence, shared inventory rules, and analyst review. Detailed execution rules and analytical quality verification remain open.
+Recorded on 2026-10-24 and updated on 2026-10-26. This document describes the retained functioning of Investigation. The [global conception](2026-10-23-question-led-workbench-conception.md) owns the overall sequence, shared inventory rules, and analyst review. The [agentic execution conception](2026-10-26-agentic-execution-architecture.md) owns the shared execution contract; detailed integration and analytical quality verification remain open.
 
 ## Purpose and Simple Workflow
 
@@ -71,7 +71,7 @@ When receiving a targeted request, Investigation examines the identified reasoni
 
 ## Autonomy and Optional Inspection
 
-The mission agent uses its available operations to adapt the inquiry and revisit interpretations as evidence requires, within the [system frame](2026-10-23-question-led-workbench-conception.md#agent-missions-within-the-system-frame). Exceptions follow the shared intervention policy; the [mission completion contract](2026-10-23-question-led-workbench-conception.md#mission-completion-contract) governs when the submitted artifacts allow progression.
+The mission agent uses its available operations to adapt the inquiry and revisit interpretations as evidence requires, under the [common execution contract](2026-10-26-agentic-execution-architecture.md#shared-mission-contract). Exceptions follow the global intervention policy; the [mission completion contract](2026-10-23-question-led-workbench-conception.md#mission-completion-contract) governs when the submitted artifacts allow progression.
 
 Optional inspection exposes the assertions reused or introduced, the relationship between evidence and interpretation, relevant alternatives, objections, and the reasons for requesting more material. The analyst can challenge a use, correct an assertion, or redirect a question. The precise correction and revision mechanics remain to be designed with the shared inventory, rather than introduced as an Investigation-only policy.
 
