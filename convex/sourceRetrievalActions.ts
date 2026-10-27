@@ -10,10 +10,10 @@ import {
 } from "@convex/domain/sourcePreparationAuthority";
 import {
     fuseRetrievalRanks,
-    type SourcePassageRankIdentity,
     retrievalMetadataValidator,
     retrievalModeValidator,
     SOURCE_RETRIEVAL_VERSION,
+    type SourcePassageRankIdentity,
     shortRetrievalQuery,
     sourceEmbeddingScopeKey,
 } from "@convex/domain/sourceRetrievalPolicy";
@@ -27,7 +27,10 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
 import { MAX_NORMALIZED_ARTIFACT_BYTES } from "./resourceLimits";
-import { approvedSourceScope } from "./sourceRetrieval";
+import {
+    approvedSourceScope,
+    type MissionApprovedCapture,
+} from "./sourceRetrieval";
 
 const PROFILE = SOURCE_EMBEDDING_PROFILE.id;
 const EMBEDDING_BATCH_SIZE = SOURCE_EMBEDDING_PROFILE.maximumBatchSize;
@@ -536,6 +539,88 @@ export const retrieve = internalAction({
     handler: (ctx, args) => retrieveSourcePassages(ctx, args),
 });
 
+type ApprovedIndexIdentity = {
+    captureId: Id<"sourceCaptures">;
+    contentHash: string;
+};
+
+type ApprovedIndexPassage = {
+    order: number;
+    startOffset: number;
+    endOffset: number;
+    quotation: string;
+    headingPath: string[];
+};
+
+async function ensureApprovedIndex(
+    ctx: ActionCtx,
+    allowed: MissionApprovedCapture,
+    persistBatch: (
+        identity: ApprovedIndexIdentity,
+        passages: ApprovedIndexPassage[],
+    ) => Promise<unknown>,
+    finishIndex: (
+        identity: ApprovedIndexIdentity,
+        candidateCount: number,
+    ) => Promise<unknown>,
+): Promise<{ status: "ready" } | { status: "unavailable"; reason: string }> {
+    if (allowed.status !== "available") return allowed;
+    const capture = allowed.capture;
+    const blob = capture.storageId
+        ? await ctx.storage.get(capture.storageId)
+        : null;
+    if (
+        !blob ||
+        blob.size > MAX_NORMALIZED_ARTIFACT_BYTES ||
+        blob.size !== capture.byteCount
+    )
+        return { status: "unavailable", reason: "capture_unavailable" };
+    const text = await blob.text();
+    if (sha256Hex(text) !== capture.contentHash)
+        return { status: "unavailable", reason: "capture_corrupt" };
+    if (allowed.state) return { status: "ready" };
+    let candidates: ReturnType<typeof extractPassagesFromNormalizedText>;
+    try {
+        candidates = extractPassagesFromNormalizedText({
+            text,
+            canonicalUrl: capture.resolvedUrl ?? capture.requestedUrl,
+            sourceVersionHash: capture.contentHash,
+            preparationVersion: SOURCE_RETRIEVAL_VERSION,
+        });
+    } catch (error) {
+        if (
+            error instanceof Error &&
+            [
+                "searchable_candidate_limit_exceeded",
+                "structured_block_limit_exceeded",
+            ].includes(error.message)
+        )
+            return {
+                status: "unavailable",
+                reason: "retrieval_candidate_limit",
+            };
+        throw error;
+    }
+    const identity = {
+        captureId: capture._id,
+        contentHash: capture.contentHash,
+    };
+    for (let offset = 0; offset < candidates.length; offset += 64) {
+        await persistBatch(
+            identity,
+            candidates.slice(offset, offset + 64).map((p) => ({
+                order: p.order,
+                startOffset: p.locator.startOffset,
+                endOffset: p.locator.endOffset,
+                quotation: p.exactQuotation,
+                headingPath: p.headingPath ?? [],
+            })),
+        );
+    }
+    await finishIndex(identity, candidates.length);
+    return { status: "ready" };
+}
+
 /** Indexes only the approved stored representation. No provider or execution capability is invoked. */
 export const ensureApprovedSourceIndex = action({
     args: approvedSourceScope,
@@ -549,64 +634,55 @@ export const ensureApprovedSourceIndex = action({
             internal.sourceRetrieval.getApprovedCapture,
             args,
         );
-        if (allowed.status !== "available") return allowed;
-        if (allowed.state) return { status: "ready" };
-        const capture = allowed.capture;
-        const blob = capture.storageId
-            ? await ctx.storage.get(capture.storageId)
-            : null;
-        if (
-            !blob ||
-            blob.size > MAX_NORMALIZED_ARTIFACT_BYTES ||
-            blob.size !== capture.byteCount
-        )
-            return { status: "unavailable", reason: "capture_unavailable" };
-        const text = await blob.text();
-        if (sha256Hex(text) !== capture.contentHash)
-            return { status: "unavailable", reason: "capture_corrupt" };
-        let candidates: ReturnType<typeof extractPassagesFromNormalizedText>;
-        try {
-            candidates = extractPassagesFromNormalizedText({
-                text,
-                canonicalUrl: capture.resolvedUrl ?? capture.requestedUrl,
-                sourceVersionHash: capture.contentHash,
-                preparationVersion: SOURCE_RETRIEVAL_VERSION,
-            });
-        } catch (error) {
-            if (
-                error instanceof Error &&
-                [
-                    "searchable_candidate_limit_exceeded",
-                    "structured_block_limit_exceeded",
-                ].includes(error.message)
-            )
-                return {
-                    status: "unavailable",
-                    reason: "retrieval_candidate_limit",
-                };
-            throw error;
-        }
-        const identity = {
-            ...args,
-            captureId: capture._id,
-            contentHash: capture.contentHash,
-        };
-        for (let offset = 0; offset < candidates.length; offset += 64) {
-            await ctx.runMutation(internal.sourceRetrieval.putApprovedBatch, {
-                ...identity,
-                passages: candidates.slice(offset, offset + 64).map((p) => ({
-                    order: p.order,
-                    startOffset: p.locator.startOffset,
-                    endOffset: p.locator.endOffset,
-                    quotation: p.exactQuotation,
-                    headingPath: p.headingPath ?? [],
-                })),
-            });
-        }
-        await ctx.runMutation(internal.sourceRetrieval.finishApprovedIndex, {
-            ...identity,
-            candidateCount: candidates.length,
-        });
-        return { status: "ready" };
+        return ensureApprovedIndex(
+            ctx,
+            allowed,
+            (identity, passages) =>
+                ctx.runMutation(internal.sourceRetrieval.putApprovedBatch, {
+                    ...args,
+                    ...identity,
+                    passages,
+                }),
+            (identity, candidateCount) =>
+                ctx.runMutation(internal.sourceRetrieval.finishApprovedIndex, {
+                    ...args,
+                    ...identity,
+                    candidateCount,
+                }),
+        );
+    },
+});
+
+/** Indexes a mission's frozen approved capture and revalidates authority for every persisted batch. */
+export const ensureApprovedSourceIndexForMission = internalAction({
+    args: {
+        missionId: v.id("agentMissions"),
+        expectedGeneration: v.number(),
+        sourceId: v.id("sources"),
+    },
+    handler: async (
+        ctx,
+        args,
+    ): Promise<
+        { status: "ready" } | { status: "unavailable"; reason: string }
+    > => {
+        const allowed = await ctx.runQuery(
+            internal.sourceRetrieval.approvedCaptureForMission,
+            args,
+        );
+        return ensureApprovedIndex(
+            ctx,
+            allowed,
+            (identity, passages) =>
+                ctx.runMutation(
+                    internal.sourceRetrieval.putApprovedBatchForMission,
+                    { ...args, ...identity, passages },
+                ),
+            (identity, candidateCount) =>
+                ctx.runMutation(
+                    internal.sourceRetrieval.finishApprovedIndexForMission,
+                    { ...args, ...identity, candidateCount },
+                ),
+        );
     },
 });

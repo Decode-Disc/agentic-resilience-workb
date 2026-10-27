@@ -57,6 +57,7 @@ import {
     workflowStepKeyValidator,
     workflowStepStateValidator,
 } from "./domain/validators";
+import { executionTables } from "./execution/contracts";
 import { SOURCE_EMBEDDING_DIMENSIONS } from "./resourceLimits";
 import { preparationStudyEnvelopeValidator } from "./sourcePreparationStudyPolicy";
 
@@ -72,6 +73,7 @@ const sourceDiscoveryQueriesValidator = v.array(
 
 export default defineSchema({
     ...authTables,
+    ...executionTables,
     invitations: defineTable({
         slotKey: v.string(),
         role: visitorRoleValidator,
@@ -191,6 +193,7 @@ export default defineSchema({
         workflowVersion: v.optional(v.number()),
         sourceQualificationAttemptCount: v.optional(v.number()),
         sourcePreparationBudget: v.optional(preparationBudgetValidator),
+        executionHarnessDeadlineAt: v.optional(v.number()),
         sourceEmbeddingReservedBytes: v.optional(v.number()),
         sourceEmbeddingAttemptCount: v.optional(v.number()),
         sourcePreparationId: v.optional(
@@ -947,6 +950,8 @@ export default defineSchema({
         ])
         .index("by_passage_key", ["passageKey"]),
     providerCalls: defineTable({
+        missionId: v.optional(v.id("agentMissions")),
+        invocationId: v.optional(v.id("agentInvocations")),
         inputHash: v.optional(v.string()),
         runId: v.optional(v.id("researchRuns")),
         corpusRevisionId: v.optional(v.id("corpusRevisions")),
