@@ -39,7 +39,24 @@ describe("IndexPage", () => {
         expect(
             screen.getByRole("heading", { name: "Evidence matrix" }),
         ).toBeTruthy();
-        expect(screen.getByText("Counter-evidence")).toBeTruthy();
+        expect(
+            screen
+                .getByRole("link", {
+                    name: "CCC 2025 Annual Report, pp. 8–9",
+                })
+                .getAttribute("href"),
+        ).toBe(
+            "https://cccis.gcs-web.com/static-files/915c24e8-371f-4d42-b0bf-d52881a52bd8",
+        );
+        expect(screen.getByText("CCC · Photo-led auto claims")).toBeTruthy();
+        expect(
+            within(
+                screen.getByRole("list", { name: "Research capabilities" }),
+            ).getAllByRole("listitem"),
+        ).toHaveLength(6);
+        expect(
+            screen.getByText("Confront competing interpretations"),
+        ).toBeTruthy();
         expect(
             screen.getByLabelText("Agentic Resilience Workbench"),
         ).toBeTruthy();

@@ -18,20 +18,18 @@ For pre-approval work, inspect both the information available before the decisio
 
 Excessive style assertions slow iteration, while a screenshot alone cannot prove a saved decision. Choose evidence that can expose the changed failure, because verification is useful only for the claim it actually tests. Classify the observable change before selecting the checks below.
 
-| Change | Smallest useful evidence |
-| --- | --- |
-| Spacing, colors, alignment, icon placement, or wording without changed meaning | Inspect the affected real surface and states in the browser; compare with the pre-change baseline. Use existing checks as appropriate. |
-| Changed status meaning, validation, selection, navigation, async transition, or custom keyboard/focus behavior | Start with a failing test importing the real module at the relevant public boundary. Then inspect the affected rendered states. |
-| Convex persistence, authorization, or workflow transition | Use the repository's focused Convex tests; prove updated local-backend behavior when runtime verification is required. |
-| Subscription, durable return path, or protected checkpoint | Exercise the real admitted local path, including refresh/reconnect as relevant. Component fixtures do not establish these properties. |
+| Change                                                                                                         | Smallest useful evidence                                                                                                               |
+| -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Spacing, colors, alignment, icon placement, or wording without changed meaning                                 | Inspect the affected real surface and states in the browser; compare with the pre-change baseline. Use existing checks as appropriate. |
+| Changed status meaning, validation, selection, navigation, async transition, or custom keyboard/focus behavior | Start with a failing test importing the real module at the relevant public boundary. Then inspect the affected rendered states.        |
+| Convex persistence, authorization, or workflow transition                                                      | Use the repository's focused Convex tests; prove updated local-backend behavior when runtime verification is required.                 |
+| Subscription, durable return path, or protected checkpoint                                                     | Exercise the real admitted local path, including refresh/reconnect as relevant. Component fixtures do not establish these properties.  |
 
 Select existing tests under `src/__tests__/` and browser scenarios under `e2e/`. React integration tests use the shared reference-routed Convex hook harness. Do not freeze incidental classes, dimensions, SVG paths, or library behavior merely to manufacture a RED step. A concrete harmful overflow or inaccessible action can justify a focused regression; assert the user-visible failure.
 
 For new or recomposed views, inspect desktop and narrow mobile with realistic content; 320, 390, 1024, and 1440 pixels are useful starting samples, not a substitute for checking the actual breakpoint boundaries affected. For a small correction, inspect its affected widths and states. Record viewport height when diagnosing scroll ownership.
 
 Exercise relevant tabs, disclosures, search, clear, navigation, and recovery. Inspect keyboard/focus, touch operation, loading geometry, empty/error outcomes, long text, and console errors. Check reduced motion when animations change and both themes when colors or surfaces change. Measure the actual scrolling element when investigating overflow; a screenshot of the top of a list does not establish correct scrolling.
-
-For presentation claims, headless browser probes establish the specific fact where a screenshot only shows a possible one: scan the built CSSOM to confirm a generated class actually resolves, read computed styles before and after a real `:hover` to prove a hover claim (assert `matches(":hover")` when using a mouse probe), compute luminance ratios for reading-surface separation against a gradient backdrop, and sweep distinct radii across a surface after consolidating a shared utility. Screenshots still record the accepted look; these probes answer the named question when the eyeball check would pass an unchanged defect.
 
 ## Keep evidence levels distinct
 

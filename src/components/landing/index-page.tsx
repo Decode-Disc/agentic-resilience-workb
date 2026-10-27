@@ -78,66 +78,71 @@ const navigationItems = [
 
 const matrixClaims = [
   {
-    claim: "Operates proprietary inference infrastructure in owned datacenters.",
+    claim: "CCC reports insurer-configurable workflows connecting insurers and repair facilities.",
     classification: "Fact",
     badgeClassName: "bg-evidence-fact/10 text-evidence-fact",
-    source: "10-K · Item 2 · p. 41",
+    source: "Company-reported · Annual Report, p. 8",
   },
   {
-    claim: "Workflow integrations raise switching costs year over year.",
+    claim: "Workflow execution alone does not establish CCC's authority over insurer decisions.",
     classification: "Inference",
     badgeClassName: "bg-evidence-inference/10 text-evidence-inference",
-    source: "Earnings call · Q1 FY26",
+    source: "Objection · insurer-configurable rules, p. 8",
   },
   {
-    claim: "Agent-mediated traffic could bypass the first-party interface.",
+    claim: "An external agent could coordinate the claim while using CCC for specific tasks.",
     classification: "Hypothesis",
     badgeClassName: "bg-evidence-hypothesis/10 text-evidence-hypothesis",
-    source: "API terms · §3.2",
+    source: "Research hypothesis · requires testing",
   },
   {
-    claim: "Renewal terms of the largest enterprise contract.",
+    claim: "Could an insurer replace CCC without losing workflow context and integrations?",
     classification: "Unknown",
     badgeClassName: "bg-evidence-unknown/10 text-evidence-unknown",
-    source: "No public source",
+    source: "Not established by the cited passages",
   },
 ] as const;
 
+const matrixSource = {
+  label: "CCC 2025 Annual Report, pp. 8–9",
+  url: "https://cccis.gcs-web.com/static-files/915c24e8-371f-4d42-b0bf-d52881a52bd8",
+} as const;
+
 const capabilities = [
   {
-    title: "Source approval",
-    description: "You approve the corpus before extraction begins. No approved source, no claim.",
-    icon: CheckmarkCircle02Icon,
-  },
-  {
-    title: "Check each claim",
-    description:
-      "Every claim is single-purpose and classified as Fact, Inference, Hypothesis, or Unknown. Conflated assertions get split apart.",
-    icon: FileSearchIcon,
-  },
-  {
-    title: "Counter-evidence",
-    description:
-      "Contradictions surface beside the claims they challenge. You see the case against before you decide.",
+    title: "See the business in context",
+    description: "Situate the company and focus on a workflow that matters to its economics.",
     icon: BookSearchIcon,
   },
   {
-    title: "Dimension review",
+    title: "Find the control points",
     description:
-      "Each dimension carries its own position, confidence, and three-year direction. No forced single verdict.",
-    icon: UserCheck01Icon,
+      "Identify who owns the context, directs execution, and holds the right to act.",
+    icon: ChartRelationshipIcon,
   },
   {
-    title: "Audit trail",
+    title: "Examine what agents could change",
     description:
-      "Retrace approvals, corrections, and rejections. Your earlier decisions remain visible as the research evolves.",
+      "Explore what could be strengthened, bypassed, or made replaceable.",
     icon: Audit01Icon,
   },
   {
-    title: "Derived views",
+    title: "Confront competing interpretations",
     description:
-      "Architecture maps and briefs draw only from claims you approved. Follow each conclusion back to its supporting evidence.",
-    icon: ChartRelationshipIcon,
+      "Weigh each interpretation against supporting evidence, objections, and dependencies.",
+    icon: FileSearchIcon,
+  },
+  {
+    title: "Surface the decisive unknowns",
+    description:
+      "Identify what remains unestablished and what could change the assessment.",
+    icon: UserCheck01Icon,
+  },
+  {
+    title: "Connect evidence to economic consequences",
+    description:
+      "Follow the reasoning from sourced observations to mechanisms and their implications.",
+    icon: CheckmarkCircle02Icon,
   },
 ] as const;
 
@@ -279,6 +284,11 @@ function MatrixPreview() {
           </span>
         </div>
 
+        <p className="mt-4 text-sm font-medium leading-6">CCC · Photo-led auto claims</p>
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          Does CCC control coordination, or provide replaceable modules?
+        </p>
+
         <ul className="mt-5 list-none divide-y divide-border/60 border-y border-border/60">
           {matrixClaims.map((row, index) => (
             <motion.li
@@ -311,8 +321,16 @@ function MatrixPreview() {
         </ul>
 
         <p className="mt-4 text-xs leading-5 text-muted-foreground">
-          Static illustration. In the workbench, every claim is extracted from analyst-approved
-          sources and remains tied to a locatable passage.
+          Illustrative analysis based on{" "}
+          <a
+            href={matrixSource.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            {matrixSource.label}
+          </a>
+          . Reasoning is illustrative; unanswered questions concern the cited passages.
         </p>
       </div>
     </LiquidGlassCard>
@@ -330,7 +348,7 @@ function CapabilityGrid() {
         ease: easeOrganic,
       }}
       className="grid w-full list-none gap-px overflow-hidden rounded-2xl border border-border/70 bg-border/70 shadow-soft motion-reduce:!transform-none motion-reduce:!opacity-100 sm:grid-cols-2 xl:grid-cols-3"
-      aria-label="Evidence matrix capabilities"
+      aria-label="Research capabilities"
     >
       {capabilities.map((capability) => (
         <GridCard key={capability.title} tone="primary">
@@ -340,7 +358,7 @@ function CapabilityGrid() {
               className="size-[1.125rem] text-muted-foreground"
               strokeWidth={1.8}
             />
-            <h3 className="mt-3 text-sm font-medium tracking-tight">{capability.title}</h3>
+            <h3 className="mt-3 text-sm font-medium tracking-tight sm:min-h-10">{capability.title}</h3>
             <p className="mt-1 text-sm leading-5 text-muted-foreground">{capability.description}</p>
           </li>
         </GridCard>
