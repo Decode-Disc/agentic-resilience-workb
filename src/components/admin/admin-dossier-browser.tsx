@@ -5,14 +5,21 @@ import type { Id } from "@convex/_generated/dataModel";
 import { useMutation, usePaginatedQuery } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { AdminDetailDisclosure } from "@/components/admin/admin-detail-disclosure";
+import {
+    AdminDossierFilters,
+    dossierFilterDefaults,
+    dossierMatchesFilters,
+    type DossierRunFilters,
+    filterSummary,
+} from "@/components/admin/admin-filters";
 import { AdminList } from "@/components/admin/admin-list";
 import { AdminLoadMore } from "@/components/admin/admin-pager";
-import { AdminRunInspection } from "@/components/admin/admin-run-inspection";
+import { ExecutionStatusBadge } from "@/components/admin/admin-status-badge";
 import {
     dossierPurposes,
     type RunPurpose,
 } from "@/components/admin/dossier-purpose";
-import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,24 +47,31 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import {
-    executionLabel,
-    executionStatusTone,
-    lifecycleLabel,
-} from "@/lib/presentation/research-copy";
+import { lifecycleLabel } from "@/lib/presentation/research-copy";
 
 /**
- * Lists technical dossiers by purpose and opens their read-only inspection.
- * Benchmark and browser-test dossiers stay out of the analyst workspaces.
+ * Lists technical dossiers by purpose. Inspection opens from the page-level
+ * dialog; benchmark and browser-test dossiers stay out of the analyst
+ * workspaces.
  */
-export function AdminDossierBrowser() {
-    const [selectedRunId, setSelectedRunId] =
-        useState<Id<"researchRuns"> | null>(null);
+export function AdminDossierBrowser({
+    onInspectRun,
+}: {
+    onInspectRun: (runId: Id<"researchRuns">) => void;
+}) {
     const [withdrawRunId, setWithdrawRunId] =
         useState<Id<"researchRuns"> | null>(null);
+    const [filters, setFilters] = useState(dossierFilterDefaults);
 
     return (
         <section className="space-y-3">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+                <AdminDossierFilters
+                    filters={filters}
+                    onChange={setFilters}
+                    className="flex items-center gap-2"
+                />
+            </div>
             <Tabs defaultValue="research">
                 <TabsList>
                     {dossierPurposes.map((purpose) => (
@@ -73,7 +87,8 @@ export function AdminDossierBrowser() {
                         className="mt-3">
                         <DossierList
                             purpose={purpose.value}
-                            onInspect={setSelectedRunId}
+                            filters={filters}
+                            onInspectRun={onInspectRun}
                             onWithdraw={setWithdrawRunId}
                         />
                     </TabsContent>
@@ -84,40 +99,19 @@ export function AdminDossierBrowser() {
                 run={withdrawRunId}
                 onClose={() => setWithdrawRunId(null)}
             />
-
-            <Dialog
-                open={selectedRunId !== null}
-                onOpenChange={(open) => {
-                    if (!open) setSelectedRunId(null);
-                }}>
-                <DialogContent className="max-h-[85svh] overflow-y-auto sm:max-w-xl">
-                    <DialogHeader>
-                        <DialogTitle>Dossier inspection</DialogTitle>
-                        <DialogDescription>
-                            Read-only history. Dossiers cannot be resumed from
-                            this view.
-                        </DialogDescription>
-                    </DialogHeader>
-                    {selectedRunId ? (
-                        <LoadErrorBoundary
-                            title="Inspection unavailable"
-                            description="We couldn’t load this dossier. Try again.">
-                            <AdminRunInspection runId={selectedRunId} />
-                        </LoadErrorBoundary>
-                    ) : null}
-                </DialogContent>
-            </Dialog>
         </section>
     );
 }
 
 function DossierList({
     purpose,
-    onInspect,
+    filters,
+    onInspectRun,
     onWithdraw,
 }: {
     purpose: RunPurpose;
-    onInspect: (runId: Id<"researchRuns">) => void;
+    filters: DossierRunFilters;
+    onInspectRun: (runId: Id<"researchRuns">) => void;
     onWithdraw: (runId: Id<"researchRuns">) => void;
 }) {
     const runs = usePaginatedQuery(
@@ -153,75 +147,110 @@ function DossierList({
         );
     }
 
+    const filtered = runs.results.filter((run) =>
+        dossierMatchesFilters(run, filters, Date.now()),
+    );
+
     return (
         <div>
-            <AdminList items={runs.results} getKey={(run) => run.runId}>
-                {(run) => (
-                    <Item size="sm">
-                        <ItemContent className="min-w-0">
-                            <ItemTitle>
-                                {lifecycleLabel(run.lifecycleState)}
-                            </ItemTitle>
-                            {run.preparation?.configurationCheck ? (
+            {filtered.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                    No loaded dossier matches the selected filters.
+                </p>
+            ) : (
+                <AdminList items={filtered} getKey={(run) => run.runId}>
+                    {(run) => (
+                        <Item size="sm">
+                            <ItemContent className="min-w-0">
+                                <ItemTitle>
+                                    {run.companyLegalName ??
+                                        "Company not recorded"}
+                                </ItemTitle>
                                 <ItemDescription>
-                                    Assessment configuration{" "}
-                                    {run.preparation.configurationCheck
-                                        .available
-                                        ? "available"
-                                        : "unavailable"}
+                                    {lifecycleLabel(run.lifecycleState)}
                                 </ItemDescription>
-                            ) : null}
-                            <p className="break-all font-mono text-xs text-muted-foreground">
-                                {run.runId}
-                            </p>
-                            {run.preparation?.stopCode ? (
-                                <p className="break-all font-mono text-[10px] text-muted-foreground">
-                                    Preparation: {run.preparation.status} ·{" "}
-                                    {run.preparation.stopCode}
+                                <p className="text-xs text-muted-foreground">
+                                    Updated{" "}
+                                    {new Date(run.updatedAt).toLocaleString(
+                                        "en",
+                                    )}{" "}
+                                    · Created{" "}
+                                    {new Date(run.createdAt).toLocaleString(
+                                        "en",
+                                    )}
                                 </p>
-                            ) : null}
-                            {run.preparation?.failures?.map((failure) => (
-                                <p
-                                    key={failure.sourceId}
-                                    className="break-all font-mono text-[10px] text-muted-foreground">
-                                    Source {failure.sourceId}:{" "}
-                                    {failure.reasonCode}
+                                <p className="break-all font-mono text-xs text-muted-foreground">
+                                    {run.runId}
                                 </p>
-                            ))}
-                        </ItemContent>
-                        <ItemActions>
-                            <Badge
-                                variant="outline"
-                                className={executionStatusTone(
-                                    run.executionStatus,
-                                )}>
-                                {executionLabel(run.executionStatus)}
-                            </Badge>
-                            {run.withdrawnAt ? (
-                                <Badge
-                                    variant="outline"
-                                    className="text-muted-foreground">
-                                    Withdrawn
-                                </Badge>
-                            ) : null}
-                            {run.canWithdraw ? (
+                                {run.preparation ? (
+                                    <AdminDetailDisclosure label="Preparation details">
+                                        {run.preparation.configurationCheck ? (
+                                            <p className="text-xs text-muted-foreground">
+                                                Assessment configuration{" "}
+                                                {run.preparation
+                                                    .configurationCheck
+                                                    .available
+                                                    ? "available"
+                                                    : "unavailable"}
+                                            </p>
+                                        ) : null}
+                                        {run.preparation.stopCode ? (
+                                            <p className="break-all font-mono text-[10px] text-muted-foreground">
+                                                Preparation:{" "}
+                                                {run.preparation.status} ·{" "}
+                                                {run.preparation.stopCode}
+                                            </p>
+                                        ) : null}
+                                        {run.preparation.failures?.map(
+                                            (failure) => (
+                                                <p
+                                                    key={failure.sourceId}
+                                                    className="break-all font-mono text-[10px] text-muted-foreground">
+                                                    Source {failure.sourceId}:{" "}
+                                                    {failure.reasonCode}
+                                                </p>
+                                            ),
+                                        )}
+                                    </AdminDetailDisclosure>
+                                ) : null}
+                            </ItemContent>
+                            <ItemActions>
+                                <ExecutionStatusBadge
+                                    status={run.executionStatus}
+                                />
+                                {run.withdrawnAt ? (
+                                    <Badge
+                                        variant="outline"
+                                        className="text-muted-foreground">
+                                        Withdrawn
+                                    </Badge>
+                                ) : null}
+                                {run.canWithdraw ? (
+                                    <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        onClick={() => onWithdraw(run.runId)}>
+                                        Withdraw dossier
+                                    </Button>
+                                ) : null}
                                 <Button
                                     size="sm"
-                                    variant="destructive"
-                                    onClick={() => onWithdraw(run.runId)}>
-                                    Withdraw dossier
+                                    variant="outline"
+                                    onClick={() => onInspectRun(run.runId)}>
+                                    Inspect dossier
                                 </Button>
-                            ) : null}
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => onInspect(run.runId)}>
-                                Inspect dossier
-                            </Button>
-                        </ItemActions>
-                    </Item>
+                            </ItemActions>
+                        </Item>
+                    )}
+                </AdminList>
+            )}
+            <p className="text-xs text-muted-foreground">
+                {filterSummary(
+                    filtered.length,
+                    runs.results.length,
+                    "dossiers",
                 )}
-            </AdminList>
+            </p>
             <AdminLoadMore page={runs} label="Load more dossiers" />
         </div>
     );

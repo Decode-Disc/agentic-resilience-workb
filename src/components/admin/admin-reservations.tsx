@@ -7,6 +7,12 @@ import type { FunctionReturnType } from "convex/server";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import {
+    AdminReservationFilters,
+    filterSummary,
+    reservationFilterDefaults,
+    reservationMatchesFilters,
+} from "@/components/admin/admin-filters";
 import { AdminList } from "@/components/admin/admin-list";
 import { AdminLoadMore } from "@/components/admin/admin-pager";
 import { Badge } from "@/components/ui/badge";
@@ -45,10 +51,22 @@ export function AdminReservations({
 }: {
     reservations: Reservation[];
 }) {
+    const [filters, setFilters] = useState(reservationFilterDefaults);
+    const filtered = reservations.filter((reservation) =>
+        reservationMatchesFilters(reservation, filters, Date.now()),
+    );
+
     return (
         <div className="space-y-6">
             <section className="space-y-2">
-                <h2 className="text-section">Remaining reservations</h2>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="text-section">Remaining reservations</h2>
+                    <AdminReservationFilters
+                        filters={filters}
+                        onChange={setFilters}
+                        className="flex items-center gap-2"
+                    />
+                </div>
                 {reservations.length === 0 ? (
                     <Empty className="min-h-40">
                         <EmptyHeader>
@@ -59,38 +77,54 @@ export function AdminReservations({
                             </EmptyDescription>
                         </EmptyHeader>
                     </Empty>
+                ) : filtered.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                        No loaded reservation matches the selected filters.
+                    </p>
                 ) : (
-                    <AdminList
-                        items={reservations}
-                        getKey={(reservation) => reservation.visitorId}>
-                        {(reservation) => (
-                            <Item size="sm">
-                                <ItemContent className="min-w-0">
-                                    <ItemTitle>
-                                        Access slot {reservation.slotKey}
-                                    </ItemTitle>
-                                    <ItemDescription className="capitalize">
-                                        {reservation.role}
-                                    </ItemDescription>
-                                </ItemContent>
-                                <ItemActions>
-                                    {reservation.reservedForTesting ? (
-                                        <Badge
-                                            variant="regular"
-                                            color="amber"
-                                            showDot>
-                                            Reserved for validation
-                                        </Badge>
-                                    ) : (
-                                        <Badge variant="secondary">
-                                            {reservation.remaining} analyses
-                                            remaining
-                                        </Badge>
-                                    )}
-                                </ItemActions>
-                            </Item>
-                        )}
-                    </AdminList>
+                    <>
+                        <AdminList
+                            items={filtered}
+                            getKey={(reservation) => reservation.visitorId}>
+                            {(reservation) => (
+                                <Item size="sm">
+                                    <ItemContent className="min-w-0">
+                                        <ItemTitle>
+                                            Access slot {reservation.slotKey}
+                                        </ItemTitle>
+                                        <ItemDescription className="capitalize">
+                                            {reservation.role} · Admitted{" "}
+                                            {new Date(
+                                                reservation.admittedAt,
+                                            ).toLocaleString("en")}
+                                        </ItemDescription>
+                                    </ItemContent>
+                                    <ItemActions>
+                                        {reservation.reservedForTesting ? (
+                                            <Badge
+                                                variant="regular"
+                                                color="amber"
+                                                showDot>
+                                                Reserved for validation
+                                            </Badge>
+                                        ) : (
+                                            <Badge variant="secondary">
+                                                {reservation.remaining} analyses
+                                                remaining
+                                            </Badge>
+                                        )}
+                                    </ItemActions>
+                                </Item>
+                            )}
+                        </AdminList>
+                        <p className="text-xs text-muted-foreground">
+                            {filterSummary(
+                                filtered.length,
+                                reservations.length,
+                                "reservations",
+                            )}
+                        </p>
+                    </>
                 )}
             </section>
 

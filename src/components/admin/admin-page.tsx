@@ -1,6 +1,7 @@
 "use client";
 
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import { Shield01Icon } from "@hugeicons/core-free-icons";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
@@ -9,8 +10,10 @@ import { toast } from "sonner";
 
 import { AdminDossierBrowser } from "@/components/admin/admin-dossier-browser";
 import { AdminProviderActivity } from "@/components/admin/admin-provider-activity";
+import { AdminProviderCallInspection } from "@/components/admin/admin-provider-call-inspection";
 import { AdminReservations } from "@/components/admin/admin-reservations";
 import { AdminReviewDecisions } from "@/components/admin/admin-review-decisions";
+import { AdminRunInspection } from "@/components/admin/admin-run-inspection";
 import Icon from "@/components/icon";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { Button } from "@/components/ui/button";
@@ -56,6 +59,15 @@ export function AdminPage() {
     const [pendingEnabled, setPendingEnabled] = useState<boolean | null>(null);
     const [reason, setReason] = useState("");
     const [pending, setPending] = useState(false);
+    const [inspectRunId, setInspectRunId] = useState<Id<"researchRuns"> | null>(
+        null,
+    );
+    const [inspectCall, setInspectCall] = useState<
+        | FunctionReturnType<
+              typeof api.adminOperations.get
+          >["providerCalls"][number]
+        | null
+    >(null);
 
     const queryBridge = (
         <LoadErrorBoundary
@@ -161,7 +173,7 @@ export function AdminPage() {
                         ))}
                     </TabsList>
                     <TabsContent value="dossiers">
-                        <AdminDossierBrowser />
+                        <AdminDossierBrowser onInspectRun={setInspectRunId} />
                     </TabsContent>
                     <TabsContent value="reservations">
                         <AdminReservations
@@ -171,11 +183,13 @@ export function AdminPage() {
                     <TabsContent value="provider-activity">
                         <AdminProviderActivity
                             providerCalls={operations.providerCalls}
+                            onInspectCall={setInspectCall}
                         />
                     </TabsContent>
                     <TabsContent value="review-decisions">
                         <AdminReviewDecisions
                             checkpoints={operations.checkpoints}
+                            onInspectRun={setInspectRunId}
                         />
                     </TabsContent>
                 </Tabs>
@@ -245,6 +259,51 @@ export function AdminPage() {
                                 : `Confirm ${pendingEnabled ? "enable" : "disable"}`}
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={inspectRunId !== null}
+                onOpenChange={(open) => {
+                    if (!open) setInspectRunId(null);
+                }}>
+                <DialogContent className="max-h-[85svh] overflow-y-auto sm:max-w-xl">
+                    <DialogHeader>
+                        <DialogTitle>Dossier inspection</DialogTitle>
+                        <DialogDescription>
+                            Read-only history. Dossiers cannot be resumed from
+                            this view.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {inspectRunId ? (
+                        <LoadErrorBoundary
+                            title="Inspection unavailable"
+                            description="We couldn’t load this dossier. Try again.">
+                            <AdminRunInspection
+                                runId={inspectRunId}
+                                onInspectCall={setInspectCall}
+                            />
+                        </LoadErrorBoundary>
+                    ) : null}
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={inspectCall !== null}
+                onOpenChange={(open) => {
+                    if (!open) setInspectCall(null);
+                }}>
+                <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>Provider attempt</DialogTitle>
+                        <DialogDescription>
+                            Read-only record of one provider attempt and its
+                            audited outcome.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {inspectCall ? (
+                        <AdminProviderCallInspection call={inspectCall} />
+                    ) : null}
                 </DialogContent>
             </Dialog>
         </>

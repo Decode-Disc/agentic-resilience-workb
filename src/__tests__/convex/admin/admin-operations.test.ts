@@ -182,6 +182,9 @@ test("reads the 50 latest events within a fixed document budget as history grows
         errorCode: "exa_not_configured",
     });
     expect(result.reservations).toHaveLength(2);
+    expect(result.reservations[0]).toMatchObject({
+        admittedAt: expect.any(Number),
+    });
     const admin = t.withIdentity({ subject: `${adminUserId}|admin-ops` });
     expect(
         (
@@ -290,11 +293,33 @@ test("admin can inspect preparation configuration and dispatch evidence without 
             paginationOpts: { numItems: 20, cursor: null },
         });
     expect(runs.page.find((run) => run.runId === runId)).toMatchObject({
+        companyLegalName: "ServiceNow, Inc.",
+        createdAt: 1,
         preparation: {
             configurationCheck: { available: false },
             failures: [{ sourceId, reasonCode: "transport_unavailable" }],
         },
     });
+    await t.run((ctx) =>
+        ctx.db.patch(runId, {
+            companySnapshot: {
+                cik: "1373715",
+                legalName: "ServiceNow (archived snapshot)",
+                ticker: "NOW",
+                exchange: "NYSE",
+            },
+        }),
+    );
+    const runsWithSnapshot = await t
+        .withIdentity({ subject: adminUserId })
+        .query(api.adminOperations.listRunsPage, {
+            purpose: "research",
+            paginationOpts: { numItems: 20, cursor: null },
+        });
+    expect(
+        runsWithSnapshot.page.find((run) => run.runId === runId)
+            ?.companyLegalName,
+    ).toBe("ServiceNow (archived snapshot)");
     expect(operations.providerCalls[0]).toMatchObject({
         preparationId,
         sourceId,

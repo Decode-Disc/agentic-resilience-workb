@@ -129,6 +129,12 @@ test("protected administration separates and pages technical dossiers", async ({
         await expect(
             page.getByRole("button", { name: "Inspect dossier", exact: true }),
         ).toHaveCount(20);
+        await expect(
+            page.getByRole("button", { name: "Status: All", exact: true }),
+        ).toBeVisible();
+        await expect(
+            page.getByRole("button", { name: "Period: All time", exact: true }),
+        ).toBeVisible();
         const firstPageMembership = await Promise.all(
             population.evaluationRunIds.map((id) =>
                 page.getByText(id, { exact: true }).isVisible(),
@@ -155,10 +161,41 @@ test("protected administration separates and pages technical dossiers", async ({
             dialog.getByText("Provider receipts", { exact: true }),
         ).toBeVisible();
         await expect(
+            dialog.getByRole("button", { name: "Status: All", exact: true }),
+        ).toBeVisible();
+        await expect(
+            dialog.getByRole("button", { name: "Service: All", exact: true }),
+        ).toBeVisible();
+        await expect(
+            dialog.getByRole("button", { name: "Period: All time", exact: true }),
+        ).toBeVisible();
+        await expect(
             dialog.getByRole("button", { name: /resume|retry|start/i }),
         ).toHaveCount(0);
         await page.keyboard.press("Escape");
         await expect(dialog).toBeHidden();
+        await page
+            .getByRole("tab", { name: "Provider activity", exact: true })
+            .click();
+        await expect(
+            page.getByRole("heading", {
+                name: "Recent provider attempts",
+                exact: true,
+            }),
+        ).toBeVisible();
+        const inspectAttempt = page.getByRole("button", {
+            name: "Inspect attempt",
+            exact: true,
+        });
+        if ((await inspectAttempt.count()) > 0) {
+            await inspectAttempt.first().click();
+            const attemptDialog = page.getByRole("dialog", {
+                name: "Provider attempt",
+            });
+            await expect(attemptDialog).toBeVisible();
+            await page.keyboard.press("Escape");
+            await expect(attemptDialog).toBeHidden();
+        }
         await page.setViewportSize({ width: 390, height: 844 });
         await page.getByRole("tab", { name: "Browser tests", exact: true }).click();
         await expect(
@@ -167,6 +204,9 @@ test("protected administration separates and pages technical dossiers", async ({
         for (const id of population.browserRunIds)
             await expect(page.getByText(id, { exact: true })).toBeVisible();
         await page.getByRole("tab", { name: "Reservations", exact: true }).click();
+        await expect(
+            page.getByRole("button", { name: "Quota: All", exact: true }),
+        ).toBeVisible();
         await expect(
             page.getByText("Reserved for validation", { exact: true }),
         ).toBeVisible();

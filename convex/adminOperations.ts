@@ -39,9 +39,11 @@ const runOverviewValidator = v.object({
     reservationStatus: runFields.reservationStatus,
     withdrawnAt: runFields.withdrawnAt,
     canWithdraw: v.boolean(),
+    companyLegalName: v.optional(v.string()),
     lifecycleState: runFields.lifecycleState,
     executionStatus: runFields.executionStatus,
     pauseReason: runFields.pauseReason,
+    createdAt: runFields.createdAt,
     updatedAt: runFields.updatedAt,
     preparation: v.optional(
         v.object({
@@ -126,6 +128,7 @@ export const get = query({
                 remaining: v.number(),
                 slotKey: v.string(),
                 reservedForTesting: v.boolean(),
+                admittedAt: schema.tables.visitors.validator.fields.admittedAt,
             }),
         ),
     }),
@@ -191,6 +194,7 @@ export const get = query({
                         role: visitor.role,
                         slotKey: invitation?.slotKey ?? "Unassigned",
                         reservedForTesting,
+                        admittedAt: visitor.admittedAt,
                         remaining: reservedForTesting
                             ? 0
                             : Math.max(0, 3 - visitor.analysesReserved),
@@ -528,12 +532,18 @@ export const backfillPhase5Authority = mutation({
 });
 
 function assertLocalPurposeMigration() {
-    if (
-        !["127.0.0.1", "localhost"].includes(
-            new URL(env.CONVEX_CLOUD_URL).hostname,
-        )
-    )
+    const hostname = tryParseHostname(env.CONVEX_CLOUD_URL);
+    if (hostname === null || !["127.0.0.1", "localhost"].includes(hostname))
         throw new Error("Run purpose migration requires the local deployment");
+}
+
+/** Treats an unparseable deployment URL as non-local instead of throwing. */
+function tryParseHostname(value: string): string | null {
+    try {
+        return new URL(value).hostname;
+    } catch {
+        return null;
+    }
 }
 
 /** Read-only preview; ambiguous legacy markers never silently acquire technical authority. */
@@ -610,6 +620,11 @@ async function projectOperationsRun(
     const preparation = run.sourcePreparationId
         ? await ctx.db.get(run.sourcePreparationId)
         : null;
+    const companyLegalName =
+        run.companySnapshot?.legalName ??
+        (run.companyId
+            ? (await ctx.db.get(run.companyId))?.legalName
+            : undefined);
     return {
         runId: run._id,
         purpose: run.purpose,
@@ -617,9 +632,11 @@ async function projectOperationsRun(
         reservationStatus: run.reservationStatus,
         withdrawnAt: run.withdrawnAt,
         canWithdraw: withdrawableRun(run),
+        companyLegalName,
         lifecycleState: run.lifecycleState,
         executionStatus: run.executionStatus,
         pauseReason: run.pauseReason,
+        createdAt: run.createdAt,
         updatedAt: run.updatedAt,
         preparation:
             preparation?.kind === "preparation"

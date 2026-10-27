@@ -5,6 +5,7 @@ import type { FunctionReturnType } from "convex/server";
 
 import { AdminList } from "@/components/admin/admin-list";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
     Empty,
     EmptyDescription,
@@ -13,6 +14,7 @@ import {
 } from "@/components/ui/empty";
 import {
     Item,
+    ItemActions,
     ItemContent,
     ItemDescription,
     ItemTitle,
@@ -32,8 +34,10 @@ type CheckpointEvent = FunctionReturnType<
 /** Recent human review decisions, newest first. */
 export function AdminReviewDecisions({
     checkpoints,
+    onInspectRun,
 }: {
     checkpoints: CheckpointEvent[];
+    onInspectRun: (runId: CheckpointEvent["runId"]) => void;
 }) {
     if (checkpoints.length === 0) {
         return (
@@ -78,11 +82,19 @@ export function AdminReviewDecisions({
                                     {event.runId}
                                 </p>
                             </ItemContent>
-                            <Badge
-                                variant={approved ? "regular" : "secondary"}
-                                color={approved ? "emerald" : "primary"}>
-                                {checkpointDecisionLabel(event.decision)}
-                            </Badge>
+                            <ItemActions>
+                                <Badge
+                                    variant={approved ? "regular" : "secondary"}
+                                    color={approved ? "emerald" : "primary"}>
+                                    {checkpointDecisionLabel(event.decision)}
+                                </Badge>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => onInspectRun(event.runId)}>
+                                    Inspect dossier
+                                </Button>
+                            </ItemActions>
                         </Item>
                     );
                 }}
