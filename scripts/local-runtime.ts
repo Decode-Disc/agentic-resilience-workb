@@ -62,6 +62,7 @@ export type ResolveLocalRuntimeOptions = {
 
 type RuntimeProjectionUpdate =
     | { kind: "process-start"; process: OwnedRuntimeProcess }
+    | { kind: "reconcile-dead-processes" }
     | {
           kind: "listener-ready";
           role: "web" | "preview";
@@ -132,6 +133,14 @@ export async function resolveLocalRuntime(
         manifest = readManifest(manifestPath);
         assertManifestIdentity(manifest, identity);
         assertManifestOrigins(manifest, deployment);
+        if (manifest.ownedPids.some(({ pid }) => !isRuntimeProcessAlive(pid))) {
+            await writeProjection(identity.root, {
+                kind: "reconcile-dead-processes",
+            });
+            manifest = readManifest(manifestPath);
+            assertManifestIdentity(manifest, identity);
+            assertManifestOrigins(manifest, deployment);
+        }
         assertOwnedProcessesAreLive(manifest);
     }
 
@@ -486,6 +495,30 @@ function assertOwnedProcessesAreLive(manifest: LocalRuntimeManifest): void {
     }
 }
 
+function pruneDeadOwnedProcesses(manifest: LocalRuntimeManifest): void {
+    const aliveProcesses: OwnedRuntimeProcess[] = [];
+    const stoppedProcesses: OwnedRuntimeProcess[] = [];
+    for (const processInfo of manifest.ownedPids) {
+        (isRuntimeProcessAlive(processInfo.pid)
+            ? aliveProcesses
+            : stoppedProcesses
+        ).push(processInfo);
+    }
+    if (stoppedProcesses.length === 0) return;
+
+    const stoppedOwners = new Set(
+        stoppedProcesses.map(({ pid, runId }) => `${pid}\0${runId}`),
+    );
+    manifest.ownedPids = aliveProcesses;
+    for (const role of ["web", "preview"] as const) {
+        const owner = manifest.originOwners[role];
+        if (owner && stoppedOwners.has(`${owner.pid}\0${owner.runId}`)) {
+            delete manifest.origins[role];
+            delete manifest.originOwners[role];
+        }
+    }
+}
+
 async function verifyBackendOrigin(
     origin: string,
     expectedInstanceName: string,
@@ -684,6 +717,13 @@ function writeProjectionUnlocked(
     } else {
         manifest = createManifest(identity, deployment);
     }
+    if (update.kind === "reconcile-dead-processes")
+        assertManifestOrigins(manifest, deployment);
+    if (
+        update.kind === "process-start" ||
+        update.kind === "reconcile-dead-processes"
+    )
+        pruneDeadOwnedProcesses(manifest);
     manifest.origins.convex = originForPort(deployment.cloudPort);
     manifest.origins.site = originForPort(deployment.sitePort);
     if (update.kind === "process-start") {

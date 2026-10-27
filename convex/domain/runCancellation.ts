@@ -28,7 +28,7 @@ export async function cancelRunExecution(
         nextEventSequence: run.nextEventSequence + 1,
         updatedAt: now,
     });
-    await cancelAgentMissionsForRun(ctx, run._id, now);
+    await cancelAgentMissionsForRun(ctx, run._id, now, run.executionGeneration);
     if (
         preparation?.kind === "preparation" &&
         preparation.runId === run._id &&

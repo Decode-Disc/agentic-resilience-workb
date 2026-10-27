@@ -1,22 +1,23 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import { runMatchesWorkspace, workspaceForVisitor } from "@convex/runWorkspace";
-import { ConvexError } from "convex/values";
-import { EXECUTION_VERSION } from "./contracts";
+import { getAgentDefinition } from "./definitions";
+import { executionError } from "./errors";
 
-export function executionError(code: string) {
-    return new ConvexError({ code });
-}
+export { executionError, executionFailureCode } from "./errors";
 
-export function executionFailureCode(error: unknown): string | undefined {
-    if (
-        !(error instanceof ConvexError) ||
-        typeof error.data !== "object" ||
-        !error.data ||
-        !("code" in error.data)
-    )
-        return undefined;
-    return typeof error.data.code === "string" ? error.data.code : undefined;
+/** Restored authority cannot retroactively authorize an observation received while access was absent. */
+export function canAdoptRetainedResponse(
+    mission: Doc<"agentMissions">,
+    invocation: Doc<"agentInvocations">,
+) {
+    return (
+        invocation.receivedWhileAuthorized === true &&
+        invocation.missionId === mission._id &&
+        invocation.runId === mission.runId &&
+        invocation.definitionVersion === mission.definitionVersion &&
+        invocation.corpusRevisionId === mission.corpusRevisionId
+    );
 }
 
 /** Internal callers inherit the persisted run's authority, not a supplied principal or model argument. */
@@ -84,8 +85,7 @@ export async function requireMissionAuthority(
         mission.generation !== expectedGeneration
     )
         throw executionError("stale_execution");
-    if (mission.definitionVersion !== EXECUTION_VERSION)
-        throw executionError("definition_version_conflict");
+    getAgentDefinition(mission.definitionId, mission.definitionVersion);
     if (mission.deadlineAt <= Date.now())
         throw executionError("execution_deadline");
     if (["blocked", "cancelled", "completed"].includes(mission.status))

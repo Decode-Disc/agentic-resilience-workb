@@ -3,18 +3,15 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
 import type { SavedMaterialOperation } from "@convex/domain/savedMaterialOperations";
 import { sha256Hex } from "@convex/domain/sourcePassages";
-import { MAX_NORMALIZED_ARTIFACT_BYTES } from "@convex/resourceLimits";
-import type { FunctionReturnType } from "convex/server";
-import type { Infer } from "convex/values";
-import { executionFailureCode } from "./authority";
 import {
     MAX_OPERATION_RESULT_BYTES,
     type operationOutcomeValidator,
-} from "./contracts";
+} from "@convex/execution/contracts";
+import { executionFailureCode } from "@convex/execution/errors";
+import type { Infer } from "convex/values";
 
 const MAX_SEARCH_RESULT_BYTES = 48 * 1024;
 const MAX_HISTORY_RESULT_BYTES = 48 * 1024;
-const MAX_CONTEXT_SIDE_CHARS = 512;
 
 type OperationOutcome = Infer<typeof operationOutcomeValidator>;
 
@@ -25,17 +22,6 @@ type MissionOperationArgs = {
 
 type MissionCaptureArgs = MissionOperationArgs & {
     sourceId: Id<"sources">;
-};
-
-type MissionCapture = FunctionReturnType<
-    typeof internal.sourceRetrieval.approvedCaptureForMission
->;
-
-type LoadedCapture = {
-    captureId: Id<"sourceCaptures">;
-    contentHash: string;
-    text: string;
-    canonicalUrl: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -101,54 +87,6 @@ function successOutcome(
               }
             : {}),
     };
-}
-
-async function loadApprovedCapture(
-    ctx: ActionCtx,
-    args: MissionCaptureArgs,
-): Promise<LoadedCapture | OperationOutcome> {
-    const approved: MissionCapture = await ctx.runQuery(
-        internal.sourceRetrieval.approvedCaptureForMission,
-        args,
-    );
-    if (approved.status !== "available")
-        return { kind: "unavailable", code: approved.reason };
-    const { capture } = approved;
-    const blob = capture.storageId
-        ? await ctx.storage.get(capture.storageId)
-        : null;
-    if (
-        !blob ||
-        blob.size > MAX_NORMALIZED_ARTIFACT_BYTES ||
-        blob.size !== capture.byteCount
-    )
-        return { kind: "unavailable", code: "capture_unavailable" };
-    const text = await blob.text();
-    if (sha256Hex(text) !== capture.contentHash)
-        return { kind: "unavailable", code: "capture_corrupt" };
-    // The mission and frozen membership may change while retained bytes are read.
-    const current: MissionCapture = await ctx.runQuery(
-        internal.sourceRetrieval.approvedCaptureForMission,
-        args,
-    );
-    if (
-        current.status !== "available" ||
-        current.capture._id !== capture._id ||
-        current.capture.contentHash !== capture.contentHash
-    )
-        return { kind: "unavailable", code: "capture_unavailable" };
-    return {
-        captureId: capture._id,
-        contentHash: capture.contentHash,
-        text,
-        canonicalUrl: capture.resolvedUrl ?? capture.requestedUrl,
-    };
-}
-
-function isOutcome(
-    value: LoadedCapture | OperationOutcome,
-): value is OperationOutcome {
-    return "kind" in value;
 }
 
 function selectHistoryPage(
@@ -234,38 +172,14 @@ async function searchAvailableMaterial(
         expectedGeneration: args.expectedGeneration,
         sourceId: args.sourceId,
     };
-    const index = await ctx.runAction(
-        internal.sourceRetrievalActions.ensureApprovedSourceIndexForMission,
-        captureArgs,
+    const result = await ctx.runAction(
+        internal.sourceRetrievalActions.readApprovedMaterialForMission,
+        { ...captureArgs, request: { kind: "search", query: args.query } },
     );
-    if (index.status !== "ready")
-        return { kind: "unavailable", code: index.reason };
-    const [stored, result] = await Promise.all([
-        loadApprovedCapture(ctx, captureArgs),
-        ctx.runQuery(
-            internal.sourceRetrieval.searchApprovedSourceForMission,
-            args,
-        ),
-    ]);
-    if (isOutcome(stored)) return stored;
     if (result.status !== "ready")
-        return {
-            kind: "unavailable",
-            code:
-                result.status === "not_indexed"
-                    ? "source_index_unavailable"
-                    : result.reason,
-        };
-    if (
-        result.captureId !== stored.captureId ||
-        result.contentHash !== stored.contentHash ||
-        result.passages.some(
-            (passage) =>
-                stored.text.slice(passage.startOffset, passage.endOffset) !==
-                passage.quotation,
-        )
-    )
-        return { kind: "unavailable", code: "capture_corrupt" };
+        return { kind: "unavailable", code: result.reason };
+    if (result.kind !== "search")
+        throw new Error("Unexpected approved material result");
     const base = {
         kind: "search_available_material",
         sourceId: args.sourceId,
@@ -321,49 +235,28 @@ async function readInContext(
     ctx: ActionCtx,
     args: MissionCaptureArgs & { passageOrder: number },
 ): Promise<OperationOutcome> {
-    const captureArgs = {
-        missionId: args.missionId,
-        expectedGeneration: args.expectedGeneration,
-        sourceId: args.sourceId,
-    };
-    const index = await ctx.runAction(
-        internal.sourceRetrievalActions.ensureApprovedSourceIndexForMission,
-        captureArgs,
+    const result = await ctx.runAction(
+        internal.sourceRetrievalActions.readApprovedMaterialForMission,
+        {
+            missionId: args.missionId,
+            expectedGeneration: args.expectedGeneration,
+            sourceId: args.sourceId,
+            request: {
+                kind: "context",
+                passageOrder: args.passageOrder,
+            },
+        },
     );
-    if (index.status !== "ready")
-        return { kind: "unavailable", code: index.reason };
-    const passageResult = await ctx.runQuery(
-        internal.sourceRetrieval.approvedPassageForMission,
-        args,
-    );
-    if (passageResult.status !== "ready")
-        return {
-            kind: "unavailable",
-            code: passageResult.reason,
-        };
-    const stored = await loadApprovedCapture(ctx, captureArgs);
-    if (isOutcome(stored)) return stored;
-    const { passage, capture } = passageResult;
-    if (
-        capture.captureId !== stored.captureId ||
-        capture.contentHash !== stored.contentHash ||
-        passage.quotationHash !== sha256Hex(passage.quotation) ||
-        stored.text.slice(passage.startOffset, passage.endOffset) !==
-            passage.quotation
-    )
-        return { kind: "unavailable", code: "capture_corrupt" };
-    const surroundingText = stored.text.slice(
-        Math.max(0, passage.startOffset - MAX_CONTEXT_SIDE_CHARS),
-        Math.min(
-            stored.text.length,
-            passage.endOffset + MAX_CONTEXT_SIDE_CHARS,
-        ),
-    );
+    if (result.status !== "ready")
+        return { kind: "unavailable", code: result.reason };
+    if (result.kind !== "context")
+        throw new Error("Unexpected approved material result");
+    const { passage } = result;
     const value = {
         kind: "read_in_context",
         sourceId: args.sourceId,
-        captureId: stored.captureId,
-        contentHash: stored.contentHash,
+        captureId: result.captureId,
+        contentHash: result.contentHash,
         passage: {
             passageOrder: passage.order,
             startOffset: passage.startOffset,
@@ -371,21 +264,21 @@ async function readInContext(
             exactQuote: passage.quotation,
             quotationHash: passage.quotationHash,
             headingPath: passage.headingPath,
-            surroundingText,
+            surroundingText: passage.surroundingText,
         },
     };
     const progressKey = sha256Hex(
         JSON.stringify({
             kind: "read_in_context",
             sourceId: args.sourceId,
-            captureId: stored.captureId,
-            contentHash: stored.contentHash,
+            captureId: result.captureId,
+            contentHash: result.contentHash,
             passageOrder: passage.order,
             quotationHash: passage.quotationHash,
         }),
     );
     return successOutcome(value, {
-        captureId: stored.captureId,
+        captureId: result.captureId,
         progressKey,
     });
 }

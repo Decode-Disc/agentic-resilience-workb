@@ -4,39 +4,86 @@ import { internal } from "@convex/_generated/api";
 import { internalAction } from "@convex/_generated/server";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import {
+    agentInputByteLength,
+    type DeferredAgentTurnResult,
     invokeDeferredAgentTurn,
     rejectedOutputDiagnostic,
 } from "@convex/integrations/modelInvocation";
 import { missionRoutes } from "@convex/integrations/sourceQualificationConfig";
-import { asSchema } from "ai";
-import type { FunctionReturnType } from "convex/server";
+import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { executionFailureCode } from "./authority";
 import {
+    invocationReplyValidator,
     invocationResponseValidator,
+    invocationStructureError,
     MAX_CONTEXT_BYTES,
     MAX_OPERATION_RESULT_BYTES,
 } from "./contracts";
-import { savedMaterialInspectionDefinition } from "./definitions";
+import { getAgentDefinition } from "./definitions";
 
-const replyValidator = v.object({
-    response: invocationResponseValidator,
-    rawOutputJson: v.optional(v.string()),
-});
+function decodeReceivedReply(
+    result: Extract<DeferredAgentTurnResult, { status: "succeeded" }>,
+): {
+    reply: Infer<typeof invocationReplyValidator>;
+    errorCode?: string;
+    diagnostic?: ReturnType<typeof rejectedOutputDiagnostic>;
+} {
+    const rawOutputJson = JSON.stringify({
+        assistantOutput: result.assistantOutput,
+        requests: result.requests,
+    });
+    const invalid = (code: string, output: string) => {
+        const diagnostic = rejectedOutputDiagnostic(code, output);
+        return {
+            reply: {
+                response: { kind: "blocked" as const, code },
+                rawOutputJson: JSON.stringify(diagnostic),
+            },
+            errorCode: code,
+            diagnostic,
+        };
+    };
+    if (
+        new TextEncoder().encode(rawOutputJson).length >
+        MAX_OPERATION_RESULT_BYTES
+    )
+        return invalid("response_capacity", rawOutputJson);
+    let decoded: unknown;
+    if (result.requests.length) {
+        decoded = { kind: "operations", requests: result.requests };
+    } else {
+        try {
+            decoded = JSON.parse(result.assistantOutput);
+        } catch {
+            return invalid("invalid_output", result.assistantOutput);
+        }
+    }
+    if (!validate(invocationResponseValidator, decoded))
+        return invalid("invalid_output", result.assistantOutput);
+    const structureError = invocationStructureError(decoded);
+    if (structureError) return invalid(structureError, rawOutputJson);
+    return { reply: { response: decoded, rawOutputJson } };
+}
 
 export const invoke = internalAction({
     args: {
         invocationId: v.id("agentInvocations"),
         expectedGeneration: v.number(),
     },
-    returns: replyValidator,
-    handler: async (ctx, args): Promise<Infer<typeof replyValidator>> => {
+    returns: invocationReplyValidator,
+    handler: async (
+        ctx,
+        args,
+    ): Promise<Infer<typeof invocationReplyValidator>> => {
         const { invocation, mission } = await ctx.runQuery(
             internal.execution.invocations.forExecution,
             args,
         );
-        const retainReply = async (reply: Infer<typeof replyValidator>) => {
+        const retainReply = async (
+            reply: Infer<typeof invocationReplyValidator>,
+        ) => {
             await ctx.runMutation(internal.execution.invocations.retainOutput, {
                 ...args,
                 responseJson: JSON.stringify(reply.response),
@@ -62,21 +109,17 @@ export const invoke = internalAction({
             return retainReply({
                 response: { kind: "blocked", code: "missing_configuration" },
             });
-        const definition = savedMaterialInspectionDefinition;
-        const schemas = await Promise.all(
-            Object.entries(definition.tools).map(async ([name, tool]) => ({
-                name,
-                description: tool.description,
-                inputSchema: await asSchema<unknown>(tool.inputSchema)
-                    .jsonSchema,
-            })),
+        const definition = getAgentDefinition(
+            mission.definitionId,
+            mission.definitionVersion,
         );
-        const envelope = JSON.stringify({
-            instructions: definition.instructions,
-            prompt: invocation.inputJson,
-            tools: schemas,
-        });
-        if (new TextEncoder().encode(envelope).length > MAX_CONTEXT_BYTES)
+        if (
+            (await agentInputByteLength({
+                instructions: definition.instructions,
+                prompt: invocation.inputJson,
+                operations: definition.operations,
+            })) > MAX_CONTEXT_BYTES
+        )
             return retainReply({
                 response: { kind: "blocked", code: "context_capacity" },
             });
@@ -93,6 +136,22 @@ export const invoke = internalAction({
             operationKey: `mission:${mission._id}:invocation:${invocation._id}:attempt:1`,
             attempt: 1,
             inputHash: sha256Hex(invocation.inputJson),
+        };
+        const recordReply = async (
+            reply: Infer<typeof invocationReplyValidator>,
+            receipt: Omit<
+                FunctionArgs<typeof internal.providerCalls.recordAttempt>,
+                keyof typeof attempt
+            >,
+        ) => {
+            await ctx.runMutation(
+                internal.execution.invocations.recordModelReply,
+                {
+                    attempt: { ...attempt, ...receipt },
+                    reply,
+                },
+            );
+            return reply;
         };
         let admitted: FunctionReturnType<
             typeof internal.providerCalls.recordAttempt
@@ -123,15 +182,17 @@ export const invoke = internalAction({
         } catch (error) {
             const code =
                 executionFailureCode(error) ?? "execution_validation_failed";
-            await ctx.runMutation(internal.providerCalls.recordAttempt, {
-                ...attempt,
-                status: "failed",
-                errorCode: code,
-                dispatchOutcome: "not_dispatched",
-                retryable: false,
-            });
+            const reply = await recordReply(
+                { response: { kind: "blocked", code } },
+                {
+                    status: "failed",
+                    errorCode: code,
+                    dispatchOutcome: "not_dispatched",
+                    retryable: false,
+                },
+            );
             if (!executionFailureCode(error)) throw error;
-            return retainReply({ response: { kind: "blocked", code } });
+            return reply;
         }
         const result = await invokeDeferredAgentTurn({
             route,
@@ -143,23 +204,41 @@ export const invoke = internalAction({
             },
             instructions: definition.instructions,
             prompt: invocation.inputJson,
-            tools: definition.tools,
+            operations: definition.operations,
         });
         if (result.status === "blocked") {
-            await ctx.runMutation(internal.providerCalls.recordAttempt, {
-                ...attempt,
-                status: "failed",
-                errorCode: result.reason,
-                dispatchOutcome: "not_dispatched",
-                retryable: false,
-            });
-            return retainReply({
-                response: { kind: "blocked", code: result.reason },
-            });
+            return recordReply(
+                { response: { kind: "blocked", code: result.reason } },
+                {
+                    status: "failed",
+                    errorCode: result.reason,
+                    dispatchOutcome: "not_dispatched",
+                    retryable: false,
+                },
+            );
         }
-        await ctx.runMutation(internal.providerCalls.recordAttempt, {
-            ...attempt,
-            status: result.status,
+        const received =
+            result.status === "succeeded"
+                ? decodeReceivedReply(result)
+                : {
+                      reply: {
+                          response: {
+                              kind: "blocked" as const,
+                              code: result.errorCode,
+                          },
+                          ...(result.outputDiagnostic
+                              ? {
+                                    rawOutputJson: JSON.stringify(
+                                        result.outputDiagnostic,
+                                    ),
+                                }
+                              : {}),
+                      },
+                      errorCode: result.errorCode,
+                      diagnostic: result.outputDiagnostic,
+                  };
+        return recordReply(received.reply, {
+            status: received.errorCode ? "failed" : "succeeded",
             dispatchOutcome: result.dispatchOutcome,
             latencyMs: result.latencyMs,
             reportedCost: result.reportedCost,
@@ -172,65 +251,14 @@ export const invoke = internalAction({
                 reasoningTokens: result.reasoningTokens,
                 cachedInputTokens: result.cachedInputTokens,
             },
-            ...(result.status === "failed"
+            ...(received.errorCode
                 ? {
-                      errorCode: result.errorCode,
-                      retryable: result.retryable,
-                      diagnostic: result.outputDiagnostic,
+                      errorCode: received.errorCode,
+                      retryable:
+                          result.status === "failed" ? result.retryable : true,
+                      diagnostic: received.diagnostic,
                   }
                 : {}),
-        });
-        if (result.status === "failed")
-            return retainReply({
-                response: { kind: "blocked", code: result.errorCode },
-                ...(result.outputDiagnostic
-                    ? { rawOutputJson: JSON.stringify(result.outputDiagnostic) }
-                    : {}),
-            });
-        const requests = result.toolRequests.map((call) => ({
-            callId: call.toolCallId,
-            name: call.toolName,
-            inputJson: JSON.stringify(call.input ?? null),
-        }));
-        const rawOutputJson = JSON.stringify({
-            assistantOutput: result.assistantOutput,
-            requests,
-        });
-        if (
-            new TextEncoder().encode(rawOutputJson).length >
-            MAX_OPERATION_RESULT_BYTES
-        )
-            return retainReply({
-                response: { kind: "blocked", code: "response_capacity" },
-                rawOutputJson: JSON.stringify(
-                    rejectedOutputDiagnostic(
-                        "response_capacity",
-                        rawOutputJson,
-                    ),
-                ),
-            });
-        if (requests.length)
-            return retainReply({
-                response: { kind: "operations", requests },
-                rawOutputJson,
-            });
-        let decoded: unknown;
-        try {
-            decoded = JSON.parse(result.assistantOutput);
-        } catch {
-            decoded = null;
-        }
-        if (
-            validate(invocationResponseValidator, decoded) &&
-            (decoded.kind !== "complete" ||
-                decoded.captureIds.every((id) =>
-                    mission.inspectedCaptureIds.includes(id),
-                ))
-        )
-            return retainReply({ response: decoded, rawOutputJson });
-        return retainReply({
-            response: { kind: "operations", requests: [] },
-            rawOutputJson,
         });
     },
 });

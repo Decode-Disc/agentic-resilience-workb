@@ -1,9 +1,28 @@
-import { savedMaterialOperationValidator } from "@convex/domain/savedMaterialOperations";
+import {
+    savedMaterialCompletionValidator,
+    savedMaterialDefinitionId,
+    savedMaterialDefinitionVersion,
+    savedMaterialMissionFields,
+    savedMaterialOperationValidator,
+} from "@convex/domain/savedMaterialOperations";
 import { preparationModelLimitsValidator } from "@convex/domain/sourcePreparationAuthority";
 import { defineTable } from "convex/server";
-import { v } from "convex/values";
+import {
+    type Infer,
+    type PropertyValidators,
+    type VObject,
+    v,
+} from "convex/values";
 
-export const EXECUTION_VERSION = 1;
+export type AgentOperationDefinition = {
+    description: string;
+    inputValidator: VObject<Record<string, unknown>, PropertyValidators>;
+};
+
+export const agentDefinitionIdValidator = savedMaterialDefinitionId;
+export const agentDefinitionVersionValidator = savedMaterialDefinitionVersion;
+export const operationInputValidator = savedMaterialOperationValidator;
+
 export const MAX_CONTEXT_BYTES = 128 * 1024;
 export const MAX_OPERATION_RESULT_BYTES = 64 * 1024;
 export const MAX_OBSERVABLE_OUTPUT_BYTES = 512 * 1024;
@@ -25,13 +44,30 @@ export const invocationResponseValidator = v.union(
         ),
         workingNotes: v.optional(v.string()),
     }),
-    v.object({
-        kind: v.literal("complete"),
-        captureIds: v.array(v.id("sourceCaptures")),
-        workingNotes: v.optional(v.string()),
-    }),
+    savedMaterialCompletionValidator,
     v.object({ kind: v.literal("blocked"), code: v.string() }),
 );
+
+export const invocationReplyValidator = v.object({
+    response: invocationResponseValidator,
+    rawOutputJson: v.optional(v.string()),
+});
+
+/** Structural batch failures are incidents before receipt settlement and remain fenced at adoption. */
+export function invocationStructureError(
+    response: Infer<typeof invocationResponseValidator>,
+) {
+    if (response.kind !== "operations") return undefined;
+    if (response.requests.length > MAX_BATCH_REQUESTS)
+        return "operation_batch_limit";
+    const callIds = response.requests.map((request) => request.callId);
+    if (
+        callIds.some((id) => id.length < 1 || id.length > 160) ||
+        new Set(callIds).size !== callIds.length
+    )
+        return "invalid_tool_correlation";
+    return undefined;
+}
 
 export const requestInputValidator = v.union(
     savedMaterialOperationValidator,
@@ -68,8 +104,8 @@ export const executionTables = {
         runId: v.id("researchRuns"),
         corpusRevisionId: v.id("corpusRevisions"),
         ownerVisitorId: v.id("visitors"),
-        definitionId: v.literal("saved_material_inspection_v1"),
-        definitionVersion: v.literal(1),
+        definitionId: agentDefinitionIdValidator,
+        definitionVersion: agentDefinitionVersionValidator,
         requestKey: v.string(),
         objectiveKey: v.string(),
         generation: v.number(),
@@ -85,7 +121,7 @@ export const executionTables = {
         lastSettledInvocationId: v.optional(v.id("agentInvocations")),
         noProgressTurns: v.number(),
         progressKeys: v.array(v.string()),
-        inspectedCaptureIds: v.array(v.id("sourceCaptures")),
+        ...savedMaterialMissionFields,
         workingNotes: v.string(),
         obligations: v.array(v.string()),
         completionRefs: v.array(v.id("sourceCaptures")),
@@ -113,6 +149,8 @@ export const executionTables = {
         outputJson: v.optional(v.string()),
         rawOutputJson: v.optional(v.string()),
         receivedOutputJson: v.optional(v.string()),
+        receivedWhileAuthorized: v.optional(v.boolean()),
+        adoptionGeneration: v.optional(v.number()),
         requestIds: v.optional(v.array(v.id("agentOperationRequests"))),
         providerCallId: v.optional(v.id("providerCalls")),
         blockCode: v.optional(v.string()),

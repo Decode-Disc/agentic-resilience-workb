@@ -1,5 +1,22 @@
 import { type Infer, v } from "convex/values";
 
+export const SAVED_MATERIAL_DEFINITION_ID = "saved_material_inspection_v1";
+export const SAVED_MATERIAL_DEFINITION_VERSION = 1;
+export const savedMaterialDefinitionId = v.literal(
+    SAVED_MATERIAL_DEFINITION_ID,
+);
+export const savedMaterialDefinitionVersion = v.literal(
+    SAVED_MATERIAL_DEFINITION_VERSION,
+);
+export const savedMaterialCompletionValidator = v.object({
+    kind: v.literal("complete"),
+    captureIds: v.array(v.id("sourceCaptures")),
+    workingNotes: v.optional(v.string()),
+});
+export const savedMaterialMissionFields = {
+    inspectedCaptureIds: v.array(v.id("sourceCaptures")),
+};
+
 export const consultMissionStateInputValidator = v.object({
     cursor: v.optional(v.string()),
 });

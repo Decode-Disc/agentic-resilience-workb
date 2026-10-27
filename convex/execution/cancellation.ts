@@ -12,6 +12,7 @@ const CANCELLATION_REQUEST_BATCH = 4;
 const continuationArgs = {
     runId: v.id("researchRuns"),
     cancelledAt: v.number(),
+    cancelledGeneration: v.optional(v.number()),
     cursor: v.optional(v.string()),
 };
 
@@ -20,11 +21,12 @@ export async function cancelAgentMissionsForRun(
     ctx: MutationCtx,
     runId: Id<"researchRuns">,
     cancelledAt: number,
+    cancelledGeneration: number,
 ) {
     await ctx.scheduler.runAfter(
         0,
         internal.execution.cancellation.continueRunCancellation,
-        { runId, cancelledAt },
+        { runId, cancelledAt, cancelledGeneration },
     );
 }
 
@@ -32,7 +34,18 @@ export const continueRunCancellation = internalMutation({
     args: continuationArgs,
     returns: v.null(),
     handler: async (ctx, args) => {
-        await cancelMissionPage(ctx, args);
+        let cancelledGeneration = args.cancelledGeneration;
+        if (cancelledGeneration === undefined) {
+            // Jobs queued by the previous deployment have no generation; only the unchanged cancellation can identify it.
+            const run = await ctx.db.get(args.runId);
+            if (
+                run?.executionStatus !== "cancelled" ||
+                run.updatedAt !== args.cancelledAt
+            )
+                return null;
+            cancelledGeneration = run.executionGeneration - 1;
+        }
+        await cancelMissionPage(ctx, { ...args, cancelledGeneration });
         return null;
     },
 });
@@ -42,6 +55,7 @@ async function cancelMissionPage(
     args: {
         runId: Id<"researchRuns">;
         cancelledAt: number;
+        cancelledGeneration: number;
         cursor?: string;
     },
 ) {
@@ -55,10 +69,16 @@ async function cancelMissionPage(
         });
     let requestsRemainInPage = false;
 
-    for (const mission of page.page)
+    for (const mission of page.page) {
+        if (mission.generation > args.cancelledGeneration) continue;
         requestsRemainInPage =
-            (await cancelMission(ctx, mission, args.cancelledAt)) ||
-            requestsRemainInPage;
+            (await cancelMission(
+                ctx,
+                mission,
+                args.cancelledAt,
+                args.cancelledGeneration,
+            )) || requestsRemainInPage;
+    }
 
     if (requestsRemainInPage) {
         await ctx.scheduler.runAfter(
@@ -67,6 +87,7 @@ async function cancelMissionPage(
             {
                 runId: args.runId,
                 cancelledAt: args.cancelledAt,
+                cancelledGeneration: args.cancelledGeneration,
                 ...(args.cursor !== undefined ? { cursor: args.cursor } : {}),
             },
         );
@@ -77,6 +98,7 @@ async function cancelMissionPage(
             {
                 runId: args.runId,
                 cancelledAt: args.cancelledAt,
+                cancelledGeneration: args.cancelledGeneration,
                 cursor: page.continueCursor,
             },
         );
@@ -87,6 +109,7 @@ async function cancelMission(
     ctx: MutationCtx,
     mission: Doc<"agentMissions">,
     cancelledAt: number,
+    cancelledGeneration: number,
 ) {
     const pending = await ctx.db
         .query("agentOperationRequests")
@@ -100,7 +123,9 @@ async function cancelMission(
             q.eq("missionId", mission._id).eq("status", "running"),
         )
         .take(CANCELLATION_REQUEST_BATCH + 1);
-    const outstanding = [...running, ...pending];
+    const outstanding = [...running, ...pending].filter(
+        (request) => request.expectedGeneration <= cancelledGeneration,
+    );
     const requestsToRefuse = outstanding.slice(0, CANCELLATION_REQUEST_BATCH);
     const cancelling =
         mission.status !== "completed" && mission.status !== "cancelled";

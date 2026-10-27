@@ -909,60 +909,6 @@ export const searchApprovedSource = query({
     args: { ...approvedSourceScope, query: v.string() },
     handler: async (ctx, args) => {
         const allowed = await approvedCapture(ctx, args);
-        if (allowed.status !== "available") return allowed;
-        if (
-            args.query.length > 512 ||
-            args.query.trim().split(/\s+/).length > 16
-        )
-            throw sourcePreparationError("retrieval_query_invalid");
-        if (!allowed.state) return { status: "not_indexed" as const };
-        const { capture, key } = allowed;
-        const rows = args.query.trim()
-            ? await ctx.db
-                  .query("sourceSearchPassages")
-                  .withSearchIndex("search_text", (q) =>
-                      q
-                          .search("searchText", args.query)
-                          .eq("scopeKey", key)
-                          .eq("captureId", capture._id),
-                  )
-                  .take(64)
-            : [];
-        if (
-            rows.some(
-                (row) =>
-                    row.contentHash !== capture.contentHash ||
-                    row.sourceId !== capture.sourceId ||
-                    row.quotationHash !== sha256Hex(row.quotation),
-            )
-        )
-            throw sourcePreparationError("capture_identity_conflict");
-        return {
-            status: "ready" as const,
-            corpusRevisionId: args.corpusRevisionId,
-            sourceId: args.sourceId,
-            captureId: capture._id,
-            contentHash: capture.contentHash,
-            canonicalUrl: capture.resolvedUrl ?? capture.requestedUrl,
-            retrievedAt: capture.retrievedAt ?? null,
-            passages: rows.map(
-                ({
-                    order,
-                    startOffset,
-                    endOffset,
-                    quotation,
-                    quotationHash,
-                    headingPath,
-                }) => ({
-                    order,
-                    startOffset,
-                    endOffset,
-                    quotation,
-                    quotationHash,
-                    headingPath,
-                }),
-            ),
-            limitReached: rows.length === 64,
-        };
+        return searchApprovedCapture(ctx, args, allowed);
     },
 });

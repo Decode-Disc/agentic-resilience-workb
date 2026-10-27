@@ -1,8 +1,7 @@
-import { savedMaterialInspectionDefinition } from "@convex/execution/definitions";
+import { savedMaterialInspectionDefinition } from "@convex/domain/savedMaterialInspection";
 import { invokeDeferredAgentTurn } from "@convex/integrations/modelInvocation";
-import { asSchema, tool } from "ai";
+import { v } from "convex/values";
 import { expect, test, vi } from "vitest";
-import { z } from "zod";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
 
 test("blocks a deferred agent turn when no authorized route exists", async () => {
@@ -12,7 +11,7 @@ test("blocks a deferred agent turn when no authorized route exists", async () =>
         dependencies: { apiKey: "", fetch: request },
         instructions: "Inspect the approved material.",
         prompt: "Continue the investigation.",
-        tools: {},
+        operations: {},
     });
 
     expect(result).toEqual({
@@ -74,11 +73,11 @@ test("returns typed tool requests for persisted dispatch without an SDK loop", a
         provider: "test-provider",
         authorizedForAgent: true,
     } as const;
-    const tools = {
-        search_material: tool({
+    const operations = {
+        search_material: {
             description: "Search approved saved material.",
-            inputSchema: z.object({ query: z.string() }),
-        }),
+            inputValidator: v.object({ query: v.string() }),
+        },
     };
 
     const result = await invokeDeferredAgentTurn({
@@ -86,26 +85,24 @@ test("returns typed tool requests for persisted dispatch without an SDK loop", a
         dependencies: { apiKey: "test-only-key", fetch: request },
         instructions: "Inspect the approved material.",
         prompt: "Find pricing evidence.",
-        tools,
+        operations,
     });
 
     expect(result.status).toBe("succeeded");
     if (result.status !== "succeeded") return;
     expect(result.finishReason).toBe("tool-calls");
-    expect(result.toolRequests).toHaveLength(2);
-    expect(result.toolRequests[0]).toMatchObject({
-        toolCallId: "call-1",
-        toolName: "search_material",
-        input: { query: "pricing" },
+    expect(result.requests).toHaveLength(2);
+    expect(result.requests[0]).toMatchObject({
+        callId: "call-1",
+        name: "search_material",
+        inputJson: JSON.stringify({ query: "pricing" }),
     });
-    expect(result.toolRequests[1]).toMatchObject({
-        toolCallId: "call-unlisted",
-        toolName: "unlisted_operation",
-        input: { requested: true },
-        dynamic: true,
-        invalid: true,
+    expect(result.requests[1]).toMatchObject({
+        callId: "call-unlisted",
+        name: "unlisted_operation",
+        inputJson: JSON.stringify({ requested: true }),
     });
-    expect(JSON.stringify(result.toolRequests)).toContain('"requested":true');
+    expect(result.requests[1]?.inputJson).toBe('{"requested":true}');
     expect(request).toHaveBeenCalledOnce();
     const requestBody = JSON.parse(String(request.mock.calls[0]?.[1]?.body));
     expect(requestBody).toMatchObject({
@@ -159,7 +156,7 @@ test("returns final assistant text for persisted completion parsing", async () =
         dependencies: { apiKey: "test-only-key", fetch: request },
         instructions: "Inspect the approved material.",
         prompt: "Report whether inspection is complete.",
-        tools: {},
+        operations: {},
     });
 
     expect(result).toMatchObject({ status: "succeeded", assistantOutput });
@@ -168,6 +165,11 @@ test("returns final assistant text for persisted completion parsing", async () =
 test("blocks tools with inline execution callbacks before provider dispatch", async () => {
     const request = vi.fn<typeof fetch>();
     const execute = vi.fn(async () => "must remain deferred");
+    const executableOperation = {
+        description: "Search approved saved material.",
+        inputValidator: v.object({ query: v.string() }),
+        execute,
+    };
     const result = await invokeDeferredAgentTurn({
         route: {
             model: "test/saved-material-agent",
@@ -177,13 +179,7 @@ test("blocks tools with inline execution callbacks before provider dispatch", as
         dependencies: { apiKey: "test-only-key", fetch: request },
         instructions: "Inspect the approved material.",
         prompt: "Find pricing evidence.",
-        tools: {
-            search_material: tool({
-                description: "Search approved saved material.",
-                inputSchema: z.object({ query: z.string() }),
-                execute,
-            }),
-        },
+        operations: { search_material: executableOperation },
     });
 
     expect(result).toEqual({
@@ -232,18 +228,6 @@ test("serializes canonical mission tools and accepts a real Convex source ID", a
                 headers: { "Content-Type": "application/json" },
             }),
     );
-    for (const definitionTool of Object.values(
-        savedMaterialInspectionDefinition.tools,
-    )) {
-        await asSchema(definitionTool.inputSchema).jsonSchema;
-    }
-    const readSchema = asSchema(
-        savedMaterialInspectionDefinition.tools.read_in_context.inputSchema,
-    );
-    expect(
-        await readSchema.validate?.({ sourceId, passageOrder: 0, extra: true }),
-    ).toMatchObject({ success: false });
-
     const result = await invokeDeferredAgentTurn({
         route: {
             model: "test/saved-material-agent",
@@ -253,16 +237,16 @@ test("serializes canonical mission tools and accepts a real Convex source ID", a
         dependencies: { apiKey: "test-only-key", fetch: request },
         instructions: savedMaterialInspectionDefinition.instructions,
         prompt: "Read the requested retained passage.",
-        tools: savedMaterialInspectionDefinition.tools,
+        operations: savedMaterialInspectionDefinition.operations,
     });
 
     expect(result.status).toBe("succeeded");
     if (result.status !== "succeeded") return;
-    expect(result.toolRequests).toMatchObject([
+    expect(result.requests).toMatchObject([
         {
-            toolCallId: "read-real-source",
-            toolName: "read_in_context",
-            input: { sourceId, passageOrder: 0 },
+            callId: "read-real-source",
+            name: "read_in_context",
+            inputJson: JSON.stringify({ sourceId, passageOrder: 0 }),
         },
     ]);
     const requestBody = JSON.parse(String(request.mock.calls[0]?.[1]?.body));
@@ -322,15 +306,14 @@ test("a response containing only invalid tool calls cannot trigger an SDK repair
         dependencies: { apiKey: "test-only-key", fetch: request },
         instructions: "Inspect approved material.",
         prompt: "Continue.",
-        tools: {},
+        operations: {},
     });
     expect(result.status).toBe("succeeded");
     expect(request).toHaveBeenCalledOnce();
     if (result.status !== "succeeded")
         throw new Error("Expected observable invalid request");
-    expect(result.toolRequests).toHaveLength(1);
-    expect(result.toolRequests[0]).toMatchObject({
-        toolName: "unlisted_operation",
-        invalid: true,
+    expect(result.requests).toHaveLength(1);
+    expect(result.requests[0]).toMatchObject({
+        name: "unlisted_operation",
     });
 });

@@ -2,7 +2,10 @@ import { api, internal } from "@convex/_generated/api";
 import { afterEach, expect, test, vi } from "vitest";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+});
 
 test("a new draft does not revoke access to the previous approved capture", async () => {
     const { t, args, userId } = await seedInspectedEvidence();
@@ -161,6 +164,67 @@ test("an admitted analyst can search an approved capture beyond materialized pas
             calls: (await ctx.db.query("providerCalls").collect()).length,
         })),
     ).toEqual({ passages: 551, versions: 0, calls: 0 });
+});
+
+test("public and mission approved searches return the same indexed passages", async () => {
+    const { t, args, userId } = await seedInspectedEvidence();
+    const owned = t.withIdentity({ subject: userId });
+    const scope = {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        sourceId: args.sourceId,
+    };
+    await owned.action(
+        api.sourceRetrievalActions.ensureApprovedSourceIndex,
+        scope,
+    );
+    const publicResult = await owned.query(
+        api.sourceRetrieval.searchApprovedSource,
+        { ...scope, query: "workflow" },
+    );
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "approved-search-parity",
+        expectedGeneration: args.executionGeneration,
+    });
+
+    const missionResult = await t.query(
+        internal.sourceRetrieval.searchApprovedSourceForMission,
+        {
+            missionId,
+            expectedGeneration: args.executionGeneration,
+            sourceId: args.sourceId,
+            query: "workflow",
+        },
+    );
+
+    expect(missionResult).toEqual(publicResult);
+});
+
+test("a warm approved public index returns ready without loading the capture again", async () => {
+    const { t, args, userId } = await seedInspectedEvidence();
+    const owned = t.withIdentity({ subject: userId });
+    const scope = {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        sourceId: args.sourceId,
+    };
+    await owned.action(
+        api.sourceRetrievalActions.ensureApprovedSourceIndex,
+        scope,
+    );
+    const readCapture = vi.spyOn(Blob.prototype, "text");
+
+    expect(
+        await owned.action(
+            api.sourceRetrievalActions.ensureApprovedSourceIndex,
+            scope,
+        ),
+    ).toEqual({ status: "ready" });
+
+    expect(readCapture).not.toHaveBeenCalled();
 });
 
 test("approved search refuses unauthenticated, foreign, unapproved and revoked access", async () => {

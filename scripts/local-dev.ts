@@ -32,27 +32,27 @@ const STARTUP_TIMEOUT_MS = positiveInteger(
 
 async function main(): Promise<number> {
     const args = process.argv.slice(2);
-    const lockedIndex = args.indexOf("--startup-lock-held");
-    if (lockedIndex !== -1) {
-        const mode = args[lockedIndex + 1];
+    if (args[0] === "--startup-lock-held") {
+        const mode = args[1];
         if (!mode)
             throw new LocalDevError(
                 "The locked local runtime command is missing.",
             );
         assertRuntimeStartupLock(process.cwd());
-        return runLockedMode(process.cwd(), mode);
+        return runLockedMode(process.cwd(), mode, args.slice(2));
     }
 
     const mode = args[0];
+    const forwardedArgs = args.slice(1);
     const root = process.cwd();
     if (!mode)
         throw new LocalDevError(
             "Choose dev, dev:web, convex:dev, dev:browser, dev:all, or test:e2e.",
         );
     if (mode === "dev" || mode === "convex:dev" || mode === "test:e2e")
-        return runWithStartupLock(root, mode);
-    if (mode === "dev:web") return runWeb(root);
-    if (mode === "dev:browser") return runPreview(root);
+        return runWithStartupLock(root, mode, forwardedArgs);
+    if (mode === "dev:web") return runWeb(root, forwardedArgs);
+    if (mode === "dev:browser") return runPreview(root, forwardedArgs);
     if (mode === "dev:all")
         return runCommand(
             "pnpm",
@@ -70,7 +70,11 @@ async function main(): Promise<number> {
     throw new LocalDevError("Unknown local runtime command.");
 }
 
-async function runWithStartupLock(root: string, mode: string): Promise<number> {
+async function runWithStartupLock(
+    root: string,
+    mode: string,
+    args: string[],
+): Promise<number> {
     const identity = getLocalRuntimeIdentity(root);
     const child = spawn(
         "flock",
@@ -82,6 +86,7 @@ async function runWithStartupLock(root: string, mode: string): Promise<number> {
             fileURLToPath(import.meta.url),
             "--startup-lock-held",
             mode,
+            ...args,
         ],
         {
             cwd: identity.root,
@@ -92,12 +97,17 @@ async function runWithStartupLock(root: string, mode: string): Promise<number> {
     return runUntilExit(child, async () => {});
 }
 
-async function runLockedMode(root: string, mode: string): Promise<number> {
+async function runLockedMode(
+    root: string,
+    mode: string,
+    args: string[],
+): Promise<number> {
     if (mode === "dev" || mode === "convex:dev" || mode === "test:e2e")
         return runNativeWatcher(
             root,
             mode !== "convex:dev",
             mode === "test:e2e",
+            args,
         );
     throw new LocalDevError("Unknown locked local runtime command.");
 }
@@ -106,6 +116,7 @@ async function runNativeWatcher(
     root: string,
     startWeb: boolean,
     runE2e: boolean,
+    args: string[],
 ): Promise<number> {
     const deploymentName = selectedLocalDeployment(root);
     const cli = resolve(root, "node_modules/convex/bin/main.js");
@@ -115,7 +126,12 @@ async function runNativeWatcher(
     const runId = randomUUID();
     const child = spawn(
         process.execPath,
-        [cli, "dev", ...(startWeb ? ["--start", "pnpm exec vite dev"] : [])],
+        [
+            cli,
+            "dev",
+            ...(startWeb ? ["--start", "pnpm exec vite dev"] : []),
+            ...(!runE2e ? args : []),
+        ],
         {
             cwd: root,
             env: nativeEnvironment(root, runId),
@@ -133,12 +149,17 @@ async function runNativeWatcher(
         const runtime = await resolveLocalRuntime(root, {
             requiredOrigins: ["convex", "web"],
         });
-        return await runCommand("pnpm", ["exec", "playwright", "test"], root, {
-            ...process.env,
-            PLAYWRIGHT_BASE_URL: runtime.origins.web,
-            LOCAL_RUNTIME_CONVEX_ORIGIN: runtime.origins.convex,
-            LOCAL_RUNTIME_WORKTREE_ID: runtime.identity.worktreeId,
-        });
+        return await runCommand(
+            "pnpm",
+            ["exec", "playwright", "test", ...args],
+            root,
+            {
+                ...process.env,
+                PLAYWRIGHT_BASE_URL: runtime.origins.web,
+                LOCAL_RUNTIME_CONVEX_ORIGIN: runtime.origins.convex,
+                LOCAL_RUNTIME_WORKTREE_ID: runtime.identity.worktreeId,
+            },
+        );
     } catch (error) {
         await stopChild(child);
         throw error;
@@ -209,43 +230,49 @@ async function waitForBackend(
     );
 }
 
-async function runWeb(root: string): Promise<number> {
+async function runWeb(root: string, args: string[]): Promise<number> {
     await resolveLocalRuntime(root, { requiredOrigins: ["convex"] });
     return runTrackedService(
         root,
         "web",
         "pnpm",
-        ["exec", "vite", "dev"],
+        ["exec", "vite", "dev", ...args],
         root,
         STARTUP_TIMEOUT_MS,
     );
 }
 
-async function runPreview(root: string): Promise<number> {
+async function runPreview(root: string, args: string[]): Promise<number> {
     const serviceRoot = join(root, "services/playwright-browser");
+    const explicitPort = configuredPreviewPort(process.env.PORT, serviceRoot);
+    const preferredPort =
+        explicitPort === undefined
+            ? getPreferredRuntimePort(root, "preview")
+            : undefined;
     const build = await runCommand("npm", ["run", "build"], serviceRoot);
     if (build !== 0) return build;
 
     const runId = randomUUID();
-    const preferredPort = getPreferredRuntimePort(root, "preview");
     let started: PreviewStart;
     try {
         started = await startPreviewService(
             root,
             serviceRoot,
-            preferredPort ?? 0,
+            explicitPort ?? preferredPort ?? 0,
             runId,
+            args,
         );
     } catch (error) {
         if (hasNativeRuntimeConfig(root)) await removeRuntimeRun(root, runId);
         throw error;
     }
     if (
-        preferredPort &&
+        explicitPort === undefined &&
+        preferredPort !== undefined &&
         started.status !== null &&
         started.stderr.includes("EADDRINUSE")
     )
-        started = await startPreviewService(root, serviceRoot, 0, runId);
+        started = await startPreviewService(root, serviceRoot, 0, runId, args);
     if (started.status !== null) {
         await removeRuntimeRun(root, runId);
         return started.status;
@@ -254,6 +281,9 @@ async function runPreview(root: string): Promise<number> {
         throw new LocalDevError(
             "The local preview service did not publish its bound address.",
         );
+    process.stdout.write(
+        `Local preview service listening at ${started.origin}\n`,
+    );
     return runUntilExit(started.child, async () => {
         await removeRuntimeRun(root, runId);
     });
@@ -271,18 +301,23 @@ async function startPreviewService(
     serviceRoot: string,
     port: number,
     runId: string,
+    args: string[],
 ): Promise<PreviewStart> {
-    const child = spawn("npm", ["run", "dev"], {
-        cwd: serviceRoot,
-        env: {
-            ...process.env,
-            PORT: String(port),
-            PREVIEW_SERVICE_HOST: "127.0.0.1",
-            LOCAL_RUNTIME_ROOT: root,
-            LOCAL_RUNTIME_RUN_ID: runId,
+    const child = spawn(
+        "npm",
+        ["run", "dev", ...(args.length > 0 ? ["--", ...args] : [])],
+        {
+            cwd: serviceRoot,
+            env: {
+                ...process.env,
+                PORT: String(port),
+                PREVIEW_SERVICE_HOST: "127.0.0.1",
+                LOCAL_RUNTIME_ROOT: root,
+                LOCAL_RUNTIME_RUN_ID: runId,
+            },
+            stdio: ["inherit", "inherit", "pipe"],
         },
-        stdio: ["inherit", "inherit", "pipe"],
-    });
+    );
     let stderr = "";
     let pending = "";
     const exit = trackExit(child);
@@ -609,6 +644,35 @@ function positiveInteger(value: string | undefined, fallback: number): number {
     return Number.isInteger(parsed) && parsed > 0
         ? Math.min(parsed, 600_000)
         : fallback;
+}
+
+function configuredPreviewPort(
+    value: string | undefined,
+    serviceRoot: string,
+): number | undefined {
+    if (value === undefined) {
+        const envPath = join(serviceRoot, ".env");
+        if (existsSync(envPath)) {
+            try {
+                value = parseEnv(readFileSync(envPath, "utf8")).PORT;
+            } catch {
+                throw new LocalDevError(
+                    "The preview service environment file is invalid.",
+                );
+            }
+        }
+    }
+    if (value === undefined) return undefined;
+    if (!/^\d+$/.test(value))
+        throw new LocalDevError(
+            "PORT must be a whole number between 0 and 65535.",
+        );
+    const port = Number(value);
+    if (!Number.isSafeInteger(port) || port > 65535)
+        throw new LocalDevError(
+            "PORT must be a whole number between 0 and 65535.",
+        );
+    return port;
 }
 
 class ChildEndedError extends LocalDevError {

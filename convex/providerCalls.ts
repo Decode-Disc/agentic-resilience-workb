@@ -198,35 +198,37 @@ export const nextPreparationAttemptForInput = internalQuery({
     },
 });
 
+export const providerAttemptValidator = v.object({
+    missionId: v.optional(v.id("agentMissions")),
+    invocationId: v.optional(v.id("agentInvocations")),
+    inputHash: v.optional(v.string()),
+    runId: v.optional(v.id("researchRuns")),
+    corpusRevisionId: v.optional(v.id("corpusRevisions")),
+    sourceId: v.optional(v.id("sources")),
+    preparationId: v.optional(v.id("sourceSelectionProposalRebuilds")),
+    acceptedDecisionId: v.optional(v.id("sourceDecisions")),
+    executionGeneration: v.optional(v.number()),
+    workflowVersion: v.optional(v.number()),
+    stepKey: v.optional(v.string()),
+    service: serviceValidator,
+    operation: v.string(),
+    operationKey: v.string(),
+    status: providerCallStatusValidator,
+    attempt: v.number(),
+    latencyMs: v.optional(v.number()),
+    usage: v.optional(v.any()),
+    reportedCost: v.optional(v.number()),
+    embeddingInputBytes: v.optional(v.number()),
+    errorCode: v.optional(v.string()),
+    diagnostic: schema.tables.providerCalls.validator.fields.diagnostic,
+    retryable: v.optional(v.boolean()),
+    dispatchOutcome: v.optional(preparationDispatchOutcomeValidator),
+    httpStatus: v.optional(v.number()),
+    retryAfterAt: v.optional(v.number()),
+});
+
 export const recordAttempt = internalMutation({
-    args: {
-        missionId: v.optional(v.id("agentMissions")),
-        invocationId: v.optional(v.id("agentInvocations")),
-        inputHash: v.optional(v.string()),
-        runId: v.optional(v.id("researchRuns")),
-        corpusRevisionId: v.optional(v.id("corpusRevisions")),
-        sourceId: v.optional(v.id("sources")),
-        preparationId: v.optional(v.id("sourceSelectionProposalRebuilds")),
-        acceptedDecisionId: v.optional(v.id("sourceDecisions")),
-        executionGeneration: v.optional(v.number()),
-        workflowVersion: v.optional(v.number()),
-        stepKey: v.optional(v.string()),
-        service: serviceValidator,
-        operation: v.string(),
-        operationKey: v.string(),
-        status: providerCallStatusValidator,
-        attempt: v.number(),
-        latencyMs: v.optional(v.number()),
-        usage: v.optional(v.any()),
-        reportedCost: v.optional(v.number()),
-        embeddingInputBytes: v.optional(v.number()),
-        errorCode: v.optional(v.string()),
-        diagnostic: schema.tables.providerCalls.validator.fields.diagnostic,
-        retryable: v.optional(v.boolean()),
-        dispatchOutcome: v.optional(preparationDispatchOutcomeValidator),
-        httpStatus: v.optional(v.number()),
-        retryAfterAt: v.optional(v.number()),
-    },
+    args: providerAttemptValidator.fields,
     returns: recordAttemptResultValidator,
     handler: async (
         ctx,
@@ -416,7 +418,7 @@ export const recordAttempt = internalMutation({
                     .withIndex("by_key", (query) => query.eq("key", "global"))
                     .unique();
                 if (paidWork?.enabled === false) {
-                    if (args.preparationId)
+                    if (args.preparationId || args.missionId)
                         throw sourcePreparationError("paid_work_disabled");
                     const existing = await ctx.db
                         .query("providerCalls")

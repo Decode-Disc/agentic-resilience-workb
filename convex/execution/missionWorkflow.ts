@@ -6,6 +6,7 @@ import type { FunctionReturnType } from "convex/server";
 import { v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import {
+    canAdoptRetainedResponse,
     executionError,
     executionFailureCode,
     recordMissionEvent,
@@ -43,15 +44,25 @@ export const next = internalMutation({
         const mission = await ctx.db.get(args.missionId);
         if (
             !mission ||
+            mission.generation !== args.expectedGeneration ||
             ["blocked", "completed", "cancelled"].includes(mission.status)
         )
             return { kind: "stopped" as const };
+        const invocation = mission.lastInvocationId
+            ? await ctx.db.get(mission.lastInvocationId)
+            : null;
         try {
             await requireMissionAuthority(
                 ctx,
                 mission._id,
                 args.expectedGeneration,
             );
+            if (
+                invocation?.status === "started" &&
+                invocation.receivedOutputJson &&
+                !canAdoptRetainedResponse(mission, invocation)
+            )
+                throw executionError("retained_response_not_reusable");
         } catch (error) {
             const code = executionFailureCode(error);
             if (!code) throw error;
@@ -84,9 +95,6 @@ export const next = internalMutation({
                 kind: "dispatch" as const,
                 requestId: request._id,
             };
-        const invocation = mission.lastInvocationId
-            ? await ctx.db.get(mission.lastInvocationId)
-            : null;
         if (invocation?.status === "started") {
             if (invocation.receivedOutputJson) {
                 const response: unknown = JSON.parse(

@@ -2,19 +2,24 @@
 
 import type { Doc } from "@convex/_generated/dataModel";
 import { providerRetryAfterAt } from "@convex/domain/sourcePreparationAuthority";
+import type { AgentOperationDefinition } from "@convex/execution/contracts";
 import { MAX_PREPARATION_DIAGNOSTIC_BYTES } from "@convex/resourceLimits";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import type { ToolSet, TypedToolCall } from "ai";
+import type { ToolSet } from "ai";
 import {
     APICallError,
+    asSchema,
     generateText,
     isStepCount,
     JSONParseError,
+    jsonSchema,
     NoObjectGeneratedError,
     Output,
     ToolLoopAgent,
+    tool,
 } from "ai";
-import type { ZodType } from "zod";
+import { convexToZod } from "convex-helpers/server/zod4";
+import { type ZodType, z } from "zod";
 import type { SourceQualificationRoute } from "./sourceQualificationConfig";
 import {
     QUALIFICATION_ATTEMPT_TIMEOUT_MS,
@@ -114,12 +119,12 @@ export type AuthorizedAgentRoute = InvocationRoute & {
     authorizedForAgent: true;
 };
 
-export type DeferredAgentTurnResult<TTools extends ToolSet> =
+export type DeferredAgentTurnResult =
     | (AttemptReceipt & {
           status: "succeeded";
           finishReason: "stop" | "tool-calls";
           assistantOutput: string;
-          toolRequests: TypedToolCall<TTools>[];
+          requests: { callId: string; name: string; inputJson: string }[];
       })
     | AttemptFailure
     | {
@@ -437,17 +442,102 @@ export async function invokeOneShot<T>(args: {
     }
 }
 
+function modelInputSchema<Schema extends z.ZodObject>(
+    validator: Schema,
+    convexIdPaths: readonly string[] = [],
+) {
+    const strictValidator = validator.strict();
+    type Input = z.output<typeof strictValidator>;
+    const createJsonSchema = () => {
+        const convertedIdPaths = new Set<string>();
+        const schema = z.toJSONSchema(strictValidator, {
+            target: "draft-7",
+            unrepresentable: "any",
+            override: ({ zodSchema, jsonSchema, path }) => {
+                if (!(zodSchema instanceof z.ZodCustom)) return;
+                const idPath = path.join(".");
+                const fieldPath = idPath.replace(/^properties\./, "");
+                if (!convexIdPaths.includes(fieldPath))
+                    throw new Error(
+                        `Unsupported custom model input schema at ${idPath}`,
+                    );
+                convertedIdPaths.add(fieldPath);
+                jsonSchema.type = "string";
+            },
+        });
+        if (
+            convertedIdPaths.size !== convexIdPaths.length ||
+            convexIdPaths.some((path) => !convertedIdPaths.has(path))
+        )
+            throw new Error("Canonical Convex ID schema was not converted");
+        return schema;
+    };
+
+    return jsonSchema<Input>(createJsonSchema, {
+        validate: (value) => {
+            const parsed = strictValidator.safeParse(value);
+            return parsed.success
+                ? { success: true, value: parsed.data }
+                : { success: false, error: parsed.error };
+        },
+    });
+}
+
+function createAgentTools(
+    operations: Record<string, AgentOperationDefinition>,
+): ToolSet {
+    return Object.fromEntries(
+        Object.entries(operations).map(([name, operation]) => [
+            name,
+            tool({
+                description: operation.description,
+                inputSchema: modelInputSchema(
+                    convexToZod(operation.inputValidator),
+                    Object.entries(operation.inputValidator.fields)
+                        .filter(([, validator]) => validator.kind === "id")
+                        .map(([field]) => field),
+                ),
+            }),
+        ]),
+    );
+}
+
+/** Measures the actual provider envelope after canonical schemas have been adapted. */
+export async function agentInputByteLength(args: {
+    instructions: string;
+    prompt: string;
+    operations: Record<string, AgentOperationDefinition>;
+}): Promise<number> {
+    const tools = await Promise.all(
+        Object.entries(createAgentTools(args.operations)).map(
+            async ([name, operation]) => ({
+                name,
+                description: operation.description,
+                inputSchema: await asSchema<unknown>(operation.inputSchema)
+                    .jsonSchema,
+            }),
+        ),
+    );
+    return new TextEncoder().encode(
+        JSON.stringify({
+            instructions: args.instructions,
+            prompt: args.prompt,
+            tools,
+        }),
+    ).length;
+}
+
 /** Runs one authorized model turn and returns tool requests for persisted dispatch. */
-export async function invokeDeferredAgentTurn<TTools extends ToolSet>(args: {
+export async function invokeDeferredAgentTurn(args: {
     route?: AuthorizedAgentRoute;
     dependencies: AttemptDependencies;
     instructions: string;
     prompt: string;
-    tools: TTools;
-}): Promise<DeferredAgentTurnResult<TTools>> {
+    operations: Record<string, AgentOperationDefinition>;
+}): Promise<DeferredAgentTurnResult> {
     if (!args.route)
         return { status: "blocked", reason: "missing_authorized_route" };
-    if (Object.values(args.tools).some(toolHasExecuteCallback))
+    if (Object.values(args.operations).some(toolHasExecuteCallback))
         return { status: "blocked", reason: "tool_callbacks_not_allowed" };
     const { route, dependencies } = args;
     const preflight = preflightFailure(route, dependencies);
@@ -456,13 +546,12 @@ export async function invokeDeferredAgentTurn<TTools extends ToolSet>(args: {
     const state: BoundedTransportState = { responseTooLarge: false };
     try {
         const provider = createBoundedProvider(dependencies, state);
-        const agent = new ToolLoopAgent<never, TTools>({
+        const agent = new ToolLoopAgent({
             model: createRoutedModel(provider, route),
             instructions: args.instructions,
-            tools: args.tools,
+            tools: createAgentTools(args.operations),
             stopWhen: isStepCount(1),
             // The runtime check above forbids executable tools, so no tool context can be consumed.
-            toolsContext: {} as never,
             maxOutputTokens: QUALIFICATION_MAX_OUTPUT_TOKENS,
             temperature: 0,
             maxRetries: 0,
@@ -493,7 +582,11 @@ export async function invokeDeferredAgentTurn<TTools extends ToolSet>(args: {
             status: "succeeded",
             finishReason: result.finishReason,
             assistantOutput: result.text,
-            toolRequests: result.toolCalls,
+            requests: result.toolCalls.map((call) => ({
+                callId: call.toolCallId,
+                name: call.toolName,
+                inputJson: JSON.stringify(call.input ?? null),
+            })),
         };
     } catch (error) {
         return failedAttemptFromError({

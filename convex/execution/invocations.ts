@@ -1,30 +1,34 @@
 import { internal } from "@convex/_generated/api";
 import { internalMutation, internalQuery } from "@convex/_generated/server";
-import { savedMaterialOperationValidator } from "@convex/domain/savedMaterialOperations";
 import { SOURCE_COMPARISON_MAX_OUTPUT_BYTES } from "@convex/domain/sourceComparison";
 import { stableStringify } from "@convex/domain/sourcePassages";
 import {
     assertPreparationComparisonFence,
     assertPreparationExecutionFence,
 } from "@convex/domain/sourcePreparationAuthority";
+import { providerAttemptValidator } from "@convex/providerCalls";
 import schema from "@convex/schema";
 import { ConvexError, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import {
+    canAdoptRetainedResponse,
     executionError,
+    executionFailureCode,
     recordMissionEvent,
     requireMissionAuthority,
 } from "./authority";
 import { buildMissionContext } from "./context";
 import {
+    invocationReplyValidator,
     invocationResponseValidator,
-    MAX_BATCH_REQUESTS,
+    invocationStructureError,
     MAX_CONTEXT_BYTES,
     MAX_NO_PROGRESS_TURNS,
     MAX_OBSERVABLE_OUTPUT_BYTES,
     MAX_OPERATION_RESULT_BYTES,
     MAX_WORKING_NOTES_BYTES,
 } from "./contracts";
+import { getAgentDefinition } from "./definitions";
 import { persistOperationRequest } from "./operations";
 
 export const begin = internalMutation({
@@ -201,8 +205,25 @@ export const retainOutput = internalMutation({
             )
                 throw executionError("provider_receipt_required");
         }
+        let receivedWhileAuthorized = invocation.receivedWhileAuthorized;
+        if (!invocation.receivedOutputJson && invocation.missionId) {
+            try {
+                await requireMissionAuthority(
+                    ctx,
+                    invocation.missionId,
+                    args.expectedGeneration,
+                );
+                receivedWhileAuthorized = true;
+            } catch (error) {
+                if (!executionFailureCode(error)) throw error;
+                receivedWhileAuthorized = false;
+            }
+        }
         await ctx.db.patch(invocation._id, {
             receivedOutputJson,
+            ...(receivedWhileAuthorized !== undefined
+                ? { receivedWhileAuthorized }
+                : {}),
             ...(args.rawOutputJson
                 ? { rawOutputJson: args.rawOutputJson }
                 : {}),
@@ -216,6 +237,34 @@ export const retainOutput = internalMutation({
                     invocationId: invocation._id,
                 });
         }
+        return null;
+    },
+});
+
+/** Receipt settlement and its observation commit together; business adoption remains a separate authority check. */
+export const recordModelReply = internalMutation({
+    args: {
+        attempt: providerAttemptValidator,
+        reply: invocationReplyValidator,
+    },
+    returns: v.null(),
+    handler: async (ctx, { attempt, reply }): Promise<null> => {
+        if (
+            !attempt.missionId ||
+            !attempt.invocationId ||
+            attempt.executionGeneration === undefined ||
+            attempt.status === "started"
+        )
+            throw executionError("invocation_receipt_invalid");
+        await ctx.runMutation(internal.providerCalls.recordAttempt, attempt);
+        await ctx.runMutation(internal.execution.invocations.retainOutput, {
+            invocationId: attempt.invocationId,
+            expectedGeneration: attempt.executionGeneration,
+            responseJson: JSON.stringify(reply.response),
+            ...(reply.rawOutputJson !== undefined
+                ? { rawOutputJson: reply.rawOutputJson }
+                : {}),
+        });
         return null;
     },
 });
@@ -395,7 +444,8 @@ export const finish = internalMutation({
         const invocation = await ctx.db.get(args.invocationId);
         if (
             !invocation?.missionId ||
-            invocation.generation !== args.expectedGeneration
+            (invocation.adoptionGeneration ?? invocation.generation) !==
+                args.expectedGeneration
         )
             throw executionError("invocation_unavailable");
         const outputJson = stableStringify(args.response);
@@ -466,6 +516,11 @@ export const finish = internalMutation({
                 throw error;
             return block(error.data.code);
         }
+        if (
+            invocation.receivedOutputJson &&
+            !canAdoptRetainedResponse(mission, invocation)
+        )
+            return block("retained_response_not_reusable", true);
         if (args.response.kind === "blocked")
             return block(args.response.code, true);
         if (invocation.provenance === "live") {
@@ -486,53 +541,14 @@ export const finish = internalMutation({
             return block("working_memory_capacity", true);
         await ctx.db.patch(mission._id, { workingNotes: notes });
         if (args.response.kind === "complete") {
-            if (
-                mission.obligations.length ||
-                !args.response.captureIds.length ||
-                args.response.captureIds.some(
-                    (id) => !mission.inspectedCaptureIds.includes(id),
-                )
-            )
-                return block("completion_requirements_missing");
-            for (const id of args.response.captureIds) {
-                const capture = await ctx.db.get(id);
-                if (
-                    capture?.runId !== mission.runId ||
-                    capture.status !== "committed" ||
-                    !capture.storageId ||
-                    !(await ctx.db.system.get("_storage", capture.storageId))
-                )
-                    return block("completion_artifact_unavailable");
-                try {
-                    const allowed = await ctx.runQuery(
-                        internal.sourceRetrieval.approvedCaptureForMission,
-                        {
-                            missionId: mission._id,
-                            expectedGeneration: args.expectedGeneration,
-                            sourceId: capture.sourceId,
-                        },
-                    );
-                    if (
-                        allowed.status !== "available" ||
-                        allowed.capture._id !== id ||
-                        allowed.capture.contentHash !== capture.contentHash
-                    )
-                        return block("completion_artifact_unavailable");
-                } catch (error) {
-                    if (
-                        !(error instanceof ConvexError) ||
-                        typeof error.data !== "object" ||
-                        !error.data ||
-                        !("code" in error.data) ||
-                        typeof error.data.code !== "string"
-                    )
-                        throw error;
-                    return block(error.data.code);
-                }
-            }
+            const completion = await getAgentDefinition(
+                mission.definitionId,
+                mission.definitionVersion,
+            ).complete(ctx, mission, args.response);
+            if (completion.kind === "blocked") return block(completion.code);
             await ctx.db.patch(mission._id, {
                 status: "completed",
-                completionRefs: args.response.captureIds,
+                completionRefs: completion.completionRefs,
             });
             await recordMissionEvent(ctx, mission, {
                 kind: "mission_completed",
@@ -541,14 +557,8 @@ export const finish = internalMutation({
             });
             return { kind: "completed" as const, requestIds: [] };
         }
-        if (args.response.requests.length > MAX_BATCH_REQUESTS)
-            return block("operation_batch_limit", true);
-        const callIds = args.response.requests.map((request) => request.callId);
-        if (
-            callIds.some((id) => id.length < 1 || id.length > 160) ||
-            new Set(callIds).size !== callIds.length
-        )
-            return block("invalid_tool_correlation", true);
+        const structureError = invocationStructureError(args.response);
+        if (structureError) return block(structureError, true);
         const requestIds = [];
         for (const request of args.response.requests) {
             let decoded: unknown;
@@ -564,9 +574,16 @@ export const finish = internalMutation({
                 !("kind" in decoded)
                     ? { ...decoded, kind: request.name }
                     : null;
-            const valid = validate(savedMaterialOperationValidator, input, {
-                db: ctx.db,
-            });
+            const valid = validate(
+                getAgentDefinition(
+                    mission.definitionId,
+                    mission.definitionVersion,
+                ).operationValidator,
+                input,
+                {
+                    db: ctx.db,
+                },
+            );
             requestIds.push(
                 await persistOperationRequest(ctx, mission, {
                     invocationId: invocation._id,

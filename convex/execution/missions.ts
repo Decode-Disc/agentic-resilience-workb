@@ -6,18 +6,24 @@ import { workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { v } from "convex/values";
 import {
+    canAdoptRetainedResponse,
     executionError,
     recordMissionEvent,
     requireMissionAuthority,
     requireRunAuthority,
 } from "./authority";
-import { EXECUTION_WINDOW_MS, HISTORY_PAGE_SIZE } from "./contracts";
+import {
+    agentDefinitionIdValidator,
+    EXECUTION_WINDOW_MS,
+    HISTORY_PAGE_SIZE,
+} from "./contracts";
+import { getAgentDefinition } from "./definitions";
 
 export const start = internalMutation({
     args: {
         runId: v.id("researchRuns"),
         corpusRevisionId: v.id("corpusRevisions"),
-        definitionId: v.literal("saved_material_inspection_v1"),
+        definitionId: agentDefinitionIdValidator,
         requestKey: v.string(),
         expectedGeneration: v.number(),
     },
@@ -46,7 +52,9 @@ export const start = internalMutation({
                 throw executionError("mission_identity_conflict");
             return previous._id;
         }
-        const objectiveKey = `saved-material:${args.corpusRevisionId}`;
+        const definition = getAgentDefinition(args.definitionId);
+        const initialState = definition.initialState(args.corpusRevisionId);
+        const { objectiveKey } = initialState;
         const objective = await ctx.db
             .query("agentMissions")
             .withIndex("by_run_and_objective_key", (q) =>
@@ -77,18 +85,16 @@ export const start = internalMutation({
             corpusRevisionId: args.corpusRevisionId,
             ownerVisitorId: visitor._id,
             definitionId: args.definitionId,
-            definitionVersion: 1,
+            definitionVersion: definition.version,
             requestKey: args.requestKey,
-            objectiveKey,
+            ...initialState,
             generation: args.expectedGeneration,
             deadlineAt,
             modelLimits: readPreparationLimits(preparation ?? undefined),
             status: "ready",
             noProgressTurns: 0,
             progressKeys: [],
-            inspectedCaptureIds: [],
             workingNotes: "",
-            obligations: ["inspect_saved_material"],
             completionRefs: [],
             nextEventSequence: 1,
             createdAt: now,
@@ -123,6 +129,15 @@ export const resume = internalMutation({
         const recoverable =
             retained.status === "blocked" &&
             retained.blockCode === "execution_interrupted";
+        const observed = retained.lastInvocationId
+            ? await ctx.db.get(retained.lastInvocationId)
+            : null;
+        if (
+            observed?.status === "started" &&
+            observed.receivedOutputJson &&
+            !canAdoptRetainedResponse(retained, observed)
+        )
+            throw executionError("retained_response_not_reusable");
         if (recoverable) {
             const last = retained.lastInvocationId
                 ? await ctx.db.get(retained.lastInvocationId)
@@ -184,13 +199,29 @@ export const resume = internalMutation({
             if (last?.status === "started") {
                 if (last.providerCallId && !last.receivedOutputJson)
                     throw executionError("attempt_outcome_unknown");
-                await ctx.db.patch(last._id, {
-                    status: "blocked",
-                    blockCode: "stale_execution",
-                });
-                await ctx.db.patch(retained._id, {
-                    lastInvocationId: undefined,
-                });
+                if (last.receivedOutputJson) {
+                    if (
+                        !recoverable ||
+                        !canAdoptRetainedResponse(retained, last)
+                    )
+                        throw executionError("retained_response_not_reusable");
+                    await ctx.db.patch(last._id, {
+                        adoptionGeneration: args.expectedGeneration,
+                    });
+                    await recordMissionEvent(ctx, retained, {
+                        kind: "invocation_recovery_authorized",
+                        cause: "confirmed_response_reuse",
+                        invocationId: last._id,
+                    });
+                } else {
+                    await ctx.db.patch(last._id, {
+                        status: "blocked",
+                        blockCode: "stale_execution",
+                    });
+                    await ctx.db.patch(retained._id, {
+                        lastInvocationId: undefined,
+                    });
+                }
             }
         }
         const { mission } = await requireMissionAuthority(

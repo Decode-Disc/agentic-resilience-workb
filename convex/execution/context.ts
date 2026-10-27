@@ -1,10 +1,14 @@
 import type { Id } from "@convex/_generated/dataModel";
 import { internalQuery, type QueryCtx } from "@convex/_generated/server";
-import { readPreparationSourceDecision } from "@convex/domain/sourcePreparationAuthority";
 import { v } from "convex/values";
-import { requireMissionAuthority } from "./authority";
-import { MAX_CONTEXT_BYTES } from "./contracts";
-import { savedMaterialInspectionDefinition } from "./definitions";
+import { validate } from "convex-helpers/validators";
+import { executionError, requireMissionAuthority } from "./authority";
+import {
+    invocationResponseValidator,
+    MAX_BATCH_REQUESTS,
+    MAX_CONTEXT_BYTES,
+} from "./contracts";
+import { getAgentDefinition } from "./definitions";
 
 /** Required context is assembled from retained authority and work, never from an optional memory-saving tool. */
 export async function buildMissionContext(
@@ -17,60 +21,61 @@ export async function buildMissionContext(
         missionId,
         expectedGeneration,
     );
-    const heads = await ctx.db
-        .query("sourceReviewItems")
-        .withIndex("by_revision_decision_and_order", (q) =>
-            q.eq("corpusRevisionId", revision._id).eq("decision", "accepted"),
-        )
-        .take(65);
-    if (heads.length > 64)
-        return { kind: "blocked" as const, code: "context_capacity" };
-    const availableMaterials = [];
-    for (const head of heads) {
-        if (
-            (await readPreparationSourceDecision(ctx.db, {
-                runId: run._id,
-                corpusRevisionId: revision._id,
-                sourceId: head.sourceId,
-            })) !== "accepted"
-        )
-            continue;
-        const source = await ctx.db.get(head.sourceId);
-        const decision = await ctx.db.get(head.latestDecisionId);
-        if (source)
-            availableMaterials.push({
-                sourceId: source._id,
-                title: source.title,
-                canonicalUrl: source.canonicalUrl,
-                humanDecision: {
-                    decisionId: head.latestDecisionId,
-                    reason: decision?.reason ?? null,
-                },
+    const definition = getAgentDefinition(
+        mission.definitionId,
+        mission.definitionVersion,
+    );
+    const domainContext = await definition.context(ctx, mission, run, revision);
+    if (domainContext.kind === "blocked") return domainContext;
+    const previousInvocation = mission.lastInvocationId
+        ? await ctx.db.get(mission.lastInvocationId)
+        : null;
+    const previousResponse: unknown = previousInvocation?.outputJson
+        ? JSON.parse(previousInvocation.outputJson)
+        : null;
+    const previousRequests =
+        validate(invocationResponseValidator, previousResponse) &&
+        previousResponse.kind === "operations"
+            ? previousResponse.requests
+            : [];
+    const triggeringRequests = [];
+    if (previousInvocation?.requestIds) {
+        if (previousInvocation.requestIds.length > MAX_BATCH_REQUESTS)
+            throw executionError("continuation_capacity");
+        for (const [
+            index,
+            requestId,
+        ] of previousInvocation.requestIds.entries()) {
+            const request = await ctx.db.get(requestId);
+            if (!request || request.missionId !== missionId)
+                throw executionError("continuation_request_unavailable");
+            triggeringRequests.push({
+                request,
+                callId: previousRequests[index]?.callId,
             });
+        }
+    } else {
+        const latest = await ctx.db
+            .query("agentOperationRequests")
+            .withIndex("by_mission", (q) => q.eq("missionId", missionId))
+            .order("desc")
+            .take(MAX_BATCH_REQUESTS);
+        for (const request of latest.reverse())
+            triggeringRequests.push({ request, callId: undefined });
     }
-    const latest = await ctx.db
-        .query("agentOperationRequests")
-        .withIndex("by_mission", (q) => q.eq("missionId", missionId))
-        .order("desc")
-        .take(4);
     const pending = await ctx.db
         .query("agentOperationRequests")
         .withIndex("by_mission_and_status", (q) =>
             q.eq("missionId", missionId).eq("status", "pending"),
         )
         .take(5);
-    const previousInvocation = mission.lastInvocationId
-        ? await ctx.db.get(mission.lastInvocationId)
-        : null;
     const inputJson = JSON.stringify({
         version: mission.definitionVersion,
         definition: {
-            id: savedMaterialInspectionDefinition.id,
-            version: savedMaterialInspectionDefinition.version,
-            instructions: savedMaterialInspectionDefinition.instructions,
-            operationNames: Object.keys(
-                savedMaterialInspectionDefinition.tools,
-            ),
+            id: definition.id,
+            version: definition.version,
+            instructions: definition.instructions,
+            operationNames: Object.keys(definition.operations),
         },
         mission: {
             id: mission._id,
@@ -80,17 +85,12 @@ export async function buildMissionContext(
             runId: run._id,
             corpusRevisionId: revision._id,
         },
-        humanInstructions: { researchAngle: run.researchAngle ?? null },
-        decisions: {
-            approvedCorpusRevision: revision.revision,
-            approvedBy: revision.approvedByVisitorId ?? null,
-            approvedAt: revision.approvedAt ?? null,
-        },
+        ...domainContext.context,
         constraints: {
             generation: mission.generation,
             deadlineAt: mission.deadlineAt,
-            operations: Object.keys(savedMaterialInspectionDefinition.tools),
-            authority: "inspect_approved_saved_material_only",
+            operations: Object.keys(definition.operations),
+            authority: definition.authority,
         },
         workingNotes: {
             status: "working_notes_not_established_facts",
@@ -106,17 +106,19 @@ export async function buildMissionContext(
                   }
                 : null,
         activeWork: {
-            inspectedCaptureIds: mission.inspectedCaptureIds,
+            ...domainContext.context.activeWork,
             unfinishedObligations: mission.obligations,
             noProgressTurns: mission.noProgressTurns,
         },
-        availableMaterials,
-        triggeringRequestsAndResults: latest.reverse().map((request) => ({
-            requestId: request._id,
-            input: request.input,
-            status: request.status,
-            outcome: request.outcome ?? null,
-        })),
+        triggeringRequestsAndResults: triggeringRequests.map(
+            ({ request, callId }) => ({
+                ...(callId ? { callId } : {}),
+                requestId: request._id,
+                input: request.input,
+                status: request.status,
+                outcome: request.outcome ?? null,
+            }),
+        ),
         pendingRequests: pending.map((request) => ({
             requestId: request._id,
             input: request.input,

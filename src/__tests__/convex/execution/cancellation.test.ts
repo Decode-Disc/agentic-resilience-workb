@@ -5,9 +5,123 @@ import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
+test("delayed cancellation cleanup preserves a resumed newer generation", async () => {
+    vi.useFakeTimers();
+    const { t, userId, args } = await seedInspectedEvidence();
+    workflowTest.register(t);
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "delayed-cancel",
+        expectedGeneration: 4,
+    });
+    await t
+        .withIdentity({ subject: `${userId}|cancel-harness` })
+        .mutation(api.workflowControls.cancel, { runId: args.runId });
+    const generation = await t.run(async (ctx) => {
+        const { claimCorpusApprovedRunExecution } = await import(
+            "@convex/domain/executionClaim"
+        );
+        await ctx.db.patch(args.runId, {
+            lifecycleState: "corpus_approved",
+            executionStatus: "idle",
+        });
+        const run = await ctx.db.get(args.runId);
+        const visitor = run?.ownerVisitorId
+            ? await ctx.db.get(run.ownerVisitorId)
+            : null;
+        if (!run || !visitor) throw new Error("Missing owner");
+        return claimCorpusApprovedRunExecution(ctx, {
+            run,
+            visitor,
+            now: Date.now(),
+        });
+    });
+    await t.mutation(internal.execution.missions.resume, {
+        missionId,
+        expectedGeneration: generation,
+    });
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId,
+        expectedGeneration: generation,
+        cause: "new-generation",
+        input: { kind: "consult_mission_state" },
+    });
+    await t.mutation(internal.execution.cancellation.continueRunCancellation, {
+        runId: args.runId,
+        cancelledAt: Date.now(),
+    });
+    expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
+        generation,
+        status: "ready",
+    });
+    expect(await t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
+        expectedGeneration: generation,
+        status: "pending",
+    });
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100), 200);
+    expect(await t.run((ctx) => ctx.db.get(missionId))).not.toMatchObject({
+        blockCode: "run_cancelled",
+    });
+}, 60_000);
+
 afterEach(() => {
     vi.unstubAllEnvs();
     vi.useRealTimers();
+});
+
+test.each([
+    "continuation",
+    "dispatch",
+])("an old queued %s cannot invalidate a recovered generation", async (boundary) => {
+    vi.useFakeTimers();
+    const { t, args } = await seedInspectedEvidence();
+    workflowTest.register(t);
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "stale-callback",
+        expectedGeneration: 4,
+    });
+    await t.run((ctx) => ctx.db.patch(args.runId, { executionGeneration: 5 }));
+    await t.mutation(internal.execution.missions.resume, {
+        missionId,
+        expectedGeneration: 5,
+    });
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId,
+        expectedGeneration: 5,
+        cause: "current",
+        input: { kind: "consult_mission_state" },
+    });
+    if (boundary === "continuation")
+        expect(
+            await t.mutation(internal.execution.missionWorkflow.next, {
+                missionId,
+                expectedGeneration: 4,
+            }),
+        ).toEqual({ kind: "stopped" });
+    else
+        expect(
+            await t.mutation(internal.execution.operations.claim, {
+                requestId,
+                expectedGeneration: 4,
+            }),
+        ).toMatchObject({
+            kind: "outcome",
+            outcome: { kind: "refused", code: "stale_execution" },
+        });
+    expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
+        generation: 5,
+        status: "ready",
+    });
+    expect(await t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
+        expectedGeneration: 5,
+        status: "pending",
+    });
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100), 200);
 });
 
 test("run cancellation fences first and drains mission work in bounded scheduled pages", async () => {

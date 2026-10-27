@@ -1,7 +1,247 @@
 import { internal } from "@convex/_generated/api";
+import { sha256Hex } from "@convex/domain/sourcePassages";
+import type { WorkflowId } from "@convex-dev/workflow";
 import type { FunctionReturnType } from "convex/server";
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
+import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
+
+afterEach(() => vi.useRealTimers());
+
+test.each([
+    "resume",
+    "next",
+    "finish",
+] as const)("%s refuses a response first observed without authority after same-generation readmission", async (entry) => {
+    vi.useFakeTimers();
+    const { t, args } = await seedInspectedEvidence();
+    workflowTest.register(t);
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "readmission",
+        expectedGeneration: 4,
+    });
+    const workflowId = await t.mutation(internal.execution.missions.resume, {
+        missionId,
+        expectedGeneration: 4,
+    });
+    const invocation = await t.mutation(internal.execution.invocations.begin, {
+        missionId,
+        expectedGeneration: 4,
+        taskKey: "before-rotation",
+        provenance: "live",
+    });
+    if (invocation.kind !== "ready") throw new Error("Expected invocation");
+    const attempt = {
+        missionId,
+        invocationId: invocation.invocationId,
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        executionGeneration: 4,
+        workflowVersion: 1,
+        stepKey: "agent_reasoning",
+        service: "model" as const,
+        operation: "agent_reasoning",
+        operationKey: `mission:${missionId}:invocation:${invocation.invocationId}:attempt:1`,
+        attempt: 1,
+        inputHash: sha256Hex(invocation.inputJson),
+    };
+    await t.mutation(internal.providerCalls.recordAttempt, {
+        ...attempt,
+        status: "started",
+    });
+    await t.mutation(internal.invitations.seedForSetup, {
+        invitations: [
+            {
+                slotKey: "source-preparation-test",
+                role: "analyst",
+                codeDigest: "rotated",
+            },
+            { slotKey: "admin", role: "admin", codeDigest: "admin-digest" },
+            ...["one", "two", "three"].map((key) => ({
+                slotKey: key,
+                role: "analyst" as const,
+                codeDigest: key,
+            })),
+        ],
+    });
+    await t.mutation(internal.providerCalls.recordAttempt, {
+        ...attempt,
+        status: "succeeded",
+        dispatchOutcome: "response_received",
+    });
+    const response = {
+        kind: "operations" as const,
+        requests: [
+            {
+                callId: "late-consult",
+                name: "consult_mission_state",
+                inputJson: "{}",
+            },
+        ],
+    };
+    await t.mutation(internal.execution.invocations.retainOutput, {
+        invocationId: invocation.invocationId,
+        expectedGeneration: 4,
+        responseJson: JSON.stringify(response),
+    });
+    if (entry === "resume")
+        await t.mutation(internal.execution.missionWorkflow.onComplete, {
+            workflowId: workflowId as WorkflowId,
+            context: { missionId },
+            result: { kind: "failed", error: "Simulated process interruption" },
+        });
+    const userId = await t.run((ctx) =>
+        ctx.db.insert("users", { isAnonymous: true }),
+    );
+    await t.mutation(internal.invitations.claimDigest, {
+        authUserId: userId,
+        codeDigest: "rotated",
+    });
+    expect(
+        (await t.run((ctx) => ctx.db.get(args.runId)))?.executionGeneration,
+    ).toBe(4);
+    if (entry === "resume")
+        await expect(
+            t.mutation(internal.execution.missions.resume, {
+                missionId,
+                expectedGeneration: 4,
+            }),
+        ).rejects.toThrow("retained_response_not_reusable");
+    else if (entry === "next")
+        expect(
+            await t.mutation(internal.execution.missionWorkflow.next, {
+                missionId,
+                expectedGeneration: 4,
+            }),
+        ).toEqual({ kind: "stopped" });
+    else
+        expect(
+            await t.mutation(internal.execution.invocations.finish, {
+                invocationId: invocation.invocationId,
+                expectedGeneration: 4,
+                response,
+            }),
+        ).toMatchObject({
+            kind: "blocked",
+            code: "retained_response_not_reusable",
+        });
+    expect(
+        await t.run((ctx) => ctx.db.query("agentOperationRequests").take(1)),
+    ).toEqual([]);
+    expect(
+        await t.run((ctx) => ctx.db.get(invocation.invocationId)),
+    ).toMatchObject({ receivedWhileAuthorized: false });
+});
+
+test("duplicate completion references are refused before accepting an artifact", async () => {
+    const { t, args, sourceId, captureId } = await seedInspectedEvidence();
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "duplicate-completion",
+        expectedGeneration: 4,
+    });
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId,
+        expectedGeneration: 4,
+        cause: "inspection",
+        input: { kind: "read_in_context", sourceId, passageOrder: 0 },
+    });
+    expect(
+        await t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 4,
+        }),
+    ).toMatchObject({ kind: "success" });
+    const invocation = await t.mutation(internal.execution.invocations.begin, {
+        missionId,
+        expectedGeneration: 4,
+        taskKey: "complete",
+        provenance: "simulation",
+    });
+    if (invocation.kind !== "ready") throw new Error("Expected invocation");
+    expect(
+        await t.mutation(internal.execution.invocations.finish, {
+            invocationId: invocation.invocationId,
+            expectedGeneration: 4,
+            response: {
+                kind: "complete",
+                captureIds: Array.from({ length: 256 }, () => captureId),
+            },
+        }),
+    ).toMatchObject({ kind: "blocked", code: "completion_references_invalid" });
+    expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
+        completionRefs: [],
+    });
+});
+
+test("a reused earlier request supplies its awaited result after newer requests", async () => {
+    const { t, args, sourceId } = await seedInspectedEvidence();
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "reused-context",
+        expectedGeneration: 4,
+    });
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId,
+        expectedGeneration: 4,
+        cause: "first-read",
+        input: { kind: "read_in_context", sourceId, passageOrder: 0 },
+    });
+    const outcome = await t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 4,
+    });
+    expect(outcome.kind).toBe("success");
+    for (const query of ["workflow", "company", "control", "material"]) {
+        const newer = await t.mutation(internal.execution.operations.enqueue, {
+            missionId,
+            expectedGeneration: 4,
+            cause: query,
+            input: { kind: "search_available_material", sourceId, query },
+        });
+        await t.action(internal.execution.operations.dispatch, {
+            requestId: newer,
+            expectedGeneration: 4,
+        });
+    }
+    const invocation = await t.mutation(internal.execution.invocations.begin, {
+        missionId,
+        expectedGeneration: 4,
+        taskKey: "repeat-read",
+        provenance: "simulation",
+    });
+    if (invocation.kind !== "ready") throw new Error("Expected invocation");
+    const returned = await t.mutation(internal.execution.invocations.finish, {
+        invocationId: invocation.invocationId,
+        expectedGeneration: 4,
+        response: {
+            kind: "operations",
+            requests: [
+                {
+                    callId: "read-again",
+                    name: "read_in_context",
+                    inputJson: JSON.stringify({ sourceId, passageOrder: 0 }),
+                },
+            ],
+        },
+    });
+    expect(returned.requestIds).toEqual([requestId]);
+    const context = await t.query(internal.execution.context.build, {
+        missionId,
+        expectedGeneration: 4,
+    });
+    if (context.kind !== "ready") throw new Error("Expected context");
+    expect(
+        JSON.parse(context.inputJson).triggeringRequestsAndResults,
+    ).toContainEqual(expect.objectContaining({ requestId, outcome }));
+});
 
 test("a recreated invocation receives retained notes, human instructions and obligations automatically", async () => {
     const { t, args } = await seedInspectedEvidence();
@@ -166,6 +406,7 @@ test("late cancelled output is retained but cannot create requests or advance th
         responseJson: JSON.stringify(response),
     });
     const observed = await t.run((ctx) => ctx.db.get(invocation.invocationId));
+    expect(observed?.receivedWhileAuthorized).toBe(false);
     expect(JSON.parse(observed?.receivedOutputJson ?? "null")).toEqual(
         response,
     );
@@ -260,7 +501,10 @@ test("saying complete without inspected artifacts cannot satisfy the mission", a
     });
 });
 
-test("an observed paid response is adopted after a crash without dispatching a second provider call", async () => {
+test.each([
+    4, 5,
+])("an observed paid response is adopted after a crash in generation %s without dispatching a second provider call", async (recoveredGeneration) => {
+    vi.useFakeTimers();
     const { t, args } = await seedInspectedEvidence();
     const missionId = await t.mutation(internal.execution.missions.start, {
         runId: args.runId,
@@ -316,9 +560,41 @@ test("an observed paid response is adopted after a crash without dispatching a s
         expectedGeneration: 4,
         responseJson: JSON.stringify(response),
     });
+    if (recoveredGeneration !== 4) {
+        workflowTest.register(t);
+        await t.run(async (ctx) => {
+            await ctx.db.patch(missionId, {
+                status: "blocked",
+                blockCode: "execution_interrupted",
+            });
+            await ctx.db.patch(args.runId, {
+                lifecycleState: "corpus_approved",
+                executionStatus: "idle",
+            });
+            const { claimCorpusApprovedRunExecution } = await import(
+                "@convex/domain/executionClaim"
+            );
+            const run = await ctx.db.get(args.runId);
+            const visitor = run?.ownerVisitorId
+                ? await ctx.db.get(run.ownerVisitorId)
+                : null;
+            if (!run || !visitor) throw new Error("Missing execution owner");
+            expect(
+                await claimCorpusApprovedRunExecution(ctx, {
+                    run,
+                    visitor,
+                    now: Date.now(),
+                }),
+            ).toBe(recoveredGeneration);
+        });
+        await t.mutation(internal.execution.missions.resume, {
+            missionId,
+            expectedGeneration: recoveredGeneration,
+        });
+    }
     const next = await t.mutation(internal.execution.missionWorkflow.next, {
         missionId,
-        expectedGeneration: 4,
+        expectedGeneration: recoveredGeneration,
     });
     expect(next).toMatchObject({
         kind: "adopt",
@@ -330,13 +606,16 @@ test("an observed paid response is adopted after a crash without dispatching a s
     expect(
         await t.mutation(internal.execution.invocations.finish, {
             invocationId: invocation.invocationId,
-            expectedGeneration: 4,
+            expectedGeneration: recoveredGeneration,
             response: next.response,
         }),
     ).toMatchObject({ kind: "waiting" });
     expect(
         await t.run((ctx) => ctx.db.query("providerCalls").collect()),
     ).toHaveLength(1);
+    expect(
+        await t.run((ctx) => ctx.db.get(invocation.invocationId)),
+    ).toMatchObject({ generation: 4, receivedWhileAuthorized: true });
 });
 
 test("exact history pagination reconstructs large observable records without gaps", async () => {

@@ -18,13 +18,13 @@ import { afterEach, expect, it } from "vitest";
 
 const roots: string[] = [];
 const servers: Server[] = [];
-const localDevProcesses: ReturnType<typeof spawn>[] = [];
+const testProcesses: ReturnType<typeof spawn>[] = [];
 const runtimeModule = await import(
     pathToFileURL(resolve(process.cwd(), "scripts/local-runtime.ts")).href
 );
 
 afterEach(async () => {
-    for (const child of localDevProcesses.splice(0)) {
+    for (const child of testProcesses.splice(0)) {
         if (child.exitCode === null && child.signalCode === null)
             child.kill("SIGTERM");
         if (child.exitCode === null && child.signalCode === null)
@@ -83,6 +83,19 @@ async function backend(instanceName: string) {
         origin: `http://127.0.0.1:${address.port}`,
         state,
     };
+}
+
+async function freePort(): Promise<number> {
+    const server = createServer();
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    const address = server.address();
+    if (!address || typeof address === "string")
+        throw new Error("Missing fixture port address");
+    const port = address.port;
+    await new Promise<void>((done, fail) =>
+        server.close((error) => (error ? fail(error) : done())),
+    );
+    return port;
 }
 
 function writeNativeConfig(
@@ -189,12 +202,16 @@ function initializeRuntimeFixture(root: string, selector: string) {
     writeFileSync(
         join(root, "node_modules/convex/bin/main.js"),
         `import { createServer } from "node:http";
+import { spawn } from "node:child_process";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, unlinkSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
 
 if (process.env.LOCAL_RUNTIME_FIXTURE_FAIL === "yes") process.exit(17);
+if (process.env.LOCAL_RUNTIME_CONVEX_ARGS_FILE) {
+    writeFileSync(process.env.LOCAL_RUNTIME_CONVEX_ARGS_FILE, JSON.stringify(process.argv.slice(2)));
+}
 const root = process.cwd();
 const deploymentName = parseEnv(readFileSync(".env.local", "utf8")).CONVEX_DEPLOYMENT.split(":")[1];
 const commonDir = execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { encoding: "utf8" }).trim();
@@ -210,19 +227,28 @@ await new Promise((done) => setTimeout(done, 120));
 const server = createServer((request, response) => {
     response.end(request.url === "/instance_name" ? deploymentName : "not found");
 });
+let webProcess;
+if (process.argv.includes("--start")) {
+    webProcess = spawn("pnpm", ["exec", "vite", "dev"], { cwd: root, env: process.env, stdio: "inherit" });
+}
 server.listen(0, "127.0.0.1", () => {
     const address = server.address();
     if (!address || typeof address === "string") process.exit(52);
-    const directory = join(root, ".convex/local/default");
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(join(directory, "config.json"), JSON.stringify({
-        deploymentName,
-        ports: { cloud: address.port, site: address.port },
-        adminKey: "fixture-secret",
-    }));
+    if (process.env.LOCAL_RUNTIME_FIXTURE_KEEP_CONFIG !== "yes") {
+        const directory = join(root, ".convex/local/default");
+        mkdirSync(directory, { recursive: true });
+        writeFileSync(join(directory, "config.json"), JSON.stringify({
+            deploymentName,
+            ports: { cloud: address.port, site: address.port },
+            adminKey: "fixture-secret",
+        }));
+    }
     unlinkSync(marker);
 });
-const shutdown = () => server.close(() => process.exit(0));
+const shutdown = () => {
+    if (webProcess && webProcess.exitCode === null && webProcess.signalCode === null) webProcess.kill("SIGTERM");
+    server.close(() => process.exit(0));
+};
 process.once("SIGTERM", shutdown);
 process.once("SIGINT", shutdown);
 `,
@@ -266,8 +292,12 @@ function spawnLocalDev(
     root: string,
     mode: string,
     overrides: NodeJS.ProcessEnv = {},
+    args: string[] = [],
+    stdio: "ignore" | "pipe" = "ignore",
 ) {
     const env = { ...process.env, ...overrides };
+    if (Object.hasOwn(overrides, "PORT") && overrides.PORT === undefined)
+        delete env.PORT;
     delete env.CONVEX_DEPLOYMENT;
     delete env.CONVEX_DEPLOY_KEY;
     delete env.CONVEX_SELF_HOSTED_URL;
@@ -278,10 +308,11 @@ function spawnLocalDev(
             "--experimental-strip-types",
             join(root, "scripts/local-dev.ts"),
             mode,
+            ...args,
         ],
-        { cwd: root, env, stdio: "ignore" },
+        { cwd: root, env, stdio },
     );
-    localDevProcesses.push(child);
+    testProcesses.push(child);
     return child;
 }
 
@@ -308,6 +339,15 @@ function processExit(child: ReturnType<typeof spawn>): Promise<number | null> {
         if (child.exitCode !== null) return done(child.exitCode);
         child.once("exit", (code) => done(code));
     });
+}
+
+async function stoppedPid(): Promise<number> {
+    const child = spawn(process.execPath, ["-e", ""], { stdio: "ignore" });
+    if (!child.pid) throw new Error("The dead-process fixture did not start");
+    const pid = child.pid;
+    await processExit(child);
+    expect(() => process.kill(pid, 0)).toThrow();
+    return pid;
 }
 
 async function waitForManifest(
@@ -350,6 +390,14 @@ function fakeWebPnpm(root: string) {
     writeFileSync(
         entry,
         `import { createServer } from "node:http";
+if (process.argv[2] === "exec" && process.argv[3] === "playwright" && process.argv[4] === "test") {
+    writeFileSync(process.env.LOCAL_RUNTIME_PLAYWRIGHT_ARGS_FILE, JSON.stringify(process.argv.slice(5)));
+    process.exit(0);
+}
+import { writeFileSync } from "node:fs";
+if (process.argv[2] === "exec" && process.argv[3] === "vite" && process.argv[4] === "dev" && process.env.LOCAL_RUNTIME_VITE_ARGS_FILE) {
+    writeFileSync(process.env.LOCAL_RUNTIME_VITE_ARGS_FILE, JSON.stringify(process.argv.slice(5)));
+}
 import { getLocalRuntimeIdentity, publishRuntimeOrigin } from ${JSON.stringify(runtimeUrl)};
 const root = process.env.LOCAL_RUNTIME_ROOT;
 const runId = process.env.LOCAL_RUNTIME_RUN_ID;
@@ -368,7 +416,10 @@ server.listen(0, "127.0.0.1", () => {
     void publishRuntimeOrigin(root, "web", "http://127.0.0.1:" + address.port, process.pid, runId)
         .catch(() => process.exit(53));
 });
-const shutdown = () => server.close(() => process.exit(0));
+const shutdown = () => {
+    server.close(() => process.exit(0));
+    server.closeAllConnections();
+};
 process.once("SIGTERM", shutdown);
 process.once("SIGINT", shutdown);
 `,
@@ -414,7 +465,10 @@ server.listen(port, "127.0.0.1", () => {
     if (!address || typeof address === "string") process.exit(52);
     process.stderr.write(JSON.stringify({ event: "server_started", origin: "http://127.0.0.1:" + address.port, port: address.port }) + "\\n");
 });
-const shutdown = () => server.close(() => process.exit(0));
+const shutdown = () => {
+    server.close(() => process.exit(0));
+    server.closeAllConnections();
+};
 process.once("SIGTERM", shutdown);
 process.once("SIGINT", shutdown);
 `,
@@ -431,6 +485,269 @@ process.once("SIGINT", shutdown);
         PREVIEW_SERVICE_SECRET: "fixture-secret",
     };
 }
+
+it("forwards e2e arguments through the startup lock to Playwright", async () => {
+    const { first } = createWorktreePair();
+    const argsPath = join(first, "playwright-args.json");
+    const convexArgsPath = join(first, "convex-args.json");
+    const child = spawnLocalDev(
+        first,
+        "test:e2e",
+        {
+            ...fakeWebPnpm(first),
+            LOCAL_RUNTIME_PLAYWRIGHT_ARGS_FILE: argsPath,
+            LOCAL_RUNTIME_CONVEX_ARGS_FILE: convexArgsPath,
+            LOCAL_RUNTIME_STARTUP_TIMEOUT_MS: "5000",
+        },
+        ["--config", "playwright.harness.config.ts", "--list"],
+        "pipe",
+    );
+    let output = "";
+    child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+
+    expect(await processExit(child)).toBe(0);
+    expect(JSON.parse(readFileSync(argsPath, "utf8"))).toEqual([
+        "--config",
+        "playwright.harness.config.ts",
+        "--list",
+    ]);
+    expect(JSON.parse(readFileSync(convexArgsPath, "utf8"))).toEqual([
+        "dev",
+        "--start",
+        "pnpm exec vite dev",
+    ]);
+    expect(output).not.toMatch(/startup-lock-held/);
+}, 20_000);
+
+it("forwards Convex CLI arguments through the startup lock", async () => {
+    const { first } = createWorktreePair();
+    const argsPath = join(first, "convex-args.json");
+    const child = spawnLocalDev(
+        first,
+        "convex:dev",
+        {
+            LOCAL_RUNTIME_CONVEX_ARGS_FILE: argsPath,
+            LOCAL_RUNTIME_STARTUP_TIMEOUT_MS: "5000",
+        },
+        ["--port", "4321", "--no-color"],
+    );
+
+    await waitForRuntimeManifest(first);
+    expect(JSON.parse(readFileSync(argsPath, "utf8"))).toEqual([
+        "dev",
+        "--port",
+        "4321",
+        "--no-color",
+    ]);
+    child.kill("SIGTERM");
+    expect(await processExit(child)).toBe(0);
+}, 20_000);
+
+it("forwards dev arguments to Convex while preserving its Vite start command", async () => {
+    const { first } = createWorktreePair();
+    const backendServer = await backend("runtime-first");
+    configureNativeRuntime(first, "runtime-first", backendServer.origin);
+    const argsPath = join(first, "convex-args.json");
+    const viteArgsPath = join(first, "vite-args.json");
+    const child = spawnLocalDev(
+        first,
+        "dev",
+        {
+            ...fakeWebPnpm(first),
+            LOCAL_RUNTIME_FIXTURE_KEEP_CONFIG: "yes",
+            LOCAL_RUNTIME_CONVEX_ARGS_FILE: argsPath,
+            LOCAL_RUNTIME_VITE_ARGS_FILE: viteArgsPath,
+            LOCAL_RUNTIME_STARTUP_TIMEOUT_MS: "5000",
+        },
+        ["--once", "--no-color"],
+        "pipe",
+    );
+    let output = "";
+    child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+
+    await waitForRuntimeManifest(first);
+    await waitForManifest(first, "web");
+    await runtimeModule.resolveLocalRuntime(first, {
+        requiredOrigins: ["web"],
+    });
+    expect(JSON.parse(readFileSync(argsPath, "utf8"))).toEqual([
+        "dev",
+        "--start",
+        "pnpm exec vite dev",
+        "--once",
+        "--no-color",
+    ]);
+    expect(JSON.parse(readFileSync(viteArgsPath, "utf8"))).toEqual([]);
+    child.kill("SIGTERM");
+    expect(await processExit(child), output).toBe(0);
+}, 20_000);
+
+it("reconciles dead owned processes on process start and retains live owners", async () => {
+    const { first } = createWorktreePair();
+    const backendServer = await backend("runtime-first");
+    configureNativeRuntime(first, "runtime-first", backendServer.origin);
+    const deadPid = await stoppedPid();
+    const identity = runtimeModule.getLocalRuntimeIdentity(first);
+    const staleRunId = "stopped-preview-run";
+    const liveOwnerProcess = spawn(
+        process.execPath,
+        ["-e", "setInterval(() => {}, 1000)"],
+        { stdio: "ignore" },
+    );
+    if (!liveOwnerProcess.pid)
+        throw new Error("The live-process fixture did not start.");
+    testProcesses.push(liveOwnerProcess);
+    const liveOwner = {
+        role: "web",
+        pid: liveOwnerProcess.pid,
+        runId: "live-run",
+    };
+    mkdirSync(join(first, ".local-runtime"), { recursive: true });
+    writeFileSync(
+        join(first, ".local-runtime/manifest.json"),
+        JSON.stringify({
+            version: 1,
+            identity: {
+                ...identity,
+                deploymentName: "runtime-first",
+                deploymentSelector: "local:runtime-first",
+            },
+            ownedPids: [
+                { role: "preview", pid: deadPid, runId: staleRunId },
+                liveOwner,
+            ],
+            origins: {
+                convex: backendServer.origin,
+                site: `http://127.0.0.1:${Number(new URL(backendServer.origin).port) + 1}`,
+                preview: backendServer.origin,
+            },
+            originOwners: {
+                preview: { pid: deadPid, runId: staleRunId },
+            },
+            updatedAt: new Date().toISOString(),
+        }),
+    );
+
+    await runtimeModule.publishRuntimeProcess(first, {
+        role: "convex",
+        pid: process.pid,
+        runId: "restart-run",
+    });
+    const runtime = await runtimeModule.resolveLocalRuntime(first);
+    const manifest = JSON.parse(
+        readFileSync(join(first, ".local-runtime/manifest.json"), "utf8"),
+    );
+
+    expect(manifest.ownedPids).toContainEqual(liveOwner);
+    expect(manifest.ownedPids).not.toContainEqual(
+        expect.objectContaining({ pid: deadPid, runId: staleRunId }),
+    );
+    expect(runtime.origins.preview).toBeUndefined();
+});
+
+it("reconciles a stopped listener before dev web readiness validation", async () => {
+    const root = createProjectRoot();
+    initializeRuntimeFixture(root, "local:runtime-fixture");
+    const backendServer = await backend("runtime-fixture");
+    configureNativeRuntime(root, "runtime-fixture", backendServer.origin);
+    const deadPid = await stoppedPid();
+    const identity = runtimeModule.getLocalRuntimeIdentity(root);
+    const staleRunId = "stopped-web-run";
+    const liveOwner = {
+        role: "preview",
+        pid: process.pid,
+        runId: "live-preview-run",
+    };
+    mkdirSync(join(root, ".local-runtime"), { recursive: true });
+    writeFileSync(
+        join(root, ".local-runtime/manifest.json"),
+        JSON.stringify({
+            version: 1,
+            identity: {
+                ...identity,
+                deploymentName: "runtime-fixture",
+                deploymentSelector: "local:runtime-fixture",
+            },
+            ownedPids: [
+                { role: "web", pid: deadPid, runId: staleRunId },
+                liveOwner,
+            ],
+            origins: {
+                convex: backendServer.origin,
+                site: `http://127.0.0.1:${Number(new URL(backendServer.origin).port) + 1}`,
+                web: backendServer.origin,
+            },
+            originOwners: { web: { pid: deadPid, runId: staleRunId } },
+            updatedAt: new Date().toISOString(),
+        }),
+    );
+
+    const child = spawnLocalDev(
+        root,
+        "dev:web",
+        {
+            ...fakeWebPnpm(root),
+            LOCAL_RUNTIME_STARTUP_TIMEOUT_MS: "5000",
+        },
+        [],
+        "pipe",
+    );
+    let output = "";
+    child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    const result = await Promise.race([
+        waitForManifest(root, "web", staleRunId).then((manifest) => ({
+            manifest,
+        })),
+        processExit(child).then((code) => ({ code })),
+    ]);
+
+    expect(result, output).toHaveProperty("manifest");
+    if (!("manifest" in result)) return;
+    await runtimeModule.resolveLocalRuntime(root, {
+        requiredOrigins: ["web"],
+    });
+    expect(result.manifest.ownedPids).toContainEqual(liveOwner);
+    expect(result.manifest.ownedPids).not.toContainEqual(
+        expect.objectContaining({ pid: deadPid, runId: staleRunId }),
+    );
+    expect(result.manifest.originOwners.web.runId).not.toBe(staleRunId);
+    child.kill("SIGTERM");
+    expect(await processExit(child)).toBe(0);
+}, 20_000);
+
+it("forwards dev web arguments to Vite", async () => {
+    const root = createProjectRoot();
+    initializeRuntimeFixture(root, "local:runtime-fixture");
+    const backendServer = await backend("runtime-fixture");
+    configureNativeRuntime(root, "runtime-fixture", backendServer.origin);
+    const argsPath = join(root, "vite-args.json");
+    const child = spawnLocalDev(
+        root,
+        "dev:web",
+        {
+            ...fakeWebPnpm(root),
+            LOCAL_RUNTIME_VITE_ARGS_FILE: argsPath,
+            LOCAL_RUNTIME_STARTUP_TIMEOUT_MS: "5000",
+        },
+        ["--host", "127.0.0.1"],
+        "pipe",
+    );
+    let output = "";
+    child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+
+    await waitForManifest(root, "web");
+    await runtimeModule.resolveLocalRuntime(root, { requiredOrigins: ["web"] });
+    expect(JSON.parse(readFileSync(argsPath, "utf8"))).toEqual([
+        "--host",
+        "127.0.0.1",
+    ]);
+    child.kill("SIGTERM");
+    expect(await processExit(child), output).toBe(0);
+}, 20_000);
 
 it("serializes native starts across worktrees while each CLI chooses its own free backend port", async () => {
     const { first, second } = createWorktreePair();
@@ -530,11 +847,25 @@ it("retries the preview listener on a free port when its saved port is occupied"
         }),
     );
 
-    const child = spawnLocalDev(root, "dev:browser", fakePreviewNpm(root));
+    const child = spawnLocalDev(
+        root,
+        "dev:browser",
+        fakePreviewNpm(root),
+        [],
+        "pipe",
+    );
+    let output = "";
+    child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
     const manifest = await waitForManifest(root, "preview", runId);
     const previewPort = Number(new URL(manifest.origins.preview).port);
+    const readinessLine = `Local preview service listening at ${manifest.origins.preview}`;
+    const outputDeadline = Date.now() + 2_000;
+    while (!output.includes(readinessLine) && Date.now() < outputDeadline)
+        await new Promise((done) => setTimeout(done, 20));
 
     expect(previewPort).not.toBe(port);
+    expect(output).toContain(readinessLine);
     expect(
         await runtimeModule.resolveLocalRuntime(root, {
             requiredOrigins: ["preview"],
@@ -543,6 +874,154 @@ it("retries the preview listener on a free port when its saved port is occupied"
         origins: { preview: manifest.origins.preview },
     });
     expect(child.exitCode).toBeNull();
+}, 20_000);
+
+it("binds the preview service to a valid explicit PORT instead of its saved port", async () => {
+    const root = createProjectRoot();
+    initializeRuntimeFixture(root, "local:runtime-fixture");
+    const backendServer = await backend("runtime-fixture");
+    configureNativeRuntime(root, "runtime-fixture", backendServer.origin);
+    const savedPortServer = await backend("saved-preview-port");
+    const explicitPort = await freePort();
+    const identity = runtimeModule.getLocalRuntimeIdentity(root);
+    const runId = "previous-preview-owner";
+    mkdirSync(join(root, ".local-runtime"), { recursive: true });
+    writeFileSync(
+        join(root, ".local-runtime/manifest.json"),
+        JSON.stringify({
+            version: 1,
+            identity: {
+                ...identity,
+                deploymentName: "runtime-fixture",
+                deploymentSelector: "local:runtime-fixture",
+            },
+            ownedPids: [{ role: "preview", pid: process.pid, runId }],
+            origins: {
+                convex: backendServer.origin,
+                site: backendServer.origin,
+                preview: savedPortServer.origin,
+            },
+            originOwners: { preview: { pid: process.pid, runId } },
+            updatedAt: new Date().toISOString(),
+        }),
+    );
+
+    const child = spawnLocalDev(root, "dev:browser", {
+        ...fakePreviewNpm(root),
+        PORT: String(explicitPort),
+        LOCAL_RUNTIME_STARTUP_TIMEOUT_MS: "5000",
+    });
+    const manifest = await waitForManifest(root, "preview", runId);
+
+    expect(Number(new URL(manifest.origins.preview).port)).toBe(explicitPort);
+    expect(child.exitCode).toBeNull();
+}, 20_000);
+
+it("honors the preview service dotenv PORT when the parent environment leaves it unset", async () => {
+    const root = createProjectRoot();
+    initializeRuntimeFixture(root, "local:runtime-fixture");
+    const backendServer = await backend("runtime-fixture");
+    configureNativeRuntime(root, "runtime-fixture", backendServer.origin);
+    const explicitPort = await freePort();
+    const serviceEnv = fakePreviewNpm(root);
+    writeFileSync(
+        join(root, "services/playwright-browser/.env"),
+        `PORT=${explicitPort}\n`,
+    );
+
+    const child = spawnLocalDev(root, "dev:browser", {
+        ...serviceEnv,
+        PORT: undefined,
+        LOCAL_RUNTIME_STARTUP_TIMEOUT_MS: "5000",
+    });
+    const manifest = await waitForManifest(root, "preview");
+
+    expect(Number(new URL(manifest.origins.preview).port)).toBe(explicitPort);
+    expect(child.exitCode).toBeNull();
+}, 20_000);
+
+it("rejects an invalid preview PORT before invoking the service", async () => {
+    const root = createProjectRoot();
+    initializeRuntimeFixture(root, "local:runtime-fixture");
+    const child = spawnLocalDev(
+        root,
+        "dev:browser",
+        {
+            ...fakePreviewNpm(root),
+            PORT: "123x",
+        },
+        [],
+        "pipe",
+    );
+    let output = "";
+    child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+
+    expect(await processExit(child)).toBe(1);
+    expect(output).toMatch(/PORT must be a whole number between 0 and 65535/i);
+}, 20_000);
+
+it("reports an occupied explicit preview port without falling back to another port", async () => {
+    const root = createProjectRoot();
+    initializeRuntimeFixture(root, "local:runtime-fixture");
+    const backendServer = await backend("runtime-fixture");
+    configureNativeRuntime(root, "runtime-fixture", backendServer.origin);
+    const savedPortServer = await backend("saved-preview-port");
+    const explicitPortServer = await backend("explicit-preview-port");
+    const identity = runtimeModule.getLocalRuntimeIdentity(root);
+    const explicitPort = Number(new URL(explicitPortServer.origin).port);
+    const runId = "previous-preview-owner";
+    mkdirSync(join(root, ".local-runtime"), { recursive: true });
+    writeFileSync(
+        join(root, ".local-runtime/manifest.json"),
+        JSON.stringify({
+            version: 1,
+            identity: {
+                ...identity,
+                deploymentName: "runtime-fixture",
+                deploymentSelector: "local:runtime-fixture",
+            },
+            ownedPids: [{ role: "preview", pid: process.pid, runId }],
+            origins: {
+                convex: backendServer.origin,
+                site: backendServer.origin,
+                preview: savedPortServer.origin,
+            },
+            originOwners: { preview: { pid: process.pid, runId } },
+            updatedAt: new Date().toISOString(),
+        }),
+    );
+
+    const child = spawnLocalDev(
+        root,
+        "dev:browser",
+        {
+            ...fakePreviewNpm(root),
+            PORT: String(explicitPort),
+            LOCAL_RUNTIME_STARTUP_TIMEOUT_MS: "5000",
+        },
+        [],
+        "pipe",
+    );
+    let output = "";
+    child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    const exitCode = await Promise.race([
+        processExit(child),
+        new Promise<null>((done) => setTimeout(() => done(null), 5_000)),
+    ]);
+    if (exitCode === null) {
+        child.kill("SIGTERM");
+        await processExit(child);
+    }
+
+    expect(exitCode).toBe(1);
+    expect(output).toMatch(/EADDRINUSE|address already in use/i);
+    expect(
+        JSON.parse(
+            readFileSync(join(root, ".local-runtime/manifest.json"), "utf8"),
+        ).origins.preview,
+    ).toBe(savedPortServer.origin);
 }, 20_000);
 
 it("reports native startup failure and does not leave a readiness projection", async () => {

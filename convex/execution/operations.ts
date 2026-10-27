@@ -5,7 +5,6 @@ import {
     internalMutation,
     type MutationCtx,
 } from "@convex/_generated/server";
-import { savedMaterialOperationValidator } from "@convex/domain/savedMaterialOperations";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { type Infer, v } from "convex/values";
 import {
@@ -15,11 +14,14 @@ import {
     requireMissionAuthority,
 } from "./authority";
 import {
+    agentDefinitionIdValidator,
+    agentDefinitionVersionValidator,
     MAX_OPERATION_RESULT_BYTES,
+    operationInputValidator,
     operationOutcomeValidator,
     type requestInputValidator,
 } from "./contracts";
-import { executeSavedMaterialOperation } from "./savedMaterial";
+import { getAgentDefinition } from "./definitions";
 
 /** A logical operation survives temporary invocations; identical requests reuse their retained outcome. */
 export async function persistOperationRequest(
@@ -39,32 +41,18 @@ export async function persistOperationRequest(
         expectedContentHash?: string;
     } = {};
     let refusal: Infer<typeof operationOutcomeValidator> | undefined;
-    if (
-        args.input.kind !== "invalid" &&
-        args.input.kind !== "consult_mission_state"
-    ) {
-        try {
-            if (!ctx.db.normalizeId("sources", args.input.sourceId))
-                throw executionError("invalid_operation_input");
-            const allowed = await ctx.runQuery(
-                internal.sourceRetrieval.approvedCaptureForMission,
-                {
-                    missionId: mission._id,
-                    expectedGeneration: mission.generation,
-                    sourceId: args.input.sourceId,
-                },
-            );
-            if (allowed.status === "available")
-                pin = {
-                    expectedCaptureId: allowed.capture._id,
-                    expectedContentHash: allowed.capture.contentHash,
-                };
-            else refusal = { kind: "unavailable", code: allowed.reason };
-        } catch (error) {
-            const code = executionFailureCode(error);
-            if (!code) throw error;
-            refusal = { kind: "refused", code };
-        }
+    const definition = getAgentDefinition(
+        mission.definitionId,
+        mission.definitionVersion,
+    );
+    try {
+        const scope = await definition.pinOperation(ctx, mission, args.input);
+        if (scope.kind === "available") pin = scope.pin;
+        else refusal = { kind: "unavailable", code: scope.code };
+    } catch (error) {
+        const code = executionFailureCode(error);
+        if (!code) throw error;
+        refusal = { kind: "refused", code };
     }
     const logicalKey = sha256Hex(
         stableStringify({
@@ -73,9 +61,7 @@ export async function persistOperationRequest(
             corpusRevisionId: mission.corpusRevisionId,
             input: args.input,
             pin,
-            ...(args.input.kind === "consult_mission_state"
-                ? { stateVersion: mission.nextEventSequence }
-                : {}),
+            ...definition.reuseScope(mission, args.input),
         }),
     );
     const previous = await ctx.db
@@ -125,7 +111,7 @@ export const enqueue = internalMutation({
         missionId: v.id("agentMissions"),
         expectedGeneration: v.number(),
         cause: v.string(),
-        input: savedMaterialOperationValidator,
+        input: operationInputValidator,
     },
     returns: v.id("agentOperationRequests"),
     handler: async (ctx, args) => {
@@ -146,7 +132,9 @@ const claimValidator = v.union(
     v.object({
         kind: v.literal("execute"),
         missionId: v.id("agentMissions"),
-        input: savedMaterialOperationValidator,
+        definitionId: agentDefinitionIdValidator,
+        definitionVersion: agentDefinitionVersionValidator,
+        input: operationInputValidator,
     }),
     v.object({
         kind: v.literal("outcome"),
@@ -170,26 +158,16 @@ async function validateRequest(
         request.operationVersion !== 1
     )
         throw executionError("stale_execution");
+    const scope = await getAgentDefinition(
+        state.mission.definitionId,
+        state.mission.definitionVersion,
+    ).pinOperation(ctx, state.mission, request.input);
+    if (scope.kind !== "available") throw executionError(scope.code);
     if (
-        request.input.kind !== "invalid" &&
-        request.input.kind !== "consult_mission_state"
-    ) {
-        const allowed = await ctx.runQuery(
-            internal.sourceRetrieval.approvedCaptureForMission,
-            {
-                missionId: request.missionId,
-                expectedGeneration,
-                sourceId: request.input.sourceId,
-            },
-        );
-        if (allowed.status !== "available")
-            throw executionError(allowed.reason);
-        if (
-            allowed.capture._id !== request.expectedCaptureId ||
-            allowed.capture.contentHash !== request.expectedContentHash
-        )
-            throw executionError("version_conflict");
-    }
+        scope.pin.expectedCaptureId !== request.expectedCaptureId ||
+        scope.pin.expectedContentHash !== request.expectedContentHash
+    )
+        throw executionError("version_conflict");
     return state;
 }
 
@@ -204,6 +182,11 @@ export const claim = internalMutation({
         if (!request) throw executionError("request_unavailable");
         const mission = await ctx.db.get(request.missionId);
         if (!mission) throw executionError("mission_unavailable");
+        if (mission.generation !== args.expectedGeneration)
+            return {
+                kind: "outcome",
+                outcome: { kind: "refused", code: "stale_execution" },
+            };
         try {
             await validateRequest(ctx, request, args.expectedGeneration);
         } catch (error) {
@@ -249,6 +232,8 @@ export const claim = internalMutation({
         return {
             kind: "execute",
             missionId: mission._id,
+            definitionId: mission.definitionId,
+            definitionVersion: mission.definitionVersion,
             input: request.input,
         };
     },
@@ -310,40 +295,12 @@ export const recordResult = internalMutation({
             completedAt: Date.now(),
         });
         const { mission } = state;
-        const progressKeys =
-            outcome.kind === "success"
-                ? [
-                      ...new Set([
-                          ...mission.progressKeys,
-                          ...(outcome.progressKeys ?? []),
-                          ...(outcome.progressKey ? [outcome.progressKey] : []),
-                      ]),
-                  ]
-                : mission.progressKeys;
-        if (
-            outcome.kind === "success" &&
-            outcome.captureId &&
-            progressKeys.length > mission.progressKeys.length
-        ) {
-            if (progressKeys.length > 256) {
-                await ctx.db.patch(mission._id, {
-                    status: "blocked",
-                    blockCode: "inspection_capacity",
-                });
-            } else
-                await ctx.db.patch(mission._id, {
-                    progressKeys,
-                    inspectedCaptureIds: [
-                        ...new Set([
-                            ...mission.inspectedCaptureIds,
-                            outcome.captureId,
-                        ]),
-                    ],
-                    obligations: mission.obligations.filter(
-                        (obligation) => obligation !== "inspect_saved_material",
-                    ),
-                });
-        }
+        const progress = getAgentDefinition(
+            mission.definitionId,
+            mission.definitionVersion,
+        ).progress(mission, outcome);
+        if (Object.keys(progress).length)
+            await ctx.db.patch(mission._id, progress);
         await recordMissionEvent(ctx, mission, {
             kind: "operation_completed",
             cause: request.cause,
@@ -370,7 +327,10 @@ export const dispatch = internalAction({
             args,
         );
         if (claimed.kind === "outcome") return claimed.outcome;
-        const outcome = await executeSavedMaterialOperation(ctx, {
+        const outcome = await getAgentDefinition(
+            claimed.definitionId,
+            claimed.definitionVersion,
+        ).executeOperation(ctx, {
             missionId: claimed.missionId,
             expectedGeneration: args.expectedGeneration,
             input: claimed.input,
