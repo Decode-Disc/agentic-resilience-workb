@@ -6,6 +6,10 @@ The table locates existing source-inspection and shared UI code. Source-set deci
 
 | Responsibility | Existing owners and inspection targets |
 | --- | --- |
+| Reusable question-led presentation | `src/components/workbench-ui/index.ts` exposes the library. Inspect the relevant component's props, implementation and caller before choosing it; a presentation callback does not supply a domain operation. |
+| Library style and theme scope | `src/components/workbench-ui/root.tsx`, `styles.css`, local CSS modules and the active theme. Inspect `WorkbenchUiRoot` and portal consumers together; scope reference materials to the intended subtree. |
+| Trigger-to-dialog transition | `src/components/ui/linear-modal.tsx` and the library's `inventory-sheet.tsx`. Inspect trigger, portal, focus, dismissal and reduced-motion behavior before composing the shared modal. |
+| Illustrative gallery and visual references | `src/development/workbench-ui/`, `workbench-ui.playwright.config.ts` and `src/__tests__/design-system/workbench-ui/`. Compare the existing examples and frozen references; they do not establish application persistence. |
 | Analyst-facing research text | `src/lib/presentation/research-copy.ts`. Trace the generated Convex result that supplies the state, then the presentation helper and its consumers. Keep domain decisions in Convex. |
 | Source categories and document metadata | `src/components/workspace/source-family-badge.tsx`, with document-kind and authority presentation in `research-copy.ts`. Compare carousel, reader, adjustment board, and candidate list before changing a shared treatment. |
 | Compatibility source inclusion and decisions | `src/components/workspace/source-decision.tsx`. Inspect the caller's effective inclusion and decision inputs rather than inferring them from reading or coverage. This is not an appraisal-review API. |
@@ -17,9 +21,13 @@ The table locates existing source-inspection and shared UI code. Source-set deci
 | Standard controls and icons | `src/components/ui/button.tsx`, `badge.tsx`, and `src/components/icon.tsx`. Verify installed icon exports and inspect the actual glyph at the intended size. |
 | Tokens and responsive behavior | `src/assets/styles/themes/evidence-workbench.css`, `src/assets/styles/base-preset.css`, `src/styles.css`, and `src/hooks/use-responsive.tsx`. Use `DESIGN.md` to locate intended style ownership. |
 
+Use the current [DESIGN.md](../../../../DESIGN.md) to locate visual guidance and approved refinements. The local design-tool export supplies reference material, not runtime imports or a parallel maintained palette. Button and Badge remain owned by `src/components/ui`; extend their existing variants rather than adding library copies. Inspect the library's material scope before applying it to an installed screen so scoped reference treatments do not become global defaults.
+
 ## Reuse behavior, preserve composition
 
 Reusing a primitive does not by itself preserve the interaction or accepted layout. Aim for one operation flow with context-appropriate composition, because the same analyst action should retain its meaning across entry points. Inspect equivalent actions together, and distinguish a shared-contract change from a consumer's local requirement before editing.
+
+Library components and installed workspace surfaces can serve different responsibilities despite similar names. Check their callers and data contracts before substitution. Reuse an applicable library component within the authorized surface; preserve the existing composer, company picker, header and shell owners unless their replacement is explicitly authorized. Surface adoption alone does not authorize rearranging company identity or removing its favicon.
 
 Trace the same action through its entry points: visible text, accessible name, icon, callback, state, and destination. Reuse one operation path rather than rebuilding it for the carousel, inspector, or mobile layout.
 

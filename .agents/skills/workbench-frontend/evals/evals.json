@@ -279,6 +279,50 @@
         "Asks a focused question only if an unresolved material choice blocks the recommendation, without restarting discovery or imposing mockups for every local change."
       ],
       "expected_output": "An evidence-backed transition assessment that preserves current integrity, supports the approved direction and identifies the smallest authorized next change without a speculative rewrite."
+    },
+    {
+      "id": 16,
+      "name": "design-system-adoption-without-recomposition",
+      "prompt": "We have approved the question-led component library. Plan how to adopt its applicable controls on Start and the dossier header. Keep their current composition, composer, company identity and favicon. Inspect existing owners and explain what can be reused and how to verify it. Plan only; do not edit, start services or run providers.",
+      "files": [
+        "../../../DESIGN.md",
+        "../../../src/components/workbench-ui/index.ts",
+        "../../../src/components/workbench-ui/root.tsx",
+        "../../../src/components/ui/button.tsx",
+        "../../../src/components/ui/badge.tsx",
+        "../../../src/routes"
+      ],
+      "expectations": [
+        "Locates the actual Start and header owners and preserves the requested composition, composer, identity hierarchy and favicon rather than treating adoption as permission to redesign.",
+        "Inspects shared Button and Badge variants directly in components/ui and does not propose duplicate library implementations.",
+        "Checks WorkbenchUiRoot and scoped materials before recommending library use, without globally copying reference styles or replacing existing owners by name alone.",
+        "Consults the current DESIGN.md and runtime owners without duplicating visual values into the skill or assuming fixed document anchors.",
+        "Selects before-and-after checks of the affected screens and relevant themes, widths and control states; does not substitute gallery fidelity for screen integration or start services in this read-only task."
+      ],
+      "expected_output": "A bounded adoption proposal grounded in existing component APIs and screen owners, preserving composition and separating library styling from application integration."
+    },
+    {
+      "id": 17,
+      "name": "gallery-versus-persisted-appraisal",
+      "prompt": "InventorySheet opens with rows and Retain appraisal responds in the component gallery, so can we mark persisted inventory and grouped appraisal review as delivered? Inspect what those interactions actually establish and propose the smallest missing verification. Analysis only; do not edit, start services, enable fixtures, synchronize a backend or call providers.",
+      "files": [
+        "../../../src/development/workbench-ui/examples.tsx",
+        "../../../src/components/workbench-ui/inventory-sheet.tsx",
+        "../../../src/components/workbench-ui/appraisal-block.tsx",
+        "../../../src/components/ui/linear-modal.tsx",
+        "../../../workbench-ui.playwright.config.ts",
+        "../../../docs/ROADMAP.md",
+        "../../../PRODUCT.md",
+        "../../../context/TECH.md"
+      ],
+      "expectations": [
+        "Traces the gallery's supplied rows, local state and appraisal callback rather than inferring Convex persistence or human adoption from a responsive button.",
+        "Distinguishes LinearModal's opening direction, focus and dismissal behavior from the inventory's data ownership and saved review decisions.",
+        "Inspects actual application callers and operations or identifies their absence; does not report target grouped appraisal review as delivered from presentation components alone.",
+        "Separates existing gallery comparisons from the focused functional and protected-runtime evidence needed for any persisted decision claim, without requiring unrelated provider journeys.",
+        "Reports unrun checks and preserves the read-only boundary, including not invoking gallery commands that start a server."
+      ],
+      "expected_output": "An evidence-backed distinction between illustrative component behavior and connected workflow delivery, identifying the smallest missing check without claiming unimplemented persistence."
     }
   ]
 }

@@ -41,6 +41,8 @@ Read only the local reference matching the task:
 
 Inspect the real owner's API, a relevant caller, and existing tests before adding logic. For substantial work, summarize **analyst need → owner and callers → scoped change → observable check** in the conversation; a small correction needs no separate artifact. Extend the owner when the same rule must change together. Keep a consumer's geometry or placement in that consumer.
 
+For question-led presentation, inspect the reusable `src/components/workbench-ui` library alongside shared `src/components/ui` primitives and the affected surface's existing owners. Follow the component reference to select the applicable implementation and style scope. Adopting the design system does not by itself authorize replacing a page, composer, shell or navigation; identify any required recomposition as a separate material choice. Read the current [DESIGN.md](../../../DESIGN.md) for visual guidance rather than copying its measurements or assuming its section structure is stable.
+
 Load specialist procedures only for their responsibility:
 
 | Work | Skill |
@@ -68,10 +70,12 @@ Individually accurate labels can still form a confusing screen. The intended res
 
 Code checks, rendered examples, and real preparation establish different facts. Match verification to the changed contract so a passing test does not become an unsupported claim of usability or live quality. Apply the repository's functional TDD and presentation-only browser rules, using the workflow reference to select the smallest relevant checks. Verify the affected protected path when its behavior changes; identify unavailable access or data as an incomplete check.
 
+For library changes, distinguish gallery fidelity from integration into an actual screen. The gallery's illustrative callbacks do not establish saved judgments or workflow transitions. When connecting a component, verify the consumer's real data and operation boundary as well as its rendered composition.
+
 Review the diff for duplicated rules and unrelated changes. Report the user-visible outcome, owners changed, exact checks run, browser states inspected, and remaining uncertainty. Keep fixture, protected-runtime, and live-provider evidence distinct. Do not claim visual acceptance or analytical quality from automated checks.
 
 ## Maintain the skill
 
-Instructions can read well without changing an agent's decisions. [Evaluation scenarios](evals/evals.json) cover target framing, question-led assessment and synthesis, existing source-review regressions, ambiguous requests and a backend-only boundary. Compatibility cases do not prescribe the target; target cases do not certify delivered features. Check reference paths, JSON structure, and skill structure after edits; these mechanical checks do not establish behavioral improvement.
+Instructions can read well without changing an agent's decisions. [Evaluation scenarios](evals/evals.json) cover target framing, question-led assessment and synthesis, component adoption without recomposition, gallery versus connected behavior, existing source-review regressions, ambiguous requests and a backend-only boundary. Compatibility cases do not prescribe the target; target cases do not certify delivered features. Check reference paths, JSON structure, and skill structure after edits; these mechanical checks do not establish behavioral improvement.
 
 When evaluation is requested and authorized, select an executor capable of the actual task and use the same configuration for the skill and baseline runs. Keep task prompts independent of skill invocation. For a revision, preserve the previous version before editing; for a new skill, compare against its absence. Record the executor and selection reason in evaluation metadata, keep outputs outside the application tree, and examine which expectations distinguish the runs. A criterion passed equally by both versions does not demonstrate improvement. Do not launch delegation or report a comparison that has not been authorized and completed.

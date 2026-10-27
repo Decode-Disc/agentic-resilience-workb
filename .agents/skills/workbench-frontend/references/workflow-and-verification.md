@@ -27,11 +27,19 @@ Excessive style assertions slow iteration, while a screenshot alone cannot prove
 | Convex persistence, authorization, or workflow transition                                                      | Use the repository's focused Convex tests; prove updated local-backend behavior when runtime verification is required.                 |
 | Subscription, durable return path, or protected checkpoint                                                     | Exercise the real admitted local path, including refresh/reconnect as relevant. Component fixtures do not establish these properties.  |
 
-Select existing tests under `src/__tests__/` and browser scenarios under `e2e/`. React integration tests use the shared reference-routed Convex hook harness. Do not freeze incidental classes, dimensions, SVG paths, or library behavior merely to manufacture a RED step. A concrete harmful overflow or inaccessible action can justify a focused regression; assert the user-visible failure.
+Select existing tests under `src/__tests__/` and application browser scenarios under `e2e/`. Library browser scenarios live under `src/__tests__/design-system/workbench-ui/browser/` with their own configuration. React integration tests use the shared reference-routed Convex hook harness. Do not freeze incidental classes, dimensions, SVG paths, or library behavior merely to manufacture a RED step. A concrete harmful overflow or inaccessible action can justify a focused regression; assert the user-visible failure.
 
 For new or recomposed views, inspect desktop and narrow mobile with realistic content; 320, 390, 1024, and 1440 pixels are useful starting samples, not a substitute for checking the actual breakpoint boundaries affected. For a small correction, inspect its affected widths and states. Record viewport height when diagnosing scroll ownership.
 
 Exercise relevant tabs, disclosures, search, clear, navigation, and recovery. Inspect keyboard/focus, touch operation, loading geometry, empty/error outcomes, long text, and console errors. Check reduced motion when animations change and both themes when colors or surfaces change. Measure the actual scrolling element when investigating overflow; a screenshot of the top of a list does not establish correct scrolling.
+
+## Verify library fidelity and integration separately
+
+A gallery can demonstrate an approved component while its application caller still supplies incomplete data or an ineffective action. Use the standalone gallery for presentation fidelity and the affected screen for integration, because neither check establishes the other's contract.
+
+For library presentation changes, inspect the relevant examples and existing comparisons in `src/__tests__/design-system/workbench-ui/`. `pnpm workbench-ui:dev` starts the illustrative gallery; `pnpm workbench-ui:check` runs its browser comparisons and can start that server. Select the affected checks where sufficient, inspect both themes and relevant widths, and preserve frozen references rather than replacing expected output with implementation screenshots. Resolve intentional differences through current [DESIGN.md](../../../../DESIGN.md), runtime owners and approved refinements.
+
+When a component is connected to an application surface, trace its supplied data, callbacks and owning operations. Verify the actual screen's composition and changed functional contract; use the admitted local journey for protected persistence or subscription claims. A populated InventorySheet example, an AppraisalBlock callback or a selected OutcomeCard state does not prove saved evidence, retained judgment or synthesis. Report library fidelity and connected behavior separately, including whichever remains unverified.
 
 ## Keep evidence levels distinct
 
