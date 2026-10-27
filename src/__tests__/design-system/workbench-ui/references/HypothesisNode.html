@@ -1,0 +1,27 @@
+<!-- @dsCard group="Investigation" height=400 subtitle="Hypotheses and the evidence beneath them" -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>HypothesisNode</title>
+<style>
+body{margin:0;padding:20px;background:var(--background);color:var(--foreground);font-family:var(--font-sans);-webkit-font-smoothing:antialiased}*{box-sizing:border-box}b{font-weight:600}
+.row{display:flex;gap:16px;align-items:stretch;flex-wrap:wrap}
+.hyp{width:300px;min-height:132px;padding:18px 22px;border-radius:var(--radius-2xl);font-size:16px;line-height:22px;display:flex;flex-direction:column;justify-content:center;gap:8px}
+.leaf{width:180px;min-height:104px;padding:12px 14px;border-radius:var(--radius-lg);font-size:13px;line-height:18px;display:flex;flex-direction:column;gap:8px}
+.role{font-family:var(--font-mono);font-size:10.5px;font-weight:500;letter-spacing:.08em;text-transform:uppercase}
+.sub{font-size:13px;color:var(--muted-foreground)}
+.wrap{display:grid;gap:18px}
+</style></head>
+<body class="ds-backdrop">
+<div class="wrap">
+<div class="row">
+<div class="hyp" style="background:linear-gradient(160deg,color-mix(in oklab,var(--brand-purple) 14%,var(--card)),var(--card) 70%);box-shadow:inset 0 1px 0 color-mix(in oklab,var(--popover) 90%,transparent),0 0 0 2px var(--brand-purple),0 24px 50px -22px color-mix(in oklab,var(--brand-purple) 65%,transparent)"><span><span class="ds-badge" style="color:var(--primary-foreground);background:var(--brand-purple)"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>Holds · current reading</span></span><b>CCC coordinates the claim without controlling it</b><span class="sub">Best supported · confidence moderate</span></div>
+<div class="hyp" style="background:color-mix(in oklab,var(--review) 9%,var(--card));border:1.5px dashed var(--review-foreground)"><span><span class="ds-badge ds-badge-review"><svg width="7" height="7" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="5" fill="var(--review)"/></svg>Open · needs material</span></span><b style="font-weight:500">CCC controls the decisions in the claim</b><span class="sub">Cannot be settled with what was read</span></div>
+<div class="hyp" style="background:var(--surface-glass);box-shadow:0 0 0 1px color-mix(in oklab,var(--foreground) 12%,transparent);color:var(--muted-foreground)"><span><span class="ds-badge ds-badge-unknown"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M6.5 17.5l11-11"/></svg>Set aside</span></span><b style="font-weight:500;color:var(--foreground);text-decoration:line-through;text-decoration-color:color-mix(in oklab,var(--foreground) 35%,transparent)">CCC is a replaceable module</b><span class="sub">Rests on an unsupported assumption</span></div>
+</div>
+<div class="row">
+<div class="leaf ds-raised"><span><span class="ds-badge ds-badge-fact"><svg width="8" height="8" viewBox="0 0 10 10" aria-hidden="true"><rect width="10" height="10" rx="2" fill="currentColor"/></svg>Fact</span> <span class="role" style="color:var(--evidence-fact)">for</span></span>10-K: insurer-configurable workflows</div>
+<div class="leaf ds-raised" style="box-shadow:0 0 0 1px color-mix(in oklab,var(--counter-evidence) 35%,transparent),var(--shadow-raised)"><span><span class="ds-badge ds-badge-counter"><svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><rect y="3.5" width="10" height="3" rx="1" fill="currentColor"/></svg>Counter</span> <span class="role" style="color:var(--counter-evidence)">against</span></span>Rules stay insurer-owned</div>
+<div class="leaf" style="border:1.5px dashed var(--edge-dashed)"><span><span class="ds-badge ds-badge-dashed">Unknown</span> <span class="role" style="color:var(--muted-foreground)">decides</span></span><span style="font-weight:500">Who can change the routing rules?</span></div>
+</div></div>
+</body>
+</html>

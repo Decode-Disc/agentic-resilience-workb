@@ -1,0 +1,103 @@
+.art {
+    --appraisal-padding: 30px;
+    max-width: 760px;
+    border-radius: var(--radius-3xl);
+    padding: 28px 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+}
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.interp {
+    padding: 20px 22px;
+    border-radius: var(--radius-xl);
+    background: var(--tint-violet);
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--brand-purple) 22%, transparent);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.bars {
+    display: flex;
+    gap: 4px;
+}
+.bars i {
+    width: 28px;
+    height: 6px;
+    border-radius: 3px;
+    background: color-mix(in oklab, var(--brand-purple) 20%, transparent);
+}
+.bars i.on {
+    background: var(--brand-purple);
+}
+.row {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    padding: 14px 0;
+    border-top: 1px solid var(--divider);
+}
+.txt {
+    font-size: 14.5px;
+    line-height: 21px;
+}
+.unk {
+    border-radius: var(--radius-xl);
+    padding: 16px 18px;
+    border: 1.5px dashed color-mix(in oklab, var(--foreground) 22%, transparent);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+.q {
+    flex-shrink: 0;
+    width: 38px;
+    height: 38px;
+    border-radius: var(--radius-full);
+    border: 1.5px dashed color-mix(in oklab, var(--foreground) 35%, transparent);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted-foreground);
+    font-size: 17px;
+    font-weight: 500;
+}
+.footer {
+    margin: 2px calc(-1 * var(--appraisal-padding)) -28px;
+    padding: 20px var(--appraisal-padding);
+    border-top: 1px solid var(--divider);
+    border-radius: 0 0 var(--radius-3xl) var(--radius-3xl);
+    background: var(--fill-quiet);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+.control {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+}
+.actions {
+    display: flex;
+    gap: 10px;
+}
+@media (max-width: 640px) {
+    .art {
+        --appraisal-padding: 20px;
+        padding-inline: var(--appraisal-padding);
+    }
+    .actions {
+        width: 100%;
+        flex-direction: column;
+    }
+}

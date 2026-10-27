@@ -739,7 +739,7 @@ function CompanyCandidateLabel({
 }) {
     return (
         <span className="flex min-w-0 items-center gap-3 pr-2">
-            <CompanyFaviconAvatar appearance="initials" company={company} />
+            <CompanyFaviconAvatar company={company} />
             <Tooltip>
                 <TooltipTrigger
                     render={

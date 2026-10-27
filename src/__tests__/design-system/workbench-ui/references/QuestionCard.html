@@ -1,0 +1,36 @@
+<!-- @dsCard group="Investigation" height=420 subtitle="Running question and question waiting for material" -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>QuestionCard</title>
+<style>
+body{margin:0;padding:20px;background:var(--background);color:var(--foreground);font-family:var(--font-sans);-webkit-font-smoothing:antialiased}*{box-sizing:border-box}b{font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;max-width:900px}
+.qcard{border-radius:var(--radius-3xl);padding:24px 26px;display:flex;flex-direction:column;gap:16px;color:inherit;text-decoration:none}
+.qw{flex-shrink:0;width:38px;height:38px;border-radius:var(--radius-tile);display:inline-flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:12.5px;font-weight:500;background:var(--primary);color:var(--primary-foreground)}
+.steps{display:flex;gap:4px;margin-left:auto}
+.s{display:flex;flex-direction:column;gap:5px;width:56px;font-size:11px;color:var(--muted-foreground)}
+.s i{display:block;width:100%;height:4px;border-radius:2px;background:color-mix(in oklab,var(--foreground) 12%,transparent)}
+.s-done i{background:var(--foreground)}.s-now{color:var(--accent-foreground);font-weight:500}.s-now i{background:var(--brand-purple)}
+.reading{font-size:20px;line-height:27px;font-weight:500;letter-spacing:-.025em}
+.bal{display:flex;height:8px;border-radius:4px;overflow:hidden;gap:2px}
+.leg{display:flex;gap:16px;font-size:12.5px;color:var(--muted-foreground)}.leg b{color:var(--foreground);font-weight:500}
+.foot{margin-top:auto;display:flex;align-items:center;gap:10px;padding-top:14px;border-top:1px solid var(--divider);font-size:13px}
+.ask{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:var(--radius-item);background:var(--card);box-shadow:0 0 0 1px color-mix(in oklab,var(--foreground) 8%,transparent)}
+.focalbg{background:linear-gradient(170deg,var(--tint-violet),var(--surface-glass) 55%)}
+.waitbg{background:linear-gradient(170deg,var(--tint-review),var(--surface-glass) 55%)}
+</style></head>
+<body class="ds-backdrop">
+<div class="grid">
+<a href="#q2" class="ds-glass ds-focal focalbg qcard">
+<span style="display:flex;align-items:center;gap:12px"><span class="qw">Q2</span><span class="ds-badge ds-badge-inference"><span class="ds-live" style="width:7px;height:7px;border-radius:50%;background:var(--brand-purple);display:inline-block"></span>Testing</span><span class="steps"><span class="s s-done"><i></i>Gather</span><span class="s s-now"><i></i>Test</span><span class="s"><i></i>Answer</span></span></span>
+<span style="display:flex;flex-direction:column;gap:6px"><span style="font-size:14px;color:var(--muted-foreground)">Do integrations hold beyond contract terms?</span><span class="reading">Participation looks durable, but only one source says why.</span></span>
+<span style="display:flex;flex-direction:column;gap:8px"><span class="bal"><span style="flex:6;background:var(--foreground)"></span><span style="flex:2;background:var(--counter-evidence)"></span><span style="flex:3;background:color-mix(in oklab,var(--foreground) 18%,transparent)"></span></span><span class="leg"><span><b>6</b> support</span><span><b>2</b> oppose</span><span><b>3</b> context</span></span></span>
+<span class="foot"><span style="flex:1;color:var(--muted-foreground)">Next · test the renewal clauses</span><span style="font-weight:500;color:var(--accent-foreground)">Open question</span></span></a>
+<a href="#q4" class="ds-glass ds-waits waitbg qcard">
+<span style="display:flex;align-items:center;gap:12px"><span class="qw" style="background:var(--tint-review);color:var(--review-foreground)">Q4</span><span class="ds-badge ds-badge-review"><svg width="7" height="7" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="5" fill="var(--review)"/></svg>Waiting for material</span><span class="steps"><span class="s s-done"><i></i>Gather</span><span class="s" style="color:var(--review-foreground);font-weight:500"><i style="background:var(--review)"></i>Test</span><span class="s"><i></i>Answer</span></span></span>
+<span style="display:flex;flex-direction:column;gap:6px"><span style="font-size:14px;color:var(--muted-foreground)">Could an agent bypass it?</span><span class="reading" style="color:var(--muted-foreground)">No reading yet. The deciding fact is shared with Q1.</span></span>
+<span class="ask"><span class="ds-label">Asked of Sources</span><span style="font-size:14px;font-weight:500">Who holds decision rights over the routing rules?</span></span>
+<span class="foot"><span style="flex:1;color:var(--muted-foreground)">Next · resumes when material returns</span><span style="font-weight:500;color:var(--accent-foreground)">See request</span></span></a>
+</div>
+</body>
+</html>

@@ -17,11 +17,7 @@ export function CompanyResolutionCard({
         <article className="surface-panel p-4" aria-live="polite">
             <div className="flex min-w-0 gap-3">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
-                    <CompanyFaviconAvatar
-                        appearance="initials"
-                        company={company}
-                        size="sm"
-                    />
+                    <CompanyFaviconAvatar company={company} size="sm" />
                 </span>
                 <div className="min-w-0">
                     <p className="text-base font-medium text-foreground">

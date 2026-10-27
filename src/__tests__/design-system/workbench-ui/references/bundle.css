@@ -1,0 +1,56 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@400;500&display=swap');
+/* Shared base for the static button previews (from the DESIGN.md preview definitions). */
+.ds-button{display:inline-flex;align-items:center;justify-content:center;gap:.375rem;height:2.25rem;padding:0 .75rem;border:1px solid transparent;border-radius:var(--radius-md);font-family:var(--font-sans);font-size:1rem;font-weight:500;white-space:nowrap;cursor:pointer;outline:none;transition:background-color .15s,color .15s,box-shadow .15s,transform .15s}.ds-button:focus-visible{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklab,var(--ring) 30%,transparent)}.ds-button:active:not(:disabled){transform:translateY(1px)}.ds-button:disabled{pointer-events:none;opacity:.5}
+
+/* Question-led workbench primitives shared by the previews. Values come from tokens.css only. */
+.ds-label{font-family:var(--font-mono);font-size:.6875rem;font-weight:500;letter-spacing:.12em;line-height:1.5;text-transform:uppercase;color:var(--muted-foreground)}
+.ds-meta{font-family:var(--font-mono);font-size:.71875rem;line-height:1.5;color:var(--muted-foreground)}
+.ds-slash{color:var(--brand-purple);letter-spacing:-.06em}
+
+.ds-badge{display:inline-flex;align-items:center;gap:6px;padding:2px 7px;border-radius:var(--radius-badge);font-family:var(--font-sans);font-size:.75rem;font-weight:500;line-height:18px;white-space:nowrap}
+.ds-badge svg{flex-shrink:0}
+.ds-badge-fact{color:var(--evidence-fact);background:var(--tint-fact)}
+.ds-badge-inference{color:var(--evidence-inference);background:var(--tint-inference)}
+.ds-badge-hypothesis{color:var(--evidence-hypothesis);background:var(--tint-hypothesis)}
+.ds-badge-unknown{color:var(--evidence-unknown);background:var(--tint-unknown)}
+.ds-badge-counter{color:var(--counter-evidence);background:var(--tint-counter)}
+.ds-badge-ink{color:var(--foreground);background:var(--tint-ink)}
+.ds-badge-review{color:var(--review-foreground);background:var(--tint-review)}
+.ds-badge-approved{color:var(--approved);background:var(--tint-approved)}
+.ds-badge-accent{color:var(--accent-foreground);background:var(--accent)}
+.ds-badge-dashed{color:var(--muted-foreground);background:transparent;outline:1px dashed var(--edge-dashed);outline-offset:-1px}
+.ds-badge-destructive{color:var(--destructive);background:color-mix(in oklab,var(--destructive) 10%,var(--card))}
+
+.ds-chip{display:inline-flex;align-items:center;gap:8px;padding:6px 11px;border-radius:var(--radius-chip);font-family:var(--font-mono);font-size:.6875rem;font-weight:500;letter-spacing:.16em;line-height:1.5;text-transform:uppercase;color:var(--accent-foreground);background:var(--tint-violet);box-shadow:inset 0 0 0 1px var(--chip-edge)}
+
+.ds-glass{background:var(--surface-glass);-webkit-backdrop-filter:blur(var(--blur-glass));backdrop-filter:blur(var(--blur-glass));box-shadow:var(--shadow-glass)}
+.ds-glass.ds-focal{box-shadow:var(--shadow-focal)}
+.ds-glass.ds-waits{box-shadow:var(--shadow-review)}
+.ds-float{background:var(--surface-float);-webkit-backdrop-filter:blur(var(--blur-glass));backdrop-filter:blur(var(--blur-glass));box-shadow:var(--shadow-float)}
+.ds-raised{background:var(--card);box-shadow:var(--shadow-raised)}
+.ds-dashed{border:1.5px dashed var(--edge-dashed);background:transparent}
+.ds-divider{border-top:1px solid var(--divider)}
+
+.ds-backdrop{background-color:var(--background);background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);background-size:var(--grid-pitch) var(--grid-pitch)}
+.ds-backdrop-glow{background-image:radial-gradient(ellipse 40% 30% at 50% 20%,var(--glow),transparent 70%),linear-gradient(var(--grid-line) 1px,transparent 1px),linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);background-size:100% 100%,var(--grid-pitch) var(--grid-pitch),var(--grid-pitch) var(--grid-pitch)}
+
+.ds-seg{display:inline-flex;align-items:center;gap:4px;padding:4px;border-radius:calc(var(--radius-tile) + 2px);background:var(--fill-quiet)}
+.ds-tab{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 14px;border-radius:var(--radius-tile);font-family:var(--font-sans);font-size:.875rem;font-weight:500;color:var(--muted-foreground);text-decoration:none;white-space:nowrap}
+.ds-tab[aria-current]{background:var(--card);color:var(--foreground);box-shadow:var(--shadow-tab)}
+.ds-tab[aria-disabled="true"]{opacity:.7}
+.ds-tab:focus-visible,.ds-navpill:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.ds-navpill{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:var(--radius-tile);background:var(--fill-quiet);font-family:var(--font-sans);font-size:.875rem;font-weight:500;color:var(--foreground);text-decoration:none;white-space:nowrap}
+
+.ds-launch{display:inline-flex;align-items:center;gap:10px;height:44px;padding:0 20px;border:0;border-radius:var(--radius-full);background:linear-gradient(180deg,var(--primary-sheen),var(--primary) 55%);color:var(--primary-foreground);box-shadow:var(--shadow-launch);font-family:var(--font-sans);font-size:.9375rem;font-weight:500;text-decoration:none;cursor:pointer}
+.ds-launch:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.ds-round{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border:0;border-radius:var(--radius-full);background:var(--primary);color:var(--primary-foreground);box-shadow:inset 0 1px 0 oklch(1 0 0 / .2);cursor:pointer}
+
+.ds-well{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:var(--radius-tile)}
+.ds-well-lg{width:44px;height:44px;border-radius:var(--radius-item)}
+.ds-doc{flex-shrink:0;display:inline-flex;align-items:flex-end;justify-content:center;box-sizing:border-box;width:24px;height:30px;padding-bottom:4px;border-radius:6px;background:var(--card);box-shadow:0 0 0 1px color-mix(in oklab,var(--foreground) 12%,transparent);font-family:var(--font-mono);font-size:7px;font-weight:500;color:var(--muted-foreground)}
+
+.ds-live{animation:ds-ping 1.8s ease-out infinite}
+.ds-sweep{background-image:linear-gradient(90deg,transparent,color-mix(in oklab,var(--brand-purple) 35%,transparent),transparent);background-size:160px 100%;background-repeat:no-repeat;animation:ds-sweep 2.2s ease-in-out infinite}
+@keyframes ds-ping{0%{box-shadow:0 0 0 0 color-mix(in oklab,var(--brand-purple) 45%,transparent)}75%,100%{box-shadow:0 0 0 9px transparent}}
+@keyframes ds-sweep{0%{background-position:-160px 0}100%{background-position:260px 0}}
+@media (prefers-reduced-motion:reduce){.ds-live,.ds-sweep{animation:none}}

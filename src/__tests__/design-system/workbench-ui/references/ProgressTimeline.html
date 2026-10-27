@@ -1,0 +1,35 @@
+<!-- @dsCard group="Workspace" height=330 subtitle="Workflow stepper and inquiry rows" -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>ProgressTimeline</title>
+<style>
+body{margin:0;padding:20px;background:var(--background);color:var(--foreground);font-family:var(--font-sans);-webkit-font-smoothing:antialiased}*{box-sizing:border-box}b{font-weight:600}
+.wrap{display:grid;gap:14px;max-width:760px}
+.stp{border-radius:var(--radius-xl);padding:18px 26px 16px;position:relative}
+.track,.fill{position:absolute;left:calc(26px + 10%);top:33px;height:3px;border-radius:2px}
+.track{right:calc(26px + 10%);background:color-mix(in oklab,var(--foreground) 9%,transparent)}
+.fill{width:calc((100% - 52px) * .4);background:linear-gradient(90deg,var(--foreground),var(--brand-purple))}
+.steps{position:relative;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));text-align:center}
+.st{display:flex;flex-direction:column;align-items:center;gap:8px}
+.sl{font-size:13px;font-weight:500}
+.dot{width:32px;height:32px;border-radius:var(--radius-full);display:inline-flex;align-items:center;justify-content:center}
+.done{background:var(--foreground);color:var(--card)}
+.now{background:var(--card);border:2px solid var(--brand-purple)}.now i{width:10px;height:10px;border-radius:50%;background:var(--brand-purple)}
+.todo{background:var(--card);border:1.5px solid color-mix(in oklab,var(--foreground) 18%,transparent)}
+.inq{border-radius:var(--radius-2xl);padding:20px 26px;display:flex;flex-direction:column}
+.hd{display:flex;justify-content:space-between;align-items:center;padding-bottom:10px}
+.q{display:flex;align-items:center;gap:14px;padding:12px 0}
+.qw{flex-shrink:0;width:34px;height:34px;border-radius:var(--radius-tile);display:inline-flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:12px;font-weight:500}
+.bal{display:flex;height:5px;width:240px;border-radius:3px;overflow:hidden;gap:2px}
+</style></head>
+<body class="ds-backdrop">
+<div class="wrap">
+<div class="ds-glass stp"><span class="track"></span><span class="fill"></span>
+<div class="steps"><span class="st"><span class="dot done"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg></span><span class="sl">Framing</span></span><span class="st"><span class="dot done"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg></span><span class="sl">Sources</span></span><span class="st"><span class="dot now ds-live"><i></i></span><span class="sl" style="font-weight:600;color:var(--accent-foreground)">Investigation</span></span><span class="st"><span class="dot todo"></span><span class="sl" style="color:var(--muted-foreground);font-weight:400">Review</span></span><span class="st"><span class="dot todo"></span><span class="sl" style="color:var(--muted-foreground);font-weight:400">Synthesis</span></span></div></div>
+<main class="ds-glass ds-focal inq">
+<div class="hd"><span style="display:flex;align-items:center;gap:10px"><b style="font-size:17px;letter-spacing:-.02em">Common inquiry</b><span class="ds-badge ds-badge-inference"><span class="ds-live" style="width:7px;height:7px;border-radius:50%;background:var(--brand-purple);display:inline-block"></span>Running</span></span><span class="ds-meta">supports · opposes · context</span></div>
+<div class="q ds-divider"><span class="qw" style="background:var(--foreground);color:var(--card)">Q1</span><span style="flex:1;display:flex;flex-direction:column;gap:7px"><span style="font-size:14.5px;font-weight:500">Coordination control or substitutable modules</span><span class="bal"><span style="flex:9;background:var(--foreground)"></span><span style="flex:4;background:var(--counter-evidence)"></span><span style="flex:3;background:color-mix(in oklab,var(--foreground) 18%,transparent)"></span></span></span><span class="ds-badge ds-badge-ink"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>Appraisal drafted</span></div>
+<div class="q ds-divider"><span class="qw" style="background:var(--accent);color:var(--accent-foreground)">Q2</span><span style="flex:1;display:flex;flex-direction:column;gap:7px"><span style="font-size:14.5px;font-weight:500">Integrations beyond contract terms</span><span class="bal" style="width:160px"><span style="flex:1" class="ds-sweep"></span></span></span><span class="ds-badge ds-badge-inference"><span class="ds-live" style="width:7px;height:7px;border-radius:50%;background:var(--brand-purple);display:inline-block"></span>Testing</span></div>
+</main></div>
+</body>
+</html>

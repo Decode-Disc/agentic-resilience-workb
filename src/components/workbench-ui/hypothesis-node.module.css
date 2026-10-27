@@ -1,0 +1,44 @@
+.row {
+    display: flex;
+    gap: 16px;
+    align-items: stretch;
+    flex-wrap: wrap;
+}
+.hyp {
+    width: 300px;
+    min-height: 132px;
+    padding: 18px 22px;
+    border-radius: var(--radius-2xl);
+    font-size: 16px;
+    line-height: 22px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+}
+.leaf {
+    width: 180px;
+    min-height: 104px;
+    padding: 12px 14px;
+    border-radius: var(--radius-lg);
+    font-size: 13px;
+    line-height: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.role {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.sub {
+    font-size: 13px;
+    color: var(--muted-foreground);
+}
+.wrap {
+    display: grid;
+    gap: 18px;
+}

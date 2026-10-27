@@ -1,0 +1,219 @@
+.dim {
+    position: absolute;
+    inset: 0;
+    background: color-mix(in oklab, var(--foreground) 22%, transparent);
+}
+.sheet {
+    position: absolute;
+    left: 60px;
+    right: 24px;
+    top: 28px;
+    bottom: 0;
+    border-radius: var(--radius-3xl) var(--radius-3xl) 0 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: color-mix(in oklab, var(--card) 94%, transparent);
+    backdrop-filter: blur(var(--blur-glass));
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklab, var(--popover) 90%, transparent),
+        0 0 0 1px var(--chip-edge),
+        0 40px 90px -30px
+        color-mix(in oklab, var(--foreground) 55%, transparent);
+}
+.top {
+    padding: 18px 22px 12px;
+    display: flex;
+    align-items: flex-end;
+    gap: 14px;
+    background: radial-gradient(
+        ellipse 60% 140% at 20% 0%,
+        color-mix(in oklab, var(--brand-purple) 11%, transparent),
+        transparent 70%
+    );
+}
+.heading {
+    flex: 1;
+}
+.field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 220px;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: var(--radius-tile);
+    background: var(--card);
+    box-shadow: inset 0 0 0 1px var(--input-border);
+    color: var(--muted-foreground);
+    font-size: 13px;
+}
+.coll {
+    height: 36px;
+    padding: 0 12px;
+    border-radius: var(--radius-tile);
+    background: var(--fill-quiet);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--foreground);
+    text-decoration: none;
+}
+.bar {
+    padding: 0 22px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.seg {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: var(--radius-tile);
+    background: var(--fill-quiet);
+}
+.flt {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 30px;
+    padding: 0 11px;
+    border-radius: 9px;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted-foreground);
+    cursor: pointer;
+}
+.flt b {
+    font-weight: 500;
+    color: var(--foreground);
+}
+.flt-on {
+    background: var(--card);
+    color: var(--foreground);
+    box-shadow: var(--shadow-tab);
+}
+.foot {
+    margin-top: auto;
+    padding: 12px 22px;
+    border-top: 1px solid var(--divider);
+    background: color-mix(in oklab, var(--foreground) 2.5%, transparent);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+.use {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: var(--radius-tile);
+    background: var(--card);
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--foreground) 8%, transparent);
+    font-size: 12.5px;
+    line-height: 17px;
+}
+.qw {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    background: var(--tint-ink);
+}
+.sheet {
+    outline: none;
+}
+.content {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    border-top: 1px solid var(--divider);
+    display: flex;
+    flex-direction: column;
+}
+.field input {
+    width: 100%;
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    outline: 0;
+    font: inherit;
+    color: var(--foreground);
+    padding: 0;
+}
+.field:focus-within {
+    box-shadow:
+        inset 0 0 0 1px var(--ring),
+        0 0 0 3px color-mix(in oklab, var(--ring) 16%, transparent);
+}
+.field input::placeholder {
+    color: var(--muted-foreground);
+    opacity: 1;
+}
+.coll,
+.use {
+    border: 0;
+    text-align: left;
+    white-space: normal;
+}
+.use {
+    justify-content: flex-start;
+    height: auto;
+}
+.field input {
+    flex: 1;
+    width: 0;
+}
+button.use {
+    color: var(--foreground);
+}
+button.use {
+    font-weight: 400;
+}
+@media (max-width: 640px) {
+    .sheet {
+        left: 12px;
+        right: 12px;
+        top: 12px;
+    }
+    .top,
+    .bar,
+    .foot {
+        flex-wrap: wrap;
+    }
+    .top {
+        padding: 18px 16px 12px;
+    }
+    .heading {
+        flex-basis: 100%;
+    }
+    .field {
+        flex: 1;
+        min-width: 0;
+    }
+    .bar {
+        padding-inline: 16px;
+    }
+    .seg {
+        max-width: 100%;
+        overflow-x: auto;
+    }
+    .foot {
+        padding: 12px 16px;
+    }
+    .foot > :last-child {
+        flex-basis: 100%;
+    }
+}

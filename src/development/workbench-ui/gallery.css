@@ -1,0 +1,80 @@
+body {
+    margin: 0;
+    background: var(--background);
+}
+.gallery-header {
+    padding: 24px;
+    font-family: var(--font-sans);
+}
+.gallery-header h1 {
+    font-size: 28px;
+}
+.gallery-header p {
+    margin: 8px 0;
+}
+.gallery-header output {
+    display: block;
+}
+.gallery-section > h2 {
+    padding: 20px 24px;
+    font: 500 18px var(--font-sans);
+}
+.gallery-scroll {
+    overflow-x: auto;
+    padding: 0;
+}
+.gallery-scene {
+    width: 1040px;
+    min-height: 100px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+}
+.gallery-cover {
+    width: 960px;
+    padding: 0;
+}
+.gallery-buttons {
+    padding: 16px;
+    background: var(--background);
+}
+.gallery-scene[data-component="AppraisalBlock"],
+.gallery-scene[data-component="OutcomeCard"],
+.gallery-scene[data-component="InventorySheet"] {
+    width: 100%;
+    max-width: 1040px;
+}
+.inventory-example-matrix {
+    min-width: 760px;
+}
+.inventory-example-uses {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+@media (max-width: 640px) {
+    .inventory-example-uses {
+        grid-template-columns: 1fr;
+    }
+}
+.wb-ui svg {
+    display: inline;
+    vertical-align: baseline;
+}
+
+body[data-single="true"] .gallery-scene {
+    min-height: 100vh;
+}
+@source "../../components";
+.gallery-notice {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 100;
+    background: var(--card);
+    color: var(--foreground);
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--surface-shadow-raised);
+}

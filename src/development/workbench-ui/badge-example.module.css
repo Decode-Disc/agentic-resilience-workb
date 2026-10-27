@@ -1,0 +1,13 @@
+.wrap {
+    display: grid;
+    gap: 14px;
+}
+.row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+.cap {
+    width: 120px;
+}

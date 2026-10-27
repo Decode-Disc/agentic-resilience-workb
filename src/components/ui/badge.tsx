@@ -13,7 +13,7 @@ type Color =
     | "primary";
 
 const badgeVariants = cva(
-    "inline-flex w-fit max-w-full shrink-0 items-center justify-center gap-1.5 overflow-hidden whitespace-nowrap rounded-badge px-[7px] py-0.5 text-xs leading-4.5 font-medium [&>svg]:size-3 [&>svg]:pointer-events-none",
+    "inline-flex w-fit shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-badge px-[7px] py-0.5 text-xs leading-4.5 font-medium [&>svg]:shrink-0 [&>svg]:pointer-events-none",
     {
         variants: {
             variant: {
@@ -32,11 +32,20 @@ const badgeVariants = cva(
                 unknown: "bg-tint-unknown text-evidence-unknown",
                 counter: "bg-tint-counter text-counter-evidence",
                 review: "bg-tint-review text-review-foreground",
+                "review-pending":
+                    "bg-tint-review text-review-foreground outline outline-dashed -outline-offset-1 outline-review-foreground",
+                destructive: "bg-destructive/10 text-destructive-text",
                 approved: "bg-tint-approved text-approved",
                 accent: "bg-accent text-accent-foreground",
                 dashed: "bg-transparent text-muted-foreground outline outline-dashed -outline-offset-1 outline-edge-dashed",
             },
         },
+        compoundVariants: [
+            {
+                tone: ["fact", "inference", "hypothesis", "unknown", "counter"],
+                className: "inset-ring inset-ring-current/20",
+            },
+        ],
         defaultVariants: { variant: "default" },
     },
 );
@@ -65,7 +74,7 @@ function Badge({
     VariantProps<typeof badgeVariants> & {
         asChild?: boolean;
         color?: Color;
-        showDot?: boolean;
+        showDot?: boolean | "running";
     }) {
     const Comp = asChild ? Slot : "span";
     return (
@@ -80,7 +89,12 @@ function Badge({
             {showDot ? (
                 <span
                     aria-hidden="true"
-                    className="size-1.5 shrink-0 rounded-full bg-current"
+                    className={cn(
+                        "shrink-0 rounded-full bg-current",
+                        showDot === "running"
+                            ? "size-[7px] animate-workbench-live motion-reduce:animate-none"
+                            : "size-1.5",
+                    )}
                 />
             ) : null}
             {children}

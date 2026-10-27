@@ -5,7 +5,9 @@
         "scripts/**/*.ts",
         "e2e/**/*.ts",
         "vite.config.ts",
-        "vitest.config.ts"
+        "vitest.config.ts",
+        "workbench-ui.vite.config.ts",
+        "workbench-ui.playwright.config.ts"
     ],
     "exclude": ["node_modules", "dist", "docs"],
     "compilerOptions": {

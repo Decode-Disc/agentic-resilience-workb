@@ -17,7 +17,8 @@
             "*.json",
             "!src/routeTree.gen.ts",
             "!convex/_generated",
-            "!docs/*"
+            "!docs/*",
+            "!src/__tests__/design-system/workbench-ui/references"
         ]
     },
     "formatter": {

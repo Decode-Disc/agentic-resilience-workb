@@ -1,0 +1,50 @@
+<!-- @dsCard height=336 -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agentic Resilience Workbench</title>
+<style>
+  html, body { margin:0; height:100%; }
+  body { color:var(--foreground); font-family:var(--font-sans); overflow:hidden; -webkit-font-smoothing:antialiased; }
+  .cover { position:relative; width:960px; height:336px; overflow:hidden; box-sizing:border-box; padding:40px 48px; display:flex; gap:40px; align-items:center;
+    background-color:var(--background);
+    background-image:radial-gradient(ellipse 36% 46% at 74% 50%, var(--glow), transparent 70%), linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size:100% 100%, var(--grid-pitch) var(--grid-pitch), var(--grid-pitch) var(--grid-pitch); }
+  .left { flex:1; display:flex; flex-direction:column; gap:18px; align-items:flex-start; }
+  .mark { width:52px; height:52px; display:block; }
+  .mark-dark { display:none; border-radius:12px; }
+  [data-theme="dark"] .mark-light { display:none; }
+  [data-theme="dark"] .mark-dark { display:block; }
+  h1 { margin:0; font-size:40px; line-height:44px; font-weight:500; letter-spacing:-0.04em; }
+  .sub { font-size:15px; line-height:22px; color:var(--muted-foreground); max-width:400px; }
+  .card { width:360px; box-sizing:border-box; border-radius:var(--radius-3xl); padding:22px 24px; display:flex; flex-direction:column; gap:14px;
+    background:linear-gradient(170deg, var(--tint-violet), var(--surface-glass) 55%); -webkit-backdrop-filter:blur(var(--blur-glass)); backdrop-filter:blur(var(--blur-glass)); box-shadow:var(--shadow-focal); }
+  .reading { font-size:18px; line-height:25px; font-weight:500; letter-spacing:-0.02em; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; }
+  .bal { display:flex; height:7px; border-radius:4px; overflow:hidden; gap:2px; }
+</style>
+</head>
+<body>
+<div class="cover">
+  <div class="left">
+    <img class="mark mark-light" src="/_blob/02a51bca00c705378ceed2ee576015ac" alt="">
+    <img class="mark mark-dark" src="/_blob/9198352325a79aa2f89b008f3dfc8f9a" alt="">
+    <span class="ds-chip">// Evidence workbench</span>
+    <h1>Agentic Resilience Workbench</h1>
+    <span class="sub">Question-led research where every claim says what it is, where it comes from and who judged it.</span>
+  </div>
+  <div class="card">
+    <span style="display:flex;justify-content:space-between;align-items:center"><span class="ds-label" style="color:var(--accent-foreground)">Q1 · Proposed appraisal</span><span class="ds-badge ds-badge-review"><svg width="7" height="7" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="5" fill="var(--review)"/></svg>For review</span></span>
+    <span class="reading">CCC coordinates the claim; whether it decides remains unestablished.</span>
+    <span class="bal"><span style="flex:9;background:var(--foreground)"></span><span style="flex:4;background:var(--counter-evidence)"></span><span style="flex:3;background:color-mix(in oklab,var(--foreground) 18%,transparent)"></span></span>
+    <span class="row">
+      <span class="ds-badge ds-badge-fact"><svg width="8" height="8" viewBox="0 0 10 10" aria-hidden="true"><rect width="10" height="10" rx="2" fill="currentColor"/></svg>Fact</span>
+      <span class="ds-badge ds-badge-inference"><svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><path d="M5 0L10 10H0Z" fill="currentColor"/></svg>Inference</span>
+      <span class="ds-badge ds-badge-counter"><svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><rect y="3.5" width="10" height="3" rx="1" fill="currentColor"/></svg>Counter</span>
+      <span class="ds-badge ds-badge-dashed">Unknown</span>
+    </span>
+  </div>
+</div>
+</body>
+</html>

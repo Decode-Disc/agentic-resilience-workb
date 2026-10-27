@@ -1,0 +1,36 @@
+.grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+}
+.p {
+    border-radius: var(--radius-2xl);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 170px;
+}
+.t {
+    font-size: 15px;
+    font-weight: 600;
+}
+.d {
+    font-size: 13px;
+    line-height: 19px;
+    color: var(--muted-foreground);
+}
+.focalbg {
+    background: linear-gradient(
+        180deg,
+        var(--tint-violet),
+        var(--surface-glass) 55%
+    );
+}
+.hatch {
+    background: repeating-linear-gradient(
+        135deg,
+        transparent 0 10px,
+        color-mix(in oklab, var(--foreground) 2.5%, transparent) 10px 11px
+    );
+}

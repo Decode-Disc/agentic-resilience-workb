@@ -1,0 +1,287 @@
+/* Agentic Resilience Workbench — generated from tokens.json */
+:root, [data-theme="light"] {
+  --primary: oklch(0.29 0.04 307.99); /* Institutional Ink. Fill for ordinary primary actions (button-primary). Dark reverses to a pale neutral. Never replace it with brand-purple. */
+  --primary-foreground: oklch(0.985 0.002 308); /* Text and icons on `primary` fills (13.7:1 light, 15.0:1 dark). */
+  --background: oklch(0.9522 0.0022 308); /* Research Canvas. The page ground behind cards and panels. */
+  --foreground: oklch(0.1811 0.0092 308); /* Reading Ink. Body copy and headings on `background`, `card`, `popover` and `muted` (13.6:1 or better in both themes). */
+  --card: oklch(0.9911 0.0011 308); /* Paper Surface. Standard card and opaque panel fill; the primary reading layer. */
+  --card-foreground: oklch(0.1811 0.0092 308); /* Text on `card` (18.3:1 light, 14.8:1 dark). */
+  --popover: oklch(0.9931 0.0009 308); /* Floating Paper. Popovers, menus and drawers that float above cards; text on it is `foreground`. */
+  --muted: oklch(0.9231 0.0033 308); /* Quiet Surface. Hover fill for ghost and outline buttons and nav items; quiet supporting regions. */
+  --muted-foreground: oklch(0.4842 0.0126 308); /* Secondary Ink. Descriptions, captions, placeholders, metadata labels and inactive nav items on `background`, `card` and `muted` (5.1:1 or better in both themes). */
+  --secondary: oklch(0.91 0 0); /* Secondary Surface. Fill for button-secondary and supporting controls. */
+  --secondary-foreground: oklch(0.2568 0.0092 308); /* Text on `secondary` (12.0:1 light, 11.7:1 dark). */
+  --accent: oklch(0.9298 0.0242 300.7); /* Violet Wash for interactive emphasis. Source value is `color-mix(in oklab, var(--brand-purple) 12%, white)` (dark: 20% with black); stored here as the exact oklab result because tokens cannot hold color-mix. In code, keep the mix. */
+  --accent-foreground: oklch(0.415 0.2019 300.7); /* Text and icons on `accent` (7.8:1 light, 16.0:1 dark). Dark switches to a pale teal. */
+  --border: oklch(0.922 0 0); /* Hairline. 1px separators and card/panel edges. Decorative structure only (about 1.1:1 on `background`); never the sole boundary of a control. Dark stays alpha-valued. */
+  --input: oklch(0.922 0 0); /* Field Fill from the source theme (inputs used it at 50%). The input preview now fills fields with `card` and edges them with `input-border`, because the 50% fill nearly vanished on light `background`. Dark stays alpha-valued. */
+  --input-border: oklch(0.1811 0.0092 308 / 0.5); /* 1px edge of text inputs: `foreground` at 50% (light) and 42% (dark). As rendered: 3.4:1 on `background` and 3.5:1 on `card` in light; 3.8:1 and 3.7:1 in dark. Meets the 3:1 minimum for control borders, so the field reads as a control. It is an edge, not text. Added in the design system; not yet in the code theme. */
+  --ring: oklch(0.415 0.2019 300.7); /* Focus ring: border plus a 3px halo at 30% of this color. 8.4:1 on `background` light, 6.6:1 dark. */
+  --brand-purple: oklch(0.415 0.2019 300.7); /* Research Violet. Recognition accents, focus, selection and small metadata moments. Not the primary action color. */
+  --brand-green: oklch(0.61 0.05 157.84); /* Quiet Sage. The restrained green brand signal and source of `sidebar-accent`. The dark value is intentionally lighter. Not an approval color. */
+  --approved: oklch(0.5 0.09 186.7); /* Approval Teal. Positive analyst approval (button-approved). Keep distinct from `brand-green`. */
+  --approved-foreground: oklch(0.985 0.002 308); /* Text on `approved`: near-white in light (5.5:1), the dark ink in dark (8.0:1; above 7:1 on the 90% hover fill too). Dark changed from the source's near-white, which read only 2.2:1 on the lighter dark teal; update `--approved-foreground` in the code's dark theme to match. */
+  --evidence-fact: oklch(0.4856 0.1016 258.76); /* Blue. Marks a claim classified as fact. Always shown beside the word "Fact". 6.3:1 on `card` light, 6.7:1 dark. */
+  --evidence-inference: oklch(0.415 0.2019 300.7); /* Violet. Marks an inference; always labelled. 9.4:1 on `card` light, 5.9:1 dark. */
+  --evidence-hypothesis: oklch(0.5086 0.1022 70.64); /* Amber. Marks a hypothesis; always labelled. 5.8:1 on `card` light, 7.6:1 dark. */
+  --evidence-unknown: oklch(0.4842 0.0126 308); /* Neutral. Marks a decisive unknown; always labelled. Same value as `muted-foreground`. */
+  --counter-evidence: oklch(0.54 0.2009 356.87); /* Rose. Marks objections and counter-evidence; always labelled. Light: 4.9:1 on `background`, 5.5:1 on `card`, 4.5:1 on `muted`. Dark: 6.4:1 or better. Light darkened from the source's `oklch(0.5725 0.2009 356.87)` (4.3:1 on `background`); update `--counter-evidence` in the code's light theme to match. */
+  --review: oklch(0.828 0.189 84.429); /* Pending review state as a fill, dot or marker, always beside a label. Kept exact from the source; set review text in `review-foreground`. FLAG: 1.7:1 on `card` in light, so never use it as a text color on light grounds. Source writes the light value as `oklch(82.8% 0.189 84.429)`. */
+  --review-foreground: oklch(0.53 0.108 84.429); /* Text for the pending review state ("Pending review") on `card` and `background`. Light is a darker amber at `review`'s hue: 5.2:1 on `card`, 4.6:1 on `background`. Dark aliases `review`: 7.6:1 on `card`. Added in the design system; not yet in the code theme. */
+  --primary-sheen: oklch(0.3965 0.034 307.99); /* Top stop of the launch button's vertical gradient (`primary-sheen` to `primary` at 55%). Source: `color-mix(in oklab, var(--primary) 85%, white)`, stored as the exact result. Never a flat fill on its own. */
+  --sidebar-accent: oklch(0.9142 0.011 157.84); /* Current-section fill in the workspace rail (navigation-current). Source value is `color-mix(in oklab, var(--brand-green) 22%, white)` (dark: 24% with black); stored as the exact oklab result. */
+  --sidebar-accent-foreground: oklch(0.31 0.055 190); /* Text, icon and side indicator of the current nav item on `sidebar-accent` (10.0:1 light, 14.1:1 dark). */
+  --destructive: oklch(0.577 0.245 27.325); /* Destructive feedback and invalid states, inherited from the base preset. Not a brand accent. button-destructive uses it as text on a 10% tint (20% in dark): 4.1:1 light and 4.3:1 dark, which passes 3:1 but not 4.5:1. FLAG, kept exact. */
+  --tint-fact: oklch(0.9405 0.0108 262.73); /* Badge fill for Fact: `evidence-fact` at 10% over `card` (source `color-mix(in oklab, var(--evidence-fact) 10%, var(--card))`, stored as the exact result). Text and glyph in `evidence-fact`: 5.4:1 light, 5.8:1 dark. */
+  --tint-inference: oklch(0.9393 0.0192 301.08); /* Badge fill for Inference: `evidence-inference` at 9% over `card` (source `color-mix(in oklab, var(--evidence-inference) 9%, var(--card))`, stored as the exact result). Text and glyph in `evidence-inference`: 8.0:1 light, 5.2:1 dark. */
+  --tint-hypothesis: oklch(0.938 0.0107 66.24); /* Badge fill for Hypothesis: `evidence-hypothesis` at 11% over `card` (source `color-mix(in oklab, var(--evidence-hypothesis) 11%, var(--card))`, stored as the exact result). Text and glyph in `evidence-hypothesis`: 4.9:1 light, 6.4:1 dark. */
+  --tint-unknown: oklch(0.9506 0.0015 308.0); /* Badge fill for Unknown and Not established: `foreground` at 5% over `card` (source `color-mix(in oklab, var(--foreground) 5%, var(--card))`, stored as the exact result). Text and glyph in `evidence-unknown`: 5.6:1 light, 6.2:1 dark. */
+  --tint-counter: oklch(0.9505 0.0188 354.57); /* Badge fill for Counter-evidence and Documentary conflict: `counter-evidence` at 9% over `card` (source `color-mix(in oklab, var(--counter-evidence) 9%, var(--card))`, stored as the exact result). Text and glyph in `counter-evidence`: 4.9:1 light, 5.7:1 dark. */
+  --tint-review: oklch(0.965 0.0296 83.2); /* Badge fill for Pending review, Proposed and Waiting: `review` at 16% over `card` (source `color-mix(in oklab, var(--review) 16%, var(--card))`, stored as the exact result). Text and glyph in `review-foreground`: 4.8:1 light, 5.8:1 dark. */
+  --tint-approved: oklch(0.9273 0.0112 190.87); /* Badge fill for Retained (analyst approval): `approved` at 13% over `card` (source `color-mix(in oklab, var(--approved) 13%, var(--card))`, stored as the exact result). Text and glyph in `approved`: 4.6:1 light, 5.9:1 dark. */
+  --tint-ink: oklch(0.9344 0.0017 308.0); /* Badge fill for neutral states such as Prepared, Supported and Correction requested: `foreground` at 7% over `card` (source `color-mix(in oklab, var(--foreground) 7%, var(--card))`, stored as the exact result). Text and glyph in `foreground`: 15.5:1 light, 12.7:1 dark. */
+  --tint-violet: oklch(0.9393 0.0192 301.08); /* Badge fill for section chips (`// Investigation`) and Showcase disclosure: `brand-purple` at 9% over `card` (source `color-mix(in oklab, var(--brand-purple) 9%, var(--card))`, stored as the exact result). Text and glyph in `accent-foreground`: 8.0:1 light, 11.8:1 dark. */
+  --surface-glass: oklch(0.9911 0.0011 308.0 / 0.68); /* Glass working panels: `card` at 68% with a 24px backdrop blur and `shadow-glass`. Sources, Investigation, Synthesis cards, outcome cards and question cards rest on it. Text keeps `foreground` and `muted-foreground`, which hold 4.5:1 because the panel sits on `background`. */
+  --surface-float: oklch(0.9911 0.0011 308.0 / 0.82); /* Floating layers that sit over content: the inventory dock, the bottom composer and the Sources-ready handoff. `card` at 82% with a 24px blur and `shadow-float`. */
+  --surface-bar: oklch(0.9911 0.0011 308.0 / 0.55); /* Top navigation bar: `card` at 55% with a 16px blur and a `divider` bottom edge. */
+  --fill-quiet: oklch(0.1811 0.0092 308.0 / 0.06); /* Segmented-control track (tabs, sub-tabs, filters), resting nav pills and icon wells on glass. `foreground` at 6%. */
+  --divider: oklch(0.1811 0.0092 308.0 / 0.07); /* Hairline inside glass panels: row separators, panel headers and footers. `foreground` at 7%. Decorative only, never a control edge. */
+  --edge-dashed: oklch(0.1811 0.0092 308.0 / 0.28); /* 1.5px dashed edge of execution states (unfinished work, technical interruption, unfinished check, locked synthesis). Dashed always means work not done, never a conclusion. */
+  --grid-line: oklch(0.1811 0.0092 308.0 / 0.045); /* 1px lines of the 40px backdrop grid (`grid-pitch`) behind every workbench screen. */
+  --glow: oklch(0.415 0.2019 300.7 / 0.15); /* Radial violet glow added to the grid on visual screens only (Start, Progress, Synthesis, landing previews). Never on Sources or the Investigation working screens. */
+  --chip-edge: oklch(0.415 0.2019 300.7 / 0.28); /* 1px inset ring of the violet section chip, over `tint-violet`. */
+  --nav-current: oklch(0.415 0.2019 300.7 / 0.12); /* Fill of the current-dossier nav pill in the top bar (`//` CCC dossier, `//` start). */
+  --shadow-glass: inset 0 1px 0 oklch(0.9931 0.0009 308.0 / 0.9), 0 0 0 1px oklch(0.1811 0.0092 308.0 / 0.07), 0 14px 36px -22px oklch(0.1811 0.0092 308.0 / 0.28); /* Glass working panel: inset highlight, a 1px foreground ring at 7% and a soft drop. Pairs with `surface-glass`. */
+  --shadow-focal: inset 0 1px 0 oklch(0.9931 0.0009 308.0 / 0.9), 0 0 0 1px oklch(0.415 0.2019 300.7 / 0.3), 0 30px 70px -36px oklch(0.415 0.2019 300.7 / 0.55); /* The one focal surface per screen: what is running or what the analyst decides now (current investigation card, inquiry timeline, proposed appraisal, Sources-ready handoff). Violet ring at 30% and a violet drop. */
+  --shadow-review: inset 0 1px 0 oklch(0.9931 0.0009 308.0 / 0.9), 0 0 0 1px oklch(0.828 0.189 84.429 / 0.55), 0 14px 32px -18px oklch(0.828 0.189 84.429 / 0.6); /* A surface that waits for the analyst (pending judgment, question waiting for material). Amber ring, always with a `Pending` or `Waiting` badge. */
+  --shadow-float: inset 0 1px 0 oklch(0.9931 0.0009 308.0 / 0.9), 0 0 0 1px oklch(0.1811 0.0092 308.0 / 0.09), 0 18px 40px -18px oklch(0.1811 0.0092 308.0 / 0.38); /* Floating layers: inventory dock, bottom composer. Pairs with `surface-float`. */
+  --shadow-raised: 0 0 0 1px oklch(0.1811 0.0092 308.0 / 0.08), 0 10px 22px -16px oklch(0.1811 0.0092 308.0 / 0.4); /* Opaque `card` items that sit on glass or on a lane: hypothesis leaves, source cards in a lane, brief margin notes, the start composer. */
+  --shadow-node: inset 0 1px 0 oklch(0.9931 0.0009 308.0 / 0.9), 0 0 0 1px oklch(0.1811 0.0092 308.0 / 0.12), 0 12px 26px -16px oklch(0.1811 0.0092 308.0 / 0.35); /* Nodes of the mechanism diagram in Synthesis. */
+  --shadow-tab: 0 0 0 1px oklch(0.1811 0.0092 308.0 / 0.08), 0 4px 10px -6px oklch(0.1811 0.0092 308.0 / 0.3); /* The selected segment of a segmented control (tab, sub-tab, filter, company selector) on its `card` fill. */
+  --shadow-launch: inset 0 1px 0 oklch(1 0 0 / 0.3), 0 12px 26px -12px oklch(0.29 0.04 307.99 / 0.8); /* The glossy launch button (Start research, Continue). One per flow step. */
+}
+[data-theme="dark"] {
+  --primary: oklch(0.9302 0.0084 308);
+  --primary-foreground: oklch(0.1911 0.0071 308);
+  --background: oklch(0.1911 0.0071 308);
+  --foreground: oklch(0.9622 0.0042 308);
+  --card: oklch(0.2381 0.0092 308);
+  --card-foreground: oklch(0.9622 0.0042 308);
+  --popover: oklch(0.2511 0.0098 308);
+  --muted: oklch(0.2691 0.0102 308);
+  --muted-foreground: oklch(0.7282 0.0124 308);
+  --secondary: oklch(0.2851 0.0122 308);
+  --secondary-foreground: oklch(0.9302 0.0084 308);
+  --accent: oklch(0.1405 0.0292 308.49);
+  --accent-foreground: oklch(0.92 0.035 186.7);
+  --border: oklch(1 0 0 / 0.1);
+  --input: oklch(1 0 0 / 0.15);
+  --input-border: oklch(0.9622 0.0042 308 / 0.42);
+  --ring: oklch(0.7024 0.146 308.49);
+  --brand-purple: oklch(0.7024 0.146 308.49);
+  --brand-green: oklch(0.8801 0.051 137.14);
+  --approved: oklch(0.7285 0.0968 186.7);
+  --approved-foreground: oklch(0.1911 0.0071 308);
+  --evidence-fact: oklch(0.72 0.105 258.76);
+  --evidence-inference: oklch(0.7024 0.146 308.49);
+  --evidence-hypothesis: oklch(0.76 0.12 70.64);
+  --evidence-unknown: oklch(0.7282 0.0124 308);
+  --counter-evidence: oklch(0.73 0.16 356.87);
+  --review: oklch(0.76 0.12 70.64);
+  --review-foreground: var(--review);
+  --primary-sheen: oklch(0.9407 0.0071 308.0);
+  --sidebar-accent: oklch(0.2112 0.0122 137.14);
+  --sidebar-accent-foreground: oklch(0.92 0.035 186.7);
+  --destructive: oklch(0.704 0.191 22.216);
+  --tint-fact: oklch(0.2863 0.0171 280.28);
+  --tint-inference: oklch(0.2799 0.0215 308.3);
+  --tint-hypothesis: oklch(0.2955 0.0112 32.51);
+  --tint-unknown: oklch(0.2743 0.0089 308.0);
+  --tint-counter: oklch(0.2824 0.0209 339.29);
+  --tint-review: oklch(0.3216 0.0164 47.23);
+  --tint-approved: oklch(0.3019 0.0109 225.77);
+  --tint-ink: oklch(0.2888 0.0088 308.0);
+  --tint-violet: oklch(0.2799 0.0215 308.3);
+  --surface-glass: oklch(0.2381 0.0092 308.0 / 0.68);
+  --surface-float: oklch(0.2381 0.0092 308.0 / 0.82);
+  --surface-bar: oklch(0.2381 0.0092 308.0 / 0.55);
+  --fill-quiet: oklch(0.9622 0.0042 308.0 / 0.06);
+  --divider: oklch(0.9622 0.0042 308.0 / 0.07);
+  --edge-dashed: oklch(0.9622 0.0042 308.0 / 0.28);
+  --grid-line: oklch(0.9622 0.0042 308.0 / 0.045);
+  --glow: oklch(0.7024 0.146 308.49 / 0.15);
+  --chip-edge: oklch(0.7024 0.146 308.49 / 0.28);
+  --nav-current: oklch(0.7024 0.146 308.49 / 0.12);
+  --shadow-glass: inset 0 1px 0 oklch(0.9622 0.0042 308.0 / 0.06), 0 0 0 1px oklch(0.9622 0.0042 308.0 / 0.1), 0 14px 36px -22px oklch(0 0 0 / 0.6);
+  --shadow-focal: inset 0 1px 0 oklch(0.9622 0.0042 308.0 / 0.06), 0 0 0 1px oklch(0.7024 0.146 308.49 / 0.4), 0 30px 70px -36px oklch(0.7024 0.146 308.49 / 0.35);
+  --shadow-review: inset 0 1px 0 oklch(0.9622 0.0042 308.0 / 0.06), 0 0 0 1px oklch(0.76 0.12 70.64 / 0.5), 0 14px 32px -18px oklch(0 0 0 / 0.6);
+  --shadow-float: inset 0 1px 0 oklch(0.9622 0.0042 308.0 / 0.06), 0 0 0 1px oklch(0.9622 0.0042 308.0 / 0.12), 0 18px 40px -18px oklch(0 0 0 / 0.7);
+  --shadow-raised: 0 0 0 1px oklch(0.9622 0.0042 308.0 / 0.1), 0 10px 22px -16px oklch(0 0 0 / 0.7);
+  --shadow-node: inset 0 1px 0 oklch(0.9622 0.0042 308.0 / 0.06), 0 0 0 1px oklch(0.9622 0.0042 308.0 / 0.14), 0 12px 26px -16px oklch(0 0 0 / 0.7);
+  --shadow-tab: 0 0 0 1px oklch(0.9622 0.0042 308.0 / 0.12), 0 4px 10px -6px oklch(0 0 0 / 0.6);
+  --shadow-launch: inset 0 1px 0 oklch(1 0 0 / 0.3), 0 12px 26px -12px oklch(0 0 0 / 0.7);
+}
+:root {
+  --space-half: 0.125rem; /* Badge vertical padding; nav item margins. */
+  --space-1: 0.25rem; /* Input vertical padding; tight icon gaps. */
+  --space-1\.5: 0.375rem; /* Badge horizontal padding; button icon gap. */
+  --space-2: 0.5rem; /* Field label gap; nav panel padding; nav item vertical padding. */
+  --space-3: 0.75rem; /* Button and input horizontal padding. */
+  --space-3\.5: 0.875rem; /* Gap between glass cards in a section and between a section heading and its panel (14px). */
+  --space-4: 1rem; /* Compact card padding; gap between surfaces; base outer gutter. */
+  --space-5: 1.25rem; /* Grid card vertical padding. */
+  --space-6: 1.5rem; /* Default card padding and inner gap; `sm` outer gutter. */
+  --space-7: 1.75rem; /* Grid card decoration pitch (28px). */
+  --space-8: 2rem; /* Gaps between major regions. */
+  --space-11: 2.75rem; /* Large button height (44px). */
+  --space-12: 3rem; /* `md` outer gutter. */
+  --radius-sm: 0.4rem; /* Small controls. */
+  --radius-md: 0.6rem; /* All ordinary buttons, text inputs and nav items. */
+  --radius-lg: 1rem; /* Theme base radius. Compact opaque cards on glass: hypothesis leaves, margin notes, request items, matrix question headers (16px). */
+  --radius-xl: 1.2rem; /* Standard cards and section glass panels (18–20px in the canvas), the nav rail panel, grid cards, the compact inventory dock. */
+  --radius-2xl: 1.4rem; /* Large glass panels: Progress cards, the inquiry timeline, sourcing lanes, hypothesis nodes, dashed execution panels, the start composer and the bottom composer (22px). */
+  --radius-3xl: 1.8rem; /* Question cards in Investigation, the proposed-appraisal article and the Sources-ready handoff (26px in the canvas). Was the input radius in the source; inputs use `radius-md`. */
+  --radius-4xl: 2.2rem; /* Was the standard card radius in the source (2.2rem). Cards now use `radius-xl`; kept for reference. */
+  --radius-badge: 0.25rem; /* Metadata badges (Badge): 4px, tint-only, never pill-shaped so they cannot read as buttons. Was 0.75rem; update the code alias to match. */
+  --radius-chip: 0.3125rem; /* Mono section and disclosure chips (5px). */
+  --radius-tile: 0.6875rem; /* Segmented-control segments and nav pills (10–11px), 36px icon wells, matrix use tiles, compact action buttons inside panels. */
+  --radius-item: 0.875rem; /* List items and lane cards, angle suggestions, 44px icon wells, inset callouts inside a question card (14px). */
+  --radius-full: 9999px; /* Launch button, round icon buttons, quick replies, step dots and the countdown ring. */
+  --radius-input: 0.65rem; /* Field-group alias. */
+  --radius-source-card: 0.75rem; /* Source cards with clipped or tabbed upper edges. */
+  --container-max: 100rem; /* Shared maximum content width. */
+  --gutter: 1rem; /* Outer gutter below `sm`. */
+  --gutter-sm: 1.5rem; /* Outer gutter from `sm`. */
+  --gutter-md: 3rem; /* Outer gutter from `md`. */
+  --control-height: 2.25rem; /* Default button and input height (36px). Alternatives: 24px, 32px, 44px. */
+  --grid-pitch: 2.5rem; /* Backdrop grid cell (40px) on every workbench screen. */
+  --bar-height: 3.75rem; /* Top navigation bar height (60px). */
+  --side-column: 18.75rem; /* Progress side columns (Sources and Investigation left, Synthesis right) and the expanded inventory dock (300px). */
+  --dock-width: 21.25rem; /* Compact inventory dock (340px), pinned 48px from the right and 28px from the bottom. */
+  --composer-width: 38.75rem; /* Bottom composer after launch (620px), centred. */
+  --start-width: 40rem; /* Start composer and framing conversation column (640px). */
+  --blur-glass: 24px; /* Backdrop blur of `surface-glass` and `surface-float` layers. */
+  --blur-bar: 16px; /* Backdrop blur of the top navigation bar. */
+  --font-sans: "Geist Variable", "Geist", "Segoe UI", ui-sans-serif, sans-serif;
+  --font-mono: "Geist Mono", "SFMono-Regular", "Cascadia Code", "Roboto Mono", ui-monospace, monospace;
+  --text-headline: 500 2.5rem/2.75rem var(--font-sans); /* Screen headline on showcase and working screens ("Read the reasoning, then retain what you stand behind"). Medium weight, tight tracking. 36px/40px (-0.045em) where the screen is denser. */
+  --text-display: 600 1.875rem/2.25rem var(--font-sans); /* Base step of the responsive display utility (mobile). Page-level headings. */
+  --text-display-sm: 600 2.25rem/2.5rem var(--font-sans); /* Display at the `sm` breakpoint and up. */
+  --text-display-md: 600 3rem/1 var(--font-sans); /* Display at the `md` breakpoint and up. */
+  --text-title: 600 1.125rem/1.75rem var(--font-sans); /* Section titles. Standard card titles use their component's medium (500) weight instead. */
+  --text-heading: 600 1.25rem/1.625rem var(--font-sans); /* Section heading inside a screen ("Claim classes", "Grouped review"). */
+  --text-reading: 500 1.25rem/1.6875rem var(--font-sans); /* The current reading of a question or the interpretation of an appraisal: the sentence the analyst judges. */
+  --text-body: 400 1rem/1.5 var(--font-sans); /* Default reading text. */
+  --text-body-sm: 400 0.875rem/1.25rem var(--font-sans); /* Compact cards, descriptions, source details, nav items. */
+  --text-brief: 400 0.96875rem/1.625rem var(--font-sans); /* Long-form prose of the Synthesis brief and the source reader (15.5px/26px). */
+  --text-figure: 500 2.25rem/2.25rem var(--font-sans); /* Counts that summarise a stage (126 controlled assertions, 38 documents). Always followed by a `body-sm` noun in `muted-foreground`. */
+  --text-figure-lg: 500 2.75rem/2.75rem var(--font-sans); /* Live counters of the sourcing stage (captured, selected). */
+  --text-label: 500 0.6875rem/1.5 var(--font-mono); /* Short uppercase metadata labels and identifiers only (set text-transform: uppercase). Never paragraphs or controls. */
+  --text-chip: 500 0.6875rem/1.5 var(--font-mono); /* Section chip and disclosure chip text (set text-transform: uppercase). Wider tracking than `label`. */
+  --text-meta: 400 0.71875rem/1.5 var(--font-mono); /* Source references, provenance lines and small status notes in sentence case, in `muted-foreground`. Not uppercase. */
+}
+.headline {
+  font-family: var(--font-sans);
+  font-size: 2.5rem;
+  line-height: 2.75rem;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+}
+.display {
+  font-family: var(--font-sans);
+  font-size: 1.875rem;
+  line-height: 2.25rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+.display-sm {
+  font-family: var(--font-sans);
+  font-size: 2.25rem;
+  line-height: 2.5rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+.display-md {
+  font-family: var(--font-sans);
+  font-size: 3rem;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+.title {
+  font-family: var(--font-sans);
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+.heading {
+  font-family: var(--font-sans);
+  font-size: 1.25rem;
+  line-height: 1.625rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+.reading {
+  font-family: var(--font-sans);
+  font-size: 1.25rem;
+  line-height: 1.6875rem;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+.body {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.5;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.body-sm {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.brief {
+  font-family: var(--font-sans);
+  font-size: 0.96875rem;
+  line-height: 1.625rem;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.figure {
+  font-family: var(--font-sans);
+  font-size: 2.25rem;
+  line-height: 2.25rem;
+  font-weight: 500;
+  letter-spacing: -0.045em;
+}
+.figure-lg {
+  font-family: var(--font-sans);
+  font-size: 2.75rem;
+  line-height: 2.75rem;
+  font-weight: 500;
+  letter-spacing: -0.05em;
+}
+.label {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+}
+.chip {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+}
+.meta {
+  font-family: var(--font-mono);
+  font-size: 0.71875rem;
+  line-height: 1.5;
+  font-weight: 400;
+  letter-spacing: 0;
+}

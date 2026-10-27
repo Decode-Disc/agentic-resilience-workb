@@ -18,7 +18,8 @@
 
 /* Evidence Workbench: semantic values, Tailwind aliases, then shared primitives. */
 
-@theme {
+@theme static {
+    --animate-workbench-live: workbench-live 1.8s ease-out infinite;
     --font-sans:
         "Geist Variable", "Geist", "Segoe UI", ui-sans-serif, sans-serif;
     --font-heading:
@@ -112,6 +113,18 @@
     --text-meta--font-weight: 400;
 }
 
+@keyframes workbench-live {
+    0% {
+        box-shadow: 0 0 0 0
+            color-mix(in oklab, var(--brand-purple) 45%, transparent);
+    }
+    75%,
+    100% {
+        box-shadow: 0 0 0 9px transparent;
+    }
+}
+
+.wb-ui[data-theme="light"],
 :root {
     --brand-green: oklch(0.61 0.05 157.84);
     --brand-purple: oklch(0.415 0.2019 300.7);
@@ -187,7 +200,7 @@
         );
 
     --input-surface: color-mix(in oklab, var(--card) 97%, black);
-    --input-border: oklch(0.1811 0.0092 308 / 0.47);
+    --input-border: oklch(0.1811 0.0092 308 / 0.22);
     --surface-shadow-input: inset 0 1px 3px oklch(0 0 0 / 0.09);
     --review-foreground: oklch(0.53 0.108 84.429);
     --primary-sheen: oklch(0.3965 0.034 307.99);
@@ -270,6 +283,7 @@
         );
 }
 
+.wb-ui[data-theme="dark"],
 .dark {
     --brand-purple: oklch(0.7024 0.146 308.49);
     --brand-green: oklch(0.8801 0.051 137.14);
@@ -343,7 +357,7 @@
         );
 
     --input-surface: color-mix(in oklab, var(--card) 90%, black);
-    --input-border: oklch(0.9622 0.0042 308 / 0.38);
+    --input-border: oklch(0.9622 0.0042 308 / 0.18);
     --surface-shadow-input: inset 0 1px 3px oklch(0 0 0 / 0.28);
     --review-foreground: var(--review);
     --primary-sheen: oklch(0.9407 0.0071 308);
@@ -487,4 +501,42 @@
     --shadow-node: var(--surface-shadow-node);
     --shadow-tab: var(--surface-shadow-tab);
     --shadow-launch: var(--surface-shadow-launch);
+}
+
+/* Reference materials and approved refinements for the isolated question-led library. */
+.wb-ui,
+.wb-ui[data-theme="light"] {
+    --outcome-limited: oklch(0.48 0.085 240);
+    --outcome-insufficiency: oklch(0.5 0.055 65);
+    --outcome-non-establishment: oklch(0.48 0.035 265);
+    --outcome-no-retained: oklch(0.51 0.07 80);
+    --outcome-unfinished: oklch(0.48 0.025 250);
+    --outcome-interruption: oklch(0.5 0.12 25);
+    --accent: oklch(0.9298 0.0242 300.7);
+    --shadow-glass: var(--surface-shadow-glass);
+    --shadow-focal: var(--surface-shadow-focal);
+    --shadow-review: var(--surface-shadow-review);
+    --shadow-float: var(--surface-shadow-float);
+    --shadow-raised: var(--surface-shadow-raised);
+    --shadow-node: var(--surface-shadow-node);
+    --shadow-tab: var(--surface-shadow-tab);
+    --shadow-launch: var(--surface-shadow-launch);
+    --wb-mark-light-display: block;
+    --wb-mark-dark-display: none;
+}
+.dark .wb-ui:not([data-theme="light"]),
+.wb-ui[data-theme="dark"] {
+    --outcome-limited: oklch(0.76 0.09 240);
+    --outcome-insufficiency: oklch(0.76 0.055 65);
+    --outcome-non-establishment: oklch(0.75 0.04 265);
+    --outcome-no-retained: oklch(0.76 0.07 80);
+    --outcome-unfinished: oklch(0.75 0.03 250);
+    --outcome-interruption: oklch(0.76 0.12 25);
+    --accent: oklch(0.1405 0.0292 308.49);
+    --surface-shadow-focal:
+        inset 0 1px 0 oklch(0.9622 0.0042 308 / 0.06),
+        0 0 0 1px oklch(0.7024 0.146 308.49 / 0.4),
+        0 30px 70px -36px oklch(0.7024 0.146 308.49 / 0.35);
+    --wb-mark-light-display: none;
+    --wb-mark-dark-display: block;
 }

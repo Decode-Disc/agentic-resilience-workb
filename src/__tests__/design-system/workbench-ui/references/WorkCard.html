@@ -1,0 +1,34 @@
+<!-- @dsCard group="Workspace" height=420 subtitle="Sources, Investigation and locked Synthesis on Progress" -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>WorkCard</title>
+<style>
+body{margin:0;padding:20px;background:var(--background);color:var(--foreground);font-family:var(--font-sans);-webkit-font-smoothing:antialiased}*{box-sizing:border-box}b{font-weight:600}
+.grid{display:grid;grid-template-columns:300px 300px;gap:16px;align-items:start}
+.col{display:flex;flex-direction:column;gap:16px}
+.wc{border-radius:var(--radius-2xl);padding:20px;display:flex;flex-direction:column;gap:14px;color:inherit;text-decoration:none}
+.hd{display:flex;justify-content:space-between;align-items:center}
+.stack{position:relative;height:104px;display:block}
+.sheet{position:absolute;width:150px;height:88px;border-radius:10px;background:var(--card);box-shadow:0 0 0 1px color-mix(in oklab,var(--foreground) 8%,transparent)}
+.ln{display:block;height:5px;border-radius:3px;background:color-mix(in oklab,var(--foreground) 10%,transparent)}
+.li{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:18px;color:var(--muted-foreground)}
+.focalbg{background:linear-gradient(180deg,var(--tint-violet),var(--surface-glass) 55%)}
+.sec{display:flex;flex-direction:column;gap:9px;padding:12px;border-radius:var(--radius-lg);background:color-mix(in oklab,var(--foreground) 3%,transparent)}
+</style></head>
+<body class="ds-backdrop">
+<div class="grid">
+<div class="col">
+<a href="#sources" class="ds-glass wc"><span class="hd"><span class="ds-label">Sources</span><span class="ds-badge ds-badge-ink"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>Prepared</span></span>
+<span class="stack"><span class="sheet" style="left:36px;top:0;transform:rotate(5deg)"></span><span class="sheet" style="left:18px;top:8px;transform:rotate(-3deg)"></span><span class="sheet" style="left:0;top:16px;width:170px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;box-shadow:var(--shadow-raised)"><span class="ds-meta" style="font-size:10.5px">10-K · FY2025</span><span class="ln" style="width:120px"></span><span class="ln" style="width:96px"></span><span class="ln" style="width:108px;background:color-mix(in oklab,var(--brand-purple) 30%,transparent)"></span></span><span style="position:absolute;right:0;top:30px;display:flex;flex-direction:column;align-items:flex-end"><b style="font-size:30px;line-height:32px;font-weight:500;letter-spacing:-.04em">38</b><span class="ds-meta">documents</span></span></span>
+<span style="font-size:13.5px;line-height:19px;color:var(--muted-foreground)">Filings, calls and investor material. <b style="color:var(--foreground);font-weight:500">2 documentary gaps</b> disclosed.</span></a>
+<a href="#investigation" class="ds-glass ds-focal focalbg wc"><span class="hd"><span class="ds-label" style="color:var(--accent-foreground)">Investigation</span><span class="ds-badge ds-badge-inference"><span class="ds-live" style="width:7px;height:7px;border-radius:50%;background:var(--brand-purple);display:inline-block"></span>Q2 now</span></span>
+<span style="display:flex;flex-direction:column;gap:10px"><span class="li" style="color:var(--foreground)"><span style="flex-shrink:0;margin-top:5px;width:7px;height:7px;border-radius:50%;background:var(--brand-purple)"></span>Testing whether integrations hold beyond contract terms</span><span class="li"><span style="margin-top:1px;color:var(--evidence-inference)"><svg width="7" height="7" viewBox="0 0 10 10" aria-hidden="true"><path d="M5 0L10 10H0Z" fill="currentColor"/></svg></span>A-027 admitted as inference</span><span class="li"><span style="color:var(--counter-evidence)"><svg width="7" height="7" viewBox="0 0 10 10" aria-hidden="true"><rect y="3.5" width="10" height="3" rx="1" fill="currentColor"/></svg></span>Conflict found · 10-K ↔ Q2 call</span></span>
+<span class="ds-meta ds-divider" style="padding-top:10px">Persisted · resumes where it stopped</span></a>
+</div>
+<div class="ds-dashed wc" style="color:var(--muted-foreground)"><span class="hd"><span class="ds-label">Synthesis</span><span class="ds-badge ds-badge-dashed"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Locked</span></span>
+<span style="font-size:13.5px;line-height:19px;color:var(--foreground)">Opens once you retain the appraisals.</span>
+<span class="sec"><span class="ds-label" style="font-size:10px">Diagram</span><span style="height:120px;display:block;border-radius:50%;border:1px dashed currentColor;width:120px;margin:0 auto;opacity:.6"></span></span>
+<span class="sec"><span class="ds-label" style="font-size:10px">Brief</span><span class="ln" style="height:7px;width:92%"></span><span class="ln" style="height:7px;width:100%"></span><span class="ln" style="height:7px;width:70%"></span></span></div>
+</div>
+</body>
+</html>

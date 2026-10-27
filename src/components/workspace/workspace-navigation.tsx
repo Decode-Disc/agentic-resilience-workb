@@ -66,7 +66,7 @@ export function WorkspaceNavigation({
                                     {section === item.key ? (
                                         <span
                                             aria-hidden="true"
-                                            className="text-brand-purple">
+                                            className="text-brand-purple tracking-[-.06em]">
                                             {"//"}
                                         </span>
                                     ) : null}
@@ -94,7 +94,7 @@ export function WorkspaceNavigation({
                                 {section === item.key ? (
                                     <span
                                         aria-hidden="true"
-                                        className="text-brand-purple">
+                                        className="text-brand-purple tracking-[-.06em]">
                                         {"//"}
                                     </span>
                                 ) : null}

@@ -60,7 +60,7 @@ const modes = {
     },
     dark: { ...declarations(preset, ".dark"), ...declarations(theme, ".dark") },
 };
-const themeAliases = declarations(theme, "@theme");
+const themeAliases = declarations(theme, "@theme static");
 const localAliases = declarations(stylesheet, "@theme inline");
 
 const colors = Object.fromEntries(

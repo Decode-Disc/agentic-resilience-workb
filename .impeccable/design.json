@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-27T16:39:51.810Z",
+  "generatedAt": "2026-10-27T21:28:21.640Z",
   "title": "Design System: Agentic Resilience Workbench",
   "extensions": {
     "colorMeta": {
@@ -218,14 +218,14 @@
         "role": "neutral",
         "displayName": "input border",
         "tonalRamp": [
-          "oklch(0.15 0.0092 308 / 0.47)",
-          "oklch(0.25 0.0092 308 / 0.47)",
-          "oklch(0.35 0.0092 308 / 0.47)",
-          "oklch(0.45 0.0092 308 / 0.47)",
-          "oklch(0.6 0.0092 308 / 0.47)",
-          "oklch(0.72 0.0092 308 / 0.47)",
-          "oklch(0.84 0.0092 308 / 0.47)",
-          "oklch(0.95 0.0092 308 / 0.47)"
+          "oklch(0.15 0.0092 308 / 0.22)",
+          "oklch(0.25 0.0092 308 / 0.22)",
+          "oklch(0.35 0.0092 308 / 0.22)",
+          "oklch(0.45 0.0092 308 / 0.22)",
+          "oklch(0.6 0.0092 308 / 0.22)",
+          "oklch(0.72 0.0092 308 / 0.22)",
+          "oklch(0.84 0.0092 308 / 0.22)",
+          "oklch(0.95 0.0092 308 / 0.22)"
         ]
       },
       "ring": {
@@ -932,14 +932,14 @@
         "role": "neutral",
         "displayName": "Dark · input border",
         "tonalRamp": [
-          "oklch(0.15 0.0042 308 / 0.38)",
-          "oklch(0.25 0.0042 308 / 0.38)",
-          "oklch(0.35 0.0042 308 / 0.38)",
-          "oklch(0.45 0.0042 308 / 0.38)",
-          "oklch(0.6 0.0042 308 / 0.38)",
-          "oklch(0.72 0.0042 308 / 0.38)",
-          "oklch(0.84 0.0042 308 / 0.38)",
-          "oklch(0.95 0.0042 308 / 0.38)"
+          "oklch(0.15 0.0042 308 / 0.18)",
+          "oklch(0.25 0.0042 308 / 0.18)",
+          "oklch(0.35 0.0042 308 / 0.18)",
+          "oklch(0.45 0.0042 308 / 0.18)",
+          "oklch(0.6 0.0042 308 / 0.18)",
+          "oklch(0.72 0.0042 308 / 0.18)",
+          "oklch(0.84 0.0042 308 / 0.18)",
+          "oklch(0.95 0.0042 308 / 0.18)"
         ]
       },
       "dark-ring": {
@@ -1631,7 +1631,7 @@
       "refersTo": "button-destructive",
       "description": "Static visual translation of the existing destructive treatment; actual behavior remains in the shared button and its consumers.",
       "html": "<button type=\"button\" class=\"ds-button ds-button-destructive\">Remove reference</button>",
-      "css": ".ds-button{display:inline-flex;align-items:center;justify-content:center;gap:.375rem;height:2.25rem;padding:0 .75rem;border:1px solid transparent;border-radius:var(--radius-md);font-family:var(--font-sans);font-size:1rem;font-weight:500;white-space:nowrap;cursor:pointer;outline:none;transition:background-color .15s,color .15s,box-shadow .15s,transform .15s}.ds-button:focus-visible{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklab,var(--ring) 30%,transparent)}.ds-button:active:not(:disabled){transform:translateY(1px)}.ds-button:disabled{pointer-events:none;opacity:.5}.ds-button-destructive{background:color-mix(in oklab,var(--destructive) 10%,transparent);color:var(--destructive)}.ds-button-destructive:hover:not(:disabled){background:color-mix(in oklab,var(--destructive) 20%,transparent)}.ds-button-destructive:focus-visible{border-color:color-mix(in oklab,var(--destructive) 40%,transparent);box-shadow:0 0 0 3px color-mix(in oklab,var(--destructive) 20%,transparent)}:host-context(.dark) .ds-button-destructive{background:color-mix(in oklab,var(--destructive) 20%,transparent)}:host-context(.dark) .ds-button-destructive:hover{background:color-mix(in oklab,var(--destructive) 30%,transparent)}"
+      "css": ".ds-button{display:inline-flex;align-items:center;justify-content:center;gap:.375rem;height:2.25rem;padding:0 .75rem;border:1px solid transparent;border-radius:var(--radius-md);font-family:var(--font-sans);font-size:1rem;font-weight:500;white-space:nowrap;cursor:pointer;outline:none;transition:background-color .15s,color .15s,box-shadow .15s,transform .15s}.ds-button:focus-visible{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklab,var(--ring) 30%,transparent)}.ds-button:active:not(:disabled){transform:translateY(1px)}.ds-button:disabled{pointer-events:none;opacity:.5}.ds-button-destructive{background:color-mix(in oklab,var(--destructive) 10%,transparent);color:var(--destructive-text)}.ds-button-destructive:hover:not(:disabled){background:color-mix(in oklab,var(--destructive) 20%,transparent)}.ds-button-destructive:focus-visible{border-color:color-mix(in oklab,var(--destructive) 40%,transparent);box-shadow:0 0 0 3px color-mix(in oklab,var(--destructive) 20%,transparent)}:host-context(.dark) .ds-button-destructive{background:color-mix(in oklab,var(--destructive) 20%,transparent)}:host-context(.dark) .ds-button-destructive:hover{background:color-mix(in oklab,var(--destructive) 30%,transparent)}"
     },
     {
       "name": "Link Button",
@@ -1650,20 +1650,44 @@
       "css": ".ds-button{display:inline-flex;align-items:center;justify-content:center;gap:.375rem;height:2.25rem;padding:0 .75rem;border:1px solid transparent;border-radius:var(--radius-md);font-family:var(--font-sans);font-size:1rem;font-weight:500;white-space:nowrap;cursor:pointer;outline:none;transition:background-color .15s,color .15s,box-shadow .15s,transform .15s}.ds-button:focus-visible{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklab,var(--ring) 30%,transparent)}.ds-button:active:not(:disabled){transform:translateY(1px)}.ds-button:disabled{pointer-events:none;opacity:.5}.ds-button-approved{background:var(--approved);color:var(--approved-foreground)}.ds-button-approved:hover:not(:disabled){background:color-mix(in oklab,var(--approved) 90%,transparent)}"
     },
     {
+      "name": "Launch Button",
+      "kind": "button",
+      "refersTo": "button-launch",
+      "description": "The shared launch variant at its default 44px height, 15px label and 10px gap.",
+      "html": "<button type=\"button\" class=\"ds-button ds-button-launch\">Start research<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M9 6l6 6-6 6\"/></svg></button>",
+      "css": ".ds-button{display:inline-flex;align-items:center;justify-content:center;gap:.375rem;height:2.25rem;padding:0 .75rem;border:1px solid transparent;border-radius:var(--radius-md);font-family:var(--font-sans);font-size:1rem;font-weight:500;white-space:nowrap;cursor:pointer;outline:none;transition:background-color .15s,color .15s,box-shadow .15s,transform .15s}.ds-button:focus-visible{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklab,var(--ring) 30%,transparent)}.ds-button:active:not(:disabled){transform:translateY(1px)}.ds-button:disabled{pointer-events:none;opacity:.5}.ds-button-launch{height:2.75rem;padding:0 1.25rem;gap:10px;border:0;border-radius:var(--radius-full);background:linear-gradient(180deg in oklab,var(--primary-sheen),var(--primary) 55%);color:var(--primary-foreground);box-shadow:var(--surface-shadow-launch);font-size:15px}.ds-button-launch:hover:not(:disabled){filter:brightness(1.1)}"
+    },
+    {
+      "name": "Round Button",
+      "kind": "button",
+      "refersTo": "button-round",
+      "description": "The shared round variant at its default 44px size with an inset highlight.",
+      "html": "<button type=\"button\" class=\"ds-button ds-button-round\" aria-label=\"Continue\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M9 6l6 6-6 6\"/></svg></button>",
+      "css": ".ds-button{display:inline-flex;align-items:center;justify-content:center;gap:.375rem;height:2.25rem;padding:0 .75rem;border:1px solid transparent;border-radius:var(--radius-md);font-family:var(--font-sans);font-size:1rem;font-weight:500;white-space:nowrap;cursor:pointer;outline:none;transition:background-color .15s,color .15s,box-shadow .15s,transform .15s}.ds-button:focus-visible{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklab,var(--ring) 30%,transparent)}.ds-button:active:not(:disabled){transform:translateY(1px)}.ds-button:disabled{pointer-events:none;opacity:.5}.ds-button-round{width:2.75rem;height:2.75rem;padding:0;border:0;border-radius:var(--radius-full);background:var(--primary);color:var(--primary-foreground);box-shadow:inset 0 1px 0 oklch(1 0 0 / .2)}.ds-button-round:hover:not(:disabled){background:color-mix(in oklab,var(--primary) 80%,transparent)}"
+    },
+    {
       "name": "Single-line Input",
       "kind": "input",
       "refersTo": "input",
       "description": "The shared input, not the research composer. Focus, invalid and disabled states follow the source control.",
       "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Source reference</span><input class=\"ds-input\" aria-label=\"Source reference\" placeholder=\"Public HTTPS source\" /></label>",
-      "css": ".ds-field{display:grid;gap:.5rem;max-width:22rem;font-family:var(--font-sans);color:var(--foreground)}.ds-field-label{font-size:.875rem;font-weight:500}.ds-input{box-sizing:border-box;height:2.25rem;width:100%;min-width:0;padding:.25rem .75rem;border:1px solid transparent;border-radius:var(--radius-md);background:var(--input-surface);border-color:var(--input-border);box-shadow:var(--surface-shadow-input);color:var(--foreground);font-family:var(--font-sans);font-size:1rem;outline:none;transition:color .15s,box-shadow .15s,background-color .15s}.ds-input::placeholder{color:var(--muted-foreground)}.ds-input:hover:not(:disabled){cursor:text}.ds-input:focus-visible{border-color:var(--ring);box-shadow:var(--surface-shadow-input),0 0 0 3px color-mix(in oklab,var(--ring) 30%,transparent)}.ds-input[aria-invalid=true]{border-color:var(--destructive-text);box-shadow:var(--surface-shadow-input),0 0 0 3px color-mix(in oklab,var(--destructive) 20%,transparent)}.ds-input:disabled{pointer-events:none;cursor:not-allowed;opacity:.5}@media(min-width:48rem){.ds-input{font-size:.875rem}}"
+      "css": ".ds-field{display:grid;gap:.5rem;max-width:22rem;font-family:var(--font-sans);color:var(--foreground)}.ds-field-label{font-size:.875rem;font-weight:500}.ds-input{box-sizing:border-box;height:2.25rem;width:100%;min-width:0;padding:.25rem .75rem;border:1px solid transparent;border-radius:var(--radius-md);background:var(--input-surface);border-color:var(--input-border);box-shadow:var(--surface-shadow-input);color:var(--foreground);font-family:var(--font-sans);font-size:1rem;outline:none;transition:color .15s,box-shadow .15s,background-color .15s}.ds-input::placeholder{color:var(--muted-foreground)}.ds-input:hover:not(:disabled){cursor:text}.ds-input:focus-visible{border-color:var(--ring);box-shadow:var(--surface-shadow-input),0 0 0 3px color-mix(in oklab,var(--ring) 30%,transparent)}.ds-input[aria-invalid=true]{border-color:var(--destructive);box-shadow:var(--surface-shadow-input),0 0 0 3px color-mix(in oklab,var(--destructive) 20%,transparent)}.ds-input:disabled{pointer-events:none;cursor:not-allowed;opacity:.5}@media(min-width:48rem){.ds-input{font-size:.875rem}}:host-context(.dark) .ds-input[aria-invalid=true]{border-color:color-mix(in oklab,var(--destructive) 50%,transparent);box-shadow:var(--surface-shadow-input),0 0 0 3px color-mix(in oklab,var(--destructive) 40%,transparent)}"
     },
     {
-      "name": "Metadata Badge",
+      "name": "Inventory Search Field",
+      "kind": "input",
+      "refersTo": "inventory-search",
+      "description": "InventorySheet owns one focus treatment on the complete search field; its inner input has no outline.",
+      "html": "<label class=\"ds-inventory-search\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"11\" cy=\"11\" r=\"6.5\"/><path d=\"M16 16l4 4\"/></svg><input type=\"search\" aria-label=\"Search assertions\" placeholder=\"Search assertions\" /></label>",
+      "css": ".ds-inventory-search{box-sizing:border-box;display:flex;align-items:center;gap:10px;width:220px;height:36px;padding:0 12px;border-radius:var(--radius-tile);background:var(--card);box-shadow:inset 0 0 0 1px var(--input-border);font-family:var(--font-sans);font-size:13px;color:var(--muted-foreground)}.ds-inventory-search svg{flex-shrink:0}.ds-inventory-search input{flex:1;width:0;min-width:0;border:0;outline:none;background:transparent;padding:0;font:inherit;color:var(--foreground)}.ds-inventory-search input::placeholder{color:var(--muted-foreground);opacity:1}.ds-inventory-search:focus-within{box-shadow:inset 0 0 0 1px var(--ring),0 0 0 3px color-mix(in oklab,var(--ring) 16%,transparent)}"
+    },
+    {
+      "name": "Metadata and Claim Badges",
       "kind": "chip",
       "refersTo": "badge-outline",
-      "description": "Non-interactive metadata; source membership does not confer analyst approval.",
-      "html": "<span class=\"ds-badge\">Fact</span>",
-      "css": ".ds-badge{display:inline-flex;align-items:center;gap:.375rem;padding:2px 7px;border-radius:var(--radius-badge);background:var(--tint-ink);color:var(--foreground);font-family:var(--font-sans);font-size:12px;line-height:18px;font-weight:500}"
+      "description": "Neutral metadata and the Fact classification treatment, including its glyph and fine inset contour.",
+      "html": "<div class=\"ds-badges\"><span class=\"ds-badge\">Prepared</span><span class=\"ds-badge ds-badge-fact\"><svg width=\"8\" height=\"8\" viewBox=\"0 0 10 10\" aria-hidden=\"true\"><rect width=\"10\" height=\"10\" rx=\"2\" fill=\"currentColor\"/></svg>Fact</span></div>",
+      "css": ".ds-badge{display:inline-flex;align-items:center;gap:.375rem;padding:2px 7px;border-radius:var(--radius-badge);background:var(--tint-ink);color:var(--foreground);font-family:var(--font-sans);font-size:12px;line-height:18px;font-weight:500}.ds-badges{display:flex;flex-wrap:wrap;gap:8px}.ds-badge-fact{background:var(--tint-fact);color:var(--evidence-fact);box-shadow:inset 0 0 0 1px color-mix(in oklab,currentColor 20%,transparent)}"
     },
     {
       "name": "Workspace Navigation",
@@ -1671,15 +1695,15 @@
       "refersTo": "navigation-current",
       "description": "Four workspace destinations. Investigation and Synthesis remain unavailable until implemented.",
       "html": "<nav class=\"ds-nav\" aria-label=\"Workspace\"><a class=\"ds-tab\" href=\"#progress\">Progress</a><a class=\"ds-tab\" href=\"#sources\" aria-current=\"page\"><span>//</span> Sources</a><button class=\"ds-tab\" type=\"button\" aria-disabled=\"true\">Investigation</button><button class=\"ds-tab\" type=\"button\" aria-disabled=\"true\">Synthesis</button></nav>",
-      "css": ".ds-nav{display:flex;gap:4px;flex-wrap:wrap;padding:4px;border-radius:var(--radius-item);background:var(--fill-quiet);font-family:var(--font-sans)}.ds-tab{display:inline-flex;gap:8px;align-items:center;min-height:34px;padding:0 12px;border:0;border-radius:var(--radius-tile);background:transparent;color:var(--muted-foreground);font:inherit;font-size:14px;text-decoration:none}.ds-tab[aria-current=page]{background:var(--card);color:var(--foreground);box-shadow:var(--surface-shadow-tab)}.ds-tab span{color:var(--brand-purple)}.ds-tab[aria-disabled=true]{opacity:.7}.ds-tab:focus-visible{outline:2px solid var(--ring);outline-offset:2px}"
+      "css": ".ds-nav{display:flex;width:fit-content;gap:4px;max-width:100%;overflow-x:auto;padding:4px;border-radius:calc(var(--radius-tile) + 2px);background:var(--fill-quiet);font-family:var(--font-sans)}.ds-tab{display:inline-flex;gap:8px;align-items:center;height:34px;padding:0 14px;white-space:nowrap;border:0;border-radius:var(--radius-tile);background:transparent;color:var(--muted-foreground);font:inherit;font-size:14px;text-decoration:none}.ds-tab[aria-current=page]{background:var(--card);color:var(--foreground);box-shadow:var(--surface-shadow-tab)}.ds-tab span{color:var(--brand-purple)}.ds-tab[aria-disabled=true]{opacity:.7}.ds-tab:focus-visible{outline:2px solid var(--ring);outline-offset:2px}"
     },
     {
       "name": "Card, Glass and Grid Surfaces",
       "kind": "card",
       "refersTo": "card",
-      "description": "Three existing surface families. Glass and grid are static CSS material samples; SVG distortion, Motion interaction and decorative source grids are documented in DESIGN.md.",
+      "description": "Material samples from Card, LiquidGlassCard and GridCard; content spacing illustrates consumers rather than shared defaults.",
       "html": "<div class=\"ds-surfaces\"><article class=\"ds-card\"><h3 class=\"ds-card-title\">Evidence matrix</h3><p class=\"ds-card-copy\">Standard card surface and spacing.</p></article><article class=\"ds-glass\"><h3 class=\"ds-card-title\">Context</h3><p class=\"ds-card-copy\">Selective translucent layer.</p></article><article class=\"ds-grid\"><h3 class=\"ds-card-title\">Source context</h3><p class=\"ds-card-copy\">Masked decorative grid.</p></article></div>",
-      "css": ".ds-surfaces{display:grid;gap:1rem;width:100%;max-width:28rem;font-family:var(--font-sans);color:var(--card-foreground)}.ds-card{display:flex;flex-direction:column;gap:1.5rem;overflow:hidden;border-radius:var(--radius-xl);padding:1.5rem 0;background:var(--card);font-size:.875rem;box-shadow:0 0 0 1px color-mix(in oklab,var(--foreground) 5%,transparent),0 4px 6px -1px rgb(0 0 0/.1),0 2px 4px -2px rgb(0 0 0/.1)}.ds-card-title{position:relative;margin:0;padding:0 1.5rem;font-size:1rem;font-weight:500}.ds-card-copy{position:relative;margin:0;padding:0 1.5rem;font-size:.875rem;line-height:1.25rem;color:var(--muted-foreground)}.ds-glass{display:grid;gap:.5rem;overflow:hidden;border:1px solid color-mix(in oklab,var(--background) 70%,transparent);border-radius:var(--radius-xl);padding:1.5rem 0;background:color-mix(in oklab,var(--card) 46%,transparent);backdrop-filter:blur(24px);box-shadow:0 12px 32px color-mix(in oklab,var(--foreground) 7%,transparent),inset 1px 1px 0 color-mix(in oklab,var(--background) 82%,transparent)}.ds-grid{position:relative;isolation:isolate;display:grid;gap:.5rem;overflow:hidden;border:1px solid var(--border);border-radius:var(--radius-xl);padding:1.25rem 0;background:color-mix(in oklab,var(--card) 82%,transparent);backdrop-filter:blur(12px);box-shadow:0 1px 3px 0 rgb(0 0 0/.1),0 1px 2px -1px rgb(0 0 0/.1)}.ds-grid::before{content:\"\";position:absolute;inset:0;background-image:linear-gradient(to right,color-mix(in oklab,var(--primary) 15%,transparent) 1px,transparent 1px),linear-gradient(to bottom,color-mix(in oklab,var(--primary) 15%,transparent) 1px,transparent 1px);background-size:28px 28px;mask-image:linear-gradient(135deg,black,transparent 72%)}:host-context(.dark) .ds-card{box-shadow:0 0 0 1px color-mix(in oklab,var(--foreground) 10%,transparent),0 4px 6px -1px rgb(0 0 0/.1),0 2px 4px -2px rgb(0 0 0/.1)}"
+      "css": ".ds-surfaces{display:grid;gap:1rem;width:100%;max-width:28rem;font-family:var(--font-sans);color:var(--card-foreground)}.ds-card{display:flex;flex-direction:column;gap:1.5rem;overflow:hidden;border-radius:var(--radius-xl);padding:1.5rem 0;background:var(--card);font-size:.875rem;box-shadow:var(--surface-shadow-raised)}.ds-card-title{position:relative;margin:0;padding:0 1.5rem;font-size:1rem;font-weight:500}.ds-card-copy{position:relative;margin:0;padding:0 1.5rem;font-size:.875rem;line-height:1.25rem;color:var(--muted-foreground)}.ds-glass{display:grid;gap:.5rem;overflow:hidden;border:1px solid color-mix(in oklab,var(--background) 70%,transparent);border-radius:var(--radius-xl);padding:1.5rem 0;background:color-mix(in oklab,var(--card) 46%,transparent);backdrop-filter:blur(24px);box-shadow:0 12px 32px color-mix(in oklab,var(--foreground) 7%,transparent),inset 1px 1px 0 color-mix(in oklab,var(--background) 82%,transparent)}.ds-grid{position:relative;isolation:isolate;display:grid;gap:.5rem;overflow:hidden;border:1px solid var(--border);border-radius:var(--radius-xl);padding:1.25rem 0;background:color-mix(in oklab,var(--card) 82%,transparent);backdrop-filter:blur(12px);box-shadow:0 1px 3px 0 rgb(0 0 0/.1),0 1px 2px -1px rgb(0 0 0/.1)}.ds-grid::before{content:\"\";position:absolute;inset:0;background-image:linear-gradient(to right,color-mix(in oklab,var(--primary) 15%,transparent) 1px,transparent 1px),linear-gradient(to bottom,color-mix(in oklab,var(--primary) 15%,transparent) 1px,transparent 1px);background-size:28px 28px;mask-image:linear-gradient(135deg,black,transparent 72%)}"
     }
   ],
   "narrative": {
@@ -1695,7 +1719,7 @@
     "rules": [
       {
         "name": "The Semantic Color Rule",
-        "body": "Violet identifies recognition and running work, teal identifies analyst approval, amber identifies pending judgment, and evidence colors identify analytical meaning. Always retain the label and non-color cue.",
+        "body": "Research Violet identifies focus, selection, running work and reasoned-appraisal outcomes; Approval Teal identifies analyst approval, amber identifies pending judgment, and evidence colors identify analytical meaning. Always retain the label and non-color cue.",
         "section": "colors"
       },
       {
@@ -1705,7 +1729,7 @@
       },
       {
         "name": "The Surface Hierarchy Rule",
-        "body": "Keep reading content opaque, use selective glass for context, and separate rows with hairlines rather than nested glass panels. Dashed edges mean work not done, never an analytical conclusion.",
+        "body": "Use opaque reading regions within selective working surfaces, and separate rows with hairlines. OutcomeCard's dashed outer edges identify unfinished execution; dashed glyphs and frames in other components retain their specific uncertainty meaning, including AppraisalBlock's decisive unknown.",
         "section": "elevation"
       }
     ],

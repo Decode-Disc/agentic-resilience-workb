@@ -12,6 +12,15 @@
         ],
         "createdAt": "2026-10-20T04:13:36.599Z",
         "reason": "Agent verified: this backend normalizer matches HTML image tags in a regular expression and never renders an image element."
+      },
+      {
+        "rule": "overused-font",
+        "value": "geist mono",
+        "files": [
+          "src/assets/styles/themes/evidence-workbench.css"
+        ],
+        "createdAt": "2026-10-27T20:12:24.357Z",
+        "reason": "Agent: DESIGN.md Typography pins locally hosted Geist Mono 400/500; preserve the user-requested exact adoption of the design system."
       }
     ]
   }

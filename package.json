@@ -43,7 +43,9 @@
         "design:sync": "node --experimental-strip-types scripts/sync-design-context.ts",
         "design:live": ".agents/skills/impeccable/scripts/impeccable live-server --background --port=8400",
         "design:live:stop": ".agents/skills/impeccable/scripts/impeccable live-server stop --keep-inject",
-        "design:check": "pnpm design:sync --check"
+        "design:check": "pnpm design:sync --check",
+        "workbench-ui:dev": "vite --config workbench-ui.vite.config.ts",
+        "workbench-ui:check": "playwright test --config workbench-ui.playwright.config.ts"
     },
     "dependencies": {
         "@auth/core": "0.41.2",

@@ -4,10 +4,13 @@
 @import "./assets/styles/base-preset.css";
 @import "./assets/styles/themes/evidence-workbench.css";
 
+@source "./components";
 @source inline("z-{20..100}");
 @source inline("z-999");
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (
+    &:is(.dark *, .wb-ui[data-theme="dark"] *):not(.wb-ui[data-theme="light"] *)
+);
 
 @theme inline {
     --app-max-width: var(--container-8xl, 100rem);
@@ -105,11 +108,11 @@
 }
 
 @utility segment-track {
-    @apply flex w-fit max-w-full items-center gap-1 rounded-item bg-fill-quiet p-1;
+    @apply flex w-fit max-w-full items-center gap-1 rounded-[calc(var(--radius-tile)+2px)] bg-fill-quiet p-1;
 }
 
 @utility segment-item {
-    @apply inline-flex min-h-8.5 shrink-0 items-center justify-center gap-2 rounded-tile px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring;
+    @apply inline-flex h-8.5 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-tile px-3.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring;
     &[aria-current="page"] {
         @apply bg-card text-foreground shadow-tab;
     }
