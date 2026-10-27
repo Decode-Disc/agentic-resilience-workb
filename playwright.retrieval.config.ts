@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { defineConfig } from "@playwright/test";
 import base from "./playwright.config";
 
@@ -9,7 +10,7 @@ export default defineConfig({
     globalSetup: undefined,
     globalTeardown: undefined,
     webServer: undefined,
-    outputDir: "/tmp/evidence-retrieval-implementation-20261021/browser",
+    outputDir: join(base.outputDir ?? ".local-runtime/playwright", "retrieval"),
     reporter: [["list"]],
     retries: 0,
 });

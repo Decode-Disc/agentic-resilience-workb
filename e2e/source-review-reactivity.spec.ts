@@ -437,7 +437,10 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 900 }, { name: "
         const errors: string[] = [];
         let intentionallyOffline = false;
         const transport: { current: WebSocketRoute | null } = { current: null };
-        await page.routeWebSocket((url) => ["127.0.0.1", "localhost"].includes(url.hostname) && url.port === "3210", (socket) => {
+        const convexOrigin = process.env.LOCAL_RUNTIME_CONVEX_ORIGIN;
+        if (!convexOrigin) throw new Error("Missing verified local Convex origin.");
+        const convexPort = new URL(convexOrigin).port;
+        await page.routeWebSocket((url) => ["127.0.0.1", "localhost"].includes(url.hostname) && url.port === convexPort, (socket) => {
             if (intentionallyOffline) { void socket.close({ code: 1001 }); return; }
             socket.connectToServer();
             transport.current = socket;
