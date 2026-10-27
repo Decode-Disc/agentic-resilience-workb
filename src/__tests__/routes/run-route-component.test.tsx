@@ -1,5 +1,11 @@
 import { api } from "@convex/_generated/api";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 
 const {
@@ -442,12 +448,19 @@ test.each([
         }).length,
     ).toBeGreaterThan(0);
     expect(screen.getAllByText("Included").length).toBeGreaterThan(0);
+    const inspection = screen.getByRole("region", {
+        name: "Inspect all source candidates",
+    });
     expect(
-        screen.queryByRole("button", {
+        within(inspection).queryByRole("button", {
             name: /Include in corpus|Move to alternatives/i,
         }),
     ).toBeNull();
-    expect(screen.queryByRole("button", { name: /Add source/i })).toBeNull();
+    // Paired with the overview intake test that asserts this control exists, so a
+    // rename breaks that test instead of silently voiding this guard.
+    expect(
+        within(inspection).queryByRole("button", { name: "Add source link" }),
+    ).toBeNull();
     expect(
         screen.queryByText(/Sources will appear here when discovery is ready/i),
     ).toBeNull();

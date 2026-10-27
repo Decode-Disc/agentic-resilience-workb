@@ -4,6 +4,7 @@ import type { FunctionReturnType } from "convex/server";
 import type { internal } from "@convex/_generated/api";
 import { runConvexJson } from "./support/convex-cli";
 import { admitAnalyst } from "./support/source-review-fixture";
+import { expectAdmissionClosed } from "./support/admission";
 
 type Inspection = FunctionReturnType<
     typeof internal.retrievalEvaluation.inspectReview
@@ -120,7 +121,7 @@ for (const viewport of [
         await expect(
             page.getByText("Corpus approved", { exact: true }),
         ).toBeVisible();
-        await expect(page.getByLabel("Access code")).toHaveCount(0);
+        await expectAdmissionClosed(page);
         await page.screenshot({
             path: testInfo.outputPath("approved.png"),
         });

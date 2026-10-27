@@ -6,6 +6,7 @@ import { expect, type Page, type Request } from "@playwright/test";
 import type { internal } from "@convex/_generated/api";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 
+import { accessCodeField, expectAdmissionClosed, submitAccessCode } from "./admission";
 import { BROWSER_TEST_SLOT, bindBrowserTestContext } from "./browser-workspace";
 import { runConvexJson } from "./convex-cli";
 
@@ -78,14 +79,11 @@ export async function admitAnalyst(page: Page): Promise<void> {
     // Cold-auth bootstrap: the workspace shell can paint before the access-code
     // admission surface is interactive. Wait for the input to be visible before
     // filling so first-run and reused sessions both resolve cleanly.
-    const accessCodeInput = page.getByLabel("Access code");
+    const accessCodeInput = accessCodeField(page);
     await expect(accessCodeInput).toBeVisible({ timeout: 60_000 });
-    await accessCodeInput.fill(invitation.code);
-    await page.getByRole("button", { name: "Continue" }).click();
+    await submitAccessCode(page, invitation.code);
     await expect(page).toHaveURL(/\/workspace\/dossiers$/);
-    await expect(
-        page.getByRole("dialog", { name: "Protected access" }),
-    ).toBeHidden();
+    await expectAdmissionClosed(page);
     bindBrowserTestContext(page);
     await expect(
         page.getByRole("heading", { name: "Dossiers", exact: true }),

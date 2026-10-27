@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
 import {
     afterAll,
     afterEach,
@@ -91,13 +97,13 @@ describe("InvitationAccessContext", () => {
 
         expect(screen.getByTestId("drawer-status").textContent).toBe("Open");
 
-        const accessCode = screen.getByLabelText(/Access code/i);
-        fireEvent.change(accessCode, {
+        const accessCodeForm = screen.getByRole("form", {
+            name: /Workspace access/i,
+        });
+        fireEvent.change(within(accessCodeForm).getByRole("textbox"), {
             target: { value: "4207" },
         });
-        fireEvent.submit(
-            screen.getByRole("form", { name: /Workspace access/i }),
-        );
+        fireEvent.submit(accessCodeForm);
 
         await waitFor(() =>
             expect(claimInvitation).toHaveBeenCalledWith({

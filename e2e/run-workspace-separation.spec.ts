@@ -3,6 +3,11 @@ import type { internal } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { runConvexJson } from "./support/convex-cli";
 import { expect } from "@playwright/test";
+import {
+    accessCodeField,
+    expectAdmissionClosed,
+    submitAccessCode,
+} from "./support/admission";
 import { test, closeBrowserTestContext } from "./support/browser-workspace";
 import {
     admitAnalyst,
@@ -100,14 +105,11 @@ test("protected administration separates and pages technical dossiers", async ({
     );
     if (!invitation)
         throw new Error("Local administrator invitation is missing");
-    await expect(page.getByLabel("Access code")).toBeVisible({
+    await expect(accessCodeField(page)).toBeVisible({
         timeout: 30_000,
     });
-    await page.getByLabel("Access code").fill(invitation.code);
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
-    await expect(
-        page.getByRole("dialog", { name: "Protected access" }),
-    ).toBeHidden();
+    await submitAccessCode(page, invitation.code);
+    await expectAdmissionClosed(page);
     await expect(
         page.getByRole("heading", { name: "Administration" }),
     ).toBeVisible();

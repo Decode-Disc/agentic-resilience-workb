@@ -5,6 +5,7 @@ import {
     seedSourceReview,
     inspectSourceReview,
 } from "./support/source-review-fixture";
+import { expectAdmissionClosed } from "./support/admission";
 
 for (const viewport of [
     { name: "desktop", width: 1500, height: 960 },
@@ -387,20 +388,22 @@ for (const viewport of [
         await page.goBack();
         await expect(overview).toBeVisible();
         await page.goForward();
-        await expect(
-            page.getByRole("button", { name: "Back to proposal", exact: true }),
-        ).toBeVisible();
+        const backToProposal = page
+            .getByRole("region", {
+                name: "Inspect all source candidates",
+                exact: true,
+            })
+            .getByRole("button", { name: "Back to proposal", exact: true });
+        await expect(backToProposal).toBeVisible();
         await page.reload();
-        await expect(page.getByLabel("Access code")).toHaveCount(0);
+        await expectAdmissionClosed(page);
         await expect(
             page.getByRole("heading", {
                 name: "Review matching candidates",
                 exact: true,
             }),
         ).toBeVisible();
-        await page
-            .getByRole("button", { name: "Back to proposal", exact: true })
-            .click();
+        await backToProposal.click();
         await expect(overview).toBeVisible();
         if (viewport.name === "mobile")
             await page

@@ -1,5 +1,11 @@
 import { api } from "@convex/_generated/api";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const { claimInvitation, navigate, retrySession, useAnonymousSession } =
@@ -59,9 +65,7 @@ describe("ProtectedWorkspaceRoute", () => {
         );
 
         expect(screen.queryByText("Protected route content")).toBeNull();
-        expect(
-            screen.getByRole("heading", { name: /Protected access/i }),
-        ).toBeTruthy();
+        expect(document.getElementById("invitation-code")).not.toBeNull();
     });
 
     test("renders protected content for an active visitor", () => {
@@ -94,12 +98,13 @@ describe("ProtectedWorkspaceRoute", () => {
             </InvitationAccessProvider>,
         );
 
-        fireEvent.change(screen.getByLabelText(/Access code/i), {
+        const accessCodeForm = screen.getByRole("form", {
+            name: /Workspace access/i,
+        });
+        fireEvent.change(within(accessCodeForm).getByRole("textbox"), {
             target: { value: "4207" },
         });
-        fireEvent.submit(
-            screen.getByRole("form", { name: /Workspace access/i }),
-        );
+        fireEvent.submit(accessCodeForm);
 
         await waitFor(() =>
             expect(navigate).toHaveBeenLastCalledWith({

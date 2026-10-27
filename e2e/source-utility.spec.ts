@@ -12,6 +12,7 @@ import {
     admitAnalyst,
     inspectSourceReview,
 } from "./support/source-review-fixture";
+import { expectAdmissionClosed } from "./support/admission";
 
 type Snapshot = FunctionReturnType<
     typeof internal.e2eFixtures.inspectRecordedSourceReview
@@ -172,6 +173,10 @@ for (const definition of scenarios) {
         );
         if (!excludedSource) throw new Error("Missing excluded-source control");
         await page
+            .getByRole("region", {
+                name: "Inspect all source candidates",
+                exact: true,
+            })
             .getByRole("button", { name: "Back to proposal", exact: true })
             .click();
         let current = runConvexJson<Snapshot>(
@@ -210,6 +215,10 @@ for (const definition of scenarios) {
         await include.click();
         await expect(remove).toBeVisible();
         await page
+            .getByRole("region", {
+                name: "Adjust source proposal",
+                exact: true,
+            })
             .getByRole("button", { name: "Back to proposal", exact: true })
             .click();
         const approve = page.getByRole("button", {
@@ -226,7 +235,7 @@ for (const definition of scenarios) {
         await expect(
             page.getByText("Corpus approved", { exact: true }),
         ).toBeVisible();
-        await expect(page.getByLabel("Access code")).toHaveCount(0);
+        await expectAdmissionClosed(page);
         current = runConvexJson<Snapshot>(
             "e2eFixtures:inspectRecordedSourceReview",
             { runId: scenario.runId, fixtureKey: scenario.fixtureKey },
@@ -412,6 +421,7 @@ test("approved recorded source reading remains open after selection", async ({
     });
     if (await include.count()) await include.click();
     await page
+        .getByRole("region", { name: "Adjust source proposal", exact: true })
         .getByRole("button", { name: "Back to proposal", exact: true })
         .click();
     await page

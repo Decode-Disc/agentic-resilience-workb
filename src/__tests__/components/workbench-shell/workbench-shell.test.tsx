@@ -1,5 +1,11 @@
 import { api } from "@convex/_generated/api";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -174,9 +180,9 @@ describe("WorkbenchShell", () => {
         ).toBeNull();
         fireEvent.click(screen.getByRole("button", { name: /Workspace/i }));
 
-        expect(
-            await screen.findByRole("heading", { name: /Protected access/i }),
-        ).toBeTruthy();
+        await waitFor(() =>
+            expect(document.getElementById("invitation-code")).not.toBeNull(),
+        );
     });
 
     it("sends an analyst to their dossiers after workspace access", async () => {
@@ -195,12 +201,13 @@ describe("WorkbenchShell", () => {
         );
 
         fireEvent.click(screen.getByRole("button", { name: /Workspace/i }));
-        fireEvent.change(await screen.findByLabelText(/Access code/i), {
+        const accessCodeForm = await screen.findByRole("form", {
+            name: /Workspace access/i,
+        });
+        fireEvent.change(within(accessCodeForm).getByRole("textbox"), {
             target: { value: "4207" },
         });
-        fireEvent.submit(
-            screen.getByRole("form", { name: /Workspace access/i }),
-        );
+        fireEvent.submit(accessCodeForm);
 
         await waitFor(() =>
             expect(navigate).toHaveBeenCalledWith({
@@ -225,12 +232,13 @@ describe("WorkbenchShell", () => {
         );
 
         fireEvent.click(screen.getByRole("button", { name: /Workspace/i }));
-        fireEvent.change(await screen.findByLabelText(/Access code/i), {
+        const accessCodeForm = await screen.findByRole("form", {
+            name: /Workspace access/i,
+        });
+        fireEvent.change(within(accessCodeForm).getByRole("textbox"), {
             target: { value: "4207" },
         });
-        fireEvent.submit(
-            screen.getByRole("form", { name: /Workspace access/i }),
-        );
+        fireEvent.submit(accessCodeForm);
 
         await waitFor(() =>
             expect(navigate).toHaveBeenCalledWith({

@@ -1612,7 +1612,10 @@ test.each([
         await waitForElementToBeRemoved(actions);
         expect(screen.getByRole("region", { name: region })).toBeTruthy();
         fireEvent.click(
-            screen.getByRole("button", { name: /Back to proposal/i }),
+            within(screen.getByRole("region", { name: region })).getByRole(
+                "button",
+                { name: "Back to proposal" },
+            ),
         );
         expect(
             await screen.findByRole("button", { name: "Source actions" }),

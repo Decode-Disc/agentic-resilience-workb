@@ -5,6 +5,7 @@ import {
     admitAnalyst,
     inspectSourceReview,
 } from "./support/source-review-fixture";
+import { expectAdmissionClosed } from "./support/admission";
 
 for (const viewport of [
     { name: "desktop", width: 1440, height: 900 },
@@ -110,7 +111,7 @@ for (const viewport of [
             path: info.outputPath("approved-source-search.png"),
         });
         await page.reload();
-        await expect(page.getByLabel("Access code")).toHaveCount(0);
+        await expectAdmissionClosed(page);
         await inspect();
         await expect
             .poll(() =>

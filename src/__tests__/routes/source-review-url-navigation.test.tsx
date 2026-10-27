@@ -6,7 +6,6 @@ import {
     createRouter,
     RouterProvider,
 } from "@tanstack/react-router";
-import type { FunctionReturnType } from "convex/server";
 import {
     fireEvent,
     render,
@@ -14,6 +13,7 @@ import {
     waitFor,
     within,
 } from "@testing-library/react";
+import type { FunctionReturnType } from "convex/server";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 vi.mock("convex/react", async () => {
@@ -253,7 +253,13 @@ test("clears coverage when showing all candidates and clears the inspector when 
     expect(
         await screen.findByRole("heading", { name: "Inspect all candidates" }),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Back to proposal" }));
+    fireEvent.click(
+        within(
+            screen.getByRole("region", {
+                name: "Inspect all source candidates",
+            }),
+        ).getByRole("button", { name: "Back to proposal" }),
+    );
     await waitFor(() =>
         expect(reopened.router.state.location.search).toEqual({
             section: "sources",

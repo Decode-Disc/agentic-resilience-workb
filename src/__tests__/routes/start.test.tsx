@@ -573,19 +573,18 @@ describe("ResearchComposer", () => {
             screen.getByRole("button", { name: /Confirm and start/i }),
         );
 
-        expect(
-            await screen.findByRole("heading", {
-                name: /Protected access/i,
-            }),
-        ).toBeTruthy();
+        await waitFor(() =>
+            expect(document.getElementById("invitation-code")).not.toBeNull(),
+        );
         expect(confirmAndStart).not.toHaveBeenCalled();
 
-        fireEvent.change(screen.getByLabelText(/Access code/i), {
+        const accessCodeForm = screen.getByRole("form", {
+            name: /Workspace access/i,
+        });
+        fireEvent.change(within(accessCodeForm).getByRole("textbox"), {
             target: { value: "4207" },
         });
-        fireEvent.submit(
-            screen.getByRole("form", { name: /Workspace access/i }),
-        );
+        fireEvent.submit(accessCodeForm);
 
         await waitFor(() =>
             expect(claimInvitation).toHaveBeenCalledWith({

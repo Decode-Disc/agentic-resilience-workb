@@ -14,6 +14,7 @@ import { test, bindBrowserTestContext } from "./support/browser-workspace";
 // host stays recorded. Every other non-127.0.0.1/localhost host fails the test.
 import { expect, type Page, type Request } from "@playwright/test";
 
+import { accessCodeField, submitAccessCode } from "./support/admission";
 import { admitAnalyst, isExternalImageFixtureRequest } from "./support/source-review-fixture";
 import {
     startSanitizedTrace,
@@ -459,13 +460,13 @@ test.describe("evidence matrix deterministic browser gate", () => {
         // admission drawer over the protected shell; the Start heading is
         // hidden behind the modal, so the gate asserts the drawer itself.
         await expect(page.getByText(/Protected access/i)).toBeVisible();
-        await expect(page.getByLabel("Access code")).toBeVisible();
+        await expect(accessCodeField(page)).toBeVisible();
 
         // The protected dossiers route no longer serves the admitted session;
         // it reopens admission instead of rendering private content.
         await page.goto("/workspace/dossiers");
         await expect(page.getByText(/Protected access/i)).toBeVisible();
-        await expect(page.getByLabel("Access code")).toBeVisible();
+        await expect(accessCodeField(page)).toBeVisible();
 
         // Stop sanitized tracing before the reusable code re-enters so no
         // credential value can reach retry traces or failure attachments.
@@ -473,9 +474,8 @@ test.describe("evidence matrix deterministic browser gate", () => {
         // A fresh anonymous session reuses the same analyst code through the
         // normal admission drawer; wait for the drawer to close before
         // navigating back to the persisted dossier.
-        await page.getByLabel("Access code").fill(analystAccessCode());
-        await page.getByRole("button", { name: "Continue" }).click();
-        await expect(page.getByLabel("Access code")).not.toBeVisible({
+        await submitAccessCode(page, analystAccessCode());
+        await expect(accessCodeField(page)).toBeHidden({
             timeout: 20_000,
         });
         bindBrowserTestContext(page);
