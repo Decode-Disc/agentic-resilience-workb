@@ -24,7 +24,6 @@ Read `PRODUCT.md` before product planning or implementation, relevant sections o
 | `DESIGN.md` | reference | - | Visual guidance and shared component design; executed tokens remain in their runtime owners. |
 | `context/PROJECT.md` | context | - | Stable candidature purpose and research framing. |
 | `docs/decisions/**` | history | - | Dated decisions and trade-offs, not additional current obligations. |
-| `docs/implementation/2026-10-27-agent-harness.md` | reference | - | Active scoped execution plan for the approved shared harness and worktree runtime; retire after verified closure. |
 | `docs/brainstorming/**` | history | - | Explorations and earlier designs, not execution instructions. |
 | `docs/research/**` | history | - | Dated research and benchmark interpretation. |
 | `docs/showcases/**` | history | - | Showcase selection rationale and research material. |

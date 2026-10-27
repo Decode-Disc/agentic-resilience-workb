@@ -10,6 +10,8 @@ Keep domain records, persistence, orchestration, acquisition/normalization, mode
 
 No second workflow engine, PostgreSQL, separate object store or custom realtime transport is part of the baseline. Eve and Vercel Workflow remain alternatives requiring demonstrated need and an explicit decision. Vercel Hobby is an acceptable hosting option only when its verified limits support the prototype; the technical baseline does not promise a free deployment. Model routes, access credentials, resource configuration, showcase identity and deployment URLs remain configuration data.
 
+Local development gives each Git worktree its own native Convex deployment and state. Native configuration and instance identity remain authoritative; an ignored runtime manifest projects verified backend, site, web and preview origins and owned processes without secrets. A repository-wide startup lock serializes native backend allocation across worktrees, then releases after identity verification. Web and preview listeners publish their actual available ports. Development commands and browser tests resolve those origins rather than assuming shared fixed ports; cleanup affects only processes owned by the invocation.
+
 ## AI Use and Deterministic Execution
 
 Model assistance is permitted at explicitly defined points in any product phase, including framing or query planning before source acquisition. Source availability is not a blanket condition for an AI call. Justify each model-backed task or mission by its purpose, expected result and need for semantic interpretation or reasoning. Where existing rules and data resolve the work reliably, keep it deterministic; do not introduce a generative intermediary for a lookup, validation, count, state transition or formatting operation that code already handles.
@@ -44,7 +46,7 @@ Making a source consultable targets an authorized candidate or actually observed
 
 ### Shared Execution Structure
 
-The accepted target centralizes execution guarantees while keeping business knowledge at its existing owner. The following structure specifies responsibilities, not a claim that these modules already exist or a requirement for one file per concept.
+The shared executor centralizes execution guarantees while business knowledge remains with its existing owner. The following structure defines responsibilities without requiring one file per concept.
 
 | Code boundary | Single responsibility owner |
 | --- | --- |
@@ -53,6 +55,10 @@ The accepted target centralizes execution guarantees while keeping business know
 | Existing domains and integrations | Business operations, semantic criteria, evidence and artifact models, acquisition, provider adapters, attempt receipts and cumulative accounting. Extend these owners rather than introducing a parallel retry or budget subsystem. |
 
 Adding an agent supplies its definition to the shared executor, without another loop, retry policy or accounting implementation. Adding an operation supplies its domain contract and implementation once; native callers and generated tool bindings use the same controlled entry. Reuse existing schema derivation mechanisms rather than adding a schema language. The available definitions and operations form a static catalogue; dynamic plugins and a workflow language are outside this design. The execution core enforces required control outcomes without absorbing documentary or analytical criteria.
+
+The initial executable definition is read-only saved-material inspection, with mission-state consultation, approved-capture search and exact contextual reading. It grants no acquisition, source-selection, qualification, analytical or human-decision authority. Qualification and comparison reuse the extracted bounded invocation transport and retain their existing domain protocols. Agent reasoning has no default authorized live route; local scripted invocations are labelled simulation and create no fictitious provider receipt. Sources, Investigation and Synthesis remain subsequent integrations.
+
+Initial inspection limits are sequential dispatch, four requests per response, at most one model step per invocation (including invalid tool calls), a fixed cumulative 15-minute dossier execution window, a 60-second model attempt, 6,144 output tokens, a 128 KiB complete context/schema envelope, 16 KiB working notes, 64 KiB operation results and history pages of at most 20 events. Three consecutive turns without new domain progress stop the mission; search counts distinct inspected passages, not result-set combinations. Required context overflow blocks explicitly. Existing dossier work/incident accounting remains the single cumulative owner, with its installed default allowances of 120/40; resumes preserve consumption, repetition state and deadline. Confirmed observable model output is retained before Workflow adoption so a recovered invocation can use it without another paid call. Unknown dispatched outcomes cannot be replayed blindly. Cancellation fences the dossier immediately and schedules bounded, traceable request/mission cleanup independently of its volume.
 
 ### Mission Lifecycle and Operation Handoffs
 
@@ -130,13 +136,13 @@ Preserve each operation's confirmed results and pending obligations. Bounded mod
 
 Automatically continue a confirmed recoverable interruption only while mandate, execution authority, versions, cancellation fences and remaining bounds permit it. Reuse confirmed work; unknown provider outcomes authorize no blind repetition. One shared attempt policy authorizes model retries, with automatic SDK and Workflow model retries disabled. A business refusal, analytical uncertainty and technical incident remain distinct. Recovery cannot cross a human prerequisite or adopt a revised judgment. Persist explicit unfinished work when continuation is unavailable. The generation, lease, idempotency, telemetry and public-address safeguards below continue to apply.
 
-Protect resources cumulatively across the dossier and count all actual provider calls, including agent reasoning, model-assisted operations and semantic controls. Tool counts do not substitute for call accounting; continuation never resets consumption. No arbitrary per-agent quota or reserved finalization share is selected. Hard time and resource ceilings may leave work incomplete. New mission parameters and numerical limits remain to be set before activation; the installed limits below continue to govern existing execution.
+Protect resources cumulatively across the dossier and count all actual provider calls, including agent reasoning, model-assisted operations and semantic controls. Tool counts do not substitute for call accounting; continuation never resets consumption. No arbitrary per-agent quota or reserved finalization share is selected. Hard time and resource ceilings may leave work incomplete. Parameters for the three target business missions remain to be set before activation; the installed limits below continue to govern existing execution.
 
 ### Loop Prevention
 
 Reuse confirmed results for unchanged operation inputs and versions when their domain contract permits it. A fresh invocation or generation does not itself create a new logical operation. Deterministic repetition policy considers the objective, operation, parameters, examined versions and previous diagnostics across invocations. Domain owners define relevant observable progress, such as newly inspected material, a changed contribution or a resolved obligation; another identifier, event or message alone is not progress. Legitimate rereading to restore context remains possible.
 
-Mission requests retain their cause and objective and obey the [documentary and analytical return bounds](#workflow-and-revision-contract). Numerical re-examination and non-progress thresholds must be set before activation. Cumulative hard bounds also constrain semantic cycles that repetition detection does not recognize. On a repetition stop, retain completed work, cause and remaining obligations; do not automatically relaunch an identical mission under unchanged conditions. Any later continuation still requires valid authority, an admissible reason and remaining shared resources.
+Mission requests retain their cause and objective and obey the [documentary and analytical return bounds](#workflow-and-revision-contract). The initial inspection threshold above is binding; the three target missions still need their numerical re-examination and non-progress thresholds before activation. Cumulative hard bounds also constrain semantic cycles that repetition detection does not recognize. On a repetition stop, retain completed work, cause and remaining obligations; do not automatically relaunch an identical mission under unchanged conditions. Any later continuation still requires valid authority, an admissible reason and remaining shared resources.
 
 ### Traceability and Typed Outcomes
 
