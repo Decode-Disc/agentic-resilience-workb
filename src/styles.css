@@ -12,26 +12,7 @@
 @theme inline {
     --app-max-width: var(--container-8xl, 100rem);
 
-    /* Operational feedback roles, distinct from the evidence and approval
-     * vocabulary owned by the theme: these report whether a technical step
-     * succeeded, not what an analyst decided. Chroma is held near the theme's
-     * 0.09-0.12 band so they read as part of the near-neutral canvas instead
-     * of the raw Tailwind palette. The base value tints fills and carries
-     * dark-mode text; the -foreground value is the dark ink used on those
-     * fills and as light-mode text. */
-    --color-info: oklch(0.7 0.105 250);
-    --color-info-foreground: oklch(0.33 0.09 250);
-    --color-success: oklch(0.72 0.105 152);
-    --color-success-foreground: oklch(0.34 0.085 152);
-    --color-danger: oklch(0.71 0.11 22);
-    --color-danger-foreground: oklch(0.34 0.135 22);
-    --color-warning: oklch(0.8 0.105 70);
-    --color-warning-foreground: oklch(0.38 0.083 70);
     --color-source-selection-accent: var(--accent-foreground);
-
-    --radius-badge: calc(var(--radius) - 0.25rem);
-    --radius-input: calc(var(--radius) - 0.35rem);
-    --radius-source-card: calc(var(--radius) - 0.25rem);
 
     --input-height: calc(var(--spacing) * 11);
     --input-group-child-height: calc(var(--spacing) * 9);
@@ -73,11 +54,11 @@
     }
 
     .start-double-slash {
-        @apply text-accent-foreground;
+        @apply text-brand-purple;
     }
 
     .link {
-        @apply text-blue-500 underline underline-offset-4 transition-colors hover:text-blue-800;
+        @apply text-accent-foreground underline underline-offset-4 transition-colors hover:decoration-2;
     }
     .edit-button {
         @apply border-info/50! bg-info/20! hover:border-info/70! hover:bg-info/30!;
@@ -91,11 +72,11 @@
  * the utility carries the silhouette instead of being overridden everywhere.
  * A consumer that needs a different corner still states it explicitly. */
 @utility surface-panel {
-    @apply rounded-xl border border-border/60 bg-card text-card-foreground shadow-soft;
+    @apply rounded-xl bg-surface-glass text-card-foreground shadow-glass backdrop-blur-glass;
 }
 
 @utility surface-floating {
-    @apply rounded-2xl border border-border/50 bg-card/80 text-card-foreground shadow-floating backdrop-blur-md;
+    @apply rounded-2xl bg-surface-float text-card-foreground shadow-float backdrop-blur-glass;
 }
 
 @utility text-display {
@@ -108,4 +89,31 @@
 
 @utility text-micro {
     @apply font-mono text-[0.6875rem] font-medium tracking-[0.12em] text-muted-foreground uppercase;
+}
+
+@utility workbench-visual {
+    background-image: radial-gradient(
+        ellipse 48% 32% at 50% 10%,
+        var(--glow),
+        transparent 70%
+    );
+}
+
+@utility section-chip {
+    @apply inline-flex w-fit items-center gap-2 rounded-chip bg-tint-violet px-3 py-1.5 font-mono text-chip tracking-[0.16em] text-accent-foreground uppercase;
+    box-shadow: inset 0 0 0 1px var(--chip-edge);
+}
+
+@utility segment-track {
+    @apply flex w-fit max-w-full items-center gap-1 rounded-item bg-fill-quiet p-1;
+}
+
+@utility segment-item {
+    @apply inline-flex min-h-8.5 shrink-0 items-center justify-center gap-2 rounded-tile px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring;
+    &[aria-current="page"] {
+        @apply bg-card text-foreground shadow-tab;
+    }
+    &[aria-disabled="true"] {
+        @apply cursor-default opacity-70;
+    }
 }

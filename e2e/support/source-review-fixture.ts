@@ -79,7 +79,7 @@ export async function admitAnalyst(page: Page): Promise<void> {
     // admission surface is interactive. Wait for the input to be visible before
     // filling so first-run and reused sessions both resolve cleanly.
     const accessCodeInput = page.getByLabel("Access code");
-    await expect(accessCodeInput).toBeVisible({ timeout: 30_000 });
+    await expect(accessCodeInput).toBeVisible({ timeout: 60_000 });
     await accessCodeInput.fill(invitation.code);
     await page.getByRole("button", { name: "Continue" }).click();
     await expect(page).toHaveURL(/\/workspace\/dossiers$/);

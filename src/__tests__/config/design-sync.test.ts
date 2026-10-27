@@ -28,7 +28,6 @@ function fixture() {
         "src/styles.css",
         "src/components/ui/motion-animate-presence.tsx",
         "src/components/ui/liquid-glass.tsx",
-        "src/components/workspace/workspace-navigation-rail.tsx",
         "node_modules/tailwindcss/theme.css",
     ]) {
         mkdirSync(dirname(join(root, path)), { recursive: true });

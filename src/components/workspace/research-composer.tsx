@@ -269,13 +269,16 @@ function ResearchComposerContent({
     return (
         <>
             <section
-                className={cn("w-full overflow-visible", className)}
+                className={cn(
+                    "@container/research-composer w-full overflow-visible",
+                    className,
+                )}
                 aria-label="Research launch">
                 <AnimatePresence initial={false} mode="wait">
                     {view === "compose" ? (
                         <motion.div
                             key="compose"
-                            className="rounded-lg border border-accent/60 bg-card shadow-lg"
+                            className="rounded-2xl bg-card shadow-raised"
                             initial={
                                 reduceMotion
                                     ? false
@@ -321,14 +324,14 @@ function ResearchComposerContent({
                                     placeholder={placeholderText}
                                     rows={3}
                                     className={cn(
-                                        "block w-full resize-none rounded-t-lg bg-transparent px-5 pt-5 pb-3 text-[15px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground",
+                                        "block w-full resize-none rounded-t-2xl bg-input-surface px-5.5 pt-5.5 pb-3 text-[15.5px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground",
                                         resolution && "pt-14",
                                     )}
                                 />
                             </div>
 
-                            <div className="flex items-center justify-between gap-3 border-t border-border/20 px-3 py-3">
-                                <div className="flex items-center gap-2 rounded-sm bg-secondary/30 p-1">
+                            <div className="flex items-center justify-between gap-3 border-t border-divider px-3 py-3">
+                                <div className="flex min-w-0 items-center gap-2 rounded-item bg-fill-quiet p-1">
                                     <SmoothDropdwon
                                         items={visibleCompanyCandidates.map(
                                             (candidate) => ({
@@ -356,9 +359,10 @@ function ResearchComposerContent({
                                         closedWidth={215}
                                         closedHeight={36}
                                         itemsAriaLabel="Company search results"
-                                        className={
-                                            pickerOpen ? "z-10" : undefined
-                                        }
+                                        className={cn(
+                                            "min-w-0 max-w-[calc(100cqw-10.25rem)] [&:not([data-open])>div]:max-w-full",
+                                            pickerOpen && "z-10",
+                                        )}
                                         trigger={
                                             <CompanyPickerTrigger
                                                 label={
@@ -440,7 +444,8 @@ function ResearchComposerContent({
                                             ? setView("confirm")
                                             : setPickerOpen(true)
                                     }
-                                    className="size-10 rounded-full">
+                                    variant="round"
+                                    className="size-10">
                                     <Icon
                                         iconNode={ArrowRight01Icon}
                                         size={18}
@@ -451,7 +456,7 @@ function ResearchComposerContent({
                     ) : resolution ? (
                         <motion.div
                             key="confirm"
-                            className="rounded-lg space-y-5 bg-card/60 px-4 py-5"
+                            className="rounded-b-2xl space-y-5 bg-tint-violet/40 px-4 py-5"
                             initial={
                                 reduceMotion
                                     ? false
@@ -588,7 +593,8 @@ function ResearchLaunchButton({
             aria-label="Confirm and start"
             onClick={launch}
             disabled={isLaunching}
-            className="rounded-full px-4">
+            variant="launch"
+            size="lg">
             {isLaunching ? "Starting…" : "Confirm and start"}
             <Icon iconNode={ArrowRight01Icon} size={18} />
         </Button>
@@ -733,7 +739,7 @@ function CompanyCandidateLabel({
 }) {
     return (
         <span className="flex min-w-0 items-center gap-3 pr-2">
-            <CompanyFaviconAvatar company={company} />
+            <CompanyFaviconAvatar appearance="initials" company={company} />
             <Tooltip>
                 <TooltipTrigger
                     render={

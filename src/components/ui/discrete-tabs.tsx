@@ -247,11 +247,11 @@ const DiscreteTabButton = ({
         tab.count === undefined ? tab.title : `${tab.title} ${tab.count}`;
     const plain = appearance === "plain";
     const activeClass = plain
-        ? "bg-foreground/7 text-foreground"
-        : "border-foreground/15 bg-background text-foreground shadow-sm";
+        ? "bg-card text-foreground shadow-tab"
+        : "border-transparent bg-card text-foreground shadow-tab";
     const nonActiveClass = plain
         ? "text-muted-foreground hover:bg-foreground/4 hover:text-foreground"
-        : "border-border/60 bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground";
+        : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground";
 
     /** Positions the tooltip above the hovered or focused control. */
     const showTooltip = (event: React.SyntheticEvent<HTMLElement>) => {

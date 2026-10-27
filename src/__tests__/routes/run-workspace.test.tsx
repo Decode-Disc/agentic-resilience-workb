@@ -57,7 +57,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 });
 
 import { SourceReview } from "@/components/workspace/source-review";
-import { WorkspaceNavigationRail } from "@/components/workspace/workspace-navigation-rail";
+import { WorkspaceNavigation } from "@/components/workspace/workspace-navigation";
 import { Route as RunRoute } from "@/routes/workspace/_protected/$runId";
 
 afterEach(() => {
@@ -68,352 +68,26 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-describe("WorkspaceNavigationRail collapse behavior", () => {
-    const STORAGE_KEY = "evidence-workbench.nav-rail.collapsed.v1";
-
-    it.each([
-        768, 1024, 1440,
-    ])("starts expanded without a saved choice at %ipx", (width) => {
-        vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
-            matches: query.includes("48rem") ? width < 768 : width <= 1024,
-            media: query,
-            onchange: null,
-            addListener: vi.fn(),
-            removeListener: vi.fn(),
-            addEventListener: vi.fn(),
-            removeEventListener: vi.fn(),
-            dispatchEvent: vi.fn(),
-        }));
-        render(
-            <WorkspaceNavigationRail
-                runId={"run-1" as never}
-                section="sources"
-                lifecycleState="awaiting_source_review"
-            />,
-        );
-        expect(
-            screen.getByRole("button", { name: "Collapse navigation" }),
-        ).toBeTruthy();
-        fireEvent.click(screen.getByRole("link", { name: "Sources" }));
-        expect(
-            screen.getByRole("button", { name: "Collapse navigation" }),
-        ).toBeTruthy();
-    });
-
-    it("starts collapsed on mobile and collapses again after selecting a section", () => {
-        responsive.isMobile = true;
-        responsive.isTabletOrBelow = true;
-        responsive.isDesktop = false;
-        vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
-            matches: query.includes("48rem") || query.includes("64rem"),
-            media: query,
-            onchange: null,
-            addListener: vi.fn(),
-            removeListener: vi.fn(),
-            addEventListener: vi.fn(),
-            removeEventListener: vi.fn(),
-            dispatchEvent: vi.fn(),
-        }));
-        render(
-            <WorkspaceNavigationRail
-                runId={"run-1" as never}
-                section="sources"
-                lifecycleState="awaiting_source_review"
-            />,
-        );
-        const toggle = screen.getByRole("button", {
-            name: "Expand navigation",
-        });
-        expect(toggle.querySelector("svg")?.style.width).toBe("14px");
-        fireEvent.click(toggle);
-        fireEvent.click(screen.getByRole("link", { name: "Sources" }));
-        expect(
-            screen.getByRole("button", { name: "Expand navigation" }),
-        ).toBeTruthy();
-        expect(window.localStorage.getItem(STORAGE_KEY)).toBe("false");
-    });
-
-    it("renders a collapse toggle and starts expanded with visible labels", () => {
-        render(
-            <WorkspaceNavigationRail
-                runId={"run-1" as never}
-                section="sources"
-                lifecycleState="awaiting_source_review"
-            />,
-        );
-
-        expect(
-            screen.getByRole("button", { name: /Collapse navigation/i }),
-        ).toBeTruthy();
-        expect(
-            screen.queryByRole("button", { name: /Expand navigation/i }),
-        ).toBeNull();
-        for (const label of ["Progress", "Sources", "Evidence"]) {
-            expect(screen.getByText(label)).toBeTruthy();
-        }
-    });
-
-    it("collapses to icon-only on toggle while keeping names accessible", () => {
-        render(
-            <WorkspaceNavigationRail
-                runId={"run-1" as never}
-                section="sources"
-                lifecycleState="awaiting_source_review"
-            />,
-        );
-
-        fireEvent.click(
-            screen.getByRole("button", { name: /Collapse navigation/i }),
-        );
-
-        expect(
-            screen.getByRole("button", { name: /Expand navigation/i }),
-        ).toBeTruthy();
-        // Visible inline labels are gone, but accessible title attributes keep
-        // names available for keyboard + screen reader users on every section.
-        for (const label of [
-            "Progress",
-            "Sources",
-            "Evidence",
-            "Assessment",
-            "Map",
-            "Brief",
-        ]) {
-            expect(screen.getByTitle(label)).toBeTruthy();
-        }
-        // The only normally-visible text in collapsed mode should be absent:
-        // section labels collapse to icons, and the rules above guarantee the
-        // names remain reachable via title/sr-only rather than inline text.
-        expect(screen.queryByText("Progress")).toBeNull();
-        expect(screen.queryByText("Sources")).toBeNull();
-    });
-
-    it("expands again when toggled back", () => {
-        render(
-            <WorkspaceNavigationRail
-                runId={"run-1" as never}
-                section="sources"
-                lifecycleState="awaiting_source_review"
-            />,
-        );
-
-        fireEvent.click(
-            screen.getByRole("button", { name: /Collapse navigation/i }),
-        );
-        fireEvent.click(
-            screen.getByRole("button", { name: /Expand navigation/i }),
-        );
-
-        expect(screen.getByText("Sources")).toBeTruthy();
-    });
-
-    it("persists the collapsed choice to local storage", () => {
-        render(
-            <WorkspaceNavigationRail
-                runId={"run-1" as never}
-                section="sources"
-                lifecycleState="awaiting_source_review"
-            />,
-        );
-
-        fireEvent.click(
-            screen.getByRole("button", { name: /Collapse navigation/i }),
-        );
-
-        expect(window.localStorage.getItem(STORAGE_KEY)).toBe("true");
-    });
-
-    it("restores the collapsed choice on mount from local storage", () => {
-        window.localStorage.setItem(STORAGE_KEY, "true");
-
-        render(
-            <WorkspaceNavigationRail
-                runId={"run-1" as never}
-                section="sources"
-                lifecycleState="awaiting_source_review"
-            />,
-        );
-
-        expect(
-            screen.getByRole("button", { name: /Expand navigation/i }),
-        ).toBeTruthy();
-    });
-
-    it("keeps locked prerequisites reachable while collapsed", () => {
-        window.localStorage.setItem(STORAGE_KEY, "true");
-
-        render(
-            <WorkspaceNavigationRail
-                runId={"run-1" as never}
-                section="sources"
-                lifecycleState="awaiting_source_review"
-            />,
-        );
-
-        expect(
-            screen.getByText(
-                /Wait for claim extraction to finish building the evidence set/i,
-            ),
-        ).toBeTruthy();
-    });
-
-    it("keeps the active marker after collapsing", () => {
-        render(
-            <WorkspaceNavigationRail
-                runId={"run-1" as never}
-                section="sources"
-                lifecycleState="awaiting_source_review"
-            />,
-        );
-
-        fireEvent.click(
-            screen.getByRole("button", { name: /Collapse navigation/i }),
-        );
-
-        expect(
-            screen
-                .getByRole("link", { name: /Sources/i })
-                .getAttribute("aria-current"),
-        ).toBe("page");
-    });
-
-    it("locks Evidence while extracting and unlocks it at evidence_ready", () => {
-        render(
-            <WorkspaceNavigationRail
-                runId={"run-1" as never}
-                section="progress"
-                lifecycleState="extracting_evidence"
-            />,
-        );
-        expect(screen.queryByRole("link", { name: /Evidence/i })).toBeNull();
-        expect(
-            screen.getByText(
-                /Wait for claim extraction to finish building the evidence set/i,
-            ),
-        ).toBeTruthy();
-
-        const { rerender } = render(
-            <WorkspaceNavigationRail
-                runId={"run-1" as never}
-                section="progress"
-                lifecycleState="evidence_ready"
-            />,
-        );
-        expect(
-            screen.queryByRole("link", { name: /Evidence/i }),
-        ).not.toBeNull();
-        rerender(
-            <WorkspaceNavigationRail
-                runId={"run-1" as never}
-                section="progress"
-                lifecycleState="evidence_ready"
-            />,
-        );
-    });
-
-    it("locks Assessment while evidence_ready and unlocks it at assessing_dimensions", () => {
-        render(
-            <WorkspaceNavigationRail
-                runId={"run-1" as never}
-                section="progress"
-                lifecycleState="evidence_ready"
-            />,
-        );
-        expect(screen.queryByRole("link", { name: /Assessment/i })).toBeNull();
-        expect(
-            screen.getByText(/Review and approve the evidence first/i),
-        ).toBeTruthy();
-
-        render(
-            <WorkspaceNavigationRail
-                runId={"run-1" as never}
-                section="progress"
-                lifecycleState="assessing_dimensions"
-            />,
-        );
-        expect(
-            screen.queryByRole("link", { name: /Assessment/i }),
-        ).not.toBeNull();
-    });
-
-    it("keeps rail behavior intact when reduced motion is requested", () => {
-        const originalMatchMedia = window.matchMedia;
-        Object.defineProperty(window, "matchMedia", {
-            writable: true,
-            value: (query: string) => ({
-                matches: query.includes("prefers-reduced-motion"),
-                media: query,
-                onchange: null,
-                addListener: () => undefined,
-                removeListener: () => undefined,
-                addEventListener: () => undefined,
-                removeEventListener: () => undefined,
-                dispatchEvent: () => false,
-            }),
-        });
-
-        const { rerender } = render(
-            <WorkspaceNavigationRail
-                runId={"run-1" as never}
-                section="evidence"
-                lifecycleState="evidence_ready"
-            />,
-        );
-        expect(
-            screen.queryByRole("link", { name: /Evidence/i }),
-        ).not.toBeNull();
-        fireEvent.click(
-            screen.getByRole("button", { name: /Collapse navigation/i }),
-        );
-        expect(
-            screen.getByRole("button", { name: /Expand navigation/i }),
-        ).toBeTruthy();
-
-        rerender(
-            <WorkspaceNavigationRail
-                runId={"run-1" as never}
-                section="evidence"
-                lifecycleState="evidence_ready"
-            />,
-        );
-
-        Object.defineProperty(window, "matchMedia", {
-            writable: true,
-            value: originalMatchMedia,
-        });
-    });
-});
-
 describe("production run workspace", () => {
-    it("keeps all six sections visible and explains locked prerequisites", () => {
+    it("keeps four named sections and explains unavailable capabilities", () => {
         render(
-            <WorkspaceNavigationRail
-                runId={"run-1" as never}
-                section="sources"
-                lifecycleState="awaiting_source_review"
-            />,
+            <WorkspaceNavigation runId={"run-1" as never} section="sources" />,
         );
-
-        for (const label of [
-            "Progress",
-            "Sources",
-            "Evidence",
-            "Assessment",
-            "Map",
-            "Brief",
-        ]) {
-            expect(screen.getByText(label)).toBeTruthy();
-        }
-        expect(
-            screen.getByText(
-                /Wait for claim extraction to finish building the evidence set/i,
-            ),
-        ).toBeTruthy();
         expect(
             screen
-                .getByRole("link", { name: /Sources/i })
+                .getByRole("link", { name: "Sources" })
                 .getAttribute("aria-current"),
         ).toBe("page");
+        expect(screen.getByRole("link", { name: "Progress" })).toBeTruthy();
+        for (const label of ["Investigation", "Synthesis"]) {
+            const tab = screen.getByRole("button", { name: label });
+            expect(tab.getAttribute("aria-disabled")).toBe("true");
+            expect(tab.getAttribute("aria-describedby")).toBeTruthy();
+        }
+        expect(screen.queryByText("Evidence")).toBeNull();
+        expect(
+            screen.queryByRole("button", { name: /Collapse navigation/ }),
+        ).toBeNull();
     });
 
     it("keeps corpus approval visible beside secondary source actions", () => {
@@ -805,19 +479,6 @@ describe("production run workspace", () => {
         expect(
             screen.getByText(/This source has not been read yet\./i),
         ).toBeTruthy();
-    });
-
-    it("states the corpus handoff without inventing extraction activity", () => {
-        render(
-            <WorkspaceNavigationRail
-                runId={"run-1" as never}
-                section="progress"
-                lifecycleState="corpus_approved"
-            />,
-        );
-
-        expect(screen.getByText(/Source set approved/i)).toBeTruthy();
-        expect(screen.queryByText(/Extracting evidence/i)).toBeNull();
     });
 
     it("opens selected source detail in a drawer on tablet and mobile", () => {

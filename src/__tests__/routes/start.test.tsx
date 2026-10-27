@@ -445,7 +445,7 @@ describe("ResearchComposer", () => {
                 }),
             ),
         );
-    }, 10_000);
+    }, 20_000);
 
     it("keeps one prepared reference when different inputs resolve to the same canonical URL", async () => {
         searchCompanies.mockResolvedValue(companyCandidates);

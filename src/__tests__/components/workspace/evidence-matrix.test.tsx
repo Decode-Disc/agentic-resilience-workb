@@ -1,7 +1,9 @@
 import { api } from "@convex/_generated/api";
-import type { FunctionReturnType } from "convex/server";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { FunctionReturnType } from "convex/server";
+import { useState } from "react";
 import { beforeEach, expect, test, vi } from "vitest";
+import { EvidenceInventory } from "@/components/workspace/evidence-inventory";
 
 const { responsive } = vi.hoisted(() => ({
     responsive: {
@@ -608,4 +610,67 @@ test("keeps claim rows keyboard selectable with visible focus", () => {
     expect(row).toBeTruthy();
     expect(row.getAttribute("aria-pressed")).toBe("true");
     expect(row.className).toContain("focus-visible:ring-2");
+});
+
+test("inventory preserves the classification filter after closing and reopening", async () => {
+    function Inventory() {
+        const [open, setOpen] = useState(false);
+        return (
+            <EvidenceInventory
+                runId={"run-1" as never}
+                open={open}
+                onOpenChange={setOpen}
+            />
+        );
+    }
+    render(<Inventory />);
+    fireEvent.click(
+        screen.getByRole("button", { name: "Open evidence inventory" }),
+    );
+    await screen.findByRole("dialog", { name: "Evidence inventory" });
+    fireEvent.click(screen.getByRole("button", { name: "Inference" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() =>
+        expect(
+            screen.queryByRole("dialog", { name: "Evidence inventory" }),
+        ).toBeNull(),
+    );
+    fireEvent.click(
+        screen.getByRole("button", { name: "Open evidence inventory" }),
+    );
+    await screen.findByRole("dialog", { name: "Evidence inventory" });
+    expect(
+        screen
+            .getByRole("button", { name: "Inference" })
+            .getAttribute("aria-pressed"),
+    ).toBe("true");
+});
+
+test("inventory starts a fresh selection when changing dossiers", async () => {
+    const { rerender } = render(
+        <EvidenceInventory
+            runId={"run-1" as never}
+            open
+            onOpenChange={vi.fn()}
+        />,
+    );
+    await screen.findByRole("dialog", { name: "Evidence inventory" });
+    fireEvent.click(screen.getByRole("button", { name: "Inference" }));
+    expect(
+        screen
+            .getByRole("button", { name: "Inference" })
+            .getAttribute("aria-pressed"),
+    ).toBe("true");
+    rerender(
+        <EvidenceInventory
+            runId={"run-2" as never}
+            open
+            onOpenChange={vi.fn()}
+        />,
+    );
+    expect(
+        screen
+            .getByRole("button", { name: "All" })
+            .getAttribute("aria-pressed"),
+    ).toBe("true");
 });

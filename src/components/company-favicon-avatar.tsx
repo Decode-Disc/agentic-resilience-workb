@@ -1,5 +1,6 @@
 import { BuildingIcon } from "lucide-react";
 import { FaviconAvatar } from "@/components/favicon-avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import type { AvatarSize } from "@/types/ui";
 
 /**
@@ -21,7 +22,7 @@ export type CompanyFaviconSubject = {
 };
 
 /**
- * Renders the favicon for a resolved company. Owns the company→favicon
+ * Renders a resolved company with an initials option for company selection. Owns the company→favicon
  * composition so call sites stop repeating `canonicalUrl`, `entityName`, and
  * `fallbackIcon` — the `BuildingIcon` fallback and the website/IR cascade
  * live here once.
@@ -32,10 +33,24 @@ export type CompanyFaviconSubject = {
 export function CompanyFaviconAvatar({
     company,
     size = "sm",
+    appearance = "favicon",
 }: {
     company: CompanyFaviconSubject;
     size?: AvatarSize;
+    appearance?: "favicon" | "initials";
 }) {
+    if (appearance === "initials") {
+        return (
+            <Avatar
+                size={size}
+                aria-label={company.legalName}
+                className="rounded-tile after:rounded-tile">
+                <AvatarFallback className="rounded-tile bg-primary font-mono text-xs text-primary-foreground">
+                    {company.ticker.slice(0, 4)}
+                </AvatarFallback>
+            </Avatar>
+        );
+    }
     const canonicalUrl =
         company.websiteUrl ?? company.investorRelationsUrl ?? "";
     return (

@@ -116,12 +116,12 @@ test("source decisions update the row, count, and detail without reload", async 
     await expect(
         page.getByRole("heading", { name: "Inspect all candidates" }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Collapse navigation" }).click();
 
     await page.evaluate(() => {
         document.documentElement.dataset.e2eDocumentInstance = "source-review";
     });
     await page
+        .getByTestId("source-master-list")
         .getByRole("button", {
             name: "Open Annual report for review",
             exact: true,
@@ -315,8 +315,6 @@ for (const viewport of [
         const inspected = runConvexJson<FunctionReturnType<typeof internal.e2eFixtures.seedInspectedSourceReviewScenario>>("e2eFixtures:seedInspectedSourceReviewScenario", {slotKey: "analyst-4", fixtureKey: key});
         const seeded = runConvexJson<FunctionReturnType<typeof internal.e2eFixtures.stageSourcePreparationRecoveryFixture>>("e2eFixtures:stageSourcePreparationRecoveryFixture", {runId: inspected.runId, slotKey: "analyst-4", fixtureKey: key});
         await page.goto(`/workspace/${seeded.runId}?section=sources`);
-        if (viewport.name === "desktop")
-            await page.getByRole("button", {name: "Collapse navigation", exact: true}).click();
         const resume = page.getByRole("button", {name: "Resume preparation", exact: true});
         await expect(resume).toBeEnabled();
         await resume.focus();
@@ -458,8 +456,7 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 900 }, { name: "
             await page.goto(`/workspace/${seeded.runId}?section=sources`);
             await expect(page.getByRole("heading", { name: "Proposed corpus", exact: true })).toBeVisible({ timeout: 30_000 });
             await expect(page.getByRole("listitem", { name: "Read candidate sources: Active" })).toBeVisible();
-            if (viewport.name === "desktop") await page.getByRole("button", { name: "Collapse navigation", exact: true }).click();
-            else await page.getByRole("button", { name: "Coverage", exact: true }).click();
+            if (viewport.name === "mobile") await page.getByRole("button", { name: "Coverage", exact: true }).click();
             await page.emulateMedia({ reducedMotion: viewport.name === "mobile" ? "reduce" : "no-preference" });
             const readingProgress = page.getByRole("progressbar", { name: "Source reading progress", exact: true });
             await expect(readingProgress).toHaveAttribute("aria-valuenow", "2");

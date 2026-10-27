@@ -42,7 +42,7 @@ test("drops malformed and irrelevant source review parameters", () => {
             view: "inspect",
             coverage: "official_commercial_terms",
         }),
-    ).toEqual({ section: "evidence" });
+    ).toEqual({ section: "progress", inventory: 1 });
     expect(
         validate({
             section: "sources",
@@ -50,4 +50,45 @@ test("drops malformed and irrelevant source review parameters", () => {
             coverage: "official_commercial_terms",
         }),
     ).toEqual({ section: "sources", view: "adjust" });
+});
+
+test.each([
+    ["evidence", { section: "progress", inventory: 1 }],
+    ["assessment", { section: "investigation", subsection: "review" }],
+    ["map", { section: "synthesis", subsection: "mechanism" }],
+    ["brief", { section: "synthesis", subsection: "full-brief" }],
+])("keeps the legacy %s destination accessible", (section, destination) => {
+    const validate = Route.options.validateSearch;
+    if (typeof validate !== "function")
+        throw new Error("Expected route search validator");
+    expect(validate({ section })).toEqual(destination);
+});
+
+test("keeps inventory above the current source review and validates sub-sections", () => {
+    const validate = Route.options.validateSearch;
+    if (typeof validate !== "function")
+        throw new Error("Expected route search validator");
+    expect(
+        validate({
+            section: "sources",
+            view: "inspect",
+            coverage: "official_commercial_terms",
+            inventory: "1",
+        }),
+    ).toEqual({
+        section: "sources",
+        view: "inspect",
+        coverage: "official_commercial_terms",
+        inventory: 1,
+    });
+    expect(
+        validate({ section: "investigation", subsection: "requests" }),
+    ).toEqual({ section: "investigation", subsection: "requests" });
+    expect(
+        validate({
+            section: "synthesis",
+            subsection: "requests",
+            inventory: "true",
+        }),
+    ).toEqual({ section: "synthesis", subsection: "mechanism" });
 });

@@ -13,16 +13,17 @@ import {
     EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EvidenceMatrix } from "@/components/workspace/evidence-matrix";
+import { EvidenceInventory } from "@/components/workspace/evidence-inventory";
 import { EvidenceSufficiencyReview } from "@/components/workspace/evidence-sufficiency-review";
 import { LiveSourceReview } from "@/components/workspace/live-source-review";
 import { RunProgress } from "@/components/workspace/run-progress";
 import type { SourceReviewNavigation } from "@/components/workspace/source-proposal-review";
+import { WorkspaceNavigation } from "@/components/workspace/workspace-navigation";
 import {
-    WorkspaceNavigationRail,
     type WorkspaceSection,
-} from "@/components/workspace/workspace-navigation-rail";
-import { uiLayerClasses } from "@/lib/ui-layers";
+    type WorkspaceSubsection,
+    workspaceSections,
+} from "@/lib/workspace/navigation";
 
 function decisionKey(prefix: string) {
     return `${prefix}:${crypto.randomUUID()}`;
@@ -34,9 +35,15 @@ export function RunRouteComponent({
     section,
     sourceReviewNavigation,
     onSourceReviewNavigate,
+    subsection,
+    inventoryOpen = false,
+    onInventoryOpenChange,
 }: {
     runId: Id<"researchRuns">;
     section: WorkspaceSection;
+    subsection?: WorkspaceSubsection;
+    inventoryOpen?: boolean;
+    onInventoryOpenChange?: (open: boolean) => void;
     sourceReviewNavigation?: SourceReviewNavigation;
     onSourceReviewNavigate?: (destination: SourceReviewNavigation) => void;
 }) {
@@ -46,6 +53,7 @@ export function RunRouteComponent({
     const decide = useMutation(api.sources.decide);
     const decideSufficiency = useMutation(api.evidenceSufficiency.decide);
     const submitManualUrl = useAction(api.sourceActions.submitManualUrl);
+    const [localInventoryOpen, setLocalInventoryOpen] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const routedToSourceReview = useRef(false);
 
@@ -54,7 +62,11 @@ export function RunRouteComponent({
             routedToSourceReview.current = false;
             return;
         }
-        if (section === "progress" && !routedToSourceReview.current) {
+        if (
+            section === "progress" &&
+            !inventoryOpen &&
+            !routedToSourceReview.current
+        ) {
             routedToSourceReview.current = true;
             void navigate({
                 to: "/workspace/$runId",
@@ -63,20 +75,35 @@ export function RunRouteComponent({
                 replace: true,
             });
         }
-    }, [navigate, run?.lifecycleState, runId, section]);
+    }, [navigate, run?.lifecycleState, runId, section, inventoryOpen]);
 
     if (run === undefined || events === undefined) {
         return (
             <div
                 role="status"
-                className="grid gap-4 md:grid-cols-[minmax(11rem,14rem)_minmax(0,1fr)] xl:grid-cols-[minmax(4.25rem,14rem)_minmax(0,1fr)]"
+                className="flex flex-col gap-5"
                 aria-label="Loading research workspace"
                 aria-busy="true">
-                <Skeleton className="h-112" />
-                <div className="space-y-3">
-                    <Skeleton className="h-24" />
-                    <Skeleton className="h-52" />
-                </div>
+                <Skeleton className="h-10 w-full max-w-md" />
+                <Skeleton className="h-8 w-64 max-w-full" />
+                {section === "progress" ? (
+                    <div className="grid items-start gap-5 xl:grid-cols-[var(--side-column)_minmax(0,1fr)_var(--side-column)]">
+                        <div className="hidden space-y-4 xl:block">
+                            <Skeleton className="h-64 rounded-2xl" />
+                            <Skeleton className="h-40 rounded-2xl" />
+                        </div>
+                        <div className="space-y-5">
+                            <Skeleton className="h-32 rounded-xl" />
+                            <Skeleton className="h-80 rounded-2xl" />
+                        </div>
+                        <Skeleton className="hidden h-96 rounded-2xl xl:block" />
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        <Skeleton className="h-24 rounded-xl" />
+                        <Skeleton className="h-80 rounded-xl" />
+                    </div>
+                )}
             </div>
         );
     }
@@ -124,7 +151,12 @@ export function RunRouteComponent({
     }
 
     return (
-        <div className="py-4">
+        <div className="min-w-0 pb-28 pt-2 sm:pb-36">
+            <WorkspaceNavigation
+                runId={runId}
+                section={section}
+                subsection={subsection}
+            />
             <header className="mb-5">
                 <p className="text-micro text-brand-purple">
                     {run.company.ticker} · {run.company.exchange}
@@ -139,101 +171,117 @@ export function RunRouteComponent({
                     </h1>
                 </div>
             </header>
-            <div className="grid items-start gap-4 grid-cols-[auto_minmax(0,1fr)]">
-                <aside
-                    className={`sticky top-20 ${uiLayerClasses.navigationRail} w-fit min-w-0`}>
-                    <WorkspaceNavigationRail
-                        runId={runId}
-                        section={section}
-                        lifecycleState={run.lifecycleState}
-                    />
-                </aside>
-                <main className="min-w-0">
-                    {error ? (
-                        <p
-                            role="alert"
-                            className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                            {error}
-                        </p>
-                    ) : null}
-                    {exaNotConfigured &&
-                    run.lifecycleState === "awaiting_source_review" ? (
-                        <p
-                            role="status"
-                            className="mb-4 rounded-lg border border-review/30 bg-review/10 p-3 text-sm text-muted-foreground">
-                            Independent web discovery is unavailable. Filing
-                            sources remain available for review.
-                        </p>
-                    ) : null}
-                    {section === "progress" ? (
-                        <>
-                            {run.lifecycleState ===
-                            "awaiting_evidence_sufficiency_review" ? (
-                                <EvidenceSufficiencyReview
-                                    onAddManualUrl={handleAddManualUrl}
-                                    onDecide={async (decision) => {
-                                        await decideSufficiency({
-                                            runId,
-                                            decision,
-                                        });
-                                    }}
-                                />
-                            ) : null}
-                            <RunProgress run={run} events={events} />
-                        </>
-                    ) : sourceMode ? (
-                        <LiveSourceReview
-                            sourceReviewNavigation={sourceReviewNavigation}
-                            onSourceReviewNavigate={onSourceReviewNavigate}
-                            runId={runId}
-                            corpusRevisionId={corpusRevisionId}
-                            canStartNewRevision={
-                                run.canStartNewCorpusRevision === true
-                            }
-                            onDecide={async (sourceId, nextDecision) => {
-                                setError(null);
-                                try {
-                                    await decide({
+            <div className="min-w-0">
+                {error ? (
+                    <p
+                        role="alert"
+                        className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                        {error}
+                    </p>
+                ) : null}
+                {exaNotConfigured &&
+                run.lifecycleState === "awaiting_source_review" ? (
+                    <p
+                        role="status"
+                        className="mb-4 rounded-lg border border-review/30 bg-review/10 p-3 text-sm text-muted-foreground">
+                        Independent web discovery is unavailable. Filing sources
+                        remain available for review.
+                    </p>
+                ) : null}
+                {section === "progress" ? (
+                    <>
+                        {run.lifecycleState ===
+                        "awaiting_evidence_sufficiency_review" ? (
+                            <EvidenceSufficiencyReview
+                                onAddManualUrl={handleAddManualUrl}
+                                onDecide={async (decision) => {
+                                    await decideSufficiency({
                                         runId,
-                                        corpusRevisionId: corpusRevisionId,
-                                        sourceId,
-                                        decision: nextDecision,
-                                        decisionKey:
-                                            decisionKey("source-decision"),
+                                        decision,
                                     });
-                                } catch (caught) {
-                                    setError(
-                                        "We couldn't save that source decision. Try again.",
-                                    );
-                                    throw caught;
-                                }
+                                }}
+                            />
+                        ) : null}
+                        <RunProgress
+                            run={run}
+                            events={events}
+                            onOpenSources={() => {
+                                void navigate({
+                                    to: "/workspace/$runId",
+                                    params: { runId },
+                                    search: { section: "sources" },
+                                });
                             }}
-                            onAddManualUrl={handleAddManualUrl}
                         />
-                    ) : section === "sources" ? (
-                        <div className="surface-panel p-6">
-                            <h2 className="text-section">Source discovery</h2>
-                            <p className="mt-2 text-sm text-muted-foreground">
-                                {run.lifecycleState === "discovering_sources"
-                                    ? "We’re gathering public sources for your review."
-                                    : "Sources will appear here when discovery is ready."}
-                            </p>
-                        </div>
-                    ) : section === "evidence" ? (
-                        <EvidenceMatrix runId={runId} />
-                    ) : (
-                        <div className="surface-panel p-6">
-                            <h2 className="text-section capitalize">
-                                {section}
-                            </h2>
-                            <p className="mt-2 text-sm text-muted-foreground">
-                                This section opens after you review and approve
-                                the preceding evidence.
-                            </p>
-                        </div>
-                    )}
-                </main>
+                    </>
+                ) : sourceMode ? (
+                    <LiveSourceReview
+                        sourceReviewNavigation={sourceReviewNavigation}
+                        onSourceReviewNavigate={onSourceReviewNavigate}
+                        runId={runId}
+                        corpusRevisionId={corpusRevisionId}
+                        canStartNewRevision={
+                            run.canStartNewCorpusRevision === true
+                        }
+                        onDecide={async (sourceId, nextDecision) => {
+                            setError(null);
+                            try {
+                                await decide({
+                                    runId,
+                                    corpusRevisionId: corpusRevisionId,
+                                    sourceId,
+                                    decision: nextDecision,
+                                    decisionKey: decisionKey("source-decision"),
+                                });
+                            } catch (caught) {
+                                setError(
+                                    "We couldn't save that source decision. Try again.",
+                                );
+                                throw caught;
+                            }
+                        }}
+                        onAddManualUrl={handleAddManualUrl}
+                    />
+                ) : section === "sources" ? (
+                    <div className="surface-panel p-6">
+                        <h2 className="text-section">Source discovery</h2>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                            {run.lifecycleState === "discovering_sources"
+                                ? "We’re gathering public sources for your review."
+                                : "Sources will appear here when discovery is ready."}
+                        </p>
+                    </div>
+                ) : (
+                    <div className="rounded-2xl border-[1.5px] border-dashed border-edge-dashed p-6 sm:p-8">
+                        <p className="section-chip mb-5">
+                            {"//"} {section}
+                        </p>
+                        <h2 className="text-heading">
+                            {section === "investigation"
+                                ? "Investigation"
+                                : "Synthesis"}{" "}
+                            is not available yet
+                        </h2>
+                        <p className="mt-3 max-w-prose text-sm leading-6 text-muted-foreground">
+                            {
+                                workspaceSections.find(
+                                    (item) =>
+                                        item.key === section &&
+                                        "unavailable" in item,
+                                )?.unavailable
+                            }
+                        </p>
+                    </div>
+                )}
             </div>
+            <EvidenceInventory
+                runId={runId}
+                open={
+                    onInventoryOpenChange ? inventoryOpen : localInventoryOpen
+                }
+                onOpenChange={onInventoryOpenChange ?? setLocalInventoryOpen}
+                expanded={section === "progress"}
+            />
         </div>
     );
 }

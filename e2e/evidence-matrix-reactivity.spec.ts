@@ -220,11 +220,10 @@ async function openEvidence(
         key,
         kind,
     );
-    await page.goto(`/workspace/${seeded.runId}?section=evidence`);
+    await page.goto(`/workspace/${seeded.runId}?section=progress`);
+    await expect(page.getByRole("heading", { name: /CCC Intelligent Solutions/i })).toBeVisible({ timeout: 60_000 });
+    await page.getByRole("button", { name: "Open evidence inventory" }).click();
     if (kind === "showcase") {
-        await expect(
-            page.getByRole("heading", { name: /CCC Intelligent Solutions/i }),
-        ).toBeVisible();
         await expect(page.getByText("Evidence is ready for review")).toBeVisible();
     } else {
         await expect(
@@ -322,9 +321,7 @@ test.describe("evidence matrix deterministic browser gate", () => {
             ),
         ).toBeVisible();
 
-        // Reset to the full seeded matrix. The workspace navigation rail
-        // expands on hover and would intercept a pointer click over the
-        // filter row, so the reset goes through the keyboard: focus the All
+        // Reset to the full seeded matrix through the keyboard: focus the All
         // button and press Enter.
         const allButton = page.getByRole("button", { name: "All", exact: true });
         await allButton.focus();
@@ -451,6 +448,9 @@ test.describe("evidence matrix deterministic browser gate", () => {
             "logout-recovery",
             "showcase",
         );
+
+        await page.getByRole("dialog", { name: "Evidence inventory", exact: true })
+            .getByRole("button", { name: "Close", exact: true }).click();
 
         // Logout through the real workspace session menu.
         await page.getByRole("button", { name: "Workspace menu" }).click();

@@ -1,7 +1,7 @@
 ---
 {
   "name": "Agentic Resilience Workbench",
-  "description": "An understated, modern and precise visual system for evidence-led research.",
+  "description": "The question-led Evidence Workbench: precise reading surfaces, selective glass and inspectable evidence.",
   "colors": {
     "primary": "oklch(0.29 0.04 307.99)",
     "primary-foreground": "oklch(0.985 0.002 308)",
@@ -18,6 +18,7 @@
     "accent-foreground": "oklch(0.415 0.2019 300.7)",
     "border": "oklch(0.922 0 0)",
     "input": "oklch(0.922 0 0)",
+    "input-border": "oklch(0.1811 0.0092 308 / 0.47)",
     "ring": "oklch(0.415 0.2019 300.7)",
     "brand-purple": "oklch(0.415 0.2019 300.7)",
     "brand-green": "oklch(0.61 0.05 157.84)",
@@ -27,11 +28,32 @@
     "evidence-inference": "oklch(0.415 0.2019 300.7)",
     "evidence-hypothesis": "oklch(0.5086 0.1022 70.64)",
     "evidence-unknown": "oklch(0.4842 0.0126 308)",
-    "counter-evidence": "oklch(0.5725 0.2009 356.87)",
-    "review": "oklch(82.8% 0.189 84.429)",
+    "counter-evidence": "oklch(0.54 0.2009 356.87)",
+    "review": "oklch(0.828 0.189 84.429)",
+    "review-foreground": "oklch(0.53 0.108 84.429)",
+    "primary-sheen": "oklch(0.3965 0.034 307.99)",
     "sidebar-accent": "color-mix(in oklab, var(--brand-green) 22%, white)",
     "sidebar-accent-foreground": "oklch(0.31 0.055 190)",
     "destructive": "oklch(0.577 0.245 27.325)",
+    "tint-fact": "oklch(0.9405 0.0108 262.73)",
+    "tint-inference": "oklch(0.9393 0.0192 301.08)",
+    "tint-hypothesis": "oklch(0.938 0.0107 66.24)",
+    "tint-unknown": "oklch(0.9506 0.0015 308)",
+    "tint-counter": "oklch(0.9505 0.0188 354.57)",
+    "tint-review": "oklch(0.965 0.0296 83.2)",
+    "tint-approved": "oklch(0.9273 0.0112 190.87)",
+    "tint-ink": "oklch(0.9344 0.0017 308)",
+    "tint-violet": "oklch(0.9393 0.0192 301.08)",
+    "surface-glass": "oklch(0.9911 0.0011 308 / 0.68)",
+    "surface-float": "oklch(0.9911 0.0011 308 / 0.82)",
+    "surface-bar": "oklch(0.9911 0.0011 308 / 0.55)",
+    "fill-quiet": "oklch(0.1811 0.0092 308 / 0.06)",
+    "divider": "oklch(0.1811 0.0092 308 / 0.07)",
+    "edge-dashed": "oklch(0.1811 0.0092 308 / 0.28)",
+    "grid-line": "oklch(0.1811 0.0092 308 / 0.045)",
+    "glow": "oklch(0.415 0.2019 300.7 / 0.15)",
+    "chip-edge": "oklch(0.415 0.2019 300.7 / 0.28)",
+    "nav-current": "oklch(0.415 0.2019 300.7 / 0.12)",
     "dark-primary": "oklch(0.9302 0.0084 308)",
     "dark-primary-foreground": "oklch(0.1911 0.0071 308)",
     "dark-background": "oklch(0.1911 0.0071 308)",
@@ -45,70 +67,165 @@
     "dark-secondary-foreground": "oklch(0.9302 0.0084 308)",
     "dark-accent": "color-mix(in oklab, var(--brand-purple) 20%, black)",
     "dark-accent-foreground": "oklch(0.92 0.035 186.7)",
-    "dark-border": "oklch(1 0 0 / 10%)",
-    "dark-input": "oklch(1 0 0 / 15%)",
+    "dark-border": "oklch(1 0 0 / 0.1)",
+    "dark-input": "oklch(1 0 0 / 0.15)",
+    "dark-input-border": "oklch(0.9622 0.0042 308 / 0.38)",
     "dark-ring": "oklch(0.7024 0.146 308.49)",
     "dark-brand-purple": "oklch(0.7024 0.146 308.49)",
-    "dark-brand-green": "oklch(88.01% 0.051 137.14)",
+    "dark-brand-green": "oklch(0.8801 0.051 137.14)",
     "dark-approved": "oklch(0.7285 0.0968 186.7)",
-    "dark-approved-foreground": "oklch(0.985 0.002 308)",
+    "dark-approved-foreground": "oklch(0.1911 0.0071 308)",
     "dark-evidence-fact": "oklch(0.72 0.105 258.76)",
     "dark-evidence-inference": "oklch(0.7024 0.146 308.49)",
     "dark-evidence-hypothesis": "oklch(0.76 0.12 70.64)",
     "dark-evidence-unknown": "oklch(0.7282 0.0124 308)",
     "dark-counter-evidence": "oklch(0.73 0.16 356.87)",
     "dark-review": "oklch(0.76 0.12 70.64)",
+    "dark-review-foreground": "var(--review)",
+    "dark-primary-sheen": "oklch(0.9407 0.0071 308)",
     "dark-sidebar-accent": "color-mix(in oklab, var(--brand-green) 24%, black)",
     "dark-sidebar-accent-foreground": "oklch(0.92 0.035 186.7)",
-    "dark-destructive": "oklch(0.704 0.191 22.216)"
+    "dark-destructive": "oklch(0.704 0.191 22.216)",
+    "dark-tint-fact": "oklch(0.2863 0.0171 280.28)",
+    "dark-tint-inference": "oklch(0.2799 0.0215 308.3)",
+    "dark-tint-hypothesis": "oklch(0.2955 0.0112 32.51)",
+    "dark-tint-unknown": "oklch(0.2743 0.0089 308)",
+    "dark-tint-counter": "oklch(0.2824 0.0209 339.29)",
+    "dark-tint-review": "oklch(0.3216 0.0164 47.23)",
+    "dark-tint-approved": "oklch(0.3019 0.0109 225.77)",
+    "dark-tint-ink": "oklch(0.2888 0.0088 308)",
+    "dark-tint-violet": "oklch(0.2799 0.0215 308.3)",
+    "dark-surface-glass": "oklch(0.2381 0.0092 308 / 0.68)",
+    "dark-surface-float": "oklch(0.2381 0.0092 308 / 0.82)",
+    "dark-surface-bar": "oklch(0.2381 0.0092 308 / 0.55)",
+    "dark-fill-quiet": "oklch(0.9622 0.0042 308 / 0.06)",
+    "dark-divider": "oklch(0.9622 0.0042 308 / 0.07)",
+    "dark-edge-dashed": "oklch(0.9622 0.0042 308 / 0.28)",
+    "dark-grid-line": "oklch(0.9622 0.0042 308 / 0.045)",
+    "dark-glow": "oklch(0.7024 0.146 308.49 / 0.15)",
+    "dark-chip-edge": "oklch(0.7024 0.146 308.49 / 0.28)",
+    "dark-nav-current": "oklch(0.7024 0.146 308.49 / 0.12)",
+    "destructive-text": "oklch(0.48 0.19 27.325)",
+    "dark-destructive-text": "oklch(0.82 0.12 22.216)",
+    "input-surface": "color-mix(in oklab, var(--card) 97%, black)",
+    "dark-input-surface": "color-mix(in oklab, var(--card) 90%, black)"
   },
   "typography": {
+    "headline": {
+      "fontFamily": "\"Geist Variable\", \"Geist\", \"Segoe UI\", ui-sans-serif, sans-serif",
+      "fontSize": "2.5rem",
+      "lineHeight": "2.75rem",
+      "fontWeight": 500,
+      "letterSpacing": "-0.04em",
+      "sample": "Every state says what it is"
+    },
     "display": {
       "fontFamily": "\"Geist Variable\", \"Geist\", \"Segoe UI\", ui-sans-serif, sans-serif",
       "fontSize": "1.875rem",
-      "fontWeight": 600,
       "lineHeight": "2.25rem",
-      "letterSpacing": "-0.025em"
+      "fontWeight": 600,
+      "letterSpacing": "-0.025em",
+      "sample": "Evidence workbench"
     },
     "display-sm": {
       "fontFamily": "\"Geist Variable\", \"Geist\", \"Segoe UI\", ui-sans-serif, sans-serif",
       "fontSize": "2.25rem",
-      "fontWeight": 600,
       "lineHeight": "2.5rem",
-      "letterSpacing": "-0.025em"
+      "fontWeight": 600,
+      "letterSpacing": "-0.025em",
+      "sample": "Evidence workbench"
     },
     "display-md": {
       "fontFamily": "\"Geist Variable\", \"Geist\", \"Segoe UI\", ui-sans-serif, sans-serif",
       "fontSize": "3rem",
+      "lineHeight": "1",
       "fontWeight": 600,
-      "lineHeight": 1,
-      "letterSpacing": "-0.025em"
+      "letterSpacing": "-0.025em",
+      "sample": "Evidence workbench"
     },
     "title": {
       "fontFamily": "\"Geist Variable\", \"Geist\", \"Segoe UI\", ui-sans-serif, sans-serif",
       "fontSize": "1.125rem",
-      "fontWeight": 600,
       "lineHeight": "1.75rem",
-      "letterSpacing": "-0.025em"
+      "fontWeight": 600,
+      "letterSpacing": "-0.025em",
+      "sample": "Supporting evidence"
+    },
+    "heading": {
+      "fontFamily": "\"Geist Variable\", \"Geist\", \"Segoe UI\", ui-sans-serif, sans-serif",
+      "fontSize": "1.25rem",
+      "lineHeight": "1.625rem",
+      "fontWeight": 600,
+      "letterSpacing": "-0.025em",
+      "sample": "Control conclusions"
+    },
+    "reading": {
+      "fontFamily": "\"Geist Variable\", \"Geist\", \"Segoe UI\", ui-sans-serif, sans-serif",
+      "fontSize": "1.25rem",
+      "lineHeight": "1.6875rem",
+      "fontWeight": 500,
+      "letterSpacing": "-0.025em",
+      "sample": "CCC appears to coordinate the claim between insurers and repairers."
     },
     "body": {
       "fontFamily": "\"Geist Variable\", \"Geist\", \"Segoe UI\", ui-sans-serif, sans-serif",
       "fontSize": "1rem",
+      "lineHeight": "1.5",
       "fontWeight": 400,
-      "lineHeight": 1.5
+      "sample": "Present each question's appraisal, evidence, objections and decisive unknowns together."
     },
     "body-sm": {
       "fontFamily": "\"Geist Variable\", \"Geist\", \"Segoe UI\", ui-sans-serif, sans-serif",
       "fontSize": "0.875rem",
+      "lineHeight": "1.25rem",
       "fontWeight": 400,
-      "lineHeight": "1.25rem"
+      "sample": "Compact card descriptions and source details."
+    },
+    "brief": {
+      "fontFamily": "\"Geist Variable\", \"Geist\", \"Segoe UI\", ui-sans-serif, sans-serif",
+      "fontSize": "0.96875rem",
+      "lineHeight": "1.625rem",
+      "fontWeight": 400,
+      "sample": "The examined material supports coordination, not decision rights."
+    },
+    "figure": {
+      "fontFamily": "\"Geist Variable\", \"Geist\", \"Segoe UI\", ui-sans-serif, sans-serif",
+      "fontSize": "2.25rem",
+      "lineHeight": "2.25rem",
+      "fontWeight": 500,
+      "letterSpacing": "-0.045em",
+      "sample": "126"
+    },
+    "figure-lg": {
+      "fontFamily": "\"Geist Variable\", \"Geist\", \"Segoe UI\", ui-sans-serif, sans-serif",
+      "fontSize": "2.75rem",
+      "lineHeight": "2.75rem",
+      "fontWeight": 500,
+      "letterSpacing": "-0.05em",
+      "sample": "38"
     },
     "label": {
-      "fontFamily": "\"SFMono-Regular\", \"Cascadia Code\", \"Roboto Mono\", ui-monospace, monospace",
+      "fontFamily": "\"Geist Mono\", \"SFMono-Regular\", \"Cascadia Code\", \"Roboto Mono\", ui-monospace, monospace",
       "fontSize": "0.6875rem",
+      "lineHeight": "1.5",
       "fontWeight": 500,
-      "lineHeight": 1.5,
-      "letterSpacing": "0.12em"
+      "letterSpacing": "0.12em",
+      "sample": "SOURCES · 12"
+    },
+    "chip": {
+      "fontFamily": "\"Geist Mono\", \"SFMono-Regular\", \"Cascadia Code\", \"Roboto Mono\", ui-monospace, monospace",
+      "fontSize": "0.6875rem",
+      "lineHeight": "1.5",
+      "fontWeight": 500,
+      "letterSpacing": "0.16em",
+      "sample": "// 01 · STATES"
+    },
+    "meta": {
+      "fontFamily": "\"Geist Mono\", \"SFMono-Regular\", \"Cascadia Code\", \"Roboto Mono\", ui-monospace, monospace",
+      "fontSize": "0.71875rem",
+      "lineHeight": "1.5",
+      "fontWeight": 400,
+      "sample": "10-K p. 8 ↔ transcript Q2"
     }
   },
   "rounded": {
@@ -119,7 +236,11 @@
     "2xl": "1.4rem",
     "3xl": "1.8rem",
     "4xl": "2.2rem",
-    "badge": "0.75rem",
+    "badge": "0.25rem",
+    "chip": "0.3125rem",
+    "tile": "0.6875rem",
+    "item": "0.875rem",
+    "full": "9999px",
     "input": "0.65rem",
     "source-card": "0.75rem"
   },
@@ -168,14 +289,14 @@
     },
     "button-destructive": {
       "backgroundColor": "color-mix(in oklab, var(--destructive) 10%, transparent)",
-      "textColor": "{colors.destructive}",
+      "textColor": "{colors.destructive-text}",
       "rounded": "{rounded.md}",
       "padding": "0 0.75rem",
       "height": "2.25rem"
     },
     "button-link": {
       "backgroundColor": "transparent",
-      "textColor": "var(--color-blue-500)",
+      "textColor": "{colors.accent-foreground}",
       "rounded": "{rounded.md}",
       "padding": "0 0.75rem",
       "height": "2.25rem"
@@ -188,21 +309,22 @@
       "height": "2.25rem"
     },
     "input": {
-      "backgroundColor": "color-mix(in oklab, var(--input) 50%, transparent)",
+      "backgroundColor": "{colors.card}",
       "textColor": "{colors.foreground}",
-      "rounded": "{rounded.3xl}",
+      "rounded": "{rounded.md}",
       "padding": "0.25rem 0.75rem",
       "height": "2.25rem"
     },
     "badge-outline": {
       "textColor": "{colors.foreground}",
-      "rounded": "{rounded.lg}",
-      "padding": "0.125rem 0.375rem"
+      "rounded": "{rounded.badge}",
+      "padding": "0.125rem 0.375rem",
+      "backgroundColor": "{colors.tint-ink}"
     },
     "card": {
       "backgroundColor": "{colors.card}",
       "textColor": "{colors.card-foreground}",
-      "rounded": "{rounded.4xl}",
+      "rounded": "{rounded.xl}",
       "padding": "1.5rem 0"
     },
     "glass-card": {
@@ -211,179 +333,103 @@
       "rounded": "{rounded.xl}"
     },
     "navigation-current": {
-      "backgroundColor": "{colors.sidebar-accent}",
-      "textColor": "{colors.sidebar-accent-foreground}",
-      "rounded": "{rounded.md}",
+      "backgroundColor": "{colors.card}",
+      "textColor": "{colors.foreground}",
+      "rounded": "{rounded.tile}",
       "padding": "0.5rem 0.625rem"
     }
   }
 }
 ---
-
 # Design System: Agentic Resilience Workbench
 
 ## Overview
 
 **Creative North Star: "The Evidence Workbench"**
 
-The visual direction is understated, modern and precise. A near-neutral canvas, Geist reading text and compact monospaced metadata provide the foundation for clear evidence, source references and analyst decisions. The product brief is in [PRODUCT.md](PRODUCT.md). UX development instructions are in [AGENTS.md](AGENTS.md#analyst-experience-direction).
-
-Depth comes from readable layering, discreet structural shadows and selective glass. Controls are crisp, precise and restrained. Qatalog informs the neutral foundation and hairline separation, the Volvo EX30 concept informs frosted focal surfaces, and Decoding Discontinuity informs the existing violet and green recognition signals. The institutional research audience remains the context for these choices.
+An understated, modern and precise working interface for institutional research. A near-neutral canvas on a faint grid, Geist reading text and compact Geist Mono metadata carry evidence, source references and analyst decisions. Selective glass and one focal surface identify current work without competing with the material being examined.
 
 **Key Characteristics:**
 
-- Near-neutral reading surfaces with selective recognition accents.
-- A shared sans-serif family with compact monospaced metadata.
-- Hairline separation, rounded containers and deliberate surface hierarchy.
-- Evidence meaning expressed with labels as well as color.
-- Responsive workspaces that preserve access to context and sources.
+- Near-neutral reading surfaces on a quiet, fading workspace grid.
+- Geist text and locally hosted Geist Mono metadata.
+- Selective glass, opaque reading objects and hairline separation.
+- Analytical meaning conveyed by labels and glyphs as well as tint.
+- Four workspace destinations and an inventory that opens in context.
 
-Captured from the working tree on 2026-10-20. Runtime values remain owned by the [active theme](src/assets/styles/themes/evidence-workbench.css), its [base preset](src/assets/styles/base-preset.css), the [global stylesheet](src/styles.css), and shared components. This file is a portable documentation snapshot in the [DESIGN.md format](https://raw.githubusercontent.com/google-labs-code/design.md/main/docs/spec.md). Agent conduct remains in [AGENTS.md](AGENTS.md), and functional implementation contracts remain in [context/TECH.md](context/TECH.md).
+The 2026-10-27 design-system transfer is maintained in code. The [active theme](src/assets/styles/themes/evidence-workbench.css) owns values, the [global stylesheet](src/styles.css) owns shared utility composition, and shared components own reusable variants. The local design-tool export is not a build input or a second maintained authority. [PRODUCT.md](PRODUCT.md) owns product behavior and [context/TECH.md](context/TECH.md) owns enforcement.
 
-Run `pnpm design:sync` to refresh CSS-derived frontmatter values and export `.impeccable/design.json`. Run `pnpm design:check` to detect design-documentation drift without writing. The frontmatter uses JSON syntax within YAML delimiters so the generator needs no additional parser dependency. Static preview definitions in Components are documentation examples, while production markup and behavior remain owned by the shared components.
-
-The frontmatter records light-theme primitives and explicit `dark-` counterparts. Runtime `.dark` overrides remain authoritative. The companion `.impeccable/design.json` contains extension metadata and isolated static component previews, not production implementations. Its synthesized tonal strips are palette illustrations, not additional application tokens.
-
-Rendered evidence was sampled from the existing local application at desktop and narrow-mobile sizes: the landing page, public Start surface, and explicitly illustrative workspace and source-review prototypes. Protected dossier behavior is documented from source rather than accepted as a verified journey. Controlled dark-class samples verify the CSS variant, not a user-facing theme-switch interaction.
+Run `pnpm design:sync` to regenerate this frontmatter and `.impeccable/design.json` from runtime owners. `pnpm design:check` detects drift without writing. Light and dark values are explicit; derived palette strips in the sidecar are illustrations rather than additional application tokens. Static component samples below document appearance, not workflow behavior.
 
 ## Colors
 
-The palette combines near-neutral surfaces and institutional ink with deliberate violet and green signals. Component and semantic exceptions remain identified rather than expanded into brand colors.
+Ordinary primary actions use **Institutional Ink** (`primary`) and `primary-foreground`. **Research Violet** (`brand-purple`) marks focus, selection, the `//` motif and real running work. Preserve `accent` as the theme's oklab mix. **Quiet Sage** (`brand-green`) remains a restrained recognition signal. **Approval Teal** (`approved`) is reserved for positive analyst approval, never technical success, source availability or proposed inclusion.
 
-### Primary
+Use `foreground` and `muted-foreground` for reading. `surface-glass`, `surface-float` and `surface-bar` distinguish working panels, floating layers and the top bar. `fill-quiet` dresses segmented tracks and icon wells; `divider` separates rows. Inputs use `input-surface` with `input-border`. Their fill is slightly darker than cards and popovers in both themes, including grouped controls, selectors and the composer text area. Shared field controls add the theme-owned `surface-shadow-input` inset and a quieter resting border to distinguish editable wells from outline buttons; focus and invalid-state rings remain explicit.
 
-- **Institutional Ink** (`primary`): ordinary primary actions. The dark variant reverses the emphasis to a pale neutral for contrast against dark surfaces.
-- **Ink Contrast** (`primary-foreground`): text on ordinary primary actions.
+Evidence classes use `evidence-fact`, `evidence-inference`, `evidence-hypothesis` and `evidence-unknown` with their corresponding `tint-*` fill, label and glyph. Counter-evidence uses rose and its label when an actual opposing relation exists; it is not a fifth mutually exclusive claim class. Source families use neutral metadata so their category cannot imply analytical authority.
 
-### Secondary
+`review` is a fill or marker; `review-foreground` is its readable text. Destructive fills retain `destructive`; `destructive-text` supplies readable small text on those tints, including hover. Links use `accent-foreground`. Alpha-valued dark borders and surfaces remain alpha-valued.
 
-- **Research Violet** (`brand-purple`): recognition accents, focus, selection and small metadata moments. It is not the primary action color.
-- **Violet Wash** (`accent`): a source-defined mix for interactive emphasis. Preserve the CSS mix rather than freezing a visually sampled approximation.
-
-### Tertiary
-
-- **Quiet Sage** (`brand-green`): the restrained green brand signal and source for selected neutral tints. Its dark counterpart is intentionally lighter.
-- **Approval Teal** (`approved`): positive analyst approval. Keep it distinct from the brand-green primitive.
-
-### Neutral
-
-- **Research Canvas** (`background`), **Reading Ink** (`foreground`), **Paper Surface** (`card`), and **Floating Paper** (`popover`): the main reading layers, with dark counterparts for each.
-- **Quiet Surface** (`muted`), **Secondary Surface** (`secondary`), and **Secondary Ink** (`muted-foreground`): supporting controls and secondary text.
-- **Hairline** (`border`) and **Field Fill** (`input`): low-contrast structure and field surfaces. Alpha-valued dark tokens remain alpha-valued.
-
-### Evidence and feedback
-
-`evidence-fact`, `evidence-inference`, `evidence-hypothesis`, `evidence-unknown`, `counter-evidence`, and `review` describe analytical meaning. Blue, violet, amber, neutral and rose roles are not a decorative category palette. `destructive` is inherited from the base preset for destructive feedback, not a new brand accent.
-
-The library also contains blue link styling and named-color badge variants. The landing implementation uses an indigo badge and a local violet spotlight. These are observed component or consumer treatments, not permission to add another shared palette. The current source-specific badges can use declared family colors while keeping evidence classification separate.
-
-**The Semantic Color Rule.** Use violet for recognition and focus, green for its existing brand and approval roles, and evidence colors only when they convey analytical meaning. A color never replaces its label.
+**The Semantic Color Rule.** Violet identifies recognition and running work, teal identifies analyst approval, amber identifies pending judgment, and evidence colors identify analytical meaning. Always retain the label and non-color cue.
 
 ## Typography
 
-**Display and body:** Geist Variable, with the existing Geist, Segoe UI and system sans-serif fallbacks. **Metadata:** the existing SFMono-Regular, Cascadia Code, Roboto Mono and system monospace stack. Geist is imported by the active theme; the Inter declaration in the earlier base preset is not the effective application font.
+Geist Variable is the shared heading and body family. Geist Mono 400/500 is hosted locally with its OFL license. Consumer-specific landing headline and composer sizing remain local.
 
-### Hierarchy
+- **Display:** responsive page titles, semibold and tightly tracked.
+- **Title:** compact section titles.
+- **Headline:** screen headline at 40px/44px and medium weight, reduced on narrow screens.
+- **Heading:** section heading at 20px and semibold weight.
+- **Reading:** the sentence under examination, at 20px and medium weight.
+- **Body:** default reading text; body-sm supports compact descriptions.
+- **Brief:** long reading text at 15.5px/26px.
+- **Figure:** real summary counts, followed by a readable noun.
+- **Label:** short uppercase monospaced metadata.
+- **Chip:** uppercase monospaced section or integrity disclosure.
+- **Meta:** sentence-case monospaced provenance and identifiers.
 
-- **Display:** the shared responsive display utility progresses from `display` through `display-sm` to `display-md`; it uses semibold weight and tight tracking.
-- **Title:** the shared section treatment uses the `title` role. Standard card titles use their component's medium-weight treatment rather than inheriting a display style.
-- **Body:** `body` is the default reading scale. `body-sm` supports compact cards, descriptions and source details.
-- **Label:** `label` is the compact monospaced uppercase metadata treatment. Use ordinary sentence case for reading text and controls unless the established consumer requires otherwise.
-
-The landing headline is a distinct consumer: medium weight, tight negative tracking, near-solid line spacing and responsive sizing up to a sampled 70.4px desktop size. It is not the default workspace heading. The composer likewise owns its textarea sizing; neither consumer changes the shared type scale.
-
-**The Shared Type Rule.** Use the active Geist stacks for headings and body copy. Reserve the shared monospaced metadata treatment for short labels and identifiers rather than ordinary paragraphs.
+**The Shared Type Rule.** Use sentence case for controls and prose. Reserve uppercase metadata and monospacing for short structural labels, counts and provenance.
 
 ## Layout
 
-The application uses fluid containers and a shared maximum width of 100rem. The shared outer gutter grows from 1rem to 1.5rem at `sm`, then to 3rem at `md`. Spacing derives from Tailwind's quarter-rem unit, with half steps where existing components need them. Default framework breakpoints remain `sm`, `md`, `lg`, `xl` and `2xl`.
+Containers are fluid to 100rem, with 1rem, 1.5rem and 3rem outer gutters at the existing Tailwind breakpoints. Start retains its established composition: the compact title with the `//` marker, a 610px composer column and the separate Evidence layers card with its disabled required switches. Preserve the multiline composer, company search, HTTPS references and in-place confirmation. Dossier headers retain ticker/exchange above the company favicon and name.
 
-Keep the current reading or decision area visually primary. Navigation, coverage summaries and supporting metadata provide context without competing with it. Analytical workspaces use desktop rails and retractable contextual panels; narrow layouts use compact navigation, inline disclosure and drawers while preserving access to the same decisions and evidence.
+The workspace top bar is 60px high. Under it, use a scrollable segmented navigation: Progress, Sources, Investigation, Synthesis. Current destinations have a paper fill, a tab shadow and one violet `//`. Unavailable destinations keep readable labels and an explanation; a missing capability is not an analytical finding. Historical dossier switching and Account actions remain accessible in the top bar.
 
-The accepted question-led workspace direction centers a persisted progress timeline and contextual interventions, with a compact composer floating at the bottom center after launch. Peripheral work cards remain inactive before actual work and animate only real execution. Detailed inspection can open dedicated views without requiring a separate source matrix for every question. This is a target hierarchy, not a claim about the captured interface; card count, grouping, responsive placement, motion details and completed-result composition remain to be designed.
+Progress has 300px side columns on wide screens: Sources and Investigation left, persisted progress in the centre, Synthesis right. Narrow screens stack the same information. Running emphasis follows actual persisted execution; do not manufacture framing completion or per-question activity for the installed workflow.
 
-Present each question's appraisal, supporting evidence, objections and decisive unknowns together, with its scope and confidence explanation readable without opening every passage. The [appraisal wireframe](docs/brainstorming/question-led-workbench/2026-10-23-question-led-workbench-conception.md#appraisal-grouped-review-and-completion) preserves the illustrative organization; its example findings and per-question approval buttons do not prescribe actual findings or replace grouped review. The supported synthesis makes the economic mechanism diagram the reference view and its argued note available at greater depth. Keep pending judgment, limited scope and non-establishment visually distinguishable, and use the [product contract](PRODUCT.md#assessment-and-review) for their behavior.
+Inventory floats bottom-right, expands on Progress and becomes a bottom bar on narrow screens. It displays the real total without a classification distribution or fabricated change counts. Its sheet contains the existing evidence matrix; opening it preserves the current screen, and closing restores focus and context. Existing dimensions are not relabelled as question-specific uses. Leave space below page content for the dock.
 
-Source review combines documentary context, compact source selection and one selected reader. Keep metadata concise, align repeated card regions across different title lengths, and disclose secondary explanations without hiding meaningful warnings or actions. Availability, source membership and analyst approval retain distinct visual meanings. The [product workflow](PRODUCT.md#source-preparation-and-corpus-review) owns their behavior and decision rules.
+Source review retains documentary coverage, its carousel, selected reader, adjustment and inspection views, source decisions, additions, approval and recovery. Keep details as the default and preview for pending candidates. Apply the shared surfaces and reader typography while preserving exact available references; never invent PDF pagination, consulted passages or question relationships.
 
-Use shared [DiscreteTabs](src/components/ui/discrete-tabs.tsx), [Accordion](src/components/ui/accordion.tsx), [Collapsible](src/components/ui/collapsible.tsx) and [ResponsivePopover](src/components/ui/responsive-popover.tsx) where their responsibilities fit. Preserve clear labels, counts and selected states across layouts. Consumer-specific dimensions, disclosure placement and responsive variants remain in the existing component owners rather than becoming global defaults.
+Question-led investigation, grouped appraisals, mechanism diagrams, full briefs and the post-launch orientation composer remain target capabilities until their actual handlers and persisted artifacts exist. Their absence is explicit. Inspectable legacy evidence remains available through Inventory.
 
 ## Elevation & Depth
 
-Readable layering, discreet structural shadows and selective glass establish depth. Near-neutral fills and hairline borders separate ordinary regions. Frosted floating layers add translucency, an inset highlight and a fine inner rim. The evidence surface remains the focal working area rather than becoming a decorative glass showcase.
+The workbench shell retains its original fixed workspace gradient, quiet 38px hairline grid fading toward the bottom, and subtle fabric-of-squares texture at 25% opacity. Progress may add one static radial violet glow behind the focal region. Landing spotlight, orbits and other landing-specific treatments stay local.
 
-The backdrop vocabulary spans two theme gradients. `--landing-gradient` anchors its brand-colored radial accent at the bottom and belongs to the project home page. `--workspace-gradient` reuses the same recognition hues at roughly half their strength, anchors the radial accent at the top of the scrolling workbench shell, and ramps vertically from the canvas toward a softer floor so reading surfaces gain separation as the analyst descends. A workspace texture layer may sit on top of it only at a restrained opacity (around 0.25); both gradients stay in the active theme, and the spotlight, orbit rings, grid mask and animated noise remain landing-only consumers.
+Glass working panels use 68% card, 24px blur and `shadow-glass`. Floating layers use 82% card and `shadow-float`; the top bar uses 55% card and 16px blur. Opaque objects use `shadow-raised`. `shadow-focal` identifies one current surface; `shadow-review` identifies a human decision. Dark drop shadows are black while colored rings retain their meaning. Existing `surface-shadow-soft` and `surface-shadow-floating` remain available for their landing and selective component consumers.
 
-### Shadow Vocabulary
-
-- **Soft surface** (`--surface-shadow-soft`): the named panel shadow, including its inset highlight. Used by the shared opaque-panel utility and selected content groups.
-- **Floating surface** (`--surface-shadow-floating`): the named elevated shadow with inner rim. Used by the floating-surface utility and landing header.
-
-The sidecar retains exact light and dark shadow strings from the theme. Existing `Card` uses the framework medium shadow and a fine ring, `GridCard` uses its small shadow, and `LiquidGlassCard` owns separate glow and inset-edge intensity maps. The production rail also applies an extra-large framework shadow. These are existing implementation differences from the two-tier shared guidance, not additional global design tiers. This documentation pass does not alter them.
-
-**The Surface Hierarchy Rule.** Use the two named theme shadows for shared panel and floating-surface guidance. Preserve existing component-specific depth during documentation or refinement rather than treating every observed shadow as another global tier.
+**The Surface Hierarchy Rule.** Keep reading content opaque, use selective glass for context, and separate rows with hairlines rather than nested glass panels. Dashed edges mean work not done, never an analytical conclusion.
 
 ## Shapes
 
-The theme's base radius is 1rem. The frontmatter contains the resolved small-through-extra-large scale, plus the existing badge, field-group and source-card aliases. Rounded buttons, broader container corners, pill navigation and the source cards' clipped or tabbed upper edges form the incumbent silhouette.
-
-Do not flatten every component to one corner size. Ordinary buttons use the medium radius, standard fields use the larger rounded treatment, and standard cards use the broadest theme corner. Glass cards accept a configurable radius. Consumers may override these deliberately, as the landing matrix preview does.
-
-Borders are usually single-pixel hairlines using semantic border values with opacity. Standard cards instead combine their rounded silhouette with a fine foreground ring. The landing grid, concentric orbits, textured backdrop and metallic call-to-action remain consumer-specific expressions.
+Metadata badges use 4px corners and no hover, border or decorative chrome. Section chips use 5px corners. Ordinary buttons and inputs use radius-md; segments use radius-tile. Cards use radius-xl, larger working panels radius-2xl, and the inventory sheet radius-3xl. Round controls and launch actions retain radius-full. Source cards retain their clipped or tabbed silhouette and radius-source-card.
 
 ## Components
 
-### Style ownership
+Extend existing shadcn/Base UI primitives and CVA variants before adding components. Palette, typography, radii and depth belong in the theme; consumer geometry remains local. [Button](src/components/ui/button.tsx) adds launch, round and approval variants to the established controls. [Badge](src/components/ui/badge.tsx) adds semantic tones; legacy operational color props map to these tones without treating success as analyst approval. Claim-class glyphs are shared by the list and detail reader.
 
-Use the established shadcn and Tailwind sequence: semantic CSS variables, theme aliases, shared primitives and CVA variants, then utility classes in page composition. The base preset provides the standard bridge; the active theme is imported after it and applies globally without a wrapper class.
-
-Palette, radius, typography, shadow and domain-state values belong in the active theme. Reusable visual variants belong on their shared component. Page composition uses utilities. Add a shared utility only when an existing primitive cannot express the recurring pattern. Keep the existing shared panel, floating-surface, display, section and micro-label utilities rather than adding a parallel styling vocabulary.
-
-### Buttons
-
-Crisp, precise and restrained. The [shared button](src/components/ui/button.tsx) exposes default, outline, secondary, ghost, destructive and link variants. The frontmatter calls the source's default variant `button-primary` to describe its visual role. The separate shared approval utility supplies the established teal action treatment.
-
-The default size is 36px high, with 24px, 32px and 44px alternatives and separate icon sizes. Primary hover reduces the fill opacity. Outline uses the existing translucent fill, with a transparent dark default. Secondary changes its tonal mix on hover. Ghost relies on a muted hover surface. Destructive is a semantic tint. Link preserves the library's existing blue styling.
-
-Focus uses the semantic ring and a three-pixel halo. Pressing a regular non-popup button shifts it down one pixel. Disabled controls remove pointer interaction and halve opacity. Invalid states use the inherited destructive token. Consumer adjustments, including uppercase approval copy, do not become default button behavior.
-
-### Chips and badges
-
-Compact classifications and secondary metadata. The [shared badge](src/components/ui/badge.tsx) offers default, regular, secondary, destructive, outline and fancy variants, plus optional family-color and dot treatments. Evidence surfaces may override these with domain-semantic colors or use neutral outlines.
-
-A badge is non-interactive metadata: it never carries a hover state of its own, and an interactive container (filter button, selectable row, link chip) owns whatever hover treatment applies. The shared primitive exposes no hover classes; consumers that deliberately restyle a badge into an interactive-looking control apply that treatment themselves. The fancy radial-chrome variant is a landing-owned composition retained for the project home page, not a workspace surface default. Keep labels explicit and preserve the distinction between a badge and an action.
-
-### Cards and containers
-
-The [standard card](src/components/ui/card.tsx) has a broad radius, a fine ring, vertical spacing and inset content regions. Default spacing is 24px; its compact size uses 16px. It is not interchangeable with the opaque panel utility.
-
-[LiquidGlassCard](src/components/ui/liquid-glass.tsx) is a translucent, configurable focal surface with a filtered backdrop, separate glow and inset-edge layers, and optional drag or expansion. Its default hover and press scales are opt-out; production navigation suppresses those scales. Its timing uses the organic curve recorded in the sidecar.
-
-[GridCard](src/components/ui/grid-card.tsx) adds a restrained, masked decorative grid over a translucent card. Its tone is configurable. Keep its decoration separate from analytical meaning. The sidecar's card entry shows these three surface families together; the glass and grid examples are static CSS representations, not an SVG-filter, motion or shader reproduction.
-
-### Inputs and fields
-
-Quiet, rounded and legible. The [standard input](src/components/ui/input.tsx) uses a half-opacity semantic field fill, a transparent default border and the broad rounded treatment. Focus adds the semantic ring; invalid and disabled states match the shared control vocabulary. At narrow widths it retains the larger base font before the desktop compact text treatment applies.
-
-The research composer is a distinct framed multiline control with its own toolbar, company selector, reference affordance and geometry. Its textarea is not a restyled copy of the standard single-line input. Preserve that composition when connecting behavior.
-
-### Navigation
-
-The production [workspace rail](src/components/workspace/workspace-navigation-rail.tsx) keeps six sections visible, marks the current section with a tinted surface and side indicator, and explains locked prerequisites. Collapsed items retain labels through accessible naming and tooltips. The sidecar preview illustrates its visual states without reproducing routing, persistence or lifecycle rules.
-
-The landing uses a separate floating pill header, dropdown context and mobile sheet. These are distinct consumers of the same surface and control vocabulary, not alternate defaults for the workspace rail.
+Use the existing disclosures, error boundaries, drawers and sheets. Inventory keeps its matrix mounted after first opening, preserving selection and filters without subscribing to all claims before it is needed. Keep loading geometry, explicit empty states and recoverable errors appropriate to the actual content.
 
 ### Motion and state
 
-Use `motion/react` for layout transitions and shared-element choreography. Reach for GSAP only when Motion is insufficient. Use motion to clarify causality, selection and already-persisted progress. The organic curve is shared by the landing and glass component, while the existing motion utility has its own preset easings and the rail uses a spring indicator. The sidecar records those differences instead of claiming one global motion token exists.
-
-The shared Accordion and Collapsible animate panel height and opacity by default. Set `animated={false}` on either root to disable the transition. Reduced-motion preferences also use immediate disclosure. Base UI owns open state, keyboard handling and ARIA; exiting content becomes inert immediately and unmounts after Motion completes unless `keepMounted` is requested. Native `hiddenUntilFound` panels retain their immediate browser-managed behavior.
-
-Reduced-motion behavior exists in the shared motion utility and production rail, and several landing and glass layers suppress transforms through CSS. The metallic landing action and animated noise retain their own continuous effects; complete reduced-motion conformance is not established by this pass. Preserve labelled loading, empty, error, review and insufficient-evidence states rather than disguising them as animation.
+Use `motion/react` for existing layout choreography. Only real persisted work may animate. Respect reduced motion; navigation and overlays remain usable with animations disabled. The shared Accordion and Collapsible retain their Base UI keyboard and ARIA behavior and optional animation. Integrity disclosures such as Illustrative, Showcase and Not live remain visible.
 
 ### Static preview definitions
 
-These isolated HTML/CSS examples preserve the existing Impeccable previews. Edit them here when a documented component sample changes, then run `pnpm design:sync`. They contain no product or workflow policy and do not implement application behavior. The exported copies in `design.json` must not be edited independently.
+These samples are visual documentation only. Edit the definitions here, then regenerate the sidecar; do not independently edit the generated copies.
 
 <details>
 <summary>Component samples for the Impeccable panel</summary>
@@ -437,7 +483,7 @@ These isolated HTML/CSS examples preserve the existing Impeccable previews. Edit
     "refersTo": "button-link",
     "description": "Static visual translation of the existing link treatment; actual behavior remains in the shared button and its consumers.",
     "html": "<button type=\"button\" class=\"ds-button ds-button-link\">Open original</button>",
-    "css": ".ds-button{display:inline-flex;align-items:center;justify-content:center;gap:.375rem;height:2.25rem;padding:0 .75rem;border:1px solid transparent;border-radius:var(--radius-md);font-family:var(--font-sans);font-size:1rem;font-weight:500;white-space:nowrap;cursor:pointer;outline:none;transition:background-color .15s,color .15s,box-shadow .15s,transform .15s}.ds-button:focus-visible{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklab,var(--ring) 30%,transparent)}.ds-button:active:not(:disabled){transform:translateY(1px)}.ds-button:disabled{pointer-events:none;opacity:.5}.ds-button-link{background:transparent;color:var(--color-blue-500);text-underline-offset:4px}.ds-button-link:hover:not(:disabled){text-decoration:underline}"
+    "css": ".ds-button{display:inline-flex;align-items:center;justify-content:center;gap:.375rem;height:2.25rem;padding:0 .75rem;border:1px solid transparent;border-radius:var(--radius-md);font-family:var(--font-sans);font-size:1rem;font-weight:500;white-space:nowrap;cursor:pointer;outline:none;transition:background-color .15s,color .15s,box-shadow .15s,transform .15s}.ds-button:focus-visible{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklab,var(--ring) 30%,transparent)}.ds-button:active:not(:disabled){transform:translateY(1px)}.ds-button:disabled{pointer-events:none;opacity:.5}.ds-button-link{background:transparent;color:var(--accent-foreground);text-underline-offset:4px}.ds-button-link:hover:not(:disabled){text-decoration:underline}"
   },
   {
     "name": "Approval Button",
@@ -453,23 +499,23 @@ These isolated HTML/CSS examples preserve the existing Impeccable previews. Edit
     "refersTo": "input",
     "description": "The shared input, not the research composer. Focus, invalid and disabled states follow the source control.",
     "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Source reference</span><input class=\"ds-input\" aria-label=\"Source reference\" placeholder=\"Public HTTPS source\" /></label>",
-    "css": ".ds-field{display:grid;gap:.5rem;max-width:22rem;font-family:var(--font-sans);color:var(--foreground)}.ds-field-label{font-size:.875rem;font-weight:500}.ds-input{box-sizing:border-box;height:2.25rem;width:100%;min-width:0;padding:.25rem .75rem;border:1px solid transparent;border-radius:var(--radius-3xl);background:color-mix(in oklab,var(--input) 50%,transparent);color:var(--foreground);font-family:var(--font-sans);font-size:1rem;outline:none;transition:color .15s,box-shadow .15s,background-color .15s}.ds-input::placeholder{color:var(--muted-foreground)}.ds-input:hover:not(:disabled){cursor:text}.ds-input:focus-visible{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklab,var(--ring) 30%,transparent)}.ds-input[aria-invalid=true]{border-color:var(--destructive);box-shadow:0 0 0 3px color-mix(in oklab,var(--destructive) 20%,transparent)}.ds-input:disabled{pointer-events:none;cursor:not-allowed;opacity:.5}@media(min-width:48rem){.ds-input{font-size:.875rem}}"
+    "css": ".ds-field{display:grid;gap:.5rem;max-width:22rem;font-family:var(--font-sans);color:var(--foreground)}.ds-field-label{font-size:.875rem;font-weight:500}.ds-input{box-sizing:border-box;height:2.25rem;width:100%;min-width:0;padding:.25rem .75rem;border:1px solid transparent;border-radius:var(--radius-md);background:var(--input-surface);border-color:var(--input-border);box-shadow:var(--surface-shadow-input);color:var(--foreground);font-family:var(--font-sans);font-size:1rem;outline:none;transition:color .15s,box-shadow .15s,background-color .15s}.ds-input::placeholder{color:var(--muted-foreground)}.ds-input:hover:not(:disabled){cursor:text}.ds-input:focus-visible{border-color:var(--ring);box-shadow:var(--surface-shadow-input),0 0 0 3px color-mix(in oklab,var(--ring) 30%,transparent)}.ds-input[aria-invalid=true]{border-color:var(--destructive-text);box-shadow:var(--surface-shadow-input),0 0 0 3px color-mix(in oklab,var(--destructive) 20%,transparent)}.ds-input:disabled{pointer-events:none;cursor:not-allowed;opacity:.5}@media(min-width:48rem){.ds-input{font-size:.875rem}}"
   },
   {
-    "name": "Outline Badge",
+    "name": "Metadata Badge",
     "kind": "chip",
     "refersTo": "badge-outline",
-    "description": "A neutral labelled classification, as used on evidence surfaces. A badge is not an action button.",
+    "description": "Non-interactive metadata; source membership does not confer analyst approval.",
     "html": "<span class=\"ds-badge\">Fact</span>",
-    "css": ".ds-badge{display:inline-flex;align-items:center;justify-content:center;gap:.125rem;width:fit-content;max-width:100%;padding:.125rem .375rem;border:1px solid var(--border);border-radius:var(--radius-lg);color:var(--foreground);background:transparent;font-family:var(--font-sans);font-size:.75rem;line-height:1rem;font-weight:500;white-space:nowrap;transition:background-color .3s,box-shadow .3s}.ds-badge:hover{background:color-mix(in oklab,var(--border) 50%,transparent)}.ds-badge:focus-visible{outline:none;border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklab,var(--ring) 50%,transparent)}"
+    "css": ".ds-badge{display:inline-flex;align-items:center;gap:.375rem;padding:2px 7px;border-radius:var(--radius-badge);background:var(--tint-ink);color:var(--foreground);font-family:var(--font-sans);font-size:12px;line-height:18px;font-weight:500}"
   },
   {
     "name": "Workspace Navigation",
     "kind": "nav",
     "refersTo": "navigation-current",
-    "description": "Static expanded desktop rail states. No route transitions, workflow decisions or persistence are implemented by this preview.",
-    "html": "<nav class=\"ds-nav\" aria-label=\"Research workspace sections\"><p class=\"ds-nav-label\">Sections</p><button class=\"ds-nav-item\" type=\"button\"><svg aria-hidden=\"true\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path d=\"M14.0278 13.3749C14.6759 12.7268 15 12.4027 15 12C15 11.5973 14.6759 11.2732 14.0278 10.6251L13.3749 9.9722C12.7268 9.32407 12.4027 9 12 9C11.5973 9 11.2732 9.32407 10.6251 9.9722L9.9722 10.6251C9.32407 11.2732 9 11.5973 9 12C9 12.4027 9.32407 12.7268 9.9722 13.3749L10.6251 14.0278C11.2732 14.6759 11.5973 15 12 15C12.4027 15 12.7268 14.6759 13.3749 14.0278L14.0278 13.3749Z\" stroke=\"currentColor\" stroke-width=\"1.5\"/><path d=\"M8 4C8 2.34533 8.34533 2 10 2H14C15.6547 2 16 2.34533 16 4C16 5.65467 15.6547 6 14 6H10C8.34533 6 8 5.65467 8 4Z\" stroke=\"currentColor\" stroke-width=\"1.5\"/><path d=\"M8 20C8 18.3453 8.34533 18 10 18H14C15.6547 18 16 18.3453 16 20C16 21.6547 15.6547 22 14 22H10C8.34533 22 8 21.6547 8 20Z\" stroke=\"currentColor\" stroke-width=\"1.5\"/><path d=\"M8.5 12H8C6.11438 12 5.17157 12 4.58579 11.4142C4 10.8284 4 9.88562 4 8C4 6.11438 4 5.17157 4.58579 4.58579C5.17157 4 6.11438 4 8 4\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M15.5 12H16C17.8856 12 18.8284 12 19.4142 12.5858C20 13.1716 20 14.1144 20 16C20 17.8856 20 18.8284 19.4142 19.4142C18.8284 20 17.8856 20 16 20\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M12 8.5V6M12 15.5V18\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg><span>Progress</span></button><button class=\"ds-nav-item\" type=\"button\"><svg aria-hidden=\"true\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path d=\"M13.5 16.5L15 18M14 14.5C14 15.8807 12.8807 17 11.5 17C10.1193 17 9 15.8807 9 14.5C9 13.1193 10.1193 12 11.5 12C12.8807 12 14 13.1193 14 14.5Z\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M13 2.5V3C13 5.82843 13 7.24264 13.8787 8.12132C14.7574 9 16.1716 9 19 9H19.5M20 10.6569V14C20 17.7712 20 19.6569 18.8284 20.8284C17.6569 22 15.7712 22 12 22C8.22876 22 6.34315 22 5.17157 20.8284C4 19.6569 4 17.7712 4 14V9.45584C4 6.21082 4 4.58831 4.88607 3.48933C5.06508 3.26731 5.26731 3.06508 5.48933 2.88607C6.58831 2 8.21082 2 11.4558 2C12.1614 2 12.5141 2 12.8372 2.11401C12.9044 2.13772 12.9702 2.165 13.0345 2.19575C13.3436 2.34355 13.593 2.593 14.0919 3.09188L18.8284 7.82843C19.4065 8.40649 19.6955 8.69552 19.8478 9.06306C20 9.4306 20 9.83935 20 10.6569Z\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg><span>Sources</span></button><button class=\"ds-nav-item ds-nav-current\" aria-current=\"page\" type=\"button\"><svg aria-hidden=\"true\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path d=\"M11 6L21 6\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><path d=\"M11 12L21 12\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><path d=\"M11 18L21 18\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><path d=\"M3 7.39286C3 7.39286 4 8.04466 4.5 9C4.5 9 6 5.25 8 4\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M3 18.3929C3 18.3929 4 19.0447 4.5 20C4.5 20 6 16.25 8 15\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg><span>Evidence</span></button><button class=\"ds-nav-item ds-nav-locked\" disabled type=\"button\"><svg aria-hidden=\"true\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path d=\"M21 21H10C6.70017 21 5.05025 21 4.02513 19.9749C3 18.9497 3 17.2998 3 14V3\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><path d=\"M17.7048 9.33333L14.8311 13.9845C14.4123 14.6623 13.9369 15.686 13.0749 15.5344C12.0611 15.356 11.5742 13.8449 10.7026 13.3445C9.99285 12.9371 9.47971 13.4281 9.06475 14M21 4L19.1465 7M5 20L7.52632 16.2667\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg><span>Assessment</span></button><button class=\"ds-nav-item ds-nav-locked\" disabled type=\"button\"><svg aria-hidden=\"true\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path d=\"M5.25345 4.19584L4.02558 4.90813C3.03739 5.48137 2.54329 5.768 2.27164 6.24483C2 6.72165 2 7.30233 2 8.46368V16.6283C2 18.1542 2 18.9172 2.34226 19.3418C2.57001 19.6244 2.88916 19.8143 3.242 19.8773C3.77226 19.9719 4.42148 19.5953 5.71987 18.8421C6.60156 18.3306 7.45011 17.7994 8.50487 17.9435C8.98466 18.009 9.44231 18.2366 10.3576 18.6917L14.1715 20.588C14.9964 20.9982 15.004 21 15.9214 21H18C19.8856 21 20.8284 21 21.4142 20.4013C22 19.8026 22 18.8389 22 16.9117V10.1715C22 8.24423 22 7.2806 21.4142 6.68188C20.8284 6.08316 19.8856 6.08316 18 6.08316H15.9214C15.004 6.08316 14.9964 6.08139 14.1715 5.6712L10.8399 4.01463C9.44884 3.32297 8.75332 2.97714 8.01238 3.00117C7.27143 3.02521 6.59877 3.41542 5.25345 4.19584Z\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M8 3L8 17.5\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M15 6.5L15 20.5\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg><span>Map</span></button><button class=\"ds-nav-item ds-nav-locked\" disabled type=\"button\"><svg aria-hidden=\"true\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path d=\"M16.5 2V5M7.5 2V5M12 2V5\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M13 3.5H11C7.70017 3.5 6.05025 3.5 5.02513 4.52513C4 5.55025 4 7.20017 4 10.5V15C4 18.2998 4 19.9497 5.02513 20.9749C6.05025 22 7.70017 22 11 22H13C16.2998 22 17.9497 22 18.9749 20.9749C20 19.9497 20 18.2998 20 15V10.5C20 7.20017 20 5.55025 18.9749 4.52512C17.9497 3.5 16.2998 3.5 13 3.5Z\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M8 15H12M8 11H16\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg><span>Brief</span></button></nav>",
-    "css": ".ds-nav{width:calc(14rem - 1rem - 2px);padding:.5rem;border:1px solid color-mix(in oklab,var(--background) 70%,transparent);border-radius:var(--radius-xl);background:color-mix(in oklab,var(--card) 46%,transparent);font-family:var(--font-sans);color:var(--foreground);backdrop-filter:blur(24px)}.ds-nav-label{margin:0;padding:.5rem .75rem;font-size:.6875rem;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-foreground)}.ds-nav-item{position:relative;display:flex;align-items:center;width:100%;margin:.125rem 0;padding:.5rem .625rem;border:0;border-radius:var(--radius-md);background:transparent;color:var(--muted-foreground);font:inherit;font-size:.875rem;text-align:left;cursor:pointer;transition:background-color .2s,color .2s}.ds-nav-item:hover:not(:disabled){background:var(--muted);color:var(--foreground)}.ds-nav-item:focus-visible{outline:2px solid var(--ring);outline-offset:2px}.ds-nav-item:active:not(:disabled){transform:translateY(1px)}.ds-nav-current{background:var(--sidebar-accent);color:var(--sidebar-accent-foreground);font-weight:500}.ds-nav-current::before{content:\"\";position:absolute;left:0;top:calc(50% - .625rem);height:1.25rem;width:.25rem;border-radius:9999px;background:var(--sidebar-accent-foreground)}.ds-nav-locked{opacity:.7;cursor:default}.ds-nav-item{gap:.625rem}.ds-nav-item svg{flex-shrink:0}"
+    "description": "Four workspace destinations. Investigation and Synthesis remain unavailable until implemented.",
+    "html": "<nav class=\"ds-nav\" aria-label=\"Workspace\"><a class=\"ds-tab\" href=\"#progress\">Progress</a><a class=\"ds-tab\" href=\"#sources\" aria-current=\"page\"><span>//</span> Sources</a><button class=\"ds-tab\" type=\"button\" aria-disabled=\"true\">Investigation</button><button class=\"ds-tab\" type=\"button\" aria-disabled=\"true\">Synthesis</button></nav>",
+    "css": ".ds-nav{display:flex;gap:4px;flex-wrap:wrap;padding:4px;border-radius:var(--radius-item);background:var(--fill-quiet);font-family:var(--font-sans)}.ds-tab{display:inline-flex;gap:8px;align-items:center;min-height:34px;padding:0 12px;border:0;border-radius:var(--radius-tile);background:transparent;color:var(--muted-foreground);font:inherit;font-size:14px;text-decoration:none}.ds-tab[aria-current=page]{background:var(--card);color:var(--foreground);box-shadow:var(--surface-shadow-tab)}.ds-tab span{color:var(--brand-purple)}.ds-tab[aria-disabled=true]{opacity:.7}.ds-tab:focus-visible{outline:2px solid var(--ring);outline-offset:2px}"
   },
   {
     "name": "Card, Glass and Grid Surfaces",
@@ -477,7 +523,7 @@ These isolated HTML/CSS examples preserve the existing Impeccable previews. Edit
     "refersTo": "card",
     "description": "Three existing surface families. Glass and grid are static CSS material samples; SVG distortion, Motion interaction and decorative source grids are documented in DESIGN.md.",
     "html": "<div class=\"ds-surfaces\"><article class=\"ds-card\"><h3 class=\"ds-card-title\">Evidence matrix</h3><p class=\"ds-card-copy\">Standard card surface and spacing.</p></article><article class=\"ds-glass\"><h3 class=\"ds-card-title\">Context</h3><p class=\"ds-card-copy\">Selective translucent layer.</p></article><article class=\"ds-grid\"><h3 class=\"ds-card-title\">Source context</h3><p class=\"ds-card-copy\">Masked decorative grid.</p></article></div>",
-    "css": ".ds-surfaces{display:grid;gap:1rem;width:100%;max-width:28rem;font-family:var(--font-sans);color:var(--card-foreground)}.ds-card{display:flex;flex-direction:column;gap:1.5rem;overflow:hidden;border-radius:var(--radius-4xl);padding:1.5rem 0;background:var(--card);font-size:.875rem;box-shadow:0 0 0 1px color-mix(in oklab,var(--foreground) 5%,transparent),0 4px 6px -1px rgb(0 0 0/.1),0 2px 4px -2px rgb(0 0 0/.1)}.ds-card-title{position:relative;margin:0;padding:0 1.5rem;font-size:1rem;font-weight:500}.ds-card-copy{position:relative;margin:0;padding:0 1.5rem;font-size:.875rem;line-height:1.25rem;color:var(--muted-foreground)}.ds-glass{display:grid;gap:.5rem;overflow:hidden;border:1px solid color-mix(in oklab,var(--background) 70%,transparent);border-radius:var(--radius-xl);padding:1.5rem 0;background:color-mix(in oklab,var(--card) 46%,transparent);backdrop-filter:blur(24px);box-shadow:0 12px 32px color-mix(in oklab,var(--foreground) 7%,transparent),inset 1px 1px 0 color-mix(in oklab,var(--background) 82%,transparent)}.ds-grid{position:relative;isolation:isolate;display:grid;gap:.5rem;overflow:hidden;border:1px solid var(--border);border-radius:var(--radius-xl);padding:1.25rem 0;background:color-mix(in oklab,var(--card) 82%,transparent);backdrop-filter:blur(12px);box-shadow:0 1px 3px 0 rgb(0 0 0/.1),0 1px 2px -1px rgb(0 0 0/.1)}.ds-grid::before{content:\"\";position:absolute;inset:0;background-image:linear-gradient(to right,color-mix(in oklab,var(--primary) 15%,transparent) 1px,transparent 1px),linear-gradient(to bottom,color-mix(in oklab,var(--primary) 15%,transparent) 1px,transparent 1px);background-size:28px 28px;mask-image:linear-gradient(135deg,black,transparent 72%)}:host-context(.dark) .ds-card{box-shadow:0 0 0 1px color-mix(in oklab,var(--foreground) 10%,transparent),0 4px 6px -1px rgb(0 0 0/.1),0 2px 4px -2px rgb(0 0 0/.1)}"
+    "css": ".ds-surfaces{display:grid;gap:1rem;width:100%;max-width:28rem;font-family:var(--font-sans);color:var(--card-foreground)}.ds-card{display:flex;flex-direction:column;gap:1.5rem;overflow:hidden;border-radius:var(--radius-xl);padding:1.5rem 0;background:var(--card);font-size:.875rem;box-shadow:0 0 0 1px color-mix(in oklab,var(--foreground) 5%,transparent),0 4px 6px -1px rgb(0 0 0/.1),0 2px 4px -2px rgb(0 0 0/.1)}.ds-card-title{position:relative;margin:0;padding:0 1.5rem;font-size:1rem;font-weight:500}.ds-card-copy{position:relative;margin:0;padding:0 1.5rem;font-size:.875rem;line-height:1.25rem;color:var(--muted-foreground)}.ds-glass{display:grid;gap:.5rem;overflow:hidden;border:1px solid color-mix(in oklab,var(--background) 70%,transparent);border-radius:var(--radius-xl);padding:1.5rem 0;background:color-mix(in oklab,var(--card) 46%,transparent);backdrop-filter:blur(24px);box-shadow:0 12px 32px color-mix(in oklab,var(--foreground) 7%,transparent),inset 1px 1px 0 color-mix(in oklab,var(--background) 82%,transparent)}.ds-grid{position:relative;isolation:isolate;display:grid;gap:.5rem;overflow:hidden;border:1px solid var(--border);border-radius:var(--radius-xl);padding:1.25rem 0;background:color-mix(in oklab,var(--card) 82%,transparent);backdrop-filter:blur(12px);box-shadow:0 1px 3px 0 rgb(0 0 0/.1),0 1px 2px -1px rgb(0 0 0/.1)}.ds-grid::before{content:\"\";position:absolute;inset:0;background-image:linear-gradient(to right,color-mix(in oklab,var(--primary) 15%,transparent) 1px,transparent 1px),linear-gradient(to bottom,color-mix(in oklab,var(--primary) 15%,transparent) 1px,transparent 1px);background-size:28px 28px;mask-image:linear-gradient(135deg,black,transparent 72%)}:host-context(.dark) .ds-card{box-shadow:0 0 0 1px color-mix(in oklab,var(--foreground) 10%,transparent),0 4px 6px -1px rgb(0 0 0/.1),0 2px 4px -2px rgb(0 0 0/.1)}"
   }
 ]
 ```
@@ -488,17 +534,14 @@ These isolated HTML/CSS examples preserve the existing Impeccable previews. Edit
 
 ### Do:
 
-- Do keep runtime values in the active theme and shared component owners. Use semantic surface, text and border utilities and shared component variants. Regenerate the documentation exports when their sources change.
-- Do use semantic colors and readable labels for claim classifications, review and approval.
-- Do preserve existing responsive geometry, source controls, focus states and loading silhouettes during refinement.
-- Do keep the evidence surface visually central and use glass for selective layers.
-- Do verify both themes and narrow layouts when changing shared styles.
+- Do keep tokens and variants in their runtime owners and regenerate derived documentation.
+- Do keep evidence, source membership and analyst judgment visibly distinct.
+- Do preserve meaningful source controls, keyboard access, loading geometry and direct links.
+- Do inspect both themes and narrow layouts after shared style changes.
 
 ### Don't:
 
-- Don't turn brand violet into the default primary action color or use evidence colors as decoration.
-- Don't reintroduce generic SaaS dashboard or starter-kit visual patterns in place of the established research interface.
-- Don't promote a landing-specific spotlight, grid, orbit, shader or texture into a universal workspace requirement.
-- Don't create a parallel palette, radius scale or component implementation from these previews, bypass the base-luma component contract, or add page-specific BEM stylesheets.
-- Don't remove useful controls or recompose an existing surface under the name of integration or refinement.
-- Don't claim contrast compliance, protected-workflow acceptance or complete reduced-motion coverage from this documentation pass.
+- Don't use teal for routine success or evidence colors for unrelated source categories.
+- Don't fabricate execution, question relationships, appraisal outcomes or change counters.
+- Don't load the local design export at runtime or maintain a parallel palette.
+- Don't remove integrity disclosures or substitute a public page for protected workflow verification.

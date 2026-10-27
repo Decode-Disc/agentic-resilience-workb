@@ -44,6 +44,7 @@ import { RunRouteComponent } from "@/components/workspace/run-route-component";
 
 beforeEach(() => {
     convexReactHarness.reset();
+    convexReactHarness.query(api.evidenceMatrix.getSummary).returns(undefined);
     convexReactHarness
         .mutation(api.sourcePreparation.startForReview)
         .uses(vi.fn());
@@ -100,6 +101,71 @@ beforeEach(() => {
     convexReactHarness
         .paginatedQuery(api.sources.listForReviewPage)
         .returns(emptyPage);
+});
+
+test("opens inventory from the current workspace without starting research", () => {
+    convexReactHarness.query(api.researchRuns.getMine).returns({
+        runId: "run-1",
+        company: {
+            legalName: "Example Corp",
+            ticker: "EXM",
+            exchange: "NASDAQ",
+            cik: "123",
+        },
+        lifecycleState: "evidence_ready",
+        executionStatus: "idle",
+        providerFailures: [],
+    });
+    convexReactHarness
+        .query(api.evidenceMatrix.getSummary)
+        .returns({ claimCount: 4 });
+    const onInventoryOpenChange = vi.fn();
+    render(
+        <RunRouteComponent
+            runId={"run-1" as never}
+            section="progress"
+            onInventoryOpenChange={onInventoryOpenChange}
+        />,
+    );
+    expect(screen.getByText("4")).toBeTruthy();
+    fireEvent.click(
+        screen.getByRole("button", { name: "Open evidence inventory" }),
+    );
+    expect(onInventoryOpenChange).toHaveBeenCalledWith(true);
+    expect(submitManualUrl).not.toHaveBeenCalled();
+    expect(decideSource).not.toHaveBeenCalled();
+});
+
+test("does not turn unavailable investigation into an analytical outcome", () => {
+    convexReactHarness.query(api.researchRuns.getMine).returns({
+        runId: "run-1",
+        company: {
+            legalName: "Example Corp",
+            ticker: "EXM",
+            exchange: "NASDAQ",
+            cik: "123",
+        },
+        lifecycleState: "evidence_ready",
+        executionStatus: "idle",
+        providerFailures: [],
+    });
+    render(
+        <RunRouteComponent
+            runId={"run-1" as never}
+            section="investigation"
+            subsection="review"
+        />,
+    );
+    expect(
+        screen.getByRole("heading", {
+            name: "Investigation is not available yet",
+        }),
+    ).toBeTruthy();
+    expect(
+        screen.queryByText(
+            /justified insufficiency|no retained appraisal|not established/i,
+        ),
+    ).toBeNull();
 });
 
 test("wires the evidence sufficiency checkpoint", async () => {

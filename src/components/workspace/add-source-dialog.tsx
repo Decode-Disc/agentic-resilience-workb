@@ -230,7 +230,9 @@ export function AddSourceDialog({
                             </p>
                         ) : null}
                         {confirmation ? (
-                            <p role="status" className="text-xs text-approved">
+                            <p
+                                role="status"
+                                className="text-xs text-foreground">
                                 {confirmation}
                             </p>
                         ) : null}

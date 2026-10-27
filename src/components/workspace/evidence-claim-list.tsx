@@ -12,8 +12,8 @@ import {
     EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ClaimClassBadge } from "@/components/workspace/claim-class-badge";
 import {
-    claimClassificationLabel,
     claimPolicyLabel,
     claimProcessingLabel,
 } from "@/lib/presentation/research-copy";
@@ -159,11 +159,11 @@ export function EvidenceClaimList({
                                     data-active={active}
                                     onClick={() => onSelect(claim.claimId)}>
                                     <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                                        <Badge variant="outline">
-                                            {claimClassificationLabel(
-                                                claim.classification,
-                                            )}
-                                        </Badge>
+                                        <ClaimClassBadge
+                                            classification={
+                                                claim.classification
+                                            }
+                                        />
                                         <Badge variant="secondary">
                                             {claimProcessingLabel(
                                                 claim.processing,

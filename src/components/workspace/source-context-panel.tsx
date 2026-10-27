@@ -156,7 +156,7 @@ export function SourceContextPanel({
                 <TabsList
                     activateOnFocus
                     variant="line"
-                    className="h-10 w-full shrink-0 justify-start rounded-none border-b border-border/60 px-4">
+                    className="h-10 w-full shrink-0 justify-start rounded-none border-b border-divider px-4">
                     <TabsTrigger
                         value="details"
                         className="flex-none rounded-none px-3 data-active:text-primary after:bg-primary">
@@ -179,7 +179,7 @@ export function SourceContextPanel({
                             key={source.sourceId}
                             render={<section />}
                             aria-label="Why this source appears"
-                            className="my-3 border-b border-border/60 pb-3">
+                            className="my-3 border-b border-divider pb-3">
                             <CollapsibleTrigger
                                 render={
                                     <Button
@@ -418,7 +418,9 @@ function SourceReadingDetails({
         ]),
     );
     return (
-        <section aria-label="Source reading" className="mt-5 space-y-4 text-sm">
+        <section
+            aria-label="Source reading"
+            className="mt-5 space-y-4 text-brief">
             <div className="space-y-2">
                 <AlertStatus
                     status={reading.status}
@@ -489,7 +491,7 @@ function SourceReadingDetails({
                                                     className="break-all text-xs font-medium link underline-offset-4">
                                                     {passage.title}
                                                 </a>
-                                                <blockquote className="whitespace-pre-wrap border-l-2 border-border pl-3 leading-relaxed text-muted-foreground">
+                                                <blockquote className="whitespace-pre-wrap border-l-2 border-brand-purple/30 bg-tint-violet/40 pl-3 text-brief text-foreground">
                                                     {passage.quotation}
                                                 </blockquote>
                                             </div>

@@ -5,12 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { sourceInclusionLabel } from "@/lib/presentation/research-copy";
 import { cn } from "@/lib/utils";
 
-/**
- * Corpus membership is presented from the approval vocabulary: "Included"
- * carries the teal approval treatment and "Not included" stays a quiet
- * neutral state. Badges are non-interactive metadata — they carry no hover
- * of their own; an interactive container owns its own hover.
- */
+/** Membership is independent of reading, qualification and analyst approval. */
 export function SourceInclusionBadge({
     included,
     className,
@@ -23,8 +18,8 @@ export function SourceInclusionBadge({
             variant="outline"
             className={cn(
                 included
-                    ? "border-approved/25 bg-approved/10 text-approved"
-                    : "border-border/60 bg-muted/30 text-muted-foreground",
+                    ? "bg-tint-ink text-foreground"
+                    : "bg-tint-unknown text-muted-foreground",
                 className,
             )}>
             {included ? (

@@ -77,16 +77,25 @@ for (const [role, value] of Object.entries(
     object(tokens.typography, "typography"),
 )) {
     const entry = object(value, `typography.${role}`);
-    const family =
-        role === "label"
-            ? "mono"
-            : /^(display|title)/.test(role)
-              ? "heading"
-              : "sans";
+    const family = ["label", "chip", "meta"].includes(role)
+        ? "mono"
+        : /^(display|title)/.test(role)
+          ? "heading"
+          : "sans";
     entry.fontFamily = string(
         themeAliases[`--font-${family}`],
         `font-${family}`,
     );
+    for (const [property, suffix] of [
+        ["fontSize", ""],
+        ["lineHeight", "--line-height"],
+        ["fontWeight", "--font-weight"],
+        ["letterSpacing", "--letter-spacing"],
+    ] as const) {
+        const value = themeAliases[`--text-${role}${suffix}`];
+        if (value !== undefined)
+            entry[property] = property === "fontWeight" ? Number(value) : value;
+    }
 }
 const radius = Number(
     match(
@@ -99,7 +108,9 @@ const rounded = object(tokens.rounded, "rounded");
 for (const name of Object.keys(rounded)) {
     const expression =
         themeAliases[`--radius-${name}`] ?? localAliases[`--radius-${name}`];
-    if (expression === "var(--radius)") {
+    if (expression && /^[\d.]+(?:rem|px)$/.test(expression)) {
+        rounded[name] = expression;
+    } else if (expression === "var(--radius)") {
         rounded[name] = `${radius}rem`;
     } else {
         const operation = expression?.match(
@@ -150,6 +161,9 @@ function colorCoordinates(
     value: string,
     mode: Record<string, string>,
 ): [number, number, number] {
+    const reference = value.match(/^var\((--[\w-]+)\)$/)?.[1];
+    if (reference)
+        return colorCoordinates(string(mode[reference], reference), mode);
     const direct = value.match(
         /^oklch\(([\d.]+)(%)? ([\d.]+) ([\d.]+)(?: \/ [^)]+)?\)$/,
     );
@@ -218,9 +232,10 @@ const overview = match(
 const bullets = (text: string) =>
     [...text.matchAll(/^- (.+)$/gm)].map((entry) => entry[1]);
 const typePurposes = Object.fromEntries(
-    [...body.matchAll(/- \*\*(Display|Title|Body|Label):\*\* (.+)/g)].map(
-        (entry) => [entry[1]?.toLowerCase(), entry[2]?.replaceAll("`", "")],
-    ),
+    [...body.matchAll(/- \*\*([\w-]+):\*\* (.+)/g)].map((entry) => [
+        entry[1]?.toLowerCase(),
+        entry[2]?.replaceAll("`", ""),
+    ]),
 );
 const typographyMeta = Object.fromEntries(
     Object.keys(object(tokens.typography, "typography")).map((key) => [
@@ -236,7 +251,6 @@ const typographyMeta = Object.fromEntries(
 );
 const motionUtility = read("src/components/ui/motion-animate-presence.tsx");
 const glass = read("src/components/ui/liquid-glass.tsx");
-const rail = read("src/components/workspace/workspace-navigation-rail.tsx");
 const tailwind = read("node_modules/tailwindcss/theme.css");
 const sidecarPath = ".impeccable/design.json";
 const timestamp = existsSync(resolve(root, sidecarPath))
@@ -254,11 +268,13 @@ const sidecar = {
         colorMeta,
         typographyMeta,
         shadows: Object.entries(modes).flatMap(([mode, values]) =>
-            ["surface-shadow-soft", "surface-shadow-floating"].map((name) => ({
-                name: `${mode === "dark" ? "dark-" : ""}${name}`,
-                value: string(values[`--${name}`], name),
-                purpose: "Theme-owned surface depth.",
-            })),
+            Object.keys(values)
+                .filter((name) => name.startsWith("surface-shadow-"))
+                .map((name) => ({
+                    name: `${mode === "dark" ? "dark-" : ""}${name}`,
+                    value: string(values[`--${name}`], name),
+                    purpose: "Theme-owned surface depth.",
+                })),
         ),
         motion: [
             {
@@ -275,15 +291,6 @@ const sidecar = {
                 name: "motion-preset-curve",
                 value: `cubic-bezier(${match(motionUtility, /const defaultEase: Easing = \[([^\]]+)\]/, "preset easing")})`,
                 purpose: "Existing shared motion preset curve.",
-            },
-            {
-                name: "rail-selection-spring",
-                value: match(
-                    rail,
-                    /type: "spring", (stiffness: \d+, damping: \d+)/,
-                    "rail spring",
-                ).replace(", ", "; "),
-                purpose: "Existing rail selection indicator.",
             },
         ],
         breakpoints: ["sm", "md", "lg", "xl", "2xl"].map((name) => ({

@@ -1,19 +1,22 @@
 @import "@fontsource-variable/geist/wght.css";
 
-/*
- * Evidence Workbench theme
- *
- * Follows the shadcn + Tailwind v4 convention:
- * semantic values -> theme bridge -> Tailwind utilities.
- * The upstream CSS server rewrites at-rule tokens even inside comments.
- * The generated base preset remains untouched and is imported before this file.
- *
- * Visual direction: an institutional near-neutral canvas with crisp hairline
- * borders (Qatalog), frosted liquid-glass surfaces with an inset top highlight
- * and soft diffuse shadows (Volvo EX30 concept), while the Decoding
- * Discontinuity purple and green remain the only chromatic signals.
- * Not all tokens are overrided from base preset, only those that are relevant to the Evidence Workbench theme.
- */
+@font-face {
+    font-family: "Geist Mono";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("../../fonts/geist-mono-400.ttf") format("truetype");
+}
+
+@font-face {
+    font-family: "Geist Mono";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("../../fonts/geist-mono-500.ttf") format("truetype");
+}
+
+/* Evidence Workbench: semantic values, Tailwind aliases, then shared primitives. */
 
 @theme {
     --font-sans:
@@ -21,16 +24,92 @@
     --font-heading:
         "Geist Variable", "Geist", "Segoe UI", ui-sans-serif, sans-serif;
     --font-mono:
-        "SFMono-Regular", "Cascadia Code", "Roboto Mono", ui-monospace,
-        monospace;
+        "Geist Mono", "SFMono-Regular", "Cascadia Code", "Roboto Mono",
+        ui-monospace, monospace;
 
-    --radius-sm: calc(var(--radius) * 0.4);
-    --radius-md: calc(var(--radius) * 0.6);
-    --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) * 1.2);
-    --radius-2xl: calc(var(--radius) * 1.4);
-    --radius-3xl: calc(var(--radius) * 1.8);
-    --radius-4xl: calc(var(--radius) * 2.2);
+    --radius-sm: 0.4rem;
+    --radius-md: 0.6rem;
+    --radius-lg: 1rem;
+    --radius-xl: 1.2rem;
+    --radius-2xl: 1.4rem;
+    --radius-3xl: 1.8rem;
+    --radius-4xl: 2.2rem;
+    --radius-badge: 0.25rem;
+    --radius-chip: 0.3125rem;
+    --radius-tile: 0.6875rem;
+    --radius-item: 0.875rem;
+    --radius-full: 9999px;
+    --radius-input: 0.65rem;
+    --radius-source-card: 0.75rem;
+    --container-max: 100rem;
+    --gutter: 1rem;
+    --gutter-sm: 1.5rem;
+    --gutter-md: 3rem;
+    --control-height: 2.25rem;
+    --grid-pitch: 2.5rem;
+    --bar-height: 3.75rem;
+    --side-column: 18.75rem;
+    --dock-width: 21.25rem;
+    --composer-width: 38.75rem;
+    --start-width: 40rem;
+    --blur-glass: 24px;
+    --blur-bar: 16px;
+    --text-headline: 2.5rem;
+    --text-headline--line-height: 2.75rem;
+    --text-headline--font-weight: 500;
+    --text-headline--letter-spacing: -0.04em;
+    --text-display: 1.875rem;
+    --text-display--line-height: 2.25rem;
+    --text-display--font-weight: 600;
+    --text-display--letter-spacing: -0.025em;
+    --text-display-sm: 2.25rem;
+    --text-display-sm--line-height: 2.5rem;
+    --text-display-sm--font-weight: 600;
+    --text-display-sm--letter-spacing: -0.025em;
+    --text-display-md: 3rem;
+    --text-display-md--line-height: 1;
+    --text-display-md--font-weight: 600;
+    --text-display-md--letter-spacing: -0.025em;
+    --text-title: 1.125rem;
+    --text-title--line-height: 1.75rem;
+    --text-title--font-weight: 600;
+    --text-title--letter-spacing: -0.025em;
+    --text-heading: 1.25rem;
+    --text-heading--line-height: 1.625rem;
+    --text-heading--font-weight: 600;
+    --text-heading--letter-spacing: -0.025em;
+    --text-reading: 1.25rem;
+    --text-reading--line-height: 1.6875rem;
+    --text-reading--font-weight: 500;
+    --text-reading--letter-spacing: -0.025em;
+    --text-body: 1rem;
+    --text-body--line-height: 1.5;
+    --text-body--font-weight: 400;
+    --text-body-sm: 0.875rem;
+    --text-body-sm--line-height: 1.25rem;
+    --text-body-sm--font-weight: 400;
+    --text-brief: 0.96875rem;
+    --text-brief--line-height: 1.625rem;
+    --text-brief--font-weight: 400;
+    --text-figure: 2.25rem;
+    --text-figure--line-height: 2.25rem;
+    --text-figure--font-weight: 500;
+    --text-figure--letter-spacing: -0.045em;
+    --text-figure-lg: 2.75rem;
+    --text-figure-lg--line-height: 2.75rem;
+    --text-figure-lg--font-weight: 500;
+    --text-figure-lg--letter-spacing: -0.05em;
+    --text-label: 0.6875rem;
+    --text-label--line-height: 1.5;
+    --text-label--font-weight: 500;
+    --text-label--letter-spacing: 0.12em;
+    --text-chip: 0.6875rem;
+    --text-chip--line-height: 1.5;
+    --text-chip--font-weight: 500;
+    --text-chip--letter-spacing: 0.16em;
+    --text-meta: 0.71875rem;
+    --text-meta--line-height: 1.5;
+    --text-meta--font-weight: 400;
 }
 
 :root {
@@ -59,16 +138,16 @@
     --evidence-inference: oklch(0.415 0.2019 300.7);
     --evidence-hypothesis: oklch(0.5086 0.1022 70.64);
     --evidence-unknown: oklch(0.4842 0.0126 308);
-    --counter-evidence: oklch(0.5725 0.2009 356.87);
-    --review: oklch(82.8% 0.189 84.429);
+    --counter-evidence: oklch(0.54 0.2009 356.87);
+    --review: oklch(0.828 0.189 84.429);
     --approved: oklch(0.5 0.09 186.7);
     --approved-foreground: oklch(0.985 0.002 308);
 
-    --chart-1: oklch(0.415 0.2019 300.7);
-    --chart-2: oklch(0.5725 0.2009 356.87);
-    --chart-3: oklch(0.4856 0.1016 258.76);
-    --chart-4: oklch(0.5086 0.1022 70.64);
-    --chart-5: oklch(0.4842 0.0126 308);
+    --chart-1: var(--brand-purple);
+    --chart-2: var(--counter-evidence);
+    --chart-3: var(--evidence-fact);
+    --chart-4: var(--evidence-hypothesis);
+    --chart-5: var(--evidence-unknown);
 
     --sidebar: oklch(0.9371 0.0031 308);
     --sidebar-foreground: oklch(0.1811 0.0092 308);
@@ -107,12 +186,62 @@
             oklch(0.9271 0.003 308) 100%
         );
 
-    /* Workspace counterpart of the landing backdrop. It reuses the same
-     * recognition hues at roughly half their strength and anchors the
-     * radial accent at the top, where the analyst enters the page, because
-     * this surface scrolls instead of filling one viewport. The vertical
-     * ramp starts at the canvas rather than white so reading surfaces keep
-     * gaining separation further down the page. */
+    --input-surface: color-mix(in oklab, var(--card) 97%, black);
+    --input-border: oklch(0.1811 0.0092 308 / 0.47);
+    --surface-shadow-input: inset 0 1px 3px oklch(0 0 0 / 0.09);
+    --review-foreground: oklch(0.53 0.108 84.429);
+    --primary-sheen: oklch(0.3965 0.034 307.99);
+    --destructive: oklch(0.577 0.245 27.325);
+    --tint-fact: oklch(0.9405 0.0108 262.73);
+    --tint-inference: oklch(0.9393 0.0192 301.08);
+    --tint-hypothesis: oklch(0.938 0.0107 66.24);
+    --tint-unknown: oklch(0.9506 0.0015 308);
+    --tint-counter: oklch(0.9505 0.0188 354.57);
+    --tint-review: oklch(0.965 0.0296 83.2);
+    --tint-approved: oklch(0.9273 0.0112 190.87);
+    --tint-ink: oklch(0.9344 0.0017 308);
+    --tint-violet: oklch(0.9393 0.0192 301.08);
+    --surface-glass: oklch(0.9911 0.0011 308 / 0.68);
+    --surface-float: oklch(0.9911 0.0011 308 / 0.82);
+    --surface-bar: oklch(0.9911 0.0011 308 / 0.55);
+    --fill-quiet: oklch(0.1811 0.0092 308 / 0.06);
+    --divider: oklch(0.1811 0.0092 308 / 0.07);
+    --edge-dashed: oklch(0.1811 0.0092 308 / 0.28);
+    --grid-line: oklch(0.1811 0.0092 308 / 0.045);
+    --glow: oklch(0.415 0.2019 300.7 / 0.15);
+    --chip-edge: oklch(0.415 0.2019 300.7 / 0.28);
+    --nav-current: oklch(0.415 0.2019 300.7 / 0.12);
+    --destructive-text: oklch(0.48 0.19 27.325);
+    --surface-shadow-glass:
+        inset 0 1px 0 oklch(0.9931 0.0009 308 / 0.9),
+        0 0 0 1px oklch(0.1811 0.0092 308 / 0.07),
+        0 14px 36px -22px oklch(0.1811 0.0092 308 / 0.28);
+    --surface-shadow-focal:
+        inset 0 1px 0 oklch(0.9931 0.0009 308 / 0.9),
+        0 0 0 1px oklch(0.415 0.2019 300.7 / 0.3),
+        0 30px 70px -36px oklch(0.415 0.2019 300.7 / 0.55);
+    --surface-shadow-review:
+        inset 0 1px 0 oklch(0.9931 0.0009 308 / 0.9),
+        0 0 0 1px oklch(0.828 0.189 84.429 / 0.55),
+        0 14px 32px -18px oklch(0.828 0.189 84.429 / 0.6);
+    --surface-shadow-float:
+        inset 0 1px 0 oklch(0.9931 0.0009 308 / 0.9),
+        0 0 0 1px oklch(0.1811 0.0092 308 / 0.09),
+        0 18px 40px -18px oklch(0.1811 0.0092 308 / 0.38);
+    --surface-shadow-raised:
+        0 0 0 1px oklch(0.1811 0.0092 308 / 0.08),
+        0 10px 22px -16px oklch(0.1811 0.0092 308 / 0.4);
+    --surface-shadow-node:
+        inset 0 1px 0 oklch(0.9931 0.0009 308 / 0.9),
+        0 0 0 1px oklch(0.1811 0.0092 308 / 0.12),
+        0 12px 26px -16px oklch(0.1811 0.0092 308 / 0.35);
+    --surface-shadow-tab:
+        0 0 0 1px oklch(0.1811 0.0092 308 / 0.08),
+        0 4px 10px -6px oklch(0.1811 0.0092 308 / 0.3);
+    --surface-shadow-launch:
+        inset 0 1px 0 oklch(1 0 0 / 0.3),
+        0 12px 26px -12px oklch(0.29 0.04 307.99 / 0.8);
+
     --workspace-gradient:
         radial-gradient(
             ellipse 120% 44% at 50% -12%,
@@ -128,12 +257,6 @@
             oklch(0.9271 0.003 308) 100%
         );
 
-    /* Tiled hairline grid for the workbench shell, a quieter sibling of the
-     * landing grid at a larger cell (the shell tiles at 28px, the landing at
-     * 22px – matching the GridCard decorative-grid scale). Lines derive from
-     * the foreground token so light and dark modes adapt without a second
-     * rule; the shell's fixed overlay fades the grid toward the bottom via
-     * its own mask so long pages keep a calm reading floor. */
     --workspace-grid:
         linear-gradient(
             to right,
@@ -149,7 +272,7 @@
 
 .dark {
     --brand-purple: oklch(0.7024 0.146 308.49);
-    --brand-green: oklch(88.01% 0.051 137.14);
+    --brand-green: oklch(0.8801 0.051 137.14);
 
     --background: oklch(0.1911 0.0071 308);
     --foreground: oklch(0.9622 0.0042 308);
@@ -165,8 +288,8 @@
     --muted-foreground: oklch(0.7282 0.0124 308);
     --accent: color-mix(in oklab, var(--brand-purple) 20%, black);
     --accent-foreground: oklch(0.92 0.035 186.7);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
+    --border: oklch(1 0 0 / 0.1);
+    --input: oklch(1 0 0 / 0.15);
     --ring: oklch(0.7024 0.146 308.49);
 
     --evidence-fact: oklch(0.72 0.105 258.76);
@@ -176,13 +299,13 @@
     --counter-evidence: oklch(0.73 0.16 356.87);
     --review: oklch(0.76 0.12 70.64);
     --approved: oklch(0.7285 0.0968 186.7);
-    --approved-foreground: oklch(0.985 0.002 308);
+    --approved-foreground: oklch(0.1911 0.0071 308);
 
-    --chart-1: oklch(0.7024 0.146 308.49);
-    --chart-2: oklch(0.73 0.16 356.87);
-    --chart-3: oklch(0.72 0.105 258.76);
-    --chart-4: oklch(0.76 0.12 70.64);
-    --chart-5: oklch(0.7282 0.0124 308);
+    --chart-1: var(--brand-purple);
+    --chart-2: var(--counter-evidence);
+    --chart-3: var(--evidence-fact);
+    --chart-4: var(--evidence-hypothesis);
+    --chart-5: var(--evidence-unknown);
 
     --sidebar: oklch(0.1671 0.0064 308);
     --sidebar-foreground: oklch(0.9622 0.0042 308);
@@ -219,6 +342,61 @@
             oklch(0.1671 0.0064 308) 100%
         );
 
+    --input-surface: color-mix(in oklab, var(--card) 90%, black);
+    --input-border: oklch(0.9622 0.0042 308 / 0.38);
+    --surface-shadow-input: inset 0 1px 3px oklch(0 0 0 / 0.28);
+    --review-foreground: var(--review);
+    --primary-sheen: oklch(0.9407 0.0071 308);
+    --destructive: oklch(0.704 0.191 22.216);
+    --tint-fact: oklch(0.2863 0.0171 280.28);
+    --tint-inference: oklch(0.2799 0.0215 308.3);
+    --tint-hypothesis: oklch(0.2955 0.0112 32.51);
+    --tint-unknown: oklch(0.2743 0.0089 308);
+    --tint-counter: oklch(0.2824 0.0209 339.29);
+    --tint-review: oklch(0.3216 0.0164 47.23);
+    --tint-approved: oklch(0.3019 0.0109 225.77);
+    --tint-ink: oklch(0.2888 0.0088 308);
+    --tint-violet: oklch(0.2799 0.0215 308.3);
+    --surface-glass: oklch(0.2381 0.0092 308 / 0.68);
+    --surface-float: oklch(0.2381 0.0092 308 / 0.82);
+    --surface-bar: oklch(0.2381 0.0092 308 / 0.55);
+    --fill-quiet: oklch(0.9622 0.0042 308 / 0.06);
+    --divider: oklch(0.9622 0.0042 308 / 0.07);
+    --edge-dashed: oklch(0.9622 0.0042 308 / 0.28);
+    --grid-line: oklch(0.9622 0.0042 308 / 0.045);
+    --glow: oklch(0.7024 0.146 308.49 / 0.15);
+    --chip-edge: oklch(0.7024 0.146 308.49 / 0.28);
+    --nav-current: oklch(0.7024 0.146 308.49 / 0.12);
+    --destructive-text: oklch(0.82 0.12 22.216);
+    --surface-shadow-glass:
+        inset 0 1px 0 oklch(0.9622 0.0042 308 / 0.06),
+        0 0 0 1px oklch(0.9622 0.0042 308 / 0.1),
+        0 14px 36px -22px oklch(0 0 0 / 0.6);
+    --surface-shadow-focal:
+        inset 0 1px 0 oklch(0.9622 0.0042 308 / 0.06),
+        0 0 0 1px oklch(0.7024 0.146 308.49 / 0.4),
+        0 30px 70px -36px oklch(0 0 0 / 0.6);
+    --surface-shadow-review:
+        inset 0 1px 0 oklch(0.9622 0.0042 308 / 0.06),
+        0 0 0 1px oklch(0.76 0.12 70.64 / 0.5),
+        0 14px 32px -18px oklch(0 0 0 / 0.6);
+    --surface-shadow-float:
+        inset 0 1px 0 oklch(0.9622 0.0042 308 / 0.06),
+        0 0 0 1px oklch(0.9622 0.0042 308 / 0.12),
+        0 18px 40px -18px oklch(0 0 0 / 0.7);
+    --surface-shadow-raised:
+        0 0 0 1px oklch(0.9622 0.0042 308 / 0.1),
+        0 10px 22px -16px oklch(0 0 0 / 0.7);
+    --surface-shadow-node:
+        inset 0 1px 0 oklch(0.9622 0.0042 308 / 0.06),
+        0 0 0 1px oklch(0.9622 0.0042 308 / 0.14),
+        0 12px 26px -16px oklch(0 0 0 / 0.7);
+    --surface-shadow-tab:
+        0 0 0 1px oklch(0.9622 0.0042 308 / 0.12),
+        0 4px 10px -6px oklch(0 0 0 / 0.6);
+    --surface-shadow-launch:
+        inset 0 1px 0 oklch(1 0 0 / 0.3), 0 12px 26px -12px oklch(0 0 0 / 0.7);
+
     --workspace-gradient:
         radial-gradient(
             ellipse 120% 44% at 50% -12%,
@@ -236,6 +414,15 @@
 }
 
 @theme inline {
+    --color-info: var(--brand-purple);
+    --color-info-foreground: var(--accent-foreground);
+    --color-success: var(--foreground);
+    --color-success-foreground: var(--foreground);
+    --color-danger: var(--destructive);
+    --color-danger-foreground: var(--destructive-text);
+    --color-warning: var(--review);
+    --color-warning-foreground: var(--review-foreground);
+
     --color-evidence-fact: var(--evidence-fact);
     --color-evidence-inference: var(--evidence-inference);
     --color-evidence-hypothesis: var(--evidence-hypothesis);
@@ -249,4 +436,55 @@
 
     --shadow-soft: var(--surface-shadow-soft);
     --shadow-floating: var(--surface-shadow-floating);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-input-surface: var(--input-surface);
+    --color-input-border: var(--input-border);
+    --color-ring: var(--ring);
+    --color-review-foreground: var(--review-foreground);
+    --color-primary-sheen: var(--primary-sheen);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-tint-fact: var(--tint-fact);
+    --color-tint-inference: var(--tint-inference);
+    --color-tint-hypothesis: var(--tint-hypothesis);
+    --color-tint-unknown: var(--tint-unknown);
+    --color-tint-counter: var(--tint-counter);
+    --color-tint-review: var(--tint-review);
+    --color-tint-approved: var(--tint-approved);
+    --color-tint-ink: var(--tint-ink);
+    --color-tint-violet: var(--tint-violet);
+    --color-surface-glass: var(--surface-glass);
+    --color-surface-float: var(--surface-float);
+    --color-surface-bar: var(--surface-bar);
+    --color-fill-quiet: var(--fill-quiet);
+    --color-divider: var(--divider);
+    --color-edge-dashed: var(--edge-dashed);
+    --color-grid-line: var(--grid-line);
+    --color-glow: var(--glow);
+    --color-chip-edge: var(--chip-edge);
+    --color-nav-current: var(--nav-current);
+    --color-destructive-text: var(--destructive-text);
+    --shadow-glass: var(--surface-shadow-glass);
+    --shadow-focal: var(--surface-shadow-focal);
+    --shadow-review: var(--surface-shadow-review);
+    --shadow-float: var(--surface-shadow-float);
+    --shadow-raised: var(--surface-shadow-raised);
+    --shadow-node: var(--surface-shadow-node);
+    --shadow-tab: var(--surface-shadow-tab);
+    --shadow-launch: var(--surface-shadow-launch);
 }

@@ -3,8 +3,8 @@ import type { FunctionReturnType } from "convex/server";
 
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { ClaimClassBadge } from "@/components/workspace/claim-class-badge";
 import {
-    claimClassificationLabel,
     claimPolicyLabel,
     dimensionLabel,
     evidenceRelationLabel,
@@ -40,9 +40,7 @@ export function EvidenceClaimDetail({
             aria-label={`Claim detail: ${detail.claim.statement}`}
             className="h-full min-w-0 space-y-5 overflow-y-auto p-6">
             <div className="flex flex-wrap items-center gap-1.5">
-                <Badge variant="outline">
-                    {claimClassificationLabel(detail.claim.classification)}
-                </Badge>
+                <ClaimClassBadge classification={detail.claim.classification} />
                 {policyLabel ? (
                     <Badge variant="secondary">{policyLabel}</Badge>
                 ) : null}

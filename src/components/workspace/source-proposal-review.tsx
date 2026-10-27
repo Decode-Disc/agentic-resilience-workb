@@ -86,7 +86,7 @@ const dispositionTabs: ReadonlyArray<
         id: "recommended",
         title: "Recommended",
         icon: CheckmarkCircle02Icon,
-        iconClassName: "text-approved",
+        iconClassName: "text-foreground",
     },
     {
         id: "needs_attention",

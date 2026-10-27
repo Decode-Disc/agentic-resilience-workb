@@ -43,7 +43,7 @@ function LogoutMenuIcon({ className }: { className?: string }) {
 
 export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
     return (
-        <div className="relative isolate min-h-svh bg-(image:--workspace-gradient) bg-fixed text-foreground overflow-x-clip">
+        <div className="relative isolate min-h-svh overflow-x-clip bg-(image:--workspace-gradient) bg-fixed text-foreground">
             <div
                 aria-hidden="true"
                 className="pointer-events-none fixed inset-0 -z-10 bg-(image:--workspace-grid) bg-[size:38px_38px] [mask-image:radial-gradient(ellipse_75%_60%_at_50%_0%,#000_55%,transparent_100%)] [-webkit-mask-image:radial-gradient(ellipse_75%_60%_at_50%_0%,#000_55%,transparent_100%)] [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat]"
@@ -58,7 +58,7 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
             </LoadErrorBoundary>
 
             <BackgroundImageTexture opacity={0.25} variant="fabric-of-squares">
-                <main className="max-width-container min-h-screen py-4">
+                <main className="max-width-container min-h-[calc(100svh-var(--bar-height))] py-4">
                     {children}
                 </main>
             </BackgroundImageTexture>
@@ -121,16 +121,17 @@ function WorkbenchHeader({ activeRunId }: { activeRunId?: string }) {
     return (
         <header
             className={cn(
-                "sticky top-0 z-30 border-b border-border bg-card/80 backdrop-blur-md",
+                "sticky top-0 z-30 border-b border-divider bg-surface-bar backdrop-blur-bar",
                 uiLayerClasses.workbenchShellHeader,
             )}>
-            <div className="max-width-container grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 py-2.5">
+            <div className="max-width-container grid min-h-(--bar-height) grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-2">
                 <div className="min-w-0 flex items-center gap-3">
                     <Button
                         render={<Link to="/" />}
                         nativeButton={false}
                         variant="secondary"
                         size="sm"
+                        className="rounded-tile bg-fill-quiet"
                         aria-label="Go to Home"
                         title="Go to Home">
                         <Icon
@@ -151,7 +152,7 @@ function WorkbenchHeader({ activeRunId }: { activeRunId?: string }) {
                             size="sm"
                             aria-label="Start a company dossier"
                             title="Start a company dossier"
-                            className="border-accent">
+                            className="rounded-tile bg-nav-current">
                             <span className="start-double-slash">{"//"}</span>
                             <span className="start-label text-primary">
                                 start
@@ -183,6 +184,7 @@ function WorkbenchHeader({ activeRunId }: { activeRunId?: string }) {
                                     type="button"
                                     variant="secondary"
                                     size="sm"
+                                    className="rounded-tile bg-fill-quiet"
                                     aria-label="Workspace menu">
                                     <Icon iconNode={UserCircleIcon} />
                                     <span className="hidden sm:inline">

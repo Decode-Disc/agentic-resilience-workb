@@ -14,10 +14,14 @@ const buttonVariants = cva(
                     "border-border bg-background/70 border-primary/35 hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:bg-transparent dark:hover:bg-input/30",
                 secondary:
                     "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
-                ghost: "hover:bg-muted/70 hover:px-1 hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
+                ghost: "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
                 destructive:
-                    "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
-                link: "text-blue-500 underline-offset-4 hover:underline",
+                    "bg-destructive/10 text-destructive-text hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
+                link: "text-accent-foreground underline-offset-4 hover:underline",
+                approved:
+                    "bg-approved text-approved-foreground hover:bg-approved/90",
+                launch: "rounded-full bg-linear-to-b from-primary-sheen to-primary to-55% text-primary-foreground shadow-launch hover:brightness-110",
+                round: "rounded-full bg-primary text-primary-foreground shadow-launch hover:bg-primary/80",
             },
             size: {
                 default:
