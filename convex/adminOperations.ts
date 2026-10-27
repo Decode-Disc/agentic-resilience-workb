@@ -19,6 +19,7 @@ import {
     buildResearchPlanQuestions,
 } from "./domain/researchPlan";
 import { classifyRunPurpose, runPurposeValidator } from "./domain/runPurpose";
+import { withdrawableRun } from "./domain/runWithdrawal";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
 import { sourceDossierCandidateLimit } from "./resourceLimits";
 import { BROWSER_TEST_SLOT } from "./runWorkspace";
@@ -35,6 +36,9 @@ const runOverviewValidator = v.object({
     runId: v.id("researchRuns"),
     purpose: runPurposeValidator,
     ownerVisitorId: runFields.ownerVisitorId,
+    reservationStatus: runFields.reservationStatus,
+    withdrawnAt: runFields.withdrawnAt,
+    canWithdraw: v.boolean(),
     lifecycleState: runFields.lifecycleState,
     executionStatus: runFields.executionStatus,
     pauseReason: runFields.pauseReason,
@@ -610,6 +614,9 @@ async function projectOperationsRun(
         runId: run._id,
         purpose: run.purpose,
         ownerVisitorId: run.ownerVisitorId,
+        reservationStatus: run.reservationStatus,
+        withdrawnAt: run.withdrawnAt,
+        canWithdraw: withdrawableRun(run),
         lifecycleState: run.lifecycleState,
         executionStatus: run.executionStatus,
         pauseReason: run.pauseReason,

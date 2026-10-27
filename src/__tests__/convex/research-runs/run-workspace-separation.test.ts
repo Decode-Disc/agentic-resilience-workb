@@ -483,3 +483,113 @@ test("the admin pagination fixture supplies its own bounded population without r
     ).rejects.toThrow("Active browser test context required");
     await f.t.finishAllScheduledFunctions(vi.runAllTimers);
 });
+
+type WorkspaceTestClient = Awaited<
+    ReturnType<typeof seedSourcePreparation>
+>["t"];
+
+/** Seeds a dedicated administrator slot so withdrawal runs against real human analyst state. */
+async function seedWithdrawalAdministrator(t: WorkspaceTestClient) {
+    const adminUserId = await t.run((ctx) =>
+        ctx.db.insert("users", { isAnonymous: true }),
+    );
+    await t.run(async (ctx) => {
+        const invitationId = await ctx.db.insert("invitations", {
+            slotKey: "withdrawal-test-admin",
+            role: "admin",
+            codeDigest: "withdrawal-test-admin-digest",
+            status: "claimed",
+            createdAt: 1,
+        });
+        const visitorId = await ctx.db.insert("visitors", {
+            authUserId: adminUserId,
+            invitationId,
+            role: "admin",
+            status: "active",
+            analysesReserved: 0,
+            admittedAt: 1,
+        });
+        await ctx.db.patch(invitationId, {
+            claimedByVisitorId: visitorId,
+        });
+    });
+    return {
+        admin: t.withIdentity({ subject: `${adminUserId}|admin-session` }),
+    };
+}
+
+test("administrative withdrawal blocks a scheduled start and a checkpoint retry", async () => {
+    const f = await seedSourcePreparation();
+    const { admin } = await seedWithdrawalAdministrator(f.t);
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.runId, {
+            reservationStatus: "consumed",
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "failed",
+            workflowId: "withdrawn-workflow",
+            pauseReason: "source_review",
+            executionGeneration: 2,
+        }),
+    );
+    await expect(
+        admin.mutation(api.admin.withdrawDossier, {
+            runId: f.runId,
+            reason: "Withdraw the abandoned dossier before relaunching",
+        }),
+    ).resolves.toEqual({ withdrawn: true });
+    await expect(
+        f.t.mutation(internal.workflowControls.startReserved, {
+            runId: f.runId,
+        }),
+    ).rejects.toThrow("A withdrawn dossier cannot be resumed");
+    const analyst = f.t.withIdentity({
+        subject: `${f.userId}|workspace-session`,
+    });
+    await expect(
+        analyst.mutation(api.workflowControls.retry, { runId: f.runId }),
+    ).rejects.toThrow("A withdrawn dossier cannot be resumed");
+    expect(await f.t.run((ctx) => ctx.db.get(f.visitorId))).toMatchObject({
+        analysesReserved: 0,
+    });
+});
+
+test("a withdrawn dossier leaves the ordinary workspace list but stays readable directly", async () => {
+    const f = await seedSourcePreparation();
+    const { admin } = await seedWithdrawalAdministrator(f.t);
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.runId, {
+            reservationStatus: "consumed",
+            lifecycleState: "completed",
+            executionStatus: "completed",
+        }),
+    );
+    const analyst = f.t.withIdentity({
+        subject: `${f.userId}|workspace-session`,
+    });
+    const visitor = await analyst.query(api.visitors.current, {});
+    if (!visitor?.workspace) throw new Error("Expected admitted workspace");
+    const listArgs = {
+        workspaceKey: visitor.workspace.key,
+        paginationOpts: { numItems: 10, cursor: null },
+    };
+    const before = await analyst.query(api.researchRuns.listMine, listArgs);
+    expect(before.page).toHaveLength(1);
+    await expect(
+        admin.mutation(api.admin.withdrawDossier, {
+            runId: f.runId,
+            reason: "Completed dossier releases its human research seat",
+        }),
+    ).resolves.toEqual({ withdrawn: true });
+    const after = await analyst.query(api.researchRuns.listMine, {
+        workspaceKey: visitor.workspace.key,
+        paginationOpts: { numItems: 10, cursor: null },
+    });
+    expect(after.page).toHaveLength(0);
+    expect(after.isDone).toBe(true);
+    await expect(
+        analyst.query(api.researchRuns.getMine, { runId: f.runId }),
+    ).resolves.toMatchObject({ runId: f.runId });
+    expect(await f.t.run((ctx) => ctx.db.get(f.visitorId))).toMatchObject({
+        analysesReserved: 0,
+    });
+});

@@ -131,7 +131,7 @@ Use the selected Questionnaire interaction for proposed-framing refinements and 
 
 Sourced economic figures, ratios and projections retain definitions, period, attribution and limitations. The prototype produces no new financial calculations, reconstructs no activity revenue share and performs no dedicated financial collection or quantitative modeling.
 
-The MVP includes durable private admission, company resolution and framing, bounded shared documentary preparation, common Investigation, a reusable evidence inventory, grouped appraisal review, autonomous Synthesis, provider-independent execution, one curated case and methodology with measured limits. Administration supports inspection, audited quota restoration and stopping new paid work, rather than a general policy configuration console.
+The MVP includes durable private admission, company resolution and framing, bounded shared documentary preparation, common Investigation, a reusable evidence inventory, grouped appraisal review, autonomous Synthesis, provider-independent execution, one curated case and methodology with measured limits. Administration supports inspection, audited quota restoration, audited dossier withdrawal that releases the dossier's analysis once, and stopping new paid work, rather than a general policy configuration console.
 
 Excluded without a new decision: investment recommendations or trading, aggregate resilience scoring, non-US markets, continuous monitoring, simultaneous analyst collaboration, local file/PDF upload, pasted text without public provenance, fine-tuning, general crawling, autonomous publication, proprietary-methodology reproduction, chat as the primary interface, cross-dossier learning and institutional memory. Automatic translation remains deferred until the English MVP is complete. No second workflow or persistence authority is selected.
 
@@ -175,7 +175,7 @@ The intended admitted analyst must be able to:
 4. Examine distinct appraisals of the framed questions through shared assertions, exact passages, control outcomes, counter-evidence and decisive unknowns. Inspect the effect of the single bounded grouped documentary complement when used.
 5. Retain identifiable reviewed appraisals in a grouped action, correct or defer a question with history preserved, and remain at review if nothing is retained.
 6. Inspect the autonomous reference diagram and argued note from the retained base, or the justified non-establishment finding. Trace a relationship to its inputs and distinguish limited delivery from waiting on a central contested premise.
-7. Reconnect to preserved scope, evidence, decisions and progress. Inspect methodology and measured limits; an administrator can inspect operations, restore research quota with a reason and stop new paid work.
+7. Reconnect to preserved scope, evidence, decisions and progress. Inspect methodology and measured limits; an administrator can inspect operations, restore research quota with a reason, withdraw a research dossier to release its analysis with a reason and stop new paid work.
 
 A generic cited narrative, hidden contradictions, misleading certainty, simulated progress, forced diagram, loss of analyst authority or infrastructure display that obscures economic usefulness fails the product purpose. Intermediate slices remain useful without certifying the full journey.
 

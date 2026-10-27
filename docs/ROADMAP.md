@@ -198,7 +198,7 @@ Outcome: the complete question-led journey is reliable, honest and ready for the
 
 - [ ] Complete remaining capability-based analytical routing, semantic verification and application-controlled fallback, including the approved experimental Codex subscription transport and real Unstructured Pipeline Jobs adapter. Their current unfinished status cannot be presented as live delivery.
 - [ ] Verify all exposed I/O authorization, validation, idempotency, bounded retry, telemetry, cancellation and late-result protections for the new mission paths.
-- [ ] Complete and verify protected administrative inspection, audited quota restoration and the emergency switch for new paid work; preserve existing purpose-scoped workspace isolation.
+- [ ] Complete and verify protected administrative inspection, audited quota restoration, audited dossier withdrawal releasing its analysis and the emergency switch for new paid work; preserve existing purpose-scoped workspace isolation.
 - [ ] Verify the full admitted-analyst journey against [MVP acceptance](../PRODUCT.md#mvp-acceptance), including Start research, grouped review, synthesis outcomes and preserved state after reconnection.
 - [ ] Run applicable focused checks and the CI aggregate at final readiness, with protected desktop/mobile, keyboard/focus, non-color cues and relevant reduced-motion checks.
 - [ ] Exercise empty, loading, partial, unfinished-check, pending-judgment, cancelled and insufficient-evidence states, including limited synthesis and waiting on a central contested premise.

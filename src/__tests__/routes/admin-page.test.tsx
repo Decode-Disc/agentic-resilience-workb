@@ -2,10 +2,13 @@ import { api } from "@convex/_generated/api";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 
-const { setPaidWorkEnabled, restoreQuota } = vi.hoisted(() => ({
-    setPaidWorkEnabled: vi.fn(),
-    restoreQuota: vi.fn(),
-}));
+const { setPaidWorkEnabled, restoreQuota, withdrawDossier } = vi.hoisted(
+    () => ({
+        setPaidWorkEnabled: vi.fn(),
+        restoreQuota: vi.fn(),
+        withdrawDossier: vi.fn(),
+    }),
+);
 
 vi.mock("convex/react", async () => {
     const { convexReactHarness } = await import(
@@ -22,6 +25,9 @@ const adminVisitor = { role: "admin", status: "active" };
 
 const researchRun = {
     runId: "run-research",
+    reservationStatus: "consumed",
+    withdrawnAt: undefined,
+    canWithdraw: true,
     lifecycleState: "awaiting_source_review",
     executionStatus: "paused",
     updatedAt: 1,
@@ -34,6 +40,9 @@ const researchRun = {
 
 const evaluationRun = {
     runId: "run-evaluation",
+    reservationStatus: undefined,
+    withdrawnAt: undefined,
+    canWithdraw: false,
     lifecycleState: "completed",
     executionStatus: "completed",
     updatedAt: 2,
@@ -84,6 +93,7 @@ beforeEach(() => {
     convexReactHarness.reset();
     setPaidWorkEnabled.mockReset();
     restoreQuota.mockReset();
+    withdrawDossier.mockReset();
     convexReactHarness.query(api.visitors.current).returns(adminVisitor);
     convexReactHarness.query(api.adminOperations.get).returns(operations);
     convexReactHarness
@@ -138,6 +148,9 @@ beforeEach(() => {
         .mutation(api.adminOperations.setPaidWorkEnabled)
         .uses(setPaidWorkEnabled);
     convexReactHarness.mutation(api.admin.restoreQuota).uses(restoreQuota);
+    convexReactHarness
+        .mutation(api.admin.withdrawDossier)
+        .uses(withdrawDossier);
 });
 
 test("presents administration sections and filters dossiers by purpose", async () => {
@@ -210,6 +223,55 @@ test("shows reserved-for-validation slots and restores an unused reservation", a
             reason: "Unused reservation approved for restoration.",
         }),
     );
+});
+
+test("offers dossier withdrawal and releases the seat with an audited reason", async () => {
+    withdrawDossier.mockResolvedValue({ withdrawn: true });
+    render(<AdminPage />);
+
+    fireEvent.click(
+        await screen.findByRole("button", { name: "Withdraw dossier" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+        name: "Withdraw dossier",
+    });
+    expect(dialog.textContent).toContain(
+        "stops unfinished execution, removes the dossier from the analyst workspace list",
+    );
+    expect(dialog.textContent).toContain("releases its analysis");
+    fireEvent.change(screen.getByLabelText(/Reason for withdrawal/i), {
+        target: {
+            value: "Relaunching research on the released human seat.",
+        },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm withdrawal" }));
+
+    await waitFor(() =>
+        expect(withdrawDossier).toHaveBeenCalledWith({
+            runId: "run-research",
+            reason: "Relaunching research on the released human seat.",
+        }),
+    );
+});
+
+test("withdrawn dossiers keep their inspection but lose the withdrawal affordance", async () => {
+    convexReactHarness
+        .paginatedQuery(api.adminOperations.listRunsPage)
+        .returns({
+            results: [{ ...researchRun, canWithdraw: false, withdrawnAt: 7 }],
+            status: "Exhausted",
+            loadMore: vi.fn(),
+        });
+    render(<AdminPage />);
+
+    expect(await screen.findByText("Withdrawn")).toBeTruthy();
+    expect(
+        screen.queryByRole("button", { name: "Withdraw dossier" }),
+    ).toBeNull();
+    expect(
+        await screen.findByRole("button", { name: "Inspect dossier" }),
+    ).toBeTruthy();
 });
 
 test("names review decisions instead of exposing stored keys", async () => {

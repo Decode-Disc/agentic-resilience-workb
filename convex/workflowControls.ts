@@ -16,6 +16,9 @@ export const startReserved = internalMutation({
     returns: v.string(),
     handler: async (ctx, args): Promise<string> => {
         const run = await ctx.db.get(args.runId);
+        if (run?.withdrawnAt) {
+            throw new Error("A withdrawn dossier cannot be resumed");
+        }
         if (run?.reservationStatus !== "consumed") {
             throw new Error("Active analysis reservation not found");
         }
@@ -191,6 +194,9 @@ export const retry = mutation({
     returns: v.object({ retryCount: v.number() }),
     handler: async (ctx, args) => {
         const { run } = await requireWorkspaceRun(ctx, args.runId);
+        if (run.withdrawnAt) {
+            throw new Error("A withdrawn dossier cannot be resumed");
+        }
         if (
             run.executionStatus !== "failed" ||
             !run.workflowId ||

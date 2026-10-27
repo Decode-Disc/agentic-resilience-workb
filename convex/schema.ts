@@ -162,6 +162,7 @@ export default defineSchema({
             v.union(v.literal("consumed"), v.literal("restored")),
         ),
         quotaRestoredAt: v.optional(v.number()),
+        withdrawnAt: v.optional(v.number()),
         companyId: v.optional(v.id("companies")),
         companySnapshot: v.optional(companySnapshotValidator),
         companyPreflightId: v.optional(v.id("companyPreflights")),
@@ -224,6 +225,13 @@ export default defineSchema({
         .index("by_owner_and_execution_status", [
             "ownerVisitorId",
             "executionStatus",
+        ])
+        .index("by_owner_purpose_context_withdrawn_updated_at", [
+            "ownerVisitorId",
+            "purpose",
+            "browserTestContextId",
+            "withdrawnAt",
+            "updatedAt",
         ]),
     evidenceAvailabilityEvaluations: defineTable({
         runId: v.id("researchRuns"),

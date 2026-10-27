@@ -364,14 +364,15 @@ export const listMine = query({
         }
         const result = await ctx.db
             .query("researchRuns")
-            .withIndex("by_owner_and_purpose_and_context_and_updated_at", (q) =>
+            .withIndex("by_owner_purpose_context_withdrawn_updated_at", (q) =>
                 q
                     .eq("ownerVisitorId", visitor._id)
                     .eq("purpose", workspace.purpose)
                     .eq(
                         "browserTestContextId",
                         workspace.contextId ?? undefined,
-                    ),
+                    )
+                    .eq("withdrawnAt", undefined),
             )
             .order("desc")
             .paginate(args.paginationOpts);

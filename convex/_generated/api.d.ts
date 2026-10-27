@@ -38,6 +38,7 @@ import type * as domain_publicSourceUrl from "../domain/publicSourceUrl.js";
 import type * as domain_researchPlan from "../domain/researchPlan.js";
 import type * as domain_runCancellation from "../domain/runCancellation.js";
 import type * as domain_runPurpose from "../domain/runPurpose.js";
+import type * as domain_runWithdrawal from "../domain/runWithdrawal.js";
 import type * as domain_showcaseManifest from "../domain/showcaseManifest.js";
 import type * as domain_sourceCandidateCapacity from "../domain/sourceCandidateCapacity.js";
 import type * as domain_sourceComparison from "../domain/sourceComparison.js";
@@ -146,6 +147,7 @@ declare const fullApi: ApiFromModules<{
   "domain/researchPlan": typeof domain_researchPlan;
   "domain/runCancellation": typeof domain_runCancellation;
   "domain/runPurpose": typeof domain_runPurpose;
+  "domain/runWithdrawal": typeof domain_runWithdrawal;
   "domain/showcaseManifest": typeof domain_showcaseManifest;
   "domain/sourceCandidateCapacity": typeof domain_sourceCandidateCapacity;
   "domain/sourceComparison": typeof domain_sourceComparison;

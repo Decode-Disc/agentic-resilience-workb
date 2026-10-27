@@ -2,16 +2,16 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { usePaginatedQuery } from "convex/react";
+import { useMutation, usePaginatedQuery } from "convex/react";
 import { useState } from "react";
-
+import { toast } from "sonner";
+import { AdminList } from "@/components/admin/admin-list";
+import { AdminLoadMore } from "@/components/admin/admin-pager";
+import { AdminRunInspection } from "@/components/admin/admin-run-inspection";
 import {
     dossierPurposes,
     type RunPurpose,
 } from "@/components/admin/dossier-purpose";
-import { AdminList } from "@/components/admin/admin-list";
-import { AdminLoadMore } from "@/components/admin/admin-pager";
-import { AdminRunInspection } from "@/components/admin/admin-run-inspection";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import {
     Dialog,
     DialogContent,
     DialogDescription,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
@@ -35,8 +36,10 @@ import {
     ItemDescription,
     ItemTitle,
 } from "@/components/ui/item";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import {
     executionLabel,
     executionStatusTone,
@@ -49,6 +52,8 @@ import {
  */
 export function AdminDossierBrowser() {
     const [selectedRunId, setSelectedRunId] =
+        useState<Id<"researchRuns"> | null>(null);
+    const [withdrawRunId, setWithdrawRunId] =
         useState<Id<"researchRuns"> | null>(null);
 
     return (
@@ -69,10 +74,16 @@ export function AdminDossierBrowser() {
                         <DossierList
                             purpose={purpose.value}
                             onInspect={setSelectedRunId}
+                            onWithdraw={setWithdrawRunId}
                         />
                     </TabsContent>
                 ))}
             </Tabs>
+
+            <WithdrawDossierDialog
+                run={withdrawRunId}
+                onClose={() => setWithdrawRunId(null)}
+            />
 
             <Dialog
                 open={selectedRunId !== null}
@@ -103,9 +114,11 @@ export function AdminDossierBrowser() {
 function DossierList({
     purpose,
     onInspect,
+    onWithdraw,
 }: {
     purpose: RunPurpose;
     onInspect: (runId: Id<"researchRuns">) => void;
+    onWithdraw: (runId: Id<"researchRuns">) => void;
 }) {
     const runs = usePaginatedQuery(
         api.adminOperations.listRunsPage,
@@ -184,6 +197,21 @@ function DossierList({
                                 )}>
                                 {executionLabel(run.executionStatus)}
                             </Badge>
+                            {run.withdrawnAt ? (
+                                <Badge
+                                    variant="outline"
+                                    className="text-muted-foreground">
+                                    Withdrawn
+                                </Badge>
+                            ) : null}
+                            {run.canWithdraw ? (
+                                <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => onWithdraw(run.runId)}>
+                                    Withdraw dossier
+                                </Button>
+                            ) : null}
                             <Button
                                 size="sm"
                                 variant="outline"
@@ -196,5 +224,80 @@ function DossierList({
             </AdminList>
             <AdminLoadMore page={runs} label="Load more dossiers" />
         </div>
+    );
+}
+
+function WithdrawDossierDialog({
+    run,
+    onClose,
+}: {
+    run: Id<"researchRuns"> | null;
+    onClose: () => void;
+}) {
+    const withdrawDossier = useMutation(api.admin.withdrawDossier);
+    const [reason, setReason] = useState("");
+    const [pending, setPending] = useState(false);
+
+    return (
+        <Dialog
+            open={run !== null}
+            onOpenChange={(open) => {
+                if (!open) onClose();
+            }}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Withdraw dossier</DialogTitle>
+                    <DialogDescription>
+                        This stops unfinished execution, removes the dossier
+                        from the analyst workspace list and releases its
+                        analysis once. Completed results stay readable through
+                        their direct link.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-2">
+                    <Label htmlFor="dossier-withdrawal-reason">
+                        Reason for withdrawal
+                    </Label>
+                    <Textarea
+                        id="dossier-withdrawal-reason"
+                        value={reason}
+                        onChange={(event) => setReason(event.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                        Recorded in the audit trail. At least 12 characters.
+                    </p>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={onClose}>
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="destructive"
+                        disabled={pending || reason.trim().length < 12}
+                        onClick={async () => {
+                            if (!run) return;
+                            setPending(true);
+                            try {
+                                await withdrawDossier({
+                                    runId: run,
+                                    reason: reason.trim(),
+                                });
+                                toast.success(
+                                    "Dossier withdrawn. The analysis seat has been released.",
+                                );
+                                onClose();
+                            } catch {
+                                toast.error(
+                                    "We couldn’t withdraw the dossier. Try again.",
+                                );
+                            } finally {
+                                setPending(false);
+                            }
+                        }}>
+                        Confirm withdrawal
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }
