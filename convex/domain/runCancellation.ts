@@ -1,5 +1,6 @@
 import type { Doc } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
+import { cancelAgentMissionsForRun } from "@convex/execution/cancellation";
 import { workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
 
@@ -27,6 +28,7 @@ export async function cancelRunExecution(
         nextEventSequence: run.nextEventSequence + 1,
         updatedAt: now,
     });
+    await cancelAgentMissionsForRun(ctx, run._id, now, run.executionGeneration);
     if (
         preparation?.kind === "preparation" &&
         preparation.runId === run._id &&

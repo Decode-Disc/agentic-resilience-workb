@@ -244,7 +244,7 @@ export function sha256Hex(content: string | Uint8Array): string {
  * same logical value hashes identically regardless of key insertion order
  * (Convex re-serializes stored objects with sorted keys).
  */
-function stableStringify(value: unknown): string {
+export function stableStringify(value: unknown): string {
     if (value === null || typeof value !== "object") {
         return JSON.stringify(value);
     }

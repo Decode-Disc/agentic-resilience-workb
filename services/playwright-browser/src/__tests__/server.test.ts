@@ -1,22 +1,57 @@
-import { createServer, type Server } from "node:http";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { Server } from "node:http";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 let server: Server;
-const BASE_URL = "http://127.0.0.1:3099";
+let BASE_URL: string;
+let logServerStarted: (server: Server) => void;
 const SECRET = "test-secret-for-preview";
 
 beforeAll(async () => {
     process.env.PREVIEW_SERVICE_SECRET = SECRET;
-    process.env.PORT = "3099";
+    process.env.PORT = "0";
     process.env.MAX_CONCURRENT_RENDERS = "2";
 
     const mod = await import("../server.js");
     server = (mod as unknown as { __server: Server }).__server;
-    await new Promise<void>((resolve) => server.listen(3099, resolve));
+    logServerStarted = (
+        mod as unknown as { logServerStarted: (server: Server) => void }
+    ).logServerStarted;
+    await new Promise<void>((resolve) =>
+        server.listen(0, "127.0.0.1", resolve),
+    );
+    const address = server.address();
+    if (!address || typeof address === "string")
+        throw new Error("Missing preview listener address");
+    BASE_URL = `http://127.0.0.1:${address.port}`;
 });
 
 afterAll(async () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
+});
+
+describe("startup logging", () => {
+    it("reports the port actually bound when the requested port is zero", () => {
+        const address = server.address();
+        if (!address || typeof address === "string")
+            throw new Error("Missing preview listener address");
+        const chunks: string[] = [];
+        const write = vi
+            .spyOn(process.stderr, "write")
+            .mockImplementation((chunk) => {
+                chunks.push(String(chunk));
+                return true;
+            });
+        try {
+            logServerStarted(server);
+        } finally {
+            write.mockRestore();
+        }
+        expect(JSON.parse(chunks.join(""))).toMatchObject({
+            event: "server_started",
+            origin: `http://127.0.0.1:${address.port}`,
+            port: address.port,
+        });
+    });
 });
 
 describe("/health", () => {
@@ -171,9 +206,7 @@ describe("/render concurrency", () => {
 
         // All should settle (fulfilled or rejected), and any fulfilled
         // ones should return a valid status.
-        const fulfilled = results.filter(
-            (r) => r.status === "fulfilled",
-        );
+        const fulfilled = results.filter((r) => r.status === "fulfilled");
         expect(fulfilled.length).toBeGreaterThanOrEqual(2);
         for (const r of fulfilled) {
             const status = (r as PromiseFulfilledResult<Response>).value.status;

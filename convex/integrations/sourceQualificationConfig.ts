@@ -12,3 +12,11 @@ export const QUALIFICATION_MAX_OUTPUT_TOKENS = 6144;
 export const QUALIFICATION_ATTEMPT_TIMEOUT_MS = 60_000;
 export const QUALIFICATION_MAX_INPUT_PRICE_PER_MILLION = 0.15;
 export const QUALIFICATION_MAX_OUTPUT_PRICE_PER_MILLION = 0.6;
+
+/** Activation requires an explicitly approved reasoning route; preparation routes do not grant it. */
+export const missionRoutes: Partial<
+    Record<
+        "saved_material_inspection_v1",
+        SourceQualificationRoute & { authorizedForAgent: true }
+    >
+> = {};

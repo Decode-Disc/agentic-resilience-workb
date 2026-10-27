@@ -55,6 +55,17 @@ for (const viewport of [
             slotKey: "analyst-4",
             fixtureKey: key,
         });
+        // Seeding updates the dossier list; finish its cover read before navigating away.
+        await page
+            .getByRole("img", {
+                name: "Reactive Systems Test Company research dossier cover",
+                exact: true,
+            })
+            .evaluate((image) => {
+                if (!(image instanceof HTMLImageElement))
+                    throw new Error("Expected dossier cover image");
+                return image.decode();
+            });
         const pending = new Map<object, string>();
         page.on("request", (request) => {
             const url = new URL(request.url());
@@ -71,7 +82,7 @@ for (const viewport of [
                     readyState: await page.evaluate(() => document.readyState),
                     approveButtons: await page
                         .getByRole("button", {
-                            name: "Approve source set",
+                            name: "Approve proposed corpus",
                             exact: true,
                         })
                         .count(),
@@ -80,7 +91,7 @@ for (const viewport of [
             throw error;
         }
         const approve = page.getByRole("button", {
-            name: "Approve source set",
+            name: "Approve proposed corpus",
             exact: true,
         });
         await expect(approve).toBeEnabled();

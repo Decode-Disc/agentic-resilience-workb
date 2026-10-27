@@ -8,6 +8,7 @@ import {
     supplementalSearchInputHash,
     supplementalSearchOperationKey,
 } from "./domain/sourceDiscoveryRecovery";
+import { sha256Hex } from "./domain/sourcePassages";
 import {
     assertPreparationComparisonFence,
     assertPreparationExecutionFence,
@@ -21,6 +22,7 @@ import {
     readPreparationLimits,
     sourcePreparationError,
 } from "./domain/sourcePreparationAuthority";
+import { requireMissionAuthority } from "./execution/authority";
 import { rateLimiter } from "./rateLimiter";
 import {
     MAX_CONCURRENT_SOURCE_EMBEDDING_CALLS,
@@ -196,33 +198,37 @@ export const nextPreparationAttemptForInput = internalQuery({
     },
 });
 
+export const providerAttemptValidator = v.object({
+    missionId: v.optional(v.id("agentMissions")),
+    invocationId: v.optional(v.id("agentInvocations")),
+    inputHash: v.optional(v.string()),
+    runId: v.optional(v.id("researchRuns")),
+    corpusRevisionId: v.optional(v.id("corpusRevisions")),
+    sourceId: v.optional(v.id("sources")),
+    preparationId: v.optional(v.id("sourceSelectionProposalRebuilds")),
+    acceptedDecisionId: v.optional(v.id("sourceDecisions")),
+    executionGeneration: v.optional(v.number()),
+    workflowVersion: v.optional(v.number()),
+    stepKey: v.optional(v.string()),
+    service: serviceValidator,
+    operation: v.string(),
+    operationKey: v.string(),
+    status: providerCallStatusValidator,
+    attempt: v.number(),
+    latencyMs: v.optional(v.number()),
+    usage: v.optional(v.any()),
+    reportedCost: v.optional(v.number()),
+    embeddingInputBytes: v.optional(v.number()),
+    errorCode: v.optional(v.string()),
+    diagnostic: schema.tables.providerCalls.validator.fields.diagnostic,
+    retryable: v.optional(v.boolean()),
+    dispatchOutcome: v.optional(preparationDispatchOutcomeValidator),
+    httpStatus: v.optional(v.number()),
+    retryAfterAt: v.optional(v.number()),
+});
+
 export const recordAttempt = internalMutation({
-    args: {
-        inputHash: v.optional(v.string()),
-        runId: v.optional(v.id("researchRuns")),
-        corpusRevisionId: v.optional(v.id("corpusRevisions")),
-        sourceId: v.optional(v.id("sources")),
-        preparationId: v.optional(v.id("sourceSelectionProposalRebuilds")),
-        acceptedDecisionId: v.optional(v.id("sourceDecisions")),
-        executionGeneration: v.optional(v.number()),
-        workflowVersion: v.optional(v.number()),
-        stepKey: v.optional(v.string()),
-        service: serviceValidator,
-        operation: v.string(),
-        operationKey: v.string(),
-        status: providerCallStatusValidator,
-        attempt: v.number(),
-        latencyMs: v.optional(v.number()),
-        usage: v.optional(v.any()),
-        reportedCost: v.optional(v.number()),
-        embeddingInputBytes: v.optional(v.number()),
-        errorCode: v.optional(v.string()),
-        diagnostic: schema.tables.providerCalls.validator.fields.diagnostic,
-        retryable: v.optional(v.boolean()),
-        dispatchOutcome: v.optional(preparationDispatchOutcomeValidator),
-        httpStatus: v.optional(v.number()),
-        retryAfterAt: v.optional(v.number()),
-    },
+    args: providerAttemptValidator.fields,
     returns: recordAttemptResultValidator,
     handler: async (
         ctx,
@@ -243,8 +249,45 @@ export const recordAttempt = internalMutation({
                 args.diagnostic.originalBytes < 0)
         )
             throw new Error("Invalid provider output diagnostic");
+        if (args.missionId || args.invocationId) {
+            const invocation = args.invocationId
+                ? await ctx.db.get(args.invocationId)
+                : null;
+            const mission = args.missionId
+                ? await ctx.db.get(args.missionId)
+                : null;
+            if (
+                !mission ||
+                !invocation ||
+                args.preparationId ||
+                args.service !== "model" ||
+                invocation.provenance !== "live" ||
+                invocation.missionId !== mission._id ||
+                invocation.runId !== args.runId ||
+                mission.runId !== args.runId ||
+                invocation.corpusRevisionId !== args.corpusRevisionId ||
+                mission.corpusRevisionId !== args.corpusRevisionId ||
+                args.executionGeneration !== invocation.generation ||
+                invocation.generation !== mission.generation ||
+                args.workflowVersion !== mission.definitionVersion ||
+                args.operation !== "agent_reasoning" ||
+                args.stepKey !== "agent_reasoning" ||
+                args.attempt !== 1 ||
+                args.inputHash !== sha256Hex(invocation.inputJson) ||
+                args.operationKey !==
+                    `mission:${mission._id}:invocation:${invocation._id}:attempt:1`
+            )
+                throw sourcePreparationError("qualification_attempt_invalid");
+            if (args.status === "started")
+                await requireMissionAuthority(
+                    ctx,
+                    mission._id,
+                    invocation.generation,
+                );
+        }
         if (
             args.service === "model" &&
+            !args.missionId &&
             (!args.preparationId ||
                 !args.inputHash ||
                 !/^[a-f0-9]{64}$/.test(args.inputHash) ||
@@ -375,7 +418,7 @@ export const recordAttempt = internalMutation({
                     .withIndex("by_key", (query) => query.eq("key", "global"))
                     .unique();
                 if (paidWork?.enabled === false) {
-                    if (args.preparationId)
+                    if (args.preparationId || args.missionId)
                         throw sourcePreparationError("paid_work_disabled");
                     const existing = await ctx.db
                         .query("providerCalls")
@@ -465,7 +508,7 @@ export const recordAttempt = internalMutation({
                     existing.leaseExpiresAt !== undefined &&
                     existing.leaseExpiresAt <= now
                 ) {
-                    if (args.preparationId) {
+                    if (args.preparationId || args.missionId) {
                         await ctx.db.patch(existing._id, {
                             status: "failed",
                             errorCode: "attempt_outcome_unknown",
@@ -631,27 +674,35 @@ export const recordAttempt = internalMutation({
             }
             if (
                 args.service === "model" &&
-                args.preparationId &&
+                (args.preparationId || args.missionId) &&
                 args.operation !== "source_embedding"
             ) {
-                const preparation = await ctx.db.get(args.preparationId);
+                const preparation = args.preparationId
+                    ? await ctx.db.get(args.preparationId)
+                    : null;
+                const mission = args.missionId
+                    ? await ctx.db.get(args.missionId)
+                    : null;
                 const run = args.runId ? await ctx.db.get(args.runId) : null;
-                if (!preparation || !run)
+                if ((!preparation && !mission) || !run)
                     throw sourcePreparationError("stale_execution");
                 const budget = await readPreparationBudget(
                     ctx.db,
                     run,
-                    preparation,
+                    preparation ?? undefined,
                 );
                 const blocked = preparationBudgetBlock(
                     budget,
-                    readPreparationLimits(preparation),
+                    mission?.modelLimits ??
+                        readPreparationLimits(preparation ?? undefined),
                 );
                 if (blocked) throw sourcePreparationError(blocked);
-                await ctx.db.patch(preparation._id, {
-                    modelAttemptCount: (preparation.modelAttemptCount ?? 0) + 1,
-                    modelLimits: readPreparationLimits(preparation),
-                });
+                if (preparation)
+                    await ctx.db.patch(preparation._id, {
+                        modelAttemptCount:
+                            (preparation.modelAttemptCount ?? 0) + 1,
+                        modelLimits: readPreparationLimits(preparation),
+                    });
                 await ctx.db.patch(run._id, {
                     sourceQualificationAttemptCount: budget.dispatches + 1,
                     sourcePreparationBudget: {
@@ -662,6 +713,8 @@ export const recordAttempt = internalMutation({
                 });
             }
             const providerCallId = await ctx.db.insert("providerCalls", {
+                missionId: args.missionId,
+                invocationId: args.invocationId,
                 inputHash: args.inputHash,
                 runId: args.runId,
                 corpusRevisionId: args.corpusRevisionId,
@@ -684,6 +737,8 @@ export const recordAttempt = internalMutation({
                         : undefined,
                 createdAt: now,
             });
+            if (args.invocationId)
+                await ctx.db.patch(args.invocationId, { providerCallId });
             return {
                 providerCallId,
                 shouldExecute: true,
@@ -711,10 +766,17 @@ export const recordAttempt = internalMutation({
         }
         if (
             args.service === "model" &&
-            args.preparationId &&
+            (args.preparationId || args.missionId) &&
             args.operation !== "source_embedding"
         ) {
-            if (existing.status !== "started") {
+            if (
+                existing.status !== "started" &&
+                !(
+                    args.missionId &&
+                    existing.errorCode === "attempt_outcome_unknown" &&
+                    args.dispatchOutcome === "response_received"
+                )
+            ) {
                 if (
                     existing.status !== args.status ||
                     existing.errorCode !== args.errorCode
@@ -727,13 +789,15 @@ export const recordAttempt = internalMutation({
                 };
             }
             const run = args.runId ? await ctx.db.get(args.runId) : null;
-            const preparation = await ctx.db.get(args.preparationId);
-            if (!run || !preparation)
+            const preparation = args.preparationId
+                ? await ctx.db.get(args.preparationId)
+                : null;
+            if (!run || (!preparation && !args.missionId))
                 throw sourcePreparationError("stale_execution");
             const budget = await readPreparationBudget(
                 ctx.db,
                 run,
-                preparation,
+                preparation ?? undefined,
             );
             const before = preparationBudgetOutcome(existing);
             const after = preparationBudgetOutcome({
@@ -748,12 +812,13 @@ export const recordAttempt = internalMutation({
             if (after !== "released") budget[after]++;
             else {
                 budget.dispatches--;
-                await ctx.db.patch(preparation._id, {
-                    modelAttemptCount: Math.max(
-                        0,
-                        (preparation.modelAttemptCount ?? 0) - 1,
-                    ),
-                });
+                if (preparation)
+                    await ctx.db.patch(preparation._id, {
+                        modelAttemptCount: Math.max(
+                            0,
+                            (preparation.modelAttemptCount ?? 0) - 1,
+                        ),
+                    });
             }
             await ctx.db.patch(run._id, {
                 sourcePreparationBudget: budget,

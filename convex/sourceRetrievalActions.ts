@@ -10,10 +10,10 @@ import {
 } from "@convex/domain/sourcePreparationAuthority";
 import {
     fuseRetrievalRanks,
-    type SourcePassageRankIdentity,
     retrievalMetadataValidator,
     retrievalModeValidator,
     SOURCE_RETRIEVAL_VERSION,
+    type SourcePassageRankIdentity,
     shortRetrievalQuery,
     sourceEmbeddingScopeKey,
 } from "@convex/domain/sourceRetrievalPolicy";
@@ -27,7 +27,10 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
 import { MAX_NORMALIZED_ARTIFACT_BYTES } from "./resourceLimits";
-import { approvedSourceScope } from "./sourceRetrieval";
+import {
+    approvedSourceScope,
+    type MissionApprovedCapture,
+} from "./sourceRetrieval";
 
 const PROFILE = SOURCE_EMBEDDING_PROFILE.id;
 const EMBEDDING_BATCH_SIZE = SOURCE_EMBEDDING_PROFILE.maximumBatchSize;
@@ -536,6 +539,309 @@ export const retrieve = internalAction({
     handler: (ctx, args) => retrieveSourcePassages(ctx, args),
 });
 
+type ApprovedIndexIdentity = {
+    captureId: Id<"sourceCaptures">;
+    contentHash: string;
+};
+
+type ApprovedIndexPassage = {
+    order: number;
+    startOffset: number;
+    endOffset: number;
+    quotation: string;
+    headingPath: string[];
+};
+
+const missionApprovedSourceScope = {
+    missionId: v.id("agentMissions"),
+    expectedGeneration: v.number(),
+    sourceId: v.id("sources"),
+};
+
+const approvedPassageResult = v.object({
+    order: v.number(),
+    startOffset: v.number(),
+    endOffset: v.number(),
+    quotation: v.string(),
+    quotationHash: v.string(),
+    headingPath: v.array(v.string()),
+});
+
+const approvedMaterialReadRequest = v.union(
+    v.object({ kind: v.literal("search"), query: v.string() }),
+    v.object({ kind: v.literal("context"), passageOrder: v.number() }),
+);
+
+const approvedMaterialReadResult = v.union(
+    v.object({ status: v.literal("unavailable"), reason: v.string() }),
+    v.object({
+        status: v.literal("ready"),
+        kind: v.literal("search"),
+        captureId: v.id("sourceCaptures"),
+        contentHash: v.string(),
+        canonicalUrl: v.string(),
+        retrievedAt: v.union(v.number(), v.null()),
+        passages: v.array(approvedPassageResult),
+        limitReached: v.boolean(),
+    }),
+    v.object({
+        status: v.literal("ready"),
+        kind: v.literal("context"),
+        captureId: v.id("sourceCaptures"),
+        contentHash: v.string(),
+        passage: v.object({
+            ...approvedPassageResult.fields,
+            surroundingText: v.string(),
+        }),
+    }),
+);
+
+type ApprovedIndexResult =
+    | { status: "ready" }
+    | { status: "unavailable"; reason: string };
+type ApprovedMaterialReadResult = Infer<typeof approvedMaterialReadResult>;
+type AvailableApprovedCapture = Extract<
+    MissionApprovedCapture,
+    { status: "available" }
+>["capture"];
+
+async function readVerifiedCaptureText(
+    ctx: ActionCtx,
+    capture: AvailableApprovedCapture,
+): Promise<
+    | { status: "available"; text: string }
+    | { status: "unavailable"; reason: string }
+> {
+    const blob = capture.storageId
+        ? await ctx.storage.get(capture.storageId)
+        : null;
+    if (
+        !blob ||
+        blob.size > MAX_NORMALIZED_ARTIFACT_BYTES ||
+        blob.size !== capture.byteCount
+    )
+        return { status: "unavailable", reason: "capture_unavailable" };
+    const text = await blob.text();
+    if (sha256Hex(text) !== capture.contentHash)
+        return { status: "unavailable", reason: "capture_corrupt" };
+    return { status: "available", text };
+}
+
+async function ensureApprovedIndex(
+    ctx: ActionCtx,
+    allowed: MissionApprovedCapture,
+    persistBatch: (
+        identity: ApprovedIndexIdentity,
+        passages: ApprovedIndexPassage[],
+    ) => Promise<unknown>,
+    finishIndex: (
+        identity: ApprovedIndexIdentity,
+        candidateCount: number,
+    ) => Promise<unknown>,
+    suppliedText?: string,
+): Promise<{ status: "ready" } | { status: "unavailable"; reason: string }> {
+    if (allowed.status !== "available") return allowed;
+    const capture = allowed.capture;
+    if (allowed.state && suppliedText === undefined) return { status: "ready" };
+    let text = suppliedText;
+    if (text === undefined) {
+        const stored = await readVerifiedCaptureText(ctx, capture);
+        if (stored.status !== "available") return stored;
+        text = stored.text;
+    }
+    if (allowed.state) return { status: "ready" };
+    let candidates: ReturnType<typeof extractPassagesFromNormalizedText>;
+    try {
+        candidates = extractPassagesFromNormalizedText({
+            text,
+            canonicalUrl: capture.resolvedUrl ?? capture.requestedUrl,
+            sourceVersionHash: capture.contentHash,
+            preparationVersion: SOURCE_RETRIEVAL_VERSION,
+        });
+    } catch (error) {
+        if (
+            error instanceof Error &&
+            [
+                "searchable_candidate_limit_exceeded",
+                "structured_block_limit_exceeded",
+            ].includes(error.message)
+        )
+            return {
+                status: "unavailable",
+                reason: "retrieval_candidate_limit",
+            };
+        throw error;
+    }
+    const identity = {
+        captureId: capture._id,
+        contentHash: capture.contentHash,
+    };
+    for (let offset = 0; offset < candidates.length; offset += 64) {
+        await persistBatch(
+            identity,
+            candidates.slice(offset, offset + 64).map((p) => ({
+                order: p.order,
+                startOffset: p.locator.startOffset,
+                endOffset: p.locator.endOffset,
+                quotation: p.exactQuotation,
+                headingPath: p.headingPath ?? [],
+            })),
+        );
+    }
+    await finishIndex(identity, candidates.length);
+    return { status: "ready" };
+}
+
+async function ensureMissionApprovedIndex(
+    ctx: ActionCtx,
+    args: {
+        missionId: Id<"agentMissions">;
+        expectedGeneration: number;
+        sourceId: Id<"sources">;
+    },
+    allowed: MissionApprovedCapture,
+    suppliedText?: string,
+): Promise<ApprovedIndexResult> {
+    return ensureApprovedIndex(
+        ctx,
+        allowed,
+        (identity, passages) =>
+            ctx.runMutation(
+                internal.sourceRetrieval.putApprovedBatchForMission,
+                { ...args, ...identity, passages },
+            ),
+        (identity, candidateCount) =>
+            ctx.runMutation(
+                internal.sourceRetrieval.finishApprovedIndexForMission,
+                { ...args, ...identity, candidateCount },
+            ),
+        suppliedText,
+    );
+}
+
+/** Reads approved search results or passage context while reusing the capture bytes used for a cold index. */
+export const readApprovedMaterialForMission = internalAction({
+    args: {
+        ...missionApprovedSourceScope,
+        request: approvedMaterialReadRequest,
+    },
+    returns: approvedMaterialReadResult,
+    handler: async (ctx, args): Promise<ApprovedMaterialReadResult> => {
+        const captureArgs = {
+            missionId: args.missionId,
+            expectedGeneration: args.expectedGeneration,
+            sourceId: args.sourceId,
+        };
+        const allowed: MissionApprovedCapture = await ctx.runQuery(
+            internal.sourceRetrieval.approvedCaptureForMission,
+            captureArgs,
+        );
+        if (allowed.status !== "available")
+            return { status: "unavailable", reason: allowed.reason };
+        const stored = await readVerifiedCaptureText(ctx, allowed.capture);
+        if (stored.status !== "available") return stored;
+        const index: ApprovedIndexResult = await ensureMissionApprovedIndex(
+            ctx,
+            captureArgs,
+            allowed,
+            stored.text,
+        );
+        if (index.status !== "ready") return index;
+
+        const current: MissionApprovedCapture = await ctx.runQuery(
+            internal.sourceRetrieval.approvedCaptureForMission,
+            captureArgs,
+        );
+        if (
+            current.status !== "available" ||
+            current.capture._id !== allowed.capture._id ||
+            current.capture.contentHash !== allowed.capture.contentHash
+        )
+            return {
+                status: "unavailable",
+                reason: "capture_unavailable",
+            };
+
+        if (args.request.kind === "search") {
+            const result: FunctionReturnType<
+                typeof internal.sourceRetrieval.searchApprovedSourceForMission
+            > = await ctx.runQuery(
+                internal.sourceRetrieval.searchApprovedSourceForMission,
+                { ...captureArgs, query: args.request.query },
+            );
+            if (result.status !== "ready")
+                return {
+                    status: "unavailable",
+                    reason:
+                        result.status === "not_indexed"
+                            ? "source_index_unavailable"
+                            : result.reason,
+                };
+            if (
+                result.captureId !== allowed.capture._id ||
+                result.contentHash !== allowed.capture.contentHash ||
+                result.passages.some(
+                    (passage) =>
+                        stored.text.slice(
+                            passage.startOffset,
+                            passage.endOffset,
+                        ) !== passage.quotation,
+                )
+            )
+                return {
+                    status: "unavailable",
+                    reason: "capture_corrupt",
+                };
+            return {
+                status: "ready",
+                kind: "search",
+                captureId: result.captureId,
+                contentHash: result.contentHash,
+                canonicalUrl: result.canonicalUrl,
+                retrievedAt: result.retrievedAt,
+                passages: result.passages,
+                limitReached: result.limitReached,
+            };
+        }
+
+        const result: FunctionReturnType<
+            typeof internal.sourceRetrieval.approvedPassageForMission
+        > = await ctx.runQuery(
+            internal.sourceRetrieval.approvedPassageForMission,
+            { ...captureArgs, passageOrder: args.request.passageOrder },
+        );
+        if (result.status !== "ready")
+            return { status: "unavailable", reason: result.reason };
+        if (
+            result.capture.captureId !== allowed.capture._id ||
+            result.capture.contentHash !== allowed.capture.contentHash ||
+            result.passage.quotationHash !==
+                sha256Hex(result.passage.quotation) ||
+            stored.text.slice(
+                result.passage.startOffset,
+                result.passage.endOffset,
+            ) !== result.passage.quotation
+        )
+            return { status: "unavailable", reason: "capture_corrupt" };
+        return {
+            status: "ready",
+            kind: "context",
+            captureId: result.capture.captureId,
+            contentHash: result.capture.contentHash,
+            passage: {
+                ...result.passage,
+                surroundingText: stored.text.slice(
+                    Math.max(0, result.passage.startOffset - 512),
+                    Math.min(
+                        stored.text.length,
+                        result.passage.endOffset + 512,
+                    ),
+                ),
+            },
+        };
+    },
+});
+
 /** Indexes only the approved stored representation. No provider or execution capability is invoked. */
 export const ensureApprovedSourceIndex = action({
     args: approvedSourceScope,
@@ -549,64 +855,38 @@ export const ensureApprovedSourceIndex = action({
             internal.sourceRetrieval.getApprovedCapture,
             args,
         );
-        if (allowed.status !== "available") return allowed;
-        if (allowed.state) return { status: "ready" };
-        const capture = allowed.capture;
-        const blob = capture.storageId
-            ? await ctx.storage.get(capture.storageId)
-            : null;
-        if (
-            !blob ||
-            blob.size > MAX_NORMALIZED_ARTIFACT_BYTES ||
-            blob.size !== capture.byteCount
-        )
-            return { status: "unavailable", reason: "capture_unavailable" };
-        const text = await blob.text();
-        if (sha256Hex(text) !== capture.contentHash)
-            return { status: "unavailable", reason: "capture_corrupt" };
-        let candidates: ReturnType<typeof extractPassagesFromNormalizedText>;
-        try {
-            candidates = extractPassagesFromNormalizedText({
-                text,
-                canonicalUrl: capture.resolvedUrl ?? capture.requestedUrl,
-                sourceVersionHash: capture.contentHash,
-                preparationVersion: SOURCE_RETRIEVAL_VERSION,
-            });
-        } catch (error) {
-            if (
-                error instanceof Error &&
-                [
-                    "searchable_candidate_limit_exceeded",
-                    "structured_block_limit_exceeded",
-                ].includes(error.message)
-            )
-                return {
-                    status: "unavailable",
-                    reason: "retrieval_candidate_limit",
-                };
-            throw error;
-        }
-        const identity = {
-            ...args,
-            captureId: capture._id,
-            contentHash: capture.contentHash,
-        };
-        for (let offset = 0; offset < candidates.length; offset += 64) {
-            await ctx.runMutation(internal.sourceRetrieval.putApprovedBatch, {
-                ...identity,
-                passages: candidates.slice(offset, offset + 64).map((p) => ({
-                    order: p.order,
-                    startOffset: p.locator.startOffset,
-                    endOffset: p.locator.endOffset,
-                    quotation: p.exactQuotation,
-                    headingPath: p.headingPath ?? [],
-                })),
-            });
-        }
-        await ctx.runMutation(internal.sourceRetrieval.finishApprovedIndex, {
-            ...identity,
-            candidateCount: candidates.length,
-        });
-        return { status: "ready" };
+        return ensureApprovedIndex(
+            ctx,
+            allowed,
+            (identity, passages) =>
+                ctx.runMutation(internal.sourceRetrieval.putApprovedBatch, {
+                    ...args,
+                    ...identity,
+                    passages,
+                }),
+            (identity, candidateCount) =>
+                ctx.runMutation(internal.sourceRetrieval.finishApprovedIndex, {
+                    ...args,
+                    ...identity,
+                    candidateCount,
+                }),
+        );
+    },
+});
+
+/** Indexes a mission's frozen approved capture and revalidates authority for every persisted batch. */
+export const ensureApprovedSourceIndexForMission = internalAction({
+    args: missionApprovedSourceScope,
+    handler: async (
+        ctx,
+        args,
+    ): Promise<
+        { status: "ready" } | { status: "unavailable"; reason: string }
+    > => {
+        const allowed = await ctx.runQuery(
+            internal.sourceRetrieval.approvedCaptureForMission,
+            args,
+        );
+        return ensureMissionApprovedIndex(ctx, args, allowed);
     },
 });

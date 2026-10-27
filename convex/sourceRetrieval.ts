@@ -13,6 +13,7 @@ import { type Infer, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./_generated/server";
+import { requireMissionAuthority } from "./execution/authority";
 import {
     MAX_SOURCE_EMBEDDING_BATCH_TEXTS,
     MAX_SOURCE_EMBEDDING_TEXT_BYTES,
@@ -564,12 +565,21 @@ async function approvedCapture(
         sourceId: Id<"sources">;
     },
 ) {
-    const { revision } = await authorizeReviewRead(
-        ctx,
-        args,
-        sourcePreparationError,
-    );
+    await authorizeReviewRead(ctx, args, sourcePreparationError);
+    return validateApprovedCapture(ctx, args);
+}
+
+async function validateApprovedCapture(
+    ctx: QueryCtx,
+    args: {
+        runId: Id<"researchRuns">;
+        corpusRevisionId: Id<"corpusRevisions">;
+        sourceId: Id<"sources">;
+    },
+) {
+    const revision = await ctx.db.get(args.corpusRevisionId);
     if (
+        revision?.runId !== args.runId ||
         revision.status !== "approved" ||
         (await readPreparationSourceDecision(ctx.db, args)) !== "accepted"
     )
@@ -625,6 +635,181 @@ async function approvedCapture(
     };
 }
 
+const missionApprovedSourceScope = {
+    missionId: v.id("agentMissions"),
+    expectedGeneration: v.number(),
+    sourceId: v.id("sources"),
+};
+
+async function validateMissionApprovedCapture(
+    ctx: QueryCtx,
+    args: {
+        missionId: Id<"agentMissions">;
+        expectedGeneration: number;
+        sourceId: Id<"sources">;
+    },
+) {
+    const { mission } = await requireMissionAuthority(
+        ctx,
+        args.missionId,
+        args.expectedGeneration,
+    );
+    return validateApprovedCapture(ctx, {
+        runId: mission.runId,
+        corpusRevisionId: mission.corpusRevisionId,
+        sourceId: args.sourceId,
+    });
+}
+
+export type MissionApprovedCapture = Awaited<
+    ReturnType<typeof validateMissionApprovedCapture>
+>;
+
+/** Uses persisted mission authority while retaining the same frozen capture checks as interactive reads. */
+export const approvedCaptureForMission = internalQuery({
+    args: missionApprovedSourceScope,
+    handler: validateMissionApprovedCapture,
+});
+
+async function searchApprovedCapture(
+    ctx: QueryCtx,
+    args: {
+        runId: Id<"researchRuns">;
+        corpusRevisionId: Id<"corpusRevisions">;
+        sourceId: Id<"sources">;
+        query: string;
+    },
+    allowed: Awaited<ReturnType<typeof approvedCapture>>,
+) {
+    if (allowed.status !== "available") return allowed;
+    if (args.query.length > 512 || args.query.trim().split(/\s+/).length > 16)
+        throw sourcePreparationError("retrieval_query_invalid");
+    if (!allowed.state) return { status: "not_indexed" as const };
+    const { capture, key } = allowed;
+    const rows = args.query.trim()
+        ? await ctx.db
+              .query("sourceSearchPassages")
+              .withSearchIndex("search_text", (q) =>
+                  q
+                      .search("searchText", args.query)
+                      .eq("scopeKey", key)
+                      .eq("captureId", capture._id),
+              )
+              .take(64)
+        : [];
+    if (
+        rows.some(
+            (row) =>
+                row.contentHash !== capture.contentHash ||
+                row.sourceId !== capture.sourceId ||
+                row.quotationHash !== sha256Hex(row.quotation),
+        )
+    )
+        throw sourcePreparationError("capture_identity_conflict");
+    return {
+        status: "ready" as const,
+        corpusRevisionId: args.corpusRevisionId,
+        sourceId: args.sourceId,
+        captureId: capture._id,
+        contentHash: capture.contentHash,
+        canonicalUrl: capture.resolvedUrl ?? capture.requestedUrl,
+        retrievedAt: capture.retrievedAt ?? null,
+        passages: rows.map(
+            ({
+                order,
+                startOffset,
+                endOffset,
+                quotation,
+                quotationHash,
+                headingPath,
+            }) => ({
+                order,
+                startOffset,
+                endOffset,
+                quotation,
+                quotationHash,
+                headingPath,
+            }),
+        ),
+        limitReached: rows.length === 64,
+    };
+}
+
+export const searchApprovedSourceForMission = internalQuery({
+    args: { ...missionApprovedSourceScope, query: v.string() },
+    handler: async (ctx, args) => {
+        const allowed = await validateMissionApprovedCapture(ctx, args);
+        const { mission } = await requireMissionAuthority(
+            ctx,
+            args.missionId,
+            args.expectedGeneration,
+        );
+        return searchApprovedCapture(
+            ctx,
+            {
+                runId: mission.runId,
+                corpusRevisionId: mission.corpusRevisionId,
+                sourceId: args.sourceId,
+                query: args.query,
+            },
+            allowed,
+        );
+    },
+});
+
+export const approvedPassageForMission = internalQuery({
+    args: { ...missionApprovedSourceScope, passageOrder: v.number() },
+    handler: async (ctx, args) => {
+        if (!Number.isSafeInteger(args.passageOrder) || args.passageOrder < 0)
+            throw sourcePreparationError("retrieval_passage_invalid");
+        const allowed = await validateMissionApprovedCapture(ctx, args);
+        if (allowed.status !== "available") return allowed;
+        if (!allowed.state)
+            return {
+                status: "unavailable" as const,
+                reason: "not_indexed" as const,
+            };
+        const row = await ctx.db
+            .query("sourceSearchPassages")
+            .withIndex("by_scope_capture_order", (q) =>
+                q
+                    .eq("scopeKey", allowed.key)
+                    .eq("captureId", allowed.capture._id)
+                    .eq("order", args.passageOrder),
+            )
+            .unique();
+        if (!row)
+            return {
+                status: "unavailable" as const,
+                reason: "passage_unavailable" as const,
+            };
+        if (
+            row.contentHash !== allowed.capture.contentHash ||
+            row.sourceId !== args.sourceId ||
+            row.quotationHash !== sha256Hex(row.quotation) ||
+            row.endOffset - row.startOffset !== row.quotation.length
+        )
+            throw sourcePreparationError("capture_identity_conflict");
+        return {
+            status: "ready" as const,
+            capture: {
+                captureId: allowed.capture._id,
+                contentHash: allowed.capture.contentHash,
+                storageId: allowed.capture.storageId,
+                byteCount: allowed.capture.byteCount,
+            },
+            passage: {
+                order: row.order,
+                startOffset: row.startOffset,
+                endOffset: row.endOffset,
+                quotation: row.quotation,
+                quotationHash: row.quotationHash,
+                headingPath: row.headingPath,
+            },
+        };
+    },
+});
+
 export const getApprovedCapture = internalQuery({
     args: approvedSourceScope,
     handler: approvedCapture,
@@ -654,6 +839,50 @@ export const putApprovedBatch = internalMutation({
     },
 });
 
+export const putApprovedBatchForMission = internalMutation({
+    args: {
+        ...missionApprovedSourceScope,
+        captureId: v.id("sourceCaptures"),
+        contentHash: v.string(),
+        passages: v.array(passage),
+    },
+    handler: async (ctx, args) => {
+        const allowed = await validateMissionApprovedCapture(ctx, args);
+        if (
+            allowed.status !== "available" ||
+            allowed.capture._id !== args.captureId ||
+            allowed.capture.contentHash !== args.contentHash
+        )
+            throw sourcePreparationError("capture_unavailable");
+        return putCaptureBatch(
+            ctx,
+            allowed.capture,
+            allowed.key,
+            args.passages,
+        );
+    },
+});
+
+export const finishApprovedIndexForMission = internalMutation({
+    args: {
+        ...missionApprovedSourceScope,
+        captureId: v.id("sourceCaptures"),
+        contentHash: v.string(),
+        candidateCount: v.number(),
+    },
+    handler: async (ctx, args) => {
+        const allowed = await validateMissionApprovedCapture(ctx, args);
+        if (
+            allowed.status !== "available" ||
+            allowed.capture._id !== args.captureId ||
+            allowed.capture.contentHash !== args.contentHash
+        )
+            throw sourcePreparationError("capture_unavailable");
+        if (allowed.state) return null;
+        return publishCaptureIndex(ctx, allowed.capture, allowed.key, args);
+    },
+});
+
 export const finishApprovedIndex = internalMutation({
     args: {
         ...approvedSourceScope,
@@ -680,60 +909,6 @@ export const searchApprovedSource = query({
     args: { ...approvedSourceScope, query: v.string() },
     handler: async (ctx, args) => {
         const allowed = await approvedCapture(ctx, args);
-        if (allowed.status !== "available") return allowed;
-        if (
-            args.query.length > 512 ||
-            args.query.trim().split(/\s+/).length > 16
-        )
-            throw sourcePreparationError("retrieval_query_invalid");
-        if (!allowed.state) return { status: "not_indexed" as const };
-        const { capture, key } = allowed;
-        const rows = args.query.trim()
-            ? await ctx.db
-                  .query("sourceSearchPassages")
-                  .withSearchIndex("search_text", (q) =>
-                      q
-                          .search("searchText", args.query)
-                          .eq("scopeKey", key)
-                          .eq("captureId", capture._id),
-                  )
-                  .take(64)
-            : [];
-        if (
-            rows.some(
-                (row) =>
-                    row.contentHash !== capture.contentHash ||
-                    row.sourceId !== capture.sourceId ||
-                    row.quotationHash !== sha256Hex(row.quotation),
-            )
-        )
-            throw sourcePreparationError("capture_identity_conflict");
-        return {
-            status: "ready" as const,
-            corpusRevisionId: args.corpusRevisionId,
-            sourceId: args.sourceId,
-            captureId: capture._id,
-            contentHash: capture.contentHash,
-            canonicalUrl: capture.resolvedUrl ?? capture.requestedUrl,
-            retrievedAt: capture.retrievedAt ?? null,
-            passages: rows.map(
-                ({
-                    order,
-                    startOffset,
-                    endOffset,
-                    quotation,
-                    quotationHash,
-                    headingPath,
-                }) => ({
-                    order,
-                    startOffset,
-                    endOffset,
-                    quotation,
-                    quotationHash,
-                    headingPath,
-                }),
-            ),
-            limitReached: rows.length === 64,
-        };
+        return searchApprovedCapture(ctx, args, allowed);
     },
 });

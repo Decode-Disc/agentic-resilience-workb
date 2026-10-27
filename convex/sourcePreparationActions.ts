@@ -96,6 +96,7 @@ async function executePreparationModel<
         sourceId: Id<"sources">;
         operation: "source_qualification" | "source_comparison";
         inputHash: string;
+        invocationInputJson: string;
         validate?: () => Promise<void>;
         execute: (
             route: SourceQualificationRoute,
@@ -164,6 +165,13 @@ async function executePreparationModel<
                 providerCallId,
                 receipt,
             };
+        const invocationId = await ctx.runMutation(
+            internal.execution.invocations.beginOneShot,
+            {
+                providerCallId,
+                inputJson: input.invocationInputJson,
+            },
+        );
         const result = await input.execute(
             route,
             AbortSignal.timeout(
@@ -193,6 +201,17 @@ async function executePreparationModel<
                 dispatchOutcome: "not_dispatched",
                 retryable: false,
             });
+            await ctx.runMutation(
+                internal.execution.invocations.finishOneShot,
+                {
+                    invocationId,
+                    outputJson: JSON.stringify({
+                        status: result.status,
+                        reason: result.reason,
+                        output: result.output,
+                    }),
+                },
+            );
             return { result, providerCallId, receipt };
         }
         await ctx.runMutation(internal.providerCalls.recordAttempt, {
@@ -209,6 +228,24 @@ async function executePreparationModel<
                       diagnostic: result.outputDiagnostic,
                   }
                 : {}),
+        });
+        await ctx.runMutation(internal.execution.invocations.finishOneShot, {
+            invocationId,
+            outputJson: JSON.stringify(
+                result.status === "succeeded"
+                    ? {
+                          status: result.status,
+                          result:
+                              "qualification" in result
+                                  ? result.qualification
+                                  : result.output,
+                      }
+                    : {
+                          status: result.status,
+                          errorCode: result.errorCode,
+                          diagnostic: result.outputDiagnostic ?? null,
+                      },
+            ),
         });
         if (result.status === "succeeded")
             return { result, providerCallId, receipt };
@@ -691,6 +728,7 @@ async function qualifyCapturedSource(
             sourceId: source._id,
             operation: "source_qualification",
             inputHash: prepared.inputHash,
+            invocationInputJson: JSON.stringify(prepared.request),
             execute: (route, signal) =>
                 qualifySourceDocument(prepared, route, {
                     apiKey: process.env.OPENROUTER_API_KEY ?? "",
@@ -1271,6 +1309,7 @@ export const compareSource = internalAction({
                 sourceId: input.targetSource._id,
                 operation: "source_comparison",
                 inputHash: prepared.inputHash,
+                invocationInputJson: JSON.stringify(prepared.request),
                 validate: async () => {
                     const current = await ctx.runQuery(
                         internal.sourcePreparation.validateComparisonAuthority,

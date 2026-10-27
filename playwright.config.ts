@@ -1,26 +1,38 @@
+import { join } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
+import { resolveLocalRuntime } from "./scripts/local-runtime.ts";
 
-const appUrl = "http://127.0.0.1:3000";
-const convexUrl = "http://127.0.0.1:3210";
+const runtime = await resolveLocalRuntime(process.cwd(), {
+    requiredOrigins: ["convex", "web"],
+});
+const outputRoot = join(
+    runtime.identity.root,
+    ".local-runtime",
+    "playwright",
+    runtime.identity.worktreeId,
+);
+process.env.LOCAL_RUNTIME_CONVEX_ORIGIN = runtime.origins.convex;
+process.env.LOCAL_RUNTIME_WORKTREE_ID = runtime.identity.worktreeId;
 
 export default defineConfig({
     testDir: "./e2e",
+    outputDir: join(outputRoot, "results"),
     fullyParallel: false,
     forbidOnly: Boolean(process.env.CI),
     retries: process.env.CI ? 1 : 0,
     workers: 1,
-    reporter: [["html", { open: "never" }], ["list"]],
+    reporter: [
+        ["html", { open: "never", outputFolder: join(outputRoot, "report") }],
+        ["list"],
+    ],
     timeout: 60_000,
     expect: { timeout: 10_000 },
     use: {
-        baseURL: process.env.PLAYWRIGHT_BASE_URL ?? appUrl,
+        baseURL: runtime.origins.web,
         actionTimeout: 10_000,
         navigationTimeout: 20_000,
-        // Automatic diagnostics are disabled: retry traces, retained failure
-        // video, and failure screenshots can capture the reusable analyst
-        // access code rendered by the admission drawer. Manual sanitized
-        // tracing runs only after an admission drawer closes (see
-        // e2e/support/sanitized-trace.ts).
+        // Automatic diagnostics are disabled because they can capture the
+        // reusable analyst access code rendered by the admission drawer.
         trace: "off",
         screenshot: "off",
         video: "off",
@@ -37,22 +49,4 @@ export default defineConfig({
     ],
     globalSetup: "./e2e/global-setup.ts",
     globalTeardown: "./e2e/global-teardown.ts",
-    webServer: [
-        {
-            command: "pnpm convex:dev",
-            url: convexUrl,
-            reuseExistingServer: false,
-            timeout: 120_000,
-            stdout: "pipe",
-            stderr: "pipe",
-        },
-        {
-            command: "pnpm dev:web",
-            url: appUrl,
-            reuseExistingServer: false,
-            timeout: 120_000,
-            stdout: "pipe",
-            stderr: "pipe",
-        },
-    ],
 });

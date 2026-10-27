@@ -1,0 +1,39 @@
+
+ RUN  v4.1.10 /home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/harnais-architecture/services/playwright-browser
+
+{"ts":"2026-10-27T14:20:05.802Z","event":"render_started","hostname":"example.com"}
+{"ts":"2026-10-27T14:20:05.826Z","event":"render_failed","hostname":"example.com","durationMs":91,"errorCode":"render_failed"}
+{"ts":"2026-10-27T14:20:05.879Z","event":"render_started","hostname":"example.com"}
+{"ts":"2026-10-27T14:20:05.881Z","event":"render_started","hostname":"example.com"}
+{"ts":"2026-10-27T14:20:05.884Z","event":"render_failed","hostname":"example.com","durationMs":36,"errorCode":"render_failed"}
+{"ts":"2026-10-27T14:20:05.886Z","event":"render_failed","hostname":"example.com","durationMs":35,"errorCode":"render_failed"}
+ ❯ src/__tests__/server.test.ts (12 tests | 1 failed) 1255ms
+     × returns PNG for a valid public URL 102ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/server.test.ts > /render success > returns PNG for a valid public URL
+AssertionError: expected 422 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 422
+
+ ❯ src/__tests__/server.test.ts:170:28
+    168|             body: JSON.stringify({ url: "https://example.com" }),
+    169|         });
+    170|         expect(res.status).toBe(200);
+       |                            ^
+    171|         const contentType = res.headers.get("content-type");
+    172|         expect(contentType).toContain("image/png");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 15 passed (16)
+   Start at  15:20:04
+   Duration  1.70s (transform 362ms, setup 0ms, import 249ms, tests 1.27s, environment 0ms)
+

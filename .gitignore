@@ -45,3 +45,7 @@ tmp/
 # Archive and restoration instructions: scripts/evaluations/source-selection/README.md
 /scripts/evaluations/**/runs/
 /scripts/evaluations/**/captures/
+
+# Per-worktree local runtime state and execution ledgers
+.local-runtime/
+.superpowers/

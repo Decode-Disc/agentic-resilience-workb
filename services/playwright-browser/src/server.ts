@@ -641,13 +641,22 @@ server.headersTimeout = 36_000;
 // Only auto-listen when run directly (not imported by tests).
 // Vitest sets VITEST env var by default.
 const isTestEnv = typeof process.env["VITEST"] !== "undefined";
-if (!isTestEnv) {
-    server.listen(PORT, () => {
-        log("server_started", {
-            port: PORT,
-            maxConcurrent: MAX_CONCURRENT_RENDERS,
-        });
+export function logServerStarted(listener: Server): void {
+    const address = listener.address();
+    if (!address || typeof address === "string")
+        throw new Error("Preview service has no TCP listener address.");
+    log("server_started", {
+        origin: `http://127.0.0.1:${address.port}`,
+        port: address.port,
+        maxConcurrent: MAX_CONCURRENT_RENDERS,
     });
+}
+
+if (!isTestEnv) {
+    server.listen(
+        { port: PORT, host: process.env["PREVIEW_SERVICE_HOST"] },
+        () => logServerStarted(server),
+    );
 }
 
 export { server as __server };

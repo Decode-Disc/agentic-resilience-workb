@@ -2,7 +2,10 @@ import { api, internal } from "@convex/_generated/api";
 import { afterEach, expect, test, vi } from "vitest";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+});
 
 test("a new draft does not revoke access to the previous approved capture", async () => {
     const { t, args, userId } = await seedInspectedEvidence();
@@ -64,6 +67,46 @@ test("a new draft does not revoke access to the previous approved capture", asyn
     ).rejects.toThrow("source_not_approved");
 });
 
+test("persisted mission capture access derives authority from the active approved run", async () => {
+    const { t, args, visitorId } = await seedInspectedEvidence();
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "saved-material-inspection",
+        expectedGeneration: args.executionGeneration,
+    });
+    const missionCaptureQuery =
+        internal.sourceRetrieval.approvedCaptureForMission;
+
+    expect(
+        await t.query(missionCaptureQuery, {
+            missionId,
+            expectedGeneration: args.executionGeneration,
+            sourceId: args.sourceId,
+        }),
+    ).toMatchObject({
+        status: "available",
+        capture: { sourceId: args.sourceId },
+    });
+    await expect(
+        t.query(missionCaptureQuery, {
+            missionId,
+            expectedGeneration: args.executionGeneration - 1,
+            sourceId: args.sourceId,
+        }),
+    ).rejects.toThrow("stale_execution");
+
+    await t.run((ctx) => ctx.db.patch(visitorId, { status: "revoked" }));
+    await expect(
+        t.query(missionCaptureQuery, {
+            missionId,
+            expectedGeneration: args.executionGeneration,
+            sourceId: args.sourceId,
+        }),
+    ).rejects.toThrow("not_authorized");
+});
+
 test("an admitted analyst can search an approved capture beyond materialized passages without provider I/O", async () => {
     const quotation = "Quasar architecture separates storage from compute.";
     const text = [
@@ -121,6 +164,67 @@ test("an admitted analyst can search an approved capture beyond materialized pas
             calls: (await ctx.db.query("providerCalls").collect()).length,
         })),
     ).toEqual({ passages: 551, versions: 0, calls: 0 });
+});
+
+test("public and mission approved searches return the same indexed passages", async () => {
+    const { t, args, userId } = await seedInspectedEvidence();
+    const owned = t.withIdentity({ subject: userId });
+    const scope = {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        sourceId: args.sourceId,
+    };
+    await owned.action(
+        api.sourceRetrievalActions.ensureApprovedSourceIndex,
+        scope,
+    );
+    const publicResult = await owned.query(
+        api.sourceRetrieval.searchApprovedSource,
+        { ...scope, query: "workflow" },
+    );
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "approved-search-parity",
+        expectedGeneration: args.executionGeneration,
+    });
+
+    const missionResult = await t.query(
+        internal.sourceRetrieval.searchApprovedSourceForMission,
+        {
+            missionId,
+            expectedGeneration: args.executionGeneration,
+            sourceId: args.sourceId,
+            query: "workflow",
+        },
+    );
+
+    expect(missionResult).toEqual(publicResult);
+});
+
+test("a warm approved public index returns ready without loading the capture again", async () => {
+    const { t, args, userId } = await seedInspectedEvidence();
+    const owned = t.withIdentity({ subject: userId });
+    const scope = {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        sourceId: args.sourceId,
+    };
+    await owned.action(
+        api.sourceRetrievalActions.ensureApprovedSourceIndex,
+        scope,
+    );
+    const readCapture = vi.spyOn(Blob.prototype, "text");
+
+    expect(
+        await owned.action(
+            api.sourceRetrievalActions.ensureApprovedSourceIndex,
+            scope,
+        ),
+    ).toEqual({ status: "ready" });
+
+    expect(readCapture).not.toHaveBeenCalled();
 });
 
 test("approved search refuses unauthenticated, foreign, unapproved and revoked access", async () => {

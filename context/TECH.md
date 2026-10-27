@@ -10,6 +10,8 @@ Keep domain records, persistence, orchestration, acquisition/normalization, mode
 
 No second workflow engine, PostgreSQL, separate object store or custom realtime transport is part of the baseline. Eve and Vercel Workflow remain alternatives requiring demonstrated need and an explicit decision. Vercel Hobby is an acceptable hosting option only when its verified limits support the prototype; the technical baseline does not promise a free deployment. Model routes, access credentials, resource configuration, showcase identity and deployment URLs remain configuration data.
 
+Local development gives each Git worktree its own native Convex deployment and state. Native configuration and instance identity remain authoritative; an ignored runtime manifest projects verified backend, site, web and preview origins and owned processes without secrets. A repository-wide startup lock serializes native backend allocation across worktrees, then releases after identity verification. Web and preview listeners publish their actual available ports. Application development commands and protected browser tests resolve those origins rather than assuming shared fixed ports; cleanup affects only processes owned by the invocation.
+
 ## AI Use and Deterministic Execution
 
 Model assistance is permitted at explicitly defined points in any product phase, including framing or query planning before source acquisition. Source availability is not a blanket condition for an AI call. Justify each model-backed task or mission by its purpose, expected result and need for semantic interpretation or reasoning. Where existing rules and data resolve the work reliably, keep it deterministic; do not introduce a generative intermediary for a lookup, validation, count, state transition or formatting operation that code already handles.
@@ -20,9 +22,9 @@ Framing proposals and research hypotheses prepared before acquisition do not est
 
 ## Agentic Missions and Shared Operations
 
-Three specialized mission agents work within system-owned execution: Sources conducts documentary inquiry; Investigation contributes assertions and investigates the framed questions; Synthesis connects retained appraisals. The system fixes each mission's authority, scope, applicable versions, permitted operations, resource bounds, expected artifacts and progression conditions. The agent chooses useful readings, confrontations and proposals from mission start; it is not activated only after a predicted risk. No new orchestration engine or general capability framework is selected.
+Three specialized mission agents work within system-owned execution: Sources conducts documentary inquiry; Investigation contributes assertions and investigates the framed questions; Synthesis connects retained appraisals. The system fixes each mission's authority, scope, applicable versions, permitted operations, resource bounds, expected artifacts and progression conditions. The agent chooses useful readings, confrontations and proposals from mission start; it is not activated only after a predicted risk. One shared mission and continuation protocol runs on Convex Workflow. Business workflows retain their phase transitions; no second orchestration engine or general capability framework is selected.
 
-Authorized native calls and agent tools reach the same deep business operations. The domain implementation owns validation, policy, versions, persistence and known dependent work; the tool binding supplies description, schema and execution. Mission exposure is least-privilege, not a separate implementation or unrestricted access to the catalogue.
+Authorized native calls and agent tools reach the same deep business operations. The domain implementation owns its authoritative input/result schemas, validation, policy, versions, persistence, effects, reuse conditions and known dependent work. The tool binding derives its input schema from that contract and supplies its description and execution binding. Server-owned context supplies authority; model arguments cannot grant it. Mission exposure is least-privilege, not a separate implementation or unrestricted access to the catalogue.
 
 | Business operation | Domain responsibility | Agent exposure | Controlled result |
 | --- | --- | --- | --- |
@@ -41,6 +43,39 @@ Authorized native calls and agent tools reach the same deep business operations.
 These are functional entries, not frozen SDK signatures or a generic all-purpose API. Consultation, explicit-query search, exact reading and handoff authorization need deterministic boundary checks, not a generative intermediary. Search and reading respect mission-specific access and permitted uses. Completion uses artifact references rather than another coordination tool.
 
 Making a source consultable targets an authorized candidate or actually observed link with its recorded origin, and requires the destination's own retained content. A URL, index label or guide does not establish that its destination was read or qualified. Sources returns qualified documentary material; it does not directly create analytical inventory assertions.
+
+### Shared Execution Structure
+
+The shared executor centralizes execution guarantees while business knowledge remains with its existing owner. The following structure defines responsibilities without requiring one file per concept.
+
+| Code boundary | Single responsibility owner |
+| --- | --- |
+| `convex/execution/` | Shared execution contracts, mission lifecycle, operation requests and outcomes, suspension/continuation, repetition controls and causal trace references, using the existing Workflow manager. |
+| Static versioned agent definitions | Mission instructions, context construction, allowed operation references and domain-owned result/completion criteria. Concrete models remain routing configuration. |
+| Existing domains and integrations | Business operations, semantic criteria, evidence and artifact models, acquisition, provider adapters, attempt receipts and cumulative accounting. Extend these owners rather than introducing a parallel retry or budget subsystem. |
+
+Adding an agent supplies its definition to the shared executor, without another loop, retry policy or accounting implementation. Adding an operation supplies its domain contract and implementation once; native callers and generated tool bindings use the same controlled entry. Reuse existing schema derivation mechanisms rather than adding a schema language. The available definitions and operations form a static catalogue; dynamic plugins and a workflow language are outside this design. The execution core enforces required control outcomes without absorbing documentary or analytical criteria.
+
+The initial executable definition is read-only saved-material inspection, with mission-state consultation, approved-capture search and exact contextual reading. It grants no acquisition, source-selection, qualification, analytical or human-decision authority. Qualification and comparison reuse the extracted bounded invocation transport and retain their existing domain protocols. Agent reasoning has no default authorized live route; local scripted invocations are labelled simulation and create no fictitious provider receipt. Sources, Investigation and Synthesis remain subsequent integrations.
+
+Initial inspection limits are sequential dispatch, four requests per response, at most one model step per invocation (including invalid tool calls), a fixed cumulative 15-minute dossier execution window, a 60-second model attempt, 6,144 output tokens, a 128 KiB complete context/schema envelope, 16 KiB working notes, 64 KiB operation results and history pages of at most 20 events. Three consecutive turns without new domain progress stop the mission; search counts distinct inspected passages, not result-set combinations. Required context overflow blocks explicitly. Existing dossier work/incident accounting remains the single cumulative owner, with its installed default allowances of 120/40; resumes preserve consumption, repetition state and deadline. Confirmed observable model output is retained before Workflow adoption so a recovered invocation can use it without another paid call. Unknown dispatched outcomes cannot be replayed blindly. Cancellation fences the dossier immediately and schedules bounded, traceable request/mission cleanup independently of its volume.
+
+### Mission Lifecycle and Operation Handoffs
+
+| Execution concept | Retained identity and state |
+| --- | --- |
+| Agent definition | Static identifier/version, instructions, operations and result criteria. |
+| Durable mission | Stable identity, dossier, objective, authorized scope, applicable versions, obligations, result references and continuation state. |
+| Temporary invocation | Mission or bounded-task reference, agent/task version, actual supplied context and provider-attempt reference. It ends when it returns control. |
+| Operation request | Causing invocation or system action, operation/version, validated arguments or input references, expected domain versions, logical identity and explicit outcome or pending obligation. |
+
+Durability belongs to the mission and retained work, not to a live JavaScript instance or hidden model reasoning. A bounded one-shot task uses the same authorized invocation and tracing boundary, retaining its results without promising conversational continuation. Definition and contract versions remain explicit on continuation; an incompatible deployment requires a defined compatibility path or an explicit stop.
+
+Ordinary handoff suspends between operations: retain the agent's request before effects, dispatch the shared business operation, retain its confirmed result or waiting state, then authorize a fresh invocation with that result and useful context. A domain operation may be deterministic, include bounded model-assisted work, or request an authorized mission. Sources, Investigation and Synthesis cooperate through their defined business requests; there is no unrestricted agent-spawning tool. Required internal checks remain system-owned. A long wait retains its correlation and releases the invocation; its result wakes only the matching eligible continuation.
+
+Every operation requested in one response receives an explicit outcome. Mutations execute sequentially by default, revalidating expected versions after each effect; conflicting or stale remaining requests return diagnostics rather than executing blindly. Independent reads may use explicitly bounded concurrency. SDK tool execution cannot bypass this dispatch boundary or introduce implicit concurrent mutations. Completion remains a proposal checked against domain-owned artifacts and controls under the [workflow contract](#workflow-and-revision-contract).
+
+Handoff is distinct from dossier cancellation. Cancellation fences adoption and future work even when an already dispatched action finishes. A continuation inside an active dossier does not claim another visitor slot; a resume that makes the dossier running atomically claims the existing slot and advances its execution generation.
 
 ## Workflow and Revision Contract
 
@@ -87,19 +122,43 @@ Synthesis can verify existing evidence and explain new relationships, but a nece
 
 ## Context, Recovery and Resource Accounting
 
-Supply compact initial mission context and references, with on-demand search and reading. Keep evidence and completed work outside the model working context; later requests must not accumulate every previous reading window. A work summary never replaces exact evidence. Tool schemas cannot enumerate a whole corpus. Reading-window sizes, context assembly and history mechanics remain implementation choices; cross-dossier learning and institutional memory are outside scope.
+Context continuity is part of the continuation contract. Compact context is a working projection of retained information. Keep evidence and completed work outside the model window; later requests must not accumulate every previous reading. Tool schemas cannot enumerate a whole corpus. Cross-dossier learning and institutional memory remain outside scope.
+
+| Context layer | Preservation and continuation |
+| --- | --- |
+| Required context | Automatically supply mission/scope, applicable human instructions and decisions, constraints, current versions, active work, open needs, the request causing suspension and its returned result. Explicitly identify changed instructions or versions. |
+| Mission working memory | Retain examined avenues, open hypotheses, rejected interpretations with reasons, pending checks and intended investigations. Working notes remain distinct from established facts and human decisions. |
+| Retrievable history | Automatically retain usable observable invocation inputs/outputs, operation requests/results, reading references and artifact versions, directly or by reproducible reference. Earlier detail stays accessible when removed from the current window. |
+
+Preservation cannot depend on the agent remembering to invoke a save-memory tool. Supply the awaited result and necessary continuation state directly; offer scoped retrieval of prior readings and exchanges. A summary or working note never replaces exact evidence. If required context exceeds the allowed capacity, return an explicit context-capacity block rather than silently dropping instructions or unfinished work. Reading windows, context assembly and storage shapes remain implementation choices; retaining accessible context does not establish that a model used it correctly. Secrets and hidden reasoning are excluded; rejected raw provider diagnostics retain their separately specified bounds and explicit truncation.
 
 Preserve each operation's confirmed results and pending obligations. Bounded model work within an operation is not one atomic database transaction across external I/O. Continuation uses retained domain state and compact context rather than replaying the complete conversation. The system organizes required follow-up checks so the mission agent need not remember to schedule them.
 
-Automatically continue a confirmed recoverable interruption only while mandate, execution authority, versions, cancellation fences and remaining bounds permit it. Reuse confirmed work; unknown provider outcomes authorize no blind repetition. Recovery cannot cross a human prerequisite or adopt a revised judgment. Persist explicit unfinished work when continuation is unavailable. The generation, lease, idempotency, telemetry and public-address safeguards below continue to apply.
+Automatically continue a confirmed recoverable interruption only while mandate, execution authority, versions, cancellation fences and remaining bounds permit it. Reuse confirmed work; unknown provider outcomes authorize no blind repetition. One shared attempt policy authorizes model retries, with automatic SDK and Workflow model retries disabled. A business refusal, analytical uncertainty and technical incident remain distinct. Recovery cannot cross a human prerequisite or adopt a revised judgment. Persist explicit unfinished work when continuation is unavailable. The generation, lease, idempotency, telemetry and public-address safeguards below continue to apply.
 
-Protect resources cumulatively across the dossier and count all actual provider calls, including agent reasoning, model-assisted operations and semantic controls. Tool counts do not substitute for call accounting; continuation never resets consumption. No arbitrary per-agent quota or reserved finalization share is selected. Hard time and resource ceilings may leave work incomplete. New mission parameters and numerical limits remain to be set before activation; the installed limits below continue to govern existing execution.
+Protect resources cumulatively across the dossier and count all actual provider calls, including agent reasoning, model-assisted operations and semantic controls. Tool counts do not substitute for call accounting; continuation never resets consumption. No arbitrary per-agent quota or reserved finalization share is selected. Hard time and resource ceilings may leave work incomplete. Parameters for the three target business missions remain to be set before activation; the installed limits below continue to govern existing execution.
+
+### Loop Prevention
+
+Reuse confirmed results for unchanged operation inputs and versions when their domain contract permits it. A fresh invocation or generation does not itself create a new logical operation. Deterministic repetition policy considers the objective, operation, parameters, examined versions and previous diagnostics across invocations. Domain owners define relevant observable progress, such as newly inspected material, a changed contribution or a resolved obligation; another identifier, event or message alone is not progress. Legitimate rereading to restore context remains possible.
+
+Mission requests retain their cause and objective and obey the [documentary and analytical return bounds](#workflow-and-revision-contract). The initial inspection threshold above is binding; the three target missions still need their numerical re-examination and non-progress thresholds before activation. Cumulative hard bounds also constrain semantic cycles that repetition detection does not recognize. On a repetition stop, retain completed work, cause and remaining obligations; do not automatically relaunch an identical mission under unchanged conditions. Any later continuation still requires valid authority, an admissible reason and remaining shared resources.
+
+### Traceability and Typed Outcomes
+
+Every significant business operation, whether native or agent-requested, retains its actor, cause, inputs or references, examined versions and outcome, including rejected or blocked requests. Correlate dossier, mission, invocation, request, logical operation, provider attempts, controls and produced revisions. The logical operation identity survives continuation; execution generation and attempt number remain separate. Domain results stay with their owner and the execution record retains references. Product progress remains a projection of persisted work; deterministic actions create no fictitious provider receipt.
+
+A previously authorized provider attempt may receive a factual terminal receipt after cancellation without adopting its business result, advancing the mission, claiming a slot or authorizing another call. Receipt closure validates that exact admitted attempt; business adoption independently checks current authority, versions and execution generation. Evolve the existing path-specific receipt behavior with focused checks rather than removing its guards globally. External exactly-once execution is not promised; confirmed results are reused and business adoption remains idempotent.
+
+Typed execution outcomes distinguish controlled success, waiting, version conflict, missing configuration, resource/repetition stop, technical interruption and unknown provider outcome. Context-capacity blocks are explicit. Analytical insufficiency and synthesis non-establishment remain domain-controlled conclusions, not replacements for these execution states. Isolate work with an unknown effect and continue independent authorized work when possible. Analyst-facing projections translate these outcomes under the product copy rules while protected diagnostics retain the relevant boundary and cause.
 
 ## Implementation Transition
 
 The following sections retain legacy storage, workflow, source-preparation and provider contracts while the target above is implemented. The roadmap distinguishes delivered behavior from former requirements that were never completed. These contracts do not make fixed dimensions, routine human source approval or selectively triggered semantic checks requirements for the target. Existing authorization, approved-membership checks, checkpoint waits and limits remain enforced until their replacement has explicit semantics, compatibility handling and verification. Documentation alone cannot bypass them or migrate persisted data.
 
 Reuse existing Convex records, Workflow execution, acquisition, retrieval, accounting and policy owners before adding concepts. Decide concrete framing, mandate, assertion/use, appraisal, review, synthesis and revision schemas in the affected slice; do not assume current dimension records already express them. Preserve immutable evidence, decisions, receipts, unresolved provider outcomes and readable historical results. Legacy fixture regressions remain applicable within their original boundary. The roadmap owns migration sequence and verified delivery.
+
+Shared-protocol acceptance must exercise native/tool authorization equivalence; interruption before dispatch, after a confirmed effect and before return to the agent; context, obligation and counter continuity; incompatible concurrent requests and stale versions; late receipts without adoption; repetition and cross-mission bounds after restart; and refusal of completion with required artifacts or controls missing. First prove the protocol with a deterministic operation and simulated model, then integrate Sources through existing owners within the roadmap sequence. Common durable integration and semantic quality remain separate verification gates; specifying this contract does not implement or activate it.
 
 ## Domain and Persistence
 

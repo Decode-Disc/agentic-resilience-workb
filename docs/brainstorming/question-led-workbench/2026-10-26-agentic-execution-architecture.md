@@ -2,19 +2,39 @@
 
 ## Status and Ownership
 
-Accepted on 2026-10-26 after examining Sources experiments, comparing execution alternatives, and extending the selected contract to Sources, Investigation, and Synthesis. This document owns their shared execution architecture. The [global conception](2026-10-23-question-led-workbench-conception.md) owns workflow order, cooperation, inventory rules, analyst judgment, and functional outcomes. Implementation integration and semantic quality remain unverified.
+Accepted on 2026-10-26 after examining Sources experiments, comparing execution alternatives, and extending the selected contract to Sources, Investigation, and Synthesis. Refined and explicitly accepted on 2026-10-27 through repository discovery, an independent architectural review and staged decisions on ownership, continuation, context continuity, loop prevention and traceability. This document retains the conception and its rationale; the [technical contract](../../../context/TECH.md#agentic-missions-and-shared-operations) owns current execution obligations. The [global conception](2026-10-23-question-led-workbench-conception.md) records workflow order, cooperation, inventory rules, analyst judgment, and functional outcomes. Implementation integration and semantic quality remain unverified.
 
-The destination is an agent that can adapt its work through controlled business operations, preserve useful progress, and recover without making the analyst coordinate routine execution. This is an execution contract, not a new agent framework or a claim that model reasoning is deterministic.
+The destination is an agent that can adapt its work through controlled business operations, preserve useful progress, and recover without making the analyst coordinate routine execution. This conception records execution choices without introducing another agent framework or claiming that model reasoning is deterministic.
+
+## Shared Harness Decision of 2026-10-27
+
+The accepted path is one mission and continuation protocol executed by the existing Convex Workflow engine. Its destination is reusable execution that lets system code act directly, assign authorized work to an agent, suspend between operations, perform business processing and resume without copying execution guarantees into each mission. A durable mission retains its identity and work while individual model invocations remain temporary. A bounded one-shot task shares invocation and tracing guarantees without requiring conversational continuation.
+
+The accepted code boundaries are a common `convex/execution/` owner for execution guarantees, static versioned agent definitions, and business operations remaining in their existing domains. Creating an agent supplies instructions, context construction, allowed operations and result criteria to the shared executor. Creating an operation supplies its authoritative domain contract once; native calls and tool bindings share it. The [technical structure and handoff contract](../../../context/TECH.md#shared-execution-structure) specifies these responsibilities without requiring a file per concept or a new plugin framework.
+
+| Compared structure | Decision and reason |
+| --- | --- |
+| Separate orchestration in each mission, with shared helpers | Not selected for the common agent lifecycle: repetition of suspension, retries and accounting would leave several maintenance paths. Domain workflows still retain their own phase transitions. |
+| Common mission/continuation protocol on Convex Workflow | Accepted by the user after independent review. It centralizes execution guarantees while preserving domain-owned semantics and artifacts. |
+| Independent mission workflows with persistent mailboxes | Not selected for the current ordered dependencies and bounded returns. Reconsider only if independently progressing missions create a demonstrated need for message delivery and acknowledgement. |
+| Agent-proposed bounded plans executed by the system | Not selected as the general architecture because readings and control results can change the inquiry. Finite independent operation batches remain compatible with the selected protocol. |
+
+The user selected suspension at operation boundaries rather than transport preemption for ordinary handoffs. Requests and outcomes are retained before continuation; multiple requested mutations require sequencing and version revalidation. Context continuity was explicitly reinforced: necessary context is supplied automatically, working memory is retained, earlier observable detail remains retrievable, and required context is never silently discarded when capacity is insufficient. These choices refine the sections below; concrete obligations belong to the [context contract](../../../context/TECH.md#context-recovery-and-resource-accounting).
+
+The accepted loop policy combines result reuse, deterministic non-progress detection, business bounds on mission returns and cumulative dossier resources that survive restarts. Traceability links native and agent actions through their causes to attempts, controls and artifacts. Factual provider receipts remain distinct from authority to adopt a late result. Numerical thresholds, detailed storage and semantic usefulness remain implementation/evaluation work rather than claims made by this decision.
 
 ## Shared Mission Contract
 
 The system starts an authorized mission with its scope, applicable versions, allowed operations, resource constraints, expected artifacts, and progression conditions. The specialized agent chooses useful inspections, hypotheses, confrontations, and proposals within that frame. The system continues to conduct the global workflow.
 
 ```text
-Mission and compact initial context
+Mission and required continuation context
                  |
                  v
-Agent chooses useful work <------------------------+
+Agent invocation chooses useful work <-------------+
+                 |                                |
+                 v                                |
+Operation request retained                        |
                  |                                |
                  v                                |
 Shared business operation                         |
@@ -40,14 +60,14 @@ A model ending its turn or declaring success does not establish mission completi
 
 | Information | Access |
 | --- | --- |
-| Mission, research scope, questions, applicable rules, available resources, and useful current state | Supplied directly and concisely at launch or continuation. |
-| Available documents, existing contributions, and prior work | Compact orientation with references; details remain retrievable. |
+| Mission, scope, questions, human instructions/decisions, constraints, current versions, active obligations and returned operation result | Supplied directly at launch or continuation, with changes identified. |
+| Available documents, existing contributions, examined avenues, open hypotheses and rejected interpretations with reasons | Retained orientation and working memory, distinct from established facts; details remain retrievable. |
 | Passages, surrounding context, qualifications, restrictions, and comparisons | Retrieved by the agent for the current need, with explicit reading limits. |
 | Captures, inspected references, artifact revisions, operation results, and history | Retained independently of the current model context. |
 
 The agent controls what it needs to inspect; the system supplies scoped retrieval and reproducible references. A search result is a lead, not established support. Removing text from the working context neither deletes its recorded inspection nor grants authority to unseen material. Citation use still depends on access, version, provenance, and permitted use.
 
-Results returned on demand must not then accumulate indefinitely in every subsequent request. Working-context management preserves useful state and references while allowing older detail to be retrieved again. A summary or work note cannot replace the exact evidence it describes. Initial-context fields, reading windows, and history-management mechanics remain to be specified; no cross-dossier learning or institutional memory is introduced.
+Results returned on demand do not accumulate indefinitely in each subsequent request. The 2026-10-27 refinement selected automatic preservation, independent of a save-memory action, with required context, working memory and retrievable observable history. A summary or work note cannot replace exact evidence. Required context that cannot fit produces an explicit block rather than silent omission. Detailed schemas, reading windows and history storage remain implementation choices under the technical contract; no cross-dossier learning or institutional memory is introduced. Preservation makes information available without proving correct use by a model.
 
 ## Complete Operations and Targeted Changes
 
@@ -99,6 +119,23 @@ The shared mechanism does not merge their semantic criteria. Sources supplies qu
 
 ## Evidence and Architectural Lessons
 
+### Harness Discovery and Independent Review
+
+Discovery on 2026-10-27 inspected the five question-led conceptions, product and technical references, roadmap, existing Workflow execution, generation/slot claims, preparation authority, provider receipts, schema-derived validation and the experimental Sources runner. The installed packages examined were AI SDK `7.0.138` and Convex Workflow `0.4.10`. These observations establish available mechanisms and gaps, not integrated mission readiness.
+
+| Primary evidence | Observed consequence for the design |
+| --- | --- |
+| `convex/workflow.ts` and `convex/sourcePreparationWorkflow.ts` | The common manager enables automatic action retries; preparation explicitly disables them on sensitive actions. A common invocation must preserve one attempt authority. |
+| `convex/domain/executionClaim.ts`, `convex/domain/runCancellation.ts` and installed Workflow cancellation behavior | Slot claims and generation fences already exist; cancellation leaves dispatched actions able to finish. Ordinary handoff therefore has a separate continuation meaning. |
+| `convex/providerCalls.ts` and `convex/domain/sourcePreparationAuthority.ts` | Existing preparation accounting retains unknown consumption and refuses blind replay. Receipt closure differs between preparation and legacy extraction; factual receipt recording and business adoption need distinct checks. |
+| `convex/domain/sourceQualification.ts` and `convex/domain/sourceRetrievalPolicy.ts` | Authoritative schemas already derive Convex validators through `zodToConvex`; a new schema language is unnecessary. |
+| Installed AI SDK tool-calling source and deterministic local probe | A tool without `execute` returns control; a recreated agent accepts a serialized continuation containing the system's tool result. Automatic tool execution uses concurrent dispatch, so it cannot supply the mutation sequencing guarantee. |
+| `scripts/evaluations/source-selection/sources-approach-runner.ts` | Sources agent/tool experiments exist outside the production mission lifecycle and do not establish a common durable harness. |
+
+One independently authorized architect reviewed the alternatives and these primary boundaries in read-only mode. Its final report recommended the accepted common protocol and challenged automatic retries, multiple-tool ordering, late receipt handling, cumulative repetition controls and identity across restarts. Review did not certify implementation or semantic quality.
+
+The command `pnpm test src/__tests__/convex/workflows/durable-workflow.test.ts src/__tests__/convex/integrations/provider-calls.test.ts src/__tests__/convex/sources/source-preparation-budget.test.ts` passed 31 tests in the primary checkout, whose relevant implementation matched the target worktree at inspection. A separate in-memory probe imported the installed AI SDK and its mock model, returned one deferred tool call without executing it, serialized the continuation and supplied a system result to a new agent instance; it passed with no network calls. Neither check exercised a production durable agent handoff. No live backend or paid provider was invoked for this conception.
+
 Session `01a17291-bc90-7833-9c34-1ffb9b9e6ab9` contains successive Sources experiments and architectural reviews. Their frozen results are linked from the [global research basis](2026-10-23-question-led-workbench-conception.md#research-basis-and-adaptation). The inspection comparison recorded a repeated useful Snowflake correction, a CrowdStrike regression, missed Adobe premises, and unfinished agent work. These are Sources findings, not an evaluation of the future Investigation or Synthesis missions. Later changes to the bench do not retroactively change the frozen outcomes.
 
 ### Source-to-Architecture Mapping
@@ -140,4 +177,6 @@ Proposed checks, not performed by documenting this conception: retrieve several 
 
 Semantic evaluation must separately judge useful contributions retained, spontaneous omission detection, corrections, regressions, and completed obligations. Frozen failures are regression cases; exposed dossiers are not unseen holdouts. Structural success and lower call counts do not establish better analytical work.
 
-Implementation work remains for concrete operation schemas and bindings, compact-context assembly, inspection and revision records, verifier routing and executable quality checks, bounded recovery conditions, and resource parameters. The transversal catalogue, semantic control boundaries, explicit reuse, and artifact-specific criteria are retained conception decisions; exact interfaces and parameter values remain adaptable.
+The shared structure, mission/invocation distinction, ordinary handoff, continuity guarantees, loop policy and traceability boundaries were accepted on 2026-10-27. Implementation work remains for concrete schemas and bindings, context assembly and history retrieval, inspection and revision records, verifier routing, executable quality checks, non-progress criteria and numerical resource/rework parameters. These open choices sit within the accepted architecture and require resolution before activation of the affected behavior.
+
+The implementation handoff is the `harnais-architecture` worktree, with implementation authorized separately from this conception. Within the roadmap sequence, first prove a deterministic operation and simulated-model continuation, including the failure boundaries in the [technical acceptance contract](../../../context/TECH.md#implementation-transition), then integrate Sources through existing owners. The [roadmap](../../ROADMAP.md#phase-7--shared-execution-and-sources) retains undelivered capability and sequencing; no implementation plan or new document owner is introduced here.
