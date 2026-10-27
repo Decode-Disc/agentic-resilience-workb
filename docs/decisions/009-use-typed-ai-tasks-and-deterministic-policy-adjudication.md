@@ -6,6 +6,8 @@ Amended on 2026-10-20 by [ADR-024](024-qualify-source-content-before-corpus-appr
 
 Accepted
 
+Target amendment on 2026-10-27: the [current AI-use policy](../../context/TECH.md#ai-use-and-deterministic-execution) permits justified model work at defined points across phases. The question-led target replaces the selective-verifier trigger recorded below with [submission-boundary semantic controls and explicit reuse](../../context/TECH.md#semantic-controls-and-analytical-outputs). This does not require model verification of every search, reading or mechanical action; the original rationale below remains historical.
+
 ## Date
 
 2026-07-27

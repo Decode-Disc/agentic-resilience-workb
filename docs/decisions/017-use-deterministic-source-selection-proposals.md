@@ -4,6 +4,8 @@
 
 Accepted; source-ranking and fixed-target sections superseded by ADR-018; analyst-source ceiling rule superseded by ADR-021. [ADR-024](024-qualify-source-content-before-corpus-approval.md) supersedes the metadata-only preparation and no-pre-approval-reading assumptions. Proposal composition remains deterministic, while bounded qualification and comparison may call models before composition. The rejected pre-approval-reading alternative below records the earlier rationale, not a current prohibition.
 
+Scope clarification on 2026-10-27: the no-additional-model-call rule belongs to deterministic proposal composition, not the entire workflow before source retrieval. Model-assisted framing, planning and documentary inquiry follow the [current AI-use policy](../../context/TECH.md#ai-use-and-deterministic-execution). This clarification does not require replacing deterministic composition with a model.
+
 ## Date
 
 2026-08-07

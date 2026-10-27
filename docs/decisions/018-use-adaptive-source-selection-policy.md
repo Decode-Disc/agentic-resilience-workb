@@ -6,6 +6,8 @@ Amended on 2026-10-20 by [ADR-024](024-qualify-source-content-before-corpus-appr
 
 Accepted
 
+Scope clarification on 2026-10-27: the no-additional-model-call premise below describes the recorded selection policy, not a phase-wide AI prohibition. The [current AI-use policy](../../context/TECH.md#ai-use-and-deterministic-execution) governs the question-led target; reliable deterministic ranking and composition do not need a generative replacement.
+
 ## Date
 
 2026-08-07

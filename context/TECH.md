@@ -10,6 +10,14 @@ Keep domain records, persistence, orchestration, acquisition/normalization, mode
 
 No second workflow engine, PostgreSQL, separate object store or custom realtime transport is part of the baseline. Eve and Vercel Workflow remain alternatives requiring demonstrated need and an explicit decision. Vercel Hobby is an acceptable hosting option only when its verified limits support the prototype; the technical baseline does not promise a free deployment. Model routes, access credentials, resource configuration, showcase identity and deployment URLs remain configuration data.
 
+## AI Use and Deterministic Execution
+
+Model assistance is permitted at explicitly defined points in any product phase, including framing or query planning before source acquisition. Source availability is not a blanket condition for an AI call. Justify each model-backed task or mission by its purpose, expected result and need for semantic interpretation or reasoning. Where existing rules and data resolve the work reliably, keep it deterministic; do not introduce a generative intermediary for a lookup, validation, count, state transition or formatting operation that code already handles.
+
+Define the calling task or mission, its allowed inputs and output use, and its execution conditions before activation. Dispatch remains subject to the [provider boundaries](#provider-boundaries) and [cumulative resource accounting](#context-recovery-and-resource-accounting), including reasoning and control calls. The system authorizes work through code; it does not call another model merely to decide whether a routine operation needs AI. This policy preserves adaptive mission reasoning and mandatory targeted submission controls without requiring another model for every action.
+
+Framing proposals and research hypotheses prepared before acquisition do not establish company facts. Documentary and analytical assertions still require their admissible evidence and controls. Permission to use models across phases does not start Sources or Investigation before Start research, bypass an analyst prerequisite, or activate a provider. Existing runtime restrictions remain under the [implementation transition](#implementation-transition) until their replacement is implemented and verified.
+
 ## Agentic Missions and Shared Operations
 
 Three specialized mission agents work within system-owned execution: Sources conducts documentary inquiry; Investigation contributes assertions and investigates the framed questions; Synthesis connects retained appraisals. The system fixes each mission's authority, scope, applicable versions, permitted operations, resource bounds, expected artifacts and progression conditions. The agent chooses useful readings, confrontations and proposals from mission start; it is not activated only after a predicted risk. No new orchestration engine or general capability framework is selected.
