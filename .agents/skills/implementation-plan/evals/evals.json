@@ -3,37 +3,37 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "Use the implementation-plan skill to create a formal implementation plan for Phase 5 evidence retrieval and claim extraction in this repository. Preserve the existing source-review workspace and persistent rail, use Convex Workflow, Unstructured Jobs, typed AI tasks, and deterministic policy gates. Do not implement anything.",
-      "expected_output": "A project-specific plan that reads the authoritative documents, maps the current UI and backend owners, preserves existing surfaces, separates Convex actions/mutations/workflows and integration adapters, defines approved-corpus-only retrieval, cancellation and late-result safety, stable passage locators, audience copy, TDD tasks, and complete admitted browser/live gates.",
+      "prompt": "Use the implementation-plan skill to draft a bounded retrieval and claim-extraction change for the existing source-review compatibility path. Inspect the actual workflow and providers before choosing files. Preserve the workspace and persistent rail, use existing Convex owners and durable execution, and identify the current corpus restriction without extending it to the question-led target. Draft in the conversation only; do not save a plan or implement anything.",
+      "expected_output": "A bounded plan grounded in current reference owners and implementation, preserving existing surfaces and compatibility retrieval guards while separating the target transition, specifying applicable functional TDD and durable-I/O checks, and leaving live execution separately authorized.",
       "assertions": [
         "References the principal writing-plans skill and the project implementation-plan overlay",
         "Includes current-state evidence and a preserve/modify/replace/remove surface map",
         "Preserves the existing rail and source-review UI instead of redesigning them",
         "Specifies authorization before I/O, execution leases, generation checks, cancellation, and late-result rejection",
         "Separates Convex actions, mutations, workflows, and provider adapters",
-        "Requires approved-corpus-only retrieval and stable passage locators",
-        "Includes audience-copy and full admitted browser verification gates",
-        "Does not implement production code"
+        "Keeps the exercised compatibility path's approved-corpus restriction and stable passage locators without making manual corpus approval a target-wide requirement",
+        "Includes audience copy and the admitted browser gate needed for the affected protected journey, without forcing unrelated global or live checks",
+        "Does not save a plan, implement production code or activate providers"
       ],
       "files": []
     },
     {
       "id": 2,
-      "prompt": "Invoke implementation-plan to revise the existing Phase 4 plan after learning that access codes are reusable, Start is public, company search returns candidates before preflight, CCC changed ticker, URL references must stay, and admin routes use a pathless protected layout. Documentation only.",
-      "expected_output": "A scoped plan revision that updates the access journey, uses CIK as stable identity, preserves HTTPS references while excluding uploads, corrects protected route paths and terminology, and adds browser/security gates without rewriting unrelated product requirements.",
+      "prompt": "Invoke implementation-plan to inspect and revise company-entry and durable-access planning against current code and references. Check public search before confirmation, reusable access codes, mutable company tickers, retained public HTTPS references and actual protected admin routes. Treat older phase descriptions as historical rather than assuming the current journey. Draft in the conversation; do not create a plan or change application code.",
+      "expected_output": "A scoped planning revision grounded in current routes and reference authority, with stable identity, preserved public references and access behavior, and verification proportional to the affected journey.",
       "assertions": [
         "Treats CIK as canonical and ticker as mutable",
         "Separates search candidates, explicit selection, and preflight",
         "Preserves public HTTPS references while excluding local uploads",
-        "Uses the pathless protected route for admin",
+        "Inspects and uses the actual protected admin route rather than assuming an old route path remains current",
         "Covers reusable access-code logout and reconnection",
-        "Changes documentation only"
+        "Keeps the revision in the conversation, with no application change or unrequested persistent plan"
       ],
       "files": []
     },
     {
       "id": 3,
-      "prompt": "Use the project implementation-plan skill to plan how to connect the existing research dossier cards to live Convex data. The cards already use CutoutCard with a generated cover, pin, inset label, footer, hover/focus action, staggered content, and a matching skeleton. Keep the visual design exactly as it is.",
+      "prompt": "Use the project implementation-plan skill to plan how to connect the existing research dossier cards to live Convex data. The cards already use CutoutCard with a generated cover, pin, inset label, footer, hover/focus action, staggered content, and a matching skeleton. Keep the visual design exactly as it is. Draft in the conversation only; do not save or implement the plan.",
       "expected_output": "A narrow integration plan that marks the existing card and skeleton composition as preserved, changes only data ownership and navigation, tests observable loading/empty/error/live states, and requires desktop/mobile/keyboard/hover visual verification without changing shared CutoutCard defaults.",
       "assertions": [
         "Marks the existing card structure and motion as preserved",
@@ -44,6 +44,59 @@
         "Includes desktop, mobile, keyboard, hover, focus, and console gates"
       ],
       "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Use implementation-plan to draft verification for a small spacing and icon-placement correction in an existing header, plus a documentation-only wording correction. Neither changes state, interaction or text meaning. Keep this in the conversation; do not edit anything.",
+      "expected_output": "A proportionate plan using affected browser comparisons for presentation and link, structure and consistency checks for documentation, without manufactured RED tests or an automatic project-wide build.",
+      "assertions": [
+        "Classifies the observable changes before choosing checks and preserves functional TDD for any separately discovered functional contract",
+        "Does not require failing CSS-class, pixel, SVG or unchanged-label tests for the presentation correction",
+        "Uses scoped browser states and documentation checks without replaying admission, provider preparation or unrelated protected journeys",
+        "Does not require the full project suite or build without a repository obligation, explicit request or demonstrated transversal risk",
+        "Creates no persistent plan and performs no implementation"
+      ],
+      "files": [
+        "../../../AGENTS.md",
+        "../../../PRODUCT.md"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Use implementation-plan to prepare the next framing slice: useful model-assisted scope and question suggestions before source acquisition, followed by explicit research launch. Explain the current-to-target transition without removing any existing checkpoint. Draft only; no implementation, provider calls or saved plan.",
+      "expected_output": "A current-state-grounded framing plan that justifies bounded semantic assistance, keeps deterministic operations deterministic, preserves launch authority and records unresolved transition contracts without inventing schemas or live readiness.",
+      "assertions": [
+        "Reads current PRODUCT and TECH requirements and the roadmap instead of treating an older ADR or phase description as a current obligation",
+        "Distinguishes delivered behavior, the approved target and the authorized slice, preserving existing guards until a replacement is implemented and verified",
+        "Permits justified bounded framing assistance before acquisition while keeping reliable lookup, validation and transitions deterministic",
+        "Does not treat framing hypotheses as established facts or allow Sources and Investigation before explicit Start research",
+        "Keeps concrete unresolved mandate or persistence decisions explicit instead of freezing an invented schema into tests",
+        "Creates no persistent plan, provider activity or production change"
+      ],
+      "files": [
+        "../../../AGENTS.md",
+        "../../../PRODUCT.md",
+        "../../../context/TECH.md",
+        "../../../docs/ROADMAP.md"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Use implementation-plan to draft a formal plan for the next approved slice. I have not requested a repository file or chosen a plan location. Explain the applicable authority and begin the draft in this conversation; do not implement.",
+      "expected_output": "A conversation draft that uses current reference authority and keeps persistent-plan creation, location and execution as separate choices, without inventing a default directory or producing a document series.",
+      "assertions": [
+        "Does not write under a retired or inherited fixed directory, create a persistent plan or assume a storage location",
+        "Uses PRODUCT for requirements, TECH for enforcement and the roadmap for delivery; PROJECT is optional deeper context and ADRs remain historical rationale",
+        "Overrides inherited template instructions that would force file creation, commits, delegation or inapplicable tests",
+        "Uses native work in the conversation and preserves the at-most-one-active-plan rule if persistent storage is later explicitly requested at an agreed location",
+        "Keeps implementation and external execution unauthorized without asking again for decisions already settled in current references"
+      ],
+      "files": [
+        "../../../AGENTS.md",
+        "../../../PRODUCT.md",
+        "../../../context/TECH.md",
+        "../../../docs/ROADMAP.md"
+      ]
     }
   ]
 }

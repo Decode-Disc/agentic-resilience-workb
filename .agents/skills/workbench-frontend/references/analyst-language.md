@@ -23,18 +23,24 @@ Keep semantic translation in the existing presentation owner. Inspect all affect
 
 ## Check the distinctions that matter
 
-Selection, processing, and evidence judgments can coexist on the same card. Keep their consequences understandable so the analyst does not mistake one for another. Use the relevant rows below when the changed information involves those concepts, and settle each question against the actual contract.
+Research progress, evidence and judgments can coexist on the same view. Keep their consequences understandable so the analyst does not mistake one for another. Use the relevant rows below when the changed information involves those concepts, and settle each question against the actual contract. The table is an inspection aid; it does not require displaying every distinction as a badge.
 
 | Information being presented | Question to resolve from the real contract |
 | --- | --- |
+| Framing proposal | Is the scope still proposed or fixed for research? Could a proposed angle be mistaken for an established company fact or for research already started? |
+| Inventory and question uses | What does the assertion establish, and how is it used for this question? Could a linked passage or Unknown be mistaken for an answered question? |
+| Appraisal | Can the analyst identify the interpretation, its support, assumptions, objections and decisive unknowns? Does the view distinguish a proposal from a retained judgment? |
+| Synthesis | Can the analyst trace a mechanism relationship to its reasoning and retained basis? Does result availability imply endorsement, or hide a material pending decision? |
 | Included or recommended sources | Which set and revision does this describe? Could the analyst mistake selection for reading, factual support, or approval? |
 | Reading and preparation | Was content saved, only partly obtained, not attempted, or unsuccessfully processed? What remains inspectable? |
 | Documentary coverage | Is a useful contribution established, limited, absent after inspection, or not yet assessed? Does the data actually distinguish these cases? |
 | Provenance, family, and document kind | Does the label identify author, host, filing venue, category, or document form? Which of those facts are independently established? |
 | Counts | What objects are counted, from which scope, and under what qualification? Do the label and destination use that same population? |
-| Human approval | Is this still a proposal, an individual decision, or an approved source set? Does a positive color imply a decision that has not occurred? |
+| Human decisions | Which object and version did the analyst review, retain, correct or defer? Does a positive color imply a decision that has not occurred? Source-set approval applies only on the existing compatibility path. |
 
 For example, several included regulatory candidates do not automatically mean several annual reports have been read and found useful. Check the actual matching population before naming a counter or linking its drill-down.
+
+Likewise, linking evidence to a question does not justify “Answered.” Inspect the appraisal and its review state against [PRODUCT.md](../../../../PRODUCT.md); support may coexist with an unresolved objection or a decisive unknown. Label the established result and make its reasoning accessible rather than substituting a completion count for an assessment.
 
 ## Say what happened and what follows
 

@@ -17,11 +17,15 @@ Invocation authorizes investigation and a draft. It does not authorize writing t
 
 Do not activate automatically after frontend work, repeated corrections, or a detected failure. Use the relevant specialist workflow for implementation, debugging, or ordinary code review.
 
+Reviewing or editing this skill's instructions is skill maintenance, not an invocation of the retrospective workflow.
+
 Do not turn a one-off preference, an unresolved explanation, or an incidental implementation detail into a general instruction.
 
 ## Scope and Output
 
 The editing target is workbench-frontend: its SKILL.md, references, and relevant evaluation scenarios. Inspect the existing target before proposing changes.
+
+Use [AGENTS.md](../../../AGENTS.md) for document authority, [PRODUCT.md](../../../PRODUCT.md) and [TECH.md](../../../context/TECH.md) for current requirements, and the [roadmap](../../../docs/ROADMAP.md) for delivery state. Consult [DESIGN.md](../../../DESIGN.md) when a lesson concerns presentation. Locate the relevant passages in those documents; a historical session or accepted ADR supplies context, not a replacement current contract.
 
 Use the visible conversation, user feedback, repository changes, and available verification evidence. A session identifier or a focused concern may supplement those inputs.
 
@@ -48,6 +52,8 @@ Complete this step when the useful process and its evidence are clear, with unre
 ## 2. Select What Deserves a Durable Change
 
 More instructions can make a skill harder to use without preventing the original failure. Select lessons that improve a future decision or execution step, then inspect how the current skill already handles them.
+
+Before retaining a lesson, establish whether it is a reusable method, a restriction of the installed compatibility path, or guidance superseded by a later accepted decision. Preserve the useful method without promoting a temporary checkpoint into a target requirement. A successful check proves the exercised behavior, not that the earlier product direction remains current. Flag a needed product decision or reference correction at its existing owner instead of creating that rule inside the frontend skill.
 
 For each candidate lesson, decide whether to:
 

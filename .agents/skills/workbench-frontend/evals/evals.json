@@ -1,7 +1,7 @@
 {
   "skill_name": "workbench-frontend",
   "files_relative_to": "skill directory",
-  "mode": "Read-only evaluation scenarios; execution and comparative evaluation require separate authorization.",
+  "mode": "Read-only evaluation scenarios; execution and comparative evaluation require separate authorization. Compatibility cases inspect delivered source-review behavior without prescribing the target; target cases distinguish approved requirements from verified delivery.",
   "evals": [
     {
       "id": 1,
@@ -129,7 +129,7 @@
     {
       "id": 8,
       "name": "fixture-versus-usable-preparation",
-      "prompt": "Component tests pass for prepared source reading, but my older dossier still has no useful passages before approval. Audit what this proves and what must be checked before declaring the workflow usable. Do not activate, synchronize, approve, or launch anything.",
+      "prompt": "On the existing source-review compatibility path, component tests pass for prepared source reading, but my older dossier still has no useful passages before corpus approval. Audit what this proves and what must be checked before declaring that path usable. Do not activate, synchronize, approve, or launch anything.",
       "files": [
         "../../../PRODUCT.md",
         "../../../docs/ROADMAP.md",
@@ -138,6 +138,7 @@
       ],
       "expectations": [
         "Checks current legacy-draft and preparation entry conditions rather than assuming the supplied historical symptom still exists.",
+        "Keeps the compatibility corpus checkpoint distinct from the target grouped appraisal review, preserving current guards without declaring them permanent target requirements.",
         "Separates implemented code, deterministic fixtures, protected local behavior, and fresh live preparation.",
         "Keeps available material and the next action central instead of substituting test counts or retrieval scores for usefulness.",
         "Reports protected and live gates that remain unverified and preserves activation and provider authority boundaries."
@@ -147,8 +148,9 @@
     {
       "id": 9,
       "name": "availability-versus-approval",
-      "prompt": "Review the colors and labels for Sources available, Included, and source-set approval across Coverage and the reader. Explain what should be shared and what must remain distinct. Do not edit.",
+      "prompt": "On the existing source-review compatibility path, review the colors and labels for Sources available, Included, and source-set approval across Coverage and the reader. Explain what should be shared and what must remain distinct. Do not edit.",
       "files": [
+        "../../../PRODUCT.md",
         "../../../DESIGN.md",
         "../../../src/assets/styles/themes/evidence-workbench.css",
         "../../../src/assets/styles/base-preset.css",
@@ -159,6 +161,7 @@
       "expectations": [
         "Reads current semantic tokens and presentation owners, including the inherited status palette.",
         "Keeps source availability and human approval distinct without inventing a parallel palette or using approval color for all positive states.",
+        "Treats source-set approval as a compatibility decision rather than prescribing a routine source-approval stop for target views.",
         "Inspects corresponding text and icons and proposes theme-aware browser checks.",
         "Centralizes only meanings that actually evolve together and does not merge unrelated domain states."
       ],
@@ -178,6 +181,104 @@
         "Preserves read-only and provider boundaries and calibrates claims to inspected policy and test evidence."
       ],
       "expected_output": "A backend-only policy analysis using Convex guidance, without applying the frontend workflow or claiming unrun tests passed."
+    },
+    {
+      "id": 11,
+      "name": "framing-assistance-and-research-launch",
+      "prompt": "Plan the target framing view: propose an activity and decisive research questions before source acquisition, let the analyst refine them, and make the launch action clear. Can model assistance be used here, and what would the view be allowed to claim or start? Inspect current references and implementation; do not edit, activate providers, or start research.",
+      "files": [
+        "../../../PRODUCT.md",
+        "../../../context/TECH.md",
+        "../../../docs/ROADMAP.md",
+        "../../../DESIGN.md"
+      ],
+      "expectations": [
+        "Distinguishes the approved framing target from inspected delivery and preserves established company confirmation, optional angle and public-reference affordances.",
+        "Uses the technical AI-use policy to permit justified bounded framing assistance before acquisition, without prescribing a model for deterministic lookup or calling a provider.",
+        "Keeps proposed scope and hypotheses distinct from established company facts and distinguishes framing assistance from documentary preparation or question investigation.",
+        "Makes explicit Start research the framing-to-research boundary, without treating an unchanged proposal or view navigation as launch authority.",
+        "Proposes concise analyst-facing English copy without adding an unnecessary source-approval step or a fixed new layout."
+      ],
+      "expected_output": "A scoped framing proposal separating model-assisted suggestions, available implementation and explicit research launch, grounded in the current product and execution contracts."
+    },
+    {
+      "id": 12,
+      "name": "question-appraisal-versus-evidence-count",
+      "prompt": "For the target question-led assessment view, someone proposes marking a question Answered as soon as the matrix contains a linked assertion, and showing only the evidence count. Inspect whether that communicates a useful assessment and propose the information hierarchy. Analysis only; do not implement or invent a scoring scale.",
+      "files": [
+        "../../../PRODUCT.md",
+        "../../../context/TECH.md",
+        "../../../DESIGN.md",
+        "../../../docs/ROADMAP.md"
+      ],
+      "expectations": [
+        "Distinguishes evidence presence and question-specific assertion use from an answered question; an Unknown link cannot establish an answer.",
+        "Makes the question and reasoned interpretation understandable with accessible support, assumptions, objections and decisive unknowns, rather than substituting a count or fixed-dimension score.",
+        "Preserves the inventory and matrix as inspectable foundations without requiring routine human approval of every assertion or link.",
+        "Locates existing presentation owners where available, reports missing target projections or operations, and does not certify the view from documentation alone.",
+        "Does not introduce new financial calculations, a confidence scale or a compulsory appraisal-card composition."
+      ],
+      "expected_output": "An analyst-readable assessment proposal grounded in the question's argument, with evidence inspection and explicit implementation gaps rather than an invented completion rule."
+    },
+    {
+      "id": 13,
+      "name": "grouped-appraisal-review-authority",
+      "prompt": "For the target grouped appraisal review, could we reuse Approve proposed corpus and automatically retain every generated appraisal when the analyst continues? Inspect the existing operation and current contracts, then explain the controls and decision wording needed. Plan only; do not edit or make any decision.",
+      "files": [
+        "../../../PRODUCT.md",
+        "../../../context/TECH.md",
+        "../../../docs/ROADMAP.md",
+        "../../../src/components/workspace/live-source-review.tsx",
+        "../../../src/components/workspace/source-decision.tsx"
+      ],
+      "expectations": [
+        "Traces the existing source decision and corpus checkpoint boundary instead of assuming the same operation can retain analytical appraisals.",
+        "Distinguishes reusable primitives and layout from source-specific authority and persistence semantics; does not recommend a parallel decision implementation without inspecting existing owners.",
+        "Explains grouped review of identifiable appraisal versions, with retention, correction and deferral remaining traceable and no default retention of unreviewed proposals.",
+        "Keeps an empty retained set at appraisal review rather than starting Synthesis or labelling it documentary insufficiency.",
+        "Preserves existing corpus guards pending a verified transition and identifies undecided target schema or interaction details without encoding them as requirements."
+      ],
+      "expected_output": "A bounded review proposal separating corpus compatibility decisions from versioned human appraisal judgments, with useful reuse and missing implementation contracts identified."
+    },
+    {
+      "id": 14,
+      "name": "synthesis-outcomes-and-human-judgment",
+      "prompt": "Plan how the target synthesis view should differ when no appraisals have been retained, when investigated retained appraisals support no defensible mechanism, and when a necessary premise is under material dispute. Explain the useful result and available next action without inventing a universal approval button. Analysis only; do not generate research or implement.",
+      "files": [
+        "../../../PRODUCT.md",
+        "../../../context/TECH.md",
+        "../../../docs/ROADMAP.md",
+        "../../../DESIGN.md"
+      ],
+      "expectations": [
+        "Keeps no retained appraisal, pending human judgment, technical interruption and justified synthesis non-establishment distinct; does not present missing review as an analytical finding.",
+        "For a supported interpretation, makes the mechanism diagram the reference result with a coherent derived reasoned note and inspectable relationships, evidence and uncertainty.",
+        "Does not imply new synthesis relationships are validated by retaining their input appraisals or that an available synthesis has been adopted by the analyst.",
+        "Routes a necessary uninstructed premise through bounded Investigation re-examination of available material, with targeted human review for material changes to retained judgments and no new documentary phase.",
+        "Distinguishes a useful limited joint result from waiting on a central disputed premise, without adding routine final synthesis approval or claiming unimplemented actions are available."
+      ],
+      "expected_output": "A differentiated synthesis presentation grounded in the retained analytical basis, exposing uncertainty and actual next actions while keeping target behavior separate from delivery."
+    },
+    {
+      "id": 15,
+      "name": "approved-target-versus-installed-checkpoint",
+      "prompt": "The question-led workflow is approved, so the current source-review screens are obsolete: remove their approval controls everywhere and replace the workspace with the new workflow. Assess this proposal before any edits. Explain what the references and current implementation actually permit, which surfaces could be reused, and which material decisions remain unresolved. Read-only; do not implement, migrate data, or run providers.",
+      "files": [
+        "../../../AGENTS.md",
+        "../../../PRODUCT.md",
+        "../../../context/TECH.md",
+        "../../../docs/ROADMAP.md",
+        "../../../DESIGN.md",
+        "../../../src/components/workspace/live-source-review.tsx"
+      ],
+      "expectations": [
+        "Separates inspected delivered behavior, the approved question-led target and the request's read-only assessment scope; approval of a target alone does not authorize a rewrite or certify migration readiness.",
+        "Classifies substantial affected surfaces as preserve, modify, replace or remove with evidence, preserving useful readers, reference inputs and unaffected interactions instead of treating all existing UI as disposable.",
+        "Identifies enforced authorization, membership and checkpoint contracts that need an implemented and verified replacement before removal, without turning compatibility stops into permanent target requirements.",
+        "Inspects reuse of existing domain and presentation owners before proposing new structures, and keeps concrete unresolved schemas or material visual choices explicit.",
+        "Asks a focused question only if an unresolved material choice blocks the recommendation, without restarting discovery or imposing mockups for every local change."
+      ],
+      "expected_output": "An evidence-backed transition assessment that preserves current integrity, supports the approved direction and identifies the smallest authorized next change without a speculative rewrite."
     }
   ]
 }

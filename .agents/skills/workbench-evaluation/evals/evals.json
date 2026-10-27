@@ -82,6 +82,58 @@
         "Does not prepare research protocols, model comparisons, archive manifests or provider calls.",
         "Keeps verification proportional to the visual change and preserves the read-only request."
       ]
+    },
+    {
+      "id": 6,
+      "name": "reference-curation-versus-corpus-checkpoint",
+      "prompt": "For an offline appraisal regression, must I first click Approve proposed corpus in the application? Explain how to prepare the reference material and expected judgments under the current conception while preserving any still-enforced legacy guards. Analysis only; do not create fixtures, approve a dossier or run measurements.",
+      "expected_output": "A distinction between frozen investigator-reviewed evaluation references, current compatibility checkpoints and the approved target, without requiring an application approval click for every offline regression.",
+      "files": [
+        "../../../PRODUCT.md",
+        "../../../context/TECH.md",
+        "../../../docs/ROADMAP.md"
+      ],
+      "expectations": [
+        "Defines identifiable reference material, cutoff, expected assertions, competing interpretations and unresolved questions without treating investigator curation as a runtime analyst decision.",
+        "Keeps offline evaluation preparation separate from driving the application; preserves a corpus checkpoint when the exercised compatibility path still requires it.",
+        "Does not restore manual source approval as a universal target requirement or infer implemented delegated selection from documentation alone.",
+        "Keeps fixture creation, application decisions and measurement execution outside the read-only request."
+      ]
+    },
+    {
+      "id": 7,
+      "name": "documentary-quality-versus-analytical-quality",
+      "prompt": "Our source-preparation results look good. Can we claim that question appraisals and the final mechanism diagram with its note are reliable too? Inspect the current requirements and available evaluation tools, then identify what is established and the smallest missing evaluation. Do not implement a runner, generate analysis or call providers.",
+      "expected_output": "A bounded assessment separating documentary results from assertion-use, appraisal and synthesis quality, with an explicit supported runner or evaluation gap rather than a transferred quality claim.",
+      "files": [
+        "../../../PRODUCT.md",
+        "../../../context/TECH.md",
+        "../../../docs/ROADMAP.md",
+        "../../../scripts/evaluations/source-selection/README.md"
+      ],
+      "expectations": [
+        "Does not infer correct analytical uses, appraisal reasoning or synthesis relationships from source inclusion, passage retention or valid structured output.",
+        "Selects relevant expected support, objections, unknowns, human revisions and diagram-to-note coherence from the current product contract.",
+        "Inspects actual runner scope and available artifacts, identifies unsupported stages explicitly, and does not present a proposed protocol as an executable existing comparison.",
+        "Keeps automated semantic controls distinct from human adoption and proposes only a check that could resolve the stated uncertainty."
+      ]
+    },
+    {
+      "id": 8,
+      "name": "model-use-before-acquisition",
+      "prompt": "I want to assess model-assisted framing before source acquisition, but someone says all AI calls must follow retrieval. Explain whether that premise matches current policy and how to compare the proposed assistance with reliable deterministic work. Plan only; no provider calls, new runner or acceptance threshold.",
+      "expected_output": "A policy-grounded, bounded evaluation proposal for framing assistance, separating semantic usefulness from deterministic operations, factual authority and application activation.",
+      "files": [
+        "../../../PRODUCT.md",
+        "../../../context/TECH.md",
+        "../../../scripts/evaluations/source-selection/README.md"
+      ],
+      "expectations": [
+        "Uses the current technical policy rather than an inherited phase-wide prohibition to assess whether the framing task justifies model assistance.",
+        "Identifies which parts require interpretation and which reliable lookups, validation or transitions should remain deterministic; does not require a model merely to decide whether another call is useful.",
+        "Keeps early framing proposals separate from established company facts and explicit research-start authority.",
+        "Defines comparable bounded inputs and useful outcomes, identifies unsupported runner scope, and preserves the read-only, provider and threshold boundaries."
+      ]
     }
   ]
 }

@@ -1,6 +1,6 @@
 # Workflow and Verification
 
-Use this reference when a frontend change touches async work, recovery, navigation, selection, approval, or the evidence needed to declare the result working.
+Use this reference when a frontend change touches async work, recovery, navigation, research launch, human decisions, or the evidence needed to declare the result working.
 
 ## Reconstruct the affected transition
 
@@ -8,11 +8,13 @@ An action can appear correct while its feedback belongs to another selection or 
 
 Trace the actual route, Convex hooks, operation, persisted result, and presentation. For the affected action, identify its prerequisite, pending state, terminal outcomes, available recovery, and consequences for existing decisions. Inspect what happens after selection changes, navigation, refresh, and reconnect when those behaviors are relevant.
 
-Source review is wired through `src/components/workspace/live-source-review.tsx` and its query-owning subtrees. Find the generated function references in the caller rather than guessing an endpoint. The same visible action in an illustrative prototype may use local state; that does not establish protected persistence or subscription behavior.
+First establish whether the affected path is delivered, an approved target awaiting implementation, or a compatibility transition using [PRODUCT.md](../../../../PRODUCT.md), [TECH.md](../../../../context/TECH.md) and the [roadmap](../../../../docs/ROADMAP.md). For a target-only view, identify the missing operation or projection instead of presenting proposed controls as working. Locate the current AI-use and deterministic-execution policy in the technical document; neither an old source-review sequence nor this frontend procedure defines when models may run.
+
+The existing source-review compatibility path is wired through `src/components/workspace/live-source-review.tsx` and its query-owning subtrees. Find the generated function references in the caller rather than guessing an endpoint. Other surfaces require their own owner inspection. The same visible action in an illustrative prototype may use local state; that does not establish protected persistence or subscription behavior.
 
 Keep status scopes visible during inspection: a dossier-wide search limit can affect multiple topics, while results belong to the requested topic. Confirm that pending and terminal feedback stays with the correct action, and that obsolete results cannot replace the current selection or message. Inspect the shared recovery projection before creating local loading or error state.
 
-For pre-approval work, inspect both the information available before the decision and the handoff afterward. A visible approval button does not prove the analyst has the material needed to exercise it. Conversely, documentary uncertainty must not become an invented approval blocker. Consult the authoritative contracts when changing either behavior.
+For a human decision, identify its object, reviewed version, consequence and actual prerequisite. Inspect the information available before the decision and the handoff afterward. Use the current product document to distinguish research launch, grouped appraisal review and synthesis outcomes rather than reusing a corpus-approval sequence. On the existing compatibility path, preserve enforced source-approval guards until their authorized replacement is verified. A visible button does not prove an informed decision; uncertainty alone does not justify inventing another approval stop.
 
 ## Match checks to the observable change
 
