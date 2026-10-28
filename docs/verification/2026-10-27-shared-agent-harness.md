@@ -138,3 +138,47 @@ The initial RED command, `pnpm test src/__tests__/config/local-runtime.test.ts -
 | `pnpm dev:ports` | Repeated calls retained the same main-worktree assignment: backend 3210, site 3211, frontend 5173, application preview 4173 and browser-preview service 6173. |
 
 The technical reference was revised in place for the approved fixed-port policy; the roadmap records the capability, without duplicating its contract. Existing design-system edits and the separate workbench-UI server configuration were preserved. Only package commands changed; dependency versions and lockfiles are unchanged. No existing service was explicitly started, stopped or restarted. Temporary listeners and leaked fixture children identified by this chat's ownership marker were cleaned up. A real-project `pnpm dev:urls --json` check found the local backend unavailable; no backend was started to replace that missing live verification. No application browser journey, live Convex startup, full aggregate, application build, provider call or cloud deployment was performed for this tooling correction. The passing startup/conflict evidence is scoped to the executable checks above, rather than a claim that every project service is currently running.
+
+
+## Central Invocation Journal
+
+Date: 2026-10-28. Implemented in `harnais-architecture`, fast-forwarded from its clean checkout to `main` at `4f4421a`. Approved journal documentation was already in that commit; unrelated primary-checkout edits were preserved.
+
+`execution/journal.ts` owns immutable canonical payload storage, hashes, sizes and incomplete markers. New invocations carry journal version 1; missing versions identify historical traces. Installed AI SDK middleware captures prepared messages, schemas, generation settings and routing before dispatch, and observable text/tool arguments before parsing. Both application paths await persistence and recheck authority. Mission and one-shot closure share receipt/journal settlement; one-shot normalized results commit in the same transaction. Existing operation records remain authoritative. Snapshots never expand continuation context automatically.
+
+An existing qualification near the 128 KiB input boundary produced a journal envelope 389 bytes larger. The user approved a separate 512 KiB snapshot allowance; model-input limits remain unchanged. No dependency, provider route, collector or purge was added. Simulation snapshots are labelled and generate zero provider receipts.
+
+### Deterministic checks
+
+RED checks reproduced the missing invocation marker, missing immutable payload boundary, missing one-shot admission event, absent post-persistence authority check and cross-dossier mission correlation. Transport RED checks observed dispatch without journaling and an unclassified checkpoint exception. UI RED checks found the missing journal component and a retained result inaccessible before adoption. GREEN checks import the real modules and mock only transport or failure boundaries.
+
+```sh
+pnpm test src/__tests__/convex/execution src/__tests__/convex/integrations/model-invocation.test.ts src/__tests__/convex/sources/source-qualification-action.test.ts src/__tests__/convex/sources/source-comparison-action.test.ts src/__tests__/convex/admin src/__tests__/components/admin/execution-journal.test.tsx src/__tests__/routes/admin-page.test.tsx --maxWorkers=1
+```
+
+This broad focused command passed 157 tests in 20 files. Subsequent focused checks passed all nine transport tests, seven administrator/UI tests, and both added qualification persistence-failure/lost-acknowledgement tests. They verify actual prepared schemas/settings against mocked wire requests, original tool arguments and rejected replies, secret/reasoning exclusion, oversized-content markers, atomic rollback, zero dispatch on checkpoint failure, and no redispatch after a lost terminal acknowledgement. Existing cancellation, late-response, budget, fallback, cache and continuation regressions passed. Administrator tests cover pagination, anonymous/analyst denial, revoked access, cross-dossier refusal and cancelled/withdrawn/historical dossiers without execution changes.
+
+`pnpm typecheck`, scoped `pnpm exec biome check` on all 20 changed application/backend/test files, `pnpm docs:check`, `git diff --check` and the final `pnpm build` passed. The separate global import checker still rejects six unchanged dynamic imports in five benchmark test files; those files have no task diff. The documentation check retains its advisory TECH.md word-count warning. The full CI aggregate was not run.
+
+### Protected local browser checks
+
+`pnpm exec playwright test e2e/invocation-journal.spec.ts` passed both 1440×1000 and 390×844 scenarios, with no retries. Real anonymous authentication and administrator admission inspect a completed, clearly labelled simulated mission through the existing dossier dialog. Checks cover 20-event pagination, lazy request/reply contents, operation requests/results, long text, keyboard opening/scroll focus, Escape/focus return, reload/reconnection and empty console/page-error collections. Query-error recovery, incomplete/historical states and dossier-selection reset have React harness coverage; browser query-error injection was not exercised.
+
+The native watcher confirmed successful final backend synchronization at 11:54:54 local time; the checks ran against Convex 3212 and frontend 5174. Teardown removed `E2E_FIXTURES_ENABLED`; the gated fixture authorization query then refused access. Services remain running. No paid provider or cloud deployment was used. Browser installation added the headless shell matching installed Playwright 1.62.1, without manifest/lockfile changes. Node's color-environment warning and Motion's intentional reduced-motion notice were observed; neither was suppressed.
+
+The pre-change [desktop capture](assets/invocation-journal-20261028/baseline-admin-desktop.png) contains only loading skeletons, so a loaded desktop visual baseline remains incomplete. The loaded [mobile baseline](assets/invocation-journal-20261028/baseline-admin-mobile.png) and the same dossier [afterwards](assets/invocation-journal-20261028/after-admin-mobile.png) show preserved controls and repaired wrapping. Current loaded [desktop inspection](assets/invocation-journal-20261028/after-admin-desktop.png), [desktop journal](assets/invocation-journal-20261028/journal-desktop.png) and [mobile journal](assets/invocation-journal-20261028/journal-mobile.png) were inspected. Early browser attempts failed on a test locator and then an overflowing hash; both were corrected before the final passing run. The unrelated administration-pagination baseline test still fails on its pre-existing expectation of provider attempts in this receipt-free local database.
+
+Live-provider behavior and semantic quality remain unverified. The technical reference changes only the approved snapshot allowance; the roadmap records this verified capability. This existing evidence record owns test commands and limitations, without adding another normative document or duplicating execution policy.
+
+
+### Journal State Corrections After Independent Review
+
+Date: 2026-10-28. Two MEDIUM findings were corrected. The common observation writer now records incomplete `not_dispatched` request/reply markers for versioned live invocations that were never admitted to a provider. Their structured result retains the refusal cause. One shared predicate also classifies earlier versioned local refusals during read-only inspection without reconstructing snapshots. Administrator inspection exposes the existing `receivedWhileAuthorized` flag; late observations received without authority display `Response retained · adoption refused` instead of awaiting adoption.
+
+RED checks reproduced absent markers under disabled paid work, the earlier-record `request_not_recorded` classification, the omitted cancellation fence and both incorrect UI labels. Commands used the relevant `model-action.test.ts`, `admin/invocation-journal.test.ts` and component journal tests with `-t` filters. GREEN regression verification passed 92 tests in 15 files:
+
+```sh
+pnpm test src/__tests__/convex/execution src/__tests__/convex/admin/invocation-journal.test.ts src/__tests__/components/admin/execution-journal.test.tsx src/__tests__/routes/admin-page.test.tsx --maxWorkers=1
+```
+
+`pnpm typecheck`, scoped Biome on eight repair files, `git diff --check`, `pnpm docs:check` and `pnpm build` passed. The existing watcher synchronized the corrected backend at 12:36:03 local time. `pnpm exec playwright test e2e/invocation-journal.spec.ts` passed both protected desktop/mobile scenarios in 1.6 minutes; teardown removed the fixture flag. The two corrected states themselves have real Convex-boundary and React harness regression coverage, rather than a new browser fixture journey. No paid call, dependency, route activation, port change or service restart was introduced. Current reference contracts and roadmap capability state remain accurate; only this existing evidence record is extended. The fixes have not received another independent review; earlier verification limits remain applicable.

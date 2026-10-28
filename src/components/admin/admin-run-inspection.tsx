@@ -6,14 +6,15 @@ import { usePaginatedQuery, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useState } from "react";
 
-import { AdminList } from "@/components/admin/admin-list";
-import { AdminLoadMore } from "@/components/admin/admin-pager";
+import { AdminExecutionJournal } from "@/components/admin/admin-execution-journal";
 import {
     AdminAttemptFilters,
     attemptFilterDefaults,
-    filterSummary,
     attemptMatchesFilters,
+    filterSummary,
 } from "@/components/admin/admin-filters";
+import { AdminList } from "@/components/admin/admin-list";
+import { AdminLoadMore } from "@/components/admin/admin-pager";
 import { ProviderStatusBadge } from "@/components/admin/admin-status-badge";
 import { dossierPurposeLabel } from "@/components/admin/dossier-purpose";
 import { Button } from "@/components/ui/button";
@@ -102,7 +103,7 @@ export function AdminRunInspection({
     );
 
     return (
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
             <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
                 <dt className="text-muted-foreground">Company</dt>
                 <dd>
@@ -137,7 +138,7 @@ export function AdminRunInspection({
                     <AdminAttemptFilters
                         filters={filters}
                         onChange={setFilters}
-                        className="flex items-center gap-2"
+                        className="flex flex-wrap items-center gap-2"
                     />
                 </div>
 
@@ -220,6 +221,7 @@ export function AdminRunInspection({
                 )}
                 <AdminLoadMore page={calls} label="Load more receipts" />
             </section>
+            <AdminExecutionJournal runId={runId} />
         </div>
     );
 }

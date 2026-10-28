@@ -112,6 +112,17 @@ test("the real Workflow recreates simulated invocations around persisted saved-m
             .collect(),
     );
     expect(invocations.length).toBeGreaterThan(1);
+    const snapshots = await t.run((ctx) =>
+        ctx.db.query("agentInvocationPayloads").collect(),
+    );
+    expect(snapshots).toHaveLength(invocations.length * 2);
+    expect(
+        snapshots.every(
+            (snapshot) =>
+                snapshot.state === "complete" &&
+                snapshot.json?.includes('"provenance":"simulation"'),
+        ),
+    ).toBe(true);
     expect(
         invocations.every(
             (invocation) =>
@@ -221,6 +232,18 @@ test("an unconfigured live mission blocks explicitly without a fictitious provid
         status: "returned",
         blockCode: "missing_authorized_route",
     });
+    const snapshots = await t.run((ctx) =>
+        ctx.db.query("agentInvocationPayloads").collect(),
+    );
+    expect(snapshots).toHaveLength(2);
+    expect(
+        snapshots.every(
+            (snapshot) =>
+                snapshot.state === "incomplete" &&
+                snapshot.code === "not_dispatched" &&
+                snapshot.json === undefined,
+        ),
+    ).toBe(true);
     expect(
         await t.run((ctx) => ctx.db.query("providerCalls").collect()),
     ).toEqual([]);

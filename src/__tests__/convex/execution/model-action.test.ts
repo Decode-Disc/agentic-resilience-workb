@@ -89,6 +89,35 @@ test("disabled paid work blocks mission admission without a receipt, charge or t
         code: "paid_work_disabled",
     });
     expect(invokeDeferredAgentTurn).not.toHaveBeenCalled();
+    const payloads = await t.run((ctx) =>
+        ctx.db
+            .query("agentInvocationPayloads")
+            .withIndex("by_invocation_and_part", (q) =>
+                q.eq("invocationId", invocation.invocationId),
+            )
+            .collect(),
+    );
+    expect(
+        payloads.map(({ part, state, code, json }) => ({
+            part,
+            state,
+            code,
+            json,
+        })),
+    ).toEqual([
+        {
+            part: "reply",
+            state: "incomplete",
+            code: "not_dispatched",
+            json: undefined,
+        },
+        {
+            part: "request",
+            state: "incomplete",
+            code: "not_dispatched",
+            json: undefined,
+        },
+    ]);
     await t.mutation(internal.execution.invocations.finish, {
         invocationId: invocation.invocationId,
         expectedGeneration: 4,
@@ -98,6 +127,86 @@ test("disabled paid work blocks mission admission without a receipt, charge or t
         status: "blocked",
         blockCode: "paid_work_disabled",
     });
+});
+
+test("missing model configuration retains non-dispatch markers without a provider receipt", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "");
+    const { t, invocation } = await liveInvocationFixture(
+        "configuration-missing",
+    );
+    expect(
+        await t.action(internal.execution.modelActions.invoke, {
+            invocationId: invocation.invocationId,
+            expectedGeneration: 4,
+        }),
+    ).toMatchObject({
+        response: { kind: "blocked", code: "missing_configuration" },
+    });
+    const payloads = await t.run((ctx) =>
+        ctx.db.query("agentInvocationPayloads").collect(),
+    );
+    expect(payloads).toHaveLength(2);
+    expect(
+        payloads.every(
+            (payload) =>
+                payload.state === "incomplete" &&
+                payload.code === "not_dispatched",
+        ),
+    ).toBe(true);
+    expect(
+        await t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([]);
+    expect(invokeDeferredAgentTurn).not.toHaveBeenCalled();
+});
+
+test("the live mission journals its prepared request and original response through the shared transport", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
+    const { t, invocation } = await liveInvocationFixture("journal-wiring");
+    const requestJson = JSON.stringify({
+        version: 1,
+        input: { prompt: "Actual prepared input" },
+    });
+    const observableReplyJson = JSON.stringify({
+        version: 1,
+        content: [
+            { type: "text", text: '{"kind":"blocked","code":"test_done"}' },
+        ],
+    });
+    vi.mocked(invokeDeferredAgentTurn).mockImplementation(async (input) => {
+        await input.dependencies.beforeDispatch?.(requestJson);
+        return {
+            status: "succeeded",
+            model: "test/inspection",
+            latencyMs: 1,
+            dispatchOutcome: "response_received",
+            finishReason: "stop",
+            requests: [],
+            assistantOutput: '{"kind":"blocked","code":"test_done"}',
+            observableReplyJson,
+        };
+    });
+    await t.action(internal.execution.modelActions.invoke, {
+        invocationId: invocation.invocationId,
+        expectedGeneration: 4,
+    });
+    const payloads = await t.run((ctx) =>
+        ctx.db
+            .query("agentInvocationPayloads")
+            .withIndex("by_invocation_and_part", (q) =>
+                q.eq("invocationId", invocation.invocationId),
+            )
+            .collect(),
+    );
+    expect(payloads.map((payload) => [payload.part, payload.state])).toEqual([
+        ["reply", "complete"],
+        ["request", "complete"],
+    ]);
+    expect(
+        JSON.parse(payloads.find((p) => p.part === "request")?.json ?? "null"),
+    ).toEqual(JSON.parse(requestJson));
+    expect(
+        JSON.parse(payloads.find((p) => p.part === "reply")?.json ?? "null"),
+    ).toEqual(JSON.parse(observableReplyJson));
 });
 
 test("an unretainable observation rolls back its receipt and budget settlement", async () => {

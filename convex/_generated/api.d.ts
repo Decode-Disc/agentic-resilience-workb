@@ -74,6 +74,7 @@ import type * as execution_definitions from "../execution/definitions.js";
 import type * as execution_errors from "../execution/errors.js";
 import type * as execution_fixtures from "../execution/fixtures.js";
 import type * as execution_invocations from "../execution/invocations.js";
+import type * as execution_journal from "../execution/journal.js";
 import type * as execution_missionWorkflow from "../execution/missionWorkflow.js";
 import type * as execution_missions from "../execution/missions.js";
 import type * as execution_modelActions from "../execution/modelActions.js";
@@ -200,6 +201,7 @@ declare const fullApi: ApiFromModules<{
   "execution/errors": typeof execution_errors;
   "execution/fixtures": typeof execution_fixtures;
   "execution/invocations": typeof execution_invocations;
+  "execution/journal": typeof execution_journal;
   "execution/missionWorkflow": typeof execution_missionWorkflow;
   "execution/missions": typeof execution_missions;
   "execution/modelActions": typeof execution_modelActions;

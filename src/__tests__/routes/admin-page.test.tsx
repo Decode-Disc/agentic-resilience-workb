@@ -141,6 +141,9 @@ beforeEach(() => {
             status: "Exhausted",
             loadMore: vi.fn(),
         });
+    convexReactHarness
+        .paginatedQuery(api.adminOperations.listRunJournalEventsPage)
+        .returns({ results: [], status: "Exhausted", loadMore: vi.fn() });
     convexReactHarness.query(api.adminOperations.inspectRun).returns({
         run: {
             _id: "run-research",

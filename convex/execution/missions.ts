@@ -309,6 +309,8 @@ export const history = internalQuery({
         }[] = [];
         let bytes = 0;
         for (const event of events) {
+            if (event.sequence === undefined)
+                throw executionError("mission_history_invalid");
             const invocation = event.invocationId
                 ? await ctx.db.get(event.invocationId)
                 : null;

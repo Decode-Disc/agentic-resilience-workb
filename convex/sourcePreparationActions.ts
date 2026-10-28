@@ -101,6 +101,7 @@ async function executePreparationModel<
         execute: (
             route: SourceQualificationRoute,
             signal: AbortSignal,
+            beforeDispatch: (requestJson: string) => Promise<void>,
         ) => Promise<Result>;
     },
 ): Promise<
@@ -177,6 +178,25 @@ async function executePreparationModel<
             AbortSignal.timeout(
                 Math.max(1, (preparation.deadlineAt ?? 0) - Date.now()),
             ),
+            async (requestJson) => {
+                const retained = await ctx.runMutation(
+                    internal.execution.invocations.retainRequest,
+                    {
+                        invocationId,
+                        expectedGeneration: preparation.executionGeneration,
+                        requestJson,
+                    },
+                );
+                if (retained.kind === "blocked")
+                    throw sourcePreparationError(retained.code);
+                await ctx.runQuery(
+                    internal.execution.invocations.authorizeDispatch,
+                    {
+                        invocationId,
+                        expectedGeneration: preparation.executionGeneration,
+                    },
+                );
+            },
         );
         receipt = {
             latencyMs: result.latencyMs,
@@ -193,18 +213,18 @@ async function executePreparationModel<
             },
         };
         if (result.status === "not_run") {
-            await ctx.runMutation(internal.providerCalls.recordAttempt, {
-                ...attempt,
-                ...receipt,
-                status: "failed",
-                errorCode: result.reason,
-                dispatchOutcome: "not_dispatched",
-                retryable: false,
-            });
             await ctx.runMutation(
                 internal.execution.invocations.finishOneShot,
                 {
                     invocationId,
+                    attempt: {
+                        ...attempt,
+                        ...receipt,
+                        status: "failed",
+                        errorCode: result.reason,
+                        dispatchOutcome: "not_dispatched",
+                        retryable: false,
+                    },
                     outputJson: JSON.stringify({
                         status: result.status,
                         reason: result.reason,
@@ -214,23 +234,26 @@ async function executePreparationModel<
             );
             return { result, providerCallId, receipt };
         }
-        await ctx.runMutation(internal.providerCalls.recordAttempt, {
-            ...attempt,
-            ...receipt,
-            status: result.status,
-            dispatchOutcome: result.dispatchOutcome,
-            httpStatus: result.httpStatus,
-            retryAfterAt: result.retryAfterAt,
-            ...(result.status === "failed"
-                ? {
-                      errorCode: result.errorCode,
-                      retryable: result.retryable,
-                      diagnostic: result.outputDiagnostic,
-                  }
-                : {}),
-        });
         await ctx.runMutation(internal.execution.invocations.finishOneShot, {
             invocationId,
+            ...(result.observableReplyJson
+                ? { observableReplyJson: result.observableReplyJson }
+                : {}),
+            attempt: {
+                ...attempt,
+                ...receipt,
+                status: result.status,
+                dispatchOutcome: result.dispatchOutcome,
+                httpStatus: result.httpStatus,
+                retryAfterAt: result.retryAfterAt,
+                ...(result.status === "failed"
+                    ? {
+                          errorCode: result.errorCode,
+                          retryable: result.retryable,
+                          diagnostic: result.outputDiagnostic,
+                      }
+                    : {}),
+            },
             outputJson: JSON.stringify(
                 result.status === "succeeded"
                     ? {
@@ -729,10 +752,11 @@ async function qualifyCapturedSource(
             operation: "source_qualification",
             inputHash: prepared.inputHash,
             invocationInputJson: JSON.stringify(prepared.request),
-            execute: (route, signal) =>
+            execute: (route, signal, beforeDispatch) =>
                 qualifySourceDocument(prepared, route, {
                     apiKey: process.env.OPENROUTER_API_KEY ?? "",
                     signal,
+                    beforeDispatch,
                 }),
         });
         if ("reasonCode" in outcome)
@@ -1332,10 +1356,11 @@ export const compareSource = internalAction({
                     if (!current)
                         throw sourcePreparationError("stale_execution");
                 },
-                execute: (route, signal) =>
+                execute: (route, signal, beforeDispatch) =>
                     compareSourceContributions(prepared, route, {
                         apiKey: process.env.OPENROUTER_API_KEY ?? "",
                         signal,
+                        beforeDispatch,
                     }),
             });
             if (!("reasonCode" in outcome)) {

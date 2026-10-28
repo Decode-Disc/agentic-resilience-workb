@@ -1,5 +1,11 @@
 import { internal } from "@convex/_generated/api";
-import { internalMutation, internalQuery } from "@convex/_generated/server";
+import type { Doc } from "@convex/_generated/dataModel";
+import {
+    internalMutation,
+    internalQuery,
+    type MutationCtx,
+    type QueryCtx,
+} from "@convex/_generated/server";
 import { SOURCE_COMPARISON_MAX_OUTPUT_BYTES } from "@convex/domain/sourceComparison";
 import { stableStringify } from "@convex/domain/sourcePassages";
 import {
@@ -8,12 +14,13 @@ import {
 } from "@convex/domain/sourcePreparationAuthority";
 import { providerAttemptValidator } from "@convex/providerCalls";
 import schema from "@convex/schema";
-import { ConvexError, v } from "convex/values";
+import { ConvexError, type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import {
     canAdoptRetainedResponse,
     executionError,
     executionFailureCode,
+    recordInvocationEvent,
     recordMissionEvent,
     requireMissionAuthority,
 } from "./authority";
@@ -29,7 +36,142 @@ import {
     MAX_WORKING_NOTES_BYTES,
 } from "./contracts";
 import { getAgentDefinition } from "./definitions";
+import { hasKnownNonDispatch, retainInvocationPayload } from "./journal";
 import { persistOperationRequest } from "./operations";
+
+async function settleReceiptObservation(
+    ctx: MutationCtx,
+    invocation: Doc<"agentInvocations">,
+    attempt: Infer<typeof providerAttemptValidator>,
+    observableReplyJson?: string,
+) {
+    if (
+        attempt.status === "started" ||
+        attempt.runId !== invocation.runId ||
+        attempt.executionGeneration !== invocation.generation
+    )
+        throw executionError("invocation_receipt_invalid");
+    const settled = await ctx.runMutation(
+        internal.providerCalls.recordAttempt,
+        attempt,
+    );
+    if (settled.providerCallId !== invocation.providerCallId)
+        throw executionError("invocation_receipt_invalid");
+    await retainInvocationPayload(
+        ctx,
+        invocation,
+        "reply",
+        observableReplyJson,
+        attempt.dispatchOutcome === "unknown"
+            ? "attempt_outcome_unknown"
+            : attempt.dispatchOutcome === "not_dispatched"
+              ? "not_dispatched"
+              : "observable_reply_unavailable",
+    );
+}
+
+async function requireDispatchAuthority(
+    ctx: QueryCtx,
+    invocationId: Doc<"agentInvocations">["_id"],
+    expectedGeneration: number,
+) {
+    const invocation = await ctx.db.get(invocationId);
+    if (
+        !invocation ||
+        invocation.generation !== expectedGeneration ||
+        invocation.status !== "started"
+    )
+        throw executionError("invocation_unavailable");
+    if (invocation.missionId) {
+        await requireMissionAuthority(
+            ctx,
+            invocation.missionId,
+            expectedGeneration,
+        );
+    } else {
+        const receipt = invocation.providerCallId
+            ? await ctx.db.get(invocation.providerCallId)
+            : null;
+        if (
+            !receipt?.preparationId ||
+            receipt.invocationId !== invocation._id ||
+            receipt.status !== "started"
+        )
+            throw executionError("provider_receipt_required");
+        if (receipt.operation === "source_comparison") {
+            if (!receipt.sourceId)
+                throw executionError("provider_receipt_required");
+            await assertPreparationComparisonFence(ctx.db, {
+                preparationId: receipt.preparationId,
+                sourceId: receipt.sourceId,
+                now: Date.now(),
+            });
+        } else {
+            await assertPreparationExecutionFence(ctx.db, {
+                preparationId: receipt.preparationId,
+                sourceId: receipt.sourceId,
+                now: Date.now(),
+            });
+        }
+    }
+    return invocation;
+}
+
+/** Rechecks current authority after the request transaction has been acknowledged. */
+export const authorizeDispatch = internalQuery({
+    args: {
+        invocationId: v.id("agentInvocations"),
+        expectedGeneration: v.number(),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const invocation = await requireDispatchAuthority(
+            ctx,
+            args.invocationId,
+            args.expectedGeneration,
+        );
+        const request = await ctx.db
+            .query("agentInvocationPayloads")
+            .withIndex("by_invocation_and_part", (q) =>
+                q.eq("invocationId", invocation._id).eq("part", "request"),
+            )
+            .unique();
+        if (request?.state !== "complete")
+            throw executionError("journal_request_unavailable");
+        return null;
+    },
+});
+
+export const retainRequest = internalMutation({
+    args: {
+        invocationId: v.id("agentInvocations"),
+        expectedGeneration: v.number(),
+        requestJson: v.string(),
+    },
+    returns: v.union(
+        v.object({ kind: v.literal("ready") }),
+        v.object({ kind: v.literal("blocked"), code: v.string() }),
+    ),
+    handler: async (ctx, args) => {
+        const invocation = await requireDispatchAuthority(
+            ctx,
+            args.invocationId,
+            args.expectedGeneration,
+        );
+        const payload = await retainInvocationPayload(
+            ctx,
+            invocation,
+            "request",
+            args.requestJson,
+        );
+        return payload.state === "complete"
+            ? { kind: "ready" as const }
+            : {
+                  kind: "blocked" as const,
+                  code: payload.code ?? "journal_request_unavailable",
+              };
+    },
+});
 
 export const begin = internalMutation({
     args: {
@@ -114,6 +256,7 @@ export const begin = internalMutation({
             return context;
         }
         const invocationId = await ctx.db.insert("agentInvocations", {
+            journalVersion: 1,
             missionId: mission._id,
             runId: mission.runId,
             corpusRevisionId: mission.corpusRevisionId,
@@ -205,6 +348,27 @@ export const retainOutput = internalMutation({
             )
                 throw executionError("provider_receipt_required");
         }
+        if (invocation.provenance === "simulation")
+            await retainInvocationPayload(
+                ctx,
+                invocation,
+                "reply",
+                JSON.stringify({
+                    version: 1,
+                    provenance: "simulation",
+                    response: JSON.parse(args.responseJson),
+                }),
+            );
+        else if (hasKnownNonDispatch({ ...invocation, receivedOutputJson })) {
+            for (const part of ["request", "reply"] as const)
+                await retainInvocationPayload(
+                    ctx,
+                    invocation,
+                    part,
+                    undefined,
+                    "not_dispatched",
+                );
+        }
         let receivedWhileAuthorized = invocation.receivedWhileAuthorized;
         if (!invocation.receivedOutputJson && invocation.missionId) {
             try {
@@ -246,9 +410,13 @@ export const recordModelReply = internalMutation({
     args: {
         attempt: providerAttemptValidator,
         reply: invocationReplyValidator,
+        observableReplyJson: v.optional(v.string()),
     },
     returns: v.null(),
-    handler: async (ctx, { attempt, reply }): Promise<null> => {
+    handler: async (
+        ctx,
+        { attempt, reply, observableReplyJson },
+    ): Promise<null> => {
         if (
             !attempt.missionId ||
             !attempt.invocationId ||
@@ -256,7 +424,14 @@ export const recordModelReply = internalMutation({
             attempt.status === "started"
         )
             throw executionError("invocation_receipt_invalid");
-        await ctx.runMutation(internal.providerCalls.recordAttempt, attempt);
+        const invocation = await ctx.db.get(attempt.invocationId);
+        if (!invocation) throw executionError("invocation_unavailable");
+        await settleReceiptObservation(
+            ctx,
+            invocation,
+            attempt,
+            observableReplyJson,
+        );
         await ctx.runMutation(internal.execution.invocations.retainOutput, {
             invocationId: attempt.invocationId,
             expectedGeneration: attempt.executionGeneration,
@@ -316,6 +491,7 @@ export const beginOneShot = internalMutation({
             return existing._id;
         }
         const id = await ctx.db.insert("agentInvocations", {
+            journalVersion: 1,
             runId: receipt.runId,
             corpusRevisionId: receipt.corpusRevisionId,
             generation: receipt.executionGeneration,
@@ -328,15 +504,34 @@ export const beginOneShot = internalMutation({
             createdAt: Date.now(),
         });
         await ctx.db.patch(receipt._id, { invocationId: id });
+        const invocation = await ctx.db.get(id);
+        if (!invocation) throw executionError("invocation_unavailable");
+        await recordInvocationEvent(ctx, invocation, {
+            kind: "invocation_started",
+        });
         return id;
     },
 });
 
 export const finishOneShot = internalMutation({
-    args: { invocationId: v.id("agentInvocations"), outputJson: v.string() },
+    args: {
+        invocationId: v.id("agentInvocations"),
+        outputJson: v.string(),
+        attempt: v.optional(providerAttemptValidator),
+        observableReplyJson: v.optional(v.string()),
+    },
     returns: v.null(),
     handler: async (ctx, args) => {
         const invocation = await ctx.db.get(args.invocationId);
+        if (!invocation || invocation.missionId)
+            throw executionError("invocation_unavailable");
+        if (args.attempt)
+            await settleReceiptObservation(
+                ctx,
+                invocation,
+                args.attempt,
+                args.observableReplyJson,
+            );
         const receipt = invocation?.providerCallId
             ? await ctx.db.get(invocation.providerCallId)
             : null;

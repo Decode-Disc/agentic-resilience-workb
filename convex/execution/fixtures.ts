@@ -205,6 +205,7 @@ export const inspect = internalQuery({
                   ).passage?.exactQuote
                 : undefined;
         return {
+            runId: run._id,
             status: mission.status,
             blockCode: mission.blockCode ?? null,
             provenance: mission.provenance,

@@ -1,3 +1,4 @@
+import { hasKnownNonDispatch } from "@convex/execution/journal";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { WorkflowId } from "@convex-dev/workflow";
 import {
@@ -752,5 +753,165 @@ export const listRunProviderCallsPage = query({
             .withIndex("by_run", (q) => q.eq("runId", args.runId))
             .order("desc")
             .paginate(args.paginationOpts);
+    },
+});
+
+/** Lists causal events without loading model payloads or requiring running execution. */
+export const listRunJournalEventsPage = query({
+    args: {
+        runId: v.id("researchRuns"),
+        paginationOpts: paginationOptsValidator,
+    },
+    returns: paginationResultValidator(schema.doc("agentExecutionEvents")),
+    handler: async (ctx, args) => {
+        await requireAdmin(ctx);
+        if (!(await ctx.db.get(args.runId))) throw new Error("Run not found");
+        if (
+            args.paginationOpts.numItems < 1 ||
+            args.paginationOpts.numItems > 20
+        )
+            throw new Error("Journal page size must be between 1 and 20");
+        return ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_run", (q) => q.eq("runId", args.runId))
+            .order("asc")
+            .paginate(args.paginationOpts);
+    },
+});
+
+const journalInvocationValidator =
+    schema.tables.agentInvocations.validator.pick(
+        "journalVersion",
+        "provenance",
+        "status",
+        "generation",
+        "taskKey",
+        "providerCallId",
+        "createdAt",
+        "completedAt",
+        "blockCode",
+        "outputJson",
+        "receivedOutputJson",
+        "receivedWhileAuthorized",
+    );
+
+export const inspectJournalEvent = query({
+    args: {
+        runId: v.id("researchRuns"),
+        eventId: v.id("agentExecutionEvents"),
+    },
+    returns: v.object({
+        event: schema.doc("agentExecutionEvents"),
+        invocation: v.union(journalInvocationValidator, v.null()),
+        request: v.union(schema.doc("agentOperationRequests"), v.null()),
+        providerCall: v.union(schema.doc("providerCalls"), v.null()),
+    }),
+    handler: async (ctx, args) => {
+        await requireAdmin(ctx);
+        const event = await ctx.db.get(args.eventId);
+        if (!event || event.runId !== args.runId)
+            throw new Error("Journal entry not found");
+        const mission = event.missionId
+            ? await ctx.db.get(event.missionId)
+            : null;
+        if (event.missionId && mission?.runId !== args.runId)
+            throw new Error("Journal correlation mismatch");
+        const invocation = event.invocationId
+            ? await ctx.db.get(event.invocationId)
+            : null;
+        const request = event.requestId
+            ? await ctx.db.get(event.requestId)
+            : null;
+        if (
+            event.invocationId &&
+            (!invocation ||
+                invocation.runId !== args.runId ||
+                invocation.missionId !== event.missionId)
+        )
+            throw new Error("Journal correlation mismatch");
+        if (request) {
+            const mission = await ctx.db.get(request.missionId);
+            if (
+                !mission ||
+                mission.runId !== args.runId ||
+                request.missionId !== event.missionId
+            )
+                throw new Error("Journal correlation mismatch");
+        } else if (event.requestId)
+            throw new Error("Journal correlation mismatch");
+        const providerCall = invocation?.providerCallId
+            ? await ctx.db.get(invocation.providerCallId)
+            : null;
+        if (invocation?.providerCallId && !providerCall)
+            throw new Error("Journal correlation mismatch");
+        if (
+            providerCall &&
+            (providerCall.runId !== args.runId ||
+                (providerCall.invocationId &&
+                    providerCall.invocationId !== invocation?._id))
+        )
+            throw new Error("Journal correlation mismatch");
+        return {
+            event,
+            request,
+            providerCall,
+            invocation: invocation
+                ? {
+                      journalVersion: invocation.journalVersion,
+                      provenance: invocation.provenance,
+                      status: invocation.status,
+                      generation: invocation.generation,
+                      taskKey: invocation.taskKey,
+                      providerCallId: invocation.providerCallId,
+                      createdAt: invocation.createdAt,
+                      completedAt: invocation.completedAt,
+                      blockCode: invocation.blockCode,
+                      outputJson: invocation.outputJson,
+                      receivedOutputJson: invocation.receivedOutputJson,
+                      receivedWhileAuthorized:
+                          invocation.receivedWhileAuthorized,
+                  }
+                : null,
+        };
+    },
+});
+
+/** Reads one bounded snapshot; legacy context is never invented into a provider request. */
+export const readInvocationJournalPayload = query({
+    args: {
+        runId: v.id("researchRuns"),
+        invocationId: v.id("agentInvocations"),
+        part: v.union(v.literal("request"), v.literal("reply")),
+    },
+    returns: v.union(
+        v.object({
+            kind: v.literal("recorded"),
+            payload: schema.doc("agentInvocationPayloads"),
+        }),
+        v.object({ kind: v.literal("unavailable"), code: v.string() }),
+    ),
+    handler: async (ctx, args) => {
+        await requireAdmin(ctx);
+        const invocation = await ctx.db.get(args.invocationId);
+        if (!invocation || invocation.runId !== args.runId)
+            throw new Error("Journal entry not found");
+        const payload = await ctx.db
+            .query("agentInvocationPayloads")
+            .withIndex("by_invocation_and_part", (q) =>
+                q.eq("invocationId", invocation._id).eq("part", args.part),
+            )
+            .unique();
+        if (!payload)
+            return {
+                kind: "unavailable" as const,
+                code: hasKnownNonDispatch(invocation)
+                    ? "not_dispatched"
+                    : invocation.journalVersion
+                      ? `${args.part}_not_recorded`
+                      : "historical_trace",
+            };
+        if (payload.runId !== args.runId)
+            throw new Error("Journal correlation mismatch");
+        return { kind: "recorded" as const, payload };
     },
 });

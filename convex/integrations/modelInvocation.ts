@@ -3,6 +3,7 @@
 import type { Doc } from "@convex/_generated/dataModel";
 import { providerRetryAfterAt } from "@convex/domain/sourcePreparationAuthority";
 import type { AgentOperationDefinition } from "@convex/execution/contracts";
+import { executionFailureCode } from "@convex/execution/errors";
 import { MAX_PREPARATION_DIAGNOSTIC_BYTES } from "@convex/resourceLimits";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { ToolSet } from "ai";
@@ -17,6 +18,7 @@ import {
     Output,
     ToolLoopAgent,
     tool,
+    wrapLanguageModel,
 } from "ai";
 import { convexToZod } from "convex-helpers/server/zod4";
 import { type ZodType, z } from "zod";
@@ -29,6 +31,7 @@ import {
 } from "./sourceQualificationConfig";
 
 export type AttemptReceipt = {
+    observableReplyJson?: string;
     model: string;
     resolvedModel?: string;
     provider?: string;
@@ -56,6 +59,7 @@ export type AttemptDependencies = {
     fetch?: typeof fetch;
     signal?: AbortSignal;
     onResponse?: (response: ProviderResponse) => void;
+    beforeDispatch?: (requestJson: string) => Promise<void>;
 };
 
 export type StructuredAttempt<T> =
@@ -110,6 +114,8 @@ type AttemptFailure = AttemptReceipt & {
 };
 
 type BoundedTransportState = {
+    requestBlockCode?: string;
+    observableReplyJson?: string;
     responseTooLarge: boolean;
     httpStatus?: number;
     retryAfterAt?: number;
@@ -206,8 +212,10 @@ function createBoundedProvider(
 function createRoutedModel(
     provider: ReturnType<typeof createOpenRouter>,
     route: InvocationRoute,
+    dependencies: AttemptDependencies,
+    state: BoundedTransportState,
 ) {
-    return provider.chat(route.model, {
+    const settings = {
         provider: {
             only: [route.provider],
             require_parameters: true,
@@ -217,8 +225,50 @@ function createRoutedModel(
                 completion: QUALIFICATION_MAX_OUTPUT_PRICE_PER_MILLION,
             },
         },
-        reasoning: { enabled: false, effort: "none", exclude: true },
+        reasoning: { enabled: false, effort: "none" as const, exclude: true },
         usage: { include: true },
+    };
+    return wrapLanguageModel({
+        model: provider.chat(route.model, settings),
+        middleware: {
+            wrapGenerate: async ({ params, doGenerate }) => {
+                const {
+                    abortSignal: _signal,
+                    headers: _headers,
+                    providerOptions: _providerOptions,
+                    ...input
+                } = params;
+                try {
+                    await dependencies.beforeDispatch?.(
+                        JSON.stringify({ version: 1, route, input, settings }),
+                    );
+                } catch (error) {
+                    state.requestBlockCode =
+                        executionFailureCode(error) ??
+                        "journal_request_unavailable";
+                    throw error;
+                }
+                const result = await doGenerate();
+                const content: Array<Record<string, string>> = [];
+                for (const part of result.content) {
+                    if (part.type === "text")
+                        content.push({ type: "text", text: part.text });
+                    else if (part.type === "tool-call")
+                        content.push({
+                            type: "tool-call",
+                            toolCallId: part.toolCallId,
+                            toolName: part.toolName,
+                            input: part.input,
+                        });
+                }
+                state.observableReplyJson = JSON.stringify({
+                    version: 1,
+                    content,
+                    finishReason: result.finishReason,
+                });
+                return result;
+            },
+        },
     });
 }
 
@@ -246,6 +296,9 @@ function createAttemptReceipt(
         ? providerMetadata.openrouter
         : {};
     return {
+        ...(state.observableReplyJson
+            ? { observableReplyJson: state.observableReplyJson }
+            : {}),
         model: route.model,
         dispatchOutcome: "response_received",
         httpStatus: state.httpStatus,
@@ -300,7 +353,19 @@ function failedAttemptFromError(args: {
     startedAt: number;
 }): AttemptFailure {
     const { error, route, dependencies, state, startedAt } = args;
+    if (state.requestBlockCode)
+        return {
+            model: route.model,
+            latencyMs: Math.max(0, Date.now() - startedAt),
+            status: "failed",
+            errorCode: state.requestBlockCode,
+            dispatchOutcome: "not_dispatched",
+            retryable: false,
+        };
     const receipt: AttemptReceipt = {
+        ...(state.observableReplyJson
+            ? { observableReplyJson: state.observableReplyJson }
+            : {}),
         model: route.model,
         dispatchOutcome:
             state.httpStatus === undefined ? "unknown" : "response_received",
@@ -399,7 +464,7 @@ export async function invokeOneShot<T>(args: {
     try {
         const provider = createBoundedProvider(dependencies, state);
         const result = await generateText({
-            model: createRoutedModel(provider, route),
+            model: createRoutedModel(provider, route, dependencies, state),
             instructions: args.instructions,
             prompt: args.prompt,
             output: Output.object({
@@ -547,7 +612,7 @@ export async function invokeDeferredAgentTurn(args: {
     try {
         const provider = createBoundedProvider(dependencies, state);
         const agent = new ToolLoopAgent({
-            model: createRoutedModel(provider, route),
+            model: createRoutedModel(provider, route, dependencies, state),
             instructions: args.instructions,
             tools: createAgentTools(args.operations),
             stopWhen: isStepCount(1),
