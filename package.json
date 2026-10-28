@@ -46,7 +46,8 @@
         "design:check": "pnpm design:sync --check",
         "workbench-ui:dev": "vite --config workbench-ui.vite.config.ts",
         "workbench-ui:check": "playwright test --config workbench-ui.playwright.config.ts",
-        "dev:urls": "node --experimental-strip-types scripts/local-runtime.ts"
+        "dev:urls": "node --experimental-strip-types scripts/local-runtime.ts",
+        "dev:ports": "node --experimental-strip-types scripts/local-runtime.ts --ports"
     },
     "dependencies": {
         "@auth/core": "0.41.2",

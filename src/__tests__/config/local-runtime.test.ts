@@ -14,6 +14,8 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import type { UserConfig } from "vite";
+import { createServer as createViteServer } from "vite";
 import { afterEach, expect, it } from "vitest";
 
 const roots: string[] = [];
@@ -64,7 +66,7 @@ function createProjectRoot(): string {
     return root;
 }
 
-async function backend(instanceName: string) {
+async function backend(instanceName: string, port = 0) {
     const state = { requests: 0 };
     const server = createServer((request, response) => {
         state.requests++;
@@ -75,7 +77,7 @@ async function backend(instanceName: string) {
         response.end(instanceName);
     });
     servers.push(server);
-    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    await new Promise<void>((done) => server.listen(port, "127.0.0.1", done));
     const address = server.address();
     if (!address || typeof address === "string")
         throw new Error("Missing fixture backend address");
@@ -131,6 +133,173 @@ it("resolves only the worktree's selected native local deployment and projects v
     expect(manifest).toContain("runtime-fixture");
     expect(manifest).not.toContain("fixture-secret-must-never-be-projected");
 });
+
+it("preserves the assigned web port after its owning service stops", async () => {
+    const root = createProjectRoot();
+    const native = await backend("runtime-fixture");
+    writeNativeConfig(root, "runtime-fixture", native.origin);
+    const port = await freePort();
+    runtimeModule.getLocalRuntimePorts(root, { web: port });
+    await runtimeModule.publishRuntimeProcess(root, {
+        role: "web",
+        pid: process.pid,
+        runId: "persistent-web",
+    });
+    await runtimeModule.publishRuntimeOrigin(
+        root,
+        "web",
+        `http://127.0.0.1:${port}`,
+        process.pid,
+        "persistent-web",
+    );
+    await runtimeModule.removeRuntimeRun(root, "persistent-web");
+    expect(runtimeModule.getLocalRuntimePorts(root).web).toBe(port);
+    const manifest = JSON.parse(
+        readFileSync(runtimeModule.getRuntimeManifestPath(root), "utf8"),
+    );
+    expect(manifest.origins.web).toBeUndefined();
+    expect(manifest.ownedPids).toEqual([]);
+});
+
+it("keeps disjoint worktree reservations after a fresh process and deleted readiness state", async () => {
+    const { first, second } = await createWorktreePair();
+    const a = runtimeModule.getLocalRuntimePorts(first);
+    const b = runtimeModule.getLocalRuntimePorts(second);
+    expect(new Set([...Object.values(a), ...Object.values(b)]).size).toBe(10);
+    rmSync(join(first, ".local-runtime"), { recursive: true, force: true });
+    const moduleUrl = pathToFileURL(
+        resolve(process.cwd(), "scripts/local-runtime.ts"),
+    ).href;
+    const child = spawnSync(
+        process.execPath,
+        [
+            "--experimental-strip-types",
+            "--input-type=module",
+            "-e",
+            `import {getLocalRuntimePorts} from ${JSON.stringify(moduleUrl)}; console.log(JSON.stringify(getLocalRuntimePorts(${JSON.stringify(first)})));`,
+        ],
+        { encoding: "utf8" },
+    );
+    expect(child.status, child.stderr).toBe(0);
+    expect(JSON.parse(child.stdout)).toEqual(a);
+    expect(runtimeModule.getLocalRuntimePorts(second)).toEqual(b);
+    const registry = readFileSync(
+        join(
+            runtimeModule.getLocalRuntimeIdentity(first).gitCommonDir,
+            "local-runtime-ports.json",
+        ),
+        "utf8",
+    );
+    expect(registry).not.toContain("fixture-secret");
+});
+
+it("reserves ports atomically when two worktrees start configuration concurrently", async () => {
+    const { first, second } = await createWorktreePair();
+    const moduleUrl = pathToFileURL(
+        resolve(process.cwd(), "scripts/local-runtime.ts"),
+    ).href;
+    const read = (root: string) =>
+        new Promise<Record<string, number>>((done, fail) => {
+            const child = spawn(
+                process.execPath,
+                [
+                    "--experimental-strip-types",
+                    "--input-type=module",
+                    "-e",
+                    `import {getLocalRuntimePorts} from ${JSON.stringify(moduleUrl)};console.log(JSON.stringify(getLocalRuntimePorts(${JSON.stringify(root)})));`,
+                ],
+                { stdio: ["ignore", "pipe", "pipe"] },
+            );
+            testProcesses.push(child);
+            let output = "",
+                errors = "";
+            child.stdout.on(
+                "data",
+                (chunk: Buffer) => (output += chunk.toString()),
+            );
+            child.stderr.on(
+                "data",
+                (chunk: Buffer) => (errors += chunk.toString()),
+            );
+            child.once("error", fail);
+            child.once("close", (code) =>
+                code === 0 ? done(JSON.parse(output)) : fail(new Error(errors)),
+            );
+        });
+    const [a, b] = await Promise.all([read(first), read(second)]);
+    expect(new Set([...Object.values(a), ...Object.values(b)]).size).toBe(10);
+    expect(runtimeModule.getLocalRuntimePorts(first)).toEqual(a);
+    expect(runtimeModule.getLocalRuntimePorts(second)).toEqual(b);
+}, 20_000);
+
+it("refuses an explicit reservation conflict without changing either worktree", async () => {
+    const { first, second } = await createWorktreePair();
+    const a = runtimeModule.getLocalRuntimePorts(first);
+    const b = runtimeModule.getLocalRuntimePorts(second);
+    expect(() =>
+        runtimeModule.getLocalRuntimePorts(second, { web: a.web }),
+    ).toThrow(`Fixed port ${a.web} conflicts`);
+    expect(runtimeModule.getLocalRuntimePorts(first)).toEqual(a);
+    expect(runtimeModule.getLocalRuntimePorts(second)).toEqual(b);
+});
+
+it("reports a corrupt reservation registry without replacing its contents", () => {
+    const root = createProjectRoot();
+    const path = join(
+        runtimeModule.getLocalRuntimeIdentity(root).gitCommonDir,
+        "local-runtime-ports.json",
+    );
+    writeFileSync(path, "{");
+    expect(() => runtimeModule.getLocalRuntimePorts(root)).toThrow(
+        /registry is unreadable/,
+    );
+    expect(readFileSync(path, "utf8")).toBe("{");
+});
+
+it.each([
+    "web",
+    "appPreview",
+] as const)("the real Vite %s configuration uses a fixed port and refuses an occupied listener", async (role) => {
+    const root = createProjectRoot();
+    const native = await backend("runtime-fixture");
+    writeNativeConfig(root, "runtime-fixture", native.origin);
+    const occupied = await backend("occupied-vite-port");
+    const port = Number(new URL(occupied.origin).port);
+    runtimeModule.getLocalRuntimePorts(root, { [role]: port });
+    const script = `import { loadConfigFromFile } from "vite";
+const loaded = await loadConfigFromFile({ command: "serve", mode: "development" }, ${JSON.stringify(resolve(process.cwd(), "vite.config.ts"))});
+console.log(JSON.stringify({server: loaded.config.server, preview: loaded.config.preview}));`;
+    const loaded = spawnSync(
+        process.execPath,
+        ["--input-type=module", "-e", script],
+        {
+            cwd: process.cwd(),
+            encoding: "utf8",
+            env: { ...process.env, LOCAL_RUNTIME_ROOT: root },
+        },
+    );
+    expect(loaded.status, loaded.stderr).toBe(0);
+    const config = JSON.parse(loaded.stdout.trim()) as Pick<
+        UserConfig,
+        "server" | "preview"
+    >;
+    const options = role === "web" ? config.server : config.preview;
+    expect(options?.port).toBe(port);
+    expect(options?.strictPort).toBe(true);
+    const server = await createViteServer({
+        configFile: false,
+        root,
+        server: options,
+        logLevel: "silent",
+    });
+    try {
+        await expect(server.listen()).rejects.toThrow(
+            `Port ${port} is already in use`,
+        );
+    } finally {
+        await server.close();
+    }
+}, 20_000);
 
 it("rejects a stale manifest identity instead of trusting its saved origins", async () => {
     const root = createProjectRoot();
@@ -231,7 +400,13 @@ let webProcess;
 if (process.argv.includes("--start")) {
     webProcess = spawn("pnpm", ["exec", "vite", "dev"], { cwd: root, env: process.env, stdio: "inherit" });
 }
-server.listen(0, "127.0.0.1", () => {
+const cloudIndex = process.argv.indexOf("--local-cloud-port");
+const siteIndex = process.argv.indexOf("--local-site-port");
+const selectedPort = cloudIndex < 0 ? 0 : Number(process.argv[cloudIndex + 1]);
+if (process.env.LOCAL_RUNTIME_FIXTURE_KEEP_CONFIG === "yes") {
+    unlinkSync(marker);
+    setInterval(() => {}, 1000);
+} else server.listen(selectedPort, "127.0.0.1", () => {
     const address = server.address();
     if (!address || typeof address === "string") process.exit(52);
     if (process.env.LOCAL_RUNTIME_FIXTURE_KEEP_CONFIG !== "yes") {
@@ -239,7 +414,7 @@ server.listen(0, "127.0.0.1", () => {
         mkdirSync(directory, { recursive: true });
         writeFileSync(join(directory, "config.json"), JSON.stringify({
             deploymentName,
-            ports: { cloud: address.port, site: address.port },
+            ports: { cloud: address.port, site: siteIndex < 0 ? address.port + 1 : Number(process.argv[siteIndex + 1]) },
             adminKey: "fixture-secret",
         }));
     }
@@ -247,7 +422,8 @@ server.listen(0, "127.0.0.1", () => {
 });
 const shutdown = () => {
     if (webProcess && webProcess.exitCode === null && webProcess.signalCode === null) webProcess.kill("SIGTERM");
-    server.close(() => process.exit(0));
+    if (server.listening) server.close(() => process.exit(0));
+    else process.exit(0);
 };
 process.once("SIGTERM", shutdown);
 process.once("SIGINT", shutdown);
@@ -255,7 +431,7 @@ process.once("SIGINT", shutdown);
     );
 }
 
-function createWorktreePair() {
+async function createWorktreePair() {
     const parent = mkdtempSync(join(tmpdir(), "local-runtime-worktrees-"));
     roots.push(parent);
     const first = join(parent, "first");
@@ -285,6 +461,15 @@ function createWorktreePair() {
     runGit(first, ["worktree", "add", "--quiet", "--detach", second, "HEAD"]);
     initializeRuntimeFixture(first, "local:runtime-first");
     initializeRuntimeFixture(second, "local:runtime-second");
+    const firstPort = await freePort();
+    let secondPort = await freePort();
+    while (Math.abs(firstPort - secondPort) < 2) secondPort = await freePort();
+    writeNativeConfig(first, "runtime-first", `http://127.0.0.1:${firstPort}`);
+    writeNativeConfig(
+        second,
+        "runtime-second",
+        `http://127.0.0.1:${secondPort}`,
+    );
     return { first, second };
 }
 
@@ -380,7 +565,10 @@ function configureNativeRuntime(root: string, name: string, origin: string) {
     writeNativeConfig(root, name, origin);
 }
 
-function fakeWebPnpm(root: string) {
+async function fakeWebPnpm(root: string, port?: number) {
+    runtimeModule.getLocalRuntimePorts(root, {
+        web: port ?? (await freePort()),
+    });
     const bin = join(root, "fixture-bin");
     mkdirSync(bin, { recursive: true });
     const runtimeUrl = pathToFileURL(
@@ -398,7 +586,7 @@ import { writeFileSync } from "node:fs";
 if (process.argv[2] === "exec" && process.argv[3] === "vite" && process.argv[4] === "dev" && process.env.LOCAL_RUNTIME_VITE_ARGS_FILE) {
     writeFileSync(process.env.LOCAL_RUNTIME_VITE_ARGS_FILE, JSON.stringify(process.argv.slice(5)));
 }
-import { getLocalRuntimeIdentity, publishRuntimeOrigin } from ${JSON.stringify(runtimeUrl)};
+import { getLocalRuntimeIdentity, getLocalRuntimePorts, publishRuntimeOrigin } from ${JSON.stringify(runtimeUrl)};
 const root = process.env.LOCAL_RUNTIME_ROOT;
 const runId = process.env.LOCAL_RUNTIME_RUN_ID;
 const identity = getLocalRuntimeIdentity(root);
@@ -410,7 +598,7 @@ const server = createServer((request, response) => {
     }
     response.end("fixture web");
 });
-server.listen(0, "127.0.0.1", () => {
+server.listen(getLocalRuntimePorts(root).web, "127.0.0.1", () => {
     const address = server.address();
     if (!address || typeof address === "string") process.exit(52);
     void publishRuntimeOrigin(root, "web", "http://127.0.0.1:" + address.port, process.pid, runId)
@@ -487,14 +675,14 @@ process.once("SIGINT", shutdown);
 }
 
 it("forwards e2e arguments through the startup lock to Playwright", async () => {
-    const { first } = createWorktreePair();
+    const { first } = await createWorktreePair();
     const argsPath = join(first, "playwright-args.json");
     const convexArgsPath = join(first, "convex-args.json");
     const child = spawnLocalDev(
         first,
         "test:e2e",
         {
-            ...fakeWebPnpm(first),
+            ...(await fakeWebPnpm(first)),
             LOCAL_RUNTIME_PLAYWRIGHT_ARGS_FILE: argsPath,
             LOCAL_RUNTIME_CONVEX_ARGS_FILE: convexArgsPath,
             LOCAL_RUNTIME_STARTUP_TIMEOUT_MS: "5000",
@@ -514,6 +702,10 @@ it("forwards e2e arguments through the startup lock to Playwright", async () => 
     ]);
     expect(JSON.parse(readFileSync(convexArgsPath, "utf8"))).toEqual([
         "dev",
+        "--local-cloud-port",
+        String(runtimeModule.readNativeLocalDeployment(first).cloudPort),
+        "--local-site-port",
+        String(runtimeModule.readNativeLocalDeployment(first).sitePort),
         "--start",
         "pnpm exec vite dev",
     ]);
@@ -521,7 +713,7 @@ it("forwards e2e arguments through the startup lock to Playwright", async () => 
 }, 20_000);
 
 it("forwards Convex CLI arguments through the startup lock", async () => {
-    const { first } = createWorktreePair();
+    const { first } = await createWorktreePair();
     const argsPath = join(first, "convex-args.json");
     const child = spawnLocalDev(
         first,
@@ -536,6 +728,10 @@ it("forwards Convex CLI arguments through the startup lock", async () => {
     await waitForRuntimeManifest(first);
     expect(JSON.parse(readFileSync(argsPath, "utf8"))).toEqual([
         "dev",
+        "--local-cloud-port",
+        String(runtimeModule.readNativeLocalDeployment(first).cloudPort),
+        "--local-site-port",
+        String(runtimeModule.readNativeLocalDeployment(first).sitePort),
         "--port",
         "4321",
         "--no-color",
@@ -545,7 +741,7 @@ it("forwards Convex CLI arguments through the startup lock", async () => {
 }, 20_000);
 
 it("forwards dev arguments to Convex while preserving its Vite start command", async () => {
-    const { first } = createWorktreePair();
+    const { first } = await createWorktreePair();
     const backendServer = await backend("runtime-first");
     configureNativeRuntime(first, "runtime-first", backendServer.origin);
     const argsPath = join(first, "convex-args.json");
@@ -554,7 +750,7 @@ it("forwards dev arguments to Convex while preserving its Vite start command", a
         first,
         "dev",
         {
-            ...fakeWebPnpm(first),
+            ...(await fakeWebPnpm(first)),
             LOCAL_RUNTIME_FIXTURE_KEEP_CONFIG: "yes",
             LOCAL_RUNTIME_CONVEX_ARGS_FILE: argsPath,
             LOCAL_RUNTIME_VITE_ARGS_FILE: viteArgsPath,
@@ -574,6 +770,10 @@ it("forwards dev arguments to Convex while preserving its Vite start command", a
     });
     expect(JSON.parse(readFileSync(argsPath, "utf8"))).toEqual([
         "dev",
+        "--local-cloud-port",
+        String(runtimeModule.readNativeLocalDeployment(first).cloudPort),
+        "--local-site-port",
+        String(runtimeModule.readNativeLocalDeployment(first).sitePort),
         "--start",
         "pnpm exec vite dev",
         "--once",
@@ -585,7 +785,7 @@ it("forwards dev arguments to Convex while preserving its Vite start command", a
 }, 20_000);
 
 it("reconciles dead owned processes on process start and retains live owners", async () => {
-    const { first } = createWorktreePair();
+    const { first } = await createWorktreePair();
     const backendServer = await backend("runtime-first");
     configureNativeRuntime(first, "runtime-first", backendServer.origin);
     const deadPid = await stoppedPid();
@@ -647,6 +847,29 @@ it("reconciles dead owned processes on process start and retains live owners", a
     expect(runtime.origins.preview).toBeUndefined();
 });
 
+it("pins both native Convex ports instead of letting the CLI allocate replacements", async () => {
+    const { first } = await createWorktreePair();
+    const cloudPort = await freePort();
+    writeNativeConfig(first, "runtime-first", `http://127.0.0.1:${cloudPort}`);
+    const ports = runtimeModule.getLocalRuntimePorts(first);
+    const argsPath = join(first, "native-fixed-args.json");
+    const child = spawnLocalDev(first, "convex:dev", {
+        LOCAL_RUNTIME_CONVEX_ARGS_FILE: argsPath,
+    });
+    await waitForRuntimeManifest(first);
+    const args = JSON.parse(readFileSync(argsPath, "utf8"));
+    expect(args).toEqual(
+        expect.arrayContaining([
+            "--local-cloud-port",
+            String(ports.convex),
+            "--local-site-port",
+            String(ports.site),
+        ]),
+    );
+    child.kill("SIGTERM");
+    expect(await processExit(child)).toBe(0);
+}, 20_000);
+
 it("reconciles a stopped listener before dev web readiness validation", async () => {
     const root = createProjectRoot();
     initializeRuntimeFixture(root, "local:runtime-fixture");
@@ -688,7 +911,7 @@ it("reconciles a stopped listener before dev web readiness validation", async ()
         root,
         "dev:web",
         {
-            ...fakeWebPnpm(root),
+            ...(await fakeWebPnpm(root)),
             LOCAL_RUNTIME_STARTUP_TIMEOUT_MS: "5000",
         },
         [],
@@ -714,8 +937,71 @@ it("reconciles a stopped listener before dev web readiness validation", async ()
         expect.objectContaining({ pid: deadPid, runId: staleRunId }),
     );
     expect(result.manifest.originOwners.web.runId).not.toBe(staleRunId);
+    await runtimeModule.resolveLocalRuntime(root, { requiredOrigins: ["web"] });
     child.kill("SIGTERM");
     expect(await processExit(child)).toBe(0);
+}, 20_000);
+
+it("refuses a foreign listener on a fixed native port without rewriting its configuration", async () => {
+    const { first } = await createWorktreePair();
+    const occupied = await backend("foreign-native");
+    writeNativeConfig(first, "runtime-first", occupied.origin);
+    const ports = runtimeModule.getLocalRuntimePorts(first);
+    const configPath = join(first, ".convex/local/default/config.json");
+    const original = readFileSync(configPath, "utf8");
+    const child = spawnLocalDev(first, "convex:dev", {}, [], "pipe");
+    let output = "";
+    child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    expect(await processExit(child), output).toBe(1);
+    expect(output).toMatch(/occupied|in use|another deployment/i);
+    expect(readFileSync(configPath, "utf8")).toBe(original);
+    expect(runtimeModule.getLocalRuntimePorts(first)).toEqual(ports);
+    expect(await (await fetch(`${occupied.origin}/instance_name`)).text()).toBe(
+        "foreign-native",
+    );
+}, 20_000);
+
+it.each([
+    "web",
+    "preview",
+] as const)("restarts %s on its persisted port and refuses a later conflict", async (role) => {
+    const root = createProjectRoot();
+    initializeRuntimeFixture(root, "local:runtime-fixture");
+    const native = await backend("runtime-fixture");
+    configureNativeRuntime(root, "runtime-fixture", native.origin);
+    const port = await freePort();
+    runtimeModule.getLocalRuntimePorts(root, { [role]: port });
+    const env = {
+        ...(role === "web"
+            ? await fakeWebPnpm(root, port)
+            : fakePreviewNpm(root)),
+        PORT: undefined,
+    };
+    const mode = role === "web" ? "dev:web" : "dev:browser";
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const child = spawnLocalDev(root, mode, env);
+        const manifest = await waitForManifest(root, role);
+        expect(Number(new URL(manifest.origins[role]).port)).toBe(port);
+        await runtimeModule.resolveLocalRuntime(root, {
+            requiredOrigins: [role],
+        });
+        child.kill("SIGTERM");
+        expect(await processExit(child)).toBe(0);
+        expect(runtimeModule.getLocalRuntimePorts(root)[role]).toBe(port);
+        rmSync(join(root, ".local-runtime"), { recursive: true, force: true });
+    }
+    const occupied = await backend("occupied-reserved-port", port);
+    const child = spawnLocalDev(root, mode, env, [], "pipe");
+    let output = "";
+    child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    expect(await processExit(child), output).toBe(1);
+    expect(output).toMatch(/EADDRINUSE|already in use/i);
+    expect(runtimeModule.getLocalRuntimePorts(root)[role]).toBe(port);
+    expect(await (await fetch(`${occupied.origin}/instance_name`)).text()).toBe(
+        "occupied-reserved-port",
+    );
 }, 20_000);
 
 it("forwards dev web arguments to Vite", async () => {
@@ -728,7 +1014,7 @@ it("forwards dev web arguments to Vite", async () => {
         root,
         "dev:web",
         {
-            ...fakeWebPnpm(root),
+            ...(await fakeWebPnpm(root)),
             LOCAL_RUNTIME_VITE_ARGS_FILE: argsPath,
             LOCAL_RUNTIME_STARTUP_TIMEOUT_MS: "5000",
         },
@@ -749,8 +1035,8 @@ it("forwards dev web arguments to Vite", async () => {
     expect(await processExit(child), output).toBe(0);
 }, 20_000);
 
-it("serializes native starts across worktrees while each CLI chooses its own free backend port", async () => {
-    const { first, second } = createWorktreePair();
+it("serializes native starts across worktrees with their distinct fixed backend ports", async () => {
+    const { first, second } = await createWorktreePair();
     const firstChild = spawnLocalDev(first, "convex:dev");
     const secondChild = spawnLocalDev(second, "convex:dev");
 
@@ -792,13 +1078,21 @@ it("serializes native starts across worktrees while each CLI chooses its own fre
 }, 20_000);
 
 it("starts concurrent web listeners on disjoint ports and verifies their worktree identities", async () => {
-    const { first, second } = createWorktreePair();
+    const { first, second } = await createWorktreePair();
     const firstBackend = await backend("runtime-first");
     const secondBackend = await backend("runtime-second");
     configureNativeRuntime(first, "runtime-first", firstBackend.origin);
     configureNativeRuntime(second, "runtime-second", secondBackend.origin);
-    const firstChild = spawnLocalDev(first, "dev:web", fakeWebPnpm(first));
-    const secondChild = spawnLocalDev(second, "dev:web", fakeWebPnpm(second));
+    const firstChild = spawnLocalDev(
+        first,
+        "dev:web",
+        await fakeWebPnpm(first),
+    );
+    const secondChild = spawnLocalDev(
+        second,
+        "dev:web",
+        await fakeWebPnpm(second),
+    );
 
     const [firstManifest, secondManifest] = await Promise.all([
         waitForManifest(first, "web"),
@@ -817,36 +1111,14 @@ it("starts concurrent web listeners on disjoint ports and verifies their worktre
     expect(secondChild.exitCode).toBeNull();
 }, 20_000);
 
-it("retries the preview listener on a free port when its saved port is occupied", async () => {
+it("refuses an occupied reserved preview port without changing its reservation", async () => {
     const root = createProjectRoot();
     initializeRuntimeFixture(root, "local:runtime-fixture");
-    const backendServer = await backend("runtime-fixture");
-    configureNativeRuntime(root, "runtime-fixture", backendServer.origin);
-    const occupied = await backend("occupied-port-fixture");
-    const identity = runtimeModule.getLocalRuntimeIdentity(root);
-    mkdirSync(join(root, ".local-runtime"), { recursive: true });
+    const native = await backend("runtime-fixture");
+    configureNativeRuntime(root, "runtime-fixture", native.origin);
+    const occupied = await backend("occupied-preview");
     const port = Number(new URL(occupied.origin).port);
-    const runId = "previous-preview-owner";
-    writeFileSync(
-        join(root, ".local-runtime/manifest.json"),
-        JSON.stringify({
-            version: 1,
-            identity: {
-                ...identity,
-                deploymentName: "runtime-fixture",
-                deploymentSelector: "local:runtime-fixture",
-            },
-            ownedPids: [{ role: "preview", pid: process.pid, runId }],
-            origins: {
-                convex: backendServer.origin,
-                site: `http://127.0.0.1:${port + 2}`,
-                preview: occupied.origin,
-            },
-            originOwners: { preview: { pid: process.pid, runId } },
-            updatedAt: new Date().toISOString(),
-        }),
-    );
-
+    runtimeModule.getLocalRuntimePorts(root, { preview: port });
     const child = spawnLocalDev(
         root,
         "dev:browser",
@@ -857,23 +1129,13 @@ it("retries the preview listener on a free port when its saved port is occupied"
     let output = "";
     child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString()));
     child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
-    const manifest = await waitForManifest(root, "preview", runId);
-    const previewPort = Number(new URL(manifest.origins.preview).port);
-    const readinessLine = `Local preview service listening at ${manifest.origins.preview}`;
-    const outputDeadline = Date.now() + 2_000;
-    while (!output.includes(readinessLine) && Date.now() < outputDeadline)
-        await new Promise((done) => setTimeout(done, 20));
-
-    expect(previewPort).not.toBe(port);
-    expect(output).toContain(readinessLine);
-    expect(
-        await runtimeModule.resolveLocalRuntime(root, {
-            requiredOrigins: ["preview"],
-        }),
-    ).toMatchObject({
-        origins: { preview: manifest.origins.preview },
-    });
-    expect(child.exitCode).toBeNull();
+    const exitCode = await Promise.race([
+        processExit(child),
+        new Promise<null>((done) => setTimeout(() => done(null), 5000)),
+    ]);
+    expect(exitCode, output).toBe(1);
+    expect(output).toMatch(/EADDRINUSE|already in use|occupied/i);
+    expect(runtimeModule.getLocalRuntimePorts(root).preview).toBe(port);
 }, 20_000);
 
 it("binds the preview service to a valid explicit PORT instead of its saved port", async () => {
@@ -940,7 +1202,10 @@ it("honors the preview service dotenv PORT when the parent environment leaves it
     expect(child.exitCode).toBeNull();
 }, 20_000);
 
-it("rejects an invalid preview PORT before invoking the service", async () => {
+it.each([
+    "123x",
+    "0",
+])("rejects invalid preview PORT %s before invoking the service", async (port) => {
     const root = createProjectRoot();
     initializeRuntimeFixture(root, "local:runtime-fixture");
     const child = spawnLocalDev(
@@ -948,7 +1213,7 @@ it("rejects an invalid preview PORT before invoking the service", async () => {
         "dev:browser",
         {
             ...fakePreviewNpm(root),
-            PORT: "123x",
+            PORT: port,
         },
         [],
         "pipe",
@@ -958,7 +1223,7 @@ it("rejects an invalid preview PORT before invoking the service", async () => {
     child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
 
     expect(await processExit(child)).toBe(1);
-    expect(output).toMatch(/PORT must be a whole number between 0 and 65535/i);
+    expect(output).toMatch(/PORT must be a whole number between 1 and 65535/i);
 }, 20_000);
 
 it("reports an occupied explicit preview port without falling back to another port", async () => {
@@ -1025,7 +1290,7 @@ it("reports an occupied explicit preview port without falling back to another po
 }, 20_000);
 
 it("reports native startup failure and does not leave a readiness projection", async () => {
-    const { first } = createWorktreePair();
+    const { first } = await createWorktreePair();
     const child = spawnLocalDev(first, "convex:dev", {
         LOCAL_RUNTIME_FIXTURE_FAIL: "yes",
         LOCAL_RUNTIME_STARTUP_TIMEOUT_MS: "800",
@@ -1036,7 +1301,7 @@ it("reports native startup failure and does not leave a readiness projection", a
 }, 20_000);
 
 it("does not terminate a process outside the local runtime run", async () => {
-    const { first } = createWorktreePair();
+    const { first } = await createWorktreePair();
     const runtime = spawnLocalDev(first, "convex:dev");
     const manifest = await waitForRuntimeManifest(first);
     const ownedPid = manifest.ownedPids.find(

@@ -4,12 +4,13 @@ import viteReact from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 import {
     getLocalRuntimeIdentity,
-    getPreferredRuntimePort,
+    getLocalRuntimePorts,
     publishRuntimeOrigin,
 } from "./scripts/local-runtime.ts";
 import { impeccableLivePlugin } from "./src/lib/development/impeccable-vite-plugin";
 
 const root = process.env.LOCAL_RUNTIME_ROOT ?? process.cwd();
+const ports = getLocalRuntimePorts(root);
 
 function localRuntimeAddressPlugin(): Plugin {
     const runId = process.env.LOCAL_RUNTIME_RUN_ID;
@@ -67,8 +68,8 @@ export default defineConfig({
     ],
     server: {
         host: "127.0.0.1",
-        port: getPreferredRuntimePort(root, "web") ?? 0,
-        strictPort: false,
+        port: ports.web,
+        strictPort: true,
         watch: {
             ignored: [
                 "**/.agents/**",
@@ -91,8 +92,8 @@ export default defineConfig({
     },
     preview: {
         host: "127.0.0.1",
-        port: 0,
-        strictPort: false,
+        port: ports.appPreview,
+        strictPort: true,
     },
     build: {
         rolldownOptions: {

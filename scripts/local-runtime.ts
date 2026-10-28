@@ -84,6 +84,15 @@ const MANIFEST_RELATIVE_PATH = ".local-runtime/manifest.json";
 const MANIFEST_LOCK_RELATIVE_PATH = ".local-runtime/manifest.lock";
 const STARTUP_LOCK_NAME = "local-runtime-startup.lock";
 
+export type LocalRuntimePorts = Record<
+    LocalRuntimeOrigin | "appPreview",
+    number
+>;
+type PortReservation = { root: string; ports: LocalRuntimePorts };
+type PortRegistry = { version: 1; worktrees: Record<string, PortReservation> };
+const PORT_ROLES = ["convex", "site", "web", "preview", "appPreview"] as const;
+const PORT_REGISTRY_NAME = "local-runtime-ports.json";
+
 export class LocalRuntimeError extends Error {
     override name = "LocalRuntimeError";
 }
@@ -125,10 +134,10 @@ export async function resolveLocalRuntime(
         deploymentSelector: deployment.selector,
     };
     const manifestPath = join(identity.root, MANIFEST_RELATIVE_PATH);
+    const hadManifest = existsSync(manifestPath);
     let manifest: LocalRuntimeManifest;
-    if (!existsSync(manifestPath)) {
+    if (!hadManifest) {
         manifest = createManifest(identity, deployment);
-        await writeProjection(identity.root, { kind: "adopt" });
     } else {
         manifest = readManifest(manifestPath);
         assertManifestIdentity(manifest, identity);
@@ -148,6 +157,7 @@ export async function resolveLocalRuntime(
         manifest.origins.convex,
         deployment.deploymentName,
     );
+    if (!hadManifest) await writeProjection(identity.root, { kind: "adopt" });
     if (manifest.origins.web) {
         const owner = manifest.originOwners.web;
         if (!owner)
@@ -176,32 +186,244 @@ export async function resolveLocalRuntime(
     };
 }
 
-/** Return a previously published port so Vite can reuse it when available. */
-export function getPreferredRuntimePort(
+/** Returns durable reservations, independently of whether their processes are running. */
+export function getLocalRuntimePorts(
     root: string,
-    role: "web" | "preview",
-): number | undefined {
-    const rootPath = canonicalDirectory(root);
-    const manifestPath = join(rootPath, MANIFEST_RELATIVE_PATH);
-    if (!existsSync(manifestPath)) return undefined;
-    try {
-        const manifest = readManifest(manifestPath);
-        const identity = getLocalRuntimeIdentity(rootPath);
-        if (
-            manifest.identity.root !== identity.root ||
-            manifest.identity.gitCommonDir !== identity.gitCommonDir ||
-            manifest.identity.worktreeId !== identity.worktreeId
+    requested: Partial<LocalRuntimePorts> = {},
+): LocalRuntimePorts {
+    const identity = getLocalRuntimeIdentity(root);
+    const result = spawnSync(
+        "flock",
+        [
+            "--no-fork",
+            "--exclusive",
+            join(identity.gitCommonDir, "local-runtime-ports.lock"),
+            process.execPath,
+            "--experimental-strip-types",
+            fileURLToPath(import.meta.url),
+            "--reserve-ports",
+            JSON.stringify(requested),
+        ],
+        {
+            cwd: identity.root,
+            encoding: "utf8",
+            timeout: 20_000,
+            stdio: ["ignore", "pipe", "pipe"],
+            env: { ...process.env, CONVEX_DEPLOYMENT: "" },
+        },
+    );
+    if (result.error || result.status !== 0)
+        throw new LocalRuntimeError(
+            result.stderr?.trim() || "Could not reserve fixed local ports.",
+        );
+    const ports: unknown = JSON.parse(result.stdout);
+    if (!isPortSet(ports))
+        throw new LocalRuntimeError(
+            "The fixed local port reservation is invalid.",
+        );
+    return ports;
+}
+
+function isPortSet(value: unknown): value is LocalRuntimePorts {
+    return (
+        !!value &&
+        typeof value === "object" &&
+        PORT_ROLES.every(
+            (role) =>
+                role in value &&
+                isPort((value as Record<string, unknown>)[role]),
         )
-            return undefined;
-        const value = manifest.origins[role];
-        if (!value) return undefined;
-        const port = Number(new URL(value).port);
-        return Number.isInteger(port) && port > 0 && port <= 65535
-            ? port
-            : undefined;
+    );
+}
+
+function readPortRegistry(path: string): PortRegistry {
+    if (!existsSync(path)) return { version: 1, worktrees: {} };
+    let value: unknown;
+    try {
+        value = JSON.parse(readFileSync(path, "utf8"));
     } catch {
-        return undefined;
+        throw new LocalRuntimeError(
+            "The fixed local port registry is unreadable.",
+        );
     }
+    if (
+        !value ||
+        typeof value !== "object" ||
+        !("version" in value) ||
+        value.version !== 1 ||
+        !("worktrees" in value) ||
+        !value.worktrees ||
+        typeof value.worktrees !== "object" ||
+        Array.isArray(value.worktrees)
+    )
+        throw new LocalRuntimeError(
+            "The fixed local port registry is invalid.",
+        );
+    for (const [id, entry] of Object.entries(value.worktrees)) {
+        if (
+            !/^[a-f0-9]{24}$/.test(id) ||
+            !entry ||
+            typeof entry !== "object" ||
+            !("root" in entry) ||
+            typeof entry.root !== "string" ||
+            !("ports" in entry) ||
+            !isPortSet(entry.ports)
+        )
+            throw new LocalRuntimeError(
+                "The fixed local port registry contains an invalid reservation.",
+            );
+    }
+    return value as PortRegistry;
+}
+
+function reservePortHints(
+    used: Map<number, string>,
+    owner: string,
+    ports: Partial<LocalRuntimePorts>,
+) {
+    for (const [role, port] of Object.entries(ports)) {
+        if (
+            !PORT_ROLES.includes(role as keyof LocalRuntimePorts) ||
+            !isPort(port)
+        )
+            throw new LocalRuntimeError(
+                "Fixed ports must be whole numbers between 1 and 65535.",
+            );
+        const key = `${owner} (${role})`;
+        const previous = used.get(port);
+        if (previous && previous !== key)
+            throw new LocalRuntimeError(
+                `Fixed port ${port} conflicts with the reservation for ${previous}.`,
+            );
+        used.set(port, key);
+    }
+}
+
+async function reservePortsUnlocked(
+    root: string,
+    requested: Partial<LocalRuntimePorts>,
+): Promise<LocalRuntimePorts> {
+    const selected = getLocalRuntimeIdentity(root);
+    const registryPath = join(selected.gitCommonDir, PORT_REGISTRY_NAME);
+    const registry = readPortRegistry(registryPath);
+    const existing = registry.worktrees[selected.worktreeId];
+    if (existing && existing.root !== selected.root)
+        throw new LocalRuntimeError(
+            "The fixed port reservation belongs to another worktree.",
+        );
+    if (existing) existing.ports = { ...existing.ports, ...requested };
+    const used = new Map<number, string>();
+    for (const entry of Object.values(registry.worktrees))
+        reservePortHints(used, entry.root, entry.ports);
+    const pending = [];
+    for (const line of gitValue(root, [
+        "worktree",
+        "list",
+        "--porcelain",
+        "-z",
+    ]).split("\0")) {
+        if (!line.startsWith("worktree ")) continue;
+        const peerRoot = line.slice(9);
+        if (!existsSync(peerRoot)) continue;
+        const identity = getLocalRuntimeIdentity(peerRoot);
+        if (registry.worktrees[identity.worktreeId]) continue;
+        const hints: Partial<LocalRuntimePorts> = {};
+        if (existsSync(join(peerRoot, ".convex/local/default/config.json"))) {
+            const native = readNativeLocalDeployment(peerRoot);
+            hints.convex = native.cloudPort;
+            hints.site = native.sitePort;
+        }
+        const manifestPath = getRuntimeManifestPath(peerRoot);
+        if (existsSync(manifestPath)) {
+            const manifest = readManifest(manifestPath);
+            if (
+                manifest.identity.worktreeId !== identity.worktreeId ||
+                manifest.identity.root !== identity.root ||
+                manifest.identity.gitCommonDir !== identity.gitCommonDir
+            )
+                throw new LocalRuntimeError(
+                    "Cannot adopt ports from another worktree's manifest.",
+                );
+            const owner = manifest.originOwners.web;
+            if (
+                manifest.origins.web &&
+                owner &&
+                isRuntimeProcessAlive(owner.pid)
+            ) {
+                try {
+                    await verifyWebOrigin(
+                        manifest.origins.web,
+                        identity.worktreeId,
+                        owner,
+                    );
+                    hints.web = Number(new URL(manifest.origins.web).port);
+                } catch (error) {
+                    if (!(error instanceof LocalRuntimeError)) throw error;
+                    // Stale listener projections do not establish a durable port assignment.
+                }
+            }
+        }
+        if (identity.worktreeId === selected.worktreeId)
+            Object.assign(hints, requested);
+        reservePortHints(used, identity.root, hints);
+        pending.push({ identity, hints });
+    }
+    for (const { identity, hints } of pending) {
+        let allocated: LocalRuntimePorts | undefined;
+        for (let slot = 0; slot < 1000; slot++) {
+            const candidate = {
+                convex: 3210 + slot * 2,
+                site: 3211 + slot * 2,
+                web: 5173 + slot,
+                preview: 6173 + slot,
+                appPreview: 4173 + slot,
+                ...hints,
+            };
+            const values = Object.values(candidate);
+            if (
+                new Set(values).size !== values.length ||
+                PORT_ROLES.some(
+                    (role) =>
+                        used.has(candidate[role]) &&
+                        used.get(candidate[role]) !==
+                            `${identity.root} (${role})`,
+                )
+            )
+                continue;
+            allocated = candidate;
+            break;
+        }
+        if (!allocated)
+            throw new LocalRuntimeError(
+                "No unreserved fixed local port set is available.",
+            );
+        reservePortHints(used, identity.root, allocated);
+        registry.worktrees[identity.worktreeId] = {
+            root: identity.root,
+            ports: allocated,
+        };
+    }
+    const reservation = registry.worktrees[selected.worktreeId];
+    if (!reservation)
+        throw new LocalRuntimeError(
+            "The worktree has no fixed port reservation.",
+        );
+    if (existsSync(join(root, ".convex/local/default/config.json"))) {
+        const native = readNativeLocalDeployment(root);
+        if (
+            native.cloudPort !== reservation.ports.convex ||
+            native.sitePort !== reservation.ports.site
+        )
+            throw new LocalRuntimeError(
+                "The native Convex ports differ from this worktree's fixed reservation.",
+            );
+    }
+    const tempPath = `${registryPath}.${process.pid}.tmp`;
+    writeFileSync(tempPath, `${JSON.stringify(registry, null, 2)}\n`, {
+        mode: 0o600,
+    });
+    renameSync(tempPath, registryPath);
+    return reservation.ports;
 }
 
 /** Record a child process owned by the current local runtime invocation. */
@@ -224,6 +446,11 @@ export async function publishRuntimeOrigin(
     const parsed = validateLoopbackOrigin(origin);
     if (!Number.isInteger(pid) || pid < 2 || !runId)
         throw new LocalRuntimeError("Invalid local runtime listener owner.");
+    const port = getLocalRuntimePorts(root)[role];
+    if (Number(parsed.port) !== port)
+        throw new LocalRuntimeError(
+            `The ${role} listener must use its fixed port ${port}.`,
+        );
     await writeProjection(root, {
         kind: "listener-ready",
         role,
@@ -779,6 +1006,14 @@ function writeProjectionUnlocked(
 
 async function main(): Promise<void> {
     const args = process.argv.slice(2);
+    if (args[0] === "--reserve-ports") {
+        const ports = await reservePortsUnlocked(
+            process.cwd(),
+            JSON.parse(args[1] ?? "{}"),
+        );
+        process.stdout.write(`${JSON.stringify(ports)}\n`);
+        return;
+    }
     if (args[0] === "--write-projection") {
         const root = process.env.LOCAL_RUNTIME_ROOT;
         if (!root) throw new LocalRuntimeError("Missing local runtime root.");
@@ -789,6 +1024,12 @@ async function main(): Promise<void> {
         return;
     }
     const root = process.cwd();
+    if (args.includes("--ports")) {
+        process.stdout.write(
+            `${JSON.stringify({ ports: getLocalRuntimePorts(root), registryPath: join(getLocalRuntimeIdentity(root).gitCommonDir, PORT_REGISTRY_NAME) }, null, 2)}\n`,
+        );
+        return;
+    }
     if (args.includes("--verify-convex")) {
         await resolveLocalRuntime(root, { requiredOrigins: ["convex"] });
         return;

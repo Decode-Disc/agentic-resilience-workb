@@ -7,8 +7,9 @@ import { parseEnv } from "node:util";
 import {
     assertRuntimeStartupLock,
     getLocalRuntimeIdentity,
-    getPreferredRuntimePort,
+    getLocalRuntimePorts,
     getRuntimeStartupLockPath,
+    LocalRuntimeError,
     type LocalRuntimeRole,
     publishRuntimeOrigin,
     publishRuntimeProcess,
@@ -119,6 +120,17 @@ async function runNativeWatcher(
     args: string[],
 ): Promise<number> {
     const deploymentName = selectedLocalDeployment(root);
+    const ports = getLocalRuntimePorts(root);
+    for (const [flag, fixed] of [
+        ["--local-cloud-port", ports.convex],
+        ["--local-site-port", ports.site],
+    ] as const) {
+        const requested = portArgument(args, flag);
+        if (requested !== undefined && requested !== fixed)
+            throw new LocalDevError(
+                `${flag} conflicts with this worktree's fixed port ${fixed}.`,
+            );
+    }
     const cli = resolve(root, "node_modules/convex/bin/main.js");
     if (!existsSync(cli))
         throw new LocalDevError("The installed Convex CLI is missing.");
@@ -129,6 +141,10 @@ async function runNativeWatcher(
         [
             cli,
             "dev",
+            "--local-cloud-port",
+            String(ports.convex),
+            "--local-site-port",
+            String(ports.site),
             ...(startWeb ? ["--start", "pnpm exec vite dev"] : []),
             ...(!runE2e ? args : []),
         ],
@@ -194,22 +210,22 @@ async function waitForBackend(
                 throw new LocalDevError(
                     "The native Convex watcher selected another local deployment.",
                 );
-            if (!processPublished) {
-                if (!child.pid)
-                    throw new LocalDevError(
-                        "The native Convex watcher did not expose its process identity.",
-                    );
-                await publishRuntimeProcess(root, {
-                    role: "convex",
-                    pid: child.pid,
-                    runId,
-                });
-                processPublished = true;
-            }
             try {
                 await resolveLocalRuntime(root, {
                     requiredOrigins: ["convex"],
                 });
+                if (!processPublished) {
+                    if (!child.pid)
+                        throw new LocalDevError(
+                            "The native Convex watcher did not expose its process identity.",
+                        );
+                    await publishRuntimeProcess(root, {
+                        role: "convex",
+                        pid: child.pid,
+                        runId,
+                    });
+                    processPublished = true;
+                }
                 return;
             } catch (error) {
                 if (
@@ -231,6 +247,8 @@ async function waitForBackend(
 }
 
 async function runWeb(root: string, args: string[]): Promise<number> {
+    const port = portArgument(args, "--port");
+    getLocalRuntimePorts(root, port === undefined ? {} : { web: port });
     await resolveLocalRuntime(root, { requiredOrigins: ["convex"] });
     return runTrackedService(
         root,
@@ -245,10 +263,10 @@ async function runWeb(root: string, args: string[]): Promise<number> {
 async function runPreview(root: string, args: string[]): Promise<number> {
     const serviceRoot = join(root, "services/playwright-browser");
     const explicitPort = configuredPreviewPort(process.env.PORT, serviceRoot);
-    const preferredPort =
-        explicitPort === undefined
-            ? getPreferredRuntimePort(root, "preview")
-            : undefined;
+    const ports = getLocalRuntimePorts(
+        root,
+        explicitPort === undefined ? {} : { preview: explicitPort },
+    );
     const build = await runCommand("npm", ["run", "build"], serviceRoot);
     if (build !== 0) return build;
 
@@ -258,7 +276,7 @@ async function runPreview(root: string, args: string[]): Promise<number> {
         started = await startPreviewService(
             root,
             serviceRoot,
-            explicitPort ?? preferredPort ?? 0,
+            ports.preview,
             runId,
             args,
         );
@@ -266,13 +284,6 @@ async function runPreview(root: string, args: string[]): Promise<number> {
         if (hasNativeRuntimeConfig(root)) await removeRuntimeRun(root, runId);
         throw error;
     }
-    if (
-        explicitPort === undefined &&
-        preferredPort !== undefined &&
-        started.status !== null &&
-        started.stderr.includes("EADDRINUSE")
-    )
-        started = await startPreviewService(root, serviceRoot, 0, runId, args);
     if (started.status !== null) {
         await removeRuntimeRun(root, runId);
         return started.status;
@@ -293,7 +304,6 @@ type PreviewStart = {
     child: Child;
     origin?: string;
     status: number | null;
-    stderr: string;
 };
 
 async function startPreviewService(
@@ -318,9 +328,12 @@ async function startPreviewService(
             stdio: ["inherit", "inherit", "pipe"],
         },
     );
-    let stderr = "";
     let pending = "";
     const exit = trackExit(child);
+    let stopping = false;
+    const removeSignals = forwardSignals(child, () => {
+        stopping = true;
+    });
     let resolveReady!: (value: string) => void;
     let rejectReady!: (reason: Error) => void;
     const ready = new Promise<string>(
@@ -331,7 +344,6 @@ async function startPreviewService(
     );
     child.stderr?.on("data", (chunk: Buffer) => {
         const text = chunk.toString();
-        stderr += text;
         process.stderr.write(text);
         pending += text;
         const lines = pending.split("\n");
@@ -389,16 +401,17 @@ async function startPreviewService(
             }),
         ]);
         await waitForPreviewHealth(boundOrigin, child, exit);
-        return { child, origin: boundOrigin, status: null, stderr };
+        return { child, origin: boundOrigin, status: null };
     } catch (error) {
         if (child.exitCode === null && child.signalCode === null)
             await stopChild(child);
         const status = await exit;
-        if (error instanceof ChildEndedError)
-            return { child, status: status.code, stderr };
+        if (stopping || error instanceof ChildEndedError)
+            return { child, status: status.code };
         throw error;
     } finally {
         if (timeout) clearTimeout(timeout);
+        removeSignals();
     }
 }
 
@@ -451,13 +464,17 @@ async function runTrackedService(
     });
     if (!child.pid) throw new LocalDevError("The local service did not start.");
     const exit = trackExit(child);
-    await publishRuntimeProcess(root, { role, pid: child.pid, runId });
-    const removeSignals = forwardSignals(child);
+    let stopping = false;
+    const removeSignals = forwardSignals(child, () => {
+        stopping = true;
+    });
     try {
+        await publishRuntimeProcess(root, { role, pid: child.pid, runId });
         await waitForOrigin(root, "web", child, exit, timeoutMs);
         return (await exit).code;
     } catch (error) {
         await stopChild(child);
+        if (stopping) return (await exit).code;
         if (error instanceof ChildEndedError) return error.status.code;
         throw error;
     } finally {
@@ -531,8 +548,9 @@ async function runCommand(
     return waitForChild(child);
 }
 
-function forwardSignals(child: Child): () => void {
+function forwardSignals(child: Child, onSignal?: () => void): () => void {
     const forward = (signal: NodeJS.Signals) => {
+        onSignal?.();
         if (child.exitCode === null && child.signalCode === null)
             child.kill(signal);
     };
@@ -569,7 +587,7 @@ function signalExitCode(signal: NodeJS.Signals | null): number {
 async function stopChild(child: Child): Promise<void> {
     if (child.exitCode !== null || child.signalCode !== null) return;
     const exit = trackExit(child);
-    child.kill("SIGTERM");
+    if (!child.killed) child.kill("SIGTERM");
     await Promise.race([
         exit,
         delay(3_000).then(() => {
@@ -663,15 +681,29 @@ function configuredPreviewPort(
         }
     }
     if (value === undefined) return undefined;
+    return fixedPort(value);
+}
+
+function fixedPort(value: string): number {
     if (!/^\d+$/.test(value))
         throw new LocalDevError(
-            "PORT must be a whole number between 0 and 65535.",
+            "PORT must be a whole number between 1 and 65535.",
         );
     const port = Number(value);
-    if (!Number.isSafeInteger(port) || port > 65535)
+    if (!Number.isSafeInteger(port) || port < 1 || port > 65535)
         throw new LocalDevError(
-            "PORT must be a whole number between 0 and 65535.",
+            "PORT must be a whole number between 1 and 65535.",
         );
+    return port;
+}
+
+function portArgument(args: string[], name: string): number | undefined {
+    let port: number | undefined;
+    for (const [index, arg] of args.entries()) {
+        if (arg === name) port = fixedPort(args[index + 1] ?? "");
+        else if (arg.startsWith(`${name}=`))
+            port = fixedPort(arg.slice(name.length + 1));
+    }
     return port;
 }
 
@@ -695,7 +727,8 @@ if (entry && fileURLToPath(import.meta.url) === resolve(entry)) {
                 process.exitCode = error.status.code;
             else {
                 console.error(
-                    error instanceof LocalDevError
+                    error instanceof LocalDevError ||
+                        error instanceof LocalRuntimeError
                         ? error.message
                         : "Local runtime command failed.",
                 );
