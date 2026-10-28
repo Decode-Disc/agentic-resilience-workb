@@ -30,7 +30,7 @@ export default defineConfig({
                         return;
                     }
                     try {
-                        const [html, tokens, bundle] = await Promise.all([
+                        let [html, tokens, bundle] = await Promise.all([
                             readFile(
                                 resolve(referenceDir, `${name}.html`),
                                 "utf8",
@@ -44,6 +44,48 @@ export default defineConfig({
                                 "utf8",
                             ),
                         ]);
+                        if (name === "WorkCard") {
+                            const synthesis = await readFile(
+                                resolve(
+                                    referenceDir,
+                                    "canvas/WorkspaceSynthesis.html",
+                                ),
+                                "utf8",
+                            );
+                            html = html.replace(
+                                /<div class="ds-dashed wc"[\s\S]*?(?=\n<\/div>\n<\/body>)/,
+                                synthesis.trim(),
+                            );
+                        }
+                        if (name === "MechanismNode") {
+                            html = await readFile(
+                                resolve(
+                                    referenceDir,
+                                    "canvas/MechanismNodes.html",
+                                ),
+                                "utf8",
+                            );
+                            // Keep the complete canvas markup; adapt only its design-tool runtime and font loading.
+                            html = html
+                                .replace(
+                                    '<script src="./support.js"></script>',
+                                    "",
+                                )
+                                .replace(
+                                    /<link[^>]*href="ds\/[^"]+"[^>]*>/g,
+                                    "",
+                                )
+                                .replace(
+                                    /<link[^>]*href="https:\/\/fonts.googleapis.com[^"]+"[^>]*>/g,
+                                    "",
+                                )
+                                .replaceAll(
+                                    "{{theme}}",
+                                    url.searchParams.get("theme") === "dark"
+                                        ? "dark"
+                                        : "light",
+                                );
+                        }
                         let output = html.replace(
                             '<html lang="en">',
                             `<html lang="en" data-theme="${url.searchParams.get("theme") === "dark" ? "dark" : "light"}">`,

@@ -38,6 +38,10 @@ body {
     padding: 16px;
     background: var(--background);
 }
+.gallery-scene[data-component="MechanismNode"] {
+    height: 808px;
+}
+
 .gallery-scene[data-component="AppraisalBlock"],
 .gallery-scene[data-component="OutcomeCard"],
 .gallery-scene[data-component="InventorySheet"] {

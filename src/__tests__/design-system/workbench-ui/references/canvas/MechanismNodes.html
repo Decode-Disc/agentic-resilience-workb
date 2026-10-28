@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mechanism diagram</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/agenticresilienceworkbench/tokens.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@500&amp;display=swap">
+<style>
+body{margin:0}
+.mono{font-family:var(--font-mono);font-size:11px;font-weight:500;letter-spacing:0.12em;text-transform:uppercase}
+.meta{font-family:var(--font-mono);font-size:11.5px;color:var(--muted-foreground)}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:6px 11px;border-radius:5px;font-family:var(--font-mono);font-size:11px;font-weight:500;letter-spacing:0.16em;text-transform:uppercase;color:var(--accent-foreground);background:color-mix(in oklab,var(--brand-purple) 9%,var(--card));box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--brand-purple) 28%,transparent)}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:2px 7px;border-radius:4px;font-size:12px;font-weight:500;line-height:18px;white-space:nowrap}
+.t-ink{color:var(--foreground);background:color-mix(in oklab,var(--foreground) 7%,var(--card))}
+.t-approved{color:var(--approved);background:color-mix(in oklab,var(--approved) 13%,var(--card))}
+.glass{background:color-mix(in oklab,var(--card) 70%,transparent);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 color-mix(in oklab,var(--popover) 90%,transparent),0 0 0 1px color-mix(in oklab,var(--foreground) 7%,transparent),0 14px 36px -22px color-mix(in oklab,var(--foreground) 28%,transparent)}
+.node{position:absolute;box-sizing:border-box;padding:12px 16px;display:flex;align-items:center;gap:12px;border-radius:16px;font-size:15px;line-height:20px;background:var(--card);box-shadow:inset 0 1px 0 color-mix(in oklab,var(--popover) 90%,transparent),0 0 0 1px color-mix(in oklab,var(--foreground) 12%,transparent),0 12px 26px -16px color-mix(in oklab,var(--foreground) 35%,transparent)}
+.rl{position:absolute;text-align:center;font-size:13px;line-height:16px;font-weight:500}
+.navpill{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:11px;background:color-mix(in oklab,var(--foreground) 7%,transparent);font-size:14px;font-weight:500;color:var(--foreground);text-decoration:none}
+.tab{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 14px;border-radius:10px;font-size:14px;font-weight:500;color:var(--muted-foreground);text-decoration:none}
+.tab-on{background:var(--card);color:var(--foreground);box-shadow:0 0 0 1px color-mix(in oklab,var(--foreground) 8%,transparent),0 4px 10px -6px color-mix(in oklab,var(--foreground) 30%,transparent)}
+</style>
+</helmet>
+<div data-theme="{{theme}}" style="position: relative; width: 1440px; height: 1204px; overflow: hidden; color: var(--foreground); font-family: var(--font-sans); background-color: var(--background); background-image: radial-gradient(ellipse 34% 30% at 37% 57%, color-mix(in oklab, var(--brand-purple) 14%, transparent), transparent 70%), linear-gradient(color-mix(in oklab, var(--foreground) 4.5%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in oklab, var(--foreground) 4.5%, transparent) 1px, transparent 1px); background-size: 100% 100%, 40px 40px, 40px 40px">
+<div style="position: absolute; left: 0; top: 0; width: 1440px; z-index: 4">
+<nav style="height: 60px; flex-shrink: 0; box-sizing: border-box; padding: 0 48px; display: flex; align-items: center; gap: 10px; background: color-mix(in oklab, var(--card) 55%, transparent); backdrop-filter: blur(16px); border-bottom: 1px solid color-mix(in oklab, var(--foreground) 6%, transparent)">
+<a href="#home" class="navpill"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"></path></svg>Home</a>
+<a href="#dossier" class="navpill" style="background: color-mix(in oklab, var(--brand-purple) 12%, transparent)"><span style="color: var(--brand-purple); letter-spacing: -0.06em">//</span>CCC dossier</a>
+<span style="font-size: 13px; color: var(--muted-foreground); padding-left: 6px">Photo-led auto physical damage claims</span>
+<span style="flex: 1"></span>
+<span class="chip" style="color: var(--muted-foreground); background: transparent; box-shadow: none; outline: 1px dashed var(--muted-foreground); outline-offset: -1px">Illustrative</span>
+<a href="#account" class="navpill"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><circle cx="12" cy="10" r="3"></circle><path d="M6.5 18c1.5-2 3.4-3 5.5-3s4 1 5.5 3"></path></svg>Account</a>
+</nav>
+</div>
+<div style="position: absolute; left: 48px; top: 76px; display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 13px; background: color-mix(in oklab, var(--foreground) 6%, transparent)">
+<a href="Workspace.dc.html" class="tab">Progress</a>
+<a href="Sources-Preparation.dc.html" class="tab">Sources</a>
+<a href="Investigation-Inquiry.dc.html" class="tab">Investigation</a>
+<a href="#synthesis" class="tab tab-on"><span style="color: var(--brand-purple); letter-spacing: -0.06em">//</span>Synthesis</a>
+</div>
+<div style="position: absolute; right: 48px; top: 76px; display: flex; gap: 4px; padding: 4px; border-radius: 13px; background: color-mix(in oklab, var(--foreground) 6%, transparent)"><a href="#mechanism" class="tab tab-on">Mechanism</a><a href="Synthesis-Brief.dc.html" class="tab">Full brief</a></div>
+
+
+<div style="position: absolute; left: 64px; top: 356px; width: 936px; height: 768px; border-radius: 30px; background: color-mix(in oklab, var(--card) 45%, transparent); backdrop-filter: blur(10px); box-shadow: inset 0 1px 0 color-mix(in oklab, var(--popover) 90%, transparent), 0 0 0 1px color-mix(in oklab, var(--brand-purple) 26%, transparent), 0 40px 90px -46px color-mix(in oklab, var(--brand-purple) 60%, transparent)"></div>
+<div style="position: absolute; left: 282px; top: 560px; width: 500px; height: 360px; border-radius: 50%; background: radial-gradient(closest-side, color-mix(in oklab, var(--brand-purple) 34%, transparent), transparent); filter: blur(12px)"></div>
+<div style="position: absolute; left: 202px; top: 410px; width: 660px; height: 660px; box-sizing: border-box; border-radius: 50%; border: 1px dashed color-mix(in oklab, var(--brand-purple) 30%, transparent)"></div>
+<div style="position: absolute; left: 352px; top: 560px; width: 360px; height: 360px; box-sizing: border-box; border-radius: 50%; border: 1px solid color-mix(in oklab, var(--brand-purple) 22%, transparent); background: radial-gradient(closest-side, color-mix(in oklab, var(--brand-purple) 6%, transparent), transparent)"></div>
+<div class="mono" style="position: absolute; left: 650px; top: 580px; font-size: 10px; color: var(--accent-foreground)">Core</div>
+<div class="mono" style="position: absolute; left: 768px; top: 484px; font-size: 10px; color: var(--accent-foreground)">Conditions · threats</div>
+
+<svg width="99" height="8" viewBox="0 0 99 8" preserveAspectRatio="none" style="position: absolute; left: 303px; top: 736px; width: 99px; height: 8px; overflow: visible; fill: none; stroke: var(--brand-purple); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 4px color-mix(in oklab, var(--brand-purple) 60%, transparent))"><defs><marker id="dc-arrow-head-filled-1" orient="auto" markerWidth="5" markerHeight="5" refX="2" refY="2" overflow="visible"><path d="M0 0 L4 2 L0 4 Z" fill="oklch(0.415 0.2019 300.7)" stroke="none" style="stroke: none; fill: oklch(0.415 0.2019 300.7); fill: context-stroke"/></marker></defs><path d="M 99 4 L 4 4" marker-end="url(#dc-arrow-head-filled-1)"></path></svg>
+<svg width="99" height="8" viewBox="0 0 99 8" preserveAspectRatio="none" style="position: absolute; left: 663px; top: 736px; width: 99px; height: 8px; overflow: visible; fill: none; stroke: var(--foreground); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 6 6"><defs><marker id="dc-arrow-head-filled-2" orient="auto" markerWidth="5" markerHeight="5" refX="2" refY="2" overflow="visible"><path d="M0 0 L4 2 L0 4 Z" fill="oklch(0.1811 0.0092 308)" stroke="none" style="stroke: none; fill: oklch(0.1811 0.0092 308); fill: context-stroke"/></marker></defs><path d="M 99 4 L 4 4" marker-end="url(#dc-arrow-head-filled-2)"></path></svg>
+<svg width="8" height="176" viewBox="0 0 8 176" preserveAspectRatio="none" style="position: absolute; left: 528px; top: 508px; width: 8px; height: 176px; overflow: visible; fill: none; stroke: var(--muted-foreground); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 4 5"><path d="M 4 0 L 4 176"></path></svg>
+<svg width="8" height="175" viewBox="0 0 8 175" preserveAspectRatio="none" style="position: absolute; left: 528px; top: 797px; width: 8px; height: 175px; overflow: visible; fill: none; stroke: var(--counter-evidence); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><defs><marker id="dc-arrow-head-filled-3" orient="auto" markerWidth="5" markerHeight="5" refX="2" refY="2" overflow="visible"><path d="M0 0 L4 2 L0 4 Z" fill="oklch(0.5725 0.2009 356.87)" stroke="none" style="stroke: none; fill: oklch(0.5725 0.2009 356.87); fill: context-stroke"/></marker></defs><path d="M 4 175 L 4 4" marker-end="url(#dc-arrow-head-filled-3)"></path></svg>
+<svg width="8" height="135" viewBox="0 0 8 135" preserveAspectRatio="none" style="position: absolute; left: 858px; top: 789px; width: 8px; height: 135px; overflow: visible; fill: none; stroke: var(--review-foreground); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 0.5 6"><defs><marker id="dc-arrow-head-filled-4" orient="auto" markerWidth="5" markerHeight="5" refX="2" refY="2" overflow="visible"><path d="M0 0 L4 2 L0 4 Z" fill="oklch(0.5086 0.1022 70.64)" stroke="none" style="stroke: none; fill: oklch(0.5086 0.1022 70.64); fill: context-stroke"/></marker></defs><path d="M 4 135 L 4 4" marker-end="url(#dc-arrow-head-filled-4)"></path></svg>
+<svg width="8" height="66" viewBox="0 0 8 66" preserveAspectRatio="none" style="position: absolute; left: 348px; top: 644px; width: 8px; height: 66px; overflow: visible; fill: none; stroke: var(--brand-purple); stroke-width: 1.2; stroke-linecap: round; stroke-dasharray: 2 4"><path d="M 4 0 L 4 66"></path></svg>
+
+<div class="node" style="left: 402px; top: 684px; width: 260px; height: 112px; padding: 16px 20px; background: var(--primary); color: var(--primary-foreground); box-shadow: inset 0 1px 0 color-mix(in oklab, white 22%, transparent), 0 0 0 1px color-mix(in oklab, var(--brand-purple) 50%, transparent), 0 0 0 7px color-mix(in oklab, var(--brand-purple) 12%, transparent), 0 24px 60px -18px color-mix(in oklab, var(--brand-purple) 75%, transparent)"><span><span class="mono" style="font-size: 10px; opacity: 0.7">Observed role · CCC</span><br><b style="font-size: 19px; line-height: 26px; font-weight: 600; letter-spacing: -0.02em">Cross-party coordination</b><br><span style="font-size: 12px; opacity: 0.7">Q1 · Q2 retained</span></span></div>
+<div class="node" style="left: 102px; top: 692px; width: 200px; height: 96px; box-shadow: inset 0 1px 0 color-mix(in oklab, var(--popover) 90%, transparent), 0 0 0 1.5px var(--brand-purple), 0 12px 26px -14px color-mix(in oklab, var(--brand-purple) 60%, transparent)"><span><span class="mono" style="font-size: 10px; color: var(--muted-foreground)">Actor · insurers</span><br><b style="font-weight: 500">Insurer-owned rules</b></span></div>
+<div class="node" style="left: 762px; top: 692px; width: 200px; height: 96px"><span><span class="mono" style="font-size: 10px; color: var(--muted-foreground)">Actors · repairers</span><br><b style="font-weight: 500">Network participation</b></span></div>
+<div class="node" style="left: 412px; top: 428px; width: 240px; height: 80px; background: color-mix(in oklab, var(--card) 60%, transparent); box-shadow: none; border: 1.5px dashed color-mix(in oklab, var(--foreground) 32%, transparent)"><span><span class="mono" style="font-size: 10px; color: var(--muted-foreground)">Decisive unknown</span><br><b style="font-weight: 500">Who changes routing rules?</b></span></div>
+<div class="node" style="left: 412px; top: 972px; width: 240px; height: 80px; background: color-mix(in oklab, var(--counter-evidence) 7%, var(--card)); box-shadow: 0 0 0 1.5px var(--counter-evidence), 0 12px 26px -14px color-mix(in oklab, var(--counter-evidence) 55%, transparent)"><span><span class="mono" style="font-size: 10px; color: var(--counter-evidence)">Possible threat</span><br><b style="font-weight: 500">Insurer direct routing</b></span></div>
+<div class="node" style="left: 762px; top: 924px; width: 200px; height: 96px; background: color-mix(in oklab, var(--review) 10%, var(--card)); box-shadow: none; border: 1.5px dashed var(--review-foreground)"><span><span class="mono" style="font-size: 10px; color: var(--review-foreground)">Contested</span><br><b style="font-weight: 500">Durable operational context</b></span></div>
+<div class="node" style="left: 102px; top: 924px; width: 200px; height: 96px; background: transparent; box-shadow: none; border: 1.5px dashed color-mix(in oklab, var(--foreground) 20%, transparent); color: var(--muted-foreground)"><span><span class="mono" style="font-size: 10px">Outside this reading</span><br><span style="font-size: 14px">Q4 · agent-led intake, left for follow-up</span></span></div>
+
+<div class="rl" style="left: 312px; top: 712px; width: 80px; color: var(--accent-foreground)">depends on</div>
+<div class="rl" style="left: 680px; top: 712px; width: 64px">enables</div>
+<div class="rl" style="left: 544px; top: 588px; width: 80px; text-align: left; color: var(--muted-foreground); font-weight: 400">unresolved</div>
+<div class="rl" style="left: 544px; top: 876px; width: 92px; text-align: left; color: var(--counter-evidence)">could bypass</div>
+<div class="rl" style="left: 874px; top: 840px; width: 72px; text-align: left; color: var(--review-foreground)">sustains<br>contested</div>
+
+<div class="glass" style="position: absolute; left: 88px; top: 424px; width: 290px; height: 220px; box-sizing: border-box; padding: 18px 20px; border-radius: 18px; display: flex; flex-direction: column; gap: 10px; box-shadow: inset 0 1px 0 color-mix(in oklab, var(--popover) 90%, transparent), 0 0 0 1px color-mix(in oklab, var(--brand-purple) 38%, transparent), 0 20px 44px -22px color-mix(in oklab, var(--brand-purple) 60%, transparent)">
+<span class="mono" style="color: var(--accent-foreground)">Selected · dependency</span>
+<b style="font-size: 16px; line-height: 21px; font-weight: 600; letter-spacing: -0.02em">Coordination depends on insurer-owned rules</b>
+<span style="font-size: 13px; line-height: 18px; color: var(--muted-foreground)">Running the flow is not deciding it. Insurers keep the rules.</span>
+<span style="margin-top: auto; display: flex; justify-content: space-between; align-items: center"><span class="meta">Q1 v1 · 4 passages</span><a href="#passages" style="font-size: 13px; font-weight: 500">Open passages</a></span>
+</div>
+
+<div style="position: absolute; left: 64px; top: 176px; display: flex; align-items: center; gap: 12px"><span class="chip">// Synthesis · result</span><span class="meta">CCC · photo-led auto physical damage claims</span></div>
+<div style="position: absolute; left: 64px; top: 220px; width: 940px; font-size: 52px; line-height: 54px; font-weight: 500; letter-spacing: -0.045em">Coordination, without<br>established control</div>
+<div style="position: absolute; left: 1040px; top: 184px; width: 336px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end">
+<span class="pill" style="color: var(--accent-foreground); background: var(--accent)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"></path></svg>Limited synthesis</span>
+</div>
+
+<div class="glass" style="position: absolute; left: 1040px; top: 356px; width: 336px; height: 744px; box-sizing: border-box; padding: 26px 24px; border-radius: 26px; display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span class="mono" style="color: var(--accent-foreground)">// Brief</span>
+<span style="font-size: 16px; line-height: 24px">CCC sits at the centre of the claim workflow, but the rules that decide outcomes stay with insurers. The position holds while repairers keep participating; direct insurer routing is the clearest bypass.</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span class="mono" style="color: var(--muted-foreground)">Built from</span>
+<span style="display: flex; gap: 6px; flex-wrap: wrap"><span class="pill t-approved">Q1 · v1</span><span class="pill t-approved">Q2 · v1</span><span class="pill t-approved">Q3 · v1</span></span>
+<span class="meta">Retained by the analyst · grouped review</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span class="mono" style="color: var(--muted-foreground)">Limits of this reading</span>
+<span style="display: flex; gap: 10px; font-size: 13.5px; line-height: 19px"><span style="flex-shrink: 0; margin-top: 6px; width: 6px; height: 6px; border-radius: 50%; border: 1.5px dashed var(--muted-foreground); box-sizing: border-box; display: block"></span>Decision rights over routing rules are undocumented.</span>
+<span style="display: flex; gap: 10px; font-size: 13.5px; line-height: 19px"><span style="flex-shrink: 0; margin-top: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--review); display: block"></span>Durable context is contested between sources.</span>
+<span style="display: flex; gap: 10px; font-size: 13.5px; line-height: 19px"><span style="flex-shrink: 0; margin-top: 6px; width: 6px; height: 6px; border-radius: 50%; border: 1px solid var(--muted-foreground); box-sizing: border-box; display: block"></span>Q4 left for follow-up, outside this reading.</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px; padding-top: 16px; border-top: 1px solid color-mix(in oklab, var(--foreground) 7%, transparent)">
+<span class="mono" style="color: var(--muted-foreground)">Relations</span>
+<span style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; font-size: 12.5px">
+<span style="display: flex; align-items: center; gap: 8px"><svg width="30" height="8" viewBox="0 0 30 8" aria-hidden="true"><path d="M1 4H23" stroke="var(--foreground)" stroke-width="2" stroke-linecap="round"></path><path d="M22 1L29 4L22 7Z" fill="var(--foreground)"></path></svg>Dependency</span>
+<span style="display: flex; align-items: center; gap: 8px"><svg width="30" height="8" viewBox="0 0 30 8" aria-hidden="true"><path d="M1 4H23" stroke="var(--foreground)" stroke-width="2" stroke-dasharray="4 3" stroke-linecap="round"></path><path d="M22 1L29 4L22 7Z" fill="var(--foreground)"></path></svg>Enabling</span>
+<span style="display: flex; align-items: center; gap: 8px; color: var(--counter-evidence)"><svg width="30" height="8" viewBox="0 0 30 8" aria-hidden="true"><path d="M1 4H23" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path><path d="M22 1L29 4L22 7Z" fill="currentColor"></path></svg>Threat</span>
+<span style="display: flex; align-items: center; gap: 8px; color: var(--review-foreground)"><svg width="30" height="8" viewBox="0 0 30 8" aria-hidden="true"><path d="M1 4H23" stroke="currentColor" stroke-width="2.2" stroke-dasharray="0.5 4.5" stroke-linecap="round"></path><path d="M22 1L29 4L22 7Z" fill="currentColor"></path></svg>Contested</span>
+<span style="display: flex; align-items: center; gap: 8px; color: var(--muted-foreground)"><svg width="30" height="8" viewBox="0 0 30 8" aria-hidden="true"><path d="M1 4H29" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 4" stroke-linecap="round"></path></svg>Unresolved</span>
+</span>
+</div>
+<div style="margin-top: auto; display: flex; flex-direction: column; gap: 8px">
+<a href="Synthesis-Brief.dc.html" style="height: 46px; text-decoration: none; border-radius: 999px; border: 0; background: linear-gradient(180deg, color-mix(in oklab, var(--primary) 85%, white), var(--primary) 55%); color: var(--primary-foreground); box-shadow: inset 0 1px 0 color-mix(in oklab, white 30%, transparent), 0 14px 28px -12px color-mix(in oklab, var(--primary) 80%, transparent); font: inherit; font-size: 15px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 10px">Read the full brief<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<button type="button" style="height: 40px; border-radius: 999px; border: 0; background: transparent; box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 16%, transparent); color: var(--foreground); font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer">Trace in evidence matrix</button>
+</div>
+</div>
+<a href="Inventory-Sheet.dc.html" aria-label="Open inventory" style="position: absolute; right: 48px; bottom: 28px; z-index: 5; width: 340px; box-sizing: border-box; padding: 10px 10px 10px 16px; border-radius: 18px; display: flex; align-items: center; gap: 14px; text-decoration: none; color: var(--foreground); background: color-mix(in oklab, var(--card) 80%, transparent); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); box-shadow: inset 0 1px 0 color-mix(in oklab, var(--popover) 90%, transparent), 0 0 0 1px color-mix(in oklab, var(--foreground) 9%, transparent), 0 18px 40px -18px color-mix(in oklab, var(--foreground) 38%, transparent)">
+<span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px">
+<span style="display: flex; align-items: baseline; gap: 8px"><span style="font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted-foreground)">Inventory</span><b style="font-size: 16px; font-weight: 600; letter-spacing: -0.02em">126</b><span style="font-size: 12px; color: var(--muted-foreground)">assertions</span><span style="margin-left: auto; display: inline-flex; align-items: center; gap: 5px; padding: 1px 6px; border-radius: 4px; font-size: 11.5px; font-weight: 500; color: var(--accent-foreground); background: var(--accent)"><span style="width: 5px; height: 5px; border-radius: 50%; background: var(--brand-purple); display: inline-block"></span>3 new</span></span>
+<span style="display: flex; height: 5px; border-radius: 3px; overflow: hidden; gap: 2px"><span style="flex: 64; background: var(--evidence-fact)"></span><span style="flex: 31; background: var(--evidence-inference)"></span><span style="flex: 14; background: var(--evidence-hypothesis)"></span><span style="flex: 9; background: color-mix(in oklab, var(--foreground) 25%, transparent)"></span><span style="flex: 8; background: var(--counter-evidence)"></span></span>
+</span>
+<span style="flex-shrink: 0; width: 36px; height: 36px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in oklab, var(--foreground) 6%, transparent)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"></path></svg></span>
+</a>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"$preview":{"width":1440,"height":1204}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { theme: this.props.theme ?? 'light' };
+  }
+}
+</script>
+</body>
+</html>

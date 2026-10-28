@@ -1,25 +1,100 @@
-.stage {
-    position: relative;
-    height: 200px;
-    max-width: 760px;
-    border-radius: var(--radius-2xl);
-}
 .node {
-    position: absolute;
+    position: relative;
     box-sizing: border-box;
+    width: 200px;
+    min-height: 96px;
     padding: 12px 16px;
     display: flex;
     align-items: center;
+    gap: 12px;
     border-radius: var(--radius-lg);
     font-size: 15px;
     line-height: 20px;
     background: var(--card);
-    box-shadow: var(--shadow-node);
 }
-.rl {
-    position: absolute;
-    text-align: center;
-    font-size: 13px;
-    line-height: 16px;
+.participant {
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklab, var(--popover) 90%, transparent),
+        0 0 0 1px color-mix(in oklab, var(--foreground) 12%, transparent),
+        0 12px 26px -16px
+        color-mix(in oklab, var(--foreground) 35%, transparent);
+}
+.label {
+    font-size: 10px;
+    line-height: inherit;
+}
+.title {
     font-weight: 500;
+}
+.detail {
+    font-size: 12px;
+    opacity: 0.7;
+}
+.actor {
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklab, var(--popover) 90%, transparent),
+        0 0 0 1.5px var(--brand-purple),
+        0 12px 26px -14px
+        color-mix(in oklab, var(--brand-purple) 60%, transparent);
+}
+.observed {
+    width: 260px;
+    min-height: 112px;
+    padding: 16px 20px;
+    background: var(--primary);
+    color: var(--primary-foreground);
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklab, white 22%, transparent),
+        0 0 0 1px color-mix(in oklab, var(--brand-purple) 50%, transparent),
+        0 0 0 7px color-mix(in oklab, var(--brand-purple) 12%, transparent),
+        0 24px 60px -18px
+        color-mix(in oklab, var(--brand-purple) 75%, transparent);
+}
+.observed .label {
+    color: inherit;
+    opacity: 0.7;
+}
+.observed .title {
+    font-size: 19px;
+    line-height: 26px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+.unknown,
+.threat {
+    width: 240px;
+    min-height: 80px;
+}
+.unknown {
+    background: color-mix(in oklab, var(--card) 60%, transparent);
+    box-shadow: none;
+    border: 1.5px dashed color-mix(in oklab, var(--foreground) 32%, transparent);
+}
+.threat {
+    background: color-mix(in oklab, var(--counter-evidence) 7%, var(--card));
+    box-shadow:
+        0 0 0 1.5px var(--counter-evidence),
+        0 12px 26px -14px
+        color-mix(in oklab, var(--counter-evidence) 55%, transparent);
+}
+.threat .label {
+    color: var(--counter-evidence);
+}
+.contested {
+    background: color-mix(in oklab, var(--review) 10%, var(--card));
+    box-shadow: none;
+    border: 1.5px dashed var(--review-foreground);
+}
+.contested .label {
+    color: var(--review-foreground);
+}
+.outside {
+    background: transparent;
+    box-shadow: none;
+    border: 1.5px dashed color-mix(in oklab, var(--foreground) 20%, transparent);
+    color: var(--muted-foreground);
+}
+.outside .title {
+    font-size: 14px;
+    font-weight: 400;
 }

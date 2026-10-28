@@ -1,102 +1,58 @@
-import { type CSSProperties, type ReactNode, useId } from "react";
+import { type ComponentProps, type ReactNode, useId } from "react";
 import { cn } from "@/lib/utils";
 import styles from "./mechanism-node.module.css";
 
-export interface MechanismNodeProps {
-    kind: "actor" | "observed" | "unknown";
+export interface MechanismNodeProps
+    extends Omit<ComponentProps<"div">, "children"> {
+    kind:
+        | "actor"
+        | "participant"
+        | "observed"
+        | "unknown"
+        | "threat"
+        | "contested"
+        | "outside";
     label: string;
     children: ReactNode;
-    detail?: string;
-    style?: CSSProperties;
+    detail?: ReactNode;
 }
+/** Presents supplied analytical meaning; the consumer owns content, placement and relations. */
 export function MechanismNode({
     kind,
     label,
     children,
     detail,
-    style,
+    className,
+    ...props
 }: MechanismNodeProps) {
-    return kind === "actor" ? (
-        <div
-            className={cn(styles.node)}
-            style={{
-                width: "200px",
-                height: "96px",
-                boxShadow:
-                    "inset 0 1px 0 color-mix(in oklab,var(--popover) 90%,transparent),0 0 0 1.5px var(--brand-purple),0 12px 26px -14px color-mix(in oklab,var(--brand-purple) 60%,transparent)",
-                ...style,
-            }}>
+    return (
+        <div {...props} className={cn(styles.node, styles[kind], className)}>
             <span>
-                <span className={cn("wb-label")} style={{ fontSize: "10px" }}>
-                    {label}
-                </span>
+                <span className={cn("wb-label", styles.label)}>{label}</span>
                 <br />
-                <b style={{ fontWeight: "500" }}>{children}</b>
-            </span>
-        </div>
-    ) : kind === "observed" ? (
-        <div
-            className={cn(styles.node)}
-            style={{
-                width: "194px",
-                height: "112px",
-                padding: "16px 20px",
-                background: "var(--primary)",
-                color: "var(--primary-foreground)",
-                boxShadow:
-                    "inset 0 1px 0 oklch(1 0 0 / .22),0 0 0 1px color-mix(in oklab,var(--brand-purple) 50%,transparent),0 0 0 7px color-mix(in oklab,var(--brand-purple) 12%,transparent),0 24px 60px -18px color-mix(in oklab,var(--brand-purple) 75%,transparent)",
-                ...style,
-            }}>
-            <span>
-                <span
-                    className={cn("wb-label")}
-                    style={{
-                        fontSize: "10px",
-                        color: "inherit",
-                        opacity: ".7",
-                    }}>
-                    {label}
-                </span>
-                <br />
-                <b
-                    style={{
-                        fontSize: "19px",
-                        lineHeight: "26px",
-                        letterSpacing: "-.02em",
-                    }}>
-                    {children}
-                </b>
-                <br />
-                <span style={{ fontSize: "12px", opacity: ".7" }}>
-                    {detail}
-                </span>
-            </span>
-        </div>
-    ) : (
-        <div
-            className={cn(styles.node)}
-            style={{
-                width: "182px",
-                height: "96px",
-                background: "transparent",
-                boxShadow: "none",
-                border: "1.5px dashed var(--edge-dashed)",
-                color: "var(--muted-foreground)",
-                ...style,
-            }}>
-            <span>
-                <span className={cn("wb-label")} style={{ fontSize: "10px" }}>
-                    {label}
-                </span>
-                <br />
-                <b style={{ fontWeight: "500", color: "var(--foreground)" }}>
-                    {children}
-                </b>
+                <span className={styles.title}>{children}</span>
+                {detail != null && (
+                    <>
+                        <br />
+                        <span className={styles.detail}>{detail}</span>
+                    </>
+                )}
             </span>
         </div>
     );
 }
-/** The screen supplies relation paths and labels; this layer never infers causation. */
+export interface MechanismRelation
+    extends Pick<
+        ComponentProps<"path">,
+        "stroke" | "strokeWidth" | "strokeDasharray" | "filter"
+    > {
+    id: string;
+    path: string;
+    viewport?: { x: number; y: number; width: number; height: number };
+    uncertain?: boolean;
+    arrow?: boolean;
+}
+/** Keeps each relation's filter and transparency local to its supplied SVG viewport. */
 export function MechanismRelations({
     width,
     height,
@@ -104,53 +60,60 @@ export function MechanismRelations({
 }: {
     width: number;
     height: number;
-    relations: readonly { id: string; path: string; uncertain?: boolean }[];
+    relations: readonly MechanismRelation[];
 }) {
     const id = useId();
-    return (
-        <svg
-            width={width}
-            height={height}
-            viewBox={`0 0 ${width} ${height}`}
-            aria-hidden="true"
-            style={{ position: "absolute", inset: 0 }}>
-            <defs>
-                {[false, true].map((uncertain) => (
+    return relations.map((r) => {
+        const viewport = r.viewport ?? { x: 0, y: 0, width, height };
+        const stroke =
+            r.stroke ??
+            (r.uncertain ? "var(--muted-foreground)" : "var(--brand-purple)");
+        return (
+            <svg
+                key={r.id}
+                width={viewport.width}
+                height={viewport.height}
+                viewBox={`0 0 ${viewport.width} ${viewport.height}`}
+                preserveAspectRatio="none"
+                aria-hidden="true"
+                style={{
+                    position: "absolute",
+                    left: viewport.x,
+                    top: viewport.y,
+                    width: viewport.width,
+                    height: viewport.height,
+                    stroke,
+                    strokeWidth: r.strokeWidth ?? (r.uncertain ? 1.5 : 2),
+                    strokeDasharray:
+                        r.strokeDasharray ?? (r.uncertain ? "5 4" : undefined),
+                    strokeLinecap: "round",
+                    strokeLinejoin: "round",
+                    fill: "none",
+                    overflow: "visible",
+                    filter: r.filter,
+                }}>
+                <defs>
                     <marker
-                        key={String(uncertain)}
-                        id={`${id}-${uncertain}`}
-                        viewBox="0 0 10 10"
-                        refX="9"
-                        refY="5"
-                        markerWidth="7"
-                        markerHeight="7"
+                        id={`${id}-${r.id}`}
+                        refX="2"
+                        refY="2"
+                        markerWidth="5"
+                        markerHeight="5"
                         orient="auto">
                         <path
-                            d="M0 0L10 5L0 10z"
-                            fill={
-                                uncertain
-                                    ? "var(--muted-foreground)"
-                                    : "var(--brand-purple)"
-                            }
+                            d="M0 0 L4 2 L0 4 Z"
+                            stroke="none"
+                            fill={stroke}
                         />
                     </marker>
-                ))}
-            </defs>
-            {relations.map((r) => (
+                </defs>
                 <path
-                    key={r.id}
                     d={r.path}
-                    stroke={
-                        r.uncertain
-                            ? "var(--muted-foreground)"
-                            : "var(--brand-purple)"
+                    markerEnd={
+                        r.arrow === false ? undefined : `url(#${id}-${r.id})`
                     }
-                    strokeWidth={r.uncertain ? 1.5 : 2}
-                    strokeDasharray={r.uncertain ? "5 4" : undefined}
-                    fill="none"
-                    markerEnd={`url(#${id}-${!!r.uncertain})`}
                 />
-            ))}
-        </svg>
-    );
+            </svg>
+        );
+    });
 }

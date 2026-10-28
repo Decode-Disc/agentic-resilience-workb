@@ -38,7 +38,7 @@
         },
         "WorkCard": {
             "sha256": "71005fa8c36cebeb4b526743ca44be7cd132ca8179aa436d1caf92c32a07f591",
-            "height": 420,
+            "height": 600,
             "width": 1040
         },
         "InventoryDock": {
@@ -93,7 +93,7 @@
         },
         "MechanismNode": {
             "sha256": "7e33e0c719d8d7973cc2dcd94620ec866dc4c3f4e77a7986d88ee0cf8bb137e3",
-            "height": 260,
+            "height": 808,
             "width": 1040
         },
         "BriefReference": {
@@ -142,6 +142,23 @@
             "reference": ".sheet",
             "actual": "[role=\"dialog\"]",
             "reason": "Compare the dialog itself; the blurred stage and ghost cards are gallery scaffolding."
+        },
+        "MechanismNode": {
+            "reference": "[style*=\"width: 936px\"][style*=\"height: 768px\"][style*=\"border-radius: 30px\"]",
+            "actual": "[data-mechanism-diagram]",
+            "reason": "Compare the complete diagram region from the unmodified canvas, including sibling nodes, relations, orbits and selected detail."
+        }
+    },
+    "canvasReferences": {
+        "WorkCard": {
+            "file": "canvas/WorkspaceSynthesis.html",
+            "sha256": "8a54f2ac85b969830dc6b4201b351a334ec3505e811cf4326a9d0b55697c70d9",
+            "source": ".design-systems/Agentic Resilience Workbench/canvas/Workspace.dc.html"
+        },
+        "MechanismNode": {
+            "file": "canvas/MechanismNodes.html",
+            "sha256": "12c747c1fc53869cc909db820a34f263111bea86b8ec3c5cfdd5838312697de5",
+            "source": ".design-systems/Agentic Resilience Workbench/canvas/Mechanism.dc.html"
         }
     }
 }

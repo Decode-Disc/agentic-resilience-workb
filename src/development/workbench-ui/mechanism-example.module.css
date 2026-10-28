@@ -1,0 +1,94 @@
+.node {
+    position: absolute;
+}
+.relation {
+    position: absolute;
+    text-align: center;
+    font-size: 13px;
+    line-height: 16px;
+    font-weight: 500;
+}
+.selected {
+    height: 220px;
+    min-height: 220px;
+    padding: 18px 20px;
+    border-radius: 18px;
+    background: color-mix(in oklab, var(--card) 70%, transparent);
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklab, var(--popover) 90%, transparent),
+        0 0 0 1px color-mix(in oklab, var(--brand-purple) 38%, transparent),
+        0 20px 44px -22px
+        color-mix(in oklab, var(--brand-purple) 60%, transparent);
+}
+.label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent-foreground);
+}
+.selectedTitle {
+    font-size: 16px;
+    line-height: 21px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+.selectedDescription {
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--muted-foreground);
+}
+.selectedFooter {
+    margin-top: auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.meta {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--muted-foreground);
+}
+.openPassages {
+    height: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    font-size: 13px;
+    line-height: normal;
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: auto;
+    color: LinkText;
+}
+
+/* Match the source artboard so blur sampling uses the same background context. */
+.artboard {
+    position: absolute;
+    left: -44px;
+    top: -336px;
+    width: 1440px;
+    height: 1204px;
+    overflow: hidden;
+    background-color: var(--background);
+    background-image:
+        radial-gradient(
+            ellipse 34% 30% at 37% 57%,
+            color-mix(in oklab, var(--brand-purple) 14%, transparent),
+            transparent 70%
+        ),
+        linear-gradient(
+            color-mix(in oklab, var(--foreground) 4.5%, transparent) 1px,
+            transparent 1px
+        ),
+        linear-gradient(
+            90deg,
+            color-mix(in oklab, var(--foreground) 4.5%, transparent) 1px,
+            transparent 1px
+        );
+    background-size:
+        100% 100%,
+        40px 40px,
+        40px 40px;
+}

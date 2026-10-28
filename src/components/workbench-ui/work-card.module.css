@@ -65,6 +65,96 @@
     border-radius: var(--radius-lg);
     background: color-mix(in oklab, var(--foreground) 3%, transparent);
 }
+.synthesis {
+    min-height: 536px;
+    border-radius: 22px;
+    border: 1.5px dashed color-mix(in oklab, var(--foreground) 22%, transparent);
+    color: var(--muted-foreground);
+}
+.diagram {
+    gap: 8px;
+}
+.diagramPreview {
+    position: relative;
+    height: 196px;
+    display: block;
+    opacity: 0.6;
+}
+.diagramPreview > span {
+    position: absolute;
+    display: block;
+}
+.outerOrbit,
+.innerOrbit,
+.core {
+    left: 50%;
+    top: 50%;
+}
+.outerOrbit {
+    box-sizing: content-box;
+    width: 176px;
+    height: 176px;
+    margin: -88px 0 0 -88px;
+    border-radius: 50%;
+    border: 1px dashed currentColor;
+}
+.innerOrbit {
+    box-sizing: content-box;
+    width: 96px;
+    height: 96px;
+    margin: -48px 0 0 -48px;
+    border-radius: 50%;
+    border: 1px solid color-mix(in oklab, currentColor 50%, transparent);
+}
+.core {
+    margin: -16px 0 0 -35px;
+    width: 70px;
+    height: 32px;
+    border-radius: 9px;
+    background: color-mix(in oklab, var(--foreground) 16%, transparent);
+}
+.leftNode,
+.rightNode {
+    top: 82px;
+    width: 52px;
+    height: 28px;
+    border-radius: 8px;
+    border: 1px solid currentColor;
+}
+.leftNode {
+    left: 4px;
+}
+.rightNode {
+    right: 4px;
+}
+.topNode,
+.bottomNode {
+    left: 50%;
+    width: 56px;
+    height: 24px;
+    margin-left: -28px;
+    border-radius: 8px;
+    border: 1px solid currentColor;
+}
+.topNode {
+    top: 2px;
+    border-style: dashed;
+}
+.bottomNode {
+    bottom: 2px;
+}
+.brief {
+    flex: 1;
+}
+.briefLine {
+    display: block;
+    height: 7px;
+    border-radius: 4px;
+    background: color-mix(in oklab, var(--foreground) 9%, transparent);
+}
+.briefLine:nth-child(2) {
+    background: color-mix(in oklab, var(--foreground) 12%, transparent);
+}
 button.wc {
     border: 0;
     text-align: left;

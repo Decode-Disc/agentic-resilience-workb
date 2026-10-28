@@ -19,6 +19,7 @@ import {
     InventoryDock,
     InventorySheet,
     InventoryUse,
+    MechanismDiagram,
     MechanismNode,
     MechanismRelations,
     OutcomeCard,
@@ -51,7 +52,6 @@ import ControlConclusionStyles from "@/components/workbench-ui/control-conclusio
 import GlassPanelStyles from "@/components/workbench-ui/glass-panel.module.css";
 import HypothesisNodeStyles from "@/components/workbench-ui/hypothesis-node.module.css";
 import InventoryDockStyles from "@/components/workbench-ui/inventory-dock.module.css";
-import MechanismNodeStyles from "@/components/workbench-ui/mechanism-node.module.css";
 import OutcomeCardStyles from "@/components/workbench-ui/outcome-card.module.css";
 import QuestionCardStyles from "@/components/workbench-ui/question-card.module.css";
 import RequestItemStyles from "@/components/workbench-ui/request-item.module.css";
@@ -59,6 +59,7 @@ import SourcingLaneStyles from "@/components/workbench-ui/sourcing-lane.module.c
 import WorkCardStyles from "@/components/workbench-ui/work-card.module.css";
 import BadgeStyles from "./badge-example.module.css";
 import ButtonStyles from "./button-example.module.css";
+import MechanismNodeStyles from "./mechanism-example.module.css";
 
 function ChipExample() {
     const styles = ChipStyles;
@@ -852,54 +853,187 @@ function OutcomeCardExample() {
 function MechanismNodeExample() {
     const styles = MechanismNodeStyles;
     return (
-        <div className={cn(styles.stage, "wb-backdrop-glow wb-backdrop")}>
-            <MechanismRelations
-                width={760}
-                height={200}
-                relations={[
-                    { id: "configures", path: "M222 104H292" },
-                    { id: "unknown", path: "M552 104H492", uncertain: true },
-                ]}
-            />
-            <MechanismNode
-                kind="actor"
-                label="Actor · insurers"
-                style={{ left: 22, top: 52 }}>
-                Insurer-owned rules
-            </MechanismNode>
-            <MechanismNode
-                kind="observed"
-                label="Observed role · CCC"
-                detail="Q1 · Q2 retained"
-                style={{ left: 296, top: 44 }}>
-                Cross-party coordination
-            </MechanismNode>
-            <MechanismNode
-                kind="unknown"
-                label="Not established"
-                style={{ left: 556, top: 52 }}>
-                Decision rights
-            </MechanismNode>
-            <span
-                className={styles.rl}
-                style={{
-                    left: 226,
-                    top: 66,
-                    width: 66,
-                    color: "var(--accent-foreground)",
-                }}>
-                configures
-            </span>
-            <span
-                className={styles.rl}
-                style={{
-                    left: 494,
-                    top: 66,
-                    width: 58,
-                    color: "var(--muted-foreground)",
-                }}>
-                unknown
-            </span>
+        <div className={styles.artboard}>
+            <MechanismDiagram
+                style={{ position: "absolute", left: 64, top: 356 }}
+                selection={
+                    <GlassPanel className={styles.selected}>
+                        <span className={styles.label}>
+                            Selected · dependency
+                        </span>
+                        <b className={styles.selectedTitle}>
+                            Coordination depends on insurer-owned rules
+                        </b>
+                        <span className={styles.selectedDescription}>
+                            Running the flow is not deciding it. Insurers keep
+                            the rules.
+                        </span>
+                        <span className={styles.selectedFooter}>
+                            <span className={styles.meta}>
+                                Q1 v1 · 4 passages
+                            </span>
+                            <Button
+                                variant="link"
+                                render={<span />}
+                                nativeButton={false}
+                                className={styles.openPassages}
+                                onClick={() => notify("Open passages · Q1 v1")}>
+                                Open passages
+                            </Button>
+                        </span>
+                    </GlassPanel>
+                }>
+                <MechanismRelations
+                    width={936}
+                    height={768}
+                    relations={[
+                        {
+                            id: "depends-on",
+                            path: "M99 4L4 4",
+                            viewport: { x: 239, y: 380, width: 99, height: 8 },
+                            filter: "drop-shadow(0 0 4px color-mix(in oklab,var(--brand-purple) 60%,transparent))",
+                        },
+                        {
+                            id: "enables",
+                            path: "M99 4L4 4",
+                            viewport: { x: 599, y: 380, width: 99, height: 8 },
+                            stroke: "var(--foreground)",
+                            strokeDasharray: "6 6",
+                        },
+                        {
+                            id: "unresolved",
+                            path: "M4 0L4 176",
+                            viewport: { x: 464, y: 152, width: 8, height: 176 },
+                            stroke: "var(--muted-foreground)",
+                            strokeWidth: 1.5,
+                            strokeDasharray: "4 5",
+                            arrow: false,
+                        },
+                        {
+                            id: "could-bypass",
+                            path: "M4 175L4 4",
+                            viewport: { x: 464, y: 441, width: 8, height: 175 },
+                            stroke: "var(--counter-evidence)",
+                        },
+                        {
+                            id: "contested",
+                            path: "M4 135L4 4",
+                            viewport: { x: 794, y: 433, width: 8, height: 135 },
+                            stroke: "var(--review-foreground)",
+                            strokeDasharray: "0.5 6",
+                        },
+                        {
+                            id: "selection",
+                            path: "M4 0L4 66",
+                            viewport: { x: 284, y: 288, width: 8, height: 66 },
+                            strokeWidth: 1.2,
+                            strokeDasharray: "2 4",
+                            arrow: false,
+                        },
+                    ]}
+                />
+                <MechanismNode
+                    kind="actor"
+                    label="Actor · insurers"
+                    className={styles.node}
+                    style={{ left: 38, top: 336 }}>
+                    Insurer-owned rules
+                </MechanismNode>
+                <MechanismNode
+                    kind="observed"
+                    label="Observed role · CCC"
+                    detail="Q1 · Q2 retained"
+                    className={styles.node}
+                    style={{ left: 338, top: 328 }}>
+                    Cross-party coordination
+                </MechanismNode>
+                <MechanismNode
+                    kind="participant"
+                    label="Actors · repairers"
+                    className={styles.node}
+                    style={{ left: 698, top: 336 }}>
+                    Network participation
+                </MechanismNode>
+                <MechanismNode
+                    kind="unknown"
+                    label="Decisive unknown"
+                    className={styles.node}
+                    style={{ left: 348, top: 72 }}>
+                    Who changes routing rules?
+                </MechanismNode>
+                <MechanismNode
+                    kind="threat"
+                    label="Possible threat"
+                    className={styles.node}
+                    style={{ left: 348, top: 616 }}>
+                    Insurer direct routing
+                </MechanismNode>
+                <MechanismNode
+                    kind="contested"
+                    label="Contested"
+                    className={styles.node}
+                    style={{ left: 698, top: 568 }}>
+                    Durable operational context
+                </MechanismNode>
+                <MechanismNode
+                    kind="outside"
+                    label="Outside this reading"
+                    className={styles.node}
+                    style={{ left: 38, top: 568 }}>
+                    Q4 · agent-led intake, left for follow-up
+                </MechanismNode>
+                <span
+                    className={styles.relation}
+                    style={{
+                        left: 248,
+                        top: 356,
+                        width: 80,
+                        color: "var(--accent-foreground)",
+                    }}>
+                    depends on
+                </span>
+                <span
+                    className={styles.relation}
+                    style={{ left: 616, top: 356, width: 64 }}>
+                    enables
+                </span>
+                <span
+                    className={styles.relation}
+                    style={{
+                        left: 480,
+                        top: 232,
+                        width: 80,
+                        textAlign: "left",
+                        color: "var(--muted-foreground)",
+                        fontWeight: 400,
+                    }}>
+                    unresolved
+                </span>
+                <span
+                    className={styles.relation}
+                    style={{
+                        left: 480,
+                        top: 520,
+                        width: 92,
+                        textAlign: "left",
+                        color: "var(--counter-evidence)",
+                    }}>
+                    could bypass
+                </span>
+                <span
+                    className={styles.relation}
+                    style={{
+                        left: 810,
+                        top: 484,
+                        width: 72,
+                        textAlign: "left",
+                        color: "var(--review-foreground)",
+                    }}>
+                    sustains
+                    <br />
+                    contested
+                </span>
+            </MechanismDiagram>
         </div>
     );
 }

@@ -11,6 +11,7 @@ export * from "./handoff";
 export * from "./hypothesis-node";
 export * from "./inventory-dock";
 export * from "./inventory-sheet";
+export * from "./mechanism-diagram";
 export * from "./mechanism-node";
 export * from "./outcome-card";
 export * from "./progress-timeline";
