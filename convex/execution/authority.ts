@@ -119,3 +119,28 @@ export async function recordMissionEvent(
         updatedAt: Date.now(),
     });
 }
+
+/** Invocation events share mission ordering when applicable; one-shot calls only need dossier ordering. */
+export async function recordInvocationEvent(
+    ctx: MutationCtx,
+    invocation: Doc<"agentInvocations">,
+    event: { kind: string; code?: string },
+) {
+    const fields = {
+        ...event,
+        invocationId: invocation._id,
+        cause: invocation.taskKey,
+    };
+    if (invocation.missionId) {
+        const mission = await ctx.db.get(invocation.missionId);
+        if (!mission || mission.runId !== invocation.runId)
+            throw executionError("mission_unavailable");
+        await recordMissionEvent(ctx, mission, fields);
+    } else {
+        await ctx.db.insert("agentExecutionEvents", {
+            ...fields,
+            runId: invocation.runId,
+            occurredAt: Date.now(),
+        });
+    }
+}

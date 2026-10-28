@@ -100,6 +100,18 @@ export const missionStatusValidator = v.union(
 );
 
 export const executionTables = {
+    agentInvocationPayloads: defineTable({
+        invocationId: v.id("agentInvocations"),
+        runId: v.id("researchRuns"),
+        version: v.literal(1),
+        part: v.union(v.literal("request"), v.literal("reply")),
+        state: v.union(v.literal("complete"), v.literal("incomplete")),
+        json: v.optional(v.string()),
+        contentHash: v.optional(v.string()),
+        sizeBytes: v.number(),
+        code: v.optional(v.string()),
+        createdAt: v.number(),
+    }).index("by_invocation_and_part", ["invocationId", "part"]),
     agentMissions: defineTable({
         runId: v.id("researchRuns"),
         corpusRevisionId: v.id("corpusRevisions"),
@@ -133,6 +145,7 @@ export const executionTables = {
         .index("by_run_and_objective_key", ["runId", "objectiveKey"])
         .index("by_run_and_status", ["runId", "status"]),
     agentInvocations: defineTable({
+        journalVersion: v.optional(v.literal(1)),
         missionId: v.optional(v.id("agentMissions")),
         runId: v.id("researchRuns"),
         corpusRevisionId: v.id("corpusRevisions"),
@@ -185,14 +198,16 @@ export const executionTables = {
         .index("by_mission_and_status", ["missionId", "status"])
         .index("by_invocation", ["invocationId"]),
     agentExecutionEvents: defineTable({
-        missionId: v.id("agentMissions"),
+        missionId: v.optional(v.id("agentMissions")),
         runId: v.id("researchRuns"),
-        sequence: v.number(),
+        sequence: v.optional(v.number()),
         kind: v.string(),
         cause: v.string(),
         invocationId: v.optional(v.id("agentInvocations")),
         requestId: v.optional(v.id("agentOperationRequests")),
         code: v.optional(v.string()),
         occurredAt: v.number(),
-    }).index("by_mission_and_sequence", ["missionId", "sequence"]),
+    })
+        .index("by_mission_and_sequence", ["missionId", "sequence"])
+        .index("by_run", ["runId"]),
 };

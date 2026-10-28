@@ -1,9 +1,16 @@
 import { internal } from "@convex/_generated/api";
+import type { ActionCtx } from "@convex/_generated/server";
 import {
     prepareQualificationInput,
     type SourceQualification,
 } from "@convex/domain/sourceQualification";
 import { SOURCE_COVERAGE_ROLES } from "@convex/domain/sourceSelectionPolicy";
+import { qualifySource } from "@convex/sourcePreparationActions";
+import {
+    type FunctionArgs,
+    type FunctionReturnType,
+    getFunctionName,
+} from "convex/server";
 import { afterEach, expect, test, vi } from "vitest";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
 
@@ -149,6 +156,18 @@ test("persists valid uncertainty once without semantic escalation", async () => 
         reportedCost: 0.0001,
     });
     expect(state.preparation?.modelAttemptCount).toBe(1);
+    const payloads = await t.run((ctx) =>
+        ctx.db.query("agentInvocationPayloads").collect(),
+    );
+    expect(
+        payloads.map((payload) => [payload.part, payload.state]).sort(),
+    ).toEqual([
+        ["reply", "complete"],
+        ["request", "complete"],
+    ]);
+    expect(
+        payloads.find((payload) => payload.part === "reply")?.json,
+    ).toContain("companyPassageKeys");
 });
 
 test("reads credentials from the current Node invocation after environment replacement", async () => {
@@ -1235,7 +1254,22 @@ test("an oversized document keeps bounded retrieved passages under the new captu
             sourceCaptureId: fixture.sourceCaptureId,
         },
     );
-    expect(result.status).toBe("qualified");
+    expect(
+        result.status,
+        JSON.stringify({
+            result,
+            captures: await fixture.t.run(async (ctx) =>
+                (await ctx.db.query("agentInvocationPayloads").collect()).map(
+                    ({ part, sizeBytes, state, code }) => ({
+                        part,
+                        sizeBytes,
+                        state,
+                        code,
+                    }),
+                ),
+            ),
+        }),
+    ).toBe("qualified");
     if (result.status !== "qualified") throw Error("Missing qualification");
     const task = await fixture.t.run((ctx) => ctx.db.get(result.taskId));
     expect(task?.output).toMatchObject({
@@ -1340,4 +1374,102 @@ test.each([
     expect(await t.run((ctx) => ctx.db.query("aiTaskResults").take(1))).toEqual(
         [],
     );
+});
+
+const qualificationHandler = qualifySource as typeof qualifySource & {
+    _handler(
+        ctx: ActionCtx,
+        args: FunctionArgs<
+            typeof internal.sourcePreparationActions.qualifySource
+        >,
+    ): Promise<
+        FunctionReturnType<
+            typeof internal.sourcePreparationActions.qualifySource
+        >
+    >;
+};
+
+test("a request journal persistence failure prevents external qualification dispatch", async () => {
+    const { t, preparationId, sourceCaptureId } = await capturedCandidate();
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    const request = vi.fn<typeof fetch>(async () => success());
+    vi.stubGlobal("fetch", request);
+    const result = await t.action(async (ctx) => {
+        const runMutation: typeof ctx.runMutation = async (ref, ...args) => {
+            if (getFunctionName(ref) === "execution/invocations:retainRequest")
+                throw new Error("Journal unavailable");
+            return ctx.runMutation(ref, ...args);
+        };
+        return qualificationHandler._handler(
+            { ...ctx, runMutation },
+            { preparationId, sourceCaptureId },
+        );
+    });
+    expect(result).toMatchObject({
+        status: "unavailable",
+        reasonCode: "journal_request_unavailable",
+    });
+    expect(request).not.toHaveBeenCalled();
+    const calls = await t.run((ctx) => ctx.db.query("providerCalls").collect());
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+        status: "failed",
+        dispatchOutcome: "not_dispatched",
+    });
+});
+
+test("a lost one-shot terminal acknowledgement keeps the journal and receipt without redispatch", async () => {
+    const { t, preparationId, sourceCaptureId, runId } =
+        await capturedCandidate();
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    const request = vi.fn<typeof fetch>(async () => success());
+    vi.stubGlobal("fetch", request);
+    await expect(
+        t.action(async (ctx) => {
+            const runMutation: typeof ctx.runMutation = async (
+                ref,
+                ...args
+            ) => {
+                const result = await ctx.runMutation(ref, ...args);
+                if (
+                    getFunctionName(ref) ===
+                    "execution/invocations:finishOneShot"
+                )
+                    throw new Error("Lost terminal acknowledgement");
+                return result;
+            };
+            return qualificationHandler._handler(
+                { ...ctx, runMutation },
+                { preparationId, sourceCaptureId },
+            );
+        }),
+    ).rejects.toThrow("Lost terminal acknowledgement");
+    expect(
+        await t.action(internal.sourcePreparationActions.qualifySource, {
+            preparationId,
+            sourceCaptureId,
+        }),
+    ).toMatchObject({
+        status: "unavailable",
+        reasonCode: "result_already_recorded",
+    });
+    expect(request).toHaveBeenCalledOnce();
+    const state = await t.run(async (ctx) => ({
+        invocation: await ctx.db.query("agentInvocations").unique(),
+        payloads: await ctx.db.query("agentInvocationPayloads").collect(),
+        calls: await ctx.db.query("providerCalls").collect(),
+        run: await ctx.db.get(runId),
+    }));
+    expect(state.invocation).toMatchObject({ status: "returned" });
+    expect(state.payloads.map((payload) => payload.state)).toEqual([
+        "complete",
+        "complete",
+    ]);
+    expect(state.calls).toHaveLength(1);
+    expect(state.calls[0]).toMatchObject({ status: "succeeded" });
+    expect(state.run?.sourcePreparationBudget).toMatchObject({
+        work: 1,
+        reserved: 0,
+        dispatches: 1,
+    });
 });

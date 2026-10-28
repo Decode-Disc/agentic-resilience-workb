@@ -13,7 +13,7 @@ import { missionRoutes } from "@convex/integrations/sourceQualificationConfig";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
-import { executionFailureCode } from "./authority";
+import { executionError, executionFailureCode } from "./authority";
 import {
     invocationReplyValidator,
     invocationResponseValidator,
@@ -93,13 +93,27 @@ export const invoke = internalAction({
             });
             return reply;
         };
-        if (invocation.provenance === "simulation")
+        if (invocation.provenance === "simulation") {
+            const recorded = await ctx.runMutation(
+                internal.execution.invocations.retainRequest,
+                {
+                    ...args,
+                    requestJson: JSON.stringify({
+                        version: 1,
+                        provenance: "simulation",
+                        input: JSON.parse(invocation.inputJson),
+                    }),
+                },
+            );
+            if (recorded.kind === "blocked")
+                throw executionError(recorded.code);
             return retainReply({
                 response: await ctx.runQuery(
                     internal.execution.simulation.invoke,
                     args,
                 ),
             });
+        }
         const route = missionRoutes[mission.definitionId];
         if (!route)
             return retainReply({
@@ -143,12 +157,14 @@ export const invoke = internalAction({
                 FunctionArgs<typeof internal.providerCalls.recordAttempt>,
                 keyof typeof attempt
             >,
+            observableReplyJson?: string,
         ) => {
             await ctx.runMutation(
                 internal.execution.invocations.recordModelReply,
                 {
                     attempt: { ...attempt, ...receipt },
                     reply,
+                    ...(observableReplyJson ? { observableReplyJson } : {}),
                 },
             );
             return reply;
@@ -198,6 +214,18 @@ export const invoke = internalAction({
             route,
             dependencies: {
                 apiKey: process.env.OPENROUTER_API_KEY ?? "",
+                beforeDispatch: async (requestJson) => {
+                    const retained = await ctx.runMutation(
+                        internal.execution.invocations.retainRequest,
+                        { ...args, requestJson },
+                    );
+                    if (retained.kind === "blocked")
+                        throw executionError(retained.code);
+                    await ctx.runQuery(
+                        internal.execution.invocations.authorizeDispatch,
+                        args,
+                    );
+                },
                 signal: AbortSignal.timeout(
                     Math.max(1, mission.deadlineAt - Date.now()),
                 ),
@@ -237,28 +265,34 @@ export const invoke = internalAction({
                       errorCode: result.errorCode,
                       diagnostic: result.outputDiagnostic,
                   };
-        return recordReply(received.reply, {
-            status: received.errorCode ? "failed" : "succeeded",
-            dispatchOutcome: result.dispatchOutcome,
-            latencyMs: result.latencyMs,
-            reportedCost: result.reportedCost,
-            usage: {
-                model: result.model,
-                resolvedModel: result.resolvedModel,
-                provider: result.provider,
-                inputTokens: result.inputTokens,
-                outputTokens: result.outputTokens,
-                reasoningTokens: result.reasoningTokens,
-                cachedInputTokens: result.cachedInputTokens,
+        return recordReply(
+            received.reply,
+            {
+                status: received.errorCode ? "failed" : "succeeded",
+                dispatchOutcome: result.dispatchOutcome,
+                latencyMs: result.latencyMs,
+                reportedCost: result.reportedCost,
+                usage: {
+                    model: result.model,
+                    resolvedModel: result.resolvedModel,
+                    provider: result.provider,
+                    inputTokens: result.inputTokens,
+                    outputTokens: result.outputTokens,
+                    reasoningTokens: result.reasoningTokens,
+                    cachedInputTokens: result.cachedInputTokens,
+                },
+                ...(received.errorCode
+                    ? {
+                          errorCode: received.errorCode,
+                          retryable:
+                              result.status === "failed"
+                                  ? result.retryable
+                                  : true,
+                          diagnostic: received.diagnostic,
+                      }
+                    : {}),
             },
-            ...(received.errorCode
-                ? {
-                      errorCode: received.errorCode,
-                      retryable:
-                          result.status === "failed" ? result.retryable : true,
-                      diagnostic: received.diagnostic,
-                  }
-                : {}),
-        });
+            result.observableReplyJson,
+        );
     },
 });

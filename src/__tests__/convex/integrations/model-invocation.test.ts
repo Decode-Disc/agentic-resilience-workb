@@ -1,8 +1,86 @@
 import { savedMaterialInspectionDefinition } from "@convex/domain/savedMaterialInspection";
-import { invokeDeferredAgentTurn } from "@convex/integrations/modelInvocation";
+import {
+    invokeDeferredAgentTurn,
+    invokeOneShot,
+} from "@convex/integrations/modelInvocation";
 import { v } from "convex/values";
 import { expect, test, vi } from "vitest";
+import { z } from "zod";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
+
+test("journals the prepared SDK request before dispatch and the original reply before parsing", async () => {
+    const events: string[] = [];
+    let requestJson = "";
+    let wireJson = "";
+    const result = await invokeOneShot({
+        route: { model: "test/journal", provider: "test-provider" },
+        dependencies: {
+            apiKey: "secret-not-for-the-journal",
+            beforeDispatch: async (snapshot: string) => {
+                requestJson = snapshot;
+                events.push("journal");
+            },
+            fetch: async (_url, init) => {
+                wireJson = String(init?.body);
+                events.push("dispatch");
+                return new Response(
+                    JSON.stringify({
+                        id: "journal-response",
+                        created: 1,
+                        model: "test/journal",
+                        choices: [
+                            {
+                                index: 0,
+                                message: {
+                                    role: "assistant",
+                                    content:
+                                        '{ "answer" : "original wording" }',
+                                    reasoning: "private reasoning",
+                                },
+                                finish_reason: "stop",
+                            },
+                        ],
+                        usage: {
+                            prompt_tokens: 10,
+                            completion_tokens: 8,
+                            total_tokens: 18,
+                        },
+                    }),
+                    { headers: { "Content-Type": "application/json" } },
+                );
+            },
+        },
+        instructions: "Use the retained evidence.",
+        prompt: "What does it establish?",
+        schema: z.object({ answer: z.string() }),
+        schemaName: "journal_answer",
+    });
+    expect(events).toEqual(["journal", "dispatch"]);
+    const snapshot = JSON.parse(requestJson);
+    const wire = JSON.parse(wireJson);
+    expect(snapshot.input.temperature).toBe(wire.temperature);
+    expect(snapshot.input.maxOutputTokens).toBe(wire.max_tokens);
+    expect(snapshot.input.responseFormat.schema).toEqual(
+        wire.response_format.json_schema.schema,
+    );
+    expect(snapshot.input.prompt[0]).toMatchObject({
+        role: wire.messages[0].role,
+        content: wire.messages[0].content[0].text,
+    });
+    expect(snapshot.input.prompt.at(-1).content).toEqual([
+        { type: "text", text: wire.messages.at(-1).content },
+    ]);
+    expect(snapshot.settings.provider).toEqual(wire.provider);
+    expect(requestJson).toContain("Use the retained evidence.");
+    expect(requestJson).toContain("What does it establish?");
+    expect(requestJson).toContain('"answer"');
+    expect(requestJson).not.toContain("secret-not-for-the-journal");
+    expect(result.status).toBe("succeeded");
+    expect(JSON.parse(result.observableReplyJson ?? "null")).toMatchObject({
+        content: [{ type: "text", text: '{ "answer" : "original wording" }' }],
+    });
+    expect(result.observableReplyJson).not.toContain("private reasoning");
+});
 
 test("blocks a deferred agent turn when no authorized route exists", async () => {
     const request = vi.fn<typeof fetch>();
@@ -21,7 +99,36 @@ test("blocks a deferred agent turn when no authorized route exists", async () =>
     expect(request).not.toHaveBeenCalled();
 });
 
+test("a failed request checkpoint prevents dispatch and returns an explicit non-dispatch outcome", async () => {
+    const request = vi.fn<typeof fetch>();
+    const result = await invokeDeferredAgentTurn({
+        route: {
+            model: "test/journal",
+            provider: "test-provider",
+            authorizedForAgent: true,
+        },
+        dependencies: {
+            apiKey: "test-only-key",
+            fetch: request,
+            beforeDispatch: async () => {
+                throw new Error("checkpoint unavailable");
+            },
+        },
+        instructions: "Inspect.",
+        prompt: "Continue.",
+        operations: {},
+    });
+    expect(result).toMatchObject({
+        status: "failed",
+        errorCode: "journal_request_unavailable",
+        dispatchOutcome: "not_dispatched",
+        retryable: false,
+    });
+    expect(request).not.toHaveBeenCalled();
+});
+
 test("returns typed tool requests for persisted dispatch without an SDK loop", async () => {
+    let requestSnapshot = "";
     const body = JSON.stringify({
         id: "deferred-tool-call",
         created: 1,
@@ -82,7 +189,13 @@ test("returns typed tool requests for persisted dispatch without an SDK loop", a
 
     const result = await invokeDeferredAgentTurn({
         route,
-        dependencies: { apiKey: "test-only-key", fetch: request },
+        dependencies: {
+            apiKey: "test-only-key",
+            fetch: request,
+            beforeDispatch: async (json) => {
+                requestSnapshot = json;
+            },
+        },
         instructions: "Inspect the approved material.",
         prompt: "Find pricing evidence.",
         operations,
@@ -105,6 +218,23 @@ test("returns typed tool requests for persisted dispatch without an SDK loop", a
     expect(result.requests[1]?.inputJson).toBe('{"requested":true}');
     expect(request).toHaveBeenCalledOnce();
     const requestBody = JSON.parse(String(request.mock.calls[0]?.[1]?.body));
+    expect(JSON.parse(requestSnapshot).input.tools[0].inputSchema).toEqual(
+        requestBody.tools[0].function.parameters,
+    );
+    expect(JSON.parse(result.observableReplyJson ?? "null").content).toEqual([
+        {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "search_material",
+            input: '{"query":"pricing"}',
+        },
+        {
+            type: "tool-call",
+            toolCallId: "call-unlisted",
+            toolName: "unlisted_operation",
+            input: '{"requested":true}',
+        },
+    ]);
     expect(requestBody).toMatchObject({
         model: route.model,
         temperature: 0,
@@ -316,4 +446,46 @@ test("a response containing only invalid tool calls cannot trigger an SDK repair
     expect(result.requests[0]).toMatchObject({
         name: "unlisted_operation",
     });
+});
+
+test("invalid structured output retains the original observable reply before schema rejection", async () => {
+    const original = ' { "wrong_field": true } ';
+    const result = await invokeOneShot({
+        route: { model: "test/journal", provider: "test-provider" },
+        instructions: "Inspect.",
+        prompt: "Answer.",
+        schema: z.object({ answer: z.string() }),
+        schemaName: "answer",
+        dependencies: {
+            apiKey: "test-only-key",
+            fetch: async () =>
+                new Response(
+                    JSON.stringify({
+                        id: "invalid-journal",
+                        created: 1,
+                        model: "test/journal",
+                        choices: [
+                            {
+                                index: 0,
+                                message: {
+                                    role: "assistant",
+                                    content: original,
+                                },
+                                finish_reason: "stop",
+                            },
+                        ],
+                        usage: {
+                            prompt_tokens: 1,
+                            completion_tokens: 1,
+                            total_tokens: 2,
+                        },
+                    }),
+                    { headers: { "Content-Type": "application/json" } },
+                ),
+        },
+    });
+    expect(result.status).toBe("failed");
+    expect(JSON.parse(result.observableReplyJson ?? "null").content).toEqual([
+        { type: "text", text: original },
+    ]);
 });
