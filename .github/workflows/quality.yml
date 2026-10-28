@@ -55,5 +55,5 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
-      - name: Compare reusable components with frozen design references
+      - name: Check reusable component interactions
         run: pnpm workbench-ui:check
