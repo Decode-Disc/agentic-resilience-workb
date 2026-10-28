@@ -2,13 +2,14 @@ import type { Id } from "@convex/_generated/dataModel";
 import { internalQuery, type QueryCtx } from "@convex/_generated/server";
 import { v } from "convex/values";
 import { validate } from "convex-helpers/validators";
+import { getAgentDefinition } from "./agentCatalog";
 import { executionError, requireMissionAuthority } from "./authority";
 import {
     invocationResponseValidator,
     MAX_BATCH_REQUESTS,
     MAX_CONTEXT_BYTES,
-} from "./contracts";
-import { getAgentDefinition } from "./definitions";
+} from "./executionProtocol";
+import { missionScope } from "./missionData";
 
 /** Required context is assembled from retained authority and work, never from an optional memory-saving tool. */
 export async function buildMissionContext(
@@ -16,7 +17,7 @@ export async function buildMissionContext(
     missionId: Id<"agentMissions">,
     expectedGeneration: number,
 ) {
-    const { mission, run, revision } = await requireMissionAuthority(
+    const { mission, run } = await requireMissionAuthority(
         ctx,
         missionId,
         expectedGeneration,
@@ -25,7 +26,7 @@ export async function buildMissionContext(
         mission.definitionId,
         mission.definitionVersion,
     );
-    const domainContext = await definition.context(ctx, mission, run, revision);
+    const domainContext = await definition.context(ctx, mission, run);
     if (domainContext.kind === "blocked") return domainContext;
     const previousInvocation = mission.lastInvocationId
         ? await ctx.db.get(mission.lastInvocationId)
@@ -83,7 +84,7 @@ export async function buildMissionContext(
             definition: mission.definitionId,
             objective: mission.objectiveKey,
             runId: run._id,
-            corpusRevisionId: revision._id,
+            scope: missionScope(mission),
         },
         ...domainContext.context,
         constraints: {

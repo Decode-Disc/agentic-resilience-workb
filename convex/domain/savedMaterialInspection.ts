@@ -1,28 +1,53 @@
 import { internal } from "@convex/_generated/api";
-import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { Doc } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
-import type {
-    operationOutcomeValidator,
-    requestInputValidator,
-} from "@convex/execution/contracts";
+import type { AgentDefinition } from "@convex/execution/agentDefinition";
 import { executionError, executionFailureCode } from "@convex/execution/errors";
+import type { operationOutcomeValidator } from "@convex/execution/executionProtocol";
+import { missionScope, missionState } from "@convex/execution/missionData";
 import type { Infer } from "convex/values";
+import { validate } from "convex-helpers/validators";
 import { executeSavedMaterialOperation } from "./savedMaterial";
 import {
-    consultMissionStateInputValidator,
     readInContextInputValidator,
     SAVED_MATERIAL_DEFINITION_ID,
     SAVED_MATERIAL_DEFINITION_VERSION,
-    type savedMaterialCompletionValidator,
+    savedMaterialCompletionValidator,
     savedMaterialOperationValidator,
+    savedMaterialResultValidator,
+    savedMaterialScopeValidator,
+    savedMaterialStateValidator,
     searchAvailableMaterialInputValidator,
 } from "./savedMaterialOperations";
+import { savedMaterialSimulation } from "./savedMaterialSimulation";
 import { readPreparationSourceDecision } from "./sourcePreparationAuthority";
 
 const MAX_INSPECTED_CAPTURES = 64;
 
+/** The approved-corpus prerequisite belongs to inspection, never to every kind of agent. */
+export async function requireSavedMaterialScope(
+    ctx: QueryCtx,
+    mission: Doc<"agentMissions">,
+    run?: Doc<"researchRuns">,
+) {
+    const scope = missionScope(mission);
+    if (scope.kind !== "saved_material_inspection_v1")
+        throw executionError("operation_not_allowed");
+    const owner = run ?? (await ctx.db.get(mission.runId));
+    const revision = await ctx.db.get(scope.corpusRevisionId);
+    if (
+        revision?.runId !== mission.runId ||
+        revision.status !== "approved" ||
+        owner?.activeCorpusRevisionId !== revision._id
+    )
+        throw executionError("corpus_not_approved");
+    return revision;
+}
+
 /** Owns inspection meaning; the shared executor owns lifecycle, persistence and generation fences. */
-export const savedMaterialInspectionDefinition = {
+export const savedMaterialInspectionDefinition: AgentDefinition & {
+    id: "saved_material_inspection_v1";
+} = {
     id: SAVED_MATERIAL_DEFINITION_ID,
     version: SAVED_MATERIAL_DEFINITION_VERSION,
     authority: "inspect_approved_saved_material_only",
@@ -34,29 +59,58 @@ export const savedMaterialInspectionDefinition = {
         "Do not make claims, decide source approval, or assert analyst authority. Keep workingNotes limited to tentative investigation notes, never facts without an inspected quotation.",
         'When inspection is complete, return only strict JSON matching {"kind":"complete","captureIds":[...],"workingNotes":"..."}. Use only capture IDs returned with inspected material.',
     ].join("\n"),
-    operationValidator: savedMaterialOperationValidator,
-    executeOperation: executeSavedMaterialOperation,
+    scopeValidator: savedMaterialScopeValidator,
+    stateValidator: savedMaterialStateValidator,
+    resultValidator: savedMaterialResultValidator,
+    completionValidator: savedMaterialCompletionValidator,
+    async requireAuthority(ctx, mission, run) {
+        await requireSavedMaterialScope(ctx, mission, run);
+    },
+    async executeOperation(ctx, args) {
+        if (!validate(savedMaterialOperationValidator, args.input))
+            return { kind: "refused", code: "operation_not_allowed" };
+        return executeSavedMaterialOperation(ctx, {
+            ...args,
+            input: args.input,
+        });
+    },
+    validateOutcome(request, outcome) {
+        const expected =
+            request.pin?.kind === "saved_material_inspection_v1"
+                ? request.pin.expectedCaptureId
+                : request.expectedCaptureId;
+        return outcome.kind === "success" &&
+            "captureId" in outcome &&
+            outcome.captureId &&
+            outcome.captureId !== expected
+            ? { kind: "refused", code: "capture_identity_conflict" }
+            : outcome;
+    },
+    simulate: savedMaterialSimulation,
     operations: {
-        consult_mission_state: {
-            description:
-                "Read the persisted mission state and one bounded page of observable history.",
-            inputValidator: consultMissionStateInputValidator,
-        },
         search_available_material: {
+            version: 1,
             description:
                 "Search one source in the mission's approved stored capture and return matching exact quotations.",
             inputValidator: searchAvailableMaterialInputValidator,
         },
         read_in_context: {
+            version: 1,
             description:
                 "Read one exact indexed quotation from an approved stored capture with bounded surrounding context.",
             inputValidator: readInContextInputValidator,
         },
     },
-    initialState(corpusRevisionId: Id<"corpusRevisions">) {
+    initialState(scope) {
+        if (scope.kind !== "saved_material_inspection_v1")
+            throw executionError("mission_contract_invalid");
+        const { corpusRevisionId } = scope;
         return {
             objectiveKey: `saved-material:${corpusRevisionId}`,
-            inspectedCaptureIds: [] as Id<"sourceCaptures">[],
+            state: {
+                kind: "saved_material_inspection_v1",
+                inspectedCaptureIds: [],
+            },
             obligations: ["inspect_saved_material"],
         };
     },
@@ -64,8 +118,11 @@ export const savedMaterialInspectionDefinition = {
         ctx: QueryCtx,
         mission: Doc<"agentMissions">,
         run: Doc<"researchRuns">,
-        revision: Doc<"corpusRevisions">,
     ) {
+        const revision = await requireSavedMaterialScope(ctx, mission, run);
+        const state = missionState(mission);
+        if (state.kind !== "saved_material_inspection_v1")
+            throw executionError("mission_contract_invalid");
         const heads = await ctx.db
             .query("sourceReviewItems")
             .withIndex("by_revision_decision_and_order", (q) =>
@@ -110,24 +167,19 @@ export const savedMaterialInspectionDefinition = {
                     approvedAt: revision.approvedAt ?? null,
                 },
                 activeWork: {
-                    inspectedCaptureIds: mission.inspectedCaptureIds,
+                    inspectedCaptureIds: state.inspectedCaptureIds,
                 },
             },
         };
     },
-    async pinOperation(
-        ctx: QueryCtx,
-        mission: Doc<"agentMissions">,
-        input: Infer<typeof requestInputValidator>,
-    ) {
-        if (input.kind === "invalid" || input.kind === "consult_mission_state")
+    async pinOperation(ctx: QueryCtx, mission: Doc<"agentMissions">, input) {
+        if (input.kind === "invalid")
             return {
                 kind: "available" as const,
-                pin: {} as {
-                    expectedCaptureId?: Id<"sourceCaptures">;
-                    expectedContentHash?: string;
-                },
+                pin: { kind: "saved_material_inspection_v1" },
             };
+        if (!validate(savedMaterialOperationValidator, input))
+            return { kind: "unavailable", code: "operation_not_allowed" };
         if (!ctx.db.normalizeId("sources", input.sourceId))
             throw executionError("invalid_operation_input");
         const allowed = await ctx.runQuery(
@@ -143,24 +195,25 @@ export const savedMaterialInspectionDefinition = {
         return {
             kind: "available" as const,
             pin: {
+                kind: "saved_material_inspection_v1",
                 expectedCaptureId: allowed.capture._id,
                 expectedContentHash: allowed.capture.contentHash,
             },
         };
     },
-    reuseScope(
-        mission: Doc<"agentMissions">,
-        input: Infer<typeof requestInputValidator>,
-    ) {
-        return input.kind === "consult_mission_state"
-            ? { stateVersion: mission.nextEventSequence }
-            : {};
-    },
     progress(
         mission: Doc<"agentMissions">,
         outcome: Infer<typeof operationOutcomeValidator>,
-    ): Partial<Doc<"agentMissions">> {
-        if (outcome.kind !== "success" || !outcome.captureId) return {};
+    ) {
+        const state = missionState(mission);
+        if (state.kind !== "saved_material_inspection_v1")
+            throw executionError("mission_contract_invalid");
+        if (
+            outcome.kind !== "success" ||
+            !("captureId" in outcome) ||
+            !outcome.captureId
+        )
+            return {};
         const progressKeys = [
             ...new Set([
                 ...mission.progressKeys,
@@ -170,22 +223,30 @@ export const savedMaterialInspectionDefinition = {
         ];
         if (progressKeys.length <= mission.progressKeys.length) return {};
         if (progressKeys.length > 256)
-            return { status: "blocked", blockCode: "inspection_capacity" };
+            return { blockCode: "inspection_capacity" };
         return {
             progressKeys,
-            inspectedCaptureIds: [
-                ...new Set([...mission.inspectedCaptureIds, outcome.captureId]),
-            ],
+            state: {
+                kind: "saved_material_inspection_v1",
+                inspectedCaptureIds: [
+                    ...new Set([
+                        ...state.inspectedCaptureIds,
+                        outcome.captureId,
+                    ]),
+                ],
+            },
             obligations: mission.obligations.filter(
                 (obligation) => obligation !== "inspect_saved_material",
             ),
         };
     },
-    async complete(
-        ctx: MutationCtx,
-        mission: Doc<"agentMissions">,
-        response: Infer<typeof savedMaterialCompletionValidator>,
-    ) {
+    async complete(ctx: MutationCtx, mission: Doc<"agentMissions">, response) {
+        const state = missionState(mission);
+        if (
+            state.kind !== "saved_material_inspection_v1" ||
+            !("captureIds" in response)
+        )
+            throw executionError("mission_contract_invalid");
         if (
             response.captureIds.length > MAX_INSPECTED_CAPTURES ||
             new Set(response.captureIds).size !== response.captureIds.length
@@ -198,7 +259,7 @@ export const savedMaterialInspectionDefinition = {
             mission.obligations.length ||
             !response.captureIds.length ||
             response.captureIds.some(
-                (id) => !mission.inspectedCaptureIds.includes(id),
+                (id) => !state.inspectedCaptureIds.includes(id),
             )
         )
             return {
@@ -243,7 +304,10 @@ export const savedMaterialInspectionDefinition = {
         }
         return {
             kind: "completed" as const,
-            completionRefs: response.captureIds,
+            result: {
+                kind: "saved_material_inspection_v1",
+                captureIds: response.captureIds,
+            },
         };
     },
-} as const;
+};

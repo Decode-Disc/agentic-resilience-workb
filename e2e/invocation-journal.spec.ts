@@ -16,7 +16,8 @@ for (const viewport of [
     { width: 1440, height: 1000 },
     { width: 390, height: 844 },
 ]) {
-    test(`administrator inspects the simulated journal after reconnection at ${viewport.width}px`, async ({
+    for (const definition of ["inspection", "validation"] as const) {
+    test(`administrator inspects the ${definition} journal after reconnection at ${viewport.width}px`, async ({
         page,
         browser,
     }) => {
@@ -35,8 +36,8 @@ for (const viewport of [
         try {
             await admitAnalyst(analystPage);
             const missionId = runConvexJson<string>(
-                "execution/fixtures:start",
-                { fixtureKey: `journal-${viewport.width}` },
+                definition === "inspection" ? "execution/fixtures:start" : "execution/fixtures:startValidation",
+                { fixtureKey: `journal-${definition}-${viewport.width}` },
             );
             const inspect = () =>
                 runConvexJson<Snapshot>("execution/fixtures:inspect", {
@@ -100,7 +101,7 @@ for (const viewport of [
             await page.keyboard.press("Enter");
             const payload = journal.locator("pre");
             await expect(payload).toContainText('"provenance":"simulation"');
-            await expect(payload).toContainText("availableMaterials");
+            await expect(payload).toContainText(definition === "inspection" ? "availableMaterials" : "validationValues");
             await payload.focus();
             await expect(payload).toBeFocused();
             expect((await payload.textContent())?.length).toBeGreaterThan(1000);
@@ -116,7 +117,7 @@ for (const viewport of [
                 .getByRole("button", { name: "Reply snapshot", exact: true })
                 .click();
             await expect(payload).toContainText('"response"');
-            await expect(payload).not.toContainText("availableMaterials");
+            await expect(payload).not.toContainText(definition === "inspection" ? "availableMaterials" : "validationValues");
             const more = journal.getByRole("button", {
                 name: "Load more events",
                 exact: true,
@@ -136,7 +137,7 @@ for (const viewport of [
                 })
                 .click();
             await expect(journal.locator("pre")).toContainText(
-                '"kind": "consult_mission_state"',
+                definition === "inspection" ? '"kind": "consult_mission_state"' : '"kind": "check_fixture_value"',
             );
             await expect(journal.locator("pre")).toContainText(
                 '"kind": "success"',
@@ -176,4 +177,6 @@ for (const viewport of [
             await analystContext.close();
         }
     });
+}
+
 }

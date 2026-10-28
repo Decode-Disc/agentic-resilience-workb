@@ -57,7 +57,7 @@ import {
     workflowStepKeyValidator,
     workflowStepStateValidator,
 } from "./domain/validators";
-import { executionTables } from "./execution/contracts";
+import { executionTables } from "./execution/schema";
 import { SOURCE_EMBEDDING_DIMENSIONS } from "./resourceLimits";
 import { preparationStudyEnvelopeValidator } from "./sourcePreparationStudyPolicy";
 

@@ -41,7 +41,7 @@ test("native dispatch persists exact retained reading once and continuation rece
     expect(outcome.kind).toBe("success");
     if (outcome.kind !== "success")
         throw new Error("Expected retained reading");
-    expect(outcome.captureId).toBe(captureId);
+    expect(outcome).toMatchObject({ captureId });
     expect(outcome.valueJson).toContain(
         "ServiceNow provides workflow software through its platform.",
     );
@@ -65,7 +65,10 @@ test("native dispatch persists exact retained reading once and continuation rece
         expect.objectContaining({ requestId, outcome }),
     ]);
     expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
-        inspectedCaptureIds: [captureId],
+        state: {
+            kind: "saved_material_inspection_v1",
+            inspectedCaptureIds: [captureId],
+        },
         obligations: [],
     });
     expect(text).toContain("ServiceNow provides");

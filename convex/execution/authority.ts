@@ -1,8 +1,11 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
+import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { runMatchesWorkspace, workspaceForVisitor } from "@convex/runWorkspace";
-import { getAgentDefinition } from "./definitions";
+import { validate } from "convex-helpers/validators";
+import { getAgentDefinition } from "./agentCatalog";
 import { executionError } from "./errors";
+import { missionScope, missionState } from "./missionData";
 
 export { executionError, executionFailureCode } from "./errors";
 
@@ -16,7 +19,11 @@ export function canAdoptRetainedResponse(
         invocation.missionId === mission._id &&
         invocation.runId === mission.runId &&
         invocation.definitionVersion === mission.definitionVersion &&
-        invocation.corpusRevisionId === mission.corpusRevisionId
+        (invocation.scopeKey === undefined
+            ? !("protocolVersion" in mission) &&
+              invocation.corpusRevisionId === mission.corpusRevisionId
+            : invocation.scopeKey ===
+              sha256Hex(stableStringify(missionScope(mission))))
     );
 }
 
@@ -24,7 +31,6 @@ export function canAdoptRetainedResponse(
 export async function requireRunAuthority(
     ctx: QueryCtx,
     runId: Id<"researchRuns">,
-    corpusRevisionId: Id<"corpusRevisions">,
     expectedGeneration: number,
 ) {
     const run = await ctx.db.get(runId);
@@ -57,14 +63,7 @@ export async function requireRunAuthority(
         .take(2);
     if (active.length !== 1 || active[0]?._id !== runId)
         throw executionError("execution_slot_unavailable");
-    const revision = await ctx.db.get(corpusRevisionId);
-    if (
-        revision?.runId !== runId ||
-        revision.status !== "approved" ||
-        run.activeCorpusRevisionId !== corpusRevisionId
-    )
-        throw executionError("corpus_not_approved");
-    return { run, revision, visitor };
+    return { run, visitor };
 }
 
 export async function requireMissionAuthority(
@@ -74,10 +73,9 @@ export async function requireMissionAuthority(
 ) {
     const mission = await ctx.db.get(missionId);
     if (!mission) throw executionError("mission_unavailable");
-    const { run, revision, visitor } = await requireRunAuthority(
+    const { run, visitor } = await requireRunAuthority(
         ctx,
         mission.runId,
-        mission.corpusRevisionId,
         expectedGeneration,
     );
     if (
@@ -85,12 +83,25 @@ export async function requireMissionAuthority(
         mission.generation !== expectedGeneration
     )
         throw executionError("stale_execution");
-    getAgentDefinition(mission.definitionId, mission.definitionVersion);
+    const definition = getAgentDefinition(
+        mission.definitionId,
+        mission.definitionVersion,
+    );
+    const scope = missionScope(mission);
+    const state = missionState(mission);
+    if (
+        scope.kind !== definition.id ||
+        state.kind !== definition.id ||
+        !validate(definition.scopeValidator, scope, { db: ctx.db }) ||
+        !validate(definition.stateValidator, state, { db: ctx.db })
+    )
+        throw executionError("mission_contract_invalid");
+    await definition.requireAuthority(ctx, mission, run);
     if (mission.deadlineAt <= Date.now())
         throw executionError("execution_deadline");
     if (["blocked", "cancelled", "completed"].includes(mission.status))
         throw executionError(mission.blockCode ?? `mission_${mission.status}`);
-    return { mission, run, revision };
+    return { mission, run };
 }
 
 /** The event sequence and its transition commit together, without a second event-sourced state owner. */

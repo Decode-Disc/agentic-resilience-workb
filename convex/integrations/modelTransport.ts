@@ -2,8 +2,8 @@
 
 import type { Doc } from "@convex/_generated/dataModel";
 import { providerRetryAfterAt } from "@convex/domain/sourcePreparationAuthority";
-import type { AgentOperationDefinition } from "@convex/execution/contracts";
 import { executionFailureCode } from "@convex/execution/errors";
+import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import { MAX_PREPARATION_DIAGNOSTIC_BYTES } from "@convex/resourceLimits";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { ToolSet } from "ai";
@@ -22,13 +22,13 @@ import {
 } from "ai";
 import { convexToZod } from "convex-helpers/server/zod4";
 import { type ZodType, z } from "zod";
-import type { SourceQualificationRoute } from "./sourceQualificationConfig";
+import type { ModelRoute } from "./modelRouting";
 import {
-    QUALIFICATION_ATTEMPT_TIMEOUT_MS,
-    QUALIFICATION_MAX_INPUT_PRICE_PER_MILLION,
-    QUALIFICATION_MAX_OUTPUT_PRICE_PER_MILLION,
-    QUALIFICATION_MAX_OUTPUT_TOKENS,
-} from "./sourceQualificationConfig";
+    MODEL_ATTEMPT_TIMEOUT_MS,
+    MODEL_MAX_INPUT_PRICE_PER_MILLION,
+    MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
+    MODEL_MAX_OUTPUT_TOKENS,
+} from "./modelRouting";
 
 export type AttemptReceipt = {
     observableReplyJson?: string;
@@ -221,8 +221,8 @@ function createRoutedModel(
             require_parameters: true,
             allow_fallbacks: false,
             max_price: {
-                prompt: QUALIFICATION_MAX_INPUT_PRICE_PER_MILLION,
-                completion: QUALIFICATION_MAX_OUTPUT_PRICE_PER_MILLION,
+                prompt: MODEL_MAX_INPUT_PRICE_PER_MILLION,
+                completion: MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
             },
         },
         reasoning: { enabled: false, effort: "none" as const, exclude: true },
@@ -449,7 +449,7 @@ function toolHasExecuteCallback(candidate: unknown): boolean {
 
 /** Performs one bounded structured-output attempt; orchestration owns fallback and persistence. */
 export async function invokeOneShot<T>(args: {
-    route: SourceQualificationRoute;
+    route: ModelRoute;
     dependencies: AttemptDependencies;
     instructions: string;
     prompt: string;
@@ -471,10 +471,10 @@ export async function invokeOneShot<T>(args: {
                 schema: args.schema,
                 name: args.schemaName,
             }),
-            maxOutputTokens: QUALIFICATION_MAX_OUTPUT_TOKENS,
+            maxOutputTokens: MODEL_MAX_OUTPUT_TOKENS,
             temperature: 0,
             maxRetries: 0,
-            timeout: QUALIFICATION_ATTEMPT_TIMEOUT_MS,
+            timeout: MODEL_ATTEMPT_TIMEOUT_MS,
             abortSignal: dependencies.signal,
         });
         const receipt = createAttemptReceipt(route, state, startedAt, result);
@@ -549,7 +549,10 @@ function modelInputSchema<Schema extends z.ZodObject>(
 }
 
 function createAgentTools(
-    operations: Record<string, AgentOperationDefinition>,
+    operations: Record<
+        string,
+        Pick<AgentOperationDefinition, "description" | "inputValidator">
+    >,
 ): ToolSet {
     return Object.fromEntries(
         Object.entries(operations).map(([name, operation]) => [
@@ -571,7 +574,10 @@ function createAgentTools(
 export async function agentInputByteLength(args: {
     instructions: string;
     prompt: string;
-    operations: Record<string, AgentOperationDefinition>;
+    operations: Record<
+        string,
+        Pick<AgentOperationDefinition, "description" | "inputValidator">
+    >;
 }): Promise<number> {
     const tools = await Promise.all(
         Object.entries(createAgentTools(args.operations)).map(
@@ -598,7 +604,10 @@ export async function invokeDeferredAgentTurn(args: {
     dependencies: AttemptDependencies;
     instructions: string;
     prompt: string;
-    operations: Record<string, AgentOperationDefinition>;
+    operations: Record<
+        string,
+        Pick<AgentOperationDefinition, "description" | "inputValidator">
+    >;
 }): Promise<DeferredAgentTurnResult> {
     if (!args.route)
         return { status: "blocked", reason: "missing_authorized_route" };
@@ -617,13 +626,13 @@ export async function invokeDeferredAgentTurn(args: {
             tools: createAgentTools(args.operations),
             stopWhen: isStepCount(1),
             // The runtime check above forbids executable tools, so no tool context can be consumed.
-            maxOutputTokens: QUALIFICATION_MAX_OUTPUT_TOKENS,
+            maxOutputTokens: MODEL_MAX_OUTPUT_TOKENS,
             temperature: 0,
             maxRetries: 0,
         });
         const result = await agent.generate({
             prompt: args.prompt,
-            timeout: QUALIFICATION_ATTEMPT_TIMEOUT_MS,
+            timeout: MODEL_ATTEMPT_TIMEOUT_MS,
             abortSignal: dependencies.signal,
         });
         const receipt = createAttemptReceipt(route, state, startedAt, result);

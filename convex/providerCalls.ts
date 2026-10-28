@@ -266,7 +266,6 @@ export const recordAttempt = internalMutation({
                 invocation.runId !== args.runId ||
                 mission.runId !== args.runId ||
                 invocation.corpusRevisionId !== args.corpusRevisionId ||
-                mission.corpusRevisionId !== args.corpusRevisionId ||
                 args.executionGeneration !== invocation.generation ||
                 invocation.generation !== mission.generation ||
                 args.workflowVersion !== mission.definitionVersion ||

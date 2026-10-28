@@ -2,8 +2,8 @@ import type { Doc } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { recordInvocationEvent } from "./authority";
-import { MAX_OBSERVABLE_OUTPUT_BYTES } from "./contracts";
 import { executionError } from "./errors";
+import { MAX_OBSERVABLE_OUTPUT_BYTES } from "./executionProtocol";
 
 /** Without provider admission, a retained live response is a known local refusal. */
 export function hasKnownNonDispatch(invocation: Doc<"agentInvocations">) {

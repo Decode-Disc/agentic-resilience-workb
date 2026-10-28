@@ -174,9 +174,9 @@ test("duplicate completion references are refused before accepting an artifact",
             },
         }),
     ).toMatchObject({ kind: "blocked", code: "completion_references_invalid" });
-    expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
-        completionRefs: [],
-    });
+    expect(await t.run((ctx) => ctx.db.get(missionId))).not.toHaveProperty(
+        "result",
+    );
 });
 
 test("a reused earlier request supplies its awaited result after newer requests", async () => {
@@ -495,8 +495,9 @@ test("saying complete without inspected artifacts cannot satisfy the mission", a
         kind: "blocked",
         code: "completion_requirements_missing",
     });
-    expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
-        completionRefs: [],
+    const unfinished = await t.run((ctx) => ctx.db.get(missionId));
+    expect(unfinished).not.toHaveProperty("result");
+    expect(unfinished).toMatchObject({
         obligations: ["inspect_saved_material"],
     });
 });

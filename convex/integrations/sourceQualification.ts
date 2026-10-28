@@ -17,7 +17,7 @@ import {
     type AttemptReceipt,
     invokeOneShot,
     rejectedOutputDiagnostic,
-} from "./modelInvocation";
+} from "./modelTransport";
 import type { SourceQualificationRoute } from "./sourceQualificationConfig";
 
 export type QualificationAttemptResult = AttemptReceipt &

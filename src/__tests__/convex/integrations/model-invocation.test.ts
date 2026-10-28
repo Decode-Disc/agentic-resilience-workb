@@ -2,7 +2,7 @@ import { savedMaterialInspectionDefinition } from "@convex/domain/savedMaterialI
 import {
     invokeDeferredAgentTurn,
     invokeOneShot,
-} from "@convex/integrations/modelInvocation";
+} from "@convex/integrations/modelTransport";
 import { v } from "convex/values";
 import { expect, test, vi } from "vitest";
 import { z } from "zod";

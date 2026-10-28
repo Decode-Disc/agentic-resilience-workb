@@ -1396,7 +1396,10 @@ test("a request journal persistence failure prevents external qualification disp
     vi.stubGlobal("fetch", request);
     const result = await t.action(async (ctx) => {
         const runMutation: typeof ctx.runMutation = async (ref, ...args) => {
-            if (getFunctionName(ref) === "execution/invocations:retainRequest")
+            if (
+                getFunctionName(ref) ===
+                "execution/invocationLifecycle:retainRequest"
+            )
                 throw new Error("Journal unavailable");
             return ctx.runMutation(ref, ...args);
         };
@@ -1433,7 +1436,7 @@ test("a lost one-shot terminal acknowledgement keeps the journal and receipt wit
                 const result = await ctx.runMutation(ref, ...args);
                 if (
                     getFunctionName(ref) ===
-                    "execution/invocations:finishOneShot"
+                    "execution/invocationLifecycle:finishOneShot"
                 )
                     throw new Error("Lost terminal acknowledgement");
                 return result;

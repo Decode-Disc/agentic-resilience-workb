@@ -1,3 +1,4 @@
+import { requireSavedMaterialScope } from "@convex/domain/savedMaterialInspection";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import {
     assertPreparationExecutionFence,
@@ -656,7 +657,7 @@ async function validateMissionApprovedCapture(
     );
     return validateApprovedCapture(ctx, {
         runId: mission.runId,
-        corpusRevisionId: mission.corpusRevisionId,
+        corpusRevisionId: (await requireSavedMaterialScope(ctx, mission))._id,
         sourceId: args.sourceId,
     });
 }
@@ -748,7 +749,9 @@ export const searchApprovedSourceForMission = internalQuery({
             ctx,
             {
                 runId: mission.runId,
-                corpusRevisionId: mission.corpusRevisionId,
+                corpusRevisionId: (
+                    await requireSavedMaterialScope(ctx, mission)
+                )._id,
                 sourceId: args.sourceId,
                 query: args.query,
             },

@@ -3,15 +3,14 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
 import type { SavedMaterialOperation } from "@convex/domain/savedMaterialOperations";
 import { sha256Hex } from "@convex/domain/sourcePassages";
+import { executionFailureCode } from "@convex/execution/errors";
 import {
     MAX_OPERATION_RESULT_BYTES,
     type operationOutcomeValidator,
-} from "@convex/execution/contracts";
-import { executionFailureCode } from "@convex/execution/errors";
+} from "@convex/execution/executionProtocol";
 import type { Infer } from "convex/values";
 
 const MAX_SEARCH_RESULT_BYTES = 48 * 1024;
-const MAX_HISTORY_RESULT_BYTES = 48 * 1024;
 
 type OperationOutcome = Infer<typeof operationOutcomeValidator>;
 
@@ -23,10 +22,6 @@ type MissionOperationArgs = {
 type MissionCaptureArgs = MissionOperationArgs & {
     sourceId: Id<"sources">;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function failedOutcome(error: unknown): OperationOutcome | undefined {
     const code = executionFailureCode(error);
@@ -87,80 +82,6 @@ function successOutcome(
               }
             : {}),
     };
-}
-
-function selectHistoryPage(
-    entries: Array<{
-        sequence: number;
-        offset: number;
-        totalCharacters: number;
-        content: string;
-    }>,
-    requestedCursor: string | undefined,
-    pageCursor: string | null,
-    fixedValue: Record<string, unknown>,
-) {
-    const selected: typeof entries = [];
-    let continueCursor = pageCursor;
-    for (const entry of entries) {
-        const candidate = [...selected, entry];
-        const candidateValue = {
-            ...fixedValue,
-            history: { entries: candidate, continueCursor: pageCursor },
-        };
-        if (
-            new TextEncoder().encode(JSON.stringify(candidateValue)).length <=
-            MAX_HISTORY_RESULT_BYTES
-        ) {
-            selected.push(entry);
-            continue;
-        }
-        continueCursor = `${entry.sequence}:${entry.offset}`;
-        break;
-    }
-    if (!selected.length && entries.length && continueCursor === pageCursor)
-        continueCursor = requestedCursor ?? "1:0";
-    return { entries: selected, continueCursor };
-}
-
-async function consultMissionState(
-    ctx: ActionCtx,
-    args: MissionOperationArgs & { cursor?: string },
-): Promise<OperationOutcome> {
-    const mission = {
-        missionId: args.missionId,
-        expectedGeneration: args.expectedGeneration,
-    };
-    const [context, history] = await Promise.all([
-        ctx.runQuery(internal.execution.context.build, mission),
-        ctx.runQuery(internal.execution.missions.history, args),
-    ]);
-    if (context.kind === "blocked")
-        return { kind: "unavailable", code: context.code };
-    let parsedContext: unknown;
-    try {
-        parsedContext = JSON.parse(context.inputJson);
-    } catch {
-        return { kind: "unavailable", code: "mission_state_unavailable" };
-    }
-    if (!isRecord(parsedContext))
-        return { kind: "unavailable", code: "mission_state_unavailable" };
-    const state = {
-        mission: parsedContext.mission,
-        humanInstructions: parsedContext.humanInstructions,
-        decisions: parsedContext.decisions,
-        constraints: parsedContext.constraints,
-        workingNotes: parsedContext.workingNotes,
-        activeWork: parsedContext.activeWork,
-    };
-    const fixedValue = { kind: "consult_mission_state", state };
-    const boundedHistory = selectHistoryPage(
-        history.entries,
-        args.cursor,
-        history.continueCursor,
-        fixedValue,
-    );
-    return successOutcome({ ...fixedValue, history: boundedHistory });
 }
 
 async function searchAvailableMaterial(
@@ -290,12 +211,6 @@ export async function executeSavedMaterialOperation(
 ): Promise<OperationOutcome> {
     try {
         switch (args.input.kind) {
-            case "consult_mission_state":
-                return await consultMissionState(ctx, {
-                    missionId: args.missionId,
-                    expectedGeneration: args.expectedGeneration,
-                    ...(args.input.cursor ? { cursor: args.input.cursor } : {}),
-                });
             case "search_available_material":
                 return await searchAvailableMaterial(ctx, {
                     missionId: args.missionId,

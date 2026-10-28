@@ -1,10 +1,14 @@
 import { internal } from "@convex/_generated/api";
 import { internalMutation, internalQuery } from "@convex/_generated/server";
+import { stableStringify } from "@convex/domain/sourcePassages";
 import { readPreparationLimits } from "@convex/domain/sourcePreparationAuthority";
 import { localBrowserFixturesEnabled } from "@convex/runWorkspace";
 import { workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { v } from "convex/values";
+import { validate } from "convex-helpers/validators";
+import { getAgentDefinition } from "./agentCatalog";
+import { agentScopeValidator } from "./agentSchemas";
 import {
     canAdoptRetainedResponse,
     executionError,
@@ -16,13 +20,14 @@ import {
     agentDefinitionIdValidator,
     EXECUTION_WINDOW_MS,
     HISTORY_PAGE_SIZE,
-} from "./contracts";
-import { getAgentDefinition } from "./definitions";
+} from "./executionProtocol";
+import { missionScope } from "./missionData";
 
 export const start = internalMutation({
     args: {
         runId: v.id("researchRuns"),
-        corpusRevisionId: v.id("corpusRevisions"),
+        corpusRevisionId: v.optional(v.id("corpusRevisions")),
+        scope: v.optional(agentScopeValidator),
         definitionId: agentDefinitionIdValidator,
         requestKey: v.string(),
         expectedGeneration: v.number(),
@@ -32,11 +37,27 @@ export const start = internalMutation({
         const { run, visitor } = await requireRunAuthority(
             ctx,
             args.runId,
-            args.corpusRevisionId,
             args.expectedGeneration,
         );
         if (!/^[a-zA-Z0-9._:-]{1,120}$/.test(args.requestKey))
             throw executionError("invalid_request_key");
+        const definition = getAgentDefinition(args.definitionId);
+        const scope =
+            args.scope ??
+            (args.corpusRevisionId &&
+            args.definitionId === "saved_material_inspection_v1"
+                ? {
+                      kind: "saved_material_inspection_v1" as const,
+                      corpusRevisionId: args.corpusRevisionId,
+                  }
+                : undefined);
+        if (
+            !scope ||
+            scope.kind !== definition.id ||
+            !validate(definition.scopeValidator, scope, { db: ctx.db }) ||
+            (args.scope && args.corpusRevisionId)
+        )
+            throw executionError("mission_scope_invalid");
         const previous = await ctx.db
             .query("agentMissions")
             .withIndex("by_run_and_request_key", (q) =>
@@ -45,15 +66,15 @@ export const start = internalMutation({
             .unique();
         if (previous) {
             if (
-                previous.corpusRevisionId !== args.corpusRevisionId ||
+                stableStringify(missionScope(previous)) !==
+                    stableStringify(scope) ||
                 previous.generation !== args.expectedGeneration ||
                 previous.definitionId !== args.definitionId
             )
                 throw executionError("mission_identity_conflict");
             return previous._id;
         }
-        const definition = getAgentDefinition(args.definitionId);
-        const initialState = definition.initialState(args.corpusRevisionId);
+        const initialState = definition.initialState(scope);
         const { objectiveKey } = initialState;
         const objective = await ctx.db
             .query("agentMissions")
@@ -82,12 +103,15 @@ export const start = internalMutation({
         await ctx.db.patch(run._id, { executionHarnessDeadlineAt: deadlineAt });
         const id = await ctx.db.insert("agentMissions", {
             runId: run._id,
-            corpusRevisionId: args.corpusRevisionId,
+            protocolVersion: 2,
+            scope,
             ownerVisitorId: visitor._id,
             definitionId: args.definitionId,
             definitionVersion: definition.version,
             requestKey: args.requestKey,
-            ...initialState,
+            objectiveKey,
+            state: initialState.state,
+            obligations: initialState.obligations,
             generation: args.expectedGeneration,
             deadlineAt,
             modelLimits: readPreparationLimits(preparation ?? undefined),
@@ -95,13 +119,13 @@ export const start = internalMutation({
             noProgressTurns: 0,
             progressKeys: [],
             workingNotes: "",
-            completionRefs: [],
             nextEventSequence: 1,
             createdAt: now,
             updatedAt: now,
         });
         const mission = await ctx.db.get(id);
         if (!mission) throw executionError("mission_unavailable");
+        await requireMissionAuthority(ctx, id, args.expectedGeneration);
         await recordMissionEvent(ctx, mission, {
             kind: "mission_started",
             cause: args.requestKey,
@@ -123,7 +147,6 @@ export const resume = internalMutation({
         const { run } = await requireRunAuthority(
             ctx,
             retained.runId,
-            retained.corpusRevisionId,
             args.expectedGeneration,
         );
         const recoverable =

@@ -7,6 +7,9 @@ import {
 } from "@convex/_generated/server";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { type Infer, v } from "convex/values";
+import { validate } from "convex-helpers/validators";
+import { getAgentDefinition } from "./agentCatalog";
+import type { OperationPin } from "./agentDefinition";
 import {
     executionError,
     executionFailureCode,
@@ -20,8 +23,13 @@ import {
     operationInputValidator,
     operationOutcomeValidator,
     type requestInputValidator,
-} from "./contracts";
-import { getAgentDefinition } from "./definitions";
+} from "./executionProtocol";
+import {
+    domainDataPatch,
+    operationIdentityScope,
+    retainedOperationPin,
+} from "./missionData";
+import { consultMissionState } from "./missionHistory";
 
 /** A logical operation survives temporary invocations; identical requests reuse their retained outcome. */
 export async function persistOperationRequest(
@@ -36,17 +44,25 @@ export async function persistOperationRequest(
 ) {
     if (!args.cause || args.cause.length > 160)
         throw executionError("invalid_operation_cause");
-    let pin: {
-        expectedCaptureId?: Doc<"sourceCaptures">["_id"];
-        expectedContentHash?: string;
-    } = {};
+    let pin: OperationPin | undefined;
     let refusal: Infer<typeof operationOutcomeValidator> | undefined;
     const definition = getAgentDefinition(
         mission.definitionId,
         mission.definitionVersion,
     );
     try {
-        const scope = await definition.pinOperation(ctx, mission, args.input);
+        if (
+            args.input.kind !== "invalid" &&
+            !definition.operations[args.input.kind]
+        )
+            throw executionError("operation_not_allowed");
+        const scope =
+            args.input.kind === "consult_mission_state"
+                ? {
+                      kind: "available" as const,
+                      pin: { kind: "mission_history" as const },
+                  }
+                : await definition.pinOperation(ctx, mission, args.input);
         if (scope.kind === "available") pin = scope.pin;
         else refusal = { kind: "unavailable", code: scope.code };
     } catch (error) {
@@ -54,14 +70,19 @@ export async function persistOperationRequest(
         if (!code) throw error;
         refusal = { kind: "refused", code };
     }
+    const operationVersion =
+        args.input.kind === "invalid"
+            ? 1
+            : (definition.operations[args.input.kind]?.version ?? 1);
     const logicalKey = sha256Hex(
         stableStringify({
             objective: mission.objectiveKey,
-            version: 1,
-            corpusRevisionId: mission.corpusRevisionId,
+            version: operationVersion,
+            ...operationIdentityScope(mission, pin),
             input: args.input,
-            pin,
-            ...definition.reuseScope(mission, args.input),
+            ...(args.input.kind === "consult_mission_state"
+                ? { stateVersion: mission.nextEventSequence }
+                : {}),
         }),
     );
     const previous = await ctx.db
@@ -87,8 +108,8 @@ export async function persistOperationRequest(
         ...args,
         missionId: mission._id,
         logicalKey,
-        operationVersion: 1,
-        ...pin,
+        operationVersion,
+        ...(pin ? { pin } : {}),
         expectedGeneration: mission.generation,
         status: outcome ? "completed" : "pending",
         ...(outcome ? { outcome, completedAt: Date.now() } : {}),
@@ -155,18 +176,33 @@ async function validateRequest(
     if (
         (request.expectedGeneration !== expectedGeneration &&
             request.status !== "completed") ||
-        request.operationVersion !== 1
+        (request.input.kind !== "invalid" &&
+            request.operationVersion !==
+                getAgentDefinition(
+                    state.mission.definitionId,
+                    state.mission.definitionVersion,
+                ).operations[request.input.kind]?.version)
     )
         throw executionError("stale_execution");
-    const scope = await getAgentDefinition(
+    const definition = getAgentDefinition(
         state.mission.definitionId,
         state.mission.definitionVersion,
-    ).pinOperation(ctx, state.mission, request.input);
-    if (scope.kind !== "available") throw executionError(scope.code);
+    );
     if (
-        scope.pin.expectedCaptureId !== request.expectedCaptureId ||
-        scope.pin.expectedContentHash !== request.expectedContentHash
+        request.input.kind !== "invalid" &&
+        !definition.operations[request.input.kind]
     )
+        throw executionError("operation_not_allowed");
+    const scope =
+        request.input.kind === "consult_mission_state"
+            ? {
+                  kind: "available" as const,
+                  pin: { kind: "mission_history" as const },
+              }
+            : await definition.pinOperation(ctx, state.mission, request.input);
+    if (scope.kind !== "available") throw executionError(scope.code);
+    const retainedPin = retainedOperationPin(request);
+    if (stableStringify(scope.pin) !== stableStringify(retainedPin))
         throw executionError("version_conflict");
     return state;
 }
@@ -283,24 +319,44 @@ export const recordResult = internalMutation({
                 kind: "unavailable",
                 code: "operation_result_capacity",
             };
-        if (
-            outcome.kind === "success" &&
-            outcome.captureId &&
-            outcome.captureId !== request.expectedCaptureId
-        )
-            outcome = { kind: "refused", code: "capture_identity_conflict" };
+        const definition = getAgentDefinition(
+            state.mission.definitionId,
+            state.mission.definitionVersion,
+        );
+        if (request.input.kind !== "consult_mission_state")
+            outcome = definition.validateOutcome(request, outcome);
         await ctx.db.patch(request._id, {
             status: "completed",
             outcome,
             completedAt: Date.now(),
         });
         const { mission } = state;
-        const progress = getAgentDefinition(
-            mission.definitionId,
-            mission.definitionVersion,
-        ).progress(mission, outcome);
-        if (Object.keys(progress).length)
-            await ctx.db.patch(mission._id, progress);
+        const progress =
+            request.input.kind === "consult_mission_state"
+                ? {}
+                : definition.progress(mission, outcome);
+        if (
+            progress.state &&
+            (progress.state.kind !== definition.id ||
+                !validate(definition.stateValidator, progress.state, {
+                    db: ctx.db,
+                }))
+        )
+            throw executionError("mission_state_invalid");
+        await ctx.db.patch(mission._id, {
+            ...domainDataPatch(mission, {
+                ...(progress.state ? { state: progress.state } : {}),
+            }),
+            ...(progress.progressKeys
+                ? { progressKeys: progress.progressKeys }
+                : {}),
+            ...(progress.obligations
+                ? { obligations: progress.obligations }
+                : {}),
+            ...(progress.blockCode
+                ? { status: "blocked", blockCode: progress.blockCode }
+                : {}),
+        });
         await recordMissionEvent(ctx, mission, {
             kind: "operation_completed",
             cause: request.cause,
@@ -327,14 +383,23 @@ export const dispatch = internalAction({
             args,
         );
         if (claimed.kind === "outcome") return claimed.outcome;
-        const outcome = await getAgentDefinition(
-            claimed.definitionId,
-            claimed.definitionVersion,
-        ).executeOperation(ctx, {
-            missionId: claimed.missionId,
-            expectedGeneration: args.expectedGeneration,
-            input: claimed.input,
-        });
+        const outcome =
+            claimed.input.kind === "consult_mission_state"
+                ? await consultMissionState(ctx, {
+                      missionId: claimed.missionId,
+                      expectedGeneration: args.expectedGeneration,
+                      ...(claimed.input.cursor
+                          ? { cursor: claimed.input.cursor }
+                          : {}),
+                  })
+                : await getAgentDefinition(
+                      claimed.definitionId,
+                      claimed.definitionVersion,
+                  ).executeOperation(ctx, {
+                      missionId: claimed.missionId,
+                      expectedGeneration: args.expectedGeneration,
+                      input: claimed.input,
+                  });
         return ctx.runMutation(internal.execution.operations.recordResult, {
             ...args,
             outcome,

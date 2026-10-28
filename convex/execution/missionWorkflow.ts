@@ -12,7 +12,7 @@ import {
     recordMissionEvent,
     requireMissionAuthority,
 } from "./authority";
-import { invocationResponseValidator } from "./contracts";
+import { invocationResponseValidator } from "./executionProtocol";
 
 const nextValidator = v.union(
     v.object({ kind: v.literal("stopped") }),
@@ -171,6 +171,7 @@ export const onComplete = internalMutation({
     },
 });
 
+// Step names are persisted by Workflow; keep these references stable across module renames.
 export const run = workflow
     .define({
         args: {

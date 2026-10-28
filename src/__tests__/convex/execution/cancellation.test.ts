@@ -167,9 +167,9 @@ test("run cancellation fences first and drains mission work in bounded scheduled
             additional.push(
                 await ctx.db.insert("agentMissions", {
                     runId: base.runId,
-                    corpusRevisionId: base.corpusRevisionId,
+                    corpusRevisionId: args.corpusRevisionId,
                     ownerVisitorId: base.ownerVisitorId,
-                    definitionId: base.definitionId,
+                    definitionId: "saved_material_inspection_v1",
                     definitionVersion: base.definitionVersion,
                     requestKey: `run-cancellation-${String(index).padStart(2, "0")}`,
                     objectiveKey: `cancellation-test-${index}`,

@@ -1,8 +1,8 @@
-import { savedMaterialOperationValidator } from "@convex/domain/savedMaterialOperations";
+import { operationInputValidator } from "@convex/execution/agentSchemas";
 import { convexToZod } from "convex-helpers/server/zod";
 import { expect, test } from "vitest";
 
-const operationSchema = convexToZod(savedMaterialOperationValidator);
+const operationSchema = convexToZod(operationInputValidator);
 
 test("accepts only the canonical saved-material operation inputs", () => {
     const operations = [

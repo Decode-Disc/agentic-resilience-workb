@@ -47,6 +47,33 @@ async function simulatedMissionFixture() {
     return { ...fixture, missionId };
 }
 
+test("the durable Workflow continues after retaining an invalid history cursor refusal", async () => {
+    const { t, missionId, captureId } = await simulatedMissionFixture();
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId,
+        expectedGeneration: 4,
+        cause: "invalid-history-before-continuation",
+        input: { kind: "consult_mission_state", cursor: "bad" },
+    });
+    await t.mutation(internal.execution.missions.resume, {
+        missionId,
+        expectedGeneration: 4,
+        simulation: true,
+    });
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
+    expect(await t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
+        status: "completed",
+        outcome: { kind: "refused", code: "history_cursor_invalid" },
+    });
+    expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
+        status: "completed",
+        result: {
+            kind: "saved_material_inspection_v1",
+            captureIds: [captureId],
+        },
+    });
+}, 30_000);
+
 test("the real Workflow recreates simulated invocations around persisted saved-material operations", async () => {
     const { t, missionId, captureId } = await simulatedMissionFixture();
     const workflowId = await t.mutation(internal.execution.missions.resume, {
@@ -102,7 +129,10 @@ test("the real Workflow recreates simulated invocations around persisted saved-m
     }
     expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
         status: "completed",
-        completionRefs: [captureId],
+        result: {
+            kind: "saved_material_inspection_v1",
+            captureIds: [captureId],
+        },
         obligations: [],
     });
     const invocations = await t.run((ctx) =>
@@ -187,7 +217,10 @@ test.each([
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
         status: "completed",
-        completionRefs: [captureId],
+        result: {
+            kind: "saved_material_inspection_v1",
+            captureIds: [captureId],
+        },
         workingNotes: "The pending question must survive recovery.",
     });
     const requests = await t.run((ctx) =>

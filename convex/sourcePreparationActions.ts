@@ -167,7 +167,7 @@ async function executePreparationModel<
                 receipt,
             };
         const invocationId = await ctx.runMutation(
-            internal.execution.invocations.beginOneShot,
+            internal.execution.invocationLifecycle.beginOneShot,
             {
                 providerCallId,
                 inputJson: input.invocationInputJson,
@@ -180,7 +180,7 @@ async function executePreparationModel<
             ),
             async (requestJson) => {
                 const retained = await ctx.runMutation(
-                    internal.execution.invocations.retainRequest,
+                    internal.execution.invocationLifecycle.retainRequest,
                     {
                         invocationId,
                         expectedGeneration: preparation.executionGeneration,
@@ -190,7 +190,7 @@ async function executePreparationModel<
                 if (retained.kind === "blocked")
                     throw sourcePreparationError(retained.code);
                 await ctx.runQuery(
-                    internal.execution.invocations.authorizeDispatch,
+                    internal.execution.invocationLifecycle.authorizeDispatch,
                     {
                         invocationId,
                         expectedGeneration: preparation.executionGeneration,
@@ -214,7 +214,7 @@ async function executePreparationModel<
         };
         if (result.status === "not_run") {
             await ctx.runMutation(
-                internal.execution.invocations.finishOneShot,
+                internal.execution.invocationLifecycle.finishOneShot,
                 {
                     invocationId,
                     attempt: {
@@ -234,42 +234,45 @@ async function executePreparationModel<
             );
             return { result, providerCallId, receipt };
         }
-        await ctx.runMutation(internal.execution.invocations.finishOneShot, {
-            invocationId,
-            ...(result.observableReplyJson
-                ? { observableReplyJson: result.observableReplyJson }
-                : {}),
-            attempt: {
-                ...attempt,
-                ...receipt,
-                status: result.status,
-                dispatchOutcome: result.dispatchOutcome,
-                httpStatus: result.httpStatus,
-                retryAfterAt: result.retryAfterAt,
-                ...(result.status === "failed"
-                    ? {
-                          errorCode: result.errorCode,
-                          retryable: result.retryable,
-                          diagnostic: result.outputDiagnostic,
-                      }
+        await ctx.runMutation(
+            internal.execution.invocationLifecycle.finishOneShot,
+            {
+                invocationId,
+                ...(result.observableReplyJson
+                    ? { observableReplyJson: result.observableReplyJson }
                     : {}),
+                attempt: {
+                    ...attempt,
+                    ...receipt,
+                    status: result.status,
+                    dispatchOutcome: result.dispatchOutcome,
+                    httpStatus: result.httpStatus,
+                    retryAfterAt: result.retryAfterAt,
+                    ...(result.status === "failed"
+                        ? {
+                              errorCode: result.errorCode,
+                              retryable: result.retryable,
+                              diagnostic: result.outputDiagnostic,
+                          }
+                        : {}),
+                },
+                outputJson: JSON.stringify(
+                    result.status === "succeeded"
+                        ? {
+                              status: result.status,
+                              result:
+                                  "qualification" in result
+                                      ? result.qualification
+                                      : result.output,
+                          }
+                        : {
+                              status: result.status,
+                              errorCode: result.errorCode,
+                              diagnostic: result.outputDiagnostic ?? null,
+                          },
+                ),
             },
-            outputJson: JSON.stringify(
-                result.status === "succeeded"
-                    ? {
-                          status: result.status,
-                          result:
-                              "qualification" in result
-                                  ? result.qualification
-                                  : result.output,
-                      }
-                    : {
-                          status: result.status,
-                          errorCode: result.errorCode,
-                          diagnostic: result.outputDiagnostic ?? null,
-                      },
-            ),
-        });
+        );
         if (result.status === "succeeded")
             return { result, providerCallId, receipt };
         if (

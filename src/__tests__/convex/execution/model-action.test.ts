@@ -2,34 +2,31 @@ import { api, internal } from "@convex/_generated/api";
 import type { ActionCtx } from "@convex/_generated/server";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { invoke as invokeModelAction } from "@convex/execution/modelActions";
-import { invokeDeferredAgentTurn } from "@convex/integrations/modelInvocation";
+import { invokeDeferredAgentTurn } from "@convex/integrations/modelTransport";
 import type { WorkflowId } from "@convex-dev/workflow";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
-vi.mock("@convex/integrations/modelInvocation", async (importOriginal) => ({
+vi.mock("@convex/integrations/modelTransport", async (importOriginal) => ({
     ...(await importOriginal<
-        typeof import("@convex/integrations/modelInvocation")
+        typeof import("@convex/integrations/modelTransport")
     >()),
     invokeDeferredAgentTurn: vi.fn(),
 }));
-vi.mock(
-    "@convex/integrations/sourceQualificationConfig",
-    async (importOriginal) => ({
-        ...(await importOriginal<
-            typeof import("@convex/integrations/sourceQualificationConfig")
-        >()),
-        missionRoutes: {
-            saved_material_inspection_v1: {
-                model: "test/inspection",
-                provider: "test-provider",
-                authorizedForAgent: true,
-            },
+vi.mock("@convex/integrations/modelRouting", async (importOriginal) => ({
+    ...(await importOriginal<
+        typeof import("@convex/integrations/modelRouting")
+    >()),
+    missionRoutes: {
+        saved_material_inspection_v1: {
+            model: "test/inspection",
+            provider: "test-provider",
+            authorizedForAgent: true,
         },
-    }),
-);
+    },
+}));
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
