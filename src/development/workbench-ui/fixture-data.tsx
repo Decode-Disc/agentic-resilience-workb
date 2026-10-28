@@ -19,6 +19,26 @@ export const matrixQuestions: MatrixQuestion[] = [
     { id: "Q2", label: "Q2", title: "Integrations beyond contracts" },
     { id: "Q3", label: "Q3", title: "Data position" },
 ];
+const supportedUse = (
+    <>
+        <Badge tone="ink">
+            <WorkbenchIcon name="check" size={11} />
+            Supported
+        </Badge>{" "}
+        <span style={{ color: "var(--muted-foreground)" }}>
+            within the examined scope
+        </span>
+    </>
+);
+const useForReview = (
+    <Badge tone="review">
+        <span
+            aria-hidden="true"
+            className="size-[7px] rounded-full bg-review"
+        />
+        Illustrative appraisal · for review
+    </Badge>
+);
 export const matrixRows: (MatrixRow & { changedAt: number })[] = [
     {
         id: "A-014",
@@ -26,7 +46,47 @@ export const matrixRows: (MatrixRow & { changedAt: number })[] = [
         text: "CCC reports insurer-configurable workflows connecting insurers and repairers.",
         kind: "fact",
         meta: "10-K p. 8",
+        sourceStatus: "verified",
         uses: { Q1: "supports", Q2: "supports", Q3: "context" },
+        passage: {
+            text: "Insurers can configure workflows that route estimates and photos between their own teams and repair facilities.",
+            meta: "Form 10-K · FY2025 · p. 8 ¶3 · illustrative excerpt",
+            kind: "fact",
+        },
+        useDetails: {
+            Q1: {
+                rationale:
+                    "Shows one workflow spanning insurers and repair facilities, which is the coordination Q1 tests.",
+                control: supportedUse,
+                limitation:
+                    "Says nothing about who sets the routing rules. A-031 opposes Q1 on that point.",
+                judgment: (
+                    <Badge tone="review">
+                        <span
+                            aria-hidden="true"
+                            className="size-[7px] rounded-full bg-review"
+                        />
+                        In Q1 appraisal v1 · for review
+                    </Badge>
+                ),
+            },
+            Q2: {
+                rationale:
+                    "Shared interfaces connect participants inside the same operational workflow.",
+                control: supportedUse,
+                limitation:
+                    "Connectivity alone does not establish whether these integrations outlast the contract.",
+                judgment: useForReview,
+            },
+            Q3: {
+                rationale:
+                    "Defines the workflow connections a substitute would need to reproduce.",
+                control: supportedUse,
+                limitation:
+                    "Does not establish an exclusive or durable data position.",
+                judgment: useForReview,
+            },
+        },
     },
     {
         id: "A-031",
@@ -34,7 +94,31 @@ export const matrixRows: (MatrixRow & { changedAt: number })[] = [
         text: "Workflow execution alone does not establish authority over insurer decisions.",
         kind: "counter",
         meta: "10-K p. 8",
+        sourceStatus: "disputed",
         uses: { Q1: "opposes", Q3: "context" },
+        passage: {
+            text: "Assignment decisions follow rules each insurer sets within the platform.",
+            meta: "Form 10-K · FY2025 · p. 8 ¶4 · illustrative excerpt",
+            kind: "fact",
+        },
+        useDetails: {
+            Q1: {
+                rationale:
+                    "Insurer-owned rules limit the claim that running the workflow establishes decision authority.",
+                control: <Badge tone="counter">Contested</Badge>,
+                limitation:
+                    "The boundary between insurer decisions and platform execution still needs reconciliation.",
+                judgment: useForReview,
+            },
+            Q3: {
+                rationale:
+                    "Locates a decision boundary that matters when interpreting the platform's data position.",
+                control: <Badge tone="counter">Contested</Badge>,
+                limitation:
+                    "Ownership of routing rules does not determine ownership of all operational data.",
+                judgment: useForReview,
+            },
+        },
     },
     {
         id: "A-027",
@@ -42,7 +126,31 @@ export const matrixRows: (MatrixRow & { changedAt: number })[] = [
         text: "Participants depend on the shared workflow to exchange estimate data.",
         kind: "inference",
         meta: "from A-014",
+        sourceStatus: "verified",
         uses: { Q1: "context", Q2: "supports" },
+        passage: {
+            text: "The shared workflow exchanges estimate information between insurers and repair facilities.",
+            meta: "Illustrative passage underlying A-014",
+            kind: "fact",
+        },
+        useDetails: {
+            Q1: {
+                rationale:
+                    "Explains why participants operate within one workflow without establishing who controls it.",
+                control: supportedUse,
+                limitation:
+                    "Participation is distinct from authority over decisions.",
+                judgment: useForReview,
+            },
+            Q2: {
+                rationale:
+                    "Operational exchanges explain why connected participants may depend on integrations.",
+                control: supportedUse,
+                limitation:
+                    "The passage does not establish how long this dependency lasts.",
+                judgment: useForReview,
+            },
+        },
     },
 ];
 export const readerPages: ReaderPage[] = [

@@ -30,6 +30,7 @@ import {
     SourcingLane,
     WorkCard,
 } from "@/components/workbench-ui";
+import { matrixUseLabels } from "@/components/workbench-ui/evidence-matrix";
 import { WorkbenchIcon } from "@/components/workbench-ui/glyphs";
 import { cn } from "@/lib/utils";
 import {
@@ -445,6 +446,8 @@ function InventorySheetExample() {
     const [query, setQuery] = useState("");
     const [filter, setFilter] = useState("all");
     const [recent, setRecent] = useState(true);
+    const [assertion, setAssertion] = useState("A-014");
+    const [question, setQuestion] = useState("Q1");
     const filteredRows = matrixRows
         .filter(
             (row) =>
@@ -456,6 +459,11 @@ function InventorySheetExample() {
         .sort((a, b) =>
             recent ? b.changedAt - a.changedAt : a.id.localeCompare(b.id),
         );
+    const selectedRow = filteredRows.find((row) => row.id === assertion);
+    const selectedUses = matrixQuestions.flatMap((q) => {
+        const use = selectedRow?.uses[q.id];
+        return use ? [{ question: q, use }] : [];
+    });
     return (
         <InventorySheet
             open={open}
@@ -489,38 +497,62 @@ function InventorySheetExample() {
             recentFirst={recent}
             onRecentFirstChange={setRecent}
             footer={
-                <>
-                    <span
-                        className="wb-label"
-                        style={{
-                            color: "var(--accent-foreground)",
-                            flexShrink: 0,
-                        }}>
-                        A-014 · 3 uses
-                    </span>
-                    <span className="inventory-example-uses">
-                        {[
-                            "Supports · one workflow across parties",
-                            "Context · which workflow",
-                            "Context · integrations to replace",
-                        ].map((text, i) => (
-                            <InventoryUse
-                                key={text}
-                                question={`Q${i + 1}`}
-                                selected={i === 0}
-                                onSelect={() => notify(text)}>
-                                {text}
-                            </InventoryUse>
-                        ))}
-                    </span>
-                </>
+                selectedRow && (
+                    <>
+                        <span
+                            className="wb-label"
+                            style={{
+                                color: "var(--accent-foreground)",
+                                flexShrink: 0,
+                            }}>
+                            {selectedRow.id} · {selectedUses.length} uses
+                        </span>
+                        <span className="inventory-example-uses">
+                            {selectedUses.map(({ question: q, use }) => (
+                                <InventoryUse
+                                    key={q.id}
+                                    question={q.label}
+                                    selected={question === q.id}
+                                    onSelect={() => setQuestion(q.id)}>
+                                    {matrixUseLabels[use]} · {q.title}
+                                </InventoryUse>
+                            ))}
+                        </span>
+                    </>
+                )
             }>
             {filteredRows.length ? (
                 <div className="inventory-example-matrix">
                     <EvidenceMatrix
                         questions={matrixQuestions}
                         rows={filteredRows}
-                        onSelectUse={(a, b) => notify(`${a} · ${b}`)}
+                        introduction={
+                            <span className="wb-meta">
+                                {recent
+                                    ? "Sorted by recent change"
+                                    : "Sorted by assertion"}
+                            </span>
+                        }
+                        selectedQuestion={question}
+                        selectedAssertion={selectedRow?.id}
+                        onSelectQuestion={setQuestion}
+                        onSelectUse={(a, q) => {
+                            setAssertion(a);
+                            setQuestion(q);
+                        }}
+                        onChallengeUse={(a, q) =>
+                            notify(
+                                `Illustrative action: challenge ${a} for ${q}`,
+                            )
+                        }
+                        onOpenPassage={(a) =>
+                            notify(`Illustrative action: open passage for ${a}`)
+                        }
+                        onOpenQuestionReasoning={(q) =>
+                            notify(
+                                `Illustrative action: inspect ${q} reasoning`,
+                            )
+                        }
                     />
                 </div>
             ) : (
@@ -533,13 +565,28 @@ function InventorySheetExample() {
 }
 function EvidenceMatrixExample() {
     const [q, setQ] = useState("Q1");
+    const [assertion, setAssertion] = useState("A-014");
     return (
         <EvidenceMatrix
             questions={matrixQuestions}
             rows={matrixRows}
             selectedQuestion={q}
+            selectedAssertion={assertion}
             onSelectQuestion={setQ}
-            onSelectUse={(a, b) => notify(`${a} · ${b}`)}
+            onSelectUse={(a, b) => {
+                setAssertion(a);
+                setQ(b);
+                notify(`${a} · ${b}`);
+            }}
+            onChallengeUse={(a, q) =>
+                notify(`Illustrative action: challenge ${a} for ${q}`)
+            }
+            onOpenPassage={(a) =>
+                notify(`Illustrative action: open passage for ${a}`)
+            }
+            onOpenQuestionReasoning={(q) =>
+                notify(`Illustrative action: inspect ${q} reasoning`)
+            }
         />
     );
 }

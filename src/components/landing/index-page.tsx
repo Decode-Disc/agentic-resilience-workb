@@ -6,13 +6,10 @@ import {
   CheckmarkCircle02Icon,
   FileSearchIcon,
   Menu01Icon,
-  Sparkles,
   UserCheck01Icon,
 } from "@hugeicons/core-free-icons";
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import type React from "react";
-import { useEffect, useRef } from "react";
 
 import Icon from "@/components/icon";
 import { AppLogo } from "@/components/logo-icon";
@@ -29,10 +26,8 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { GridCard } from "@/components/ui/grid-card";
-import { LiquidGlassCard } from "@/components/ui/liquid-glass";
 import { LiquidMetalBorderButton } from "@/components/ui/liquid-metal-border-button";
 import MotionAnimatePresence from "@/components/ui/motion-animate-presence";
 import {
@@ -46,6 +41,7 @@ import {
 } from "@/components/ui/sheet";
 import { PRODUCT_NAME, PRODUCT_SHORT_NAME } from "@/config/product";
 import { cn } from "@/lib/utils";
+import { EvidenceMatrixIllustration } from "./evidence-matrix-illustration";
 
 const easeOrganic = [0.32, 0.72, 0, 1] as const;
 
@@ -75,38 +71,6 @@ const navigationItems = [
     details: ["Explicit uncertainty", "Recorded decisions and overrides"],
   },
 ] as const;
-
-const matrixClaims = [
-  {
-    claim: "CCC reports insurer-configurable workflows connecting insurers and repair facilities.",
-    classification: "Fact",
-    badgeClassName: "bg-evidence-fact/10 text-evidence-fact",
-    source: "Company-reported · Annual Report, p. 8",
-  },
-  {
-    claim: "Workflow execution alone does not establish CCC's authority over insurer decisions.",
-    classification: "Inference",
-    badgeClassName: "bg-evidence-inference/10 text-evidence-inference",
-    source: "Objection · insurer-configurable rules, p. 8",
-  },
-  {
-    claim: "An external agent could coordinate the claim while using CCC for specific tasks.",
-    classification: "Hypothesis",
-    badgeClassName: "bg-evidence-hypothesis/10 text-evidence-hypothesis",
-    source: "Research hypothesis · requires testing",
-  },
-  {
-    claim: "Could an insurer replace CCC without losing workflow context and integrations?",
-    classification: "Unknown",
-    badgeClassName: "bg-evidence-unknown/10 text-evidence-unknown",
-    source: "Not established by the cited passages",
-  },
-] as const;
-
-const matrixSource = {
-  label: "CCC 2025 Annual Report, pp. 8–9",
-  url: "https://cccis.gcs-web.com/static-files/915c24e8-371f-4d42-b0bf-d52881a52bd8",
-} as const;
 
 const capabilities = [
   {
@@ -262,81 +226,6 @@ function LandingHeader() {
   );
 }
 
-function MatrixPreview() {
-  return (
-    <LiquidGlassCard
-      className="relative w-full text-left bg-card/80 border border-brand-purple/30 shadow shadow-primary motion-reduce:transform-none!"
-      blurIntensity="md"
-      glowIntensity="sm"
-      shadowIntensity="md"
-      borderRadius="var(--radius-2xl)"
-    >
-      <Noise patternAlpha={15} className="absolute inset-0" />
-
-      <div className="p-5 sm:p-7">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-micro text-brand-purple">Examine the evidence</p>
-            <h2 className="mt-1.5 text-xl font-medium tracking-tight">Evidence matrix</h2>
-          </div>
-          <span className="rounded-full border border-border/80 bg-muted/60 px-3 py-1 text-[0.6875rem] font-medium tracking-[0.08em] text-muted-foreground uppercase">
-            Illustrative preview
-          </span>
-        </div>
-
-        <p className="mt-4 text-sm font-medium leading-6">CCC · Photo-led auto claims</p>
-        <p className="mt-1 text-sm leading-6 text-muted-foreground">
-          Does CCC control coordination, or provide replaceable modules?
-        </p>
-
-        <ul className="mt-5 list-none divide-y divide-border/60 border-y border-border/60">
-          {matrixClaims.map((row, index) => (
-            <motion.li
-              key={row.classification}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{
-                duration: 0.5,
-                delay: 0.25 + index * 0.09,
-                ease: easeOrganic,
-              }}
-              className="grid gap-x-4 gap-y-1 py-3.5 motion-reduce:!transform-none motion-reduce:!opacity-100 sm:grid-cols-[1fr_auto] sm:items-center"
-            >
-              <div className="min-w-0">
-                <p className="text-sm leading-6">{row.claim}</p>
-                <p className="mt-0.5 font-mono text-[0.6875rem] tracking-wide text-muted-foreground">
-                  {row.source}
-                </p>
-              </div>
-              <span
-                className={cn(
-                  "w-fit rounded-full px-2.5 py-0.5 text-xs font-medium",
-                  row.badgeClassName,
-                )}
-              >
-                {row.classification}
-              </span>
-            </motion.li>
-          ))}
-        </ul>
-
-        <p className="mt-4 text-xs leading-5 text-muted-foreground">
-          Illustrative analysis based on{" "}
-          <a
-            href={matrixSource.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            {matrixSource.label}
-          </a>
-          . Reasoning is illustrative; unanswered questions concern the cited passages.
-        </p>
-      </div>
-    </LiquidGlassCard>
-  );
-}
-
 function CapabilityGrid() {
   return (
     <motion.ul
@@ -366,61 +255,6 @@ function CapabilityGrid() {
     </motion.ul>
   );
 }
-
-/** Inline Noise overlay */
-const Noise: React.FC<{
-  patternRefreshInterval?: number;
-  patternAlpha?: number;
-  className?: string;
-}> = ({ patternRefreshInterval = 2, patternAlpha = 16, className }) => {
-  const ref = useRef<HTMLCanvasElement | null>(null);
-  useEffect(() => {
-    const canvas = ref.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d", { alpha: true });
-    if (!ctx) return;
-    let frame = 0;
-    let id = 0;
-    const size = 1024;
-    const resize = () => {
-      canvas.width = size;
-      canvas.height = size;
-      canvas.style.width = "100vw";
-      canvas.style.height = "100vh";
-    };
-    const draw = () => {
-      const img = ctx.createImageData(size, size);
-      const data = img.data;
-      for (let i = 0; i < data.length; i += 4) {
-        const v = Math.random() * 255;
-        data[i] = v;
-        data[i + 1] = v;
-        data[i + 2] = v;
-        data[i + 3] = patternAlpha;
-      }
-      ctx.putImageData(img, 0, 0);
-    };
-    const loop = () => {
-      if (frame % patternRefreshInterval === 0) draw();
-      frame++;
-      id = requestAnimationFrame(loop);
-    };
-    addEventListener("resize", resize);
-    resize();
-    loop();
-    return () => {
-      removeEventListener("resize", resize);
-      cancelAnimationFrame(id);
-    };
-  }, [patternRefreshInterval, patternAlpha]);
-  return (
-    <canvas
-      ref={ref}
-      className={cn("pointer-events-none", className)}
-      style={{ imageRendering: "pixelated" }}
-    />
-  );
-};
 
 /**
  * Standalone project home page. It introduces the evidence-first thesis without
@@ -456,14 +290,10 @@ export function IndexPage() {
           className="flex max-w-[40rem] xl:max-w-[50rem] flex-col gap-4 items-center text-center motion-reduce:transform-none! motion-reduce:opacity-100!"
           aria-labelledby="index-title"
         >
-          <Badge
-            variant="fancy"
-            color="indigo"
-            className="rounded-none p-2 font-mono font-medium tracking-[0.12em] uppercase"
-          >
-            <Icon iconNode={Sparkles} className="size-8" />
+          <span className="section-chip">
+            <span aria-hidden="true">{"//"}</span>
             {PRODUCT_NAME}
-          </Badge>
+          </span>
           <h1
             id="index-title"
             className="text-5xl leading-[0.96] font-medium tracking-[-0.045em] text-balance sm:text-6xl lg:text-[4.4rem]"
@@ -497,7 +327,7 @@ export function IndexPage() {
             delay: 0.15,
             ease: easeOrganic,
           }}
-          className="mt-5 w-full motion-reduce:!transform-none motion-reduce:!opacity-100"
+          className="mt-8 w-[min(72rem,calc(100vw-2rem))] motion-reduce:!transform-none motion-reduce:!opacity-100"
           aria-label="Evidence matrix preview"
         >
           <MotionAnimatePresence
@@ -505,7 +335,7 @@ export function IndexPage() {
             delay={0.2}
             className="motion-reduce:!transform-none motion-reduce:!opacity-100"
           >
-            <MatrixPreview />
+            <EvidenceMatrixIllustration />
           </MotionAnimatePresence>
         </motion.section>
 

@@ -1,5 +1,79 @@
 import { expect, test } from "@playwright/test";
 
+test("an inventory use opens a themed inspection without closing its sheet on Escape", async ({
+    page,
+}) => {
+    await page.goto("/?component=InventorySheet&theme=dark");
+    const inventoryTrigger = page.getByRole("button", {
+        name: "Open inventory",
+        exact: true,
+    });
+    await inventoryTrigger.click();
+    const sheet = page.getByRole("dialog", {
+        name: "Which evidence bears on which question",
+        exact: true,
+    });
+    const tile = page.getByRole("button", { name: "A-014 · Q1 · Supports" });
+    await tile.focus();
+    await page.keyboard.press("Enter");
+    const inspection = page.getByRole("dialog", {
+        name: "A-014 used for Q1",
+        exact: true,
+    });
+    await expect(inspection).toBeVisible();
+    await expect(inspection).toHaveAttribute("data-theme", "dark");
+    await expect(
+        inspection.getByText(/Shows one workflow spanning insurers/),
+    ).toBeVisible();
+    await expect(
+        inspection.getByRole("button", { name: "Close use details" }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(inspection).toHaveCount(0);
+    await expect(sheet).toBeVisible();
+    await expect(tile).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(sheet).toHaveCount(0);
+    await expect(inventoryTrigger).toBeFocused();
+});
+
+test("the base matrix includes source checks alongside question uses", async ({
+    page,
+}) => {
+    await page.goto("/?component=EvidenceMatrix&theme=light");
+    const matrix = page.getByRole("table", { name: "Evidence by question" });
+    await expect(
+        matrix.getByRole("columnheader", { name: "Source", exact: true }),
+    ).toBeVisible();
+    await expect(
+        matrix.getByRole("cell", { name: "Verified", exact: true }),
+    ).toHaveCount(2);
+    await expect(
+        matrix.getByRole("cell", { name: "Sources disagree", exact: true }),
+    ).toBeVisible();
+});
+
+test("inventory selection follows an assertion use and its question", async ({
+    page,
+}) => {
+    await page.goto("/?component=InventorySheet&theme=light");
+    await page
+        .getByRole("button", { name: "Open inventory", exact: true })
+        .click();
+    const initial = page.getByRole("button", { name: "A-014 · Q1 · Supports" });
+    await expect(initial).toHaveAttribute("aria-pressed", "true");
+    const next = page.getByRole("button", { name: "A-031 · Q3 · Context" });
+    await next.click();
+    await expect(next).toHaveAttribute("aria-pressed", "true");
+    await expect(initial).toHaveAttribute("aria-pressed", "false");
+    await expect(
+        page.getByText("A-031 · selected", { exact: true }),
+    ).toBeVisible();
+    await expect(
+        page.getByText("A-031 · 2 uses", { exact: true }),
+    ).toBeVisible();
+});
+
 test("inventory closes with Escape and carries its dark theme through the portal", async ({
     page,
 }) => {
@@ -50,7 +124,7 @@ test("inventory keeps keyboard focus contained and restores its trigger after an
     await page.keyboard.press("Shift+Tab");
     await expect(
         page.getByRole("button", {
-            name: "Q3 Context · integrations to replace",
+            name: "Q3 Context · Data position",
         }),
     ).toBeFocused();
     await page.keyboard.press("Escape");
@@ -117,7 +191,7 @@ test("the gallery index remains available until an inventory preview is opened",
         page
             .getByRole("table", { name: "Evidence by question" })
             .getByRole("row"),
-    ).toHaveCount(4);
+    ).toHaveCount(5);
     await page.keyboard.press("Escape");
     await expect(
         page

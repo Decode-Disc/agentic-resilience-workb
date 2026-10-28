@@ -1,17 +1,56 @@
 .box {
+    min-width: min-content;
     border-radius: var(--radius-2xl);
     overflow: hidden;
-    max-width: 900px;
 }
 .grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) repeat(3, 132px);
     column-gap: 8px;
+}
+.axes {
+    padding: 16px 20px 0 24px;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.5;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+}
+.questionAxis {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 8px;
+    color: var(--brand-purple);
+}
+.axisLine {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(
+        90deg,
+        color-mix(in oklab, var(--brand-purple) 40%, transparent),
+        transparent
+    );
+}
+.box .sourceHeading {
+    text-align: right;
+}
+.head .sourceIntro {
+    align-self: end;
+    padding-bottom: 4px;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--muted-foreground);
+    text-align: right;
 }
 .head {
     padding: 14px 20px 12px 24px;
 }
 .qcard {
+    position: relative;
+    isolation: isolate;
+    transition: none;
     margin: 0 2px;
     padding: 12px 12px 14px;
     border-radius: var(--radius-lg);
@@ -25,8 +64,24 @@
     line-height: 16px;
     font-weight: 500;
 }
-.qcard.sel {
-    box-shadow: inset 0 0 0 1.5px var(--brand-purple);
+.qcard::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: var(--question-selection, 0);
+    background: linear-gradient(
+        180deg,
+        color-mix(in oklab, var(--brand-purple) 14%, var(--card)),
+        color-mix(in oklab, var(--brand-purple) 6%, var(--card))
+    );
+    box-shadow:
+        inset 0 0 0 1px
+        color-mix(in oklab, var(--brand-purple) 35%, transparent),
+        0 12px 24px -14px
+        color-mix(in oklab, var(--brand-purple) 60%, transparent);
 }
 .qw {
     width: 28px;
@@ -40,7 +95,47 @@
     font-weight: 500;
     background: var(--tint-ink);
 }
+.sel .qw {
+    background: var(--primary);
+    color: var(--primary-foreground);
+}
+.supportDot,
+.contextDot {
+    display: inline-block;
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+}
+.contextDot {
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px currentColor;
+}
+.source {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+    padding-left: 6px;
+    font-size: 12.5px;
+    line-height: 18px;
+}
+.source[data-source-status="verified"] {
+    color: var(--evidence-fact);
+}
+.source[data-source-status="disputed"] {
+    color: var(--counter-evidence);
+}
+.source[data-source-status="unestablished"] {
+    color: var(--evidence-unknown);
+}
+.source[data-source-status="unchecked"] {
+    color: var(--muted-foreground);
+}
 .row {
+    position: relative;
+    isolation: isolate;
     padding: 0 20px 0 24px;
     border-top: 1px solid var(--divider);
 }
@@ -51,11 +146,43 @@
     gap: 6px;
 }
 .cell {
+    position: relative;
+    isolation: isolate;
     display: flex;
     align-items: center;
     padding: 0 6px;
 }
+.cell::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: var(--column-selection, 0);
+    background: color-mix(in oklab, var(--brand-purple) 7%, transparent);
+}
+.row::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: var(--row-selection, 0);
+    background: linear-gradient(
+        90deg,
+        color-mix(in oklab, var(--brand-purple) 10%, transparent),
+        color-mix(in oklab, var(--brand-purple) 3%, transparent)
+    );
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklab, var(--brand-purple) 30%, transparent),
+        inset 0 -1px 0 color-mix(in oklab, var(--brand-purple) 30%, transparent);
+}
+.selectedRow .meta {
+    color: var(--accent-foreground);
+}
 .use {
+    position: relative;
+    transition: none;
     flex: 1;
     height: 42px;
     border-radius: var(--radius-tile);
@@ -66,7 +193,7 @@
     font-size: 12.5px;
     font-weight: 500;
 }
-.u-s {
+.use[data-use="supports"] {
     color: var(--card);
     background: linear-gradient(
         180deg,
@@ -77,13 +204,13 @@
         inset 0 1px 0 oklch(1 0 0 / 0.18),
         0 8px 16px -10px color-mix(in oklab, var(--foreground) 80%, transparent);
 }
-.u-o {
+.use[data-use="opposes"] {
     color: var(--counter-evidence);
     background: color-mix(in oklab, var(--counter-evidence) 12%, var(--card));
     box-shadow: inset 0 0 0 1px
         color-mix(in oklab, var(--counter-evidence) 32%, transparent);
 }
-.u-c {
+.use[data-use="context"] {
     color: var(--muted-foreground);
     background: var(--surface-float);
     box-shadow: inset 0 0 0 1px
@@ -95,6 +222,19 @@
         transparent 0 6px,
         color-mix(in oklab, var(--foreground) 5%, transparent) 6px 7px
     );
+}
+.use::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: var(--use-selection, 0);
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklab, white 18%, transparent),
+        0 0 0 3px color-mix(in oklab, var(--brand-purple) 35%, transparent),
+        0 10px 22px -8px
+        color-mix(in oklab, var(--brand-purple) 70%, transparent);
 }
 .sr {
     position: absolute;

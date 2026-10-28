@@ -4,6 +4,7 @@ export * from "./chip";
 export * from "./control-conclusion";
 export * from "./cover";
 export * from "./evidence-matrix";
+export * from "./evidence-use-popover";
 export * from "./framing-controls";
 export * from "./glass-panel";
 export type { ClaimTone } from "./glyphs";

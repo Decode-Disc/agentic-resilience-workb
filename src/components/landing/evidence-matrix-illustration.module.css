@@ -1,0 +1,131 @@
+.preview {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    text-align: left;
+}
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 24px;
+}
+.title,
+.explanation {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+}
+.title h2 {
+    margin: 0;
+    font-size: 42px;
+    line-height: 46px;
+    font-weight: 500;
+    letter-spacing: -0.045em;
+}
+.explanation {
+    align-items: flex-end;
+    gap: 12px;
+    text-align: right;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--muted-foreground);
+}
+.frame {
+    border-radius: var(--radius-3xl);
+    overflow: hidden;
+    background: var(--surface-glass);
+    box-shadow: var(--shadow-focal);
+    backdrop-filter: blur(var(--blur-glass));
+}
+.scroller {
+    overflow-x: auto;
+}
+.scroller:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -3px;
+}
+.matrix {
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+}
+.introduction {
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--muted-foreground);
+}
+.legend {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 18px;
+    padding: 14px 24px;
+    border-top: 1px solid var(--divider);
+    background: var(--fill-quiet);
+    font-size: 12.5px;
+    line-height: 18px;
+}
+.legend > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.legend i {
+    width: 22px;
+    height: 16px;
+    border-radius: 5px;
+}
+.supports {
+    background: var(--foreground);
+}
+.opposes {
+    background: color-mix(in oklab, var(--counter-evidence) 12%, var(--card));
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--counter-evidence) 32%, transparent);
+}
+.context {
+    background: var(--surface-float);
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--foreground) 14%, transparent);
+}
+.unused {
+    background: repeating-linear-gradient(
+        135deg,
+        transparent 0 6px,
+        color-mix(in oklab, var(--foreground) 5%, transparent) 6px 7px
+    );
+}
+.legend p {
+    margin-left: auto;
+    color: var(--muted-foreground);
+}
+.disclosure {
+    font-size: 12.5px;
+    line-height: 18px;
+    color: var(--muted-foreground);
+}
+@media (max-width: 640px) {
+    .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+    }
+    .title h2 {
+        font-size: 32px;
+        line-height: 36px;
+    }
+    .explanation {
+        align-items: flex-start;
+        text-align: left;
+    }
+    .legend {
+        gap: 12px;
+        padding: 14px 18px;
+    }
+    .legend p {
+        margin-left: 0;
+    }
+}
