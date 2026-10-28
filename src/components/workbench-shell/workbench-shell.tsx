@@ -15,7 +15,6 @@ import { toast } from "sonner";
 
 import Icon from "@/components/icon";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
-import { BackgroundImageTexture } from "@/components/ui/bg-image-texture";
 import { Button } from "@/components/ui/button";
 import {
     NestedMenu,
@@ -27,6 +26,7 @@ import { useResponsive } from "@/hooks/use-responsive";
 import { uiLayerClasses } from "@/lib/ui-layers";
 import { cn } from "@/lib/utils";
 import { getWorkspaceDestination } from "@/lib/workspace/access-destination";
+import { WorkbenchShellSurface } from "./workbench-shell-surface";
 
 export interface WorkbenchShellProps {
     children: ReactNode;
@@ -43,26 +43,21 @@ function LogoutMenuIcon({ className }: { className?: string }) {
 
 export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
     return (
-        <div className="relative isolate min-h-svh overflow-x-clip bg-(image:--workspace-gradient) bg-fixed text-foreground">
-            <div
-                aria-hidden="true"
-                className="pointer-events-none fixed inset-0 -z-10 bg-(image:--workspace-grid) bg-[size:38px_38px] [mask-image:radial-gradient(ellipse_75%_60%_at_50%_0%,#000_55%,transparent_100%)] [-webkit-mask-image:radial-gradient(ellipse_75%_60%_at_50%_0%,#000_55%,transparent_100%)] [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat]"
-            />
-            <LoadErrorBoundary
-                title="Workspace navigation unavailable"
-                description="We couldn’t load the workspace navigation. Try again."
-                retryLabel="Retry"
-                variant="compact"
-                className="max-width-container py-2.5">
-                <WorkbenchHeader activeRunId={activeRunId} />
-            </LoadErrorBoundary>
-
-            <BackgroundImageTexture opacity={0.25} variant="fabric-of-squares">
-                <main className="max-width-container min-h-[calc(100svh-var(--bar-height))] py-4">
-                    {children}
-                </main>
-            </BackgroundImageTexture>
-        </div>
+        <WorkbenchShellSurface
+            header={
+                <LoadErrorBoundary
+                    title="Workspace navigation unavailable"
+                    description="We couldn’t load the workspace navigation. Try again."
+                    retryLabel="Retry"
+                    variant="compact"
+                    className="max-width-container py-2.5">
+                    <WorkbenchHeader activeRunId={activeRunId} />
+                </LoadErrorBoundary>
+            }>
+            <main className="max-width-container min-h-[calc(100svh-var(--bar-height))] py-4">
+                {children}
+            </main>
+        </WorkbenchShellSurface>
     );
 }
 

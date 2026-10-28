@@ -13,6 +13,7 @@ export interface SourcingLaneProps {
     count: number;
     documents: readonly SourcingDocument[];
     remainingLabel?: string;
+    active?: boolean;
 }
 export function SourcingLane({
     state,
@@ -20,8 +21,9 @@ export function SourcingLane({
     count,
     documents,
     remainingLabel,
+    active = state === "capturing",
 }: SourcingLaneProps) {
-    const running = state === "capturing";
+    const running = active;
     return (
         <div
             className={styles.lane}

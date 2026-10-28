@@ -6,7 +6,6 @@ import {
     UserGroupIcon,
 } from "@hugeicons/core-free-icons";
 import { createFileRoute } from "@tanstack/react-router";
-
 import Icon from "@/components/icon";
 import {
     Card,
@@ -17,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { ResearchComposer } from "@/components/workspace/research-composer";
+import { StartDossierHeading } from "@/components/workspace/start/start-dossier-heading";
 import type { PlatformIcon } from "@/types/ui";
 
 export const Route = createFileRoute("/workspace/start")({
@@ -72,18 +72,7 @@ function StartAnalysisRoute() {
     return (
         <div className="flex flex-col justify-center gap-4 py-8 md:py-14">
             <div className="mx-auto flex w-full max-w-[610px] flex-col items-stretch">
-                <div className="mb-6 flex items-baseline gap-3">
-                    <div className="flex items-baseline rounded-none bg-muted-foreground/10 px-2 py-0.5">
-                        <span
-                            aria-hidden="true"
-                            className="text-[32px] start-double-slash">
-                            {"//"}
-                        </span>
-                        <h1 className="text-2xl font-medium tracking-tight text-muted-foreground/90">
-                            Start a research dossier
-                        </h1>
-                    </div>
-                </div>
+                <StartDossierHeading />
 
                 <ResearchComposer placeholderText="Describe the resilience question to focus on for research. Or choose a company to start." />
             </div>

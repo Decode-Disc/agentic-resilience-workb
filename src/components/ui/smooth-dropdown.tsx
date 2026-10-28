@@ -108,8 +108,30 @@ export function SmoothDropdwon({
     const containerRef = useRef<HTMLDivElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
+    const triggerContentRef = useRef<HTMLDivElement>(null);
+    const restoreTriggerFocus = useRef(false);
     const [contentHeight, setContentHeight] = useState(0);
     const [portalStyle, setPortalStyle] = useState<CSSProperties>({});
+
+    useEffect(() => {
+        if (isOpen) {
+            contentRef.current
+                ?.querySelector<HTMLElement>(
+                    "input:not(:disabled), textarea:not(:disabled), [role=option]:not([aria-disabled=true])",
+                )
+                ?.focus();
+        } else if (restoreTriggerFocus.current) {
+            const triggerButton =
+                triggerContentRef.current?.querySelector<HTMLButtonElement>(
+                    "button",
+                ) ??
+                containerRef.current?.querySelector<HTMLButtonElement>(
+                    "button",
+                );
+            triggerButton?.focus();
+            restoreTriggerFocus.current = false;
+        }
+    }, [isOpen]);
 
     useEffect(() => {
         const contentElement = contentRef.current;
@@ -255,6 +277,9 @@ export function SmoothDropdwon({
     const menuContent = (
         <>
             <motion.div
+                ref={triggerContentRef}
+                aria-hidden={isOpen}
+                inert={isOpen}
                 initial={false}
                 animate={{
                     opacity: isOpen ? 0 : 1,
@@ -274,7 +299,7 @@ export function SmoothDropdwon({
                 )}
             </motion.div>
 
-            <div ref={contentRef}>
+            <div ref={contentRef} aria-hidden={!isOpen} inert={!isOpen}>
                 <motion.div
                     layout
                     initial={false}
@@ -475,6 +500,15 @@ export function SmoothDropdwon({
     return (
         <div
             ref={containerRef}
+            role="group"
+            onKeyDown={(event) => {
+                if (isOpen && event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    restoreTriggerFocus.current = true;
+                    requestOpenChange(false);
+                }
+            }}
             data-testid="smooth-dropdown-container"
             data-open={isOpen ? "true" : undefined}
             className={cn("relative not-prose", className)}

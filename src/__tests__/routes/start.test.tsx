@@ -68,6 +68,9 @@ function renderWithInvitationAccess(component: ReactNode) {
 }
 
 async function searchAndSelectCompany(query = "CCC") {
+    fireEvent.click(
+        screen.getByRole("button", { name: /Company to investigate/i }),
+    );
     fireEvent.change(
         screen.getByRole("textbox", { name: /^Company search$/i }),
         {
@@ -193,6 +196,9 @@ describe("ResearchComposer", () => {
         preflight.mockResolvedValue(resolvedCompany);
         renderWithInvitationAccess(<ResearchComposer />);
 
+        fireEvent.click(
+            screen.getByRole("button", { name: /Company to investigate/i }),
+        );
         fireEvent.change(
             screen.getByRole("textbox", { name: /^Company search$/i }),
             {
@@ -248,6 +254,9 @@ describe("ResearchComposer", () => {
         searchCompanies.mockResolvedValue(rankedCandidates);
         renderWithInvitationAccess(<ResearchComposer />);
 
+        fireEvent.click(
+            screen.getByRole("button", { name: /Company to investigate/i }),
+        );
         fireEvent.change(
             screen.getByRole("textbox", { name: /^Company search$/i }),
             { target: { value: "ranked" } },
@@ -607,6 +616,9 @@ describe("ResearchComposer", () => {
         );
         renderWithInvitationAccess(<ResearchComposer />);
 
+        fireEvent.click(
+            screen.getByRole("button", { name: /Company to investigate/i }),
+        );
         fireEvent.change(
             screen.getByRole("textbox", { name: /^Company search$/i }),
             {
