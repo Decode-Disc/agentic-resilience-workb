@@ -13,7 +13,7 @@ Use when comparing model candidates, retrieval methods, source-selection policie
 
 ## When Not to Use
 
-Ordinary unit tests, UI checks, security audits and performance investigations use their dedicated workflows. This skill does not authorize changing application routing, implementing a proposed correction, deploying, deleting evidence, publishing results or spending money.
+Ordinary unit tests, UI checks, security audits and performance investigations use their dedicated workflows.
 
 Respect the requested mode. Inspection and planning remain read-only: propose the selection or use the archive preview instead of writing a snapshot. An authorized evaluation can retain its results within its agreed scope.
 
@@ -32,7 +32,7 @@ If the goal is ambiguous, inspect the product context and existing results first
 
 ## Frame the Decision
 
-A comparison is useful only if it answers the project's actual question. Read [PRODUCT.md](../../../PRODUCT.md), then locate the applicable execution and evaluation requirements in [TECH.md](../../../context/TECH.md). Use [AGENTS.md](../../../AGENTS.md) for authority and the [roadmap](../../../docs/ROADMAP.md) for delivered capability. Product requirements remain in their owners; this skill owns the evaluation procedure. Inspect the current implementation and available evidence before proposing a new study.
+A comparison is useful only if it answers the project's actual question. Inspect the analyst outcome, current implementation, available runners and saved evidence before proposing a new study.
 
 Name the evaluated boundary: framing, documentary preparation, assertion and use admission, appraisal reasoning or synthesis. For model-assisted work, identify the task's need for semantic interpretation or reasoning and the reliable deterministic alternative, where one exists. A comparison does not presume that every phase needs a model or that source acquisition must precede every model task. Early framing suggestions cannot establish company facts. Evaluation does not bypass research-start authority or activate an unavailable route.
 
@@ -86,8 +86,4 @@ Scores and preserved files are inputs to a decision, not the final outcome. Give
 - What remains uncertain and the smallest next check, only if it could change the decision. Otherwise state that no further comparison is needed for the present question.
 - For retained experiments, where the evidence is preserved and any missing inputs or verification limits.
 
-Use plain language before technical scores and identifiers. A user asking which approach is useful should not need to reconstruct that answer from a benchmark table. Keep recommendations distinct from authorization to implement, change routing, deploy or spend.
-
-## Maintain the Procedure
-
-Evaluation guidance can preserve every artifact while still driving unnecessary experiments. Use the [read-only scenarios](evals/evals.json) to examine investigation selection, stopping conditions, decision clarity and scope boundaries after a substantive revision. Validate skill structure, local links and scenario fields mechanically; those checks do not demonstrate improved behavior. Run comparative evaluations only when requested and authorized, with an appropriate executor and equivalent configurations, and keep their outputs outside the application tree.
+Use plain language before technical scores and identifiers. A user asking which approach is useful should not need to reconstruct that answer from a benchmark table.

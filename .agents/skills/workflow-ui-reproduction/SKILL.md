@@ -13,13 +13,11 @@ Use when converting approved workflow references into reusable components, layou
 
 ## When Not to Use
 
-Do not use for open-ended redesign, product conception, backend implementation or a minor cosmetic correction that needs no reference-conversion workflow. An analysis-only request remains read-only.
+Do not use for open-ended redesign, product conception, backend implementation or a minor cosmetic correction that needs no reference-conversion workflow.
 
 ## 1. Establish the target and the preserved foundation
 
 A reference can describe a new block without replacing the surrounding application. Establish which parts come from the reference and which retain their existing owners before making implementation choices.
-
-Read [AGENTS.md](../../../AGENTS.md), [PRODUCT.md](../../../PRODUCT.md), relevant passages of [TECH.md](../../../context/TECH.md) and the current [DESIGN.md](../../../DESIGN.md). Follow their authorization, ownership and verification rules; link whole documents rather than fixed heading anchors.
 
 Inspect the working diff, actual consumers, existing components and the exact references named by the user. Classify affected surfaces as preserve, modify, replace or remove. Explain the evidence and authorization for anything beyond preservation.
 
@@ -102,8 +100,6 @@ Keep gallery data clearly illustrative. Reuse its existing navigation and availa
 
 Identify operations that require backend logic or an unresolved product decision. Keep their unconnected status explicit rather than fabricating successful execution.
 
-For changed functional contracts, follow the repository’s RED → GREEN discipline through the real module or browser boundary. Test outcomes rather than incidental CSS.
-
 ## 6. Preserve motion and complete cancellation
 
 Motion explains a state change only when it follows the actual interaction and can be interrupted safely.
@@ -128,12 +124,4 @@ Exercise the changed controls. Check keyboard access, focus, dismissal, navigati
 
 Use temporary captures and executable browser observations to resolve differences. Do not stop after inspecting source code, running types or viewing only the implementation.
 
-For presentation-only changes, use browser verification rather than tests that freeze CSS or pixels. For functional changes, retain focused regression coverage. Run scoped formatting, lint, type checks and relevant tests under the repository’s validation cadence.
-
 Report the implemented foundation, preview entry points, verified states, actual checks and remaining unconnected operations. Distinguish gallery behavior from connected workflow delivery. Do not claim protected-runtime or backend completion from fixture interactions.
-
-## Evaluating this skill
-
-The [evaluation scenarios](evals/evals.json) cover ordinary conversion, conflicting references, interaction and motion completion, and a read-only boundary.
-
-Use them for an explicitly requested skill evaluation. Follow project delegation and execution permissions. A comparison needs an authorized executor capable of code editing and browser interaction, with the same configuration for the skill and baseline runs. Structural validation and self-review alone do not demonstrate improved agent behavior.

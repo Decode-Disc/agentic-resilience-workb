@@ -10,28 +10,17 @@ Create an executable plan that preserves the user's product and identifies the s
 
 ## When to Use
 
-This skill is opt-in. Use the AI harness's native planning mode by default, even when work has multiple steps, affects several files, crosses Convex and TanStack boundaries, or would benefit from careful sequencing. Load this skill only when the user explicitly names `implementation-plan` or explicitly asks to use the project implementation-plan skill. Do not infer invocation from requests such as “plan this”, “what should be next?”, “break this down”, or “use planning mode”.
-
-The principal `writing-plans` skill is also opt-in outside this overlay. Explicitly invoking `writing-plans` alone uses that principal skill without automatically loading this project overlay. Explicitly invoking `implementation-plan` loads `writing-plans` first because the overlay depends on it.
+Load this skill only when the user explicitly names `implementation-plan` or asks to use the project implementation-plan skill. Invoking it loads `writing-plans` first; invoking `writing-plans` alone does not load this overlay.
 
 ## When Not to Use
 
-Use native planning for ordinary sequencing, local fixes and roadmap discussion unless this overlay is explicitly requested. Reviewing or editing this skill does not invoke its plan-creation workflow. A planning request does not authorize implementation, deployment, paid experiments or delegation.
+Use native planning for ordinary sequencing, local fixes and roadmap discussion unless this overlay is explicitly requested. Reviewing or editing this skill does not invoke its plan-creation workflow.
 
 ## Required base skill
 
 1. After the user explicitly invokes this skill, read the principal `writing-plans` skill completely before drafting.
 2. Apply this skill after it. Repository contracts govern document storage, applicable TDD, verification and execution authority when an inherited template differs. Do not copy a fixed plan directory, automatic commit step or delegation instruction from a base example into the plan.
 3. If `writing-plans` is unavailable, stop and report the missing dependency. Do not silently recreate an approximate version from memory.
-
-## Authority and mode
-
-- Read [AGENTS.md](../../../AGENTS.md) and [PRODUCT.md](../../../PRODUCT.md) before product planning. Locate relevant technical contracts in [TECH.md](../../../context/TECH.md), use [DESIGN.md](../../../DESIGN.md) for interface changes, and consult the [roadmap](../../../docs/ROADMAP.md) for delivery and sequence. Use [PROJECT.md](../../../context/PROJECT.md) only when deeper candidature context is needed.
-- Current requirements belong to those reference owners. ADRs and brainstorming records supply dated rationale, not additional current obligations or renewed execution permissions. Surface a conflict between current references before planning the affected change.
-- Inspect `git status`, relevant history, current routes, production modules, tests, and generated contracts before proposing files.
-- A plan is documentation. Do not implement it unless the user separately authorizes implementation.
-
-Draft in the conversation unless a persistent plan is explicitly requested and its location is agreed. Keep at most one active plan per authorized workstream. On closure, transfer verified delivery and outstanding work to the roadmap at capability level, then retire the plan according to repository policy. This skill supplies no default storage location or permission to create a document series.
 
 ## Step 1: Reconstruct the current state
 
@@ -75,7 +64,7 @@ Examples:
 - A provider being free does not remove application rate limits or telemetry.
 - A reusable access code is not a one-time invitation and must support the documented logout/reconnection journey.
 
-If implementation evidence invalidates an accepted assumption, identify the affected requirement and its reference owner before continuing the dependent task. Obtain an explicit decision for a material product or architecture change, revise the owning passage, and use an ADR only when durable rationale or meaningful rejected alternatives warrant one. Independent work can continue within established authority.
+If implementation evidence invalidates an accepted assumption, identify the affected requirement and the dependent tasks that need revision before continuing their decomposition.
 
 ## Step 3: Define the preservation contract
 
@@ -195,7 +184,7 @@ Map every exit criterion to evidence before implementation begins:
 | Exit criterion | Deterministic test | Browser proof | Live proof | Blocking |
 |---|---|---|---|---|
 
-Select only the layers that establish the changed contract. Use focused tests and diagnostics during implementation, then the applicable stabilized checks. Require project-wide checks only for a repository or CI obligation, an explicitly requested gate, or a demonstrated transversal risk, and state the reason. A focused result may complete a bounded task without certifying the whole MVP. Documentation-only or standalone-tooling work does not require rebuilding the application.
+For each criterion, select the verification layer that can expose its failure and name the exact command or browser scenario. Separate completion of the planned slice from acceptance of the whole MVP.
 
 The final gate for a protected critical journey must use the intended access state and role. A public page, mocked component, or unauthenticated rejection is not a substitute.
 

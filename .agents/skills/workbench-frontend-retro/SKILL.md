@@ -25,8 +25,6 @@ Do not turn a one-off preference, an unresolved explanation, or an incidental im
 
 The editing target is workbench-frontend: its SKILL.md, references, and relevant evaluation scenarios. Inspect the existing target before proposing changes.
 
-Use [AGENTS.md](../../../AGENTS.md) for document authority, [PRODUCT.md](../../../PRODUCT.md) and [TECH.md](../../../context/TECH.md) for current requirements, and the [roadmap](../../../docs/ROADMAP.md) for delivery state. Consult [DESIGN.md](../../../DESIGN.md) when a lesson concerns presentation. Locate the relevant passages in those documents; a historical session or accepted ADR supplies context, not a replacement current contract.
-
 Use the visible conversation, user feedback, repository changes, and available verification evidence. A session identifier or a focused concern may supplement those inputs.
 
 Produce a concise explanation and the complete proposed text or exact diff in the conversation. “No useful change” is a valid result. Do not create a session journal, another instruction owner, or a permanent retrospective report.

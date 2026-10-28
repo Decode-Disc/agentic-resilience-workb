@@ -5,7 +5,7 @@ description: Plan, build, change, or review Agentic Resilience Workbench interfa
 
 # Workbench Frontend
 
-Make the economic question, interpretation, evidence and next useful action understandable to the analyst. This skill supplies a work sequence; the product contract, execution rules and design system remain in their existing owners. Keep the procedure proportional to the change and within the authorized scope.
+Make the economic question, interpretation, evidence and next useful action understandable to the analyst. Keep the procedure proportional to the change.
 
 ## When to Use
 
@@ -13,7 +13,7 @@ Use for frontend planning, implementation, or review in this project, including 
 
 ## When Not to Use
 
-Skip for backend-only work, dependency management alone, or unrelated documentation. If a narrower specialist procedure already owns the task, use this skill only for relevant project integration checks; do not restart discovery, request new mockups, or impose a redesign. Planning and review remain read-only until implementation is authorized.
+Skip for backend-only work, dependency management alone, or unrelated documentation. If a narrower specialist procedure already owns the task, use this skill only for relevant project integration checks; do not restart discovery, request new mockups, or impose a redesign.
 
 ## Establish the reference
 
@@ -23,7 +23,7 @@ Changes can preserve the code's behavior while losing the intended analyst exper
 - Separate **delivered behavior**, established by the working tree, runtime and [roadmap](../../../docs/ROADMAP.md), from the **approved target** in [PRODUCT.md](../../../PRODUCT.md) and relevant [technical contracts](../../../context/TECH.md), and from the **change authorized** by the request and repository instructions. Reuse context already gathered. A target requirement does not certify delivery or authorize its implementation.
 - For research-journey changes, use the current product document to locate the affected framing, inventory, appraisal-review or synthesis responsibility. Source-review examples below locate existing code; they do not prescribe the target workflow or its main result.
 - For an existing surface, identify what is preserved and what the request changes. Compare the running surface with [DESIGN.md](../../../DESIGN.md) and the accepted reference, including interactions, disclosures, mobile behavior, and failure states. Preserve unaffected affordances without turning every installed behavior into a future requirement. Apply the repository's surface classification for substantial changes and explain conflicts before choosing a new composition.
-- Keep planning and review read-only until implementation is authorized. User feedback is evidence of a problem, not automatic approval of the first proposed remedy. Recheck the underlying behavior before changing the recommendation.
+- Recheck the underlying behavior when feedback changes the diagnosis or recommendation.
 
 Consult [TECH.md](../../../context/TECH.md) for the transition when current guards differ from the target. In particular, source-set approval belongs to the compatibility path described in [PRODUCT.md](../../../PRODUCT.md); do not carry that stop into a new target view by default. A UI edit cannot remove an enforced prerequisite before its replacement is implemented and verified.
 
@@ -53,8 +53,6 @@ Load specialist procedures only for their responsibility:
 | Installed primitives and component APIs | [shadcn](../shadcn/SKILL.md) |
 | Motion behavior | [Motion React](../motion-react/SKILL.md) |
 
-Repository conventions take precedence over generic examples, including test locations, state ownership, and abstraction choices. A file's length alone does not justify splitting it. Follow the repository's Convex guidance if the authorized change reaches backend code.
-
 ## Check meaning and composition together
 
 Individually accurate labels can still form a confusing screen. The intended result is a coherent explanation of what is available and what the analyst can decide, because understanding depends on the combined text, hierarchy, and actions. Apply the semantic checks when meaning changes and the composition checks when visibility or layout changes.
@@ -68,14 +66,8 @@ Individually accurate labels can still form a confusing screen. The intended res
 
 ## Verify and report the result
 
-Code checks, rendered examples, and real preparation establish different facts. Match verification to the changed contract so a passing test does not become an unsupported claim of usability or live quality. Apply the repository's functional TDD and presentation-only browser rules, using the workflow reference to select the smallest relevant checks. Verify the affected protected path when its behavior changes; identify unavailable access or data as an incomplete check.
+Code checks, rendered examples, and real preparation establish different facts. Use the workflow reference to select checks that can expose the affected failure. Verify the affected protected path when its behavior changes; identify unavailable access or data as an incomplete check.
 
 For library changes, distinguish gallery fidelity from integration into an actual screen. The gallery's illustrative callbacks do not establish saved judgments or workflow transitions. When connecting a component, verify the consumer's real data and operation boundary as well as its rendered composition.
 
 Review the diff for duplicated rules and unrelated changes. Report the user-visible outcome, owners changed, exact checks run, browser states inspected, and remaining uncertainty. Keep fixture, protected-runtime, and live-provider evidence distinct. Do not claim visual acceptance or analytical quality from automated checks.
-
-## Maintain the skill
-
-Instructions can read well without changing an agent's decisions. [Evaluation scenarios](evals/evals.json) cover target framing, question-led assessment and synthesis, component adoption without recomposition, gallery versus connected behavior, existing source-review regressions, ambiguous requests and a backend-only boundary. Compatibility cases do not prescribe the target; target cases do not certify delivered features. Check reference paths, JSON structure, and skill structure after edits; these mechanical checks do not establish behavioral improvement.
-
-When evaluation is requested and authorized, select an executor capable of the actual task and use the same configuration for the skill and baseline runs. Keep task prompts independent of skill invocation. For a revision, preserve the previous version before editing; for a new skill, compare against its absence. Record the executor and selection reason in evaluation metadata, keep outputs outside the application tree, and examine which expectations distinguish the runs. A criterion passed equally by both versions does not demonstrate improvement. Do not launch delegation or report a comparison that has not been authorized and completed.

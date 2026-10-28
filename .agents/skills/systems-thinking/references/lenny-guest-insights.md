@@ -4,6 +4,8 @@ _6 guests, 6 mentions_
 
 Raw source quotes, kept for provenance only. The operational guidance distilled from them lives in [`SKILL.md`](../SKILL.md) (procedure and output format) and [`lenny-mapping.md`](./lenny-mapping.md) (reasoning and depth).
 
+The typology and DART come from Sandeep Swadia's Cynefin-derived four-system model; the mapping tools come from [`RefoundAI/lenny-skills`](https://github.com/RefoundAI/lenny-skills/tree/main/skills/systems-thinking), distilled from six Lenny's Podcast guests.
+
 ---
 
 ## Hari Srinivasan

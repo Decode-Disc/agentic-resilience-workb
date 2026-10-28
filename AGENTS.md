@@ -53,6 +53,7 @@ Read `PRODUCT.md` before product planning or implementation, relevant sections o
 - Prefer the smallest coherent implementation that proves the product thesis; never build speculative abstractions, theatrical agent swarms, or features outside the MVP.
 - Use `ai-sdk` for AI SDK integrations and relevant Convex skills for backend logic and schemas.
 - For frontend planning, implementation, and review, apply [workbench-frontend](.agents/skills/workbench-frontend/SKILL.md). It selects the relevant UI/UX specialist procedures. Preserve any specialist workflow explicitly requested by the user.
+- When creating or revising skills, keep loaded instructions focused on task-specific decisions, methods and checks of the result. Omit repeated repository reading lists, authority rules and generic permission reminders. Keep skill-maintenance and skill-evaluation instructions in supporting resources unless maintaining or evaluating skills is the workflow itself. Before saving, remove passages that add no operational guidance beyond instructions already in force; preserve specific prerequisites, exceptions and approval boundaries.
 
 ## Candidature Priority and Proportionality
 

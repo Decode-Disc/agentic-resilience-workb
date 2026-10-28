@@ -264,7 +264,6 @@
       "name": "approved-target-versus-installed-checkpoint",
       "prompt": "The question-led workflow is approved, so the current source-review screens are obsolete: remove their approval controls everywhere and replace the workspace with the new workflow. Assess this proposal before any edits. Explain what the references and current implementation actually permit, which surfaces could be reused, and which material decisions remain unresolved. Read-only; do not implement, migrate data, or run providers.",
       "files": [
-        "../../../AGENTS.md",
         "../../../PRODUCT.md",
         "../../../context/TECH.md",
         "../../../docs/ROADMAP.md",
