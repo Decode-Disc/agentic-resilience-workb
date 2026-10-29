@@ -1,6 +1,37 @@
-import { type ReactNode, useEffect, useId, useRef } from "react";
+import {
+    type ComponentProps,
+    type ReactNode,
+    useEffect,
+    useId,
+    useRef,
+    useState,
+} from "react";
+import {
+    ConversationThread,
+    ConversationThreadDock,
+    ConversationThreadLog,
+} from "@/components/uai/conversation-thread";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import {
+    AgentQuestion,
+    AgentQuestionDescription,
+    AgentQuestionFooter,
+    AgentQuestionItem,
+    AgentQuestionOption,
+    AgentQuestionOptions,
+    AgentQuestionOther,
+    AgentQuestionTitle,
+} from "@/components/ui/uai/agent-question";
+import {
+    Message,
+    MessageBody,
+    MessageContent,
+} from "@/components/ui/uai/message";
 import { WorkbenchIcon } from "@/components/workbench-ui/glyphs";
+import { CompanyResolutionCard } from "@/components/workspace/company-resolution-card";
 import { StartDossierHeading } from "./start-dossier-heading";
 import styles from "./start-screens.module.css";
 
@@ -110,28 +141,60 @@ export function StartRequestMessage({
 }) {
     return (
         <div className={styles.messageGroup}>
-            <div className={styles.message}>{children}</div>
+            <Message from="user">
+                <MessageBody>
+                    <MessageContent>{children}</MessageContent>
+                </MessageBody>
+            </Message>
             {context && <div className={styles.messageContext}>{context}</div>}
         </div>
     );
 }
-/** A reading column with the reference's request bubble, framing card and refinement composer. */
+/** The pending action and composer stay anchored while only the message history scrolls. */
 export function StartFramingScreen({
     request,
-    proposal,
+    response,
+    action,
     refinement,
+    history,
+    suggestions,
 }: {
     request: ReactNode;
-    proposal: ReactNode;
+    response?: ReactNode;
+    action?: ReactNode;
     refinement?: ReactNode;
+    history?: ReactNode;
+    suggestions?: ReactNode;
 }) {
     return (
         <section className={styles.framing} aria-label="Research framing">
-            <div className={styles.request}>{request}</div>
-            {proposal}
-            {refinement && (
-                <div className={styles.refinement}>{refinement}</div>
-            )}
+            <ConversationThread aria-label="Framing conversation">
+                <ConversationThreadLog>
+                    <div className={styles.request}>
+                        <span className="sr-only">Your request</span>
+                        {request}
+                    </div>
+                    {response && (
+                        <Message from="assistant" variant="plain">
+                            <MessageBody>
+                                <MessageContent>{response}</MessageContent>
+                            </MessageBody>
+                        </Message>
+                    )}
+                    {history}
+                </ConversationThreadLog>
+                <ConversationThreadDock className={styles.framingDock}>
+                    {action && (
+                        <section
+                            aria-label="Pending action"
+                            className={styles.pendingAction}>
+                            {action}
+                        </section>
+                    )}
+                    {suggestions}
+                    {refinement}
+                </ConversationThreadDock>
+            </ConversationThread>
         </section>
     );
 }
@@ -155,15 +218,35 @@ export function StartResearchScreen({
     limitations?: ReactNode;
     handoff?: ReactNode;
 }) {
+    const [view, setView] = useState("progress");
     return (
-        <section className={styles.research} aria-label="Research preparation">
+        <section
+            data-mobile-view={view}
+            className={styles.research}
+            aria-label="Research preparation">
+            <Tabs
+                value={view}
+                onValueChange={setView}
+                className={styles.mobileTabs}>
+                <TabsList aria-label="Research view">
+                    <TabsTrigger value="conversation">Conversation</TabsTrigger>
+                    <TabsTrigger value="progress">Progress</TabsTrigger>
+                </TabsList>
+            </Tabs>
             <aside className={styles.conversation} aria-label="Conversation">
-                {conversation}
-                {conversationComposer && (
-                    <div className={styles.conversationComposer}>
-                        {conversationComposer}
-                    </div>
-                )}
+                <ConversationThread
+                    variant="compact"
+                    aria-label="Research conversation">
+                    <ConversationThreadLog>
+                        {conversation}
+                    </ConversationThreadLog>
+                    {conversationComposer && (
+                        <ConversationThreadDock
+                            className={styles.conversationComposer}>
+                            {conversationComposer}
+                        </ConversationThreadDock>
+                    )}
+                </ConversationThread>
             </aside>
             <div className={styles.progress}>
                 <header className={handoff ? styles.muted : undefined}>
@@ -187,25 +270,19 @@ export function StartResearchScreen({
         </section>
     );
 }
-export interface StartCompanyIdentity {
-    name: string;
-    ticker: string;
-    exchange: string;
-    cik: string;
-    website?: string;
-    avatar?: ReactNode;
-}
-/** Displays supplied identity and mandate without resolving a company or authorizing work. */
+/** Composes company confirmation and research context; the caller owns selection and launch. */
 export function CompanyMandatePanel({
     company,
     mandate,
+    coverage,
     onChangeCompany,
     onConfirm,
     pending = false,
     error,
 }: {
-    company: StartCompanyIdentity;
+    company: ComponentProps<typeof CompanyResolutionCard>["company"];
     mandate: ReactNode;
+    coverage?: ReactNode;
     onChangeCompany?: () => void;
     onConfirm?: () => void;
     pending?: boolean;
@@ -215,31 +292,23 @@ export function CompanyMandatePanel({
         <section
             className={styles.confirmation}
             aria-label="Confirm company and mandate">
-            <div className={styles.identity}>
-                {company.avatar}
-                <div>
-                    <span className={styles.identityLabel}>
-                        Is this the company?
-                    </span>
-                    <h2>{company.name}</h2>
-                </div>
+            <div className={styles.confirmationIdentity}>
+                <CompanyResolutionCard company={company} />
+                {company.websiteUrl && (
+                    <div className={styles.confirmationWebsite}>
+                        <span>Website</span>
+                        <a
+                            href={company.websiteUrl}
+                            target="_blank"
+                            rel="noreferrer">
+                            {company.websiteUrl
+                                .replace(/^https?:\/\//, "")
+                                .replace(/\/$/, "")}
+                        </a>
+                    </div>
+                )}
             </div>
-            <dl className={styles.metadata}>
-                <div>
-                    <dt>Ticker · exchange</dt>
-                    <dd>
-                        {company.ticker} · {company.exchange}
-                    </dd>
-                </div>
-                <div>
-                    <dt>SEC identity</dt>
-                    <dd>CIK {company.cik}</dd>
-                </div>
-                <div>
-                    <dt>Website</dt>
-                    <dd>{company.website ?? "Not available"}</dd>
-                </div>
-            </dl>
+            {coverage}
             <div className={styles.mandate}>
                 <span className={styles.label}>Mandate</span>
                 <div>{mandate}</div>
@@ -247,10 +316,11 @@ export function CompanyMandatePanel({
             {error && <p role="alert">{error}</p>}
             <div className={styles.actions}>
                 <Button
-                    variant="outline"
+                    variant="ghost"
                     disabled={pending || !onChangeCompany}
                     onClick={onChangeCompany}>
-                    Change company
+                    <WorkbenchIcon name="back" size={14} />
+                    Back
                 </Button>
                 <Button
                     variant="launch"
@@ -262,6 +332,10 @@ export function CompanyMandatePanel({
                     <WorkbenchIcon name="chevron" size={14} />
                 </Button>
             </div>
+            <p className={styles.confirmationNote}>
+                Website details help recognition only. The legal identity comes
+                from the SEC registration.
+            </p>
         </section>
     );
 }
@@ -269,137 +343,370 @@ export interface StartFramingQuestion {
     id: string;
     label: string;
     text: string;
+    rationale?: string;
 }
-/** Controlled framing fields; the caller owns the questions, mandate and launch authority. */
+export interface StartFramingContextQuestion {
+    id: string;
+    prompt: string;
+    reason: string;
+    choices: readonly { value: string; label: string }[];
+    proposedValue: string;
+}
+/** Collects a supplied scope clarification; the caller decides when it is useful and updates the framing. */
+export function FramingClarification({
+    question,
+    onAnswer,
+    onUseProposal,
+    pending = false,
+}: {
+    question: StartFramingContextQuestion;
+    onAnswer: (answer: string) => void;
+    onUseProposal: () => void;
+    pending?: boolean;
+}) {
+    return (
+        <AgentQuestion
+            key={question.id + question.proposedValue}
+            aria-label="Clarify research context"
+            status={pending ? "submitting" : "asking"}
+            defaultValue={{
+                [question.id]: question.choices.some(
+                    (c) => c.value === question.proposedValue,
+                )
+                    ? question.proposedValue
+                    : "other",
+                [`${question.id}:other`]: question.proposedValue,
+            }}
+            onSubmit={(answers) => {
+                const value =
+                    answers[question.id] === "other"
+                        ? answers[`${question.id}:other`]
+                        : answers[question.id];
+                if (typeof value === "string" && value.trim())
+                    onAnswer(value.trim());
+            }}>
+            <AgentQuestionItem id={question.id} required>
+                <AgentQuestionTitle>{question.prompt}</AgentQuestionTitle>
+                <AgentQuestionDescription>
+                    {question.reason}
+                </AgentQuestionDescription>
+                <AgentQuestionOptions>
+                    {question.choices.map((choice) => (
+                        <AgentQuestionOption
+                            key={choice.value}
+                            value={choice.value}
+                            recommended={
+                                choice.value === question.proposedValue
+                            }
+                            label={choice.label}
+                        />
+                    ))}
+                    <AgentQuestionOther
+                        label="Another activity or boundary"
+                        placeholder="Describe the scope you have in mind…"
+                    />
+                </AgentQuestionOptions>
+            </AgentQuestionItem>
+            <AgentQuestionFooter>
+                <Button
+                    variant="ghost"
+                    disabled={pending}
+                    onClick={onUseProposal}>
+                    Use proposed scope
+                </Button>
+            </AgentQuestionFooter>
+        </AgentQuestion>
+    );
+}
+/** Separates the proposed research program from optional analyst context and corrections. */
 export function FramingProposal({
     introduction,
-    activities,
+    scope,
     activity,
-    onActivityChange,
-    activityDetail,
     questions,
+    clarification,
+    suppliedContext,
+    onAdjustScope,
     onQuestionChange,
     onAddQuestion,
-    focusQuestionId,
-    optionalQuestion,
     onStart,
     pending = false,
     error,
 }: {
-    introduction: ReactNode;
-    activities: readonly { id: string; label: string }[];
-    activity: string;
-    onActivityChange: (id: string) => void;
-    activityDetail?: ReactNode;
+    introduction?: ReactNode;
+    scope: string;
+    activity?: ReactNode;
     questions: readonly StartFramingQuestion[];
+    clarification?: ReactNode;
+    suppliedContext?: { question: string; answer: string };
+    onAdjustScope?: () => void;
     onQuestionChange?: (id: string, text: string) => void;
-    onAddQuestion?: () => void;
-    focusQuestionId?: string;
-    optionalQuestion?: ReactNode;
+    onAddQuestion?: (text: string) => void;
     onStart?: () => void;
     pending?: boolean;
     error?: string;
 }) {
-    const group = useId();
-    const questionToFocus = useRef<HTMLTextAreaElement>(null);
+    const editId = useId();
+    const [editing, setEditing] = useState<string | null>(null);
+    const [draft, setDraft] = useState("");
+    const editTrigger = useRef<HTMLButtonElement | null>(null);
     useEffect(() => {
-        if (focusQuestionId) questionToFocus.current?.focus();
-    }, [focusQuestionId]);
+        if (editing === null) editTrigger.current?.focus();
+    }, [editing]);
+    const summaryRef = useRef<HTMLElement>(null);
+    const clarificationRef = useRef<HTMLDivElement>(null);
+    const hasClarification = Boolean(clarification);
+    const previousClarification = useRef(hasClarification);
+    useEffect(() => {
+        if (previousClarification.current !== hasClarification) {
+            if (hasClarification)
+                clarificationRef.current
+                    ?.querySelector<HTMLElement>("legend")
+                    ?.focus();
+            else summaryRef.current?.focus();
+        }
+        previousClarification.current = hasClarification;
+    }, [hasClarification]);
     return (
-        <section className={styles.proposal} aria-label="Proposed framing">
-            <div className={styles.who}>
-                <span>{"//"}</span>Workbench
-            </div>
-            <div className={styles.introduction}>{introduction}</div>
-            <div className={styles.framingCard}>
-                <div className={styles.cardBody}>
-                    <fieldset className={styles.activity}>
-                        <legend>Activity</legend>
-                        {activities.map((option) => (
-                            <label key={option.id}>
-                                <input
-                                    type="radio"
-                                    name={group}
-                                    value={option.id}
-                                    checked={activity === option.id}
-                                    onChange={() => onActivityChange(option.id)}
-                                    disabled={pending}
-                                />
-                                {activity === option.id && (
-                                    <WorkbenchIcon name="check" size={12} />
-                                )}{" "}
-                                {option.label}
-                            </label>
-                        ))}
-                    </fieldset>
-                    {activityDetail}
-                    <div>
-                        <p className={styles.label}>Questions</p>
-                        <ol className={styles.questions}>
-                            {questions.map((q) => (
-                                <li key={q.id}>
-                                    <label>
-                                        <span className={styles.questionNumber}>
-                                            {q.label}
-                                        </span>
-                                        <textarea
-                                            ref={
-                                                q.id === focusQuestionId
-                                                    ? questionToFocus
-                                                    : undefined
+        <section
+            className={styles.framingProposal}
+            aria-label="Proposed framing">
+            {introduction && (
+                <>
+                    <div className={styles.framingAuthor}>
+                        <span>{"//"}</span>
+                        <strong>Workbench</strong>
+                    </div>
+                    <p className={styles.framingIntroduction}>{introduction}</p>
+                </>
+            )}
+            {clarification && <div ref={clarificationRef}>{clarification}</div>}
+            {suppliedContext && (
+                <section
+                    className={styles.suppliedContext}
+                    aria-label="Your clarification">
+                    <details>
+                        <summary>You clarified</summary>
+                        <dl>
+                            <dt>{suppliedContext.question}</dt>
+                            <dd>{suppliedContext.answer}</dd>
+                        </dl>
+                    </details>
+                </section>
+            )}
+            {!hasClarification && (
+                <div className={styles.framingCard}>
+                    <section
+                        className={styles.framingScope}
+                        aria-label="Proposed research scope">
+                        <header>
+                            <h2>Activity</h2>
+                            {!activity && onAdjustScope && (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={pending || hasClarification}
+                                    onClick={onAdjustScope}>
+                                    Adjust scope
+                                </Button>
+                            )}
+                        </header>
+                        {activity ?? <p>{scope}</p>}
+                    </section>
+                    <section
+                        className={styles.framingRecap}
+                        aria-label="Framing summary"
+                        tabIndex={-1}
+                        ref={summaryRef}>
+                        <header>
+                            <h2>Questions</h2>
+                            <span className="sr-only">
+                                {questions.length} questions
+                            </span>
+                        </header>
+                        <ol className={styles.framingQuestions}>
+                            {questions.map((question) => (
+                                <li key={question.id}>
+                                    <span className={styles.framingQuestionId}>
+                                        {question.label}
+                                    </span>
+                                    <div>
+                                        {editing === question.id ? (
+                                            <form
+                                                className={
+                                                    styles.questionCorrection
+                                                }
+                                                onSubmit={(event) => {
+                                                    event.preventDefault();
+                                                    if (!draft.trim()) return;
+                                                    onQuestionChange?.(
+                                                        question.id,
+                                                        draft.trim(),
+                                                    );
+                                                    setEditing(null);
+                                                    editTrigger.current?.focus();
+                                                }}>
+                                                <label htmlFor={editId}>
+                                                    Edit {question.label}{" "}
+                                                    wording
+                                                    <Textarea
+                                                        id={editId}
+                                                        autoFocus
+                                                        aria-label={`Edit ${question.label} wording`}
+                                                        value={draft}
+                                                        onChange={(event) =>
+                                                            setDraft(
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                    />
+                                                </label>
+                                                <div>
+                                                    <Button
+                                                        size="sm"
+                                                        type="submit"
+                                                        disabled={
+                                                            !draft.trim() ||
+                                                            pending
+                                                        }>
+                                                        Save question
+                                                    </Button>{" "}
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setEditing(null);
+                                                            editTrigger.current?.focus();
+                                                        }}>
+                                                        Cancel
+                                                    </Button>
+                                                </div>
+                                            </form>
+                                        ) : question.rationale ? (
+                                            <details
+                                                className={
+                                                    styles.questionReason
+                                                }>
+                                                <summary>
+                                                    {question.text}
+                                                </summary>
+                                                <span>
+                                                    {question.rationale}
+                                                </span>
+                                            </details>
+                                        ) : (
+                                            <p>{question.text}</p>
+                                        )}
+                                    </div>
+                                    {onQuestionChange && (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            aria-label={`Edit ${question.label}`}
+                                            disabled={
+                                                pending || editing !== null
                                             }
-                                            rows={1}
-                                            aria-label={`${q.label} research question`}
-                                            value={q.text}
-                                            readOnly={!onQuestionChange}
-                                            disabled={pending}
-                                            onChange={(e) =>
-                                                onQuestionChange?.(
-                                                    q.id,
-                                                    e.target.value,
-                                                )
-                                            }
-                                        />
-                                        <span className={styles.edit}>
+                                            onClick={(event) => {
+                                                editTrigger.current =
+                                                    event.currentTarget;
+                                                setDraft(question.text);
+                                                setEditing(question.id);
+                                            }}>
                                             <WorkbenchIcon
                                                 name="edit"
-                                                size={12}
+                                                size={13}
                                             />
-                                        </span>
-                                    </label>
+                                        </Button>
+                                    )}
                                 </li>
                             ))}
                         </ol>
-                        <Button
-                            variant="ghost"
-                            className={styles.addQuestion}
-                            onClick={onAddQuestion}
-                            disabled={pending || !onAddQuestion}>
-                            <span aria-hidden="true">+</span>Add a question ·
-                            the common foundation is always included
-                        </Button>
-                    </div>
+                    </section>
+                    {onAddQuestion && (
+                        <details className={styles.framingCorrections}>
+                            <summary>
+                                <span aria-hidden="true">+</span>
+                                <span>Add a research question</span>
+                            </summary>
+                            <AdditionalFramingQuestion
+                                onAddQuestion={onAddQuestion}
+                                pending={pending || editing !== null}
+                            />
+                        </details>
+                    )}
+                    {editing && (
+                        <p role="status">
+                            Save or cancel your edit before starting research.
+                        </p>
+                    )}
                     {error && <p role="alert">{error}</p>}
+                    {onStart && (
+                        <div className={styles.framingLaunch}>
+                            <p>
+                                Nothing runs before you start. Primary sources
+                                first, counter-evidence always sought, bounded
+                                effort.
+                            </p>
+                            <Button
+                                variant="launch"
+                                onClick={onStart}
+                                disabled={
+                                    pending || !onStart || editing !== null
+                                }>
+                                Start research
+                                <WorkbenchIcon name="chevron" size={14} />
+                            </Button>
+                        </div>
+                    )}
                 </div>
-                <div className={styles.launch}>
-                    <p>
-                        Nothing runs before you start. Primary sources first,
-                        counter-evidence always sought, bounded effort.
-                    </p>
-                    <Button
-                        variant="launch"
-                        onClick={onStart}
-                        disabled={pending || !onStart}>
-                        {pending ? "Starting…" : "Start research"}
-                        <WorkbenchIcon name="chevron" size={14} />
-                    </Button>
-                </div>
-            </div>
-            {optionalQuestion}
+            )}
         </section>
     );
 }
-
+function AdditionalFramingQuestion({
+    onAddQuestion,
+    pending,
+}: {
+    onAddQuestion: (text: string) => void;
+    pending: boolean;
+}) {
+    const [text, setText] = useState("");
+    const inputId = useId();
+    return (
+        <form
+            className={styles.additionalQuestion}
+            aria-label="Suggest a research question"
+            onSubmit={(event) => {
+                event.preventDefault();
+                if (text.trim()) {
+                    onAddQuestion(text.trim());
+                    setText("");
+                }
+            }}>
+            <label className={styles.additionalQuestionLabel} htmlFor={inputId}>
+                Another question to investigate
+            </label>
+            <div>
+                <Input
+                    id={inputId}
+                    aria-label="Another question to investigate"
+                    placeholder="What else should the research examine?"
+                    value={text}
+                    onChange={(event) => setText(event.target.value)}
+                    disabled={pending}
+                />
+                <Button
+                    variant="outline"
+                    type="submit"
+                    disabled={pending || !text.trim()}>
+                    Add to framing
+                </Button>
+            </div>
+        </form>
+    );
+}
 /** Source progress labels and numbers are supplied by the execution owner. */
 export function StartSourceCounts({
     counts,

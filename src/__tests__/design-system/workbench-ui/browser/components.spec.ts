@@ -49,40 +49,56 @@ test("START company picker closes with Escape and restores keyboard focus", asyn
     ).toBeFocused();
 });
 
-test("START Other activity reveals a field for the analyst's own scope", async ({
+test("START missing context can use the proposed scope without answering", async ({
     page,
 }) => {
     await page.goto("/?layout=start&screen=framing&theme=light");
-    await page.getByRole("radio", { name: "Other…", exact: true }).check();
-    const scope = page.getByRole("textbox", {
-        name: "Other activity",
-        exact: true,
-    });
-    await scope.fill("Claims intake");
-    await expect(scope).toHaveValue("Claims intake");
+    await page
+        .getByRole("button", { name: "Company only", exact: true })
+        .click();
+    await expect(
+        page.getByRole("region", { name: "Clarify research context" }),
+    ).toBeVisible();
+    await page
+        .getByRole("button", { name: "Use proposed scope", exact: true })
+        .click();
+    await expect(
+        page.getByRole("region", { name: "Clarify research context" }),
+    ).toHaveCount(0);
+    await expect(
+        page.getByRole("region", { name: "Proposed research scope" }),
+    ).toContainText("Photo-led auto physical damage claims");
+    await expect(
+        page.getByRole("region", { name: "Your clarification" }),
+    ).toHaveCount(0);
+    await expect(page.getByRole("status")).not.toContainText(
+        "Illustrative callback: Start research",
+    );
 });
 
-test("START removing a company hides its confirmation and preserves the request", async ({
+test("START confirmation preserves the approved company card and opens framing without a composer", async ({
     page,
 }) => {
     await page.goto("/?layout=start&screen=confirm&theme=light");
-    const request = page.getByRole("textbox", {
-        name: "Research request — optional research angle",
-    });
-    await request.fill("Keep this research angle");
-    await page
-        .getByRole("button", { name: "Remove selected company", exact: true })
-        .click();
     await expect(
         page.getByRole("region", { name: "Confirm company and mandate" }),
-    ).toHaveCount(0);
-    await expect(request).toHaveValue("Keep this research angle");
-    await expect(
-        page.getByRole("button", {
-            name: "Company to investigate",
-            exact: true,
-        }),
     ).toBeVisible();
+    await expect(
+        page.getByRole("textbox", {
+            name: "Research request — optional research angle",
+        }),
+    ).toHaveCount(0);
+    await page.getByRole("radio", { name: /Independent scrutiny/ }).check();
+    await expect(
+        page.getByRole("radio", { name: /Independent scrutiny/ }),
+    ).toBeChecked();
+    await page
+        .getByRole("button", {
+            name: "Confirm and propose framing",
+            exact: true,
+        })
+        .click();
+    await expect(page).toHaveURL(/layout=start&screen=framing/);
 });
 
 test("START public reference controls stage and remove links locally", async ({
@@ -132,12 +148,14 @@ test("START public reference controls stage and remove links locally", async ({
     ).toBeVisible();
 });
 
-test("START Change company opens its picker and search filters the illustrative company", async ({
+test("START Back returns to the company picker and search filters the illustrative company", async ({
     page,
 }) => {
     await page.goto("/?layout=start&screen=confirm&theme=light");
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(page).toHaveURL(/screen=composer/);
     await page
-        .getByRole("button", { name: "Change company", exact: true })
+        .getByRole("button", { name: "Company to investigate", exact: true })
         .click();
     const search = page.getByRole("textbox", {
         name: "Company search",
@@ -167,34 +185,41 @@ test("START View framing navigates from source collection to its framing screen"
     await page
         .getByRole("button", { name: "View framing", exact: true })
         .click();
-    await expect(page).toHaveURL(/layout=start&screen=framing&theme=dark/);
     await expect(
         page.getByRole("region", { name: "Proposed framing" }),
     ).toBeVisible();
-    await page.goBack();
     await expect(
-        page.getByRole("heading", {
-            name: "Collecting the documentary material",
-        }),
-    ).toBeVisible();
+        page.getByRole("button", { name: "Start research", exact: true }),
+    ).toHaveCount(0);
     await page
         .getByRole("button", { name: "Open Progress", exact: true })
         .click();
     await expect(page).toHaveURL(/component=ProgressTimeline/);
 });
 
-test("START Add a question creates an editable question and focuses it", async ({
+test("START optional corrections update the proposed research program", async ({
     page,
 }) => {
     await page.goto("/?layout=start&screen=framing&theme=light");
-    await page.getByRole("button", { name: /Add a question ·/ }).click();
-    const question = page.getByRole("textbox", {
-        name: "Q5 research question",
-        exact: true,
-    });
-    await expect(question).toBeFocused();
-    await question.fill("Who can change the routing rules?");
-    await expect(question).toHaveValue("Who can change the routing rules?");
+    await page.getByRole("button", { name: "Edit Q1", exact: true }).click();
+    await page
+        .getByRole("textbox", { name: "Edit Q1 wording", exact: true })
+        .fill("Who can change the routing rules?");
+    await page.getByRole("button", { name: "Save question" }).click();
+    await page.getByText("Add a research question", { exact: true }).click();
+    await page
+        .getByRole("textbox", {
+            name: "Another question to investigate",
+            exact: true,
+        })
+        .fill("Who owns the repairer relationship?");
+    await page
+        .getByRole("button", { name: "Add to framing", exact: true })
+        .click();
+    const summary = page.getByRole("region", { name: "Framing summary" });
+    await expect(summary).toContainText("Who can change the routing rules?");
+    await expect(summary).toContainText("Who owns the repairer relationship?");
+    await expect(summary).toContainText("5 questions");
 });
 
 test("START angle suggestions populate and focus the request composer", async ({
@@ -216,18 +241,32 @@ test("START angle suggestions populate and focus the request composer", async ({
     await expect(request).toBeFocused();
 });
 
-test("START framing replies populate and focus the refinement composer", async ({
+test("START freeform context is reflected in the scope and retained when reopened", async ({
     page,
 }) => {
     await page.goto("/?layout=start&screen=framing&theme=dark");
     await page
-        .getByRole("button", { name: "Substitution by agents", exact: true })
+        .getByRole("button", { name: "Company only", exact: true })
         .click();
-    const refinement = page.getByRole("textbox", {
-        name: "Refine the framing in your own words",
+    await page
+        .getByRole("radio", { name: "Another activity or boundary" })
+        .click();
+    const context = page.getByRole("textbox", {
+        name: "Another activity or boundary",
+        exact: true,
     });
-    await expect(refinement).toHaveValue("Substitution by agents");
-    await expect(refinement).toBeFocused();
+    await context.fill("Claims intake");
+    await page
+        .getByRole("button", { name: "Update framing", exact: true })
+        .click();
+    await expect(page.getByRole("log")).toContainText("Claims intake");
+    await expect(
+        page.getByRole("region", { name: "Proposed research scope" }),
+    ).toContainText("Claims intake");
+    await page
+        .getByRole("button", { name: "Adjust scope", exact: true })
+        .click();
+    await expect(context).toHaveValue("Claims intake");
 });
 
 test("START previews keep screen navigation and theme within the START layout", async ({
@@ -246,32 +285,64 @@ test("START previews keep screen navigation and theme within the START layout", 
     await expect(page).toHaveURL(/layout=start&screen=confirm&theme=light/);
 });
 
-test("START framing controls remain an isolated presentation", async ({
+test("START a specific request receives a framing directly and needs an explicit research start", async ({
     page,
 }) => {
     await page.goto("/?layout=start&screen=framing&theme=light");
     await expect(
-        page.getByRole("region", { name: "Proposed framing" }),
-    ).toBeVisible();
-    await page
-        .getByRole("radio", { name: "Repair network management" })
-        .check();
+        page.getByRole("region", { name: "Clarify research context" }),
+    ).toHaveCount(0);
+    await expect(page.getByRole("radio")).toHaveCount(0);
     await expect(
-        page.getByRole("radio", { name: "Repair network management" }),
-    ).toBeChecked();
-    await page
-        .getByRole("textbox", { name: "Q1 research question" })
-        .fill("Who controls routing?");
-    await expect(
-        page.getByRole("textbox", { name: "Q1 research question" }),
-    ).toHaveValue("Who controls routing?");
+        page.getByRole("region", { name: "Framing summary" }),
+    ).toContainText("4 questions");
+    await expect(page.getByText("Your request", { exact: true })).toBeVisible();
+    await expect(page.getByText("Workbench", { exact: true })).toBeVisible();
     await page
         .getByRole("button", { name: "Start research", exact: true })
         .click();
-    await expect(page.getByRole("status")).toContainText(
+    await expect(page).toHaveURL(/layout=start&screen=launched/);
+});
+
+test("START useful context changes the scope and research program with mobile keyboard access", async ({
+    page,
+}) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/?layout=start&screen=framing&theme=light");
+    await page
+        .getByRole("button", { name: "Company only", exact: true })
+        .click();
+    const activity = page.getByRole("radio", {
+        name: "Repair network management",
+        exact: true,
+    });
+    await activity.focus();
+    await page.keyboard.press("Space");
+    await expect(activity).toBeChecked();
+    await page.keyboard.press("Enter");
+    await expect(
+        page.getByRole("region", { name: "Proposed research scope" }),
+    ).toContainText("Repair network management");
+    await expect(page.getByRole("log")).toContainText(
+        "Repair network management",
+    );
+    const summary = page.getByRole("region", { name: "Framing summary" });
+    await expect(summary).toBeFocused();
+    await expect(summary).toContainText(
+        "Who controls access to the repair network?",
+    );
+    await expect(summary).toContainText("3 questions");
+    await expect(summary).not.toContainText(
+        "Could agent-led claim intake bypass it?",
+    );
+    await expect(page.getByRole("status")).not.toContainText(
         "Illustrative callback: Start research",
     );
-    await expect(page).toHaveURL(/layout=start&screen=framing/);
+    expect(
+        await page.evaluate(
+            () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+    ).toBe(true);
 });
 
 test("an inventory use opens a themed inspection without closing its sheet on Escape", async ({
@@ -472,4 +543,313 @@ test("the gallery index remains available until an inventory preview is opened",
             .getByRole("button", { name: "Open inventory", exact: true })
             .filter({ hasText: "Open inventory" }),
     ).toBeFocused();
+});
+
+test("START conversation keeps a guided correction through launch and reload", async ({
+    page,
+}) => {
+    await page.goto("/?layout=start&screen=framing&theme=light");
+    await page
+        .getByRole("button", { name: "Example: switching costs" })
+        .click();
+    await page.getByRole("button", { name: "Send refinement" }).click();
+    await expect(
+        page.getByRole("region", { name: "Framing summary" }),
+    ).toContainText(
+        "What would insurers and repairers need to change to switch away from CCC?",
+    );
+    await page
+        .getByRole("button", { name: "Start research", exact: true })
+        .click();
+    await expect(page).toHaveURL(/screen=launched/);
+    await page.reload();
+    await page
+        .getByRole("button", { name: "View framing", exact: true })
+        .click();
+    await expect(
+        page.getByRole("region", { name: "Framing summary" }),
+    ).toContainText(
+        "What would insurers and repairers need to change to switch away from CCC?",
+    );
+    await expect(
+        page.getByRole("button", { name: "Start research", exact: true }),
+    ).toHaveCount(0);
+});
+
+for (const theme of ["light", "dark"] as const) {
+    test(`START ${theme} conversation keeps the composer visible and preserves the mobile draft`, async ({
+        page,
+    }) => {
+        const errors: string[] = [];
+        page.on("pageerror", (error) => errors.push(error.message));
+        await page.emulateMedia({ reducedMotion: "no-preference" });
+        await page.goto(`/?layout=start&screen=framing&theme=${theme}`);
+        const input = page.getByRole("textbox", {
+            name: "Refine the framing in your own words",
+        });
+        await page.getByRole("button", { name: "Example: reword Q1" }).click();
+        await expect(input).toBeFocused();
+        await page.getByRole("button", { name: "Send refinement" }).click();
+        await expect(
+            page.getByRole("region", { name: "Framing summary" }),
+        ).toContainText(
+            "Does CCC decide coordination rules, or execute workflows defined by insurers?",
+        );
+        const before = await input.boundingBox();
+        expect(
+            before &&
+                before.y + before.height <= (page.viewportSize()?.height ?? 0),
+        ).toBeTruthy();
+        await page
+            .getByRole("button", { name: "Start research", exact: true })
+            .click();
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page
+            .getByRole("tab", { name: "Conversation", exact: true })
+            .click();
+        const followUp = page.getByRole("textbox", {
+            name: "Ask about the sources",
+        });
+        await followUp.fill("Keep this draft\nwith a second line");
+        await page.getByRole("tab", { name: "Progress", exact: true }).click();
+        await page
+            .getByRole("tab", { name: "Conversation", exact: true })
+            .click();
+        await expect(followUp).toHaveValue(
+            "Keep this draft\nwith a second line",
+        );
+        const box = await followUp.boundingBox();
+        expect(box && box.y + box.height <= 844).toBeTruthy();
+        await page.getByRole("button", { name: "Send refinement" }).click();
+        await expect(page.getByRole("log")).toContainText("Keep this draft");
+        expect(
+            await page.evaluate(
+                () => document.documentElement.scrollWidth <= window.innerWidth,
+            ),
+        ).toBe(true);
+        expect(errors).toEqual([]);
+    });
+}
+
+test("START opening the accepted framing keeps its disclosure in view on mobile", async ({
+    page,
+}) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/?layout=start&screen=launched&theme=light");
+    await page.getByRole("tab", { name: "Conversation", exact: true }).click();
+    const disclosure = page.getByRole("button", {
+        name: "View framing",
+        exact: true,
+    });
+    await disclosure.click();
+    await expect(disclosure).toBeInViewport();
+});
+
+test("START a freeform request stays visible without silently changing framing or moving the reader", async ({
+    page,
+}) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/?layout=start&screen=framing&theme=light");
+    const summary = page.getByRole("region", { name: "Framing summary" });
+    const before = await summary.textContent();
+    const log = page.getByRole("log");
+    const viewport = page.getByRole("region", {
+        name: "Conversation scroll area",
+        exact: true,
+    });
+    await viewport.evaluate((node) => {
+        node.scrollTop = 0;
+        node.dispatchEvent(new Event("scroll"));
+    });
+    const input = page.getByRole("textbox", {
+        name: "Refine the framing in your own words",
+    });
+    await input.fill("Please investigate the network instead.");
+    await page.getByRole("button", { name: "Send refinement" }).click();
+    await expect(summary).toHaveText(before ?? "");
+    await expect(log).toContainText("Please investigate the network instead.");
+    await expect(page.getByRole("status")).toContainText(
+        "freeform interpretation is not connected",
+    );
+    await expect
+        .poll(() => viewport.evaluate((node) => node.scrollTop))
+        .toBe(0);
+});
+
+test("START reference reading controls fill the floating composer without changing the research program", async ({
+    page,
+}) => {
+    await page.goto("/?layout=start&screen=framing&theme=light");
+    const summary = page.getByRole("region", { name: "Framing summary" });
+    const initial = await summary.textContent();
+    await page
+        .getByRole("button", { name: "Control of coordination", exact: true })
+        .click();
+    const composer = page.getByRole("textbox", {
+        name: "Refine the framing in your own words",
+    });
+    await expect(composer).toBeFocused();
+    await expect(composer).toHaveValue(
+        "Test control of coordination most closely.",
+    );
+    await expect(summary).toHaveText(initial ?? "");
+});
+
+test("START reference activity controls update the supplied scope and question program", async ({
+    page,
+}) => {
+    await page.goto("/?layout=start&screen=framing&theme=light");
+    const activity = page.getByRole("button", {
+        name: "Repair network management",
+        exact: true,
+    });
+    await activity.click();
+    await expect(activity).toHaveAttribute("aria-pressed", "true");
+    await expect(
+        page.getByRole("region", { name: "Framing summary" }),
+    ).toContainText("Who controls access to the repair network?");
+    await expect(
+        page.getByRole("region", { name: "Framing summary" }),
+    ).toContainText("3 questions");
+    await expect(
+        page.getByRole("button", { name: "Start research", exact: true }),
+    ).toBeEnabled();
+    await expect(page).toHaveURL(/screen=framing/);
+});
+
+test("START pending actions stay above the composer and company-only clarification precedes framing", async ({
+    page,
+}) => {
+    await page.goto("/?layout=start&screen=framing&theme=light");
+    await page
+        .getByRole("button", { name: "Company only", exact: true })
+        .click();
+    const log = page.getByRole("log");
+    await expect(
+        log.getByRole("region", { name: "Clarify research context" }),
+    ).toHaveCount(0);
+    await expect(
+        page.getByRole("region", { name: "Clarify research context" }),
+    ).toBeVisible();
+    await expect(
+        page.getByRole("region", { name: "Framing summary" }),
+    ).toHaveCount(0);
+    await page
+        .getByRole("radio", { name: "Repair network management", exact: true })
+        .click();
+    await page
+        .getByRole("button", { name: "Update framing", exact: true })
+        .click();
+    await expect(log).toContainText("Repair network management");
+    await expect(
+        log.getByRole("region", { name: "Framing summary" }),
+    ).toHaveCount(0);
+    await expect(
+        page.getByRole("region", { name: "Framing summary" }),
+    ).toContainText("Who controls access to the repair network?");
+});
+
+test("START conversation scroll uses the pane width and offers a return to latest without moving its composer", async ({
+    page,
+}) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto("/?layout=start&screen=framing&theme=light");
+    const log = page.getByRole("region", {
+        name: "Conversation scroll area",
+        exact: true,
+    });
+    const bounds = await log.boundingBox();
+    expect(bounds && bounds.width >= 1400).toBeTruthy();
+    const input = page.getByRole("textbox", {
+        name: "Refine the framing in your own words",
+    });
+    for (let index = 0; index < 4; index++) {
+        await input.fill(
+            `Follow-up ${index}: ${"Examine the coordination dependencies. ".repeat(30)}`,
+        );
+        await page.getByRole("button", { name: "Send refinement" }).click();
+    }
+    const before = await input.boundingBox();
+    await log.evaluate((node) => {
+        node.scrollTop = 0;
+        node.dispatchEvent(new Event("scroll"));
+    });
+    await expect(
+        page.getByRole("button", { name: "Jump to latest", exact: true }),
+    ).toBeVisible();
+    const after = await input.boundingBox();
+    expect(Math.abs((before?.y ?? 0) - (after?.y ?? 0))).toBeLessThan(1);
+    await page
+        .getByRole("button", { name: "Jump to latest", exact: true })
+        .click();
+    await expect
+        .poll(() =>
+            log.evaluate(
+                (node) =>
+                    node.scrollHeight - node.scrollTop - node.clientHeight,
+            ),
+        )
+        .toBeLessThan(32);
+});
+
+test("START mobile pending framing keeps its launch action visible above the composer", async ({
+    page,
+}) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/?layout=start&screen=framing&theme=light");
+    const start = page.getByRole("button", {
+        name: "Start research",
+        exact: true,
+    });
+    await expect(start).toBeInViewport();
+    await expect(
+        page.getByRole("textbox", {
+            name: "Refine the framing in your own words",
+        }),
+    ).toBeInViewport();
+});
+
+test("START pending artifact stays anchored above the composer while the conversation scrolls", async ({
+    page,
+}) => {
+    await page.setViewportSize({ width: 1440, height: 820 });
+    await page.goto("/?layout=start&screen=framing&theme=light");
+    const viewport = page.getByRole("region", {
+        name: "Conversation scroll area",
+        exact: true,
+    });
+    const artifact = page.getByRole("region", {
+        name: "Pending action",
+        exact: true,
+    });
+    await expect(
+        viewport.getByRole("region", { name: "Pending action", exact: true }),
+    ).toHaveCount(0);
+    const composer = page.getByRole("textbox", {
+        name: "Refine the framing in your own words",
+    });
+    for (let index = 0; index < 3; index++) {
+        await composer.fill(
+            `Follow-up ${index}: ${"Inspect the coordination rules. ".repeat(25)}`,
+        );
+        await page.getByRole("button", { name: "Send refinement" }).click();
+    }
+    const before = await artifact.boundingBox();
+    const inputBefore = await composer.boundingBox();
+    await viewport.evaluate((node) => {
+        node.scrollTop = 0;
+        node.dispatchEvent(new Event("scroll"));
+    });
+    const after = await artifact.boundingBox();
+    const inputAfter = await composer.boundingBox();
+    expect(Math.abs((before?.y ?? 0) - (after?.y ?? 0))).toBeLessThan(1);
+    expect(Math.abs((inputBefore?.y ?? 0) - (inputAfter?.y ?? 0))).toBeLessThan(
+        1,
+    );
+    expect((after?.y ?? 0) + (after?.height ?? 0)).toBeLessThan(
+        inputAfter?.y ?? 0,
+    );
+    await expect(
+        page.getByRole("button", { name: "Start research", exact: true }),
+    ).toBeInViewport();
 });

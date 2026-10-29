@@ -146,15 +146,6 @@
     font-size: 12px;
     color: var(--muted-foreground);
 }
-.framing {
-    width: min(760px, calc(100% - 32px));
-    min-height: calc(100svh - 60px);
-    margin: 0 auto;
-    padding: 28px 0 32px;
-    display: flex;
-    flex-direction: column;
-    gap: 22px;
-}
 .request {
     align-self: flex-end;
     max-width: 560px;
@@ -184,213 +175,39 @@
     margin-top: auto;
     padding-top: 24px;
 }
-.proposal {
+.confirmation {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 24px;
 }
-.who {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    font-weight: 500;
-}
-.who > span {
-    color: var(--brand-purple);
-    letter-spacing: -0.08em;
-}
-.introduction {
-    font-size: 15.5px;
-    line-height: 23px;
-}
-.framingCard {
-    border-radius: 24px;
-    background: var(--card);
-    box-shadow:
-        0 0 0 1px var(--chip-edge),
-        0 24px 56px -30px var(--glow);
-    overflow: hidden;
-}
-.cardBody {
-    padding: 20px 20px 0;
+.confirmationIdentity {
     display: flex;
     flex-direction: column;
-    gap: 18px;
-}
-.activity {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    border: 0;
-    padding: 0;
-    margin: 0;
-}
-.activity legend {
-    font: 500 11px / 1.5 var(--font-mono);
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--muted-foreground);
-    margin-bottom: 8px;
-}
-.activity label {
-    position: relative;
-    height: 32px;
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 0 12px;
-    border-radius: 10px;
-    background: var(--card);
-    box-shadow: inset 0 0 0 1px
-        color-mix(in oklab, var(--foreground) 14%, transparent);
-    font-size: 13.5px;
-    font-weight: 500;
-    cursor: pointer;
-}
-.activity input {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    opacity: 0;
-    cursor: inherit;
-}
-.activity label:has(input:checked) {
-    background: color-mix(in oklab, var(--brand-purple) 7%, var(--card));
-    box-shadow:
-        inset 0 0 0 1.5px var(--brand-purple),
-        0 0 0 3px color-mix(in oklab, var(--brand-purple) 16%, transparent);
-}
-.activity label:focus-within {
-    outline: 2px solid var(--ring);
-    outline-offset: 4px;
-}
-.questions {
-    list-style: none;
-    padding: 0;
-    margin: 4px 0 0;
-}
-.questions label {
-    display: flex;
-    align-items: center;
     gap: 12px;
-    padding: 9px 0;
-    border-top: 1px solid var(--divider);
 }
-.questionNumber {
-    flex-shrink: 0;
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font: 500 10.5px var(--font-mono);
-    background: var(--tint-ink);
-}
-.questions textarea {
-    flex: 1;
-    min-width: 0;
-    field-sizing: content;
-    resize: none;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--foreground);
-    font: 400 14.5px / 20px var(--font-sans);
-}
-.questions textarea:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 4px;
-}
-.edit {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    color: var(--muted-foreground);
-}
-.addQuestion {
+.confirmationWebsite {
     display: flex;
-    justify-content: flex-start;
-    gap: 18px;
-    width: 100%;
-    height: auto;
-    white-space: normal;
-    border: 0;
-    border-top: 1px solid var(--divider);
-    border-radius: 0;
-    padding: 12px 8px 16px;
-    font: 400 12.5px / 18px var(--font-sans);
-    color: var(--muted-foreground);
-}
-.launch {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 14px 20px;
-    background: color-mix(in oklab, var(--foreground) 2.5%, transparent);
-    border-top: 1px solid var(--divider);
-}
-.launch p {
-    flex: 1;
-    font-size: 12.5px;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    padding: 0 4px;
+    font-size: 12px;
     line-height: 18px;
     color: var(--muted-foreground);
 }
-.launch button {
-    height: 44px;
-    font-size: 14px;
-    padding: 0 18px;
-}
-.confirmation {
-    padding: 22px;
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-    border-top: 1px solid var(--chip-edge);
-    border-radius: 0 0 22px 22px;
-    background: linear-gradient(
-        180deg,
-        color-mix(in oklab, var(--brand-purple) 7%, var(--card)),
-        var(--card)
-    );
-}
-.identity {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-}
-.identity h2 {
-    margin: 4px 0 0;
-    font-size: 18px;
-    line-height: 24px;
-    font-weight: 500;
-    letter-spacing: -0.02em;
-}
-.metadata {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 16px;
-    padding: 14px 16px;
-    border-radius: 14px;
-    background: var(--card);
-    box-shadow: 0 0 0 1px var(--divider);
-    margin: 0;
-}
-.metadata dt {
-    font: 400 11px / 1.5 var(--font-mono);
-    color: var(--muted-foreground);
-    margin-bottom: 5px;
-}
-.metadata dd {
-    margin: 0;
-    font-size: 13.5px;
-    font-weight: 500;
+.confirmationWebsite a {
+    color: var(--foreground);
+    text-decoration: underline;
+    text-underline-offset: 3px;
     overflow-wrap: anywhere;
+    min-width: 0;
+}
+.confirmationNote {
+    margin: 0;
+    text-align: center;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--muted-foreground);
 }
 .mandate {
     display: flex;
@@ -404,14 +221,22 @@
 .mandate p {
     margin: 0 0 5px;
 }
+.mandate p:last-child {
+    margin-bottom: 0;
+}
 .actions {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
+    padding-top: 8px;
 }
 .actions button {
     font-size: 14px;
+    min-height: 44px;
+}
+.actions button:first-child {
+    padding-inline: 8px;
 }
 .research {
     min-height: calc(100svh - 60px);
@@ -540,32 +365,23 @@
         height: auto;
         min-height: 40px;
     }
-    .metadata {
-        grid-template-columns: minmax(0, 1fr);
-        gap: 12px;
-    }
-    .confirmation {
-        padding: 18px;
-    }
     .actions,
-    .launch,
     .mandate {
         flex-direction: column;
         align-items: stretch;
     }
-    .actions button,
-    .launch button {
+    .actions button {
         width: 100%;
         white-space: normal;
         height: auto;
         min-height: 44px;
     }
+    .actions button:first-child {
+        align-self: flex-start;
+        width: auto;
+    }
     .mandate {
         gap: 8px;
-    }
-    .activity label {
-        height: auto;
-        min-height: 32px;
     }
     .request {
         width: 100%;
@@ -760,4 +576,605 @@
 
 .showcase {
     line-height: normal;
+}
+
+.framingAuthor span {
+    color: var(--brand-purple);
+    letter-spacing: -0.04em;
+}
+.framingQuestionId {
+    font: 500 10.5px var(--font-mono);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--tint-ink);
+    letter-spacing: normal;
+}
+.framingRecap:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 6px;
+    border-radius: 8px;
+}
+.framingRecap header > span {
+    font-size: 12px;
+    color: var(--muted-foreground);
+}
+.additionalQuestion {
+    display: grid;
+    gap: 10px;
+    padding-top: 20px;
+    border-top: 1px solid var(--divider);
+}
+.additionalQuestionLabel {
+    font-size: 13px;
+    font-weight: 500;
+}
+.additionalQuestion > div {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.additionalQuestion button {
+    flex-shrink: 0;
+    min-height: 44px;
+}
+@media (max-width: 550px) {
+    .additionalQuestion > div {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
+.requestLabel {
+    margin: 0 0 8px;
+    text-align: right;
+    font-size: 12px;
+    color: var(--muted-foreground);
+}
+.suppliedContext {
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: color-mix(in oklab, var(--brand-purple) 4%, var(--card));
+}
+.suppliedContext h2 {
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 500;
+}
+.suppliedContext dl {
+    margin: 0;
+}
+.suppliedContext dt {
+    font-size: 12px;
+    color: var(--muted-foreground);
+}
+.suppliedContext dd {
+    margin: 4px 0 0;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+}
+.framingCorrections .additionalQuestion {
+    margin-top: 20px;
+}
+.framingCorrections [data-slot="textarea"]:focus-visible {
+    box-shadow: var(--surface-shadow-input);
+    outline: 2px solid var(--ring);
+    outline-offset: 3px;
+}
+
+/* The host supplies the viewport height; only the message log and progress scroll. */
+.refinement {
+    margin-top: 0;
+    padding: 12px 4px 0;
+    flex-shrink: 0;
+}
+.framingQuestions li > button {
+    opacity: 0.7;
+}
+.framingQuestions li:hover > button,
+.framingQuestions li:focus-within > button {
+    opacity: 1;
+}
+.research {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+.conversation {
+    min-height: 0;
+    min-width: 0;
+    padding: 20px 16px;
+}
+.conversationComposer {
+    margin-top: 0;
+    padding-top: 10px;
+}
+.progress {
+    overflow-y: auto;
+    min-height: 0;
+}
+.mobileTabs {
+    display: none;
+}
+@media (max-width: 760px) {
+    .research {
+        grid-template-rows: auto minmax(0, 1fr);
+    }
+    .mobileTabs {
+        display: flex;
+        padding: 8px 16px;
+    }
+    .research[data-mobile-view="progress"] .conversation,
+    .research[data-mobile-view="conversation"] .progress {
+        display: none;
+    }
+    .conversation {
+        border: 0;
+        padding: 8px 16px 16px;
+    }
+}
+
+/* Framing follows Start-4-Framing.dc.html; the shell and behavior stay application-owned. */
+.framingProposal {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+    color: var(--foreground);
+    font: 400 14.5px / 20px var(--font-sans);
+}
+.framingAuthor {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    line-height: 20px;
+    font-weight: 500;
+}
+.framingAuthor span {
+    color: var(--brand-purple);
+    letter-spacing: -0.04em;
+}
+.framingIntroduction {
+    margin: 0;
+    font-size: 15.5px;
+    line-height: 24px;
+}
+.framingCard {
+    overflow: hidden;
+    min-width: 0;
+    border-radius: 22px;
+    background: var(--surface-glass);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    box-shadow:
+        0 0 0 1px var(--chip-edge),
+        0 24px 56px -30px
+        color-mix(in oklab, var(--brand-purple) 55%, transparent);
+}
+.framingScope {
+    padding: 18px 20px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.framingScope header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.framingScope h2,
+.framingRecap h2 {
+    margin: 0;
+    font: 500 11px / 16px var(--font-mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+}
+.framingScope p {
+    margin: 0;
+    font-size: 14.5px;
+    line-height: 22px;
+}
+.framingRecap {
+    padding: 4px 20px 6px;
+    min-width: 0;
+}
+.framingRecap:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -3px;
+}
+.framingRecap header {
+    padding-bottom: 6px;
+}
+.framingQuestions {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.framingQuestions li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 0;
+    border-top: 1px solid var(--divider);
+    font-size: 14.5px;
+    line-height: 20px;
+}
+.framingQuestions li > div {
+    flex: 1;
+    min-width: 0;
+}
+.framingQuestions li p {
+    margin: 0;
+}
+.framingQuestions li > button {
+    width: 28px;
+    height: 28px;
+    min-height: 28px;
+    border-radius: 8px;
+    padding: 0;
+    color: var(--muted-foreground);
+}
+.questionReason summary {
+    cursor: help;
+    list-style: none;
+}
+.questionReason summary::-webkit-details-marker {
+    display: none;
+}
+.questionReason[open] summary {
+    margin-bottom: 6px;
+}
+.questionReason > span {
+    display: block;
+    font-size: 12.5px;
+    line-height: 19px;
+    color: var(--muted-foreground);
+}
+.framingCorrections {
+    margin: 0 20px;
+    padding: 0;
+    border-top: 1px solid var(--divider);
+}
+.framingCorrections > summary {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    min-height: 40px;
+    padding: 9px 0;
+    cursor: pointer;
+    color: var(--muted-foreground);
+    font-size: 13px;
+    line-height: 20px;
+    list-style: none;
+}
+.framingCorrections > summary > span:first-child {
+    width: 28px;
+    text-align: center;
+    font-size: 16px;
+}
+.framingCorrections > summary::-webkit-details-marker {
+    display: none;
+}
+.questionCorrection {
+    display: grid;
+    gap: 10px;
+    padding: 4px 0;
+    font-size: 12px;
+}
+.framingLaunch {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--divider);
+    background: color-mix(in oklab, var(--foreground) 3%, transparent);
+}
+.framingLaunch > p {
+    flex: 1;
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 18px;
+    color: var(--muted-foreground);
+}
+.framingLaunch > button {
+    flex-shrink: 0;
+}
+.conversation .framingProposal {
+    gap: 12px;
+}
+.conversation .framingScope {
+    padding: 14px 12px;
+}
+.conversation .framingRecap {
+    padding: 4px 12px 6px;
+}
+.conversation .framingQuestions li {
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 13px;
+    line-height: 19px;
+}
+@media (max-width: 550px) {
+    .framingScope {
+        padding: 16px 16px 12px;
+    }
+    .framingRecap {
+        padding-inline: 16px;
+    }
+    .framingCorrections {
+        margin-inline: 16px;
+    }
+    .framingLaunch {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 14px 16px;
+    }
+    .framingLaunch > button {
+        align-self: flex-end;
+    }
+}
+
+.request {
+    justify-self: end;
+    width: min(560px, 100%);
+}
+
+.framingAuthor strong {
+    font: inherit;
+}
+
+body:has(.framing),
+body:has(.start-screen-preview[data-start-screen="launched"]),
+body:has(.start-screen-preview[data-start-screen="handoff"]) {
+    overflow: hidden;
+}
+.framing [data-slot="prompt-composer"],
+.conversationComposer [data-slot="prompt-composer"] {
+    box-shadow: var(--shadow-glass);
+}
+.framing [data-slot="prompt-composer"],
+.conversationComposer [data-slot="prompt-composer"] {
+    border-radius: 22px;
+}
+.framing [data-slot="prompt-composer-card"],
+.conversationComposer [data-slot="prompt-composer-card"] {
+    border-radius: inherit;
+    border-color: var(--divider);
+    background: var(--surface-float);
+    padding: 8px;
+}
+.framing [data-slot="prompt-composer-submit"],
+.conversationComposer [data-slot="prompt-composer-submit"] {
+    background: var(--primary);
+    color: var(--primary-foreground);
+}
+
+.framing [data-role="user"] [data-slot="message-content"] {
+    padding: 14px 18px;
+    border-radius: 20px 20px 6px 20px;
+    background: var(--primary);
+    color: var(--primary-foreground);
+    font-size: 15px;
+    line-height: 22px;
+}
+.framing [data-role="assistant"] > [data-slot="message-body"],
+.framing
+    [data-role="assistant"]
+    > [data-slot="message-body"]
+    > [data-slot="message-content"] {
+    width: 100%;
+}
+.framingScope > div {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.framingScope > div [data-slot="toggle-group"] {
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.framingScope > div [data-slot="toggle-group-item"],
+.framingScope > div [data-slot="toggle-group"] > [data-slot="button"] {
+    height: 32px;
+    min-height: 32px;
+    padding: 0 12px;
+    border-radius: 10px;
+    border: 0;
+    background: var(--card);
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--foreground) 14%, transparent);
+    color: var(--foreground);
+    font: 500 13.5px / 20px var(--font-sans);
+}
+.framingScope > div [data-slot="toggle-group-item"][data-pressed] {
+    box-shadow:
+        inset 0 0 0 1.5px var(--brand-purple),
+        0 0 0 3px color-mix(in oklab, var(--brand-purple) 16%, transparent);
+    background: color-mix(in oklab, var(--brand-purple) 7%, var(--card));
+}
+.framingScope > div [data-slot="toggle-group"] > [data-slot="button"] {
+    color: var(--muted-foreground);
+}
+.framingScope > div > p {
+    flex-basis: 100%;
+    margin: 4px 0 0;
+}
+.framing [data-slot="framing-suggestions"] {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.framing [data-slot="framing-suggestions"] p {
+    margin: 0;
+    color: var(--muted-foreground);
+    font-size: 14.5px;
+    line-height: 22px;
+}
+.framing [data-slot="framing-suggestions"] > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.framing [data-slot="framing-suggestions"] button {
+    height: 34px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--card);
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--foreground) 14%, transparent);
+    font-size: 13.5px;
+    line-height: 20px;
+    font-weight: 500;
+}
+.framing [data-slot="prompt-composer-card"] {
+    padding: 8px 8px 8px 20px;
+    background: var(--card);
+}
+.framing [data-slot="prompt-composer-card"] > div:last-child {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+}
+.framing [data-slot="prompt-composer-input"] {
+    flex: 1;
+    min-width: 0;
+    min-height: 40px;
+    padding: 9px 0;
+    font-size: 15px;
+    line-height: 22px;
+}
+.framing [data-slot="prompt-composer-submit"] {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+}
+
+/* Pending decisions are docked above the composer; the transcript owns the full pane width. */
+.framing {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
+}
+.framing [data-slot="conversation-thread-log"] {
+    padding: 0;
+    border-radius: 0;
+}
+.framing [data-slot="conversation-thread-content"] {
+    width: min(760px, calc(100% - 32px));
+    margin-inline: auto;
+    gap: 22px;
+    padding: 28px 0 0;
+}
+.framing [data-slot="conversation-scroll-content"] {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    padding-bottom: calc(var(--conversation-dock-height, 80px) + 28px);
+}
+.framingDock {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 16px;
+    max-height: calc(100% - 96px);
+    width: min(760px, calc(100% - 32px));
+    margin-inline: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.pendingAction {
+    max-height: min(52dvh, 520px);
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--foreground) 18%, transparent)
+        transparent;
+    border-radius: 22px;
+    box-shadow:
+        0 0 0 1px var(--chip-edge),
+        var(--shadow-float);
+}
+.pendingAction:hover {
+    scrollbar-color: color-mix(in oklab, var(--foreground) 32%, transparent)
+        transparent;
+}
+.pendingAction::-webkit-scrollbar {
+    width: 4px;
+}
+.pendingAction::-webkit-scrollbar-track {
+    background: transparent;
+}
+.pendingAction::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--foreground) 18%, transparent);
+}
+.pendingAction .framingCard {
+    overflow: visible;
+    box-shadow: none;
+}
+.pendingAction .framingProposal {
+    gap: 0;
+}
+.pendingAction [data-slot="agent-question"] {
+    max-width: none;
+    border-radius: 22px;
+    background: var(--surface-glass);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    box-shadow: none;
+    border: 0;
+}
+.pendingAction .framingLaunch {
+    position: sticky;
+    bottom: 0;
+    border-radius: 0 0 22px 22px;
+    background: var(--surface-float);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+}
+.framingDock > [data-slot="framing-suggestions"],
+.framingDock > [data-slot="prompt-composer"] {
+    flex-shrink: 0;
+}
+.framing [data-slot="conversation-thread-content"] [data-role="assistant"] p {
+    margin: 8px 0 0;
+    font-size: 15.5px;
+    line-height: 24px;
+}
+
+.conversationComposer {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    margin-top: 0;
+}
+.conversation [data-slot="conversation-thread-content"] {
+    padding-bottom: calc(var(--conversation-dock-height, 0px) + 24px);
+}
+@media (max-width: 760px) {
+    .pendingAction .framingScope > div [data-slot="toggle-group"],
+    .framingDock [data-slot="framing-suggestions"] > div {
+        max-width: 100%;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+    }
+    .pendingAction .framingScope > div [data-slot="toggle-group"] > button {
+        flex-shrink: 0;
+    }
 }

@@ -1,7 +1,9 @@
 .start-screen-preview {
+    min-width: 0;
     width: 100%;
 }
 .start-screen-toolbar {
+    min-width: 0;
     padding: 20px;
     display: flex;
     flex-wrap: wrap;
@@ -27,69 +29,6 @@
     border-radius: 9px;
     background: var(--fill-quiet);
     font-size: 12.5px;
-}
-.start-preview-optional {
-    padding-top: 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-.start-preview-optional p {
-    font-size: 13px;
-    line-height: 19px;
-    color: var(--muted-foreground);
-}
-.start-preview-optional > div {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-.start-preview-optional button {
-    height: 34px;
-    border-radius: 999px;
-    padding: 0 14px;
-    background: var(--card);
-    box-shadow: inset 0 0 0 1px
-        color-mix(in oklab, var(--foreground) 14%, transparent);
-    border: 0;
-    font-size: 13.5px;
-    font-weight: 500;
-}
-.start-preview-refinement {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 8px 8px 20px;
-    border-radius: 22px;
-    background: var(--card);
-    box-shadow:
-        0 0 0 1px var(--divider),
-        0 18px 44px -18px
-        color-mix(in oklab, var(--foreground) 30%, transparent);
-}
-.start-preview-refinement input {
-    flex: 1;
-    min-width: 0;
-    background: transparent;
-    border: 0;
-    font-size: 14px;
-}
-.start-preview-refinement input:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 4px;
-}
-.start-preview-refinement.compact {
-    border-radius: 14px;
-    padding: 8px 6px 8px 16px;
-    gap: 6px;
-    box-shadow: 0 0 0 1px var(--divider);
-}
-.start-preview-refinement.compact input {
-    font-size: 12.5px;
-}
-.start-preview-refinement.compact button {
-    width: 34px;
-    height: 34px;
 }
 .start-preview-reply {
     font-size: 12.5px;
@@ -129,4 +68,181 @@
     .start-preview-limitations > span:last-child {
         margin-left: 0;
     }
+}
+
+.start-confirmation-frame {
+    width: min(640px, calc(100% - 32px));
+    margin: 0 auto;
+    padding: 56px 0 40px;
+}
+.start-confirmation-frame > div:first-child {
+    margin-bottom: 24px;
+}
+
+.start-preview-scenarios {
+    width: min(760px, calc(100% - 32px));
+    margin: 24px auto 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+.start-preview-scenarios > span {
+    font-size: 12px;
+    color: var(--muted-foreground);
+    margin-right: 8px;
+}
+.start-preview-scenario {
+    min-height: 36px;
+    font-size: 12px;
+}
+.start-preview-scenario[aria-pressed="true"] {
+    background: var(--tint-violet);
+    color: var(--foreground);
+}
+
+#root:has(.start-conversation-shell) {
+    height: 100dvh;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+}
+.start-screen-preview:has(.start-conversation-shell) {
+    min-height: 0;
+    height: 100%;
+}
+.start-conversation-shell {
+    min-width: 0;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.start-conversation-surface {
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+}
+.start-screen-toolbar:has(+ .start-screen-preview .start-conversation-shell) {
+    padding: 8px 16px;
+    gap: 6px;
+}
+.start-screen-toolbar p {
+    margin: 0;
+}
+.start-preview-scenarios {
+    margin: 8px auto 0;
+    flex-shrink: 0;
+}
+.start-guided-examples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    margin-bottom: 8px;
+}
+.start-guided-examples button {
+    font-size: 11px;
+}
+
+.start-preview-scenarios .start-guided-examples {
+    margin: 0 0 0 auto;
+}
+
+.start-preview-scenarios {
+    width: min(1120px, calc(100% - 32px));
+}
+@media (max-width: 760px) {
+    .start-screen-toolbar:has(
+        + .start-screen-preview .start-conversation-shell
+    ) {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 2px 8px;
+    }
+    .start-screen-toolbar:has(+ .start-screen-preview .start-conversation-shell)
+        h1 {
+        grid-column: 1;
+        grid-row: 1;
+        font-size: 13px;
+    }
+    .start-screen-toolbar:has(+ .start-screen-preview .start-conversation-shell)
+        > a {
+        grid-column: 2;
+        grid-row: 1;
+        font-size: 12px;
+    }
+    .start-screen-toolbar:has(+ .start-screen-preview .start-conversation-shell)
+        nav {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        gap: 8px;
+    }
+    .start-screen-toolbar:has(+ .start-screen-preview .start-conversation-shell)
+        nav
+        a {
+        flex-shrink: 0;
+        margin: 6px 0;
+        font-size: 12px;
+    }
+    .start-screen-toolbar:has(+ .start-screen-preview .start-conversation-shell)
+        p {
+        grid-column: 1 / -1;
+        font-size: 11px;
+        line-height: 16px;
+    }
+    .start-screen-toolbar:has(+ .start-screen-preview .start-conversation-shell)
+        output:empty {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+    }
+    .start-screen-toolbar:has(+ .start-screen-preview .start-conversation-shell)
+        output:not(:empty) {
+        grid-column: 1 / -1;
+        font-size: 11px;
+        line-height: 16px;
+    }
+    .start-preview-scenarios {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        margin-top: 4px;
+        padding: 4px 0;
+        gap: 6px;
+    }
+    .start-preview-scenarios > span {
+        display: none;
+    }
+    .start-preview-scenarios > button {
+        flex-shrink: 0;
+        min-height: 30px;
+        height: 30px;
+        padding-inline: 8px;
+        font-size: 11px;
+    }
+    .start-preview-scenarios .start-guided-examples {
+        flex-shrink: 0;
+        flex-wrap: nowrap;
+    }
+}
+
+.start-conversation-author {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    line-height: 20px;
+    font-weight: 500;
+}
+.start-conversation-author span {
+    color: var(--brand-purple);
+}
+.start-conversation-author strong {
+    font: inherit;
 }

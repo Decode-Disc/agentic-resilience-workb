@@ -1,16 +1,26 @@
 import {
     ArrowRight01Icon,
-    ArrowUp01Icon,
+    ArrowUp02Icon,
     Plus,
 } from "@hugeicons/core-free-icons";
-import { type Ref, useState } from "react";
+import { type Ref, useEffect, useState } from "react";
 import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
 import Icon from "@/components/icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { SmoothDropdwon } from "@/components/ui/smooth-dropdown";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+    Message,
+    MessageBody,
+    MessageContent,
+} from "@/components/ui/uai/message";
+import {
+    PromptComposer,
+    PromptComposerActions,
+    PromptComposerInput,
+    PromptComposerSubmit,
+} from "@/components/ui/uai/prompt-composer";
 import { WorkbenchShellSurface } from "@/components/workbench-shell/workbench-shell-surface";
 import { WorkbenchIcon } from "@/components/workbench-ui/glyphs";
 import { Handoff } from "@/components/workbench-ui/handoff";
@@ -22,6 +32,10 @@ import {
     ToolbarIconButton,
 } from "@/components/workspace/composer-toolbar-actions";
 import {
+    type CoveragePreset,
+    CoveragePresetPicker,
+} from "@/components/workspace/coverage-preset-picker";
+import {
     CompanyCandidateLabel,
     CompanyContextBadge,
     CompanyLookup,
@@ -29,11 +43,14 @@ import {
     ResearchComposerToolbar,
     ResearchComposerView,
 } from "@/components/workspace/start/research-composer-view";
+import { StartDossierHeading } from "@/components/workspace/start/start-dossier-heading";
 import {
     CompanyMandatePanel,
+    FramingClarification,
     FramingProposal,
     StartAngleSuggestions,
     StartEntryScreen,
+    type StartFramingQuestion,
     StartFramingScreen,
     StartFramingSummary,
     StartRequestMessage,
@@ -69,17 +86,72 @@ const angles = [
     "Which integrations would an agent have to replace?",
     "Where could value move if agents coordinate the work?",
 ];
-const activities = [
-    { id: "claims", label: "Photo-led auto physical damage claims" },
-    { id: "network", label: "Repair network management" },
-    { id: "other", label: "Other…" },
+const activityClarification = {
+    id: "activity",
+    prompt: "Which activity would you like to examine?",
+    reason: "Your request names the company. The activity determines which relationships and dependencies this dossier should investigate.",
+    proposedValue: "claims",
+    choices: [
+        { value: "claims", label: "Photo-led auto physical damage claims" },
+        { value: "network", label: "Repair network management" },
+    ],
+};
+const claimsScope =
+    "Photo-led auto physical damage claims, focusing on coordination between insurers, repairers and CCC, and what an agent could replace.";
+const networkScope =
+    "Repair network management, focusing on the relationships between insurers, repairers and CCC, and the dependencies a substitute would need.";
+const initialQuestions: StartFramingQuestion[] = [
+    {
+        id: "q1",
+        label: "Q1",
+        text: "Does CCC control coordination, or supply replaceable modules?",
+        rationale: "Distinguish running the workflow from deciding its rules.",
+    },
+    {
+        id: "q2",
+        label: "Q2",
+        text: "Is its operational context durable beyond contracts?",
+        rationale:
+            "Examine what remains useful and difficult to reproduce across renewals.",
+    },
+    {
+        id: "q3",
+        label: "Q3",
+        text: "Could core claims platforms replace it for insurers?",
+        rationale:
+            "Compare substitution paths and the dependencies they would need.",
+    },
+    {
+        id: "q4",
+        label: "Q4",
+        text: "Could agent-led claim intake bypass it?",
+        rationale:
+            "Trace a possible bypass and the coordination it would still require.",
+    },
 ];
-const initialQuestions = [
-    "Does CCC control coordination, or supply replaceable modules?",
-    "Is its operational context durable beyond contracts?",
-    "Could core claims platforms replace it for insurers?",
-    "Could agent-led claim intake bypass it?",
-].map((text, i) => ({ id: `q${i + 1}`, label: `Q${i + 1}`, text }));
+const networkQuestions: StartFramingQuestion[] = [
+    {
+        id: "q1",
+        label: "Q1",
+        text: "Who controls access to the repair network?",
+        rationale:
+            "Examine how participation, assignment and network rules are decided.",
+    },
+    {
+        id: "q2",
+        label: "Q2",
+        text: "What keeps insurers and repairers using the network?",
+        rationale:
+            "Separate contractual participation from dependencies that may persist.",
+    },
+    {
+        id: "q3",
+        label: "Q3",
+        text: "Could another coordinator reproduce these relationships?",
+        rationale:
+            "Investigate the relationships and integrations a substitute would need.",
+    },
+];
 function report(detail: string) {
     window.dispatchEvent(
         new CustomEvent("workbench-example-action", {
@@ -95,13 +167,13 @@ function ReferenceChip() {
         </span>
     );
 }
-function EntryExample({ confirmed }: { confirmed: boolean }) {
-    const [value, setValue] = useState(confirmed ? request : "");
+function EntryExample() {
+    const [value, setValue] = useState("");
     const { inputRef: composerRef, fill: fillComposer } =
         useQuickTextFill<HTMLTextAreaElement>(setValue);
     const [query, setQuery] = useState("");
     const [open, setOpen] = useState(false);
-    const [selected, setSelected] = useState(confirmed);
+    const [selected, setSelected] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [hasSearched, setHasSearched] = useState(false);
     const [referencesOpen, setReferencesOpen] = useState(false);
@@ -115,228 +187,166 @@ function EntryExample({ confirmed }: { confirmed: boolean }) {
         <>
             <StartEntryScreen
                 composer={
-                    <>
-                        <ResearchComposerView
-                            value={value}
-                            onValueChange={setValue}
-                            textareaRef={composerRef}
-                            placeholder="Describe the resilience question to focus on for research. Or choose a company to start."
-                            companyAdornment={
-                                selected ? (
-                                    <CompanyContextBadge
-                                        company={company}
-                                        onRemove={() => setSelected(false)}
-                                    />
-                                ) : undefined
-                            }
-                            toolbar={
-                                <ResearchComposerToolbar
-                                    tools={
-                                        <>
-                                            <SmoothDropdwon
-                                                open={open}
-                                                onOpenChange={setOpen}
-                                                openWidth={isMobile ? 300 : 400}
-                                                closedWidth={215}
-                                                closedHeight={36}
-                                                className={`min-w-0 max-w-[calc(100cqw-10.25rem)] [&:not([data-open])>div]:max-w-full ${open ? "z-10" : ""}`}
-                                                itemsAriaLabel="Company search results"
-                                                trigger={
-                                                    <CompanyPickerTrigger
-                                                        label={
-                                                            selected
-                                                                ? company.legalName
-                                                                : "Company to investigate"
-                                                        }
-                                                        ticker={
-                                                            selected
-                                                                ? company.ticker
-                                                                : undefined
-                                                        }
-                                                        highlighted={open}
-                                                    />
-                                                }
-                                                header={
-                                                    <CompanyLookup
-                                                        companyQuery={query}
-                                                        onCompanyQueryChange={(
-                                                            next,
-                                                        ) => {
-                                                            setQuery(next);
-                                                            setHasSearched(
-                                                                false,
-                                                            );
-                                                        }}
-                                                        isSearching={false}
-                                                        lookupError={null}
-                                                        hasResolution={selected}
-                                                        hasSearched={
-                                                            hasSearched
-                                                        }
-                                                        resultCount={
-                                                            matches ? 1 : 0
-                                                        }
-                                                        onClear={() => {
-                                                            setSelected(false);
-                                                            setQuery("");
-                                                            setHasSearched(
-                                                                false,
-                                                            );
-                                                        }}
-                                                        onSearch={() => {
-                                                            setSearchTerm(
-                                                                query.trim(),
-                                                            );
-                                                            setHasSearched(
-                                                                true,
-                                                            );
-                                                        }}
-                                                        sessionReady
-                                                    />
-                                                }
-                                                items={
-                                                    matches
-                                                        ? [
-                                                              {
-                                                                  id: company.cik,
-                                                                  label: companyLabel,
-                                                                  onSelect:
-                                                                      () => {
-                                                                          setSelected(
-                                                                              true,
-                                                                          );
-                                                                          setOpen(
-                                                                              false,
-                                                                          );
-                                                                      },
-                                                                  renderLabel:
-                                                                      () => (
-                                                                          <CompanyCandidateLabel
-                                                                              company={
-                                                                                  company
-                                                                              }
-                                                                              selecting={
-                                                                                  false
-                                                                              }
-                                                                          />
-                                                                      ),
-                                                              },
-                                                          ]
-                                                        : []
-                                                }
-                                            />
-                                            <ToolbarIconButton
-                                                label="Add a public reference"
-                                                icon={Plus}
-                                                count={references.length}
-                                                onClick={() =>
-                                                    setReferencesOpen(true)
-                                                }
-                                            />
-                                            <MoreOptionsButton />
-                                        </>
-                                    }
-                                    action={
-                                        <Button
-                                            type="button"
-                                            variant="round"
-                                            className="size-10"
-                                            aria-label={
-                                                selected
-                                                    ? "Continue"
-                                                    : "Send request"
-                                            }
-                                            onClick={() =>
-                                                selected
-                                                    ? report("Continue")
-                                                    : setOpen(true)
-                                            }>
-                                            <Icon
-                                                iconNode={ArrowRight01Icon}
-                                                size={18}
-                                            />
-                                        </Button>
-                                    }
+                    <ResearchComposerView
+                        value={value}
+                        onValueChange={setValue}
+                        textareaRef={composerRef}
+                        placeholder="Describe the resilience question to focus on for research. Or choose a company to start."
+                        companyAdornment={
+                            selected ? (
+                                <CompanyContextBadge
+                                    company={company}
+                                    onRemove={() => setSelected(false)}
                                 />
-                            }
-                        />
-                        {confirmed && selected && (
-                            <CompanyMandatePanel
-                                company={{
-                                    name: company.legalName,
-                                    ticker: company.ticker,
-                                    exchange: company.exchange,
-                                    cik: "[from EDGAR]",
-                                    website: "cccis.com",
-                                    avatar: (
-                                        <CompanyFaviconAvatar
-                                            company={company}
-                                            size="lg"
-                                        />
-                                    ),
-                                }}
-                                mandate={
+                            ) : undefined
+                        }
+                        toolbar={
+                            <ResearchComposerToolbar
+                                tools={
                                     <>
-                                        <p>
-                                            Primary sources first: SEC filings
-                                            and company material, then public
-                                            third-party sources.
-                                        </p>
-                                        <p>
-                                            Counter-evidence is always sought.
-                                            Every claim stays traceable to a
-                                            passage.
-                                        </p>
-                                        <p className="text-muted-foreground">
-                                            Bounded effort. You are asked only
-                                            for important exceptions.
-                                        </p>
+                                        <SmoothDropdwon
+                                            open={open}
+                                            onOpenChange={setOpen}
+                                            openWidth={isMobile ? 300 : 400}
+                                            closedWidth={215}
+                                            closedHeight={36}
+                                            className={`min-w-0 max-w-[calc(100cqw-10.25rem)] [&:not([data-open])>div]:max-w-full ${open ? "z-10" : ""}`}
+                                            itemsAriaLabel="Company search results"
+                                            trigger={
+                                                <CompanyPickerTrigger
+                                                    label={
+                                                        selected
+                                                            ? company.legalName
+                                                            : "Company to investigate"
+                                                    }
+                                                    ticker={
+                                                        selected
+                                                            ? company.ticker
+                                                            : undefined
+                                                    }
+                                                    highlighted={open}
+                                                />
+                                            }
+                                            header={
+                                                <CompanyLookup
+                                                    companyQuery={query}
+                                                    onCompanyQueryChange={(
+                                                        next,
+                                                    ) => {
+                                                        setQuery(next);
+                                                        setHasSearched(false);
+                                                    }}
+                                                    isSearching={false}
+                                                    lookupError={null}
+                                                    hasResolution={selected}
+                                                    hasSearched={hasSearched}
+                                                    resultCount={
+                                                        matches ? 1 : 0
+                                                    }
+                                                    onClear={() => {
+                                                        setSelected(false);
+                                                        setQuery("");
+                                                        setHasSearched(false);
+                                                    }}
+                                                    onSearch={() => {
+                                                        setSearchTerm(
+                                                            query.trim(),
+                                                        );
+                                                        setHasSearched(true);
+                                                    }}
+                                                    sessionReady
+                                                />
+                                            }
+                                            items={
+                                                matches
+                                                    ? [
+                                                          {
+                                                              id: company.cik,
+                                                              label: companyLabel,
+                                                              onSelect: () => {
+                                                                  setSelected(
+                                                                      true,
+                                                                  );
+                                                                  setOpen(
+                                                                      false,
+                                                                  );
+                                                              },
+                                                              renderLabel:
+                                                                  () => (
+                                                                      <CompanyCandidateLabel
+                                                                          company={
+                                                                              company
+                                                                          }
+                                                                          selecting={
+                                                                              false
+                                                                          }
+                                                                      />
+                                                                  ),
+                                                          },
+                                                      ]
+                                                    : []
+                                            }
+                                        />
+                                        <ToolbarIconButton
+                                            label="Add a public reference"
+                                            icon={Plus}
+                                            count={references.length}
+                                            onClick={() =>
+                                                setReferencesOpen(true)
+                                            }
+                                        />
+                                        <MoreOptionsButton />
                                     </>
                                 }
-                                onConfirm={() =>
-                                    report("Confirm and propose framing")
+                                action={
+                                    <Button
+                                        type="button"
+                                        variant="round"
+                                        className="size-10"
+                                        aria-label={
+                                            selected
+                                                ? "Continue"
+                                                : "Send request"
+                                        }
+                                        onClick={() =>
+                                            selected
+                                                ? report("Continue")
+                                                : setOpen(true)
+                                        }>
+                                        <Icon
+                                            iconNode={ArrowRight01Icon}
+                                            size={18}
+                                        />
+                                    </Button>
                                 }
-                                onChangeCompany={() => setOpen(true)}
                             />
-                        )}
-                    </>
+                        }
+                    />
                 }
                 suggestions={
-                    !confirmed ? (
-                        <StartAngleSuggestions
-                            angles={angles.map((label) => ({
-                                id: label,
-                                label,
-                            }))}
-                            onSelect={fillComposer}
-                        />
-                    ) : undefined
+                    <StartAngleSuggestions
+                        angles={angles.map((label) => ({
+                            id: label,
+                            label,
+                        }))}
+                        onSelect={fillComposer}
+                    />
                 }
                 showcase={
-                    !confirmed ? (
-                        <StartShowcaseCard
-                            avatar={
-                                <CompanyFaviconAvatar
-                                    company={company}
-                                    size="lg"
-                                />
-                            }
-                            title="Who holds the photo-led claim workflow?"
-                            description="CCC Intelligent Solutions · a prepared dossier, from sources to the mechanism"
-                            metrics={[
-                                { value: 4, label: "questions" },
-                                { value: 38, label: "sources" },
-                                { value: 126, label: "assertions" },
-                                { value: 1, label: "mechanism" },
-                            ]}
-                            onOpen={() => report("Open showcase")}
-                        />
-                    ) : (
-                        <p className="start-preview-identity-note">
-                            Website details help recognition only. The legal
-                            identity comes from the SEC registration.
-                        </p>
-                    )
+                    <StartShowcaseCard
+                        avatar={
+                            <CompanyFaviconAvatar company={company} size="lg" />
+                        }
+                        title="Who holds the photo-led claim workflow?"
+                        description="CCC Intelligent Solutions · a prepared dossier, from sources to the mechanism"
+                        metrics={[
+                            { value: 4, label: "questions" },
+                            { value: 38, label: "sources" },
+                            { value: 126, label: "assertions" },
+                            { value: 1, label: "mechanism" },
+                        ]}
+                        onOpen={() => report("Open showcase")}
+                    />
                 }
             />
             <AddSourceDialog
@@ -349,144 +359,556 @@ function EntryExample({ confirmed }: { confirmed: boolean }) {
     );
 }
 function Refinement({
-    label = "Refine the framing in your own words",
-    compact = false,
+    inputRef,
     value,
     onValueChange,
-    inputRef,
+    onSubmit,
+    compact = false,
+    label = "Refine the framing in your own words",
 }: {
-    label?: string;
+    inputRef?: Ref<HTMLTextAreaElement>;
+    value: string;
+    onValueChange: (value: string) => void;
+    onSubmit: (text: string) => void;
     compact?: boolean;
-    value?: string;
-    onValueChange?: (value: string) => void;
-    inputRef?: Ref<HTMLInputElement>;
+    label?: string;
 }) {
     return (
-        <div
-            className={
-                compact
-                    ? "start-preview-refinement compact"
-                    : "start-preview-refinement"
-            }>
-            <input
+        <PromptComposer
+            variant={compact ? "compact" : "rounded"}
+            value={value}
+            onValueChange={onValueChange}
+            onSubmit={(text) => onSubmit(text)}
+            aria-label="Message the workbench">
+            <PromptComposerInput
                 ref={inputRef}
                 aria-label={label}
                 placeholder={label}
-                value={value}
-                onChange={
-                    onValueChange
-                        ? (event) => onValueChange(event.target.value)
-                        : undefined
-                }
             />
-            <Button
-                variant="round"
-                className="size-10"
-                aria-label="Send refinement"
-                onClick={() => report(label)}>
-                <Icon iconNode={ArrowUp01Icon} size={18} />
-            </Button>
-        </div>
+            <PromptComposerActions>
+                <PromptComposerSubmit aria-label="Send refinement">
+                    <Icon iconNode={ArrowUp02Icon} size={16} />
+                </PromptComposerSubmit>
+            </PromptComposerActions>
+        </PromptComposer>
     );
 }
-function FramingExample() {
-    const [activity, setActivity] = useState("claims");
-    const [otherActivity, setOtherActivity] = useState("");
-    const [questions, setQuestions] = useState(initialQuestions);
-    const [refinement, setRefinement] = useState("");
-    const { inputRef: refinementRef, fill: fillRefinement } =
-        useQuickTextFill<HTMLInputElement>(setRefinement);
-    const [focusQuestionId, setFocusQuestionId] = useState<string>();
+type PreviewConversation = {
+    scenario: "specific" | "company";
+    needsContext: boolean;
+    scope: string;
+    questions: StartFramingQuestion[];
+    suppliedContext?: { question: string; answer: string };
+    draft: string;
+    messages: { id: string; text: string; from?: "user" | "assistant" }[];
+    launched: boolean;
+    framingMessageCount: number;
+};
+const previewKey = "start-conversation-preview-v3";
+function freshConversation(): PreviewConversation {
+    return {
+        scenario: "specific",
+        needsContext: false,
+        scope: claimsScope,
+        questions: [...initialQuestions],
+        draft: "",
+        messages: [],
+        launched: false,
+        framingMessageCount: 0,
+    };
+}
+function readConversation(): PreviewConversation {
+    try {
+        const stored = sessionStorage.getItem(previewKey);
+        if (!stored) return freshConversation();
+        const data: unknown = JSON.parse(stored);
+        if (
+            typeof data === "object" &&
+            data !== null &&
+            "questions" in data &&
+            Array.isArray(data.questions) &&
+            data.questions.every(
+                (q) =>
+                    typeof q.id === "string" &&
+                    typeof q.text === "string" &&
+                    typeof q.label === "string",
+            ) &&
+            "scope" in data &&
+            typeof data.scope === "string" &&
+            "draft" in data &&
+            typeof data.draft === "string" &&
+            "messages" in data &&
+            Array.isArray(data.messages) &&
+            data.messages.every(
+                (m) =>
+                    m !== null &&
+                    typeof m === "object" &&
+                    typeof m.id === "string" &&
+                    typeof m.text === "string" &&
+                    (m.from === undefined ||
+                        m.from === "user" ||
+                        m.from === "assistant"),
+            ) &&
+            "scenario" in data &&
+            (data.scenario === "specific" || data.scenario === "company") &&
+            "needsContext" in data &&
+            typeof data.needsContext === "boolean" &&
+            "launched" in data &&
+            typeof data.launched === "boolean" &&
+            "framingMessageCount" in data &&
+            typeof data.framingMessageCount === "number"
+        )
+            return data as PreviewConversation;
+        throw new Error("Invalid saved preview");
+    } catch {
+        report(
+            "Saved preview could not be restored. A fresh illustrative conversation was opened.",
+        );
+        return freshConversation();
+    }
+}
+const guidedExamples = [
+    {
+        id: "scope",
+        label: "Example: narrower scope",
+        text: "Focus on insurer–repairer coordination after photo intake.",
+    },
+    {
+        id: "wording",
+        label: "Example: reword Q1",
+        text: "Distinguish who decides the rules from who executes the workflow in Q1.",
+    },
+    {
+        id: "switching",
+        label: "Example: switching costs",
+        text: "Add a question about switching costs.",
+    },
+] as const;
+function PreviewMessages({
+    messages,
+}: {
+    messages: readonly {
+        id: string;
+        text: string;
+        from?: "user" | "assistant";
+    }[];
+}) {
+    return messages.map(({ id, text, from }) => (
+        <Message key={id} from={from ?? "user"}>
+            <MessageBody>
+                <MessageContent>{text}</MessageContent>
+            </MessageBody>
+        </Message>
+    ));
+}
+function FramingExample({
+    state,
+    update,
+    onLaunch,
+}: {
+    state: PreviewConversation;
+    update: (patch: Partial<PreviewConversation>) => void;
+    onLaunch: () => void;
+}) {
+    const {
+        scenario,
+        needsContext,
+        scope,
+        questions,
+        suppliedContext,
+        draft: refinement,
+    } = state;
+    const setNeedsContext = (needsContext: boolean) => update({ needsContext });
+    const setScope = (scope: string) => update({ scope });
+    const setQuestions = (
+        next:
+            | StartFramingQuestion[]
+            | ((current: StartFramingQuestion[]) => StartFramingQuestion[]),
+    ) =>
+        update({
+            questions:
+                typeof next === "function" ? next(state.questions) : next,
+        });
+    const setSuppliedContext = (
+        suppliedContext: PreviewConversation["suppliedContext"],
+    ) => update({ suppliedContext });
+    const setRefinement = (draft: string) => update({ draft });
+    const { inputRef: refinementRef, fill } =
+        useQuickTextFill<HTMLTextAreaElement>((text) => {
+            setRefinement(text);
+        });
+    const [example, setExample] = useState<string | null>(null);
+    function send(text: string) {
+        const chosen = guidedExamples.find(
+            (item) => item.id === example && item.text === text,
+        );
+        const patch: Partial<PreviewConversation> = {
+            messages: [...state.messages, { id: crypto.randomUUID(), text }],
+            draft: "",
+        };
+        if (chosen?.id === "scope") patch.scope = chosen.text;
+        if (chosen?.id === "wording")
+            patch.questions = state.questions.map((q, i) =>
+                i === 0
+                    ? {
+                          ...q,
+                          text: "Does CCC decide coordination rules, or execute workflows defined by insurers?",
+                      }
+                    : q,
+            );
+        if (chosen?.id === "switching")
+            patch.questions = [
+                ...state.questions,
+                {
+                    id: `q${state.questions.length + 1}`,
+                    label: `Q${state.questions.length + 1}`,
+                    text: "What would insurers and repairers need to change to switch away from CCC?",
+                    rationale:
+                        "Examine the practical requirements of substitution.",
+                },
+            ];
+        update(patch);
+        setExample(null);
+        report(
+            chosen
+                ? "Illustrative framing updated"
+                : "Request recorded in this preview; freeform interpretation is not connected.",
+        );
+    }
+    function completeContext(text: string) {
+        setNeedsContext(false);
+        update({
+            messages: [
+                ...state.messages,
+                { id: crypto.randomUUID(), text, from: "user" },
+                {
+                    id: crypto.randomUUID(),
+                    text: "The framing is ready to review.",
+                    from: "assistant",
+                },
+            ],
+        });
+    }
+    function applyContext(answer: string) {
+        const option = activityClarification.choices.find(
+            (choice) => choice.value === answer,
+        );
+        setSuppliedContext({
+            question: activityClarification.prompt,
+            answer: option?.label ?? answer,
+        });
+        if (answer === "claims") {
+            setScope(claimsScope);
+            setQuestions(initialQuestions);
+        } else if (answer === "network") {
+            setScope(networkScope);
+            setQuestions(networkQuestions);
+        } else {
+            setScope(answer);
+            setQuestions([
+                {
+                    id: "q1",
+                    label: "Q1",
+                    text: "Who holds decision rights in this activity?",
+                    rationale:
+                        "Identify who can define the rules and change the workflow.",
+                },
+                {
+                    id: "q2",
+                    label: "Q2",
+                    text: "Which dependencies would a substitute still need?",
+                    rationale:
+                        "Examine relationships, information and integrations within the supplied scope.",
+                },
+                {
+                    id: "q3",
+                    label: "Q3",
+                    text: "Where could an agent change how the activity is coordinated?",
+                    rationale:
+                        "Test possible changes while keeping remaining dependencies visible.",
+                },
+            ]);
+        }
+        completeContext(`Activity selected: ${option?.label ?? answer}`);
+    }
+    const selectedActivity =
+        scope === claimsScope
+            ? "claims"
+            : scope === networkScope
+              ? "network"
+              : "other";
+    function selectScenario(scenario: "specific" | "company") {
+        update({
+            ...freshConversation(),
+            scenario,
+            needsContext: scenario === "company",
+        });
+    }
+
     return (
-        <StartFramingScreen
-            request={
-                <StartRequestMessage
-                    context={
-                        <>
-                            <Badge tone="ink">
-                                <CompanyFaviconAvatar
-                                    company={company}
-                                    size="xs"
-                                />
-                                CCC Intelligent Solutions · CCCS
-                            </Badge>
-                            <ReferenceChip />
-                        </>
-                    }>
-                    {request}
-                </StartRequestMessage>
-            }
-            proposal={
-                <FramingProposal
-                    introduction="I suggest focusing on one workflow and four questions. Change anything you like, or start as it is."
-                    activities={activities}
-                    activity={activity}
-                    onActivityChange={setActivity}
-                    activityDetail={
-                        activity === "other" ? (
-                            <div className="space-y-2">
-                                <Label htmlFor="start-preview-other-activity">
-                                    Other activity
-                                </Label>
-                                <Input
-                                    id="start-preview-other-activity"
-                                    value={otherActivity}
-                                    onChange={(event) =>
-                                        setOtherActivity(event.target.value)
-                                    }
-                                />
-                            </div>
-                        ) : undefined
-                    }
-                    questions={questions}
-                    onQuestionChange={(id, text) =>
-                        setQuestions((list) =>
-                            list.map((q) => (q.id === id ? { ...q, text } : q)),
-                        )
-                    }
-                    focusQuestionId={focusQuestionId}
-                    onAddQuestion={() => {
-                        const number = questions.length + 1;
-                        const id = `q${number}`;
-                        setQuestions([
-                            ...questions,
-                            { id, label: `Q${number}`, text: "" },
-                        ]);
-                        setFocusQuestionId(id);
-                    }}
-                    onStart={() => report("Start research")}
-                    optionalQuestion={
-                        <div className="start-preview-optional">
+        <>
+            <section
+                className="start-preview-scenarios"
+                aria-label="Illustrative framing scenarios">
+                <span>Illustrative request</span>
+                <Button
+                    variant="ghost"
+                    onClick={() => selectScenario("specific")}>
+                    Reset preview
+                </Button>
+                <Button
+                    variant="ghost"
+                    className="start-preview-scenario"
+                    aria-pressed={scenario === "specific"}
+                    onClick={() => selectScenario("specific")}>
+                    Specific request
+                </Button>
+                <Button
+                    variant="ghost"
+                    className="start-preview-scenario"
+                    aria-pressed={scenario === "company"}
+                    onClick={() => selectScenario("company")}>
+                    Company only
+                </Button>
+                {!state.launched && (
+                    <div className="start-guided-examples">
+                        {guidedExamples.map((item) => (
+                            <Button
+                                key={item.id}
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                    setExample(item.id);
+                                    fill(item.text);
+                                }}>
+                                {item.label}
+                            </Button>
+                        ))}
+                    </div>
+                )}
+            </section>
+            <StartFramingScreen
+                history={<PreviewMessages messages={state.messages} />}
+                suggestions={
+                    !state.launched &&
+                    !needsContext && (
+                        <section
+                            data-slot="framing-suggestions"
+                            aria-label="Optional reading preference">
                             <p>
                                 Optional: which reading should I test hardest?
                             </p>
                             <div>
                                 {[
-                                    "Control of coordination",
-                                    "Substitution by agents",
-                                    "No preference",
-                                ].map((label) => (
+                                    {
+                                        label: "Control of coordination",
+                                        text: "Test control of coordination most closely.",
+                                    },
+                                    {
+                                        label: "Substitution by agents",
+                                        text: "Test substitution by agents most closely.",
+                                    },
+                                    {
+                                        label: "No preference",
+                                        text: "Use the proposed framing without a preferred reading.",
+                                    },
+                                ].map((item) => (
                                     <Button
                                         variant="outline"
-                                        key={label}
-                                        aria-pressed={refinement === label}
-                                        onClick={() => fillRefinement(label)}>
-                                        {label}
+                                        size="sm"
+                                        key={item.label}
+                                        onClick={() => {
+                                            setExample(null);
+                                            fill(item.text);
+                                        }}>
+                                        {item.label}
                                     </Button>
                                 ))}
                             </div>
+                        </section>
+                    )
+                }
+                request={
+                    <StartRequestMessage
+                        context={
+                            <>
+                                <Badge tone="ink">
+                                    <CompanyFaviconAvatar
+                                        company={company}
+                                        size="xs"
+                                    />
+                                    CCC Intelligent Solutions · CCCS
+                                </Badge>
+                                {scenario === "specific" && <ReferenceChip />}
+                            </>
+                        }>
+                        {scenario === "specific"
+                            ? request
+                            : "Study CCC Intelligent Solutions."}
+                    </StartRequestMessage>
+                }
+                response={
+                    <>
+                        <div className="start-conversation-author">
+                            <span>{"//"}</span>
+                            <strong>Workbench</strong>
                         </div>
-                    }
-                />
-            }
-            refinement={
-                <Refinement
-                    value={refinement}
-                    onValueChange={setRefinement}
-                    inputRef={refinementRef}
-                />
-            }
-        />
+                        <p>
+                            {state.launched
+                                ? "Research started with the framing you reviewed."
+                                : "I can help frame this research before it starts."}
+                        </p>
+                        {state.launched && (
+                            <FramingProposal
+                                scope={scope}
+                                questions={questions}
+                                suppliedContext={suppliedContext}
+                            />
+                        )}
+                    </>
+                }
+                action={
+                    state.launched ? undefined : (
+                        <FramingProposal
+                            scope={scope}
+                            activity={
+                                <div className="start-framing-activity">
+                                    {state.launched ? (
+                                        <span>{scope}</span>
+                                    ) : (
+                                        <ToggleGroup
+                                            aria-label="Activity"
+                                            value={[selectedActivity]}
+                                            onValueChange={(values) => {
+                                                const value = values[0];
+                                                if (typeof value === "string")
+                                                    applyContext(value);
+                                            }}>
+                                            {activityClarification.choices.map(
+                                                (choice) => (
+                                                    <ToggleGroupItem
+                                                        key={choice.value}
+                                                        value={choice.value}>
+                                                        {selectedActivity ===
+                                                            choice.value && (
+                                                            <WorkbenchIcon
+                                                                name="check"
+                                                                size={12}
+                                                            />
+                                                        )}
+                                                        {choice.label}
+                                                    </ToggleGroupItem>
+                                                ),
+                                            )}
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                aria-label="Adjust scope"
+                                                disabled={needsContext}
+                                                onClick={() =>
+                                                    setNeedsContext(true)
+                                                }>
+                                                Other…
+                                            </Button>
+                                        </ToggleGroup>
+                                    )}
+                                    {selectedActivity === "other" && (
+                                        <p>{scope}</p>
+                                    )}
+                                </div>
+                            }
+                            clarification={
+                                needsContext ? (
+                                    <FramingClarification
+                                        question={{
+                                            ...activityClarification,
+                                            reason:
+                                                scenario === "company" &&
+                                                !suppliedContext
+                                                    ? activityClarification.reason
+                                                    : "Adjust the activity or boundary if the proposed scope does not match your intention.",
+                                            proposedValue:
+                                                activityClarification.choices.find(
+                                                    (choice) =>
+                                                        choice.label ===
+                                                        suppliedContext?.answer,
+                                                )?.value ??
+                                                suppliedContext?.answer ??
+                                                "claims",
+                                        }}
+                                        onUseProposal={() =>
+                                            completeContext(
+                                                "Use the proposed activity scope.",
+                                            )
+                                        }
+                                        onAnswer={applyContext}
+                                    />
+                                ) : undefined
+                            }
+                            onAdjustScope={
+                                state.launched
+                                    ? undefined
+                                    : () => setNeedsContext(true)
+                            }
+                            questions={questions}
+                            onQuestionChange={(id, text) => {
+                                setQuestions((current) =>
+                                    current.map((question) =>
+                                        question.id === id
+                                            ? { ...question, text }
+                                            : question,
+                                    ),
+                                );
+                                update({
+                                    messages: [
+                                        ...state.messages,
+                                        {
+                                            id: crypto.randomUUID(),
+                                            text: `Question updated: ${text}`,
+                                            from: "user",
+                                        },
+                                    ],
+                                });
+                            }}
+                            onAddQuestion={(text) => {
+                                setQuestions((current) => [
+                                    ...current,
+                                    {
+                                        id: `q${current.length + 1}`,
+                                        label: `Q${current.length + 1}`,
+                                        text,
+                                        rationale:
+                                            "Additional question suggested by the analyst.",
+                                    },
+                                ]);
+                                update({
+                                    messages: [
+                                        ...state.messages,
+                                        {
+                                            id: crypto.randomUUID(),
+                                            text: `Question added: ${text}`,
+                                            from: "user",
+                                        },
+                                    ],
+                                });
+                            }}
+                            onStart={state.launched ? undefined : onLaunch}
+                        />
+                    )
+                }
+                refinement={
+                    <Refinement
+                        inputRef={refinementRef}
+                        value={refinement}
+                        onValueChange={(value) => {
+                            setExample(null);
+                            setRefinement(value);
+                        }}
+                        onSubmit={send}
+                    />
+                }
+            />
+        </>
     );
 }
 const found = [
@@ -558,37 +980,91 @@ const captured = [
 ] as const;
 function ResearchExample({
     done,
-    onViewFraming,
+    state,
+    update,
     onOpenProgress,
 }: {
+    state: PreviewConversation;
+    update: (patch: Partial<PreviewConversation>) => void;
     done: boolean;
-    onViewFraming: () => void;
     onOpenProgress: () => void;
 }) {
     const [handoffVisible, setHandoffVisible] = useState(true);
+    const [framingOpen, setFramingOpen] = useState(false);
     return (
         <StartResearchScreen
             conversation={
                 <>
                     <span className="wb-label">Conversation</span>
-                    <StartRequestMessage>{request}</StartRequestMessage>
+                    <StartRequestMessage>
+                        {state.scenario === "specific"
+                            ? request
+                            : "Study CCC Intelligent Solutions."}
+                    </StartRequestMessage>
                     <StartFramingSummary
-                        scope={done ? undefined : "Photo-led claims"}
-                        questionCount={done ? undefined : 4}
-                        onInspect={done ? undefined : onViewFraming}
+                        scope={state.scope}
+                        questionCount={state.questions.length}
+                        onInspect={() => setFramingOpen((value) => !value)}
+                    />
+                    <div hidden={!framingOpen}>
+                        <FramingProposal
+                            introduction="Research started with this framing."
+                            scope={state.scope}
+                            questions={state.questions}
+                            suppliedContext={state.suppliedContext}
+                        />
+                    </div>
+                    {state.suppliedContext && (
+                        <details>
+                            <summary>Your clarification</summary>
+                            <p>{state.suppliedContext.question}</p>
+                            <p>{state.suppliedContext.answer}</p>
+                        </details>
+                    )}
+                    <details>
+                        <summary>
+                            Earlier conversation · {state.framingMessageCount}{" "}
+                            refinements
+                        </summary>
+                        <PreviewMessages
+                            messages={state.messages.slice(
+                                0,
+                                state.framingMessageCount,
+                            )}
+                        />
+                    </details>
+                    <PreviewMessages
+                        messages={state.messages.slice(
+                            state.framingMessageCount,
+                        )}
                     />
                     <p className="start-preview-reply">
                         <span>{"// "}</span>
                         {done
-                            ? "The material is ready. Investigation is starting on the four questions."
+                            ? `The material is ready. Investigation is starting on the ${state.questions.length} questions.`
                             : "Research started. I'll bring you to Progress when the material is ready."}
                     </p>
                 </>
             }
             conversationComposer={
-                !done ? (
-                    <Refinement label="Ask about the sources" compact />
-                ) : undefined
+                <Refinement
+                    label="Ask about the sources"
+                    compact
+                    value={state.draft}
+                    onValueChange={(draft) => update({ draft })}
+                    onSubmit={(text) => {
+                        update({
+                            messages: [
+                                ...state.messages,
+                                { id: crypto.randomUUID(), text },
+                            ],
+                            draft: "",
+                        });
+                        report(
+                            "Follow-up recorded in this illustrative conversation.",
+                        );
+                    }}
+                />
             }
             heading={
                 <StartSourcesHeader
@@ -697,6 +1173,45 @@ function ResearchExample({
         />
     );
 }
+function ConfirmationExample({
+    onBack,
+    onConfirm,
+}: {
+    onBack: () => void;
+    onConfirm: () => void;
+}) {
+    const [coveragePreset, setCoveragePreset] =
+        useState<CoveragePreset>("balanced");
+    return (
+        <CompanyMandatePanel
+            company={company}
+            coverage={
+                <CoveragePresetPicker
+                    value={coveragePreset}
+                    onChange={setCoveragePreset}
+                />
+            }
+            mandate={
+                <>
+                    <p>
+                        Primary sources first: SEC filings and company material,
+                        then public third-party sources.
+                    </p>
+                    <p>
+                        Counter-evidence is always sought. Every claim stays
+                        traceable to a passage.
+                    </p>
+                    <p className="text-muted-foreground">
+                        Bounded effort. You are asked only for important
+                        exceptions.
+                    </p>
+                </>
+            }
+            onChangeCompany={onBack}
+            onConfirm={onConfirm}
+        />
+    );
+}
 export function StartScreenPreview({
     name,
     theme,
@@ -708,23 +1223,72 @@ export function StartScreenPreview({
     onNavigate: (screen: StartScreenName) => void;
     onOpenProgress: () => void;
 }) {
+    const [state, setState] = useState(readConversation);
+    const update = (patch: Partial<PreviewConversation>) =>
+        setState((current) => ({ ...current, ...patch }));
+    useEffect(() => {
+        try {
+            sessionStorage.setItem(previewKey, JSON.stringify(state));
+        } catch {
+            report("Preview continuity is unavailable in this browser.");
+        }
+    }, [state]);
     return (
         <WorkbenchUiRoot
             theme={theme}
             className="start-screen-preview"
             style={{ lineHeight: 1.5 }}
             data-start-screen={name}>
-            <WorkbenchShellSurface>
+            <WorkbenchShellSurface
+                className={
+                    name === "framing" ||
+                    name === "launched" ||
+                    name === "handoff"
+                        ? "start-conversation-shell"
+                        : undefined
+                }
+                contentClassName={
+                    name === "framing" ||
+                    name === "launched" ||
+                    name === "handoff"
+                        ? "start-conversation-surface"
+                        : undefined
+                }>
                 {name === "framing" ? (
-                    <FramingExample />
+                    <FramingExample
+                        state={state}
+                        update={update}
+                        onLaunch={() => {
+                            const next = {
+                                ...state,
+                                launched: true,
+                                framingMessageCount: state.messages.length,
+                            };
+                            sessionStorage.setItem(
+                                previewKey,
+                                JSON.stringify(next),
+                            );
+                            setState(next);
+                            onNavigate("launched");
+                        }}
+                    />
                 ) : name === "launched" || name === "handoff" ? (
                     <ResearchExample
                         done={name === "handoff"}
-                        onViewFraming={() => onNavigate("framing")}
+                        state={state}
+                        update={update}
                         onOpenProgress={onOpenProgress}
                     />
+                ) : name === "confirm" ? (
+                    <div className="start-confirmation-frame">
+                        <StartDossierHeading />
+                        <ConfirmationExample
+                            onBack={() => onNavigate("composer")}
+                            onConfirm={() => onNavigate("framing")}
+                        />
+                    </div>
                 ) : (
-                    <EntryExample confirmed={name === "confirm"} />
+                    <EntryExample />
                 )}
             </WorkbenchShellSurface>
         </WorkbenchUiRoot>
