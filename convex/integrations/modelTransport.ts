@@ -3,7 +3,13 @@
 import type { Doc } from "@convex/_generated/dataModel";
 import { providerRetryAfterAt } from "@convex/domain/sourcePreparationAuthority";
 import { executionFailureCode } from "@convex/execution/errors";
-import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
+import type {
+    AgentGenerationObservation,
+    AgentGenerationResult,
+    AgentModelRoute,
+    AgentOperationDefinition,
+    ModelAttemptReceipt,
+} from "@convex/execution/executionProtocol";
 import { MAX_PREPARATION_DIAGNOSTIC_BYTES } from "@convex/resourceLimits";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { ToolSet } from "ai";
@@ -30,22 +36,7 @@ import {
     MODEL_MAX_OUTPUT_TOKENS,
 } from "./modelRouting";
 
-export type AttemptReceipt = {
-    observableReplyJson?: string;
-    model: string;
-    resolvedModel?: string;
-    provider?: string;
-    inputTokens?: number;
-    outputTokens?: number;
-    reasoningTokens?: number;
-    cachedInputTokens?: number;
-    reportedCost?: number;
-    latencyMs: number;
-    dispatchOutcome?: "not_dispatched" | "response_received" | "unknown";
-    httpStatus?: number;
-    retryAfterAt?: number;
-    outputDiagnostic?: Doc<"providerCalls">["diagnostic"];
-};
+export type AttemptReceipt = ModelAttemptReceipt;
 
 export type ProviderResponse = {
     status: number;
@@ -60,6 +51,7 @@ export type AttemptDependencies = {
     signal?: AbortSignal;
     onResponse?: (response: ProviderResponse) => void;
     beforeDispatch?: (requestJson: string) => Promise<void>;
+    onObservation?: (observation: AgentGenerationObservation) => Promise<void>;
 };
 
 export type StructuredAttempt<T> =
@@ -119,24 +111,26 @@ type BoundedTransportState = {
     responseTooLarge: boolean;
     httpStatus?: number;
     retryAfterAt?: number;
+    dispatched?: boolean;
+    turn?: {
+        startedAt: number;
+        result?: AgentGenerationObservation;
+        observationError?: unknown;
+        generationError?: unknown;
+    };
 };
 
-export type AuthorizedAgentRoute = InvocationRoute & {
-    authorizedForAgent: true;
-};
+export type AuthorizedAgentRoute = AgentModelRoute;
+export type DeferredAgentGenerationResult = AgentGenerationResult;
 
-export type DeferredAgentTurnResult =
-    | (AttemptReceipt & {
-          status: "succeeded";
-          finishReason: "stop" | "tool-calls";
-          assistantOutput: string;
-          requests: { callId: string; name: string; inputJson: string }[];
-      })
-    | AttemptFailure
-    | {
-          status: "blocked";
-          reason: "missing_authorized_route" | "tool_callbacks_not_allowed";
-      };
+/** SDK-specific generation mechanics stay between transport adapters. */
+export type AgentStepGenerator = (input: {
+    model: ReturnType<typeof wrapLanguageModel>;
+    instructions: string;
+    prompt: string;
+    tools: ToolSet;
+    signal?: AbortSignal;
+}) => Promise<unknown>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -232,6 +226,8 @@ function createRoutedModel(
         model: provider.chat(route.model, settings),
         middleware: {
             wrapGenerate: async ({ params, doGenerate }) => {
+                if (state.turn && state.dispatched)
+                    throw new Error("A controlled turn cannot generate twice");
                 const {
                     abortSignal: _signal,
                     headers: _headers,
@@ -246,9 +242,20 @@ function createRoutedModel(
                     state.requestBlockCode =
                         executionFailureCode(error) ??
                         "journal_request_unavailable";
+                    if (state.turn) throw new Error("model_dispatch_refused");
                     throw error;
                 }
-                const result = await doGenerate();
+                state.dispatched = true;
+                let result: Awaited<ReturnType<typeof doGenerate>>;
+                try {
+                    result = await doGenerate();
+                } catch (error) {
+                    if (state.turn) {
+                        state.turn.generationError = error;
+                        throw new Error("model_generation_failed");
+                    }
+                    throw error;
+                }
                 const content: Array<Record<string, string>> = [];
                 for (const part of result.content) {
                     if (part.type === "text")
@@ -266,6 +273,98 @@ function createRoutedModel(
                     content,
                     finishReason: result.finishReason,
                 });
+                if (state.turn) {
+                    const text = content
+                        .filter((part) => part.type === "text")
+                        .map((part) => part.text)
+                        .join("");
+                    const receipt = createAttemptReceipt(
+                        route,
+                        state,
+                        state.turn.startedAt,
+                        {
+                            ...result,
+                            usage: {
+                                inputTokens: result.usage.inputTokens.total,
+                                outputTokens: result.usage.outputTokens.total,
+                                inputTokenDetails: {
+                                    cacheReadTokens:
+                                        result.usage.inputTokens.cacheRead,
+                                },
+                                outputTokenDetails: {
+                                    reasoningTokens:
+                                        result.usage.outputTokens.reasoning,
+                                },
+                            },
+                        },
+                    );
+                    const finishReason = result.finishReason.unified;
+                    const observation: AgentGenerationObservation =
+                        finishReason === "stop" || finishReason === "tool-calls"
+                            ? {
+                                  ...receipt,
+                                  status: "succeeded",
+                                  finishReason,
+                                  assistantOutput: text,
+                                  requests: content
+                                      .filter(
+                                          (part) => part.type === "tool-call",
+                                      )
+                                      .map((part) => ({
+                                          callId: part.toolCallId ?? "",
+                                          name: part.toolName ?? "",
+                                          inputJson: part.input ?? "null",
+                                      })),
+                              }
+                            : {
+                                  ...receipt,
+                                  status: "failed",
+                                  errorCode: "invalid_output",
+                                  retryable: true,
+                                  outputDiagnostic: rejectedOutputDiagnostic(
+                                      "finish_reason_invalid",
+                                      text,
+                                      finishReason,
+                                  ),
+                              };
+                    state.turn.result = observation;
+                    try {
+                        await dependencies.onObservation?.(observation);
+                    } catch (error) {
+                        state.turn.observationError = error;
+                        throw new Error("model_observation_unconfirmed");
+                    }
+                    // Framework persistence only receives observable parts and whitelisted metadata.
+                    return {
+                        ...result,
+                        content: result.content
+                            .filter(
+                                (part) =>
+                                    part.type === "text" ||
+                                    part.type === "tool-call",
+                            )
+                            .map((part) =>
+                                part.type === "text"
+                                    ? { type: "text" as const, text: part.text }
+                                    : {
+                                          type: "tool-call" as const,
+                                          toolCallId: part.toolCallId,
+                                          toolName: part.toolName,
+                                          input: part.input,
+                                      },
+                            ),
+                        providerMetadata: undefined,
+                        request: undefined,
+                        response: result.response
+                            ? {
+                                  modelId: result.response.modelId,
+                                  id: result.response.id,
+                                  timestamp: result.response.timestamp,
+                              }
+                            : undefined,
+                        usage: { ...result.usage, raw: undefined },
+                    };
+                }
                 return result;
             },
         },
@@ -608,7 +707,8 @@ export async function invokeDeferredAgentTurn(args: {
         string,
         Pick<AgentOperationDefinition, "description" | "inputValidator">
     >;
-}): Promise<DeferredAgentTurnResult> {
+    generateStep?: AgentStepGenerator;
+}): Promise<DeferredAgentGenerationResult> {
     if (!args.route)
         return { status: "blocked", reason: "missing_authorized_route" };
     if (Object.values(args.operations).some(toolHasExecuteCallback))
@@ -617,54 +717,54 @@ export async function invokeDeferredAgentTurn(args: {
     const preflight = preflightFailure(route, dependencies);
     if (preflight) return preflight;
     const startedAt = Date.now();
-    const state: BoundedTransportState = { responseTooLarge: false };
+    const state: BoundedTransportState = {
+        responseTooLarge: false,
+        turn: { startedAt },
+    };
     try {
         const provider = createBoundedProvider(dependencies, state);
-        const agent = new ToolLoopAgent({
+        const input = {
             model: createRoutedModel(provider, route, dependencies, state),
             instructions: args.instructions,
-            tools: createAgentTools(args.operations),
-            stopWhen: isStepCount(1),
-            // The runtime check above forbids executable tools, so no tool context can be consumed.
-            maxOutputTokens: MODEL_MAX_OUTPUT_TOKENS,
-            temperature: 0,
-            maxRetries: 0,
-        });
-        const result = await agent.generate({
             prompt: args.prompt,
-            timeout: MODEL_ATTEMPT_TIMEOUT_MS,
-            abortSignal: dependencies.signal,
-        });
-        const receipt = createAttemptReceipt(route, state, startedAt, result);
-        if (
-            result.finishReason !== "stop" &&
-            result.finishReason !== "tool-calls"
-        )
-            return {
-                ...receipt,
-                status: "failed",
-                errorCode: "invalid_output",
-                retryable: true,
-                outputDiagnostic: rejectedOutputDiagnostic(
-                    "finish_reason_invalid",
-                    result.text,
-                    result.finishReason,
-                ),
-            };
-        return {
-            ...receipt,
-            status: "succeeded",
-            finishReason: result.finishReason,
-            assistantOutput: result.text,
-            requests: result.toolCalls.map((call) => ({
-                callId: call.toolCallId,
-                name: call.toolName,
-                inputJson: JSON.stringify(call.input ?? null),
-            })),
+            tools: createAgentTools(args.operations),
+            signal: dependencies.signal,
         };
+        if (args.generateStep) await args.generateStep(input);
+        else {
+            const agent = new ToolLoopAgent({
+                model: input.model,
+                instructions: input.instructions,
+                tools: input.tools,
+                stopWhen: isStepCount(1),
+                maxOutputTokens: MODEL_MAX_OUTPUT_TOKENS,
+                temperature: 0,
+                maxRetries: 0,
+            });
+            await agent.generate({
+                prompt: input.prompt,
+                timeout: MODEL_ATTEMPT_TIMEOUT_MS,
+                abortSignal: input.signal,
+            });
+        }
+        if (!state.turn?.result)
+            throw new Error("Generation completed without an observation");
+        return state.turn.result;
     } catch (error) {
+        if (state.turn?.observationError) throw state.turn.observationError;
+        // An observed result is durable already; framework failures remain explicit interruptions.
+        if (state.turn?.result) throw error;
+        if (args.generateStep && !state.dispatched && !state.requestBlockCode)
+            return {
+                status: "failed",
+                model: route.model,
+                latencyMs: Math.max(0, Date.now() - startedAt),
+                errorCode: "generation_backend_unavailable",
+                dispatchOutcome: "not_dispatched",
+                retryable: false,
+            };
         return failedAttemptFromError({
-            error,
+            error: state.turn?.generationError ?? error,
             route,
             dependencies,
             state,

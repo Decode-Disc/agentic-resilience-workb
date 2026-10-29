@@ -13,35 +13,56 @@ import {
     canAdoptRetainedResponse,
     executionError,
     recordMissionEvent,
+    requireDossierAuthority,
     requireMissionAuthority,
     requireRunAuthority,
 } from "./authority";
 import {
+    agentBackendValidator,
     agentDefinitionIdValidator,
     EXECUTION_WINDOW_MS,
     HISTORY_PAGE_SIZE,
 } from "./executionProtocol";
-import { missionScope } from "./missionData";
+import { isRecoverableInterruption, missionScope } from "./missionData";
 
 export const start = internalMutation({
     args: {
         runId: v.id("researchRuns"),
         corpusRevisionId: v.optional(v.id("corpusRevisions")),
         scope: v.optional(agentScopeValidator),
+        conversationTurnId: v.optional(v.id("agentConversationTurns")),
         definitionId: agentDefinitionIdValidator,
+        generationBackend: v.optional(agentBackendValidator),
         requestKey: v.string(),
         expectedGeneration: v.number(),
     },
     returns: v.id("agentMissions"),
     handler: async (ctx, args) => {
-        const { run, visitor } = await requireRunAuthority(
-            ctx,
-            args.runId,
-            args.expectedGeneration,
-        );
+        const definition = getAgentDefinition(args.definitionId);
+        const executionScope = definition.executionScope ?? "research";
+        const { run, visitor } =
+            executionScope === "conversation"
+                ? await requireDossierAuthority(ctx, args.runId)
+                : await requireRunAuthority(
+                      ctx,
+                      args.runId,
+                      args.expectedGeneration,
+                  );
+        const turn = args.conversationTurnId
+            ? await ctx.db.get(args.conversationTurnId)
+            : null;
+        if (
+            executionScope === "conversation" &&
+            (!turn ||
+                turn.runId !== run._id ||
+                turn.status !== "active" ||
+                turn.generation !== args.expectedGeneration)
+        )
+            throw executionError("active_turn_required");
+        if (executionScope === "research" && args.conversationTurnId)
+            throw executionError("invalid_delivery_target");
         if (!/^[a-zA-Z0-9._:-]{1,120}$/.test(args.requestKey))
             throw executionError("invalid_request_key");
-        const definition = getAgentDefinition(args.definitionId);
         const scope =
             args.scope ??
             (args.corpusRevisionId &&
@@ -69,13 +90,19 @@ export const start = internalMutation({
                 stableStringify(missionScope(previous)) !==
                     stableStringify(scope) ||
                 previous.generation !== args.expectedGeneration ||
-                previous.definitionId !== args.definitionId
+                previous.definitionId !== args.definitionId ||
+                previous.conversationTurnId !== args.conversationTurnId ||
+                (args.generationBackend !== undefined &&
+                    stableStringify(previous.generationBackend) !==
+                        stableStringify(args.generationBackend))
             )
                 throw executionError("mission_identity_conflict");
             return previous._id;
         }
         const initialState = definition.initialState(scope);
-        const { objectiveKey } = initialState;
+        const objectiveKey = turn
+            ? `${initialState.objectiveKey}:${turn._id}`
+            : initialState.objectiveKey;
         const objective = await ctx.db
             .query("agentMissions")
             .withIndex("by_run_and_objective_key", (q) =>
@@ -94,16 +121,28 @@ export const start = internalMutation({
             : null;
         const now = Date.now();
         const deadlineAt =
-            run.executionHarnessDeadlineAt ??
+            (executionScope === "research"
+                ? run.executionHarnessDeadlineAt
+                : undefined) ??
             Math.min(
                 now + EXECUTION_WINDOW_MS,
-                preparation?.deadlineAt ?? Infinity,
+                executionScope === "research"
+                    ? (preparation?.deadlineAt ?? Infinity)
+                    : Infinity,
             );
         if (deadlineAt <= now) throw executionError("execution_deadline");
-        await ctx.db.patch(run._id, { executionHarnessDeadlineAt: deadlineAt });
+        if (executionScope === "research")
+            await ctx.db.patch(run._id, {
+                executionHarnessDeadlineAt: deadlineAt,
+            });
         const id = await ctx.db.insert("agentMissions", {
+            ...(args.generationBackend
+                ? { generationBackend: args.generationBackend }
+                : {}),
             runId: run._id,
-            protocolVersion: 2,
+            protocolVersion: 3,
+            executionScope,
+            conversationTurnId: args.conversationTurnId,
             scope,
             ownerVisitorId: visitor._id,
             definitionId: args.definitionId,
@@ -125,6 +164,11 @@ export const start = internalMutation({
         });
         const mission = await ctx.db.get(id);
         if (!mission) throw executionError("mission_unavailable");
+        if (turn) {
+            if (turn.missionId && turn.missionId !== id)
+                throw executionError("turn_already_claimed");
+            await ctx.db.patch(turn._id, { missionId: id });
+        }
         await requireMissionAuthority(ctx, id, args.expectedGeneration);
         await recordMissionEvent(ctx, mission, {
             kind: "mission_started",
@@ -144,14 +188,15 @@ export const resume = internalMutation({
     handler: async (ctx, args): Promise<string> => {
         const retained = await ctx.db.get(args.missionId);
         if (!retained) throw executionError("mission_unavailable");
-        const { run } = await requireRunAuthority(
-            ctx,
-            retained.runId,
-            args.expectedGeneration,
-        );
-        const recoverable =
-            retained.status === "blocked" &&
-            retained.blockCode === "execution_interrupted";
+        const { run } =
+            retained.executionScope === "conversation"
+                ? await requireDossierAuthority(ctx, retained.runId)
+                : await requireRunAuthority(
+                      ctx,
+                      retained.runId,
+                      args.expectedGeneration,
+                  );
+        const recoverable = isRecoverableInterruption(retained);
         const observed = retained.lastInvocationId
             ? await ctx.db.get(retained.lastInvocationId)
             : null;
@@ -201,7 +246,12 @@ export const resume = internalMutation({
             });
             if (retained.workflowId)
                 await workflow.cancel(ctx, retained.workflowId as WorkflowId);
-            for (const status of ["pending", "running"] as const) {
+            for (const status of [
+                "pending",
+                "running",
+                "observed",
+                "waiting",
+            ] as const) {
                 const pending = await ctx.db
                     .query("agentOperationRequests")
                     .withIndex("by_mission_and_status", (q) =>
@@ -212,8 +262,9 @@ export const resume = internalMutation({
                     throw executionError("continuation_capacity");
                 for (const request of pending)
                     await ctx.db.patch(request._id, {
-                        expectedGeneration: args.expectedGeneration,
-                        status: "pending",
+                        ...(request.status === "pending"
+                            ? { expectedGeneration: args.expectedGeneration }
+                            : { adoptionGeneration: args.expectedGeneration }),
                     });
             }
             const last = retained.lastInvocationId
@@ -223,10 +274,7 @@ export const resume = internalMutation({
                 if (last.providerCallId && !last.receivedOutputJson)
                     throw executionError("attempt_outcome_unknown");
                 if (last.receivedOutputJson) {
-                    if (
-                        !recoverable ||
-                        !canAdoptRetainedResponse(retained, last)
-                    )
+                    if (!canAdoptRetainedResponse(retained, last))
                         throw executionError("retained_response_not_reusable");
                     await ctx.db.patch(last._id, {
                         adoptionGeneration: args.expectedGeneration,
@@ -263,7 +311,9 @@ export const resume = internalMutation({
         if (mission.workflowId) return mission.workflowId;
         const id = await workflow.start(
             ctx,
-            internal.execution.missionWorkflow.run,
+            "protocolVersion" in mission && mission.protocolVersion === 3
+                ? internal.execution.missionWorkflow.runV3
+                : internal.execution.missionWorkflow.run,
             {
                 missionId: mission._id,
                 expectedGeneration: args.expectedGeneration,
@@ -275,6 +325,26 @@ export const resume = internalMutation({
             },
         );
         await ctx.db.patch(mission._id, { workflowId: id, provenance });
+        for (const status of ["running", "waiting"] as const) {
+            const requests = await ctx.db
+                .query("agentOperationRequests")
+                .withIndex("by_mission_and_status", (q) =>
+                    q.eq("missionId", mission._id).eq("status", status),
+                )
+                .take(5);
+            if (requests.length > 4)
+                throw executionError("continuation_capacity");
+            for (const request of requests) {
+                const eventId = await workflow.createEvent(ctx, {
+                    name: `operation:${request._id}`,
+                    workflowId: id,
+                });
+                await ctx.db.patch(request._id, {
+                    waitEventId: eventId,
+                    waitNotified: false,
+                });
+            }
+        }
         await recordMissionEvent(ctx, mission, {
             kind: "mission_resumed",
             cause: "authorized_continuation",

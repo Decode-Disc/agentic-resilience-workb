@@ -15,6 +15,7 @@ import { sourceLocatorValidator } from "./domain/sourcePassages";
 import {
     executionStatusValidator,
     researchRunLifecycleValidator,
+    runPauseReasonValidator,
 } from "./domain/validators";
 import {
     MAX_CLAIMS_PER_RUN,
@@ -27,13 +28,6 @@ import { requireWorkspaceRun } from "./runWorkspace";
 const MAX_RESEARCH_PLAN_QUESTIONS = 11;
 const MAX_EXTRACTION_TASK_SCAN = 16;
 const MAX_POLICY_EVAL_SCAN = 16;
-
-const pauseReasonValidator = v.union(
-    v.literal("evidence_sufficiency_review"),
-    v.literal("source_review"),
-    v.literal("assessment_review"),
-    v.literal("claim_generation_unavailable"),
-);
 
 const extractionModeValidator = v.union(
     v.literal("showcase"),
@@ -512,7 +506,7 @@ export const getSummary = query({
         lifecycleState: researchRunLifecycleValidator,
         executionGeneration: v.number(),
         executionStatus: executionStatusValidator,
-        pauseReason: v.optional(pauseReasonValidator),
+        pauseReason: v.optional(runPauseReasonValidator),
         questionCoverage: questionCoverageValidator,
         frozenSources: frozenSourceBucketsValidator,
         claimCount: v.number(),

@@ -7,6 +7,14 @@ import type {
 } from "./agentDefinition";
 import { executionError } from "./errors";
 
+/** An interrupted executor can resume the same mission; it is not a terminal business result. */
+export function isRecoverableInterruption(mission: Doc<"agentMissions">) {
+    return (
+        mission.status === "blocked" &&
+        mission.blockCode === "execution_interrupted"
+    );
+}
+
 /** Normalizes persisted v1 inspection fields without rewriting historical records. */
 export function missionScope(mission: Doc<"agentMissions">): AgentScope {
     return "protocolVersion" in mission
@@ -94,4 +102,21 @@ export function operationIdentityScope(
                   }
                 : {},
     };
+}
+
+/** Preserves historical operation identity; each operation selects its reuse dependencies. */
+export function operationReuseIdentity(
+    context: Parameters<
+        import("./executionProtocol").AgentOperationDefinition["identity"]
+    >[0],
+) {
+    const { mission, runId, version, input, pin } = context;
+    return mission
+        ? {
+              objective: mission.objectiveKey,
+              version,
+              ...operationIdentityScope(mission, pin),
+              input,
+          }
+        : { runId, version, pin, input };
 }

@@ -14,6 +14,9 @@ importers:
       '@base-ui/react':
         specifier: 1.6.0
         version: 1.6.0(@date-fns/tz@1.5.0)(@types/react@19.2.17)(date-fns@4.4.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@convex-dev/agent':
+        specifier: 0.7.9
+        version: 0.7.9(@ai-sdk/provider-utils@5.0.59(zod@4.4.3))(@ai-sdk/provider@4.0.27)(ai@7.0.138(zod@4.4.3))(convex-helpers@0.1.128(@standard-schema/spec@1.1.0)(convex@1.47.0(react@19.2.7))(hono@4.12.30)(react@19.2.7)(typescript@7.0.2)(zod@4.4.3))(convex@1.47.0(react@19.2.7))(react@19.2.7)
       '@convex-dev/auth':
         specifier: 0.0.94
         version: 0.0.94(@auth/core@0.41.2)(convex@1.47.0(react@19.2.7))(react@19.2.7)
@@ -481,6 +484,20 @@ packages:
   '@bramus/specificity@2.4.2':
     resolution: {integrity: sha512-ctxtJ/eA+t+6q2++vj5j7FYX3nRu311q1wfYH3xjlLOsczhlhxAg2FWNUXhpGvAw3BWo1xBcvOV6/YLc2r5FJw==}
     hasBin: true
+
+  '@convex-dev/agent@0.7.9':
+    resolution: {integrity: sha512-/P7IU6CyzopR3olJmqQsLmy0sb9bTvubeuLTInsgqqQBgr7S7Z/N6L22AIer9dGcYTnW1sb7Lzacw61H2ptqbw==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@ai-sdk/provider': ^4.0.0
+      '@ai-sdk/provider-utils': ^5.0.0
+      ai: ^7.0.129
+      convex: ^1.46.0
+      convex-helpers: ^0.1.127
+      react: ^18.3.1 || ^19.0.0
+    peerDependenciesMeta:
+      react:
+        optional: true
 
   '@convex-dev/auth@0.0.94':
     resolution: {integrity: sha512-A/ily6mXQFhSOUAYoiVZdzAZj3RBhiU4d2MOqpEByL7Uzzub6Y+MYQCzSTi0hQzE1dv7dVHprFku0lQuiq6A5w==}
@@ -1701,6 +1718,9 @@ packages:
     engines: {node: '>=16.20.0'}
     cpu: [x64]
     os: [win32]
+
+  '@ungap/structured-clone@1.4.0':
+    resolution: {integrity: sha512-1mEZtMKPM09vDmQt5y7YvmN2+DFTP7Tg0EWXdic8/C6VRnpb33e4ghisCIE3WZjsE2N8mf+QV1Zqh7ZFYLWInQ==}
 
   '@vercel/oidc@3.2.0':
     resolution: {integrity: sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug==}
@@ -4155,6 +4175,17 @@ snapshots:
     dependencies:
       css-tree: 3.2.1
 
+  '@convex-dev/agent@0.7.9(@ai-sdk/provider-utils@5.0.59(zod@4.4.3))(@ai-sdk/provider@4.0.27)(ai@7.0.138(zod@4.4.3))(convex-helpers@0.1.128(@standard-schema/spec@1.1.0)(convex@1.47.0(react@19.2.7))(hono@4.12.30)(react@19.2.7)(typescript@7.0.2)(zod@4.4.3))(convex@1.47.0(react@19.2.7))(react@19.2.7)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.27
+      '@ai-sdk/provider-utils': 5.0.59(zod@4.4.3)
+      ai: 7.0.138(zod@4.4.3)
+      convex: 1.47.0(react@19.2.7)
+      convex-helpers: 0.1.128(@standard-schema/spec@1.1.0)(convex@1.47.0(react@19.2.7))(hono@4.12.30)(react@19.2.7)(typescript@7.0.2)(zod@4.4.3)
+    optionalDependencies:
+      '@ungap/structured-clone': 1.4.0
+      react: 19.2.7
+
   '@convex-dev/auth@0.0.94(@auth/core@0.41.2)(convex@1.47.0(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@auth/core': 0.41.2
@@ -5220,6 +5251,9 @@ snapshots:
     optional: true
 
   '@typescript/typescript-win32-x64@7.0.2':
+    optional: true
+
+  '@ungap/structured-clone@1.4.0':
     optional: true
 
   '@vercel/oidc@3.2.0': {}

@@ -385,7 +385,8 @@ export const recordAttempt = internalMutation({
                     args.stepKey === "extracting_evidence" ||
                     (args.sourceId && args.acceptedDecisionId)
                 ) &&
-                args.runId
+                args.runId &&
+                !args.missionId
             ) {
                 const run = await ctx.db.get(args.runId);
                 const executionIsActive = args.operation.startsWith(

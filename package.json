@@ -52,6 +52,7 @@
     "dependencies": {
         "@auth/core": "0.41.2",
         "@base-ui/react": "1.6.0",
+        "@convex-dev/agent": "0.7.9",
         "@convex-dev/auth": "0.0.94",
         "@convex-dev/rate-limiter": "0.3.2",
         "@convex-dev/react-query": "0.1.0",

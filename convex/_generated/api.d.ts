@@ -21,6 +21,8 @@ import type * as domain_claimCanonicalization from "../domain/claimCanonicalizat
 import type * as domain_claimValidation from "../domain/claimValidation.js";
 import type * as domain_claims from "../domain/claims.js";
 import type * as domain_companyMetadata from "../domain/companyMetadata.js";
+import type * as domain_conversationValidation from "../domain/conversationValidation.js";
+import type * as domain_conversationValidationContracts from "../domain/conversationValidationContracts.js";
 import type * as domain_coverImageUrl from "../domain/coverImageUrl.js";
 import type * as domain_evidenceArtifacts from "../domain/evidenceArtifacts.js";
 import type * as domain_evidenceAuthority from "../domain/evidenceAuthority.js";
@@ -74,10 +76,13 @@ import type * as execution_agentDefinition from "../execution/agentDefinition.js
 import type * as execution_agentSchemas from "../execution/agentSchemas.js";
 import type * as execution_authority from "../execution/authority.js";
 import type * as execution_cancellation from "../execution/cancellation.js";
+import type * as execution_commonOperations from "../execution/commonOperations.js";
 import type * as execution_context from "../execution/context.js";
+import type * as execution_conversations from "../execution/conversations.js";
 import type * as execution_errors from "../execution/errors.js";
 import type * as execution_executionProtocol from "../execution/executionProtocol.js";
 import type * as execution_fixtures from "../execution/fixtures.js";
+import type * as execution_handoffs from "../execution/handoffs.js";
 import type * as execution_invocationLifecycle from "../execution/invocationLifecycle.js";
 import type * as execution_invocations from "../execution/invocations.js";
 import type * as execution_invokeAgentModel from "../execution/invokeAgentModel.js";
@@ -88,10 +93,13 @@ import type * as execution_missionWorkflow from "../execution/missionWorkflow.js
 import type * as execution_missions from "../execution/missions.js";
 import type * as execution_modelActions from "../execution/modelActions.js";
 import type * as execution_operations from "../execution/operations.js";
+import type * as execution_researchControl from "../execution/researchControl.js";
 import type * as execution_simulation from "../execution/simulation.js";
 import type * as fixtureManifestStore from "../fixtureManifestStore.js";
 import type * as fixtures_cccShowcase from "../fixtures/cccShowcase.js";
 import type * as http from "../http.js";
+import type * as integrations_agentBackends from "../integrations/agentBackends.js";
+import type * as integrations_agentStorage from "../integrations/agentStorage.js";
 import type * as integrations_approvedSourceRetrieval from "../integrations/approvedSourceRetrieval.js";
 import type * as integrations_evidenceNormalization from "../integrations/evidenceNormalization.js";
 import type * as integrations_exa from "../integrations/exa.js";
@@ -158,6 +166,8 @@ declare const fullApi: ApiFromModules<{
   "domain/claimValidation": typeof domain_claimValidation;
   "domain/claims": typeof domain_claims;
   "domain/companyMetadata": typeof domain_companyMetadata;
+  "domain/conversationValidation": typeof domain_conversationValidation;
+  "domain/conversationValidationContracts": typeof domain_conversationValidationContracts;
   "domain/coverImageUrl": typeof domain_coverImageUrl;
   "domain/evidenceArtifacts": typeof domain_evidenceArtifacts;
   "domain/evidenceAuthority": typeof domain_evidenceAuthority;
@@ -211,10 +221,13 @@ declare const fullApi: ApiFromModules<{
   "execution/agentSchemas": typeof execution_agentSchemas;
   "execution/authority": typeof execution_authority;
   "execution/cancellation": typeof execution_cancellation;
+  "execution/commonOperations": typeof execution_commonOperations;
   "execution/context": typeof execution_context;
+  "execution/conversations": typeof execution_conversations;
   "execution/errors": typeof execution_errors;
   "execution/executionProtocol": typeof execution_executionProtocol;
   "execution/fixtures": typeof execution_fixtures;
+  "execution/handoffs": typeof execution_handoffs;
   "execution/invocationLifecycle": typeof execution_invocationLifecycle;
   "execution/invocations": typeof execution_invocations;
   "execution/invokeAgentModel": typeof execution_invokeAgentModel;
@@ -225,10 +238,13 @@ declare const fullApi: ApiFromModules<{
   "execution/missions": typeof execution_missions;
   "execution/modelActions": typeof execution_modelActions;
   "execution/operations": typeof execution_operations;
+  "execution/researchControl": typeof execution_researchControl;
   "execution/simulation": typeof execution_simulation;
   fixtureManifestStore: typeof fixtureManifestStore;
   "fixtures/cccShowcase": typeof fixtures_cccShowcase;
   http: typeof http;
+  "integrations/agentBackends": typeof integrations_agentBackends;
+  "integrations/agentStorage": typeof integrations_agentStorage;
   "integrations/approvedSourceRetrieval": typeof integrations_approvedSourceRetrieval;
   "integrations/evidenceNormalization": typeof integrations_evidenceNormalization;
   "integrations/exa": typeof integrations_exa;
@@ -305,4 +321,5 @@ export declare const internal: FilterApi<
 export declare const components: {
   workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
   rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
+  agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
 };

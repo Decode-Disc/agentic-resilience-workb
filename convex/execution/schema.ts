@@ -9,14 +9,25 @@ import {
     operationPinValidator,
 } from "./agentSchemas";
 import {
+    agentBackendValidator,
     agentDefinitionIdValidator,
     agentDefinitionVersionValidator,
     missionStatusValidator,
     operationOutcomeValidator,
+    operationRefusalValidator,
     requestInputValidator,
 } from "./executionProtocol";
 
 const missionFields = {
+    parentRequestId: v.optional(v.id("agentOperationRequests")),
+    rootMissionId: v.optional(v.id("agentMissions")),
+    childMissionRequests: v.optional(v.number()),
+    generationStorageRef: v.optional(v.string()),
+    executionScope: v.optional(
+        v.union(v.literal("research"), v.literal("conversation")),
+    ),
+    conversationTurnId: v.optional(v.id("agentConversationTurns")),
+    generationBackend: v.optional(agentBackendValidator),
     runId: v.id("researchRuns"),
     ownerVisitorId: v.id("visitors"),
     definitionId: agentDefinitionIdValidator,
@@ -42,6 +53,55 @@ const missionFields = {
 };
 
 export const executionTables = {
+    agentConversations: defineTable({
+        runId: v.id("researchRuns"),
+        storageRef: v.string(),
+        queuedCount: v.number(),
+        activeTurnId: v.optional(v.id("agentConversationTurns")),
+        createdAt: v.number(),
+    }).index("by_run", ["runId"]),
+    agentConversationTurns: defineTable({
+        runId: v.id("researchRuns"),
+        conversationId: v.id("agentConversations"),
+        status: v.union(
+            v.literal("active"),
+            v.literal("published"),
+            v.literal("cancelled"),
+        ),
+        instructionVersion: v.number(),
+        generation: v.number(),
+        messageCount: v.number(),
+        missionId: v.optional(v.id("agentMissions")),
+        publishedMessageId: v.optional(v.id("agentMessageDeliveries")),
+        publicationHash: v.optional(v.string()),
+        createdAt: v.number(),
+        completedAt: v.optional(v.number()),
+    }).index("by_run", ["runId"]),
+    agentMessageDeliveries: defineTable({
+        runId: v.id("researchRuns"),
+        conversationId: v.id("agentConversations"),
+        storageMessageRef: v.string(),
+        requestKey: v.string(),
+        contentHash: v.string(),
+        role: v.union(v.literal("user"), v.literal("assistant")),
+        delivery: v.union(
+            v.literal("queue"),
+            v.literal("steer"),
+            v.literal("reply"),
+        ),
+        status: v.union(
+            v.literal("queued"),
+            v.literal("active"),
+            v.literal("processed"),
+            v.literal("interrupted"),
+        ),
+        turnId: v.optional(v.id("agentConversationTurns")),
+        createdAt: v.number(),
+    })
+        .index("by_run_and_key", ["runId", "requestKey"])
+        .index("by_run", ["runId"])
+        .index("by_run_and_status", ["runId", "status"])
+        .index("by_turn", ["turnId"]),
     agentInvocationPayloads: defineTable({
         invocationId: v.id("agentInvocations"),
         runId: v.id("researchRuns"),
@@ -65,7 +125,7 @@ export const executionTables = {
             }),
             v.object({
                 ...missionFields,
-                protocolVersion: v.literal(2),
+                protocolVersion: v.union(v.literal(2), v.literal(3)),
                 scope: agentScopeValidator,
                 state: agentStateValidator,
                 result: v.optional(agentResultValidator),
@@ -76,7 +136,11 @@ export const executionTables = {
         .index("by_run_and_objective_key", ["runId", "objectiveKey"])
         .index("by_run_and_status", ["runId", "status"]),
     agentInvocations: defineTable({
+        generationBackend: v.optional(agentBackendValidator),
+        generationStorageRef: v.optional(v.string()),
         journalVersion: v.optional(v.literal(1)),
+        conversationTurnId: v.optional(v.id("agentConversationTurns")),
+        instructionVersion: v.optional(v.number()),
         missionId: v.optional(v.id("agentMissions")),
         runId: v.id("researchRuns"),
         corpusRevisionId: v.optional(v.id("corpusRevisions")),
@@ -106,7 +170,23 @@ export const executionTables = {
         .index("by_mission", ["missionId"])
         .index("by_run_and_task_key", ["runId", "taskKey"]),
     agentOperationRequests: defineTable({
-        missionId: v.id("agentMissions"),
+        admissionEventId: v.optional(v.id("agentExecutionEvents")),
+        deadlineAt: v.optional(v.number()),
+        runId: v.optional(v.id("researchRuns")),
+        protocolVersion: v.optional(v.literal(3)),
+        missionId: v.optional(v.id("agentMissions")),
+        instructionVersion: v.optional(v.number()),
+        waitEventId: v.optional(v.string()),
+        waitReference: v.optional(v.string()),
+        childMissionId: v.optional(v.id("agentMissions")),
+        sourceMessageId: v.optional(v.id("agentMessageDeliveries")),
+        interpretedNeed: v.optional(v.string()),
+        adoptedAt: v.optional(v.number()),
+        adoptionRefusalCode: v.optional(v.string()),
+        knownNotDispatched: v.optional(v.literal(true)),
+        adoptionGeneration: v.optional(v.number()),
+        waitNotified: v.optional(v.boolean()),
+        expiryJobId: v.optional(v.id("_scheduled_functions")),
         invocationId: v.optional(v.id("agentInvocations")),
         actor: v.union(v.literal("system"), v.literal("agent")),
         cause: v.string(),
@@ -120,17 +200,36 @@ export const executionTables = {
         status: v.union(
             v.literal("pending"),
             v.literal("running"),
+            v.literal("waiting"),
+            v.literal("observed"),
+            v.literal("unknown"),
             v.literal("completed"),
         ),
         outcome: v.optional(operationOutcomeValidator),
         createdAt: v.number(),
         completedAt: v.optional(v.number()),
     })
+        .index("by_run_and_logical_key", ["runId", "logicalKey"])
         .index("by_mission", ["missionId"])
         .index("by_mission_and_logical_key", ["missionId", "logicalKey"])
+        .index("by_mission_and_actor", ["missionId", "actor"])
         .index("by_mission_and_status", ["missionId", "status"])
         .index("by_invocation", ["invocationId"]),
     agentExecutionEvents: defineTable({
+        actor: v.optional(
+            v.union(
+                v.object({ type: v.literal("system") }),
+                v.object({
+                    type: v.literal("agent"),
+                    missionId: v.id("agentMissions"),
+                }),
+                v.object({
+                    type: v.literal("visitor"),
+                    visitorId: v.id("visitors"),
+                }),
+            ),
+        ),
+        parentRequestId: v.optional(v.id("agentOperationRequests")),
         missionId: v.optional(v.id("agentMissions")),
         runId: v.id("researchRuns"),
         sequence: v.optional(v.number()),
@@ -139,8 +238,16 @@ export const executionTables = {
         invocationId: v.optional(v.id("agentInvocations")),
         requestId: v.optional(v.id("agentOperationRequests")),
         code: v.optional(v.string()),
+        admissionOutcome: v.optional(operationRefusalValidator),
+        interpretedNeed: v.optional(v.string()),
+        generation: v.optional(v.number()),
+        instructionVersion: v.optional(v.number()),
         occurredAt: v.number(),
+        conversationTurnId: v.optional(v.id("agentConversationTurns")),
+        messageId: v.optional(v.id("agentMessageDeliveries")),
     })
         .index("by_mission_and_sequence", ["missionId", "sequence"])
+        .index("by_mission_and_kind", ["missionId", "kind"])
+        .index("by_invocation_and_kind", ["invocationId", "kind"])
         .index("by_run", ["runId"]),
 };

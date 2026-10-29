@@ -10,6 +10,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs, parseEnv } from "node:util";
 
+// Codegen and backend typechecking share this publisher process budget.
+const PUBLICATION_TIMEOUT_MS = 10 * 60_000;
+
 class LocalSyncError extends Error {}
 
 async function main(): Promise<number> {
@@ -122,7 +125,7 @@ async function main(): Promise<number> {
                 [cli, "deploy", "--env-file", credentials],
                 {
                     env,
-                    timeout: 120_000,
+                    timeout: PUBLICATION_TIMEOUT_MS,
                     maxBuffer: 4 * 1024 * 1024,
                     encoding: "utf8",
                 },
@@ -137,7 +140,9 @@ async function main(): Promise<number> {
                     );
                     if (error)
                         console.error(
-                            "Local synchronization failed; no backend restart was attempted.",
+                            !cancelled && error.killed && !error.code
+                                ? "Local publication timed out; no backend restart was attempted."
+                                : "Local synchronization failed; no backend restart was attempted.",
                         );
                     done(
                         cancelled

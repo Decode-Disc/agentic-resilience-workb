@@ -1,3 +1,5 @@
+import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { ActionCtx, QueryCtx } from "@convex/_generated/server";
 import {
     type Infer,
     type PropertyValidators,
@@ -16,9 +18,130 @@ export {
     operationInputValidator,
 } from "./agentSchemas";
 export type AgentOperationDefinition = {
+    identity(context: {
+        mission?: Doc<"agentMissions">;
+        runId: Id<"researchRuns">;
+        version: number;
+        input: Infer<typeof requestInputValidator>;
+        pin?: import("./agentDefinition").OperationPin;
+    }): unknown;
+    nativeAuthority?: "dossier" | "research";
+    childMission?(request: Doc<"agentOperationRequests">): {
+        definitionId: Doc<"agentMissions">["definitionId"];
+        scope: import("./agentDefinition").AgentScope;
+        maxRequests: number;
+    };
+    pin(
+        ctx: QueryCtx,
+        mission: Doc<"agentMissions"> | undefined,
+        input: Infer<typeof requestInputValidator>,
+        runId?: Id<"researchRuns">,
+    ): Promise<
+        | { kind: "available"; pin: import("./agentDefinition").OperationPin }
+        | { kind: "unavailable"; code: string }
+    >;
+    execute(
+        ctx: ActionCtx,
+        args: {
+            missionId?: Id<"agentMissions">;
+            runId?: Id<"researchRuns">;
+            requestId?: Id<"agentOperationRequests">;
+            expectedGeneration: number;
+            input: Infer<typeof requestInputValidator>;
+        },
+    ): Promise<Infer<typeof operationOutcomeValidator>>;
+    validateOutcome(
+        request: Doc<"agentOperationRequests">,
+        outcome: Infer<typeof operationOutcomeValidator>,
+    ): Infer<typeof operationOutcomeValidator>;
     version: number;
     description: string;
     inputValidator: VObject<Record<string, unknown>, PropertyValidators>;
+};
+
+export const agentBackendValidator = v.object({
+    id: v.string(),
+    version: v.number(),
+});
+export type AgentBackendIdentity = Infer<typeof agentBackendValidator>;
+export const LEGACY_AGENT_BACKEND: AgentBackendIdentity = {
+    id: "ai-sdk",
+    version: 1,
+};
+export const DEFAULT_AGENT_BACKEND: AgentBackendIdentity = {
+    id: "convex-agent",
+    version: 2,
+};
+
+export type ModelAttemptReceipt = {
+    observableReplyJson?: string;
+    model: string;
+    resolvedModel?: string;
+    provider?: string;
+    inputTokens?: number;
+    outputTokens?: number;
+    reasoningTokens?: number;
+    cachedInputTokens?: number;
+    reportedCost?: number;
+    latencyMs: number;
+    dispatchOutcome?: "not_dispatched" | "response_received" | "unknown";
+    httpStatus?: number;
+    retryAfterAt?: number;
+    outputDiagnostic?: Doc<"providerCalls">["diagnostic"];
+};
+export type AgentModelRoute = Readonly<{
+    model: string;
+    provider: string;
+    authorizedForAgent: true;
+}>;
+export type AgentGenerationInput = {
+    route?: AgentModelRoute;
+    instructions: string;
+    prompt: string;
+    operations: Record<
+        string,
+        Pick<AgentOperationDefinition, "description" | "inputValidator">
+    >;
+};
+export type AgentGenerationObservation = ModelAttemptReceipt &
+    (
+        | {
+              status: "succeeded";
+              finishReason: "stop" | "tool-calls";
+              assistantOutput: string;
+              requests: { callId: string; name: string; inputJson: string }[];
+          }
+        | { status: "failed"; errorCode: string; retryable: boolean }
+    );
+export type AgentGenerationResult =
+    | AgentGenerationObservation
+    | {
+          status: "blocked";
+          reason:
+              | "missing_authorized_route"
+              | "tool_callbacks_not_allowed"
+              | "generation_backend_unknown";
+      };
+
+export type AgentGenerationLifecycle = {
+    beforeDispatch(requestJson: string): Promise<void>;
+    observe(observation: AgentGenerationObservation): Promise<void>;
+    signal?: AbortSignal;
+};
+export type AgentGenerationRuntime = {
+    ctx: ActionCtx;
+    invocationId: Id<"agentInvocations">;
+    expectedGeneration: number;
+    transport: { apiKey: string; fetch?: typeof fetch };
+};
+
+/** Backends generate observations; the harness owns every effect, reservation and adoption. */
+export type AgentGenerationBackend = AgentBackendIdentity & {
+    generate(
+        input: AgentGenerationInput,
+        lifecycle: AgentGenerationLifecycle,
+        runtime: AgentGenerationRuntime,
+    ): Promise<AgentGenerationResult>;
 };
 
 export const MAX_CONTEXT_BYTES = 128 * 1024;
@@ -76,10 +199,15 @@ export const requestInputValidator = v.union(
     }),
 );
 
-export const operationOutcomeValidator = v.union(
-    agentOperationSuccessValidator,
+export const operationRefusalValidator = v.union(
     v.object({ kind: v.literal("unavailable"), code: v.string() }),
     v.object({ kind: v.literal("refused"), code: v.string() }),
+);
+
+export const operationOutcomeValidator = v.union(
+    v.object({ kind: v.literal("waiting"), reference: v.string() }),
+    agentOperationSuccessValidator,
+    operationRefusalValidator,
 );
 
 export const missionStatusValidator = v.union(

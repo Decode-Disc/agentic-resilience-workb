@@ -235,11 +235,27 @@ test("run cancellation fences first and drains mission work in bounded scheduled
         );
     }
     for (const requestId of requestIds) {
-        expect(await t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
-            status: "completed",
-            outcome: { kind: "refused", code: "run_cancelled" },
-        });
+        const request = await t.run((ctx) => ctx.db.get(requestId));
+        if (requestId === firstRequestId) {
+            expect(request).toMatchObject({ status: "unknown" });
+            expect(request).not.toHaveProperty("outcome");
+        } else
+            expect(request).toMatchObject({
+                status: "completed",
+                outcome: { kind: "refused", code: "run_cancelled" },
+            });
     }
+    expect(
+        await t.mutation(internal.execution.operations.recordResult, {
+            requestId: firstRequestId,
+            expectedGeneration: args.executionGeneration,
+            outcome: { kind: "success", valueJson: '{"retained":true}' },
+        }),
+    ).toMatchObject({ kind: "refused" });
+    expect(await t.run((ctx) => ctx.db.get(firstRequestId))).toMatchObject({
+        status: "observed",
+        outcome: { kind: "success" },
+    });
     const originalEvents = await t.run((ctx) =>
         ctx.db
             .query("agentExecutionEvents")

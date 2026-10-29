@@ -53,6 +53,7 @@ import {
     invitationStatusValidator,
     researchRunLifecycleValidator,
     runEventTypeValidator,
+    runPauseReasonValidator,
     visitorRoleValidator,
     workflowStepKeyValidator,
     workflowStepStateValidator,
@@ -156,6 +157,7 @@ export default defineSchema({
         .index("by_owner_and_context_key", ["ownerVisitorId", "contextKey"])
         .index("by_auth_user_id_and_status", ["authUserId", "status"]),
     researchRuns: defineTable({
+        agentExecutionVersion: v.optional(v.literal(3)),
         purpose: runPurposeValidator,
         browserTestContextId: v.optional(v.id("browserTestContexts")),
         ownerVisitorId: v.optional(v.id("visitors")),
@@ -180,14 +182,7 @@ export default defineSchema({
         executionGeneration: v.number(),
         lifecycleState: researchRunLifecycleValidator,
         executionStatus: executionStatusValidator,
-        pauseReason: v.optional(
-            v.union(
-                v.literal("evidence_sufficiency_review"),
-                v.literal("source_review"),
-                v.literal("assessment_review"),
-                v.literal("claim_generation_unavailable"),
-            ),
-        ),
+        pauseReason: v.optional(runPauseReasonValidator),
         nextEventSequence: v.number(),
         workflowId: v.optional(v.string()),
         workflowVersion: v.optional(v.number()),

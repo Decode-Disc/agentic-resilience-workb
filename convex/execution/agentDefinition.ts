@@ -1,9 +1,5 @@
-import type { Doc, Id } from "@convex/_generated/dataModel";
-import type {
-    ActionCtx,
-    MutationCtx,
-    QueryCtx,
-} from "@convex/_generated/server";
+import type { Doc } from "@convex/_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import type { Infer, Validator } from "convex/values";
 import type {
     agentCompletionValidator,
@@ -13,6 +9,7 @@ import type {
     operationPinValidator,
 } from "./agentSchemas";
 import type {
+    AgentGenerationInput,
     AgentOperationDefinition,
     operationOutcomeValidator,
     requestInputValidator,
@@ -37,6 +34,8 @@ export type AgentDefinition = {
     id: AgentScope["kind"];
     version: number;
     authority: string;
+    executionScope?: "research" | "conversation";
+    conversationReply?(result: AgentResult): string;
     instructions: string;
     scopeValidator: Validator<AgentScope, "required", string>;
     stateValidator: Validator<AgentState, "required", string>;
@@ -66,26 +65,6 @@ export type AgentDefinition = {
               };
           }
     >;
-    pinOperation(
-        ctx: QueryCtx,
-        mission: Doc<"agentMissions">,
-        input: OperationInput,
-    ): Promise<
-        | { kind: "available"; pin: OperationPin }
-        | { kind: "unavailable"; code: string }
-    >;
-    executeOperation(
-        ctx: ActionCtx,
-        args: {
-            missionId: Id<"agentMissions">;
-            expectedGeneration: number;
-            input: OperationInput;
-        },
-    ): Promise<OperationOutcome>;
-    validateOutcome(
-        request: Doc<"agentOperationRequests">,
-        outcome: OperationOutcome,
-    ): OperationOutcome;
     progress(
         mission: Doc<"agentMissions">,
         outcome: OperationOutcome,
@@ -106,3 +85,18 @@ export type AgentDefinition = {
           }
         | { kind: "blocked"; code: string };
 };
+
+/** Exposes model-visible schemas while keeping server execution callbacks out of SDK tools. */
+export function agentToolSchemas(
+    definition: Pick<AgentDefinition, "operations">,
+): AgentGenerationInput["operations"] {
+    return Object.fromEntries(
+        Object.entries(definition.operations).map(([name, operation]) => [
+            name,
+            {
+                description: operation.description,
+                inputValidator: operation.inputValidator,
+            },
+        ]),
+    );
+}

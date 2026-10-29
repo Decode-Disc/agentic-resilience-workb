@@ -1,5 +1,5 @@
 import { internal } from "@convex/_generated/api";
-import type { Doc } from "@convex/_generated/dataModel";
+import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
     internalMutation,
     internalQuery,
@@ -14,7 +14,7 @@ import {
 } from "@convex/domain/sourcePreparationAuthority";
 import { providerAttemptValidator } from "@convex/providerCalls";
 import schema from "@convex/schema";
-import { ConvexError, type Infer, v } from "convex/values";
+import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
 import {
@@ -24,12 +24,16 @@ import {
     recordInvocationEvent,
     recordMissionEvent,
     requireMissionAuthority,
+    requireMissionObservationAuthority,
 } from "./authority";
 import { buildMissionContext } from "./context";
+import { publishTurn, requireInstructionVersion } from "./conversations";
 import {
+    DEFAULT_AGENT_BACKEND,
     invocationReplyValidator,
     invocationResponseValidator,
     invocationStructureError,
+    LEGACY_AGENT_BACKEND,
     MAX_CONTEXT_BYTES,
     MAX_NO_PROGRESS_TURNS,
     MAX_OBSERVABLE_OUTPUT_BYTES,
@@ -44,6 +48,30 @@ import {
     missionScope,
 } from "./missionData";
 import { persistOperationRequest } from "./operations";
+
+async function hasOutstandingOperations(
+    ctx: QueryCtx,
+    missionId: Id<"agentMissions">,
+) {
+    for (const status of [
+        "pending",
+        "running",
+        "waiting",
+        "observed",
+        "unknown",
+    ] as const) {
+        if (
+            await ctx.db
+                .query("agentOperationRequests")
+                .withIndex("by_mission_and_status", (q) =>
+                    q.eq("missionId", missionId).eq("status", status),
+                )
+                .first()
+        )
+            return true;
+    }
+    return false;
+}
 
 async function settleReceiptObservation(
     ctx: MutationCtx,
@@ -63,6 +91,22 @@ async function settleReceiptObservation(
     );
     if (settled.providerCallId !== invocation.providerCallId)
         throw executionError("invocation_receipt_invalid");
+    if (attempt.dispatchOutcome === "not_dispatched") {
+        const request = await ctx.db
+            .query("agentInvocationPayloads")
+            .withIndex("by_invocation_and_part", (q) =>
+                q.eq("invocationId", invocation._id).eq("part", "request"),
+            )
+            .unique();
+        if (!request)
+            await retainInvocationPayload(
+                ctx,
+                invocation,
+                "request",
+                undefined,
+                "not_dispatched",
+            );
+    }
     await retainInvocationPayload(
         ctx,
         invocation,
@@ -89,10 +133,15 @@ async function requireDispatchAuthority(
     )
         throw executionError("invocation_unavailable");
     if (invocation.missionId) {
-        await requireMissionAuthority(
+        const { mission } = await requireMissionAuthority(
             ctx,
             invocation.missionId,
             expectedGeneration,
+        );
+        await requireInstructionVersion(
+            ctx,
+            mission,
+            invocation.instructionVersion,
         );
     } else {
         const receipt = invocation.providerCallId
@@ -225,19 +274,7 @@ export const begin = internalMutation({
                 inputJson: existing.inputJson,
             };
         }
-        const pending = await ctx.db
-            .query("agentOperationRequests")
-            .withIndex("by_mission_and_status", (q) =>
-                q.eq("missionId", mission._id).eq("status", "pending"),
-            )
-            .first();
-        const running = await ctx.db
-            .query("agentOperationRequests")
-            .withIndex("by_mission_and_status", (q) =>
-                q.eq("missionId", mission._id).eq("status", "running"),
-            )
-            .first();
-        if (pending || running)
+        if (await hasOutstandingOperations(ctx, mission._id))
             return { kind: "blocked" as const, code: "pending_operations" };
         const previousInvocation = mission.lastInvocationId
             ? await ctx.db.get(mission.lastInvocationId)
@@ -261,7 +298,14 @@ export const begin = internalMutation({
             });
             return context;
         }
+        const turn = mission.conversationTurnId
+            ? await ctx.db.get(mission.conversationTurnId)
+            : null;
         const invocationId = await ctx.db.insert("agentInvocations", {
+            conversationTurnId: mission.conversationTurnId,
+            instructionVersion: turn?.instructionVersion,
+            generationBackend:
+                mission.generationBackend ?? DEFAULT_AGENT_BACKEND,
             journalVersion: 1,
             missionId: mission._id,
             runId: mission.runId,
@@ -320,12 +364,31 @@ export const forExecution = internalQuery({
     },
 });
 
+export const noteBackendInterruption = internalMutation({
+    args: {
+        invocationId: v.id("agentInvocations"),
+        expectedGeneration: v.number(),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const invocation = await ctx.db.get(args.invocationId);
+        if (!invocation || invocation.generation !== args.expectedGeneration)
+            throw executionError("invocation_unavailable");
+        await recordInvocationEvent(ctx, invocation, {
+            kind: "generation_backend_interrupted",
+            code: "generation_backend_interrupted",
+        });
+        return null;
+    },
+});
+
 export const retainOutput = internalMutation({
     args: {
         invocationId: v.id("agentInvocations"),
         expectedGeneration: v.number(),
         responseJson: v.string(),
         rawOutputJson: v.optional(v.string()),
+        observableReplyJson: v.optional(v.string()),
     },
     returns: v.null(),
     handler: async (ctx, args) => {
@@ -360,11 +423,12 @@ export const retainOutput = internalMutation({
                 ctx,
                 invocation,
                 "reply",
-                JSON.stringify({
-                    version: 1,
-                    provenance: "simulation",
-                    response: JSON.parse(args.responseJson),
-                }),
+                args.observableReplyJson ??
+                    JSON.stringify({
+                        version: 1,
+                        provenance: "simulation",
+                        response: JSON.parse(args.responseJson),
+                    }),
             );
         else if (hasKnownNonDispatch({ ...invocation, receivedOutputJson })) {
             for (const part of ["request", "reply"] as const)
@@ -379,7 +443,7 @@ export const retainOutput = internalMutation({
         let receivedWhileAuthorized = invocation.receivedWhileAuthorized;
         if (!invocation.receivedOutputJson && invocation.missionId) {
             try {
-                await requireMissionAuthority(
+                await requireMissionObservationAuthority(
                     ctx,
                     invocation.missionId,
                     args.expectedGeneration,
@@ -501,6 +565,7 @@ export const beginOneShot = internalMutation({
             return existing._id;
         }
         const id = await ctx.db.insert("agentInvocations", {
+            generationBackend: LEGACY_AGENT_BACKEND,
             journalVersion: 1,
             runId: receipt.runId,
             corpusRevisionId: receipt.corpusRevisionId,
@@ -679,16 +744,17 @@ export const finish = internalMutation({
                 ...(invocation.blockCode ? { code: invocation.blockCode } : {}),
             };
         }
-        await ctx.db.patch(invocation._id, {
-            status: "returned",
+        const mission = await ctx.db.get(invocation.missionId);
+        if (!mission) throw executionError("mission_unavailable");
+        const returned = {
+            status: "returned" as const,
             outputJson,
+            blockCode: undefined,
             ...(args.rawOutputJson
                 ? { rawOutputJson: args.rawOutputJson }
                 : {}),
             completedAt: Date.now(),
-        });
-        const mission = await ctx.db.get(invocation.missionId);
-        if (!mission) throw executionError("mission_unavailable");
+        };
         const block = async (code: string, terminal = false) => {
             await ctx.db.patch(invocation._id, { blockCode: code });
             if (terminal)
@@ -711,15 +777,32 @@ export const finish = internalMutation({
                 args.expectedGeneration,
             );
         } catch (error) {
-            if (
-                !(error instanceof ConvexError) ||
-                typeof error.data !== "object" ||
-                !error.data ||
-                !("code" in error.data) ||
-                typeof error.data.code !== "string"
-            )
-                throw error;
-            return block(error.data.code);
+            const code = executionFailureCode(error);
+            if (!code) throw error;
+            try {
+                await requireMissionObservationAuthority(
+                    ctx,
+                    mission._id,
+                    args.expectedGeneration,
+                );
+            } catch (observationError) {
+                if (!executionFailureCode(observationError))
+                    throw observationError;
+                await ctx.db.patch(invocation._id, returned);
+            }
+            return block(code);
+        }
+        await ctx.db.patch(invocation._id, returned);
+        try {
+            await requireInstructionVersion(
+                ctx,
+                mission,
+                invocation.instructionVersion,
+            );
+        } catch (error) {
+            const code = executionFailureCode(error);
+            if (!code) throw error;
+            return block(code);
         }
         if (
             invocation.receivedOutputJson &&
@@ -746,6 +829,8 @@ export const finish = internalMutation({
             return block("working_memory_capacity", true);
         await ctx.db.patch(mission._id, { workingNotes: notes });
         if (args.response.kind === "complete") {
+            if (await hasOutstandingOperations(ctx, mission._id))
+                return block("pending_operations");
             const definition = getAgentDefinition(
                 mission.definitionId,
                 mission.definitionVersion,
@@ -767,6 +852,16 @@ export const finish = internalMutation({
                 })
             )
                 return block("invalid_completion", true);
+            if (mission.conversationTurnId) {
+                if (!definition.conversationReply)
+                    return block("conversation_reply_missing", true);
+                await publishTurn(
+                    ctx,
+                    mission,
+                    definition.conversationReply(completion.result),
+                    invocation.instructionVersion,
+                );
+            }
             await ctx.db.patch(mission._id, {
                 status: "completed",
                 ...domainDataPatch(mission, { result: completion.result }),

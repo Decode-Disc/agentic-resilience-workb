@@ -1,4 +1,5 @@
 import { savedMaterialInspectionDefinition } from "@convex/domain/savedMaterialInspection";
+import { agentToolSchemas } from "@convex/execution/agentDefinition";
 import {
     invokeDeferredAgentTurn,
     invokeOneShot,
@@ -7,6 +8,92 @@ import { v } from "convex/values";
 import { expect, test, vi } from "vitest";
 import { z } from "zod";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
+
+test("retains an original observable turn before the generation runtime receives it", async () => {
+    const events: string[] = [];
+    const originalInput = '{ "query" : "pricing" }';
+    let observed: unknown;
+    const dependencies = {
+        apiKey: "test-secret",
+        beforeDispatch: async () => {
+            events.push("request");
+        },
+        onObservation: async (result: unknown) => {
+            observed = result;
+            events.push("observation");
+        },
+        fetch: async () => {
+            events.push("provider");
+            return new Response(
+                JSON.stringify({
+                    id: "observed-before-storage",
+                    created: 1,
+                    model: "test/agent",
+                    choices: [
+                        {
+                            index: 0,
+                            message: {
+                                role: "assistant",
+                                content: null,
+                                reasoning: "private reasoning",
+                                tool_calls: [
+                                    {
+                                        id: "call-original",
+                                        type: "function",
+                                        function: {
+                                            name: "search_material",
+                                            arguments: originalInput,
+                                        },
+                                    },
+                                ],
+                            },
+                            finish_reason: "tool_calls",
+                        },
+                    ],
+                    usage: {
+                        prompt_tokens: 8,
+                        completion_tokens: 4,
+                        total_tokens: 12,
+                    },
+                }),
+                { headers: { "Content-Type": "application/json" } },
+            );
+        },
+    };
+    const result = await invokeDeferredAgentTurn({
+        route: {
+            model: "test/agent",
+            provider: "test",
+            authorizedForAgent: true,
+        },
+        dependencies,
+        instructions: "Inspect.",
+        prompt: "Continue.",
+        operations: {
+            search_material: {
+                description: "Search.",
+                inputValidator: v.object({ query: v.string() }),
+            },
+        },
+    });
+    events.push("returned");
+    expect(events).toEqual(["request", "provider", "observation", "returned"]);
+    expect(observed).toMatchObject({
+        status: "succeeded",
+        inputTokens: 8,
+        outputTokens: 4,
+        requests: [
+            {
+                callId: "call-original",
+                name: "search_material",
+                inputJson: originalInput,
+            },
+        ],
+    });
+    expect(result).toEqual(observed);
+    expect(JSON.stringify(observed)).not.toContain("private reasoning");
+    expect(JSON.stringify(observed)).not.toContain("test-secret");
+});
 
 test("journals the prepared SDK request before dispatch and the original reply before parsing", async () => {
     const events: string[] = [];
@@ -95,6 +182,31 @@ test("blocks a deferred agent turn when no authorized route exists", async () =>
     expect(result).toEqual({
         status: "blocked",
         reason: "missing_authorized_route",
+    });
+    expect(request).not.toHaveBeenCalled();
+});
+
+test("a backend preparation failure is explicitly not dispatched", async () => {
+    const request = vi.fn<typeof fetch>();
+    const result = await invokeDeferredAgentTurn({
+        route: {
+            model: "test/agent",
+            provider: "test",
+            authorizedForAgent: true,
+        },
+        dependencies: { apiKey: "test-only-key", fetch: request },
+        instructions: "Inspect.",
+        prompt: "Continue.",
+        operations: {},
+        generateStep: async () => {
+            throw new Error("Component storage unavailable");
+        },
+    });
+    expect(result).toMatchObject({
+        status: "failed",
+        errorCode: "generation_backend_unavailable",
+        dispatchOutcome: "not_dispatched",
+        retryable: false,
     });
     expect(request).not.toHaveBeenCalled();
 });
@@ -367,7 +479,7 @@ test("serializes canonical mission tools and accepts a real Convex source ID", a
         dependencies: { apiKey: "test-only-key", fetch: request },
         instructions: savedMaterialInspectionDefinition.instructions,
         prompt: "Read the requested retained passage.",
-        operations: savedMaterialInspectionDefinition.operations,
+        operations: agentToolSchemas(savedMaterialInspectionDefinition),
     });
 
     expect(result.status).toBe("succeeded");

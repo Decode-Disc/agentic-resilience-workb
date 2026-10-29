@@ -781,6 +781,7 @@ export const listRunJournalEventsPage = query({
 
 const journalInvocationValidator =
     schema.tables.agentInvocations.validator.pick(
+        "generationBackend",
         "journalVersion",
         "provenance",
         "status",
@@ -811,6 +812,20 @@ export const inspectJournalEvent = query({
         const event = await ctx.db.get(args.eventId);
         if (!event || event.runId !== args.runId)
             throw new Error("Journal entry not found");
+        const turn = event.conversationTurnId
+            ? await ctx.db.get(event.conversationTurnId)
+            : null;
+        const message = event.messageId
+            ? await ctx.db.get(event.messageId)
+            : null;
+        if (
+            (event.conversationTurnId && turn?.runId !== args.runId) ||
+            (event.messageId &&
+                (message?.runId !== args.runId ||
+                    (event.conversationTurnId &&
+                        message?.turnId !== event.conversationTurnId)))
+        )
+            throw new Error("Journal correlation mismatch");
         const mission = event.missionId
             ? await ctx.db.get(event.missionId)
             : null;
@@ -830,10 +845,12 @@ export const inspectJournalEvent = query({
         )
             throw new Error("Journal correlation mismatch");
         if (request) {
-            const mission = await ctx.db.get(request.missionId);
+            const mission = request.missionId
+                ? await ctx.db.get(request.missionId)
+                : null;
             if (
-                !mission ||
-                mission.runId !== args.runId ||
+                (request.missionId ? mission?.runId : request.runId) !==
+                    args.runId ||
                 request.missionId !== event.missionId
             )
                 throw new Error("Journal correlation mismatch");
@@ -857,6 +874,7 @@ export const inspectJournalEvent = query({
             providerCall,
             invocation: invocation
                 ? {
+                      generationBackend: invocation.generationBackend,
                       journalVersion: invocation.journalVersion,
                       provenance: invocation.provenance,
                       status: invocation.status,

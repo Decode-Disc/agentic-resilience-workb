@@ -45,6 +45,10 @@ export const continueRunCancellation = internalMutation({
                 return null;
             cancelledGeneration = run.executionGeneration - 1;
         }
+        await ctx.runMutation(internal.execution.conversations.cancelPending, {
+            runId: args.runId,
+            cancelledAt: args.cancelledAt,
+        });
         await cancelMissionPage(ctx, { ...args, cancelledGeneration });
         return null;
     },
@@ -70,7 +74,14 @@ async function cancelMissionPage(
     let requestsRemainInPage = false;
 
     for (const mission of page.page) {
-        if (mission.generation > args.cancelledGeneration) continue;
+        if (mission.executionScope === "conversation") {
+            const run = await ctx.db.get(args.runId);
+            if (
+                run?.executionStatus !== "cancelled" ||
+                run.updatedAt !== args.cancelledAt
+            )
+                continue;
+        } else if (mission.generation > args.cancelledGeneration) continue;
         requestsRemainInPage =
             (await cancelMission(
                 ctx,
@@ -123,8 +134,16 @@ async function cancelMission(
             q.eq("missionId", mission._id).eq("status", "running"),
         )
         .take(CANCELLATION_REQUEST_BATCH + 1);
-    const outstanding = [...running, ...pending].filter(
-        (request) => request.expectedGeneration <= cancelledGeneration,
+    const waiting = await ctx.db
+        .query("agentOperationRequests")
+        .withIndex("by_mission_and_status", (q) =>
+            q.eq("missionId", mission._id).eq("status", "waiting"),
+        )
+        .take(CANCELLATION_REQUEST_BATCH + 1);
+    const outstanding = [...running, ...pending, ...waiting].filter(
+        (request) =>
+            mission.executionScope === "conversation" ||
+            request.expectedGeneration <= cancelledGeneration,
     );
     const requestsToRefuse = outstanding.slice(0, CANCELLATION_REQUEST_BATCH);
     const cancelling =
@@ -147,11 +166,18 @@ async function cancelMission(
     }
 
     for (const request of requestsToRefuse) {
-        await ctx.db.patch(request._id, {
-            status: "completed",
-            outcome: { kind: "refused", code: "run_cancelled" },
-            completedAt: cancelledAt,
-        });
+        if (request.expiryJobId)
+            await ctx.scheduler.cancel(request.expiryJobId);
+        await ctx.db.patch(
+            request._id,
+            request.protocolVersion === 3 && request.status !== "pending"
+                ? { status: "unknown" }
+                : {
+                      status: "completed",
+                      outcome: { kind: "refused", code: "run_cancelled" },
+                      completedAt: cancelledAt,
+                  },
+        );
         await recordMissionEvent(ctx, mission, {
             kind: "operation_refused",
             cause: "run_cancellation",

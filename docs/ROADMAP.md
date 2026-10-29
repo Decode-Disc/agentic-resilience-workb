@@ -24,7 +24,7 @@ The accepted [question-led conception](brainstorming/question-led-workbench/2026
 | Reusable question-led UI library | Twenty presentation components, shared Button/Badge integration, restored company favicons and an isolated light/dark gallery are implemented. The gallery supports visual inspection; focused Playwright checks cover inventory interactions, keyboard/focus, scrolling and reader pagination. | These illustrative components are not connected to question-led missions, persisted appraisals or live synthesis. Existing pages retain their composition. |
 | Shared agent execution and worktree runtime | [Verification](verification/2026-10-27-shared-agent-harness.md) covers durable missions, temporary invocations, retained requests/results, automatic continuation context, exact history, repetition stops and shared provider accounting are implemented for approved saved-material inspection. Existing qualification/comparison reuse the bounded transport. Local services have distinct worktree identities and fixed port reservations that survive restarts; occupied ports fail without fallback. | No default live agent route; scripted execution does not establish model judgment or three-mission acceptance. |
 | Shared invocation journal | Bounded request/reply snapshots, atomic receipt/result settlement and an administrator dossier timeline are implemented and [locally verified](verification/2026-10-27-shared-agent-harness.md#central-invocation-journal). | No live-provider certification; historical snapshots remain unavailable. |
-| Question-led framing and three-mission execution | Accepted conception, including the [shared execution design](brainstorming/question-led-workbench/2026-10-26-agentic-execution-architecture.md#shared-harness-decision-of-2026-10-27). | Explicit Start research, delegated selection, Sources/Investigation/Synthesis bindings and their new domain artifacts remain unfinished. |
+| Question-led framing and three-mission execution | Accepted [Workbench conversation and framing contracts](../context/TECH.md#workbench-conversation-steering-and-instructions), including persistent dossier identity, queued/steering turns and tracked instructions. | Workbench/START bindings, explicit Start research, delegated selection, Sources/Investigation/Synthesis bindings and their new domain artifacts remain unfinished. |
 | Investigation, grouped appraisal review and Synthesis | Required target slices, replacing planned fixed-dimension review and secondary map/brief generation. | No completed common inquiry, retained-appraisal handoff or joint diagram-and-note journey is certified. |
 
 ### Next Preparation Gate
@@ -37,10 +37,9 @@ Bounded explicit recovery in the same editable dossier is implemented and locall
 
 ### Open Verification Limits
 
-- Shared-harness checks pass for the scoped execution, transport, accounting and runtime contracts. Protected harness and approval scenarios pass on desktop/mobile. The full root suite retains one missing ignored evaluation-archive fixture; the aggregate also retains unchanged benchmark-import and UI-format failures. The preview service's real-render gate requires its absent bundled Chromium binary. Details and command boundaries are in the [harness verification](verification/2026-10-27-shared-agent-harness.md).
+- The shared backend is synchronized and local services retain their instance, data and fixed ports after the approved restart. Independent review still requests changes; the execution-contract gaps are tracked in Phase 7. A reservation test timed out in the combined tooling run and passed in isolation; earlier aggregate/import limitations remain. See the [harness verification](verification/2026-10-27-shared-agent-harness.md).
 - Protected local journeys exercise decisions, approval, capture reuse, history, keyboard access and reconnection. Controlled fixtures and read-only inspection of the interrupted dossier do not certify fresh provider behavior, general analytical quality or visual acceptance.
 - External image availability and CORS behavior remain unqualified after earlier failures. The separate approval-only performance gate remains unaccepted after a materialization wait and a favicon-abort mismatch.
-- Some grouped tests timed out and passed in focused reruns without increased timeouts; those results do not establish a cause for the grouped instability. The recorded slices do not certify a passing aggregate check; earlier lint/format failures and unrun full-suite checks remain part of the record.
 
 Detailed historical verification notes, including local-only evidence locations, remain recoverable at `bd07b1bf756d8538547477a700c15aeb6391675d:docs/ROADMAP.md`. The linked reports and raw artifacts are unchanged.
 
@@ -138,12 +137,17 @@ Note: [Phase 5 deterministic/local certification](verification/2026-08-15-phase-
 
 ## Phase 6 — Framing and Controlled Transition
 
-Outcome: the analyst can establish a useful scope and launch the question-led workflow without weakening existing dossier authority.
+Outcome: the analyst can frame one persistent dossier, launch the question-led workflow and orient it through Workbench without weakening dossier authority.
 
-- [ ] Define concrete framing, mandate and revision contracts, common research questions, case-specific needs and contextual-intervention thresholds within the accepted scope.
+- [ ] Define concrete framing, mandate and business instruction records, common research questions, case-specific needs and contextual-intervention thresholds within the accepted scope.
 - [ ] Specify compatibility for current dossiers, approved corpora, claims, dimension decisions and in-flight executions before replacing any installed checkpoint or schema.
-- [ ] Preserve company identity, optional angle and public references through confirmation, proposed framing and optional Questionnaire refinement.
-- [ ] Persist explicit Start research as the event that fixes framing and launches Sources; prevent documentary preparation or question investigation while framing remains open.
+- [ ] Create the persistent framing dossier after admission and company confirmation, preserving its identity, optional angle, public references and analyst-facing conversation through research and results.
+- [ ] Connect conversational refinements and direct controls to the same versioned framing draft, with optional contextual clarification and preserved analyst edits.
+- [ ] Persist explicit Start research as the atomic, idempotent framing commitment, analysis consumption and Sources launch; bound and account prior framing without starting documentary preparation or question investigation.
+- [ ] Apply common operation/phase authority so Workbench can converse during framing and analyst pauses without falsely marking research active or bypassing human prerequisites.
+- [ ] Implement Workbench turns with default queued messages and explicit active-turn steering, preserving useful work and checking active-instruction freshness before dispatch and adoption.
+- [ ] Track analyst instructions through the existing operation owners, retaining original messages, interpreted needs and explicit outcomes under the available research phase.
+- [ ] Connect shared research pause/resume primitives to the research workflow and analyst controls, preserving engaged results, pending requests, cumulative consumption and the single active research slot.
 - [ ] Make the proposed company/activity scope and intended question useful immediately without reconstructing activity revenue or introducing financial calculations.
 - [ ] Evolve the existing workspace within the accepted timeline, compact composer and contextual-intervention direction. Settle remaining layout choices before changing the affected surfaces.
 
@@ -151,9 +155,15 @@ Outcome: the analyst can establish a useful scope and launch the question-led wo
 
 Outcome: one controlled execution mechanism supports adaptive documentary inquiry and preserves useful work across interruptions.
 
-The existing Workflow engine supports typed agent definitions with separate business scope, state and completion contracts. Read-only saved-material inspection and a local-only numeric validation agent exercise the same driver, context, operation dispatch and journal. Legacy mission records, request identities and function paths remain compatible. The validation definition proves execution reuse, not a second business capability; Sources remains the next integration. Verification and remaining limits are recorded in the [shared-harness evidence](verification/2026-10-27-shared-agent-harness.md).
+Typed definitions share Workflow, canonical native/tool operations and independent conversational/research authority. Earlier inspection and numeric fixtures have protected desktop/mobile coverage. Conversational administration passes on mobile and on a warmed desktop after reconnection; its initial desktop cold load exceeded the navigation budget. Deterministic checks cover legacy formats, adapters, function paths and selected continuation races. Workbench, Sources, Investigation and Synthesis remain business integrations. See the [shared-harness evidence](verification/2026-10-27-shared-agent-harness.md).
 
 - [x] Implement the common mission/continuation protocol on the existing Workflow engine, with static agent definitions, temporary invocations, retained operation requests/results and shared native/tool dispatch.
+- [x] Isolate generation behind a shared backend contract; verify both real library adapters, versioned selection, retained observations and controlled recovery without activating a live reasoning route.
+- [x] Adopt Convex Agent version 2 for new mission invocations, preserving pinned historical backends, shared per-mission technical storage and explicit failure for unsupported identities.
+- [x] Implement shared conversation/research authority, queued and steering turns, deferred operation continuation and bounded mission returns, with deterministic component/Workflow coverage and a protected local conversational journey.
+- [x] Synchronize the shared backend and exercise conversational administration on desktop/mobile after reconnection with simulated provider I/O.
+- [x] Repair the three execution findings: preserve confirmed model replies across analyst pauses, resume recoverable interruptions through public Resume, and retain active instructions across history pages with transactional rejection of assembled-context overflow. Automatic compaction and capacity-aware queued-lot selection remain in the continuation target below.
+- [ ] Implement the accepted durable-generation continuation target: independently bounded queue draining, capacity-aware message selection, automatic LLM compaction preserving required context, common access to earlier conversation turns and an explained stop on confirmed non-progress. Define thresholds and verify summary fidelity and recovery before activation; see the [technical contract](../context/TECH.md#shared-execution-structure).
 - [ ] Implement the shared access and Sources operations needed by this slice through existing domain owners, callable by authorized native code and mission-specific agent bindings under equivalent rules. Add the Investigation and Synthesis operations in their respective phases when their behavior is needed.
 - [x] Assemble required continuation context, retained working memory and retrievable observable history; verify automatic preservation, explicit capacity blocks and on-demand reading without corpus-sized tool schemas.
 - [ ] Support targeted artifact changes, resulting-artifact controls, precise diagnostics and system execution of known required dependent checks.

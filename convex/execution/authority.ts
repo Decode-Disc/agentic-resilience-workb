@@ -9,6 +9,29 @@ import { missionScope, missionState } from "./missionData";
 
 export { executionError, executionFailureCode } from "./errors";
 
+/** Logical results may serve several callers; each retained cause must still belong to that request. */
+export async function readOperationCause(
+    ctx: QueryCtx,
+    request: Doc<"agentOperationRequests">,
+    eventId?: Id<"agentExecutionEvents">,
+) {
+    if (!eventId) return null;
+    const cause = await ctx.db.get(eventId);
+    if (
+        !cause ||
+        cause.requestId !== request._id ||
+        cause.missionId !== request.missionId ||
+        (request.runId && cause.runId !== request.runId) ||
+        ![
+            "operation_requested",
+            "operation_reused",
+            "operation_refused",
+        ].includes(cause.kind)
+    )
+        throw executionError("operation_correlation_invalid");
+    return cause;
+}
+
 /** Restored authority cannot retroactively authorize an observation received while access was absent. */
 export function canAdoptRetainedResponse(
     mission: Doc<"agentMissions">,
@@ -28,10 +51,9 @@ export function canAdoptRetainedResponse(
 }
 
 /** Internal callers inherit the persisted run's authority, not a supplied principal or model argument. */
-export async function requireRunAuthority(
+export async function requireDossierAuthority(
     ctx: QueryCtx,
     runId: Id<"researchRuns">,
-    expectedGeneration: number,
 ) {
     const run = await ctx.db.get(runId);
     const visitor = run?.ownerVisitorId
@@ -48,6 +70,17 @@ export async function requireRunAuthority(
         throw executionError("not_authorized");
     if (!runMatchesWorkspace(run, await workspaceForVisitor(ctx, visitor)))
         throw executionError("not_authorized");
+    if (run.executionStatus === "cancelled")
+        throw executionError("stale_execution");
+    return { run, visitor };
+}
+
+export async function requireRunAuthority(
+    ctx: QueryCtx,
+    runId: Id<"researchRuns">,
+    expectedGeneration: number,
+) {
+    const { run, visitor } = await requireDossierAuthority(ctx, runId);
     if (
         run.executionGeneration !== expectedGeneration ||
         run.executionStatus !== "running"
@@ -66,27 +99,54 @@ export async function requireRunAuthority(
     return { run, visitor };
 }
 
-export async function requireMissionAuthority(
+async function requireMissionAccess(
     ctx: QueryCtx,
     missionId: Id<"agentMissions">,
     expectedGeneration: number,
+    permission: "progression" | "observation",
 ) {
     const mission = await ctx.db.get(missionId);
     if (!mission) throw executionError("mission_unavailable");
-    const { run, visitor } = await requireRunAuthority(
-        ctx,
-        mission.runId,
-        expectedGeneration,
+    const definition = getAgentDefinition(
+        mission.definitionId,
+        mission.definitionVersion,
     );
+    const scopeKind = definition.executionScope ?? "research";
+    if (mission.executionScope && mission.executionScope !== scopeKind)
+        throw executionError("mission_contract_invalid");
+    const { run, visitor } =
+        scopeKind === "conversation" || permission === "observation"
+            ? await requireDossierAuthority(ctx, mission.runId)
+            : await requireRunAuthority(ctx, mission.runId, expectedGeneration);
+    if (
+        scopeKind !== "conversation" &&
+        permission === "observation" &&
+        !(
+            run.agentExecutionVersion === 3 &&
+            run.executionStatus === "paused" &&
+            run.pauseReason === "analyst" &&
+            run.executionGeneration === expectedGeneration + 1
+        )
+    )
+        await requireRunAuthority(ctx, mission.runId, expectedGeneration);
+    if (scopeKind === "conversation") {
+        const turn = mission.conversationTurnId
+            ? await ctx.db.get(mission.conversationTurnId)
+            : null;
+        if (
+            !turn ||
+            turn.missionId !== mission._id ||
+            turn.runId !== run._id ||
+            turn.generation !== mission.generation ||
+            turn.status !== "active"
+        )
+            throw executionError("active_turn_required");
+    }
     if (
         mission.ownerVisitorId !== visitor._id ||
         mission.generation !== expectedGeneration
     )
         throw executionError("stale_execution");
-    const definition = getAgentDefinition(
-        mission.definitionId,
-        mission.definitionVersion,
-    );
     const scope = missionScope(mission);
     const state = missionState(mission);
     if (
@@ -104,6 +164,33 @@ export async function requireMissionAuthority(
     return { mission, run };
 }
 
+export function requireMissionAuthority(
+    ctx: QueryCtx,
+    missionId: Id<"agentMissions">,
+    expectedGeneration: number,
+) {
+    return requireMissionAccess(
+        ctx,
+        missionId,
+        expectedGeneration,
+        "progression",
+    );
+}
+
+/** Analyst suspension permits retaining engaged work, without granting progression authority. */
+export function requireMissionObservationAuthority(
+    ctx: QueryCtx,
+    missionId: Id<"agentMissions">,
+    expectedGeneration: number,
+) {
+    return requireMissionAccess(
+        ctx,
+        missionId,
+        expectedGeneration,
+        "observation",
+    );
+}
+
 /** The event sequence and its transition commit together, without a second event-sourced state owner. */
 export async function recordMissionEvent(
     ctx: MutationCtx,
@@ -114,14 +201,27 @@ export async function recordMissionEvent(
         invocationId?: Id<"agentInvocations">;
         requestId?: Id<"agentOperationRequests">;
         code?: string;
+        admissionOutcome?: Doc<"agentExecutionEvents">["admissionOutcome"];
+        messageId?: Id<"agentMessageDeliveries">;
+        actor?: Doc<"agentExecutionEvents">["actor"];
+        interpretedNeed?: string;
+        generation?: number;
+        instructionVersion?: number;
     },
 ) {
     const current = await ctx.db.get(mission._id);
     if (!current) throw executionError("mission_unavailable");
-    await ctx.db.insert("agentExecutionEvents", {
+    const eventId = await ctx.db.insert("agentExecutionEvents", {
         ...event,
+        actor:
+            event.actor ??
+            (event.invocationId
+                ? { type: "agent", missionId: mission._id }
+                : { type: "system" }),
+        parentRequestId: mission.parentRequestId,
         missionId: mission._id,
         runId: mission.runId,
+        conversationTurnId: mission.conversationTurnId,
         sequence: current.nextEventSequence,
         occurredAt: Date.now(),
     });
@@ -129,6 +229,7 @@ export async function recordMissionEvent(
         nextEventSequence: current.nextEventSequence + 1,
         updatedAt: Date.now(),
     });
+    return eventId;
 }
 
 /** Invocation events share mission ordering when applicable; one-shot calls only need dossier ordering. */

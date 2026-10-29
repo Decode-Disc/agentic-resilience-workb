@@ -28,7 +28,7 @@ type Child = ReturnType<typeof spawn>;
 
 const STARTUP_TIMEOUT_MS = positiveInteger(
     process.env.LOCAL_RUNTIME_STARTUP_TIMEOUT_MS,
-    120_000,
+    600_000,
 );
 
 async function main(): Promise<number> {
@@ -155,7 +155,8 @@ async function runNativeWatcher(
         },
     );
     const exit = trackExit(child);
-    const removeSignals = forwardSignals(child);
+    // The native CLI's SIGINT handler shuts down the backend it started.
+    const removeSignals = forwardSignals(child, undefined, "SIGINT");
     try {
         await waitForBackend(root, deploymentName, child, runId, exit);
         releaseRuntimeStartupLock();
@@ -177,11 +178,11 @@ async function runNativeWatcher(
             },
         );
     } catch (error) {
-        await stopChild(child);
+        await stopChild(child, "SIGINT");
         throw error;
     } finally {
         removeSignals();
-        if (runE2e) await stopChild(child);
+        if (runE2e) await stopChild(child, "SIGINT");
         await exit;
         await removeRuntimeRun(root, runId);
     }
@@ -548,11 +549,15 @@ async function runCommand(
     return waitForChild(child);
 }
 
-function forwardSignals(child: Child, onSignal?: () => void): () => void {
+function forwardSignals(
+    child: Child,
+    onSignal?: () => void,
+    gracefulSignal?: NodeJS.Signals,
+): () => void {
     const forward = (signal: NodeJS.Signals) => {
         onSignal?.();
         if (child.exitCode === null && child.signalCode === null)
-            child.kill(signal);
+            child.kill(gracefulSignal ?? signal);
     };
     const onInt = () => forward("SIGINT");
     const onTerm = () => forward("SIGTERM");
@@ -584,10 +589,13 @@ function signalExitCode(signal: NodeJS.Signals | null): number {
     return signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : 1;
 }
 
-async function stopChild(child: Child): Promise<void> {
+async function stopChild(
+    child: Child,
+    signal: NodeJS.Signals = "SIGTERM",
+): Promise<void> {
     if (child.exitCode !== null || child.signalCode !== null) return;
     const exit = trackExit(child);
-    if (!child.killed) child.kill("SIGTERM");
+    if (!child.killed) child.kill(signal);
     await Promise.race([
         exit,
         delay(3_000).then(() => {
@@ -632,7 +640,8 @@ function nativeEnvironment(root: string, runId: string): NodeJS.ProcessEnv {
         ...process.env,
         CONVEX_TMPDIR: process.env.CONVEX_TMPDIR ?? "/tmp",
         CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS:
-            process.env.CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS ?? "120",
+            process.env.CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS ??
+            String(Math.ceil(STARTUP_TIMEOUT_MS / 1000)),
         LOCAL_RUNTIME_ROOT: root,
         LOCAL_RUNTIME_RUN_ID: runId,
     };

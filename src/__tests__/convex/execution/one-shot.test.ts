@@ -72,6 +72,7 @@ test("an existing authorized preparation attempt retains its one-shot context an
     });
     expect(await t.run((ctx) => ctx.db.get(invocationId))).toMatchObject({
         inputJson,
+        generationBackend: { id: "ai-sdk", version: 1 },
         status: "returned",
         provenance: "live",
         providerCallId: claimed.providerCallId,

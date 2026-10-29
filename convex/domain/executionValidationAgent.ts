@@ -1,6 +1,11 @@
 import type { AgentDefinition } from "@convex/execution/agentDefinition";
 import { executionError } from "@convex/execution/errors";
-import { missionScope, missionState } from "@convex/execution/missionData";
+import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
+import {
+    missionScope,
+    missionState,
+    operationReuseIdentity,
+} from "@convex/execution/missionData";
 import {
     BROWSER_TEST_SLOT,
     requireBrowserFixtureContext,
@@ -17,69 +22,13 @@ import {
 } from "./executionValidationContracts";
 
 /** Local contract probe: no research authority, external I/O or provider route. */
-export const executionValidationDefinition: AgentDefinition & {
-    id: "execution_validation_v1";
-} = {
-    id: "execution_validation_v1",
-    version: 1,
-    authority: "local_fixture_validation_only",
-    instructions:
-        "Simulation only. Check each supplied fixture value, then report their total.",
-    scopeValidator: validationScopeValidator,
-    stateValidator: validationStateValidator,
-    resultValidator: validationResultValidator,
-    completionValidator: validationCompletionValidator,
-    operations: {
-        check_fixture_value: {
-            version: 1,
-            description: "Inspect one deterministic fixture value.",
-            inputValidator: checkValueInputValidator,
-        },
-    },
-    initialState(scope) {
-        if (
-            scope.kind !== "execution_validation_v1" ||
-            scope.values.length < 1 ||
-            scope.values.length > 8 ||
-            scope.values.some((value) => !Number.isSafeInteger(value)) ||
-            !Number.isSafeInteger(
-                scope.values.reduce((sum, value) => sum + value, 0),
-            )
-        )
-            throw executionError("validation_scope_invalid");
-        return {
-            objectiveKey: `validation:${JSON.stringify(scope.values)}`,
-            state: { kind: "execution_validation_v1", checkedIndices: [] },
-            obligations: ["check_all_values"],
-        };
-    },
-    async requireAuthority(ctx, mission, run) {
-        const visitor = await requireBrowserTestOwner(ctx, BROWSER_TEST_SLOT);
-        const contextId = await requireBrowserFixtureContext(ctx, visitor);
-        if (
-            run.purpose !== "browser_test" ||
-            mission.ownerVisitorId !== visitor._id ||
-            run.browserTestContextId !== contextId
-        )
-            throw executionError("simulation_not_authorized");
-    },
-    async context(_ctx, mission) {
-        const scope = missionScope(mission);
-        const state = missionState(mission);
-        if (
-            scope.kind !== "execution_validation_v1" ||
-            state.kind !== "execution_validation_v1"
-        )
-            throw executionError("mission_contract_invalid");
-        return {
-            kind: "ready",
-            context: {
-                validationValues: scope.values,
-                activeWork: { checkedIndices: state.checkedIndices },
-            },
-        };
-    },
-    async pinOperation(_ctx, mission, input) {
+export const validationOperationBehavior: Pick<
+    AgentOperationDefinition,
+    "pin" | "execute" | "validateOutcome" | "identity"
+> = {
+    identity: operationReuseIdentity,
+    async pin(_ctx, mission, input) {
+        if (!mission) return { kind: "unavailable", code: "mission_required" };
         const scope = missionScope(mission);
         if (
             scope.kind !== "execution_validation_v1" ||
@@ -97,7 +46,9 @@ export const executionValidationDefinition: AgentDefinition & {
             pin: { kind: "execution_validation_v1", value },
         };
     },
-    async executeOperation(ctx, args) {
+    async execute(ctx, args) {
+        if (!args.missionId)
+            return { kind: "refused", code: "mission_required" };
         // Dispatch has already claimed the authorized request; read immutable scope again at the boundary.
         const { internal } = await import("@convex/_generated/api");
         const context = await ctx.runQuery(internal.execution.context.build, {
@@ -151,8 +102,80 @@ export const executionValidationDefinition: AgentDefinition & {
             progressKey: `checked:${request.input.index}`,
         };
     },
+};
+
+export const validationOperations: Record<string, AgentOperationDefinition> = {
+    check_fixture_value: {
+        ...validationOperationBehavior,
+        version: 1,
+        description: "Inspect one deterministic fixture value.",
+        inputValidator: checkValueInputValidator,
+    },
+};
+
+export const executionValidationDefinition: AgentDefinition & {
+    id: "execution_validation_v1";
+} = {
+    id: "execution_validation_v1",
+    version: 1,
+    authority: "local_fixture_validation_only",
+    instructions:
+        "Simulation only. Check each supplied fixture value, then report their total.",
+    scopeValidator: validationScopeValidator,
+    stateValidator: validationStateValidator,
+    resultValidator: validationResultValidator,
+    completionValidator: validationCompletionValidator,
+    operations: validationOperations,
+    initialState(scope) {
+        if (
+            scope.kind !== "execution_validation_v1" ||
+            scope.values.length < 1 ||
+            scope.values.length > 8 ||
+            scope.values.some((value) => !Number.isSafeInteger(value)) ||
+            !Number.isSafeInteger(
+                scope.values.reduce((sum, value) => sum + value, 0),
+            )
+        )
+            throw executionError("validation_scope_invalid");
+        return {
+            objectiveKey: `validation:${JSON.stringify(scope.values)}`,
+            state: { kind: "execution_validation_v1", checkedIndices: [] },
+            obligations: ["check_all_values"],
+        };
+    },
+    async requireAuthority(ctx, mission, run) {
+        const visitor = await requireBrowserTestOwner(ctx, BROWSER_TEST_SLOT);
+        const contextId = await requireBrowserFixtureContext(ctx, visitor);
+        if (
+            run.purpose !== "browser_test" ||
+            mission.ownerVisitorId !== visitor._id ||
+            run.browserTestContextId !== contextId
+        )
+            throw executionError("simulation_not_authorized");
+    },
+    async context(_ctx, mission) {
+        const scope = missionScope(mission);
+        const state = missionState(mission);
+        if (
+            scope.kind !== "execution_validation_v1" ||
+            state.kind !== "execution_validation_v1"
+        )
+            throw executionError("mission_contract_invalid");
+        return {
+            kind: "ready",
+            context: {
+                validationValues: scope.values,
+                activeWork: { checkedIndices: state.checkedIndices },
+            },
+        };
+    },
     progress(mission, outcome) {
-        if (outcome.kind !== "success" || !outcome.progressKey) return {};
+        if (
+            outcome.kind !== "success" ||
+            !("progressKey" in outcome) ||
+            !outcome.progressKey
+        )
+            return {};
         const state = missionState(mission);
         const scope = missionScope(mission);
         if (

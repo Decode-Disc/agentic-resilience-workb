@@ -95,7 +95,7 @@ test("a registered validation agent starts without an approved corpus and retain
     );
     const mission = await t.run((ctx) => ctx.db.get(missionId));
     expect(mission).toMatchObject({
-        protocolVersion: 2,
+        protocolVersion: 3,
         definitionId: "execution_validation_v1",
         state: { kind: "execution_validation_v1", checkedIndices: [] },
     });

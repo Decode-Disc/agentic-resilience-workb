@@ -82,6 +82,7 @@ test("only an active administrator can read paginated journal events and lazily 
         { runId: args.runId, eventId: event._id },
     );
     expect(detail.invocation).toMatchObject({
+        generationBackend: { id: "convex-agent", version: 2 },
         journalVersion: 1,
         provenance: "simulation",
         receivedOutputJson: '{"kind":"blocked","code":"retained"}',
@@ -236,4 +237,50 @@ test("inspection preserves the adoption fence of an observation received after c
         status: "started",
         receivedWhileAuthorized: false,
     });
+});
+
+test("journal inspection rejects a conversation reference belonging to another dossier", async () => {
+    const f = await journalFixture();
+    await f.t.run((ctx) => ctx.db.patch(f.visitorId, { role: "admin" }));
+    const eventId = await f.t.run(async (ctx) => {
+        const otherRun = await ctx.db.insert("researchRuns", {
+            purpose: "research",
+            lifecycleState: "draft",
+            executionStatus: "idle",
+            executionGeneration: 0,
+            nextEventSequence: 1,
+            createdAt: 1,
+            updatedAt: 1,
+        });
+        const conversationId = await ctx.db.insert("agentConversations", {
+            runId: otherRun,
+            storageRef: "foreign",
+            queuedCount: 0,
+            createdAt: 1,
+        });
+        const turnId = await ctx.db.insert("agentConversationTurns", {
+            runId: otherRun,
+            conversationId,
+            status: "active",
+            instructionVersion: 1,
+            generation: 1,
+            messageCount: 0,
+            createdAt: 1,
+        });
+        return ctx.db.insert("agentExecutionEvents", {
+            runId: f.args.runId,
+            conversationTurnId: turnId,
+            kind: "turn_started",
+            cause: "invalid-correlation",
+            occurredAt: 1,
+        });
+    });
+    await expect(
+        f.t
+            .withIdentity({ subject: f.userId })
+            .query(api.adminOperations.inspectJournalEvent, {
+                runId: f.args.runId,
+                eventId,
+            }),
+    ).rejects.toThrow("Journal correlation mismatch");
 });

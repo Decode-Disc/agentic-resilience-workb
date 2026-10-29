@@ -21,6 +21,7 @@ import { afterEach, expect, it } from "vitest";
 const roots: string[] = [];
 const servers: Server[] = [];
 const testProcesses: ReturnType<typeof spawn>[] = [];
+const fixtureBackendPids: number[] = [];
 const runtimeModule = await import(
     pathToFileURL(resolve(process.cwd(), "scripts/local-runtime.ts")).href
 );
@@ -34,6 +35,13 @@ afterEach(async () => {
                 processExit(child),
                 new Promise((done) => setTimeout(done, 3_000)),
             ]);
+    }
+    for (const pid of fixtureBackendPids.splice(0)) {
+        try {
+            process.kill(pid, "SIGTERM");
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+        }
     }
     await Promise.all(
         servers
@@ -1297,6 +1305,72 @@ it("reports native startup failure and does not leave a readiness projection", a
     });
 
     expect(await processExit(child)).toBe(17);
+    expect(existsSync(join(first, ".local-runtime/manifest.json"))).toBe(false);
+}, 20_000);
+
+it("gives the native CLI the configured startup budget", async () => {
+    const { first } = await createWorktreePair();
+    const path = join(first, "native-budget.json");
+    const entry = join(first, "node_modules/convex/bin/main.js");
+    writeFileSync(
+        entry,
+        `import {writeFileSync} from 'node:fs';
+writeFileSync(${JSON.stringify(path)},JSON.stringify({timeout:process.env.CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS}));
+process.exit(17);`,
+    );
+    const child = spawnLocalDev(first, "convex:dev", {
+        LOCAL_RUNTIME_STARTUP_TIMEOUT_MS: "5000",
+        CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: undefined,
+    });
+    expect(await processExit(child)).toBe(17);
+    expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ timeout: "5" });
+}, 20_000);
+
+it.each([
+    "startup timeout",
+    "parent cancellation",
+] as const)("uses native CLI cleanup on %s without leaving its backend child", async (reason) => {
+    const { first } = await createWorktreePair();
+    const marker = join(first, "native-cleanup.json");
+    const cleaned = join(first, "native-cleaned");
+    const clock = join(first, "native-startup-clock.mjs");
+    // Cross the startup deadline only after the CLI has installed cleanup and spawned its backend.
+    writeFileSync(
+        clock,
+        `
+import {existsSync} from 'node:fs';
+const now=Date.now.bind(Date);
+Date.now=()=>now()+(existsSync(${JSON.stringify(marker)})?60000:0);
+`,
+    );
+    writeFileSync(
+        join(first, "node_modules/convex/bin/main.js"),
+        `
+import {spawn} from 'node:child_process';
+import {writeFileSync} from 'node:fs';
+const backend=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});
+backend.once('spawn',()=>writeFileSync(${JSON.stringify(marker)},JSON.stringify({pid:backend.pid})));
+// Convex dev installs its cleanup handler for SIGINT, not SIGTERM.
+process.once('SIGINT',()=>{backend.once('exit',()=>{writeFileSync(${JSON.stringify(cleaned)},'done');process.exit(0)});backend.kill('SIGTERM')});
+setInterval(()=>{},1000);
+`,
+    );
+    const child = spawnLocalDev(first, "convex:dev", {
+        LOCAL_RUNTIME_STARTUP_TIMEOUT_MS: "30000",
+        ...(reason === "startup timeout"
+            ? {
+                  NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import ${clock}`,
+              }
+            : {}),
+    });
+    await expect.poll(() => existsSync(marker), { timeout: 10_000 }).toBe(true);
+    const backendPid: number = JSON.parse(readFileSync(marker, "utf8")).pid;
+    if (!backendPid) throw new Error("Expected fixture backend pid");
+    fixtureBackendPids.push(backendPid);
+    if (reason === "parent cancellation") child.kill("SIGTERM");
+    expect(await processExit(child)).toBe(reason === "startup timeout" ? 1 : 0);
+    expect(existsSync(cleaned)).toBe(true);
+    expect(() => process.kill(backendPid, 0)).toThrow(/ESRCH/);
     expect(existsSync(join(first, ".local-runtime/manifest.json"))).toBe(false);
 }, 20_000);
 

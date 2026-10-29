@@ -1,7 +1,11 @@
 import { internal } from "@convex/_generated/api";
 import { internalMutation } from "@convex/_generated/server";
 import { workflow } from "@convex/workflow";
-import { vResultValidator, vWorkflowId } from "@convex-dev/workflow";
+import {
+    type EventId,
+    vResultValidator,
+    vWorkflowId,
+} from "@convex-dev/workflow";
 import type { FunctionReturnType } from "convex/server";
 import { v } from "convex/values";
 import { validate } from "convex-helpers/validators";
@@ -12,9 +16,18 @@ import {
     recordMissionEvent,
     requireMissionAuthority,
 } from "./authority";
-import { invocationResponseValidator } from "./executionProtocol";
+import {
+    operationOutcomeValidator as importOutcomeValidator,
+    invocationResponseValidator,
+} from "./executionProtocol";
 
 const nextValidator = v.union(
+    v.object({ kind: v.literal("wait"), eventId: v.string() }),
+    v.object({
+        kind: v.literal("adoptOperation"),
+        requestId: v.id("agentOperationRequests"),
+        outcome: importOutcomeValidator,
+    }),
     v.object({ kind: v.literal("stopped") }),
     v.object({
         kind: v.literal("dispatch"),
@@ -66,6 +79,16 @@ export const next = internalMutation({
         } catch (error) {
             const code = executionFailureCode(error);
             if (!code) throw error;
+            const run = await ctx.db.get(mission.runId);
+            if (
+                "protocolVersion" in mission &&
+                mission.protocolVersion === 3 &&
+                mission.executionScope !== "conversation" &&
+                run?.executionStatus === "paused"
+            ) {
+                await ctx.db.patch(mission._id, { status: "waiting" });
+                return { kind: "stopped" as const };
+            }
             await ctx.db.patch(mission._id, {
                 status: "blocked",
                 blockCode: code,
@@ -90,11 +113,39 @@ export const next = internalMutation({
             )
             .first();
         const request = running ?? pending;
+        if (running?.waitEventId && !running.outcome)
+            return { kind: "wait" as const, eventId: running.waitEventId };
         if (request)
             return {
                 kind: "dispatch" as const,
                 requestId: request._id,
             };
+        const observedOperation = await ctx.db
+            .query("agentOperationRequests")
+            .withIndex("by_mission_and_status", (q) =>
+                q.eq("missionId", mission._id).eq("status", "observed"),
+            )
+            .first();
+        if (observedOperation?.outcome)
+            return {
+                kind: "adoptOperation" as const,
+                requestId: observedOperation._id,
+                outcome: observedOperation.outcome,
+            };
+        const waitingOperation = await ctx.db
+            .query("agentOperationRequests")
+            .withIndex("by_mission_and_status", (q) =>
+                q.eq("missionId", mission._id).eq("status", "waiting"),
+            )
+            .first();
+        if (waitingOperation) {
+            if (!waitingOperation.waitEventId)
+                throw executionError("continuation_unavailable");
+            return {
+                kind: "wait" as const,
+                eventId: waitingOperation.waitEventId,
+            };
+        }
         if (invocation?.status === "started") {
             if (invocation.receivedOutputJson) {
                 const response: unknown = JSON.parse(
@@ -167,12 +218,16 @@ export const onComplete = internalMutation({
                 code: "execution_interrupted",
             });
         }
+        if (mission.parentRequestId)
+            await ctx.runMutation(internal.execution.handoffs.finishChild, {
+                missionId: mission._id,
+            });
         return null;
     },
 });
 
 // Step names are persisted by Workflow; keep these references stable across module renames.
-export const run = workflow
+const workflowDefinition = workflow
     .define({
         args: {
             missionId: v.id("agentMissions"),
@@ -193,6 +248,19 @@ export const run = workflow
                 },
             );
             switch (nextStep.kind) {
+                case "wait":
+                    await step.awaitEvent({ id: nextStep.eventId as EventId });
+                    break;
+                case "adoptOperation":
+                    await step.runMutation(
+                        internal.execution.operations.recordResult,
+                        {
+                            requestId: nextStep.requestId,
+                            expectedGeneration: args.expectedGeneration,
+                            outcome: nextStep.outcome,
+                        },
+                    );
+                    break;
                 case "stopped":
                     return null;
                 case "dispatch":
@@ -266,3 +334,7 @@ export const run = workflow
             }
         }
     });
+
+// Existing Workflow references remain registered; new executions pin the evolved driver.
+export const run = workflowDefinition;
+export const runV3 = workflowDefinition;

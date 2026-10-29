@@ -122,7 +122,8 @@ import {parseEnv} from 'node:util';
 const args=process.argv.slice(2);
 const credentialPath=args[args.indexOf('--env-file')+1];
 const credentials=parseEnv(readFileSync(credentialPath,'utf8'));
-writeFileSync('publication.json',JSON.stringify({args,credentials,credentialPath,mode:statSync(credentialPath).mode&0o777,inheritedSelectors:Object.keys(process.env).filter(key=>['CONVEX_DEPLOY_KEY','CONVEX_DEPLOYMENT','CONVEX_SELF_HOSTED_URL','CONVEX_SELF_HOSTED_ADMIN_KEY'].includes(key))}));
+writeFileSync('publication.json',JSON.stringify({pid:process.pid,args,credentials,credentialPath,mode:statSync(credentialPath).mode&0o777,inheritedSelectors:Object.keys(process.env).filter(key=>['CONVEX_DEPLOY_KEY','CONVEX_DEPLOYMENT','CONVEX_SELF_HOSTED_URL','CONVEX_SELF_HOSTED_ADMIN_KEY'].includes(key))}));
+if(existsSync('publication-delay')) await new Promise(done=>setTimeout(done,Number(readFileSync('publication-delay','utf8'))));
 console.log('Applied local code');
 console.error(credentials.CONVEX_SELF_HOSTED_ADMIN_KEY);
 process.exitCode=Number(readFileSync('exit-code','utf8'));
@@ -216,6 +217,67 @@ it("propagates publication failure, cleans credentials and preserves the existin
         "local-fixture",
     );
 });
+
+function acceleratedPublisherClock(root: string): NodeJS.ProcessEnv {
+    const clock = join(root, "publisher-clock.mjs");
+    // Accelerate only the external process budget; the publisher and identity check remain real.
+    writeFileSync(
+        clock,
+        `
+import childProcess from 'node:child_process';
+import {syncBuiltinESMExports} from 'node:module';
+const execFile=childProcess.execFile.bind(childProcess);
+childProcess.execFile=(file,args,options,callback)=>execFile(file,args,{...options,timeout:options.timeout/100},callback);
+syncBuiltinESMExports();
+`,
+    );
+    return {
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import ${clock}`,
+    };
+}
+
+it("lets the publisher complete typechecking beyond the former two-minute budget", async () => {
+    const { root, url, env, config } = await fixture();
+    writeFileSync(join(root, "publication-delay"), "1800");
+    const result = await run(
+        root,
+        ["--url", url],
+        acceleratedPublisherClock(root),
+    );
+    expect(result.status, result.output).toBe(0);
+    expect(result.output).toContain("Applied local code");
+    expect(result.output).not.toContain(config.adminKey);
+    const publication = JSON.parse(
+        readFileSync(join(root, "publication.json"), "utf8"),
+    );
+    expect(existsSync(publication.credentialPath)).toBe(false);
+    expect(readFileSync(join(root, ".env.local"), "utf8")).toBe(env);
+    expect(await (await fetch(`${url}/instance_name`)).text()).toBe(
+        "local-fixture",
+    );
+}, 10_000);
+
+it("reports the publisher timeout, cleans credentials and leaves the backend running", async () => {
+    const { root, url, env, config } = await fixture();
+    writeFileSync(join(root, "pause-publication"), "yes");
+    const result = await run(
+        root,
+        ["--url", url],
+        acceleratedPublisherClock(root),
+    );
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Local publication timed out");
+    expect(result.output).not.toContain(config.adminKey);
+    const publication = JSON.parse(
+        readFileSync(join(root, "publication.json"), "utf8"),
+    );
+    expect(() => process.kill(publication.pid, 0)).toThrow(/ESRCH/);
+    expect(existsSync(publication.credentialPath)).toBe(false);
+    expect(readFileSync(join(root, ".env.local"), "utf8")).toBe(env);
+    expect(await (await fetch(`${url}/instance_name`)).text()).toBe(
+        "local-fixture",
+    );
+}, 10_000);
 
 it.each([
     "missing",
@@ -338,6 +400,7 @@ it("cleans credentials on cancellation without stopping the backend", async () =
         const publication = JSON.parse(readFileSync(marker, "utf8"));
         child.kill("SIGTERM");
         expect(await exit).toBe(130);
+        expect(() => process.kill(publication.pid, 0)).toThrow(/ESRCH/);
         expect(existsSync(publication.credentialPath)).toBe(false);
         expect(readFileSync(join(root, ".env.local"), "utf8")).toBe(env);
         expect(await (await fetch(`${url}/instance_name`)).text()).toBe(

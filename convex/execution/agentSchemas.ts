@@ -1,9 +1,14 @@
+import { conversationValidationSchemas } from "@convex/domain/conversationValidationContracts";
 import { validationSchemas } from "@convex/domain/executionValidationContracts";
 import { savedMaterialSchemas } from "@convex/domain/savedMaterialOperations";
 import { v } from "convex/values";
 
 // Pure schema registration stays independent of runtime bindings and generated function types.
-const registeredSchemas = [savedMaterialSchemas, validationSchemas] as const;
+const registeredSchemas = [
+    savedMaterialSchemas,
+    validationSchemas,
+    conversationValidationSchemas,
+] as const;
 export const agentDefinitionIdValidator = v.union(
     ...registeredSchemas.map((schema) => schema.id),
 );
@@ -23,7 +28,12 @@ export const agentCompletionValidator = v.union(
 export const consultMissionStateInputValidator = v.object({
     cursor: v.optional(v.string()),
 });
+export const consultRunStateInputValidator = v.object({});
 export const operationInputValidator = v.union(
+    v.object({
+        kind: v.literal("consult_run_state"),
+        ...consultRunStateInputValidator.fields,
+    }),
     v.object({
         kind: v.literal("consult_mission_state"),
         ...consultMissionStateInputValidator.fields,
@@ -31,6 +41,7 @@ export const operationInputValidator = v.union(
     ...registeredSchemas.map((schema) => schema.operation),
 );
 export const operationPinValidator = v.union(
+    v.object({ kind: v.literal("run_state"), stateHash: v.string() }),
     v.object({ kind: v.literal("mission_history") }),
     ...registeredSchemas.map((schema) => schema.pin),
 );

@@ -3,28 +3,33 @@
 import { internal } from "@convex/_generated/api";
 import { internalAction } from "@convex/_generated/server";
 import { sha256Hex } from "@convex/domain/sourcePassages";
+import { resolveAgentGenerationBackend } from "@convex/integrations/agentBackends";
 import { missionRoutes } from "@convex/integrations/modelRouting";
 import {
     agentInputByteLength,
-    type DeferredAgentTurnResult,
-    invokeDeferredAgentTurn,
     rejectedOutputDiagnostic,
 } from "@convex/integrations/modelTransport";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
+import { agentToolSchemas } from "./agentDefinition";
 import { executionError, executionFailureCode } from "./authority";
 import {
+    type AgentGenerationObservation,
+    type AgentGenerationResult,
     invocationReplyValidator,
     invocationResponseValidator,
     invocationStructureError,
+    LEGACY_AGENT_BACKEND,
     MAX_CONTEXT_BYTES,
     MAX_OPERATION_RESULT_BYTES,
 } from "./executionProtocol";
 
+import { simulationFetch } from "./simulation";
+
 function decodeReceivedReply(
-    result: Extract<DeferredAgentTurnResult, { status: "succeeded" }>,
+    result: Extract<AgentGenerationResult, { status: "succeeded" }>,
 ): {
     reply: Infer<typeof invocationReplyValidator>;
     errorCode?: string;
@@ -96,7 +101,10 @@ export const invoke = internalAction({
             );
             return reply;
         };
-        if (invocation.provenance === "simulation") {
+        if (
+            invocation.provenance === "simulation" &&
+            !invocation.generationBackend
+        ) {
             const recorded = await ctx.runMutation(
                 internal.execution.invocationLifecycle.retainRequest,
                 {
@@ -117,12 +125,29 @@ export const invoke = internalAction({
                 ),
             });
         }
-        const route = missionRoutes[mission.definitionId];
+        const simulated = invocation.provenance === "simulation";
+        const backend = resolveAgentGenerationBackend(
+            invocation.generationBackend ?? LEGACY_AGENT_BACKEND,
+        );
+        if (!backend)
+            return retainReply({
+                response: {
+                    kind: "blocked",
+                    code: "generation_backend_unknown",
+                },
+            });
+        const route = simulated
+            ? {
+                  model: "simulation/controlled-turn",
+                  provider: "simulation",
+                  authorizedForAgent: true as const,
+              }
+            : missionRoutes[mission.definitionId];
         if (!route)
             return retainReply({
                 response: { kind: "blocked", code: "missing_authorized_route" },
             });
-        if (!process.env.OPENROUTER_API_KEY?.trim())
+        if (!simulated && !process.env.OPENROUTER_API_KEY?.trim())
             return retainReply({
                 response: { kind: "blocked", code: "missing_configuration" },
             });
@@ -130,11 +155,12 @@ export const invoke = internalAction({
             mission.definitionId,
             mission.definitionVersion,
         );
+        const tools = agentToolSchemas(definition);
         if (
             (await agentInputByteLength({
                 instructions: definition.instructions,
                 prompt: invocation.inputJson,
-                operations: definition.operations,
+                operations: tools,
             })) > MAX_CONTEXT_BYTES
         )
             return retainReply({
@@ -164,6 +190,27 @@ export const invoke = internalAction({
             >,
             observableReplyJson?: string,
         ) => {
+            if (simulated) {
+                await ctx.runMutation(
+                    internal.execution.invocationLifecycle.retainOutput,
+                    {
+                        ...args,
+                        responseJson: JSON.stringify(reply.response),
+                        ...(reply.rawOutputJson
+                            ? { rawOutputJson: reply.rawOutputJson }
+                            : {}),
+                        ...(observableReplyJson
+                            ? {
+                                  observableReplyJson: JSON.stringify({
+                                      ...JSON.parse(observableReplyJson),
+                                      provenance: "simulation",
+                                  }),
+                              }
+                            : {}),
+                    },
+                );
+                return reply;
+            }
             await ctx.runMutation(
                 internal.execution.invocationLifecycle.recordModelReply,
                 {
@@ -177,23 +224,25 @@ export const invoke = internalAction({
         let admitted: FunctionReturnType<
             typeof internal.providerCalls.recordAttempt
         >;
-        try {
-            admitted = await ctx.runMutation(
-                internal.providerCalls.recordAttempt,
-                { ...attempt, status: "started" },
-            );
-        } catch (error) {
-            const code = executionFailureCode(error);
-            if (!code) throw error;
-            return retainReply({ response: { kind: "blocked", code } });
+        if (!simulated) {
+            try {
+                admitted = await ctx.runMutation(
+                    internal.providerCalls.recordAttempt,
+                    { ...attempt, status: "started" },
+                );
+            } catch (error) {
+                const code = executionFailureCode(error);
+                if (!code) throw error;
+                return retainReply({ response: { kind: "blocked", code } });
+            }
+            if (!admitted.shouldExecute)
+                return retainReply({
+                    response: {
+                        kind: "blocked",
+                        code: admitted.errorCode ?? "attempt_already_recorded",
+                    },
+                });
         }
-        if (!admitted.shouldExecute)
-            return retainReply({
-                response: {
-                    kind: "blocked",
-                    code: admitted.errorCode ?? "attempt_already_recorded",
-                },
-            });
         // Admission and call are separate transactions; recheck the generation immediately before I/O.
         try {
             await ctx.runQuery(
@@ -215,31 +264,122 @@ export const invoke = internalAction({
             if (!executionFailureCode(error)) throw error;
             return reply;
         }
-        const result = await invokeDeferredAgentTurn({
-            route,
-            dependencies: {
-                apiKey: process.env.OPENROUTER_API_KEY ?? "",
-                beforeDispatch: async (requestJson) => {
-                    const retained = await ctx.runMutation(
-                        internal.execution.invocationLifecycle.retainRequest,
-                        { ...args, requestJson },
-                    );
-                    if (retained.kind === "blocked")
-                        throw executionError(retained.code);
-                    await ctx.runQuery(
-                        internal.execution.invocationLifecycle
-                            .authorizeDispatch,
-                        args,
-                    );
+        let observedReply: Infer<typeof invocationReplyValidator> | undefined;
+        const recordObservation = async (
+            result: AgentGenerationObservation,
+        ) => {
+            const received =
+                result.status === "succeeded"
+                    ? decodeReceivedReply(result)
+                    : {
+                          reply: {
+                              response: {
+                                  kind: "blocked" as const,
+                                  code: result.errorCode,
+                              },
+                              ...(result.outputDiagnostic
+                                  ? {
+                                        rawOutputJson: JSON.stringify(
+                                            result.outputDiagnostic,
+                                        ),
+                                    }
+                                  : {}),
+                          },
+                          errorCode: result.errorCode,
+                          diagnostic: result.outputDiagnostic,
+                      };
+            observedReply = await recordReply(
+                received.reply,
+                {
+                    status: received.errorCode ? "failed" : "succeeded",
+                    dispatchOutcome: result.dispatchOutcome,
+                    latencyMs: result.latencyMs,
+                    reportedCost: result.reportedCost,
+                    usage: {
+                        model: result.model,
+                        resolvedModel: result.resolvedModel,
+                        provider: result.provider,
+                        inputTokens: result.inputTokens,
+                        outputTokens: result.outputTokens,
+                        reasoningTokens: result.reasoningTokens,
+                        cachedInputTokens: result.cachedInputTokens,
+                    },
+                    ...(received.errorCode
+                        ? {
+                              errorCode: received.errorCode,
+                              retryable:
+                                  result.status === "failed"
+                                      ? result.retryable
+                                      : true,
+                              diagnostic: received.diagnostic,
+                          }
+                        : {}),
                 },
-                signal: AbortSignal.timeout(
-                    Math.max(1, mission.deadlineAt - Date.now()),
-                ),
-            },
-            instructions: definition.instructions,
-            prompt: invocation.inputJson,
-            operations: definition.operations,
-        });
+                result.observableReplyJson,
+            );
+            return observedReply;
+        };
+        const simulatedResponse = simulated
+            ? await ctx.runQuery(internal.execution.simulation.invoke, args)
+            : undefined;
+        let result: AgentGenerationResult;
+        try {
+            result = await backend.generate(
+                {
+                    route,
+                    instructions: definition.instructions,
+                    prompt: invocation.inputJson,
+                    operations: tools,
+                },
+                {
+                    beforeDispatch: async (requestJson) => {
+                        const retained = await ctx.runMutation(
+                            internal.execution.invocationLifecycle
+                                .retainRequest,
+                            {
+                                ...args,
+                                requestJson: simulated
+                                    ? JSON.stringify({
+                                          ...JSON.parse(requestJson),
+                                          provenance: "simulation",
+                                      })
+                                    : requestJson,
+                            },
+                        );
+                        if (retained.kind === "blocked")
+                            throw executionError(retained.code);
+                        await ctx.runQuery(
+                            internal.execution.invocationLifecycle
+                                .authorizeDispatch,
+                            args,
+                        );
+                    },
+                    observe: async (observation) => {
+                        await recordObservation(observation);
+                    },
+                    signal: AbortSignal.timeout(
+                        Math.max(1, mission.deadlineAt - Date.now()),
+                    ),
+                },
+                {
+                    ctx,
+                    invocationId: invocation._id,
+                    expectedGeneration: args.expectedGeneration,
+                    transport: simulatedResponse
+                        ? {
+                              apiKey: "local-fixture",
+                              fetch: simulationFetch(simulatedResponse),
+                          }
+                        : { apiKey: process.env.OPENROUTER_API_KEY ?? "" },
+                },
+            );
+        } catch {
+            await ctx.runMutation(
+                internal.execution.invocationLifecycle.noteBackendInterruption,
+                args,
+            );
+            throw executionError("generation_backend_interrupted");
+        }
         if (result.status === "blocked") {
             return recordReply(
                 { response: { kind: "blocked", code: result.reason } },
@@ -251,54 +391,6 @@ export const invoke = internalAction({
                 },
             );
         }
-        const received =
-            result.status === "succeeded"
-                ? decodeReceivedReply(result)
-                : {
-                      reply: {
-                          response: {
-                              kind: "blocked" as const,
-                              code: result.errorCode,
-                          },
-                          ...(result.outputDiagnostic
-                              ? {
-                                    rawOutputJson: JSON.stringify(
-                                        result.outputDiagnostic,
-                                    ),
-                                }
-                              : {}),
-                      },
-                      errorCode: result.errorCode,
-                      diagnostic: result.outputDiagnostic,
-                  };
-        return recordReply(
-            received.reply,
-            {
-                status: received.errorCode ? "failed" : "succeeded",
-                dispatchOutcome: result.dispatchOutcome,
-                latencyMs: result.latencyMs,
-                reportedCost: result.reportedCost,
-                usage: {
-                    model: result.model,
-                    resolvedModel: result.resolvedModel,
-                    provider: result.provider,
-                    inputTokens: result.inputTokens,
-                    outputTokens: result.outputTokens,
-                    reasoningTokens: result.reasoningTokens,
-                    cachedInputTokens: result.cachedInputTokens,
-                },
-                ...(received.errorCode
-                    ? {
-                          errorCode: received.errorCode,
-                          retryable:
-                              result.status === "failed"
-                                  ? result.retryable
-                                  : true,
-                          diagnostic: received.diagnostic,
-                      }
-                    : {}),
-            },
-            result.observableReplyJson,
-        );
+        return observedReply ?? recordObservation(result);
     },
 });
