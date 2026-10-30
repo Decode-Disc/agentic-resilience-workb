@@ -322,6 +322,67 @@
         "Reports unrun checks and preserves the read-only boundary, including not invoking gallery commands that start a server."
       ],
       "expected_output": "An evidence-backed distinction between illustrative component behavior and connected workflow delivery, identifying the smallest missing check without claiming unimplemented persistence."
+    },
+    {
+      "id": 18,
+      "name": "assistant-ui-adoption-and-style-effects",
+      "prompt": "Compare the raw @assistant-ui/tool-group registry item with the installed workbench components before proposing its use in the research conversation. The project's visual direction and existing screen composition are approved. Plan only; do not edit, install or start providers.",
+      "files": [
+        "../../../components.json",
+        "../../../DESIGN.md",
+        "../../../src/components/ui/uai",
+        "../../../src/components/ui",
+        "../../../src/assets/styles/themes/evidence-workbench.css"
+      ],
+      "expectations": [
+        "Inspects installed owners first and reuses an adequate project adaptation when one exists.",
+        "Uses the shadcn MCP for registry inspection when available, resolves the configured Base UI flavor, or identifies the unavailable capability and uses an appropriate read-only fallback.",
+        "Identifies concrete styling, dependency and primitive effects from inspected source or preview output, including local defaults as well as global theme changes.",
+        "Adapts behavior to the project's primitives, tokens and approved composition without introducing a parallel theme, duplicate helpers or unintended shared-control replacements.",
+        "Selects rendered-consumer checks for the affected styles and interactions without claiming that a passing typecheck establishes visual fidelity.",
+        "Distinguishes the selected assistant-ui candidate from installed Uai adaptations and an executed integration; does not adopt the complete Thread composition or expose hidden reasoning by default."
+      ],
+      "expected_output": "A source-backed adoption proposal identifying what to reuse, what to adapt, introduced effects and focused verification."
+    },
+    {
+      "id": 19,
+      "name": "scroll-correction-preserves-anchor",
+      "prompt": "The pending artifact's scrollbar is visually intrusive. Improve its presentation while keeping the artifact anchored directly above the composer and the conversation independently scrollable. Inspect the current owners and propose the smallest correction. Analysis only; do not edit.",
+      "files": [
+        "../../../DESIGN.md",
+        "../../../src/components/workspace/start/start-screens.tsx",
+        "../../../src/components/workspace/start/start-screens.module.css",
+        "../../../src/components/uai/conversation-thread.tsx"
+      ],
+      "expectations": [
+        "Traces the actual scrolling regions, positioning rules and material owners before proposing a correction.",
+        "Preserves the approved artifact anchor and separation from message history rather than moving the artifact into the transcript's scrolling flow.",
+        "Keeps long artifact content and its required action reachable across relevant viewport sizes.",
+        "Proposes before-and-after scroll-position checks for the artifact and composer, plus visual inspection of the scrollbar and material treatment.",
+        "Does not redefine the approved placement or change acceptance assertions merely to make an alternative layout pass."
+      ],
+      "expected_output": "A bounded correction proposal preserving the anchor, content access and project styling, with checks tied to the approved interaction."
+    },
+    {
+      "id": 20,
+      "name": "conversation-registry-versus-runtime-migration",
+      "prompt": "The @uai registry has been replaced by @assistant-ui in components.json. Should we now delete the installed Uai components, replace the framing screen with the registry Thread, and connect its Stop button to Pause research? Inspect the actual owners and explain the minimum justified next step. Analysis only; do not edit, install or run providers.",
+      "files": [
+        "../../../components.json",
+        "../../../DESIGN.md",
+        "../../../context/TECH.md",
+        "../../../src/components/uai/conversation-thread.tsx",
+        "../../../src/components/ui/uai",
+        "../../../src/components/workspace/start/start-screens.tsx"
+      ],
+      "expectations": [
+        "Traces current imports and consumers; removing a registry entry does not remove a runtime dependency on installed source components.",
+        "Keeps the existing screen and action/composer anchor while proposing a bounded illustrative integration trial rather than deleting Uai or adopting the full Thread screen.",
+        "Maps ExternalStoreRuntime to externally owned messages and callbacks, preserving Convex domain authority and separating the analyst-facing transcript from technical agent logs.",
+        "Separates Workbench response generation from continuing or paused research; does not map generic response cancellation to research pause without an explicit domain operation.",
+        "Treats fixture-based UI evidence and connected workflow delivery separately and reports the remaining validation without claiming the candidate is installed or integrated."
+      ],
+      "expected_output": "A source-backed migration boundary preserving the installed UI, identifying the candidate trial and preventing registry changes from becoming implicit runtime or product changes."
     }
   ]
 }

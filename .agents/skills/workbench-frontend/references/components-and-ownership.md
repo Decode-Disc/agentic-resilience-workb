@@ -7,6 +7,7 @@ The table locates existing source-inspection and shared UI code. Source-set deci
 | Responsibility | Existing owners and inspection targets |
 | --- | --- |
 | Reusable question-led presentation | `src/components/workbench-ui/index.ts` exposes the library. Inspect the relevant component's props, implementation and caller before choosing it; a presentation callback does not supply a domain operation. |
+| Existing conversation presentation | `src/components/uai/conversation-thread.tsx`, `src/components/ui/uai/` and `src/components/workspace/start/start-screens.tsx`. Trace the transcript, action/composer dock and screen consumers before adopting assistant-ui. The installed Uai components remain in use until their scoped replacement is verified. |
 | Library style and theme scope | `src/components/workbench-ui/root.tsx`, `styles.css`, local CSS modules and the active theme. Inspect `WorkbenchUiRoot` and portal consumers together; scope reference materials to the intended subtree. |
 | Trigger-to-dialog transition | `src/components/ui/linear-modal.tsx` and the library's `inventory-sheet.tsx`. Inspect trigger, portal, focus, dismissal and reduced-motion behavior before composing the shared modal. |
 | Illustrative gallery and interaction checks | `src/development/workbench-ui/`, `workbench-ui.playwright.config.ts` and `src/__tests__/design-system/workbench-ui/`. Use current design references and temporary browser captures for visual review; gallery fixtures do not establish application persistence. |
@@ -19,9 +20,9 @@ The table locates existing source-inspection and shared UI code. Source-set deci
 | Disclosures and contextual help | `src/components/ui/accordion.tsx`, `collapsible.tsx`, and `responsive-popover.tsx`. Inspect their actual motion, keyboard, focus, and responsive APIs before composing them. |
 | Feedback and query recovery | `src/components/ui/alert-status.tsx`, `load-error-alert.tsx`, `empty.tsx`, and `src/components/load-error-boundary.tsx`. Choose by the outcome and existing caller; an operational interruption is not merely secondary metadata. |
 | Standard controls and icons | `src/components/ui/button.tsx`, `badge.tsx`, and `src/components/icon.tsx`. Verify installed icon exports and inspect the actual glyph at the intended size. |
-| Tokens and responsive behavior | `src/assets/styles/themes/evidence-workbench.css`, `src/assets/styles/base-preset.css`, `src/styles.css`, and `src/hooks/use-responsive.tsx`. Use `DESIGN.md` to locate intended style ownership. |
+| Tokens and responsive behavior | `src/assets/styles/themes/evidence-workbench.css`, `src/assets/styles/base-preset.css`, `src/styles.css`, and `src/hooks/use-responsive.tsx`. |
 
-Use the current [DESIGN.md](../../../../DESIGN.md) to locate visual guidance and approved refinements. The local design-tool export supplies reference material, not runtime imports or a parallel maintained palette. Button and Badge remain owned by `src/components/ui`; extend their existing variants rather than adding library copies. Inspect the library's material scope before applying it to an installed screen so scoped reference treatments do not become global defaults.
+The local design-tool export supplies reference material, not runtime imports or a parallel maintained palette. Button and Badge remain owned by `src/components/ui`; extend their existing variants rather than adding library copies. Inspect the library's material scope before applying it to an installed screen so scoped reference treatments do not become global defaults.
 
 ## Reuse behavior, preserve composition
 
@@ -33,9 +34,15 @@ Trace the same action through its entry points: visible text, accessible name, i
 
 Choose disclosure by purpose. An accordion can retain topic-specific detail in context; a popover can hold a short shared explanation. They can coexist without repeating the same content. Reuse `ResponsivePopover` for the established click/tap and narrow-screen drawer behavior when it fits. Do not make necessary help hover-only or replace the accepted interaction solely to simplify implementation.
 
-Compare card regions across short and long titles, absent dates, annotations, and selection states. Keep stable metadata rows aligned and meaningful annotations discoverable. Preserve the established preview frame and actions when showing an unavailable result. Consult `DESIGN.md` for the current accepted composition rather than inventing another arrangement here.
+Compare card regions across short and long titles, absent dates, annotations, and selection states. Keep stable metadata rows aligned and meaningful annotations discoverable. Preserve the established preview frame and actions when showing an unavailable result.
 
-Before changing a shared primitive default, inspect its other consumers. Apply a local width, chevron, stacking, or density requirement in the requesting consumer unless the change belongs to the shared contract. Do not create another wrapper, status map, or palette when an existing owner can express the need.
+Registry adoption can change more than the requested component. Inspect the item source, registry dependencies and available preview or dry-run output for global CSS, theme variables, fonts, dependency additions and shared files it would create or overwrite.
+
+For assistant-ui, resolve registry items through the configured style-aware URL so `base-luma` selects Base UI composition. Compare individual primitives with the complete Thread composition: its default reasoning, tool, attachment and action sections are not automatically product requirements. Trace message conversion and callbacks without introducing another authoritative transcript or enabling automatic client-side domain operations. Keep response-generation state separate from research progress and pause. Removing the Uai registry does not migrate its installed components or authorize replacing their screens.
+
+Review the component's own defaults too: colors, surfaces, typography, dimensions, overflow, scrolling, focus, motion, icons and overlay placement. Adapt these to the installed primitives, runtime tokens and approved consumer layout. Check compatibility with the project's primitive implementation rather than copying a registry example unchanged.
+
+Adopt only the parts needed by the interaction. Keep surface-specific styling in the owning component or consumer; preserve customized shared controls and theme definitions. Change a shared default only for an established shared requirement, after inspecting its other consumers. Review the resulting diff and rendered consumer for effects outside the requested component.
 
 ## Inspect colors by meaning
 
