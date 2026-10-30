@@ -2,7 +2,9 @@
 
 ## Status
 
-Recorded on 2026-10-25 and updated on 2026-10-26. The functional direction and three principal stages are accepted. Visual composition and immediate comprehensibility remain to be tested. The [global conception](2026-10-23-question-led-workbench-conception.md) owns workflow order, shared analytical controls, analyst judgment, and cooperation between bricks. The [agentic execution conception](2026-10-26-agentic-execution-architecture.md) owns the shared execution contract.
+Recorded on 2026-10-25, with functional revisions through 2026-10-26. This document preserves Synthesis' accepted design and [global workflow rationale](2026-10-23-question-led-workbench-conception.md). [PRODUCT.md](../../../PRODUCT.md#derived-views-and-workspace) owns current outcome and review requirements; [TECH](../../../context/TECH.md#semantic-controls-and-analytical-outputs) owns enforcement.
+
+Status reviewed on 2026-10-30: the shared runtime is implemented, but Synthesis' business binding, joint output control and analytical quality acceptance are undelivered. Visual composition and immediate comprehensibility remain untested. [The roadmap](../../ROADMAP.md#phase-9--synthesis-ccc-showcase-and-evaluation) prioritizes the submission-control contract before integration.
 
 ## Purpose and Simple Workflow
 
@@ -23,7 +25,7 @@ DEVELOP THE REASONED NOTE
 
 ## Interface
 
-A specialized Synthesis agent takes the retained analytical base and uses the [transversal operation catalogue](2026-10-23-question-led-workbench-conception.md#transversal-operation-catalogue) to prepare its result. A supported synthesis submits its diagram and note together; the alternative result is the reasoned non-establishment finding below. A re-examination concern is conditional. Exact records and execution integration remain to be designed.
+A specialized Synthesis agent takes the retained analytical base and uses the [transversal operation catalogue](2026-10-23-question-led-workbench-conception.md#transversal-operation-catalogue) to prepare its result. A supported synthesis submits its diagram and note together; the alternative result is the reasoned non-establishment finding below. A re-examination concern is conditional. As of 2026-10-30, business records, submission bindings and semantic evaluation remain open on the implemented shared runtime.
 
 | Direction | Information crossing the interface |
 | --- | --- |
@@ -82,6 +84,8 @@ Synthesis submission owns structural and semantic controls of the proposed resul
 
 For the alternative non-establishment finding, the control examines the stated analytical basis, reasons, and limitations rather than requiring a forced diagram. Diagnostics return to the Synthesis agent for targeted reconsideration; delivery and affected-result handling follow the global outcome and revision rules.
 
+These criteria are not yet an executable control contract. Specify joint output and alternative-finding controls under [TECH's pending analytical control contracts](../../../context/TECH.md#pending-analytical-control-contracts) before integrating synthesis submission.
+
 ## Autonomy and Optional Inspection
 
 The mission agent chooses its approach and useful inspections under the [common execution contract](2026-10-26-agentic-execution-architecture.md#shared-mission-contract). The [mission completion contract](2026-10-23-question-led-workbench-conception.md#mission-completion-contract) governs when the applicable result allows progression. System work checks the result against its artifact requirements; for a supported synthesis, this includes the diagram's relationships and the note's fidelity.
@@ -110,7 +114,7 @@ Proposed visual exploration: use a frozen illustrative dossier to compare compos
 
 - Define how to select the decisive mechanisms and an appropriate level of visual detail for the investigated case.
 - Specify the representation and explanation of dependencies, conditions, opposing mechanisms, and unresolved relationships.
-- Specify executable quality checks and evaluation for the retained submission criteria, including transversal reasoning and diagram-to-note fidelity.
+- Specify the joint output and alternative-finding control contract and evaluation cases in [TECH](../../../context/TECH.md#pending-analytical-control-contracts), including transversal reasoning and diagram-to-note fidelity.
 - Explore the diagram's composition, accessible inspection, responsive behavior, and the note's reading experience.
 - Specify the relationship between input versions, changing reasoning, and affected synthesis outputs within the shared revision model.
 - Define the detailed contracts and correction records for the joint synthesis submission and alternative finding within the transversal operation catalogue.

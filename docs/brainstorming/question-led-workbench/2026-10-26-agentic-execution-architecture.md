@@ -2,11 +2,15 @@
 
 ## Status and Ownership
 
-Accepted on 2026-10-26 after examining Sources experiments, comparing execution alternatives, and extending the selected contract to Sources, Investigation, and Synthesis. Refined and explicitly accepted on 2026-10-27 through repository discovery, an independent architectural review and staged decisions on ownership, continuation, context continuity, loop prevention and traceability. The [2026-10-29 refinement](#common-generation-and-workbench-decision-of-2026-10-29) records the subsequent generation and conversation choices. This document retains rationale; the [technical contract](../../../context/TECH.md#agentic-missions-and-shared-operations) owns current execution obligations. The [global conception](2026-10-23-question-led-workbench-conception.md) records the earlier workflow and analytical rationale. Implementation evidence and its limits are recorded in the [harness verification](../../verification/2026-10-27-shared-agent-harness.md); semantic quality remains a separate gate.
+Accepted on 2026-10-26 and refined on 2026-10-27 and 2026-10-29. This document preserves dated execution rationale; the [technical contract](../../../context/TECH.md#agentic-missions-and-shared-operations) owns current obligations and the [global conception](2026-10-23-question-led-workbench-conception.md) preserves workflow rationale.
+
+Status reviewed on 2026-10-30: Pi Durable is delivered for new mission loops, technical history and compaction, with a bounded inspection mission and simulated-provider verification. Historical Workflow executions and the analyst-facing conversation storage remain compatible. Workbench/START and the three research mission bindings remain undelivered; live model judgment and summary fidelity are not certified. See the [replacement verification](../../verification/2026-10-30-pi-durable-replacement.md) and [delivery roadmap](../../ROADMAP.md#phase-7--shared-execution-and-sources).
 
 The destination is an agent that can adapt its work through controlled business operations, preserve useful progress, and recover without making the analyst coordinate routine execution. This conception records execution choices without introducing another workflow engine or claiming that model reasoning is deterministic.
 
 ## Shared Harness Decision of 2026-10-27
+
+> Historical runtime choice: the Workflow-based agent loop below was superseded for new missions on 2026-10-30. Its ownership and execution invariants continue under [the current technical contract](../../../context/TECH.md#shared-execution-structure).
 
 The accepted path is one mission and continuation protocol executed by the existing Convex Workflow engine. Its destination is reusable execution that lets system code act directly, assign authorized work to an agent, suspend between operations, perform business processing and resume without copying execution guarantees into each mission. A durable mission retains its identity and work while individual model invocations remain temporary. A bounded one-shot task shares invocation and tracing guarantees without requiring conversational continuation.
 
@@ -173,6 +177,8 @@ Session `01a17291-bc90-7833-9c34-1ffb9b9e6ab9` contains successive Sources exper
 
 ## Verification Direction and Open Decisions
 
+The following checklist records the design handoff of 2026-10-27, before the shared runtime was delivered. Current gaps and verified capabilities belong to [the roadmap](../../ROADMAP.md#phase-7--shared-execution-and-sources); this list is not a current implementation backlog.
+
 Proposed checks, not performed by documenting this conception: retrieve several windows and reread the first; correct one contribution without losing another; require a dependent control without an agent explicitly scheduling it; interrupt an operation after confirmed work and recover without repetition or counter reset; isolate an unknown provider outcome; reject a stale revision; and preserve a human checkpoint during recovery. Exercise the same business operation through native and agent entry points under equivalent authority.
 
 Semantic evaluation must separately judge useful contributions retained, spontaneous omission detection, corrections, regressions, and completed obligations. Frozen failures are regression cases; exposed dossiers are not unseen holdouts. Structural success and lower call counts do not establish better analytical work.
@@ -183,6 +189,8 @@ The 2026-10-27 implementation handoff designated the `harnais-architecture` work
 
 ## Common Generation and Workbench Decision of 2026-10-29
 
+> Superseded on 2026-10-30 by Pi Durable for new mission generation and technical continuation; see the [replacement verification](../../verification/2026-10-30-pi-durable-replacement.md). The paragraph below records the earlier selection. Workbench's product decisions and retained conversation storage are governed by the current references, independently of that runtime change.
+
 Convex Agent was selected as the common generation and conversation layer behind the interchangeable backend contract after both real library adapters passed the recorded simulated-provider checks. The comparison and independent Oracle advice favored avoiding future conversational plumbing while preserving the shared kernel. Targeted adoption around direct AI SDK remains technically viable; existing code alone was not a reason to freeze that boundary. Neither choice eliminates Workflow orchestration or domain-owned authorization, accounting, operations and adoption. The [verification record](../../verification/2026-10-27-shared-agent-harness.md#replaceable-generation-backends--2026-10-29) owns the experimental results, not live analytical acceptance.
 
 The subsequent Workbench discussion retained one dossier from confirmed-company framing through results, with analysis consumption at Start research. A turn can accept explicit steering while ordinary messages queue; the rigid proposal of one independent job per incoming message was not retained. This supports correction during active work while preserving clear turn boundaries and dossier context. Explicit research pause/resume and tracked domain instructions preserve analyst control without turning conversation into a second workflow authority.
@@ -190,6 +198,8 @@ The subsequent Workbench discussion retained one dossier from confirmed-company 
 The retained analyst behavior, operation families, authority, turn delivery and request contracts are specified in [PRODUCT.md](../../../PRODUCT.md#workbench-conversation-and-research-control) and the [technical Workbench contract](../../../context/TECH.md#workbench-conversation-steering-and-instructions). Concrete schemas, bindings, numerical settings and verification of these newly accepted behaviors remain implementation work; this refinement does not certify connected START delivery.
 
 ## Execution Continuation Decision of 2026-10-29
+
+> Superseded on 2026-10-30 by Pi Durable for new mission continuation; see the [replacement verification](../../verification/2026-10-30-pi-durable-replacement.md). The following paragraphs preserve the decision as recorded on 2026-10-29, including the then-unselected Pi alternative. Current continuation, compaction and loop obligations belong to [TECH](../../../context/TECH.md#context-recovery-and-resource-accounting).
 
 The user accepted keeping a durable Workflow boundary after each Convex Agent generation, automatic LLM compaction near context capacity, and a direct explained stop once repetition without progress is confirmed. Approval covered conception and the need to define thresholds and verify compaction fidelity before activation; it did not authorize implementation. The current obligations belong to the [shared execution contract](../../../context/TECH.md#shared-execution-structure), [context and recovery contract](../../../context/TECH.md#context-recovery-and-resource-accounting) and [loop policy](../../../context/TECH.md#loop-prevention); the [roadmap](../../ROADMAP.md#phase-7--shared-execution-and-sources) tracks the undelivered work.
 

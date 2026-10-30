@@ -2,7 +2,9 @@
 
 ## Status
 
-Recorded on 2026-10-24 and updated on 2026-10-26. This document describes how Sources prepares documentary material. The [global conception](2026-10-23-question-led-workbench-conception.md#cooperation-and-documentary-complement) defines when this work is requested and how it cooperates with Investigation. The [agentic execution conception](2026-10-26-agentic-execution-architecture.md) owns the shared execution contract.
+Recorded on 2026-10-24, with functional revisions through 2026-10-26. This document preserves Sources' documentary design and its [cooperation rationale](2026-10-23-question-led-workbench-conception.md#cooperation-and-documentary-complement). Current behavior belongs to [PRODUCT.md](../../../PRODUCT.md#source-preparation-and-corpus-review), and execution to [TECH](../../../context/TECH.md#agentic-missions-and-shared-operations).
+
+Status reviewed on 2026-10-30: the [shared Pi runtime is locally verified](../../verification/2026-10-30-pi-durable-replacement.md). The installed preparation path remains distinct from the target Sources mission binding and delegated selection, which are undelivered. Documentary quality acceptance remains separate from mechanical runtime checks; [the roadmap](../../ROADMAP.md#phase-7--shared-execution-and-sources) records those gaps.
 
 ## Purpose and Simple Workflow
 

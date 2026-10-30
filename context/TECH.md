@@ -149,6 +149,23 @@ Operation owners preserve unaffected content, reconstruct changed artifacts and 
 
 Synthesis may verify evidence and explain relationships. Necessary uninstructed premises return to Investigation for inventory admission and appraisal effects: a proposed revision or reasoned maintenance. Material human revisions remain pending explicitly. A limited diagram/note may be delivered together only if the unaffected base supports coherent, useful scope; contested central premises block delivery. Non-establishment requires an instructed retained base, not empty review, technical interruption or pending judgment. No routine final approval checkpoint applies.
 
+### Pending Analytical Control Contracts
+
+Investigation appraisal and joint Synthesis submission controls remain unimplemented. Specify their operation contracts here before integration, using the responsibilities above and the following requirements. These are design prerequisites, not delivered verifier guarantees.
+
+| Contract part | Required specification |
+| --- | --- |
+| Authorized inputs | Submitted artifact/use, scope, versions, admissible evidence and restrictions; Synthesis also requires eligible retained appraisal versions. |
+| Deterministic checks | Authority, schemas, references, hashes, versions, prerequisites and permitted uses before model dispatch. |
+| Model task | Semantic questions left after deterministic checks, the examined basis and the limits of the examination. |
+| Typed outcome | A closed result contract with scoped findings and diagnostics, distinct from technical incompleteness; no bare verifier approval. |
+| Restrictions | Affected uses and known dependent artifacts, preserving independent valid contributions. |
+| Reuse identity | Unchanged object/use, evidence and applicable rule/restriction versions, with explicit invalidation conditions. |
+| Technical failure | Missing route, timeout, interruption and unknown outcome under the existing invocation, accounting and recovery contracts. |
+| Evaluation | Accepted/rejected cases for unsupported inference, objections, unknowns, stale inputs, partial checks, technical failure and diagram-to-note divergence; acceptance thresholds still need agreement. |
+
+Existing `deriveQuestionCoverage` and matrix `questionCoverage` counts include question-linked `Unknown` claims. They project evidence presence, not appraisal outcomes. Define and verify the replacement at the Convex question-outcome boundary before exposing the [product's answer states or dependent transitions](../PRODUCT.md#evidence-matrix-and-analytical-review). Retaining an evidence-presence count does not implement that replacement.
+
 ## Context, Recovery and Resource Accounting
 
 Compact context projects retained information; evidence and completed work stay outside the model window. Requests cannot accumulate every reading or enumerate the corpus in tool schemas. Cross-dossier learning and institutional memory remain excluded.

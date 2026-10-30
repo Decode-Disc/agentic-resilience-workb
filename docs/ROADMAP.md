@@ -37,6 +37,8 @@ Bounded explicit recovery in the same editable dossier is implemented and locall
 
 ### Open Verification Limits
 
+- Analytical control contracts for Investigation and Synthesis remain design work under [TECH](../context/TECH.md#pending-analytical-control-contracts), before their respective submission operations are integrated. The shared runtime's delivery does not establish their semantic quality. Phases 8 and 9 record these priorities.
+- Question coverage still counts linked evidence, including `Unknown`. Replacing that projection is blocking debt for answer labels and transitions requiring an answer under the [product contract](../PRODUCT.md#evidence-matrix-and-analytical-review); the current evidence-presence metric cannot authorize them.
 - The prior harness review findings were repaired at the recorded checkpoint. A five-lane independent review of the Pi replacement requested corrections to admission, native observations, recovery and storage behavior; the replacement record tracks those corrections and their verification. The [replacement record](verification/2026-10-30-pi-durable-replacement.md) owns current local checks and runtime changes; earlier aggregate/import failures and the isolated reservation timeout remain in the [harness verification](verification/2026-10-27-shared-agent-harness.md).
 - Protected local journeys exercise decisions, approval, capture reuse, history, keyboard access and reconnection. Controlled fixtures and read-only inspection of the interrupted dossier do not certify fresh provider behavior, general analytical quality or visual acceptance.
 - External image availability and CORS behavior remain unqualified after earlier failures. The separate approval-only performance gate remains unaccepted after a materialization wait and a favicon-abort mismatch.
@@ -180,6 +182,8 @@ Typed definitions now share the Pi execution loop, canonical native/tool operati
 
 Outcome: a common inquiry produces reasoned appraisals with inspectable evidence, objections and unknowns for meaningful human judgment.
 
+- [ ] Specify the appraisal-submission control contract and evaluation cases under [TECH's analytical control requirements](../context/TECH.md#pending-analytical-control-contracts) before integrating that operation.
+- [ ] Replace claim-count coverage with an explicit question-outcome projection before enabling answer labels or dependent transitions; retain evidence presence separately and verify `Unknown`-only evidence, unfinished controls and justified insufficiency.
 - [ ] Enrich one reusable company inventory through controlled assertions and separate question-specific uses; admit each contribution before use without routine human confirmation of every assertion/link.
 - [ ] Preserve exact evidence, permitted use, attribution, temporal scope, corrections and earlier judgments. Distinguish evidence presence from an answered question.
 - [ ] Conduct one common inquiry across questions and compare rival interpretations. Group decisive missing information into at most one bounded autonomous documentary complement, then re-examine the returned material without another search cycle.
@@ -193,6 +197,7 @@ Outcome: a common inquiry produces reasoned appraisals with inspectable evidence
 
 Outcome: retained appraisals support an immediately useful economic interpretation, with its diagram and fully reasoned note controlled together.
 
+- [ ] Specify the joint diagram/note and alternative-finding control contract and evaluation cases under [TECH's analytical control requirements](../context/TECH.md#pending-analytical-control-contracts) before integrating synthesis submission.
 - [ ] Produce a reference economic mechanism diagram anchored in the investigated actors and workflow, with traceable relationships, conditions and uncertainty; derive the note from the same interpretation.
 - [ ] Control new transversal inferences and joint diagram-to-note fidelity. Retaining the inputs cannot automatically validate a proposed relationship.
 - [ ] Route a necessary uninstructed premise or appraisal concern through bounded Investigation re-examination of available material, without another documentary phase.

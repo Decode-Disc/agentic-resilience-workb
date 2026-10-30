@@ -2,7 +2,9 @@
 
 ## Status
 
-Recorded on 2026-10-24 and updated on 2026-10-26. This document describes the retained functioning of Investigation. The [global conception](2026-10-23-question-led-workbench-conception.md) owns the overall sequence, shared inventory rules, and analyst review. The [agentic execution conception](2026-10-26-agentic-execution-architecture.md) owns the shared execution contract; detailed integration and analytical quality verification remain open.
+Recorded on 2026-10-24, with functional revisions through 2026-10-26. This document preserves Investigation's design rationale alongside the [global conception](2026-10-23-question-led-workbench-conception.md). [PRODUCT.md](../../../PRODUCT.md#assessment-and-review) owns the current inquiry/review behavior; [TECH](../../../context/TECH.md#semantic-controls-and-analytical-outputs) owns enforcement.
+
+Status reviewed on 2026-10-30: the shared runtime is implemented, but Investigation's inventory/appraisal bindings and analytical quality acceptance are undelivered. The appraisal-control contract is priority design work before its operation is integrated; [the roadmap](../../ROADMAP.md#phase-8--investigation-and-grouped-appraisal-review) records that work.
 
 ## Purpose and Simple Workflow
 
@@ -79,6 +81,8 @@ When receiving a targeted request, Investigation examines the identified reasoni
 
 At submission, semantic control examines the reasoning from assertions through assumptions and mechanisms to the economic conclusion, the treatment of examined objections and alternative interpretations, and whether unknowns actually limit the conclusion. It reuses valid inventory and documentary controls rather than repeating their earlier work. A justified insufficiency remains a possible analytical result after instruction; it is not a substitute for unfinished investigation.
 
+These criteria are not yet an executable control contract. Its required inputs, checks, outcomes, restrictions, reuse and evaluation belong in [TECH's pending analytical control contracts](../../../context/TECH.md#pending-analytical-control-contracts), before integration of appraisal submission.
+
 ## Autonomy and Optional Inspection
 
 The mission agent uses its available operations to adapt the inquiry and revisit interpretations as evidence requires, under the [common execution contract](2026-10-26-agentic-execution-architecture.md#shared-mission-contract). Exceptions follow the global intervention policy; the [mission completion contract](2026-10-23-question-led-workbench-conception.md#mission-completion-contract) governs when the submitted artifacts allow progression. Challenged uses and dependent appraisals follow the [global re-examination rules](2026-10-23-question-led-workbench-conception.md#retained-judgments-and-pending-revisions).
@@ -87,14 +91,14 @@ Optional inspection exposes the assertions reused or introduced, the relationshi
 
 ## Design and Verification Direction
 
-Investigation keeps inventory enrichment and question reasoning together because the assertions worth retaining emerge during the inquiry, and their usefulness depends on their intended analytical use. Its interface exposes contributions, documentary needs, and appraisals rather than asking the caller to orchestrate assertion extraction and separate reasoning passes. The specialized agent is assigned to the common mission across questions; detailed tool and model execution remain to be selected.
+Investigation keeps inventory enrichment and question reasoning together because the assertions worth retaining emerge during the inquiry, and their usefulness depends on their intended analytical use. Its interface exposes contributions, documentary needs, and appraisals rather than asking the caller to orchestrate assertion extraction and separate reasoning passes. As of 2026-10-30, the common execution runtime is selected and implemented; Investigation's operation bindings, artifact contracts, model route and semantic evaluation remain open.
 
 Proposed verification: use a bounded dossier with two questions sharing an assertion, material supporting a rival interpretation, and a missing fact that could affect both questions. Verify that the inquiry reuses the assertion with distinct use rationales, examines the rival interpretation, and expresses one grouped documentary need. Return additional qualified material and inspect whether the resulting appraisals explain its effect without losing their objections or limitations. Submit targeted requests about an existing appraisal and a new premise found in retained material; inspect admission controls and the explanation of any effect on the appraisals. Analytical usefulness and control quality still need evaluation; this conception does not establish them.
 
 ## Open Decisions
 
 - Define how to select useful inventory contributions and recognize reusable assertions without erasing meaningful differences in scope or interpretation.
-- Translate the retained inventory-admission and appraisal-reasoning criteria into executable checks and analytical quality evaluation.
+- Specify the appraisal-control contract and evaluation cases in [TECH](../../../context/TECH.md#pending-analytical-control-contracts) before integration; translate inventory-admission criteria through their existing domain owner.
 - Define how documentary needs are prioritized by their potential effect on the framed questions and expressed without prescribing source-retrieval mechanics.
 - Specify the inspection and correction interactions for reasoning and question-specific evidence uses, in coordination with the shared revision model.
 - Specify how the Investigation mission uses its shared operations and artifact contracts, including meaningful progress and executable quality checks through the interface.

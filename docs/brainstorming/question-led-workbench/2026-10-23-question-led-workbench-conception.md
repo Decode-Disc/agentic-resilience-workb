@@ -2,9 +2,11 @@
 
 ## Status
 
-Recorded on 2026-10-23 and updated on 2026-10-26. This document preserves the accepted product direction, shared inventory and operations, agent missions, grouped analyst review, and synthesis direction. The target workflow is not implemented; detailed design decisions remain open.
+Recorded on 2026-10-23, with functional revisions through 2026-10-26. This document preserves the accepted design rationale for the product direction, shared inventory and operations, agent missions, grouped review and synthesis.
 
-This document owns the overall workflow, cooperation between responsibilities, shared inventory rules, and analyst judgment. The [source ingestion and processing conception](2026-10-24-source-ingestion-and-processing-conception.md), [Investigation conception](2026-10-24-investigation-conception.md), and [Synthesis conception](2026-10-25-synthesis-conception.md) detail their respective work and interfaces. The [agentic execution conception](2026-10-26-agentic-execution-architecture.md) owns their common context access, controlled operations, preservation, recovery, and resource-protection model.
+Status reviewed on 2026-10-30: the shared runtime, continuation, compaction and bounded inspection mission are implemented and [locally verified](../../verification/2026-10-30-pi-durable-replacement.md). Workbench/START and the Sources, Investigation and Synthesis business bindings remain undelivered; live model judgment and summary fidelity are not certified. [PRODUCT.md](../../../PRODUCT.md) owns current behavior, [TECH](../../../context/TECH.md) owns enforcement and [the roadmap](../../ROADMAP.md) owns delivery state.
+
+The following sections record the overall workflow, cooperation, shared inventory and analyst-judgment decisions. The [Sources](2026-10-24-source-ingestion-and-processing-conception.md), [Investigation](2026-10-24-investigation-conception.md) and [Synthesis](2026-10-25-synthesis-conception.md) conceptions preserve their business rationale; the [execution conception](2026-10-26-agentic-execution-architecture.md) preserves the dated technical decisions and their supersession.
 
 ## Purpose
 
@@ -115,7 +117,7 @@ Exact card count, grouping, responsive placement, animation behavior, and the re
 
 ## Reusable Workflow Responsibilities
 
-Sources, Investigation, and Synthesis have dedicated functional conceptions. Investigation and Synthesis each use a specialized mission agent within the system's execution frame. Their service boundaries, model routes, detailed execution integration, and card presentation remain to be selected.
+Sources, Investigation, and Synthesis have dedicated functional conceptions. Investigation and Synthesis each use a specialized mission agent within the system's execution frame. As of 2026-10-30, the [shared runtime is delivered](../../../context/TECH.md#shared-execution-structure); their business-operation bindings, artifact contracts, model routes, semantic evaluation and card presentation remain to be completed.
 
 | Proposed responsibility | Output |
 | --- | --- |
@@ -317,7 +319,7 @@ While the targeted judgment is pending, independent work continues. A limited sy
 
 If the overall reading depends on the contested premise, delivery waits for the targeted judgment. This pending decision is not a reasoned finding that the instructed evidence cannot support a synthesis.
 
-Question coverage must not imply that a question is resolved merely because a claim refers to it. Inspection of [claimValidation.ts](../../../convex/domain/claimValidation.ts) found that `deriveQuestionCoverage` counts question-linked claims, including `Unknown`. The [matrix query](../../../convex/evidenceMatrix.ts) uses that count. This is evidence presence, not an established answer. The exact replacement for this projection is undecided.
+Observation confirmed on 2026-10-30: [claimValidation.ts](../../../convex/domain/claimValidation.ts) counts question-linked claims, including `Unknown`, in `deriveQuestionCoverage`; the [matrix query](../../../convex/evidenceMatrix.ts) separately counts valid claims linked to current questions. These are evidence-presence projections. The [product contract](../../../PRODUCT.md#evidence-matrix-and-analytical-review) owns the blocking rule for answer labels and dependent transitions; [TECH](../../../context/TECH.md#pending-analytical-control-contracts) and [the roadmap](../../ROADMAP.md#phase-8--investigation-and-grouped-appraisal-review) own its replacement and delivery. This observation does not define a question-resolution algorithm.
 
 The analyst remains the final authority over analytical judgment. Source selection follows the target launch mandate described above; exact provenance, inspectable proposals, and preserved decisions remain essential.
 
