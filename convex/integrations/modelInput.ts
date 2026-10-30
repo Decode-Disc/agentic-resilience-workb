@@ -2,7 +2,7 @@ import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { executionError } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import type { TranscriptContext } from "@earendil-works/pi-ai";
-import { asSchema, jsonSchema, type ToolSet, tool } from "ai";
+import { asSchema, jsonSchema, type JSONSchema7, type ToolSet, tool } from "ai";
 import { convexToZod } from "convex-helpers/server/zod4";
 import { z } from "zod";
 import {
@@ -103,7 +103,8 @@ function modelInputSchema<Schema extends z.ZodObject>(
             convexIdPaths.some((path) => !convertedIdPaths.has(path))
         )
             throw new Error("Canonical Convex ID schema was not converted");
-        return schema;
+        // Zod declares a cross-draft union; the explicit target above produces draft-7.
+        return schema as JSONSchema7;
     };
 
     return jsonSchema<Input>(createJsonSchema, {

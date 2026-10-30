@@ -1,0 +1,512 @@
+/* Shared conversation materials; screen owners supply width and dock placement. */
+[data-slot="conversation-thread"] {
+    background: var(--card);
+}
+[data-slot="conversation-thread"] [data-slot="message-content"] {
+    font-size: 14px;
+    line-height: 23px;
+}
+[data-slot="conversation-thread"]
+    [data-role="assistant"]
+    [data-slot="message-content"] {
+    width: 100%;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    box-shadow: none;
+}
+[data-slot="conversation-thread"]
+    [data-role="user"]
+    [data-slot="message-content"] {
+    padding: 11px 15px;
+    border-radius: 16px 16px 5px 16px;
+    background: color-mix(in oklab, var(--primary) 12%, var(--card));
+    color: var(--foreground);
+    font-size: 13px;
+    line-height: 20px;
+}
+[data-slot="conversation-thread"]
+    [data-role="assistant"]
+    > [data-slot="message-body"] {
+    width: 100%;
+}
+[data-slot="conversation-thread"] [data-slot="prompt-composer"] {
+    border: 1px solid var(--input-border);
+    border-radius: 16px;
+    background: var(--card);
+    box-shadow: none;
+}
+[data-slot="conversation-thread"] [data-slot="prompt-composer-card"] {
+    padding: 10px;
+    border: 0;
+    background: transparent;
+    border-radius: inherit;
+}
+[data-slot="conversation-thread"] [data-slot="prompt-composer-input"] {
+    width: 100%;
+    min-height: 40px;
+    max-height: 40px;
+    padding: 9px 0;
+    background: transparent;
+    font-size: 14px;
+    line-height: 22px;
+}
+[data-slot="composer-fields"] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+}
+[data-slot="composer-bottom"] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: auto;
+    gap: 12px;
+}
+[data-slot="composer-bottom"] > span {
+    display: none;
+    font-size: 10px;
+    color: var(--muted-foreground);
+}
+[data-slot="conversation-thread"] [data-slot="prompt-composer-submit"] {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+}
+[data-slot="conversation-thread"] [data-slot="prompt-composer"]:focus-within {
+    border-color: var(--ring);
+}
+[data-slot="prompt-composer"]:focus-within [data-slot="composer-fields"] {
+    grid-template-columns: minmax(0, 1fr);
+}
+[data-slot="conversation-thread"]
+    [data-slot="prompt-composer"]:focus-within
+    [data-slot="prompt-composer-card"] {
+    padding: 12px;
+}
+[data-slot="conversation-thread"]
+    [data-slot="prompt-composer"]:focus-within
+    [data-slot="prompt-composer-input"] {
+    min-height: 64px;
+    max-height: 150px;
+    padding: 0;
+}
+[data-slot="prompt-composer"]:focus-within [data-slot="composer-bottom"] {
+    width: 100%;
+}
+[data-slot="prompt-composer"]:focus-within
+    [data-slot="composer-bottom"]
+    > span {
+    display: block;
+}
+[data-slot="conversation-pending-panel"] {
+    border: 1px solid var(--divider);
+    border-bottom: 0;
+    border-radius: 14px 14px 0 0;
+    background: color-mix(in oklab, var(--foreground) 3%, var(--card));
+    overflow: hidden;
+}
+[data-slot="conversation-pending-details"] > summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 10px 12px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 500;
+}
+[data-slot="conversation-pending-details"] > summary::-webkit-details-marker {
+    display: none;
+}
+[data-slot="conversation-pending-details"]
+    > summary
+    > span:first-child::before {
+    content: "";
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--brand-purple);
+    margin-right: 8px;
+}
+[data-slot="conversation-pending-details"] > summary > span:nth-child(2) {
+    margin-left: auto;
+    font-weight: 400;
+    color: var(--muted-foreground);
+}
+[data-slot="conversation-pending-body"] {
+    max-height: min(28dvh, 230px);
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--divider) transparent;
+}
+[data-slot="conversation-pending-details"] > summary:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -3px;
+}
+[data-slot="conversation-activity"] {
+    margin: 2px 0;
+    min-width: 0;
+}
+[data-slot="conversation-activity"] > button,
+.chat-activity-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+    height: auto;
+    padding: 5px 0;
+    text-align: left;
+    white-space: normal;
+    border: 0;
+    background: transparent;
+    font-weight: 400;
+    color: var(--muted-foreground);
+}
+[data-slot="conversation-reference"] > svg {
+    flex-shrink: 0;
+    color: var(--muted-foreground);
+}
+[data-slot="conversation-activity"] > button > svg,
+.chat-activity-row > svg {
+    margin-top: 3px;
+    flex-shrink: 0;
+}
+.chat-activity-row > span:first-of-type,
+[data-slot="conversation-activity"] > button > span:first-of-type {
+    flex: 1;
+    min-width: 0;
+}
+[data-slot="activity-title"] {
+    display: block;
+    font-size: 12.5px;
+    line-height: 18px;
+    color: var(--foreground);
+}
+[data-slot="activity-summary"] {
+    display: block;
+    font-size: 12px;
+    line-height: 18px;
+    margin-top: 2px;
+}
+[data-slot="activity-state"] {
+    flex-shrink: 0;
+    font-size: 10px;
+    line-height: 18px;
+}
+[data-slot="conversation-activity"][data-state="running"]
+    [data-slot="activity-state"] {
+    color: var(--brand-purple);
+}
+[data-slot="conversation-activity"][data-state="interrupted"]
+    [data-slot="activity-state"],
+.chat-work-limit {
+    color: var(--destructive-text);
+}
+[data-slot="activity-detail"] {
+    margin: 4px 0 12px 22px;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--muted-foreground);
+}
+[data-slot="conversation-assistant-turn"] {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    font-size: 14px;
+    line-height: 23px;
+}
+[data-slot="conversation-thread-log"] {
+    scrollbar-width: thin;
+    scrollbar-color: var(--divider) transparent;
+}
+[data-slot="conversation-thread"] ::selection {
+    background: var(--tint-violet);
+}
+[data-slot="conversation-pending-details"][open] > summary > svg {
+    transform: rotate(90deg);
+}
+
+[data-slot="conversation-thread"] [data-slot="message-actions"] {
+    opacity: 0;
+    transition: opacity 120ms ease;
+}
+[data-slot="conversation-thread"]
+    [data-slot="message"]:hover
+    [data-slot="message-actions"],
+[data-slot="conversation-thread"]
+    [data-slot="message"]:focus-within
+    [data-slot="message-actions"] {
+    opacity: 1;
+}
+[data-slot="conversation-reference"] {
+    display: flex;
+    width: 100%;
+    justify-content: flex-start;
+    gap: 8px;
+    height: auto;
+    min-height: 32px;
+    padding: 5px 0;
+    border-radius: 6px;
+    background: transparent;
+    font-size: 12px;
+    color: var(--foreground);
+    text-align: left;
+}
+[data-slot="conversation-reference"] > span {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chat-reference-details {
+    padding: 6px 0 0 23px;
+}
+.chat-reference-description {
+    margin: 0 0 12px;
+    color: var(--muted-foreground);
+    font-size: 11px;
+    line-height: 17px;
+}
+.chat-reference-facts {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    font-size: 12px;
+    line-height: 18px;
+}
+.chat-reference-facts > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+.chat-reference-facts dt,
+.chat-reference-limit {
+    color: var(--muted-foreground);
+}
+.chat-reference-facts dd {
+    margin: 0;
+    text-align: right;
+}
+.chat-reference-limit {
+    margin: 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--divider);
+    font-size: 11px;
+    line-height: 18px;
+}
+@media (hover: none) {
+    [data-slot="conversation-thread"] [data-slot="message-actions"] {
+        opacity: 1;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    [data-slot="conversation-thread"] [data-slot="message-actions"] {
+        transition: none;
+    }
+}
+
+[data-slot="conversation-work-group"] {
+    min-width: 0;
+    margin: 0 0 8px;
+}
+[data-slot="conversation-work-group"] > button {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: 100%;
+    height: auto;
+    padding: 5px 0;
+    border: 0;
+    background: transparent;
+    white-space: normal;
+    text-align: left;
+}
+.chat-work-description {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 3px 8px;
+}
+.chat-work-description strong {
+    font-size: 12px;
+    line-height: 19px;
+    font-weight: 400;
+    color: var(--muted-foreground);
+}
+.chat-work-description > span {
+    font-size: 11px;
+    line-height: 17px;
+    color: var(--muted-foreground);
+}
+[data-slot="conversation-work-group"] > button > svg {
+    flex-shrink: 0;
+    color: var(--muted-foreground);
+}
+[data-slot="conversation-work-group"]
+    > button[data-panel-open]
+    > svg:first-child {
+    transform: rotate(90deg);
+}
+.chat-work-entries {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 0;
+}
+.chat-work-limit {
+    flex-shrink: 0;
+    font-size: 11px;
+}
+.chat-context-card {
+    position: relative;
+    width: min(320px, calc(100vw - 24px));
+    max-height: min(78dvh, 660px);
+    overflow-y: auto;
+    padding: 0 14px;
+    gap: 0;
+    border-radius: 16px;
+    background: var(--background);
+    border: 1px solid var(--divider);
+    box-shadow: 0 8px 24px -16px
+        color-mix(in oklab, var(--foreground) 30%, transparent);
+    scrollbar-width: thin;
+    scrollbar-color: var(--divider) transparent;
+}
+.chat-context-topline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 13px 26px 12px 0;
+    color: var(--muted-foreground);
+}
+.chat-context-topline h2 {
+    color: var(--foreground);
+    font-size: 12px;
+    line-height: 18px;
+    font-weight: 500;
+}
+.chat-context-topline > svg {
+    flex-shrink: 0;
+}
+.chat-context-card > section {
+    padding: 12px 0;
+    border-top: 1px solid var(--divider);
+}
+.chat-context-card > section > h2 {
+    margin: 0 0 8px;
+    font-size: 11px;
+    line-height: 17px;
+    font-weight: 400;
+    color: var(--muted-foreground);
+}
+.chat-context-card > section > p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 19px;
+}
+.chat-context-close {
+    position: absolute;
+    top: 10px;
+    right: 8px;
+}
+.chat-context-meta {
+    display: block;
+    margin-top: 6px;
+    font-size: 10px;
+    line-height: 16px;
+    color: var(--muted-foreground);
+}
+.chat-context-empty {
+    color: var(--muted-foreground);
+}
+.chat-context-work-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.chat-context-work-heading h2 {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--muted-foreground);
+}
+.chat-context-work-heading > span {
+    font-size: 10px;
+    color: var(--muted-foreground);
+}
+.chat-context-work:has([data-state="running"])
+    .chat-context-work-heading
+    > span {
+    color: var(--brand-purple);
+}
+.chat-context-work ul {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+.chat-context-work li {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 12px;
+    line-height: 18px;
+}
+.chat-context-work li > svg {
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--muted-foreground);
+}
+.chat-context-work li > div {
+    flex: 1;
+    min-width: 0;
+}
+.chat-context-work strong {
+    display: block;
+    font-weight: 400;
+}
+.chat-context-work li > div > span {
+    display: block;
+    color: var(--muted-foreground);
+    font-size: 10px;
+    line-height: 16px;
+}
+.chat-context-work-state {
+    font-size: 10px;
+    color: var(--muted-foreground);
+    flex-shrink: 0;
+}
+.chat-context-work li[data-state="running"] > svg,
+.chat-context-work li[data-state="running"] .chat-context-work-state {
+    color: var(--brand-purple);
+}
+.chat-context-work li[data-state="interrupted"] .chat-context-work-state {
+    color: var(--destructive-text);
+}
+@keyframes chat-working {
+    to {
+        transform: rotate(360deg);
+    }
+}
+.chat-working-icon {
+    color: var(--brand-purple);
+    animation: chat-working 1.2s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+    .chat-working-icon {
+        animation: none;
+    }
+}

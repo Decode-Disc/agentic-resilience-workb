@@ -50,6 +50,8 @@
         "dev:ports": "node --experimental-strip-types scripts/local-runtime.ts --ports"
     },
     "dependencies": {
+        "@assistant-ui/react": "0.15.31",
+        "@assistant-ui/react-markdown": "0.14.24",
         "@auth/core": "0.41.2",
         "@base-ui/react": "1.6.0",
         "@convex-dev/agent": "0.7.9",

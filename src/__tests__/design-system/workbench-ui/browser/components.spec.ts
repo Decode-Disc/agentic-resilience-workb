@@ -71,9 +71,7 @@ test("START missing context can use the proposed scope without answering", async
     await expect(
         page.getByRole("region", { name: "Your clarification" }),
     ).toHaveCount(0);
-    await expect(page.getByRole("status")).not.toContainText(
-        "Illustrative callback: Start research",
-    );
+    await expect(page.locator(".start-screen-toolbar output")).toBeEmpty();
 });
 
 test("START confirmation preserves the approved company card and opens framing without a composer", async ({
@@ -297,7 +295,9 @@ test("START a specific request receives a framing directly and needs an explicit
         page.getByRole("region", { name: "Framing summary" }),
     ).toContainText("4 questions");
     await expect(page.getByText("Your request", { exact: true })).toBeVisible();
-    await expect(page.getByText("Workbench", { exact: true })).toBeVisible();
+    await expect(
+        page.getByRole("log").getByText("Workbench", { exact: true }),
+    ).toBeVisible();
     await page
         .getByRole("button", { name: "Start research", exact: true })
         .click();
@@ -550,8 +550,12 @@ test("START conversation keeps a guided correction through launch and reload", a
 }) => {
     await page.goto("/?layout=start&screen=framing&theme=light");
     await page
+        .getByRole("button", { name: "Preview tools", exact: true })
+        .click();
+    await page
         .getByRole("button", { name: "Example: switching costs" })
         .click();
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Send refinement" }).click();
     await expect(
         page.getByRole("region", { name: "Framing summary" }),
@@ -574,6 +578,12 @@ test("START conversation keeps a guided correction through launch and reload", a
     await expect(
         page.getByRole("button", { name: "Start research", exact: true }),
     ).toHaveCount(0);
+    await page
+        .getByText("Earlier conversation · 1 refinement", { exact: true })
+        .click();
+    await expect(page.getByRole("log")).toContainText(
+        "Added to the research program: What would insurers and repairers need to change to switch away from CCC?",
+    );
 });
 
 for (const theme of ["light", "dark"] as const) {
@@ -587,7 +597,11 @@ for (const theme of ["light", "dark"] as const) {
         const input = page.getByRole("textbox", {
             name: "Refine the framing in your own words",
         });
+        await page
+            .getByRole("button", { name: "Preview tools", exact: true })
+            .click();
         await page.getByRole("button", { name: "Example: reword Q1" }).click();
+        await page.keyboard.press("Escape");
         await expect(input).toBeFocused();
         await page.getByRole("button", { name: "Send refinement" }).click();
         await expect(
@@ -682,6 +696,7 @@ test("START reference reading controls fill the floating composer without changi
     await page.goto("/?layout=start&screen=framing&theme=light");
     const summary = page.getByRole("region", { name: "Framing summary" });
     const initial = await summary.textContent();
+    await page.getByText("Suggestions", { exact: true }).click();
     await page
         .getByRole("button", { name: "Control of coordination", exact: true })
         .click();
@@ -849,6 +864,38 @@ test("START pending artifact stays anchored above the composer while the convers
     expect((after?.y ?? 0) + (after?.height ?? 0)).toBeLessThan(
         inputAfter?.y ?? 0,
     );
+    await expect(
+        page.getByRole("button", { name: "Start research", exact: true }),
+    ).toBeInViewport();
+});
+
+test("START preview tools stay secondary and close with Escape while navigation remains links", async ({
+    page,
+}) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/?layout=start&screen=framing&theme=dark");
+    await expect(
+        page
+            .getByRole("navigation", { name: "Start screen previews" })
+            .getByRole("link", { name: "framing", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
+    await expect(
+        page.getByRole("button", { name: "Fail next send" }),
+    ).toHaveCount(0);
+    const tools = page.getByRole("button", {
+        name: "Preview tools",
+        exact: true,
+    });
+    await tools.focus();
+    await page.keyboard.press("Enter");
+    await expect(
+        page.getByRole("button", { name: "Fail next send" }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(tools).toBeFocused();
+    await expect(
+        page.getByRole("button", { name: "Fail next send" }),
+    ).not.toBeVisible();
     await expect(
         page.getByRole("button", { name: "Start research", exact: true }),
     ).toBeInViewport();

@@ -1,26 +1,35 @@
+import type { ThreadMessageLike } from "@assistant-ui/react";
+import { ArrowRight01Icon, Plus } from "@hugeicons/core-free-icons";
 import {
-    ArrowRight01Icon,
-    ArrowUp02Icon,
-    Plus,
-} from "@hugeicons/core-free-icons";
-import { type Ref, useEffect, useState } from "react";
+    type ReactNode,
+    useEffect,
+    useId,
+    useLayoutEffect,
+    useState,
+} from "react";
+import { createPortal } from "react-dom";
 import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
 import Icon from "@/components/icon";
+import {
+    Popover,
+    PopoverContent,
+    PopoverTitle,
+    PopoverTrigger,
+} from "@/components/ui/popover";
+import "./preview-controls.css";
+import {
+    ConversationActivityGroup,
+    ConversationComposer,
+    ConversationContext,
+    ConversationMessages,
+    ConversationReference,
+    type ConversationWorkItem,
+    useWorkbenchConversation,
+} from "@/components/chat/workbench-conversation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SmoothDropdwon } from "@/components/ui/smooth-dropdown";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import {
-    Message,
-    MessageBody,
-    MessageContent,
-} from "@/components/ui/uai/message";
-import {
-    PromptComposer,
-    PromptComposerActions,
-    PromptComposerInput,
-    PromptComposerSubmit,
-} from "@/components/ui/uai/prompt-composer";
 import { WorkbenchShellSurface } from "@/components/workbench-shell/workbench-shell-surface";
 import { WorkbenchIcon } from "@/components/workbench-ui/glyphs";
 import { Handoff } from "@/components/workbench-ui/handoff";
@@ -159,12 +168,96 @@ function report(detail: string) {
         }),
     );
 }
+/** Places gallery controls in its toolbar; isolated examples keep their controls in place. */
+function PreviewControls({ children }: { children: ReactNode }) {
+    const controls = (
+        <section
+            className="start-preview-scenarios"
+            aria-label="Illustrative framing scenarios">
+            {children}
+        </section>
+    );
+    const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
+    useLayoutEffect(() => {
+        setToolbar(document.getElementById("start-preview-controls"));
+    }, []);
+    return toolbar ? createPortal(controls, toolbar) : controls;
+}
+/** Keeps gallery diagnostics available without taking space from the conversation. */
+function PreviewTools({ children }: { children: ReactNode }) {
+    return (
+        <Popover>
+            <PopoverTrigger render={<Button variant="outline" size="sm" />}>
+                Preview tools
+            </PopoverTrigger>
+            <PopoverContent align="end" className="preview-tools-panel">
+                <PopoverTitle>Preview tools</PopoverTitle>
+                {children}
+            </PopoverContent>
+        </Popover>
+    );
+}
 function ReferenceChip() {
     return (
-        <span className="start-preview-reference">
-            <WorkbenchIcon name="back" size={12} />
-            Investor day 2025 deck
-        </span>
+        <ConversationReference
+            title="Investor day 2025 deck"
+            description="Presentation · CCC Intelligent Solutions · 2025">
+            <dl className="chat-reference-facts">
+                <div>
+                    <dt>Context</dt>
+                    <dd>Provided with your request</dd>
+                </div>
+                <div>
+                    <dt>Reading</dt>
+                    <dd>Not retrieved</dd>
+                </div>
+            </dl>
+            <p className="chat-reference-limit">
+                This reference is a research input. Its contents are not
+                available in this illustrative preview.
+            </p>
+        </ConversationReference>
+    );
+}
+function PreviewResearchContext({
+    activities,
+    scope,
+    count,
+    launched,
+    hasReference,
+}: {
+    activities: readonly ConversationWorkItem[];
+    scope: string;
+    count: number;
+    launched: boolean;
+    hasReference: boolean;
+}) {
+    return (
+        <ConversationContext
+            title={`${company.ticker} · Research`}
+            activities={activities}
+            plan={
+                <>
+                    <p>{scope}</p>
+                    <span className="chat-context-meta">
+                        {launched ? "Accepted framing" : "Proposed framing"} ·{" "}
+                        {count} questions
+                    </span>
+                </>
+            }
+            outputs={
+                <p className="chat-context-empty">No retained outputs yet.</p>
+            }
+            sources={
+                hasReference ? (
+                    <ReferenceChip />
+                ) : (
+                    <p className="chat-context-empty">
+                        No references supplied.
+                    </p>
+                )
+            }
+        />
     );
 }
 function EntryExample() {
@@ -358,41 +451,6 @@ function EntryExample() {
         </>
     );
 }
-function Refinement({
-    inputRef,
-    value,
-    onValueChange,
-    onSubmit,
-    compact = false,
-    label = "Refine the framing in your own words",
-}: {
-    inputRef?: Ref<HTMLTextAreaElement>;
-    value: string;
-    onValueChange: (value: string) => void;
-    onSubmit: (text: string) => void;
-    compact?: boolean;
-    label?: string;
-}) {
-    return (
-        <PromptComposer
-            variant={compact ? "compact" : "rounded"}
-            value={value}
-            onValueChange={onValueChange}
-            onSubmit={(text) => onSubmit(text)}
-            aria-label="Message the workbench">
-            <PromptComposerInput
-                ref={inputRef}
-                aria-label={label}
-                placeholder={label}
-            />
-            <PromptComposerActions>
-                <PromptComposerSubmit aria-label="Send refinement">
-                    <Icon iconNode={ArrowUp02Icon} size={16} />
-                </PromptComposerSubmit>
-            </PromptComposerActions>
-        </PromptComposer>
-    );
-}
 type PreviewConversation = {
     scenario: "specific" | "company";
     needsContext: boolean;
@@ -400,7 +458,12 @@ type PreviewConversation = {
     questions: StartFramingQuestion[];
     suppliedContext?: { question: string; answer: string };
     draft: string;
-    messages: { id: string; text: string; from?: "user" | "assistant" }[];
+    messages: {
+        id: string;
+        text: string;
+        from?: "user" | "assistant";
+        status?: "running" | "interrupted";
+    }[];
     launched: boolean;
     framingMessageCount: number;
 };
@@ -458,7 +521,14 @@ function readConversation(): PreviewConversation {
             "framingMessageCount" in data &&
             typeof data.framingMessageCount === "number"
         )
-            return data as PreviewConversation;
+            return {
+                ...data,
+                messages: data.messages.map((message) =>
+                    message.status === "running"
+                        ? { ...message, status: "interrupted" }
+                        : message,
+                ),
+            } as PreviewConversation;
         throw new Error("Invalid saved preview");
     } catch {
         report(
@@ -487,21 +557,32 @@ const guidedExamples = [
 function PreviewMessages({
     messages,
 }: {
-    messages: readonly {
-        id: string;
-        text: string;
-        from?: "user" | "assistant";
-    }[];
+    messages: PreviewConversation["messages"];
 }) {
-    return messages.map(({ id, text, from }) => (
-        <Message key={id} from={from ?? "user"}>
-            <MessageBody>
-                <MessageContent>{text}</MessageContent>
-            </MessageBody>
-        </Message>
-    ));
+    return <ConversationMessages ids={messages.map((message) => message.id)} />;
+}
+function previewMessages(
+    messages: PreviewConversation["messages"],
+): ThreadMessageLike[] {
+    return messages.map((message) => ({
+        id: message.id,
+        role: message.from ?? "user",
+        content: message.text,
+        ...(message.status
+            ? {
+                  status:
+                      message.status === "running"
+                          ? { type: "running" as const }
+                          : {
+                                type: "incomplete" as const,
+                                reason: "error" as const,
+                            },
+              }
+            : {}),
+    }));
 }
 function FramingExample({
+    trialControls,
     state,
     update,
     onLaunch,
@@ -509,15 +590,25 @@ function FramingExample({
     state: PreviewConversation;
     update: (patch: Partial<PreviewConversation>) => void;
     onLaunch: () => void;
+    trialControls: ReactNode;
 }) {
-    const {
-        scenario,
-        needsContext,
-        scope,
-        questions,
-        suppliedContext,
-        draft: refinement,
-    } = state;
+    const { scenario, needsContext, scope, questions, suppliedContext } = state;
+    const activities: ConversationWorkItem[] = [
+        {
+            id: "research-framing",
+            title: "Prepare research framing",
+            state: "completed",
+            summary: needsContext
+                ? "Company identified; the research boundary needs your direction."
+                : "Activity scope and research questions are prepared for your review.",
+            details: (
+                <p>
+                    Illustrative framing state. No source preparation has
+                    started.
+                </p>
+            ),
+        },
+    ];
     const setNeedsContext = (needsContext: boolean) => update({ needsContext });
     const setScope = (scope: string) => update({ scope });
     const setQuestions = (
@@ -538,16 +629,36 @@ function FramingExample({
             setRefinement(text);
         });
     const [example, setExample] = useState<string | null>(null);
-    function send(text: string) {
+    const [failNext, setFailNext] = useState(false);
+    const conversation = useWorkbenchConversation({
+        messages: previewMessages(state.messages),
+        draft: state.draft,
+        isRunning: state.messages.some(
+            (message) => message.status === "running",
+        ),
+        onDraftChange: setRefinement,
+        onSend: send,
+    });
+    async function send(text: string) {
+        if (failNext) {
+            setFailNext(false);
+            throw new Error("fixture_delivery_failure");
+        }
+
         const chosen = guidedExamples.find(
             (item) => item.id === example && item.text === text,
         );
-        const patch: Partial<PreviewConversation> = {
-            messages: [...state.messages, { id: crypto.randomUUID(), text }],
-            draft: "",
-        };
-        if (chosen?.id === "scope") patch.scope = chosen.text;
-        if (chosen?.id === "wording")
+        const messages: PreviewConversation["messages"] = [
+            ...state.messages,
+            { id: crypto.randomUUID(), text },
+        ];
+        const patch: Partial<PreviewConversation> = { messages, draft: "" };
+        let result: string | undefined;
+        if (chosen?.id === "scope") {
+            patch.scope = chosen.text;
+            result = `Updated the activity scope: ${patch.scope}`;
+        }
+        if (chosen?.id === "wording") {
             patch.questions = state.questions.map((q, i) =>
                 i === 0
                     ? {
@@ -556,7 +667,11 @@ function FramingExample({
                       }
                     : q,
             );
-        if (chosen?.id === "switching")
+            const revised = patch.questions[0];
+            if (!revised) throw new Error("fixture_question_missing");
+            result = `Updated ${revised.label}: ${revised.text}`;
+        }
+        if (chosen?.id === "switching") {
             patch.questions = [
                 ...state.questions,
                 {
@@ -567,6 +682,16 @@ function FramingExample({
                         "Examine the practical requirements of substitution.",
                 },
             ];
+            const added = patch.questions.at(-1);
+            if (!added) throw new Error("fixture_question_missing");
+            result = `Added to the research program: ${added.text}`;
+        }
+        if (result)
+            messages.push({
+                id: crypto.randomUUID(),
+                from: "assistant",
+                text: result,
+            });
         update(patch);
         setExample(null);
         report(
@@ -647,47 +772,71 @@ function FramingExample({
 
     return (
         <>
-            <section
-                className="start-preview-scenarios"
-                aria-label="Illustrative framing scenarios">
-                <span>Illustrative request</span>
-                <Button
-                    variant="ghost"
-                    onClick={() => selectScenario("specific")}>
-                    Reset preview
-                </Button>
-                <Button
-                    variant="ghost"
-                    className="start-preview-scenario"
-                    aria-pressed={scenario === "specific"}
-                    onClick={() => selectScenario("specific")}>
-                    Specific request
-                </Button>
-                <Button
-                    variant="ghost"
-                    className="start-preview-scenario"
-                    aria-pressed={scenario === "company"}
-                    onClick={() => selectScenario("company")}>
-                    Company only
-                </Button>
-                {!state.launched && (
-                    <div className="start-guided-examples">
-                        {guidedExamples.map((item) => (
-                            <Button
-                                key={item.id}
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                    setExample(item.id);
-                                    fill(item.text);
-                                }}>
-                                {item.label}
-                            </Button>
-                        ))}
+            <PreviewControls>
+                <ToggleGroup
+                    className="preview-control-group"
+                    aria-label="Request scenario"
+                    value={[scenario]}
+                    onValueChange={(values) => {
+                        const next = values[0];
+                        if (next === "specific" || next === "company")
+                            selectScenario(next);
+                    }}>
+                    <ToggleGroupItem value="specific">
+                        Specific request
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="company">
+                        Company only
+                    </ToggleGroupItem>
+                </ToggleGroup>
+                <PreviewTools>
+                    <div className="preview-tool-actions">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => selectScenario("specific")}>
+                            Reset preview
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setFailNext(true)}>
+                            Fail next send
+                        </Button>
+                        {trialControls}
                     </div>
-                )}
-            </section>
+                    {!state.launched && (
+                        <section
+                            aria-label="Example refinements"
+                            className="start-guided-examples">
+                            <p>Example refinements</p>
+                            {guidedExamples.map((item) => (
+                                <Button
+                                    key={item.id}
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                        setExample(item.id);
+                                        fill(item.text);
+                                    }}>
+                                    {item.label}
+                                </Button>
+                            ))}
+                        </section>
+                    )}
+                </PreviewTools>
+            </PreviewControls>
             <StartFramingScreen
+                context={
+                    <PreviewResearchContext
+                        activities={activities}
+                        scope={scope}
+                        count={questions.length}
+                        launched={state.launched}
+                        hasReference={scenario === "specific"}
+                    />
+                }
+                runtime={conversation.runtime}
                 history={<PreviewMessages messages={state.messages} />}
                 suggestions={
                     !state.launched &&
@@ -728,20 +877,14 @@ function FramingExample({
                         </section>
                     )
                 }
+                identity={
+                    <Badge tone="ink">
+                        <CompanyFaviconAvatar company={company} size="xs" />
+                        CCC Intelligent Solutions · CCCS
+                    </Badge>
+                }
                 request={
-                    <StartRequestMessage
-                        context={
-                            <>
-                                <Badge tone="ink">
-                                    <CompanyFaviconAvatar
-                                        company={company}
-                                        size="xs"
-                                    />
-                                    CCC Intelligent Solutions · CCCS
-                                </Badge>
-                                {scenario === "specific" && <ReferenceChip />}
-                            </>
-                        }>
+                    <StartRequestMessage>
                         {scenario === "specific"
                             ? request
                             : "Study CCC Intelligent Solutions."}
@@ -749,6 +892,19 @@ function FramingExample({
                 }
                 response={
                     <>
+                        {!state.launched && (
+                            <ConversationActivityGroup
+                                id="framing-preparation-turn"
+                                title="Framing preparation"
+                                state="completed"
+                                activities={activities}
+                                summary={
+                                    needsContext
+                                        ? "Your direction is needed"
+                                        : "Ready for your review"
+                                }
+                            />
+                        )}
                         <div className="start-conversation-author">
                             <span>{"//"}</span>
                             <strong>Workbench</strong>
@@ -770,6 +926,7 @@ function FramingExample({
                 action={
                     state.launched ? undefined : (
                         <FramingProposal
+                            collapsible
                             scope={scope}
                             activity={
                                 <div className="start-framing-activity">
@@ -897,14 +1054,10 @@ function FramingExample({
                     )
                 }
                 refinement={
-                    <Refinement
+                    <ConversationComposer
                         inputRef={refinementRef}
-                        value={refinement}
-                        onValueChange={(value) => {
-                            setExample(null);
-                            setRefinement(value);
-                        }}
-                        onSubmit={send}
+                        label="Refine the framing in your own words"
+                        failed={conversation.failed}
                     />
                 }
             />
@@ -979,6 +1132,7 @@ const captured = [
     },
 ] as const;
 function ResearchExample({
+    trialControls,
     done,
     state,
     update,
@@ -988,13 +1142,179 @@ function ResearchExample({
     update: (patch: Partial<PreviewConversation>) => void;
     done: boolean;
     onOpenProgress: () => void;
+    trialControls: ReactNode;
 }) {
+    const [workPreview, setWorkPreview] = useState<{
+        step: number;
+        state: ConversationWorkItem["state"];
+        generation: number;
+    }>({ step: 0, state: "running", generation: 0 });
+    const workState = done ? "completed" : workPreview.state;
+    const step = done ? 2 : workPreview.step;
+    const activities: ConversationWorkItem[] = [
+        ...(state.scenario === "specific"
+            ? [
+                  {
+                      id: "reference-context",
+                      title: "Check supplied reference",
+                      state: "completed" as const,
+                      summary:
+                          "Investor presentation recorded as an input; contents not retrieved.",
+                      details: (
+                          <p>
+                              Illustrative reference check. The supplied
+                              document has not been read by this preview.
+                          </p>
+                      ),
+                  },
+              ]
+            : []),
+        {
+            id: "company-reporting",
+            title: "Find company reporting",
+            state: step > 0 ? "completed" : workState,
+            summary:
+                step > 0
+                    ? "Filing and earnings candidates listed; contents remain unverified."
+                    : workState === "interrupted"
+                      ? "Reporting search stopped; no new reading is available."
+                      : "Looking for filings and earnings material about claims coordination.",
+            details: (
+                <p>
+                    Illustrative activity — these documents have not been
+                    retrieved by this preview.
+                </p>
+            ),
+        },
+        ...(step > 0
+            ? [
+                  {
+                      id: "integration-documentation",
+                      title: "Find product and integration documentation",
+                      state: step === 2 ? ("completed" as const) : workState,
+                      summary:
+                          step === 2
+                              ? "Documentation candidates listed; unavailable readings remain explicit."
+                              : workState === "interrupted"
+                                ? "Documentation search stopped; listed reporting candidates remain available."
+                                : "Looking for insurer integration and workflow documentation.",
+                      details: (
+                          <p>
+                              Illustrative candidate search, not a verified
+                              reading or analytical finding.
+                          </p>
+                      ),
+                  },
+              ]
+            : []),
+    ];
+    const workSummary =
+        workState === "interrupted"
+            ? "Preparation stopped; recorded inputs and candidates are retained."
+            : workState === "completed"
+              ? "Candidates listed; document contents remain unverified."
+              : "Preparing the documentary basis";
     const [handoffVisible, setHandoffVisible] = useState(true);
     const [framingOpen, setFramingOpen] = useState(false);
+    const framingDetailsId = useId();
+    const earlierMessages = state.messages.slice(0, state.framingMessageCount);
+    const refinementCount = earlierMessages.filter(
+        (message) => message.from !== "assistant",
+    ).length;
+    const conversation = useWorkbenchConversation({
+        messages: previewMessages(state.messages),
+        draft: state.draft,
+        isRunning: state.messages.some(
+            (message) => message.status === "running",
+        ),
+        onDraftChange: (draft) => update({ draft }),
+        onSend: (text) =>
+            update({
+                messages: [
+                    ...state.messages,
+                    { id: crypto.randomUUID(), text },
+                ],
+                draft: "",
+            }),
+    });
     return (
         <StartResearchScreen
+            context={
+                <PreviewResearchContext
+                    activities={activities}
+                    scope={state.scope}
+                    count={state.questions.length}
+                    launched
+                    hasReference={state.scenario === "specific"}
+                />
+            }
+            runtime={conversation.runtime}
             conversation={
                 <>
+                    <PreviewControls>
+                        <PreviewTools>
+                            {trialControls}
+                            {!done && (
+                                <>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled={
+                                            step > 0 || workState !== "running"
+                                        }
+                                        onClick={() =>
+                                            setWorkPreview((current) => ({
+                                                ...current,
+                                                step: 1,
+                                                state: "running",
+                                            }))
+                                        }>
+                                        Advance illustrative work
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled={workState !== "running"}
+                                        onClick={() =>
+                                            setWorkPreview((current) => ({
+                                                ...current,
+                                                step: 2,
+                                                state: "completed",
+                                            }))
+                                        }>
+                                        Finish illustrative work
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled={workState !== "running"}
+                                        onClick={() =>
+                                            setWorkPreview((current) => ({
+                                                ...current,
+                                                state: "interrupted",
+                                            }))
+                                        }>
+                                        Interrupt illustrative work
+                                    </Button>
+                                    {workState !== "running" && (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() =>
+                                                setWorkPreview((current) => ({
+                                                    step: 0,
+                                                    state: "running",
+                                                    generation:
+                                                        current.generation + 1,
+                                                }))
+                                            }>
+                                            Restart illustrative work
+                                        </Button>
+                                    )}
+                                </>
+                            )}
+                        </PreviewTools>
+                    </PreviewControls>
                     <span className="wb-label">Conversation</span>
                     <StartRequestMessage>
                         {state.scenario === "specific"
@@ -1005,8 +1325,10 @@ function ResearchExample({
                         scope={state.scope}
                         questionCount={state.questions.length}
                         onInspect={() => setFramingOpen((value) => !value)}
+                        expanded={framingOpen}
+                        detailsId={framingDetailsId}
                     />
-                    <div hidden={!framingOpen}>
+                    <div id={framingDetailsId} hidden={!framingOpen}>
                         <FramingProposal
                             introduction="Research started with this framing."
                             scope={state.scope}
@@ -1023,47 +1345,51 @@ function ResearchExample({
                     )}
                     <details>
                         <summary>
-                            Earlier conversation · {state.framingMessageCount}{" "}
-                            refinements
+                            Earlier conversation · {refinementCount}{" "}
+                            {refinementCount === 1
+                                ? "refinement"
+                                : "refinements"}
                         </summary>
-                        <PreviewMessages
-                            messages={state.messages.slice(
-                                0,
-                                state.framingMessageCount,
-                            )}
-                        />
+                        <PreviewMessages messages={earlierMessages} />
                     </details>
                     <PreviewMessages
                         messages={state.messages.slice(
                             state.framingMessageCount,
                         )}
                     />
-                    <p className="start-preview-reply">
-                        <span>{"// "}</span>
-                        {done
-                            ? `The material is ready. Investigation is starting on the ${state.questions.length} questions.`
-                            : "Research started. I'll bring you to Progress when the material is ready."}
-                    </p>
+                    <div
+                        data-slot="conversation-assistant-turn"
+                        data-message-id="source-preparation-turn">
+                        <ConversationActivityGroup
+                            key={workPreview.generation}
+                            id={`source-preparation-turn-${workPreview.generation}`}
+                            title="Source preparation"
+                            summary={workSummary}
+                            state={workState}
+                            activities={activities}
+                        />
+                        <div className="start-conversation-author">
+                            <span>{"//"}</span>
+                            <strong>Workbench</strong>
+                        </div>
+                        <p className="start-preview-reply">
+                            <span>{"// "}</span>
+                            {done
+                                ? `The material is ready. Investigation is starting on the ${state.questions.length} questions.`
+                                : workState === "completed"
+                                  ? "The illustrative candidate list is ready. Document contents still need to be retrieved and checked."
+                                  : workState === "interrupted"
+                                    ? "The illustrative preparation stopped. Recorded inputs and any listed candidates remain available."
+                                    : "Research started. I'll bring you to Progress when the material is ready."}
+                        </p>
+                    </div>
                 </>
             }
             conversationComposer={
-                <Refinement
+                <ConversationComposer
                     label="Ask about the sources"
                     compact
-                    value={state.draft}
-                    onValueChange={(draft) => update({ draft })}
-                    onSubmit={(text) => {
-                        update({
-                            messages: [
-                                ...state.messages,
-                                { id: crypto.randomUUID(), text },
-                            ],
-                            draft: "",
-                        });
-                        report(
-                            "Follow-up recorded in this illustrative conversation.",
-                        );
-                    }}
+                    failed={conversation.failed}
                 />
             }
             heading={
@@ -1226,6 +1552,88 @@ export function StartScreenPreview({
     const [state, setState] = useState(readConversation);
     const update = (patch: Partial<PreviewConversation>) =>
         setState((current) => ({ ...current, ...patch }));
+    const [reply, setReply] = useState<{ id: string; step: number } | null>(
+        null,
+    );
+    useEffect(() => {
+        if (!reply) return;
+        const timer = window.setTimeout(() => {
+            setState((current) => ({
+                ...current,
+                messages: current.messages.map((message) =>
+                    message.id === reply.id
+                        ? {
+                              ...message,
+                              text: Array.from(
+                                  { length: reply.step + 1 },
+                                  (_, index) =>
+                                      `**Illustrative reading ${index + 1}.** Examine who sets the routing rules, owns operational context, and can substitute each integration. This preview does not establish an analytical finding. [Source context](https://www.sec.gov/edgar/search/).`,
+                              ).join("\n\n"),
+                              status: reply.step < 23 ? "running" : undefined,
+                          }
+                        : message,
+                ),
+            }));
+            setReply(
+                reply.step < 23 ? { ...reply, step: reply.step + 1 } : null,
+            );
+        }, 200);
+        return () => window.clearTimeout(timer);
+    }, [reply]);
+    const trialControls = (
+        <section
+            aria-label="Illustrative conversation controls"
+            className="flex flex-wrap gap-1">
+            {(name === "framing" || name === "handoff") && (
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onNavigate("launched")}>
+                    Try activity grouping
+                </Button>
+            )}
+            <Button
+                variant="ghost"
+                size="sm"
+                disabled={reply !== null}
+                onClick={() => {
+                    const id = crypto.randomUUID();
+                    setState((current) => ({
+                        ...current,
+                        messages: [
+                            ...current.messages,
+                            {
+                                id,
+                                from: "assistant",
+                                text: "**Illustrative reading",
+                                status: "running",
+                            },
+                        ],
+                    }));
+                    setReply({ id, step: 0 });
+                }}>
+                Grow illustrative reply
+            </Button>
+            {reply && (
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                        setState((current) => ({
+                            ...current,
+                            messages: current.messages.map((message) =>
+                                message.id === reply.id
+                                    ? { ...message, status: "interrupted" }
+                                    : message,
+                            ),
+                        }));
+                        setReply(null);
+                    }}>
+                    Interrupt illustrative reply
+                </Button>
+            )}
+        </section>
+    );
     useEffect(() => {
         try {
             sessionStorage.setItem(previewKey, JSON.stringify(state));
@@ -1240,6 +1648,11 @@ export function StartScreenPreview({
             style={{ lineHeight: 1.5 }}
             data-start-screen={name}>
             <WorkbenchShellSurface
+                plain={
+                    name === "framing" ||
+                    name === "launched" ||
+                    name === "handoff"
+                }
                 className={
                     name === "framing" ||
                     name === "launched" ||
@@ -1256,6 +1669,7 @@ export function StartScreenPreview({
                 }>
                 {name === "framing" ? (
                     <FramingExample
+                        trialControls={trialControls}
                         state={state}
                         update={update}
                         onLaunch={() => {
@@ -1274,6 +1688,7 @@ export function StartScreenPreview({
                     />
                 ) : name === "launched" || name === "handoff" ? (
                     <ResearchExample
+                        trialControls={trialControls}
                         done={name === "handoff"}
                         state={state}
                         update={update}

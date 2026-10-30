@@ -718,7 +718,7 @@
     }
 }
 
-/* Framing follows Start-4-Framing.dc.html; the shell and behavior stay application-owned. */
+/* Framing content and editing controls also serve retained, read-only history. */
 .framingProposal {
     display: flex;
     flex-direction: column;
@@ -745,16 +745,8 @@
     line-height: 24px;
 }
 .framingCard {
-    overflow: hidden;
     min-width: 0;
-    border-radius: 22px;
-    background: var(--surface-glass);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    box-shadow:
-        0 0 0 1px var(--chip-edge),
-        0 24px 56px -30px
-        color-mix(in oklab, var(--brand-purple) 55%, transparent);
+    background: transparent;
 }
 .framingScope {
     padding: 18px 20px 14px;
@@ -868,24 +860,6 @@
     padding: 4px 0;
     font-size: 12px;
 }
-.framingLaunch {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 14px 20px;
-    border-top: 1px solid var(--divider);
-    background: color-mix(in oklab, var(--foreground) 3%, transparent);
-}
-.framingLaunch > p {
-    flex: 1;
-    margin: 0;
-    font-size: 12.5px;
-    line-height: 18px;
-    color: var(--muted-foreground);
-}
-.framingLaunch > button {
-    flex-shrink: 0;
-}
 .conversation .framingProposal {
     gap: 12px;
 }
@@ -911,14 +885,6 @@
     .framingCorrections {
         margin-inline: 16px;
     }
-    .framingLaunch {
-        flex-direction: column;
-        align-items: stretch;
-        padding: 14px 16px;
-    }
-    .framingLaunch > button {
-        align-self: flex-end;
-    }
 }
 
 .request {
@@ -931,134 +897,9 @@
 }
 
 body:has(.framing),
-body:has(.start-screen-preview[data-start-screen="launched"]),
-body:has(.start-screen-preview[data-start-screen="handoff"]) {
+body:has(.research) {
     overflow: hidden;
 }
-.framing [data-slot="prompt-composer"],
-.conversationComposer [data-slot="prompt-composer"] {
-    box-shadow: var(--shadow-glass);
-}
-.framing [data-slot="prompt-composer"],
-.conversationComposer [data-slot="prompt-composer"] {
-    border-radius: 22px;
-}
-.framing [data-slot="prompt-composer-card"],
-.conversationComposer [data-slot="prompt-composer-card"] {
-    border-radius: inherit;
-    border-color: var(--divider);
-    background: var(--surface-float);
-    padding: 8px;
-}
-.framing [data-slot="prompt-composer-submit"],
-.conversationComposer [data-slot="prompt-composer-submit"] {
-    background: var(--primary);
-    color: var(--primary-foreground);
-}
-
-.framing [data-role="user"] [data-slot="message-content"] {
-    padding: 14px 18px;
-    border-radius: 20px 20px 6px 20px;
-    background: var(--primary);
-    color: var(--primary-foreground);
-    font-size: 15px;
-    line-height: 22px;
-}
-.framing [data-role="assistant"] > [data-slot="message-body"],
-.framing
-    [data-role="assistant"]
-    > [data-slot="message-body"]
-    > [data-slot="message-content"] {
-    width: 100%;
-}
-.framingScope > div {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-}
-.framingScope > div [data-slot="toggle-group"] {
-    flex-wrap: wrap;
-    gap: 8px;
-}
-.framingScope > div [data-slot="toggle-group-item"],
-.framingScope > div [data-slot="toggle-group"] > [data-slot="button"] {
-    height: 32px;
-    min-height: 32px;
-    padding: 0 12px;
-    border-radius: 10px;
-    border: 0;
-    background: var(--card);
-    box-shadow: inset 0 0 0 1px
-        color-mix(in oklab, var(--foreground) 14%, transparent);
-    color: var(--foreground);
-    font: 500 13.5px / 20px var(--font-sans);
-}
-.framingScope > div [data-slot="toggle-group-item"][data-pressed] {
-    box-shadow:
-        inset 0 0 0 1.5px var(--brand-purple),
-        0 0 0 3px color-mix(in oklab, var(--brand-purple) 16%, transparent);
-    background: color-mix(in oklab, var(--brand-purple) 7%, var(--card));
-}
-.framingScope > div [data-slot="toggle-group"] > [data-slot="button"] {
-    color: var(--muted-foreground);
-}
-.framingScope > div > p {
-    flex-basis: 100%;
-    margin: 4px 0 0;
-}
-.framing [data-slot="framing-suggestions"] {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-.framing [data-slot="framing-suggestions"] p {
-    margin: 0;
-    color: var(--muted-foreground);
-    font-size: 14.5px;
-    line-height: 22px;
-}
-.framing [data-slot="framing-suggestions"] > div {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-.framing [data-slot="framing-suggestions"] button {
-    height: 34px;
-    padding: 0 14px;
-    border: 0;
-    border-radius: 999px;
-    background: var(--card);
-    box-shadow: inset 0 0 0 1px
-        color-mix(in oklab, var(--foreground) 14%, transparent);
-    font-size: 13.5px;
-    line-height: 20px;
-    font-weight: 500;
-}
-.framing [data-slot="prompt-composer-card"] {
-    padding: 8px 8px 8px 20px;
-    background: var(--card);
-}
-.framing [data-slot="prompt-composer-card"] > div:last-child {
-    display: flex;
-    align-items: flex-end;
-    gap: 8px;
-}
-.framing [data-slot="prompt-composer-input"] {
-    flex: 1;
-    min-width: 0;
-    min-height: 40px;
-    padding: 9px 0;
-    font-size: 15px;
-    line-height: 22px;
-}
-.framing [data-slot="prompt-composer-submit"] {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-}
-
-/* Pending decisions are docked above the composer; the transcript owns the full pane width. */
 .framing {
     position: relative;
     display: flex;
@@ -1067,7 +908,6 @@ body:has(.start-screen-preview[data-start-screen="handoff"]) {
     height: 100%;
     min-height: 0;
     min-width: 0;
-    padding: 0;
     overflow: hidden;
 }
 .framing [data-slot="conversation-thread-log"] {
@@ -1075,106 +915,251 @@ body:has(.start-screen-preview[data-start-screen="handoff"]) {
     border-radius: 0;
 }
 .framing [data-slot="conversation-thread-content"] {
-    width: min(760px, calc(100% - 32px));
+    width: min(732px, calc(100% - 48px));
     margin-inline: auto;
-    gap: 22px;
+    gap: 26px;
     padding: 28px 0 0;
 }
 .framing [data-slot="conversation-scroll-content"] {
-    display: flex;
-    flex-direction: column;
     min-height: 100%;
     padding-bottom: calc(var(--conversation-dock-height, 80px) + 28px);
 }
 .framingDock {
     position: absolute;
     inset-inline: 0;
-    bottom: 16px;
-    max-height: calc(100% - 96px);
-    width: min(760px, calc(100% - 32px));
+    bottom: 12px;
+    width: min(748px, calc(100% - 32px));
     margin-inline: auto;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 0;
 }
 .pendingAction {
-    max-height: min(52dvh, 520px);
     min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
-    scrollbar-width: thin;
-    scrollbar-color: color-mix(in oklab, var(--foreground) 18%, transparent)
-        transparent;
-    border-radius: 22px;
-    box-shadow:
-        0 0 0 1px var(--chip-edge),
-        var(--shadow-float);
-}
-.pendingAction:hover {
-    scrollbar-color: color-mix(in oklab, var(--foreground) 32%, transparent)
-        transparent;
-}
-.pendingAction::-webkit-scrollbar {
-    width: 4px;
-}
-.pendingAction::-webkit-scrollbar-track {
-    background: transparent;
-}
-.pendingAction::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    background: color-mix(in oklab, var(--foreground) 18%, transparent);
-}
-.pendingAction .framingCard {
-    overflow: visible;
-    box-shadow: none;
+    margin-inline: 8px;
 }
 .pendingAction .framingProposal {
     gap: 0;
 }
+.pendingAction .framingCard {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+}
 .pendingAction [data-slot="agent-question"] {
     max-width: none;
-    border-radius: 22px;
-    background: var(--surface-glass);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
     box-shadow: none;
+    font-size: 12.5px;
+}
+.pendingAction .framingScope {
+    padding: 0 12px 10px;
+    gap: 6px;
+}
+.pendingAction .framingScope header {
+    display: none;
+}
+.pendingAction .framingRecap {
+    padding: 0 12px;
+}
+.pendingAction .framingRecap header {
+    display: none;
+}
+.pendingAction .framingQuestions li {
+    padding-block: 8px;
+    border: 0;
+    font-size: 12.5px;
+    line-height: 18px;
+    gap: 9px;
+}
+.pendingAction .framingQuestionId {
+    background: transparent;
+    color: var(--muted-foreground);
+    padding: 0;
+    min-width: 18px;
+}
+.pendingAction .framingCorrections {
+    margin: 0 12px;
     border: 0;
 }
-.pendingAction .framingLaunch {
-    position: sticky;
-    bottom: 0;
-    border-radius: 0 0 22px 22px;
-    background: var(--surface-float);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
+.framingLaunch {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 12px;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
 }
-.framingDock > [data-slot="framing-suggestions"],
-.framingDock > [data-slot="prompt-composer"] {
-    flex-shrink: 0;
+.framingLaunch p {
+    max-width: 52ch;
+    font-size: 10px;
+    line-height: 15px;
+    color: var(--muted-foreground);
 }
-.framing [data-slot="conversation-thread-content"] [data-role="assistant"] p {
-    margin: 8px 0 0;
-    font-size: 15.5px;
-    line-height: 24px;
+.framingScope > div [data-slot="toggle-group"] {
+    flex-wrap: wrap;
+    gap: 4px;
 }
-
+.framingScope > div [data-slot="toggle-group-item"],
+.framingScope > div [data-slot="toggle-group"] > button {
+    height: auto;
+    min-height: 28px;
+    padding: 4px 8px;
+    font-size: 11px;
+    line-height: 16px;
+    border-radius: 6px;
+    box-shadow: none;
+    border: 1px solid var(--divider);
+    white-space: normal;
+}
+.framingScope > div [data-slot="toggle-group-item"][data-pressed] {
+    background: var(--fill-quiet);
+    border-color: var(--ring);
+}
+.composerSuggestions {
+    padding: 5px 12px 0;
+    font-size: 11px;
+    color: var(--muted-foreground);
+}
+.composerSuggestions summary {
+    cursor: pointer;
+}
+.composerSuggestions [data-slot="framing-suggestions"] {
+    padding: 8px 0;
+}
+.composerSuggestions p {
+    margin: 0 0 6px;
+    font-size: 11px;
+}
+.composerSuggestions button {
+    font-size: 11px;
+    min-height: 28px;
+    height: auto;
+    padding: 4px 8px;
+}
+.composerSuggestions [data-slot="framing-suggestions"] > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
 .conversationComposer {
     position: absolute;
     inset-inline: 0;
     bottom: 0;
     margin-top: 0;
+    padding: 0;
 }
 .conversation [data-slot="conversation-thread-content"] {
     padding-bottom: calc(var(--conversation-dock-height, 0px) + 24px);
 }
+.framingSummary {
+    padding: 8px 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    border-bottom: 1px solid var(--divider);
+}
 @media (max-width: 760px) {
-    .pendingAction .framingScope > div [data-slot="toggle-group"],
-    .framingDock [data-slot="framing-suggestions"] > div {
-        max-width: 100%;
-        flex-wrap: nowrap;
-        overflow-x: auto;
+    .framing [data-slot="conversation-thread-content"] {
+        width: calc(100% - 36px);
+        padding-top: 22px;
     }
-    .pendingAction .framingScope > div [data-slot="toggle-group"] > button {
-        flex-shrink: 0;
+    .framingDock {
+        width: calc(100% - 20px);
+        bottom: 10px;
+    }
+    .framingLaunch p {
+        max-width: 24ch;
+    }
+}
+.conversationHeader {
+    height: 54px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 18px;
+    border-bottom: 1px solid var(--divider);
+    font-size: 12px;
+}
+.conversationBrand {
+    color: var(--brand-purple);
+    font-size: 16px;
+    font-weight: 500;
+}
+.conversationHeader > div {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1;
+}
+.conversationHeader > div > :last-child:not(:first-child) {
+    margin-left: auto;
+}
+.conversationHeader [data-slot="badge"] {
+    background: transparent;
+    font-size: 11px;
+    min-width: 0;
+}
+@media (max-width: 550px) {
+    .conversationHeader {
+        padding-inline: 12px;
+    }
+    .conversationHeader > div {
+        overflow: visible;
+    }
+    .conversationHeader > div > :last-child:not(:first-child) {
+        max-width: 90px;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+}
+
+.conversationHeader [data-slot="badge"] {
+    flex: 0 1 auto;
+    justify-content: flex-start;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.conversationHeader [data-slot="badge"] img {
+    flex-shrink: 0;
+}
+
+.pendingAction .framingQuestions li > button {
+    width: 22px;
+    height: 22px;
+    min-height: 22px;
+}
+.pendingAction .framingQuestions li {
+    padding-block: 6px;
+}
+
+.research:has(> .conversationHeader) {
+    grid-template-rows: auto minmax(0, 1fr);
+}
+.research > .conversationHeader {
+    grid-column: 1 / -1;
+}
+@media (max-width: 760px) {
+    .research:has(> .conversationHeader) {
+        grid-template-rows: auto auto minmax(0, 1fr);
+    }
+}
+
+@media (min-width: 960px) {
+    .framing:has(
+            [data-slot="conversation-context-trigger"][aria-expanded="true"]
+        )
+        > [data-slot="conversation-thread"] {
+        width: calc(100% - 344px);
     }
 }

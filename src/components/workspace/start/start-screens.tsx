@@ -1,3 +1,4 @@
+import type { AssistantRuntime } from "@assistant-ui/react";
 import {
     type ComponentProps,
     type ReactNode,
@@ -7,15 +8,6 @@ import {
     useState,
 } from "react";
 import {
-    ConversationThread,
-    ConversationThreadDock,
-    ConversationThreadLog,
-} from "@/components/uai/conversation-thread";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import {
     AgentQuestion,
     AgentQuestionDescription,
     AgentQuestionFooter,
@@ -24,12 +16,22 @@ import {
     AgentQuestionOptions,
     AgentQuestionOther,
     AgentQuestionTitle,
-} from "@/components/ui/uai/agent-question";
+} from "@/components/chat/agent-question";
+import {
+    ConversationThread,
+    ConversationThreadDock,
+    ConversationThreadLog,
+} from "@/components/chat/conversation-thread";
 import {
     Message,
     MessageBody,
     MessageContent,
-} from "@/components/ui/uai/message";
+} from "@/components/chat/message";
+import { ConversationPendingPanel } from "@/components/chat/workbench-conversation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { WorkbenchIcon } from "@/components/workbench-ui/glyphs";
 import { CompanyResolutionCard } from "@/components/workspace/company-resolution-card";
 import { StartDossierHeading } from "./start-dossier-heading";
@@ -150,8 +152,27 @@ export function StartRequestMessage({
         </div>
     );
 }
+function ConversationHeader({
+    identity,
+    context,
+}: {
+    identity?: ReactNode;
+    context?: ReactNode;
+}) {
+    return (
+        <header className={styles.conversationHeader}>
+            <span className={styles.conversationBrand}>{"//"}</span>
+            <span>Workbench</span>
+            <div>{identity}</div>
+            {context}
+        </header>
+    );
+}
 /** The pending action and composer stay anchored while only the message history scrolls. */
 export function StartFramingScreen({
+    identity,
+    context,
+    runtime,
     request,
     response,
     action,
@@ -159,6 +180,9 @@ export function StartFramingScreen({
     history,
     suggestions,
 }: {
+    identity?: ReactNode;
+    context?: ReactNode;
+    runtime: AssistantRuntime;
     request: ReactNode;
     response?: ReactNode;
     action?: ReactNode;
@@ -168,7 +192,12 @@ export function StartFramingScreen({
 }) {
     return (
         <section className={styles.framing} aria-label="Research framing">
-            <ConversationThread aria-label="Framing conversation">
+            {(identity || context) && (
+                <ConversationHeader identity={identity} context={context} />
+            )}
+            <ConversationThread
+                runtime={runtime}
+                aria-label="Framing conversation">
                 <ConversationThreadLog>
                     <div className={styles.request}>
                         <span className="sr-only">Your request</span>
@@ -191,8 +220,13 @@ export function StartFramingScreen({
                             {action}
                         </section>
                     )}
-                    {suggestions}
                     {refinement}
+                    {suggestions && (
+                        <details className={styles.composerSuggestions}>
+                            <summary>Suggestions</summary>
+                            {suggestions}
+                        </details>
+                    )}
                 </ConversationThreadDock>
             </ConversationThread>
         </section>
@@ -200,6 +234,8 @@ export function StartFramingScreen({
 }
 /** Conversation and documentary progress remain supplied independently of workflow state. */
 export function StartResearchScreen({
+    context,
+    runtime,
     conversation,
     conversationComposer,
     heading,
@@ -209,6 +245,8 @@ export function StartResearchScreen({
     limitations,
     handoff,
 }: {
+    context?: ReactNode;
+    runtime: AssistantRuntime;
     conversation: ReactNode;
     conversationComposer?: ReactNode;
     heading: ReactNode;
@@ -233,8 +271,10 @@ export function StartResearchScreen({
                     <TabsTrigger value="progress">Progress</TabsTrigger>
                 </TabsList>
             </Tabs>
+            {context && <ConversationHeader context={context} />}
             <aside className={styles.conversation} aria-label="Conversation">
                 <ConversationThread
+                    runtime={runtime}
                     variant="compact"
                     aria-label="Research conversation">
                     <ConversationThreadLog>
@@ -420,6 +460,7 @@ export function FramingClarification({
 }
 /** Separates the proposed research program from optional analyst context and corrections. */
 export function FramingProposal({
+    collapsible = false,
     introduction,
     scope,
     activity,
@@ -433,6 +474,7 @@ export function FramingProposal({
     pending = false,
     error,
 }: {
+    collapsible?: boolean;
     introduction?: ReactNode;
     scope: string;
     activity?: ReactNode;
@@ -467,7 +509,7 @@ export function FramingProposal({
         }
         previousClarification.current = hasClarification;
     }, [hasClarification]);
-    return (
+    const content = (
         <section
             className={styles.framingProposal}
             aria-label="Proposed framing">
@@ -642,27 +684,38 @@ export function FramingProposal({
                         </p>
                     )}
                     {error && <p role="alert">{error}</p>}
-                    {onStart && (
-                        <div className={styles.framingLaunch}>
-                            <p>
-                                Nothing runs before you start. Primary sources
-                                first, counter-evidence always sought, bounded
-                                effort.
-                            </p>
-                            <Button
-                                variant="launch"
-                                onClick={onStart}
-                                disabled={
-                                    pending || !onStart || editing !== null
-                                }>
-                                Start research
-                                <WorkbenchIcon name="chevron" size={14} />
-                            </Button>
-                        </div>
-                    )}
                 </div>
             )}
         </section>
+    );
+    const footer = onStart && (
+        <div className={styles.framingLaunch}>
+            <p>Research starts only when you choose.</p>
+            <Button
+                variant="launch"
+                onClick={onStart}
+                disabled={pending || !onStart || editing !== null}>
+                Start research
+                <WorkbenchIcon name="chevron" size={14} />
+            </Button>
+        </div>
+    );
+    return collapsible ? (
+        <ConversationPendingPanel
+            title={hasClarification ? "Your direction" : "Proposed research"}
+            summary={
+                hasClarification
+                    ? "Research boundary"
+                    : `${questions.length} questions`
+            }
+            footer={!hasClarification && footer}>
+            {content}
+        </ConversationPendingPanel>
+    ) : (
+        <>
+            {content}
+            {footer}
+        </>
     );
 }
 function AdditionalFramingQuestion({
@@ -795,13 +848,19 @@ export function StartFramingSummary({
     scope,
     questionCount,
     onInspect,
+    expanded,
+    detailsId,
 }: {
     scope?: string;
     questionCount?: number;
     onInspect?: () => void;
+    expanded?: boolean;
+    detailsId?: string;
 }) {
     return (
-        <div className={styles.framingSummary}>
+        <div
+            className={styles.framingSummary}
+            data-message-id="accepted-framing">
             <b>
                 <WorkbenchIcon name="check" size={13} />
                 Framing fixed
@@ -815,7 +874,11 @@ export function StartFramingSummary({
                 </div>
             )}
             {onInspect && (
-                <Button variant="ghost" onClick={onInspect}>
+                <Button
+                    variant="ghost"
+                    onClick={onInspect}
+                    aria-expanded={expanded}
+                    aria-controls={detailsId}>
                     View framing
                 </Button>
             )}

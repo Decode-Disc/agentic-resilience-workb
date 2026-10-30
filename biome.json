@@ -138,7 +138,11 @@
             }
         },
         {
-            "includes": ["src/components/ui/**/*.{ts,tsx}"],
+            "includes": [
+                "src/components/ui/**/*.{ts,tsx}",
+                "src/components/chat/agent-question.tsx",
+                "src/components/chat/message.tsx"
+            ],
             "linter": {
                 "rules": {
                     "correctness": {

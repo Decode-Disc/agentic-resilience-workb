@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { buttonVariants } from "@/components/ui/button";
+import "./preview-controls.css";
 import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
 import "@/styles.css";
 import "./gallery.css";
 import { examples } from "./examples";
 import { StartScreenPreview, startScreenNames } from "./start-screen-examples";
+import { ChatCompositionMocks } from "./chat-composition-mocks";
 
 const params = new URLSearchParams(location.search);
 const theme = params.get("theme") === "dark" ? "dark" : "light";
@@ -25,16 +28,26 @@ function Gallery() {
         return () =>
             window.removeEventListener("workbench-example-action", listener);
     }, []);
+    if (params.get("layout") === "chat-mocks")
+        return <ChatCompositionMocks initialTheme={theme} />;
     if (requestedScreen)
         return (
             <>
                 <header className="start-screen-toolbar">
                     <h1>START screens</h1>
-                    <nav aria-label="Start screen previews">
+                    <nav
+                        className="preview-control-group"
+                        aria-label="Start screen previews">
                         {startScreenNames.map((name) => (
                             <a
                                 key={name}
-                                className="m-2 underline"
+                                className={buttonVariants({
+                                    variant:
+                                        name === requestedScreen
+                                            ? "secondary"
+                                            : "ghost",
+                                    size: "sm",
+                                })}
                                 href={`?layout=start&screen=${name}&theme=${theme}`}
                                 aria-current={
                                     name === requestedScreen
@@ -45,14 +58,17 @@ function Gallery() {
                             </a>
                         ))}
                     </nav>
+                    <div id="start-preview-controls" />
                     <a
+                        className={buttonVariants({
+                            variant: "ghost",
+                            size: "sm",
+                        })}
+                        aria-label="Switch theme"
                         href={`?layout=start&screen=${requestedScreen}&theme=${theme === "dark" ? "light" : "dark"}`}>
-                        Switch theme
+                        {theme === "dark" ? "Light theme" : "Dark theme"}
                     </a>
-                    <p>
-                        Illustrative screen states. No research is executed.
-                        Local controls and navigation work with fictitious data.
-                    </p>
+                    <p>Illustrative · no research executed</p>
                     <output aria-live="polite">{action}</output>
                 </header>
                 <StartScreenPreview
@@ -83,6 +99,9 @@ function Gallery() {
                 <header className="gallery-header">
                     <h1>Workbench UI</h1>
                     <nav aria-label="Screen previews">
+                        <a href={`?layout=chat-mocks&theme=${theme}`}>
+                            Chat composition studies
+                        </a>
                         <a
                             href={`?layout=start&screen=composer&theme=${theme}`}>
                             START screens

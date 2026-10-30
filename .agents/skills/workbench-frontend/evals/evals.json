@@ -330,7 +330,7 @@
       "files": [
         "../../../components.json",
         "../../../DESIGN.md",
-        "../../../src/components/ui/uai",
+        "../../../src/components/chat",
         "../../../src/components/ui",
         "../../../src/assets/styles/themes/evidence-workbench.css"
       ],
@@ -352,7 +352,7 @@
         "../../../DESIGN.md",
         "../../../src/components/workspace/start/start-screens.tsx",
         "../../../src/components/workspace/start/start-screens.module.css",
-        "../../../src/components/uai/conversation-thread.tsx"
+        "../../../src/components/chat/conversation-thread.tsx"
       ],
       "expectations": [
         "Traces the actual scrolling regions, positioning rules and material owners before proposing a correction.",
@@ -371,8 +371,8 @@
         "../../../components.json",
         "../../../DESIGN.md",
         "../../../context/TECH.md",
-        "../../../src/components/uai/conversation-thread.tsx",
-        "../../../src/components/ui/uai",
+        "../../../src/components/chat/conversation-thread.tsx",
+        "../../../src/components/chat",
         "../../../src/components/workspace/start/start-screens.tsx"
       ],
       "expectations": [

@@ -1,0 +1,59 @@
+/* Shared segmented material for gallery navigation and mutually exclusive previews. */
+.preview-control-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px;
+    padding: 4px;
+    border-radius: 10px;
+    background: var(--fill-quiet);
+}
+.preview-control-group > a,
+.preview-control-group > button {
+    border: 0;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 500;
+    box-shadow: none;
+}
+.preview-control-group > button[data-pressed],
+.preview-control-group > a[aria-current="page"],
+.preview-control-group > button[aria-pressed="true"] {
+    background: color-mix(in oklab, var(--foreground) 10%, var(--card));
+    color: var(--foreground);
+}
+.preview-tools-panel {
+    width: min(330px, calc(100vw - 24px));
+    max-height: min(70dvh, 500px);
+    overflow-y: auto;
+    padding: 12px;
+    border-radius: 12px;
+    gap: 12px;
+}
+.preview-tools-panel h2 {
+    font-size: 13px;
+    font-weight: 500;
+}
+.preview-tool-actions,
+.preview-tool-actions > section,
+.start-guided-examples {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+}
+.preview-tool-actions button,
+.start-guided-examples button {
+    justify-content: flex-start;
+    height: 32px;
+    font-size: 12px;
+}
+.start-guided-examples {
+    border-top: 1px solid var(--divider);
+    padding-top: 10px;
+}
+.start-guided-examples p {
+    margin: 0 8px 4px;
+    color: var(--muted-foreground);
+    font-size: 11px;
+}

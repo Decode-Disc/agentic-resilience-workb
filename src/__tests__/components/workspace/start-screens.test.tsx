@@ -1,12 +1,13 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import {
-    PromptComposer,
-    PromptComposerActions,
-    PromptComposerInput,
-    PromptComposerSubmit,
-} from "@/components/ui/uai/prompt-composer";
+import { StartScreenPreview } from "@/development/workbench-ui/start-screen-examples";
 import { ResearchComposerView } from "@/components/workspace/start/research-composer-view";
 import {
     CompanyMandatePanel,
@@ -165,24 +166,39 @@ describe("Start presentation without backend providers", () => {
         expect(screen.getByText("Who controls routing?")).toBeTruthy();
         expect(document.activeElement).toBe(edit);
     });
-    it("keeps shifted and composing Enter inside the composer and sends an ordinary Enter", () => {
-        const submit = vi.fn();
+    it("keeps shifted and composing Enter inside the composer and sends an ordinary Enter", async () => {
+        sessionStorage.clear();
         render(
-            <PromptComposer
-                defaultValue="Inspect the dependencies"
-                onSubmit={submit}>
-                <PromptComposerInput aria-label="Follow-up" />
-                <PromptComposerActions>
-                    <PromptComposerSubmit />
-                </PromptComposerActions>
-            </PromptComposer>,
+            <StartScreenPreview
+                name="framing"
+                theme="light"
+                onNavigate={vi.fn()}
+                onOpenProgress={vi.fn()}
+            />,
         );
-        const input = screen.getByRole("textbox", { name: "Follow-up" });
+        const input = screen.getByRole<HTMLTextAreaElement>("textbox", {
+            name: "Refine the framing in your own words",
+        });
+        fireEvent.change(input, {
+            target: { value: "Inspect the dependencies" },
+        });
         fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
         fireEvent.keyDown(input, { key: "Enter", isComposing: true });
-        expect(submit).not.toHaveBeenCalled();
+        expect(
+            within(screen.getByRole("log")).queryByText(
+                "Inspect the dependencies",
+            ),
+        ).toBeNull();
+        expect(input.value).toBe("Inspect the dependencies");
         fireEvent.keyDown(input, { key: "Enter" });
-        expect(submit).toHaveBeenCalledWith("Inspect the dependencies", []);
+        await waitFor(() =>
+            expect(
+                within(screen.getByRole("log")).getByText(
+                    "Inspect the dependencies",
+                ),
+            ).toBeTruthy(),
+        );
+        expect(input.value).toBe("");
     });
     it("keeps confirmation controls disabled while its caller is preparing framing", () => {
         render(
@@ -299,3 +315,43 @@ function FramingFixture({
         />
     );
 }
+
+it("keeps an unfinished question edit and launch guard when the pending program is folded", () => {
+    render(
+        <FramingProposal
+            collapsible
+            scope="Claims coordination"
+            questions={[
+                { id: "q1", label: "Q1", text: "Who controls the workflow?" },
+            ]}
+            onQuestionChange={vi.fn()}
+            onStart={vi.fn()}
+        />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Edit Q1$/ }));
+    const editor = screen.getByRole("textbox", { name: "Edit Q1 wording" });
+    fireEvent.change(editor, {
+        target: { value: "Who can replace a service?" },
+    });
+    const disclosure = screen
+        .getByText("Proposed research", { selector: "summary span" })
+        .closest("details");
+    if (!disclosure) throw new Error("Missing pending program disclosure");
+    fireEvent.click(
+        screen.getByText("Proposed research", { selector: "summary span" }),
+    );
+    expect(disclosure.open).toBe(false);
+    expect(
+        screen.getByRole<HTMLButtonElement>("button", {
+            name: "Start research",
+        }).disabled,
+    ).toBe(true);
+    fireEvent.click(
+        screen.getByText("Proposed research", { selector: "summary span" }),
+    );
+    expect(
+        screen.getByRole<HTMLTextAreaElement>("textbox", {
+            name: "Edit Q1 wording",
+        }).value,
+    ).toBe("Who can replace a service?");
+});

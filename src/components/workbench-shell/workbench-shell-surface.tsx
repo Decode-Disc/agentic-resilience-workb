@@ -4,11 +4,13 @@ import { cn } from "@/lib/utils";
 
 /** Shared workspace backdrop and texture, independent of navigation data and authentication. */
 export function WorkbenchShellSurface({
+    plain = false,
     header,
     className,
     contentClassName,
     children,
 }: {
+    plain?: boolean;
     className?: string;
     contentClassName?: string;
     header?: ReactNode;
@@ -18,21 +20,28 @@ export function WorkbenchShellSurface({
         <div
             className={cn(
                 "relative isolate min-h-svh overflow-x-clip bg-(image:--workspace-gradient) bg-fixed text-foreground",
+                plain && "bg-card bg-none",
                 className,
             )}>
-            <div
-                aria-hidden="true"
-                className="pointer-events-none fixed inset-0 -z-10 bg-(image:--workspace-grid) bg-[size:38px_38px] [mask-image:radial-gradient(ellipse_75%_60%_at_50%_0%,#000_55%,transparent_100%)] [-webkit-mask-image:radial-gradient(ellipse_75%_60%_at_50%_0%,#000_55%,transparent_100%)] [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat]"
-            />
+            {!plain && (
+                <div
+                    aria-hidden="true"
+                    className="pointer-events-none fixed inset-0 -z-10 bg-(image:--workspace-grid) bg-[size:38px_38px] [mask-image:radial-gradient(ellipse_75%_60%_at_50%_0%,#000_55%,transparent_100%)] [-webkit-mask-image:radial-gradient(ellipse_75%_60%_at_50%_0%,#000_55%,transparent_100%)] [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat]"
+                />
+            )}
             {header}
 
-            <BackgroundImageTexture
-                opacity={0.25}
-                variant="fabric-of-squares"
-                className={contentClassName}
-                childrenClassName={contentClassName}>
-                {children}
-            </BackgroundImageTexture>
+            {plain ? (
+                <div className={contentClassName}>{children}</div>
+            ) : (
+                <BackgroundImageTexture
+                    opacity={0.25}
+                    variant="fabric-of-squares"
+                    className={contentClassName}
+                    childrenClassName={contentClassName}>
+                    {children}
+                </BackgroundImageTexture>
+            )}
         </div>
     );
 }
