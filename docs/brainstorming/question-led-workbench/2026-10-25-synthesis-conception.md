@@ -84,7 +84,7 @@ Synthesis submission owns structural and semantic controls of the proposed resul
 
 For the alternative non-establishment finding, the control examines the stated analytical basis, reasons, and limitations rather than requiring a forced diagram. Diagnostics return to the Synthesis agent for targeted reconsideration; delivery and affected-result handling follow the global outcome and revision rules.
 
-These criteria are not yet an executable control contract. Specify joint output and alternative-finding controls under [TECH's pending analytical control contracts](../../../context/TECH.md#pending-analytical-control-contracts) before integrating synthesis submission.
+Design arbitration on 2026-10-30 selected typed, scoped semantic findings under deterministic domain disposition. A new joint output or alternative finding is either admissible for delivery or returned for required revision; technical incompleteness remains separate, and later restriction applies only to an already usable result. [TECH](../../../context/TECH.md#analytical-control-and-question-outcome-contracts) owns the accepted target contract and [ADR-026](../../decisions/026-use-typed-analytical-controls-and-materialized-question-outcomes.md) preserves the alternatives. The operation and its semantic evaluation remain unimplemented.
 
 ## Autonomy and Optional Inspection
 
@@ -114,7 +114,7 @@ Proposed visual exploration: use a frozen illustrative dossier to compare compos
 
 - Define how to select the decisive mechanisms and an appropriate level of visual detail for the investigated case.
 - Specify the representation and explanation of dependencies, conditions, opposing mechanisms, and unresolved relationships.
-- Specify the joint output and alternative-finding control contract and evaluation cases in [TECH](../../../context/TECH.md#pending-analytical-control-contracts), including transversal reasoning and diagram-to-note fidelity.
+- Define the closed Synthesis-finding schema, versioned thresholds and evaluation cases within [TECH's accepted control contract](../../../context/TECH.md#analytical-control-and-question-outcome-contracts), including transversal reasoning and diagram-to-note fidelity.
 - Explore the diagram's composition, accessible inspection, responsive behavior, and the note's reading experience.
 - Specify the relationship between input versions, changing reasoning, and affected synthesis outputs within the shared revision model.
 - Define the detailed contracts and correction records for the joint synthesis submission and alternative finding within the transversal operation catalogue.

@@ -81,7 +81,7 @@ When receiving a targeted request, Investigation examines the identified reasoni
 
 At submission, semantic control examines the reasoning from assertions through assumptions and mechanisms to the economic conclusion, the treatment of examined objections and alternative interpretations, and whether unknowns actually limit the conclusion. It reuses valid inventory and documentary controls rather than repeating their earlier work. A justified insufficiency remains a possible analytical result after instruction; it is not a substitute for unfinished investigation.
 
-These criteria are not yet an executable control contract. Its required inputs, checks, outcomes, restrictions, reuse and evaluation belong in [TECH's pending analytical control contracts](../../../context/TECH.md#pending-analytical-control-contracts), before integration of appraisal submission.
+Design arbitration on 2026-10-30 selected typed, scoped semantic findings under deterministic domain disposition. A new appraisal is either admissible for grouped review or returned for required revision; technical incompleteness remains separate, and later restriction applies only to an already usable result. [TECH](../../../context/TECH.md#analytical-control-and-question-outcome-contracts) owns the accepted target contract and [ADR-026](../../decisions/026-use-typed-analytical-controls-and-materialized-question-outcomes.md) preserves the alternatives. The operation and its semantic evaluation remain unimplemented.
 
 ## Autonomy and Optional Inspection
 
@@ -98,7 +98,7 @@ Proposed verification: use a bounded dossier with two questions sharing an asser
 ## Open Decisions
 
 - Define how to select useful inventory contributions and recognize reusable assertions without erasing meaningful differences in scope or interpretation.
-- Specify the appraisal-control contract and evaluation cases in [TECH](../../../context/TECH.md#pending-analytical-control-contracts) before integration; translate inventory-admission criteria through their existing domain owner.
+- Define the closed appraisal-finding schema, versioned thresholds and evaluation cases within [TECH's accepted control contract](../../../context/TECH.md#analytical-control-and-question-outcome-contracts); translate inventory-admission criteria through their existing domain owner.
 - Define how documentary needs are prioritized by their potential effect on the framed questions and expressed without prescribing source-retrieval mechanics.
 - Specify the inspection and correction interactions for reasoning and question-specific evidence uses, in coordination with the shared revision model.
 - Specify how the Investigation mission uses its shared operations and artifact contracts, including meaningful progress and executable quality checks through the interface.

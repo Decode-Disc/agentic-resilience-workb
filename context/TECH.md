@@ -149,22 +149,30 @@ Operation owners preserve unaffected content, reconstruct changed artifacts and 
 
 Synthesis may verify evidence and explain relationships. Necessary uninstructed premises return to Investigation for inventory admission and appraisal effects: a proposed revision or reasoned maintenance. Material human revisions remain pending explicitly. A limited diagram/note may be delivered together only if the unaffected base supports coherent, useful scope; contested central premises block delivery. Non-establishment requires an instructed retained base, not empty review, technical interruption or pending judgment. No routine final approval checkpoint applies.
 
-### Pending Analytical Control Contracts
+### Analytical Control and Question Outcome Contracts
 
-Investigation appraisal and joint Synthesis submission controls remain unimplemented. Specify their operation contracts here before integration, using the responsibilities above and the following requirements. These are design prerequisites, not delivered verifier guarantees.
+[ADR-026](../docs/decisions/026-use-typed-analytical-controls-and-materialized-question-outcomes.md) records the accepted architecture. Investigation appraisal control, joint Synthesis control and the question-outcome projection remain unimplemented; this section defines their target contracts rather than claiming delivered verifier quality.
 
-| Contract part | Required specification |
+Appraisal submission and Synthesis submission each expose one artifact-family operation that owns bounded input preparation, deterministic admission, semantic examination, finding validation, disposition, exact-result reuse and affected-use restrictions. Callers submit the artifact and its declared basis; they do not coordinate a chain of validators or adopt raw model output.
+
+| Contract part | Accepted specification |
 | --- | --- |
-| Authorized inputs | Submitted artifact/use, scope, versions, admissible evidence and restrictions; Synthesis also requires eligible retained appraisal versions. |
-| Deterministic checks | Authority, schemas, references, hashes, versions, prerequisites and permitted uses before model dispatch. |
-| Model task | Semantic questions left after deterministic checks, the examined basis and the limits of the examination. |
-| Typed outcome | A closed result contract with scoped findings and diagnostics, distinct from technical incompleteness; no bare verifier approval. |
-| Restrictions | Affected uses and known dependent artifacts, preserving independent valid contributions. |
-| Reuse identity | Unchanged object/use, evidence and applicable rule/restriction versions, with explicit invalidation conditions. |
-| Technical failure | Missing route, timeout, interruption and unknown outcome under the existing invocation, accounting and recovery contracts. |
-| Evaluation | Accepted/rejected cases for unsupported inference, objections, unknowns, stale inputs, partial checks, technical failure and diagram-to-note divergence; acceptance thresholds still need agreement. |
+| Authorized inputs | Submitted artifact and declared scope, exact artifact/evidence/rule/restriction versions, admissible uses and applicable human decisions. Synthesis additionally requires eligible retained appraisal versions. |
+| Deterministic checks | Check authority, schema, references, hashes, versions, prerequisites, permitted uses and applicable restrictions before any model dispatch. Reject stale or unauthorized input without inference. |
+| Model task | Examine only the semantic responsibilities left after deterministic checks and return closed, scoped findings tied to affected assertions, assumptions, objections, unknowns, relationships or output elements. The model neither rewrites the proposal nor grants workflow authority. |
+| Initial disposition | Map validated findings deterministically to `admissible` or `revision_required`. Any material unresolved finding requires revision. A limited result is admissible only when the submitted reasoning already exposes and obeys that limit. |
+| Later restriction | Reserve `restricted` for a later adverse control affecting an already retained or usable result. Restrict the affected use and flag known dependents without rewriting history or invalidating independent work. |
+| Reuse identity | Reuse only an unchanged artifact/use with unchanged evidence, rules and restrictions. Modified reasoning, new use or joint-output coherence requires examination; no model decides semantic equivalence for reuse. |
+| Technical failure | Missing route, timeout, interruption and unknown provider outcome produce technical incompleteness under existing invocation, accounting and recovery contracts. They cannot become semantic revision, justified insufficiency or admissibility. |
+| Evaluation | Cover unsupported inference, scope overreach, ignored counter-evidence or alternatives, unknowns that fail to constrain a conclusion, unjustified insufficiency, stale input, partial examination, technical failure, unsupported Synthesis relationships, unadmitted premises and diagram-to-note divergence. Keep exact findings and acceptance thresholds versioned with the implemented contract. |
 
-Existing `deriveQuestionCoverage` and matrix `questionCoverage` counts include question-linked `Unknown` claims. They project evidence presence, not appraisal outcomes. Define and verify the replacement at the Convex question-outcome boundary before exposing the [product's answer states or dependent transitions](../PRODUCT.md#evidence-matrix-and-analytical-review). Retaining an evidence-presence count does not implement that replacement.
+Appraisal findings localize defects in the path from assertions through assumptions and mechanisms to the proposed consequence, including the treatment of rival interpretations, objections, scope and decisive unknowns. Synthesis findings localize unsupported relationships or transversal inferences, necessary premises that lack Investigation admission, hidden conditions or limitations, diagram-to-note disagreement and an unsupported non-establishment basis. These responsibilities constrain the closed implementation schema without prescribing provider wording.
+
+Existing `deriveQuestionCoverage` and matrix `questionCoverage` remain evidence-presence projections, including when the only linked claim is `Unknown`. Add a separate materialized question-outcome projection owned by the Investigation domain. Rebuild the affected projection transactionally when an authoritative appraisal artifact, control result or append-only analyst review decision changes. Those source records remain authoritative; the projection is a reproducible read model, and clients do not derive workflow gates.
+
+The projection preserves evidence presence, analytical result kind, control state and human review state as separate facts. Do not store a generic `answered` boolean. A controlled substantive appraisal completes preparation and exposes a proposed answer; only its exact analyst-retained version becomes a retained answer and eligible Synthesis input. Controlled justified insufficiency also completes preparation, but is neither an answer nor a retained appraisal and contributes only a visible limitation. Technical incompleteness, unperformed work and `revision_required` do not complete preparation.
+
+Grouped review is available only when every assigned question has an admissible substantive appraisal or admissible justified-insufficiency result. Synthesis requires at least one retained substantive appraisal. An empty retained set remains at review. Retaining the evidence-presence count does not implement this projection, and the [product's answer labels and dependent transitions](../PRODUCT.md#evidence-matrix-and-analytical-review) remain blocked until the projection and its gates are verified.
 
 ## Context, Recovery and Resource Accounting
 
