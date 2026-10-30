@@ -68,13 +68,18 @@ export const LEGACY_AGENT_BACKEND: AgentBackendIdentity = {
     id: "ai-sdk",
     version: 1,
 };
-export const DEFAULT_AGENT_BACKEND: AgentBackendIdentity = {
+export const HISTORICAL_AGENT_BACKEND: AgentBackendIdentity = {
     id: "convex-agent",
     version: 2,
+};
+export const DEFAULT_AGENT_BACKEND: AgentBackendIdentity = {
+    id: "pi-durable",
+    version: 1,
 };
 
 export type ModelAttemptReceipt = {
     observableReplyJson?: string;
+    backendOutputJson?: string;
     model: string;
     resolvedModel?: string;
     provider?: string;
@@ -177,9 +182,10 @@ export const invocationReplyValidator = v.object({
 /** Structural batch failures are incidents before receipt settlement and remain fenced at adoption. */
 export function invocationStructureError(
     response: Infer<typeof invocationResponseValidator>,
+    pi = false,
 ) {
     if (response.kind !== "operations") return undefined;
-    if (response.requests.length > MAX_BATCH_REQUESTS)
+    if (!pi && response.requests.length > MAX_BATCH_REQUESTS)
         return "operation_batch_limit";
     const callIds = response.requests.map((request) => request.callId);
     if (

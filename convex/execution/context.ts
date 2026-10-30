@@ -2,9 +2,15 @@ import type { Doc, Id } from "@convex/_generated/dataModel";
 import { internalQuery, type QueryCtx } from "@convex/_generated/server";
 import { stableStringify } from "@convex/domain/sourcePassages";
 import { readConversationMessages } from "@convex/integrations/agentStorage";
+import { agentInputByteLength } from "@convex/integrations/modelInput";
+import {
+    missionRoutes,
+    SIMULATION_MODEL_ROUTE,
+} from "@convex/integrations/modelRouting";
 import { v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
+import { agentToolSchemas } from "./agentDefinition";
 import {
     executionError,
     executionFailureCode,
@@ -130,18 +136,31 @@ export async function buildMissionContext(
                         .eq("invocationId", previousInvocation._id)
                         .eq("kind", kind),
                 )
-                .take(MAX_BATCH_REQUESTS + 1);
-            if (causes.length > MAX_BATCH_REQUESTS)
+                .take(
+                    mission.executionRuntime === "pi-durable"
+                        ? 8192
+                        : MAX_BATCH_REQUESTS + 1,
+                );
+            if (
+                mission.executionRuntime !== "pi-durable" &&
+                causes.length > MAX_BATCH_REQUESTS
+            )
                 throw executionError("continuation_capacity");
             for (const cause of causes)
                 invocationCauses.set(cause.cause, cause._id);
         }
-        if (invocationCauses.size > MAX_BATCH_REQUESTS)
+        if (
+            mission.executionRuntime !== "pi-durable" &&
+            invocationCauses.size > MAX_BATCH_REQUESTS
+        )
             throw executionError("continuation_capacity");
     }
     const triggeringRequests = [];
     if (previousInvocation?.requestIds) {
-        if (previousInvocation.requestIds.length > MAX_BATCH_REQUESTS)
+        if (
+            mission.executionRuntime !== "pi-durable" &&
+            previousInvocation.requestIds.length > MAX_BATCH_REQUESTS
+        )
             throw executionError("continuation_capacity");
         for (const [
             index,
@@ -276,8 +295,14 @@ export async function buildMissionContext(
                 ? {
                       invocationId: previousInvocation._id,
                       status: "observable_reply_not_established_facts",
-                      outputJson: previousInvocation.outputJson ?? null,
-                      rawOutputJson: previousInvocation.rawOutputJson ?? null,
+                      ...(mission.executionRuntime === "pi-durable"
+                          ? { historyOperation: "consult_mission_state" }
+                          : {
+                                outputJson:
+                                    previousInvocation.outputJson ?? null,
+                                rawOutputJson:
+                                    previousInvocation.rawOutputJson ?? null,
+                            }),
                   }
                 : null,
         activeWork: {
@@ -297,7 +322,21 @@ export async function buildMissionContext(
                 "Exact prior observable inputs, outputs, requests and results are retained and can be read in pages.",
         },
     });
-    if (new TextEncoder().encode(inputJson).length > MAX_CONTEXT_BYTES)
+    if (
+        (await agentInputByteLength({
+            instructions: definition.instructions,
+            prompt: inputJson,
+            operations: agentToolSchemas(definition),
+            definitionVersion: definition.version,
+            nativeRoute:
+                mission.executionRuntime === "pi-durable"
+                    ? mission.provenance === "simulation"
+                        ? SIMULATION_MODEL_ROUTE
+                        : (missionRoutes[mission.definitionId] ??
+                          SIMULATION_MODEL_ROUTE)
+                    : undefined,
+        })) > MAX_CONTEXT_BYTES
+    )
         return { kind: "blocked" as const, code: "context_capacity" };
     return { kind: "ready" as const, inputJson };
 }

@@ -26,6 +26,7 @@ async function mission() {
     );
     if (!turnId) throw new Error("Expected active turn");
     const missionId = await f.t.mutation(internal.execution.missions.start, {
+        generationBackend: { id: "convex-agent", version: 2 },
         runId: f.runId,
         definitionId: "conversation_validation_v1",
         scope: { kind: "conversation_validation_v1" },
@@ -531,6 +532,7 @@ test("analyst resume adopts a confirmed pre-pause model response without regener
         }),
     );
     const missionId = await f.t.mutation(internal.execution.missions.start, {
+        generationBackend: { id: "convex-agent", version: 2 },
         runId: f.runId,
         definitionId: "execution_validation_v1",
         scope: { kind: "execution_validation_v1", values: [7] },
@@ -778,6 +780,7 @@ test("an explicit research pause retains an engaged operation while the conversa
         }),
     );
     const researchId = await f.t.mutation(internal.execution.missions.start, {
+        generationBackend: { id: "convex-agent", version: 2 },
         runId: f.runId,
         definitionId: "execution_validation_v1",
         scope: { kind: "execution_validation_v1", values: [7] },
@@ -961,6 +964,7 @@ test("explicit resume reclaims the research slot and adopts retained work withou
         }),
     );
     const researchId = await f.t.mutation(internal.execution.missions.start, {
+        generationBackend: { id: "convex-agent", version: 2 },
         runId: f.runId,
         definitionId: "execution_validation_v1",
         scope: { kind: "execution_validation_v1", values: [7] },
@@ -1072,6 +1076,7 @@ test("delegation cannot take over an unfinished mission assigned to another busi
         ctx.db.patch(f.runId, { executionStatus: "running" }),
     );
     const existing = await f.t.mutation(internal.execution.missions.start, {
+        generationBackend: { id: "convex-agent", version: 2 },
         runId: f.runId,
         definitionId: "execution_validation_v1",
         scope: { kind: "execution_validation_v1", values: [3, 7] },

@@ -2,6 +2,7 @@ import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
     internalMutation,
+    internalQuery,
     type MutationCtx,
     mutation,
     type QueryCtx,
@@ -25,8 +26,8 @@ import {
     agentDefinitionIdValidator,
     agentScopeValidator,
 } from "./agentSchemas";
-import { requireDossierAuthority } from "./authority";
-import { executionError } from "./errors";
+import { requireDossierAuthority, requireMissionAuthority } from "./authority";
+import { executionError, executionFailureCode } from "./errors";
 import {
     HISTORY_PAGE_SIZE,
     MAX_CONTEXT_BYTES,
@@ -191,9 +192,9 @@ export const submit = mutation({
 });
 
 export const claimTurn = internalMutation({
-    args: { runId: v.id("researchRuns") },
+    args: { runId: v.id("researchRuns"), single: v.optional(v.boolean()) },
     returns: v.union(v.id("agentConversationTurns"), v.null()),
-    handler: async (ctx, { runId }) => {
+    handler: async (ctx, { runId, single }) => {
         await requireDossierAuthority(ctx, runId);
         const conversation = await conversationForRun(ctx, runId);
         if (!conversation) return null;
@@ -203,7 +204,7 @@ export const claimTurn = internalMutation({
             .withIndex("by_run_and_status", (q) =>
                 q.eq("runId", runId).eq("status", "queued"),
             )
-            .take(HISTORY_PAGE_SIZE);
+            .take(single ? 1 : HISTORY_PAGE_SIZE);
         if (!messages.length) return null;
         const turnId = await ctx.db.insert("agentConversationTurns", {
             runId,
@@ -515,7 +516,7 @@ const startTurnResult = v.union(
     v.null(),
 );
 
-/** Claim, definition binding and Workflow admission commit as one operation for business callers. */
+/** Claims only instructions that fit the assembled context before admitting the mission. */
 export const startTurn = internalMutation({
     args: {
         runId: v.id("researchRuns"),
@@ -531,9 +532,11 @@ export const startTurn = internalMutation({
             !definition.conversationReply
         )
             throw executionError("conversation_definition_required");
+        const existingTurnId = (await conversationForRun(ctx, args.runId))
+            ?.activeTurnId;
         const turnId = await ctx.runMutation(
             internal.execution.conversations.claimTurn,
-            { runId: args.runId },
+            { runId: args.runId, single: true },
         );
         if (!turnId) return null;
         const turn = await ctx.db.get(turnId);
@@ -554,6 +557,146 @@ export const startTurn = internalMutation({
             expectedGeneration: turn.generation,
             simulation: args.simulation,
         });
+        const initialContext = await ctx.runQuery(
+            internal.execution.context.build,
+            { missionId, expectedGeneration: turn.generation },
+        );
+        if (initialContext.kind === "blocked")
+            throw executionError(initialContext.code);
+        for (
+            let count = 1;
+            !existingTurnId && count < HISTORY_PAGE_SIZE;
+            count++
+        ) {
+            try {
+                if (
+                    !(await ctx.runMutation(
+                        internal.execution.conversations.appendQueuedToTurn,
+                        { missionId, expectedGeneration: turn.generation },
+                    ))
+                )
+                    break;
+            } catch (error) {
+                if (executionFailureCode(error) !== "context_capacity")
+                    throw error;
+                break;
+            }
+        }
         return { turnId, missionId };
+    },
+});
+
+/** Exact earlier turns remain available without exposing inputs queued for a later turn. */
+export const historyForMission = internalQuery({
+    args: {
+        missionId: v.id("agentMissions"),
+        expectedGeneration: v.number(),
+        cursor: v.optional(v.string()),
+    },
+    returns: v.string(),
+    handler: async (ctx, args) => {
+        const { mission } = await requireMissionAuthority(
+            ctx,
+            args.missionId,
+            args.expectedGeneration,
+        );
+        let position: { cursor: string | null; offset: number } = {
+            cursor: null,
+            offset: 0,
+        };
+        if (args.cursor) {
+            try {
+                position = JSON.parse(args.cursor);
+            } catch {
+                throw executionError("history_cursor_invalid");
+            }
+            if (
+                !position ||
+                !(
+                    position.cursor === null ||
+                    typeof position.cursor === "string"
+                ) ||
+                !Number.isSafeInteger(position.offset) ||
+                position.offset < 0
+            )
+                throw executionError("history_cursor_invalid");
+        }
+        const page = await ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_run_and_status", (q) =>
+                q.eq("runId", mission.runId).eq("status", "processed"),
+            )
+            .paginate({ numItems: 1, cursor: position.cursor });
+        const message = page.page[0];
+        if (!message)
+            return JSON.stringify({ entries: [], continueCursor: null });
+        const conversation = await conversationForRun(ctx, mission.runId);
+        if (!conversation) throw executionError("conversation_unavailable");
+        const [text] = await readConversationMessages(
+            ctx,
+            conversation.storageRef,
+            [message.storageMessageRef],
+        );
+        if (text === undefined || position.offset > text.length)
+            throw executionError("history_cursor_invalid");
+        const content = text.slice(position.offset, position.offset + 8192);
+        const offset = position.offset + content.length;
+        const next =
+            offset < text.length
+                ? { cursor: position.cursor, offset }
+                : page.isDone
+                  ? null
+                  : { cursor: page.continueCursor, offset: 0 };
+        return JSON.stringify({
+            entries: [
+                {
+                    messageId: message._id,
+                    turnId: message.turnId,
+                    role: message.role,
+                    offset: position.offset,
+                    totalCharacters: text.length,
+                    content,
+                },
+            ],
+            continueCursor: next ? JSON.stringify(next) : null,
+        });
+    },
+});
+
+/** Each tentative delivery is a subtransaction, so capacity rejection leaves it queued. */
+export const appendQueuedToTurn = internalMutation({
+    args: { missionId: v.id("agentMissions"), expectedGeneration: v.number() },
+    returns: v.boolean(),
+    handler: async (ctx, args) => {
+        const { mission } = await requireMissionAuthority(
+            ctx,
+            args.missionId,
+            args.expectedGeneration,
+        );
+        const turn = mission.conversationTurnId
+            ? await ctx.db.get(mission.conversationTurnId)
+            : null;
+        if (turn?.status !== "active")
+            throw executionError("active_turn_required");
+        const conversation = await ctx.db.get(turn.conversationId);
+        if (!conversation) throw executionError("conversation_unavailable");
+        const next = await ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_run_and_status", (q) =>
+                q.eq("runId", mission.runId).eq("status", "queued"),
+            )
+            .first();
+        if (!next) return false;
+        await ctx.db.patch(next._id, { status: "active", turnId: turn._id });
+        await ctx.db.patch(turn._id, { messageCount: turn.messageCount + 1 });
+        await ctx.db.patch(conversation._id, {
+            queuedCount: conversation.queuedCount - 1,
+        });
+        const context = await ctx.runQuery(
+            internal.execution.context.build,
+            args,
+        );
+        if (context.kind === "blocked") throw executionError(context.code);
+        return true;
     },
 });

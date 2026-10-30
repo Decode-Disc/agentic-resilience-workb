@@ -364,33 +364,43 @@ test("interruption after Agent message storage keeps the common result and resum
 });
 
 test("new invocations pin the default generation backend without changing mission identity", async () => {
-    const { t, args } = await seedInspectedEvidence();
-    const missionId = await t.mutation(internal.execution.missions.start, {
-        runId: args.runId,
-        corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
-        requestKey: "backend-default",
-        expectedGeneration: args.executionGeneration,
-    });
-    const begun = await t.mutation(internal.execution.invocations.begin, {
-        missionId,
-        expectedGeneration: args.executionGeneration,
-        taskKey: "turn",
-        provenance: "live",
-    });
-    if (begun.kind !== "ready") throw new Error("Expected invocation");
-    const invocation = await t.run((ctx) => ctx.db.get(begun.invocationId));
-    expect(invocation).toMatchObject({
-        generationBackend: { id: "convex-agent", version: 2 },
-    });
-    expect(
-        await t.mutation(internal.execution.invocations.begin, {
+    const routing = await import("@convex/integrations/modelRouting");
+    const { nativePiFixtureRoute } = await import(
+        "@/__tests__/setup/pi-native"
+    );
+    const previous = routing.missionRoutes.saved_material_inspection_v1;
+    routing.missionRoutes.saved_material_inspection_v1 = nativePiFixtureRoute;
+    try {
+        const { t, args } = await seedInspectedEvidence();
+        const missionId = await t.mutation(internal.execution.missions.start, {
+            runId: args.runId,
+            corpusRevisionId: args.corpusRevisionId,
+            definitionId: "saved_material_inspection_v1",
+            requestKey: "backend-default",
+            expectedGeneration: args.executionGeneration,
+        });
+        const begun = await t.mutation(internal.execution.invocations.begin, {
             missionId,
             expectedGeneration: args.executionGeneration,
             taskKey: "turn",
             provenance: "live",
-        }),
-    ).toEqual(begun);
+        });
+        if (begun.kind !== "ready") throw new Error("Expected invocation");
+        const invocation = await t.run((ctx) => ctx.db.get(begun.invocationId));
+        expect(invocation).toMatchObject({
+            generationBackend: { id: "pi-durable", version: 1 },
+        });
+        expect(
+            await t.mutation(internal.execution.invocations.begin, {
+                missionId,
+                expectedGeneration: args.executionGeneration,
+                taskKey: "turn",
+                provenance: "live",
+            }),
+        ).toEqual(begun);
+    } finally {
+        routing.missionRoutes.saved_material_inspection_v1 = previous;
+    }
 });
 
 async function liveBackendTurn(backend: { id: string; version: number }) {

@@ -20,10 +20,12 @@ import {
 import {
     agentBackendValidator,
     agentDefinitionIdValidator,
+    DEFAULT_AGENT_BACKEND,
     EXECUTION_WINDOW_MS,
     HISTORY_PAGE_SIZE,
 } from "./executionProtocol";
 import { isRecoverableInterruption, missionScope } from "./missionData";
+import { cancelPiWake, schedulePiMission } from "./piControl";
 
 export const start = internalMutation({
     args: {
@@ -135,10 +137,13 @@ export const start = internalMutation({
             await ctx.db.patch(run._id, {
                 executionHarnessDeadlineAt: deadlineAt,
             });
+        const backend = args.generationBackend ?? DEFAULT_AGENT_BACKEND;
+        if (backend.id === "pi-durable" && backend.version !== 1)
+            throw executionError("generation_backend_unknown");
         const id = await ctx.db.insert("agentMissions", {
-            ...(args.generationBackend
-                ? { generationBackend: args.generationBackend }
-                : {}),
+            executionRuntime:
+                backend.id === "pi-durable" ? "pi-durable" : undefined,
+            generationBackend: backend,
             runId: run._id,
             protocolVersion: 3,
             executionScope,
@@ -246,31 +251,66 @@ export const resume = internalMutation({
             });
             if (retained.workflowId)
                 await workflow.cancel(ctx, retained.workflowId as WorkflowId);
-            for (const status of [
-                "pending",
-                "running",
-                "observed",
-                "waiting",
-            ] as const) {
-                const pending = await ctx.db
-                    .query("agentOperationRequests")
-                    .withIndex("by_mission_and_status", (q) =>
-                        q.eq("missionId", retained._id).eq("status", status),
-                    )
-                    .take(5);
-                if (pending.length > 4)
-                    throw executionError("continuation_capacity");
-                for (const request of pending)
-                    await ctx.db.patch(request._id, {
-                        ...(request.status === "pending"
-                            ? { expectedGeneration: args.expectedGeneration }
-                            : { adoptionGeneration: args.expectedGeneration }),
-                    });
+            if (retained.executionRuntime === "pi-durable") {
+                if (retained.piWakeId)
+                    await cancelPiWake(ctx, retained.piWakeId);
+                await ctx.db.patch(retained._id, {
+                    piRebinding: true,
+                    piWakeId: undefined,
+                    piWakeAt: undefined,
+                    piWakeToken: undefined,
+                    piActiveWriter: undefined,
+                });
+                await ctx.scheduler.runAfter(
+                    0,
+                    internal.execution.piControl.rebind,
+                    {
+                        missionId: retained._id,
+                        expectedGeneration: args.expectedGeneration,
+                        stage: 0,
+                        cursor: null,
+                    },
+                );
+            } else {
+                for (const status of [
+                    "pending",
+                    "running",
+                    "observed",
+                    "waiting",
+                ] as const) {
+                    const pending = await ctx.db
+                        .query("agentOperationRequests")
+                        .withIndex("by_mission_and_status", (q) =>
+                            q
+                                .eq("missionId", retained._id)
+                                .eq("status", status),
+                        )
+                        .take(5);
+                    if (pending.length > 4)
+                        throw executionError("continuation_capacity");
+                    for (const request of pending)
+                        await ctx.db.patch(request._id, {
+                            ...(request.status === "pending"
+                                ? {
+                                      expectedGeneration:
+                                          args.expectedGeneration,
+                                  }
+                                : {
+                                      adoptionGeneration:
+                                          args.expectedGeneration,
+                                  }),
+                        });
+                }
             }
             const last = retained.lastInvocationId
                 ? await ctx.db.get(retained.lastInvocationId)
                 : null;
-            if (last?.status === "started") {
+            if (
+                last?.status === "started" ||
+                (retained.executionRuntime === "pi-durable" &&
+                    last?.status === "returned" &&
+                    last.receivedOutputJson)
+            ) {
                 if (last.providerCallId && !last.receivedOutputJson)
                     throw executionError("attempt_outcome_unknown");
                 if (last.receivedOutputJson) {
@@ -308,6 +348,16 @@ export const resume = internalMutation({
             (!localBrowserFixturesEnabled() || run.purpose !== "browser_test")
         )
             throw executionError("simulation_not_authorized");
+        if (mission.executionRuntime === "pi-durable") {
+            if (
+                mission.generationBackend?.id !== "pi-durable" ||
+                mission.generationBackend.version !== 1
+            )
+                throw executionError("generation_backend_unknown");
+            await ctx.db.patch(mission._id, { provenance });
+            await schedulePiMission(ctx, mission._id, args.expectedGeneration);
+            return `pi:${mission._id}`;
+        }
         if (mission.workflowId) return mission.workflowId;
         const id = await workflow.start(
             ctx,

@@ -37,6 +37,7 @@ async function liveInvocationFixture(requestKey: string) {
     const fixture = await seedInspectedEvidence();
     const { t, args } = fixture;
     const missionId = await t.mutation(internal.execution.missions.start, {
+        generationBackend: { id: "convex-agent", version: 2 },
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
         definitionId: "saved_material_inspection_v1",

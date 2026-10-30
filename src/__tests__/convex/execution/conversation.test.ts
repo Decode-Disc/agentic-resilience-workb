@@ -148,6 +148,7 @@ test("a conversational mission survives research generation changes and publishe
     );
     if (!turnId) throw new Error("Expected active turn");
     const missionId = await f.t.mutation(internal.execution.missions.start, {
+        generationBackend: { id: "convex-agent", version: 2 },
         runId: f.runId,
         definitionId: "conversation_validation_v1",
         scope: { kind: "conversation_validation_v1" },
@@ -213,6 +214,7 @@ test("steering between observation and adoption prevents stale publication and r
     );
     if (!turnId) throw new Error("Expected active turn");
     const missionId = await f.t.mutation(internal.execution.missions.start, {
+        generationBackend: { id: "convex-agent", version: 2 },
         runId: f.runId,
         definitionId: "conversation_validation_v1",
         scope: { kind: "conversation_validation_v1" },
@@ -401,6 +403,7 @@ test("steering beyond one history page preserves every instruction and completes
     );
     if (!turnId) throw new Error("Expected active turn");
     const missionId = await f.t.mutation(internal.execution.missions.start, {
+        generationBackend: { id: "convex-agent", version: 2 },
         runId: f.runId,
         definitionId: "conversation_validation_v1",
         scope: { kind: "conversation_validation_v1" },
@@ -488,6 +491,7 @@ test("a steer exceeding the assembled context rolls back without stranding the a
     );
     if (!turnId) throw new Error("Expected active turn");
     const missionId = await f.t.mutation(internal.execution.missions.start, {
+        generationBackend: { id: "convex-agent", version: 2 },
         runId: f.runId,
         definitionId: "conversation_validation_v1",
         scope: { kind: "conversation_validation_v1" },

@@ -15,25 +15,24 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { ToolSet } from "ai";
 import {
     APICallError,
-    asSchema,
     generateText,
     isStepCount,
     JSONParseError,
-    jsonSchema,
     NoObjectGeneratedError,
     Output,
     ToolLoopAgent,
-    tool,
     wrapLanguageModel,
 } from "ai";
-import { convexToZod } from "convex-helpers/server/zod4";
-import { type ZodType, z } from "zod";
+import type { ZodType } from "zod";
+import { createAgentTools } from "./modelInput";
+
+export { agentInputByteLength, agentOperationInputSchema } from "./modelInput";
+
 import type { ModelRoute } from "./modelRouting";
 import {
     MODEL_ATTEMPT_TIMEOUT_MS,
-    MODEL_MAX_INPUT_PRICE_PER_MILLION,
-    MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
     MODEL_MAX_OUTPUT_TOKENS,
+    routedModelSettings,
 } from "./modelRouting";
 
 export type AttemptReceipt = ModelAttemptReceipt;
@@ -87,7 +86,49 @@ export function rejectedOutputDiagnostic(
     };
 }
 
-function readReportedCost(value: unknown): number | undefined {
+/** Applies the same terminal-response acceptance policy after each SDK has normalized its reply. */
+export function generationObservation(
+    receipt: AttemptReceipt,
+    reply: Pick<
+        Extract<AgentGenerationObservation, { status: "succeeded" }>,
+        "assistantOutput" | "requests"
+    > & { finishReason: string; argumentsError?: string },
+): AgentGenerationObservation {
+    if (receipt.httpStatus !== undefined && receipt.httpStatus >= 400)
+        return httpResponseFailure(receipt, receipt.httpStatus);
+    if (reply.argumentsError)
+        return {
+            ...receipt,
+            status: "failed",
+            errorCode: "invalid_output",
+            retryable: true,
+            outputDiagnostic: rejectedOutputDiagnostic(
+                "tool_arguments_invalid",
+                reply.argumentsError,
+                reply.finishReason,
+            ),
+        };
+    if (reply.finishReason === "stop" || reply.finishReason === "tool-calls")
+        return {
+            ...receipt,
+            ...reply,
+            finishReason: reply.finishReason,
+            status: "succeeded",
+        };
+    return {
+        ...receipt,
+        status: "failed",
+        errorCode: "invalid_output",
+        retryable: true,
+        outputDiagnostic: rejectedOutputDiagnostic(
+            "finish_reason_invalid",
+            reply.assistantOutput,
+            reply.finishReason,
+        ),
+    };
+}
+
+export function readReportedCost(value: unknown): number | undefined {
     if (!value || typeof value !== "object" || !("cost" in value))
         return undefined;
     return typeof value.cost === "number" &&
@@ -140,66 +181,73 @@ function readOptionalNumber(value: unknown): number | undefined {
     return typeof value === "number" ? value : undefined;
 }
 
+/** Shared HTTP bound for both generation engines; redirects cannot issue an unadmitted request. */
+export function createBoundedModelFetch(
+    dependencies: Pick<AttemptDependencies, "fetch" | "onResponse">,
+    state: Pick<
+        BoundedTransportState,
+        "httpStatus" | "retryAfterAt" | "responseTooLarge"
+    >,
+): typeof fetch {
+    return async (url, init) => {
+        const response = await (dependencies.fetch ?? globalThis.fetch)(url, {
+            ...init,
+            redirect: "error",
+        });
+        state.httpStatus = response.status;
+        state.retryAfterAt = providerRetryAfterAt(
+            response.headers.get("retry-after"),
+            Date.now(),
+        );
+        const chunks: Uint8Array[] = [];
+        let bytes = 0;
+        const reader = response.body?.getReader();
+        if (reader) {
+            try {
+                while (true) {
+                    const part = await reader.read();
+                    if (part.done) break;
+                    bytes += part.value.byteLength;
+                    if (bytes > 1024 * 1024) {
+                        state.responseTooLarge = true;
+                        await reader.cancel();
+                        throw new Error(
+                            "Structured provider response exceeds its byte bound",
+                        );
+                    }
+                    chunks.push(part.value);
+                }
+            } finally {
+                reader.releaseLock();
+            }
+        }
+        const body = new Uint8Array(bytes);
+        let offset = 0;
+        for (const chunk of chunks) {
+            body.set(chunk, offset);
+            offset += chunk.byteLength;
+        }
+        dependencies.onResponse?.({
+            status: response.status,
+            body: new TextDecoder().decode(body),
+            requestId: response.headers.get("x-request-id") ?? undefined,
+            generationId: response.headers.get("x-generation-id") ?? undefined,
+        });
+        return new Response(body, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+        });
+    };
+}
+
 function createBoundedProvider(
     dependencies: AttemptDependencies,
     state: BoundedTransportState,
 ) {
     return createOpenRouter({
         apiKey: dependencies.apiKey,
-        fetch: async (url, init) => {
-            const response = await (dependencies.fetch ?? globalThis.fetch)(
-                url,
-                {
-                    ...init,
-                    redirect: "error",
-                },
-            );
-            state.httpStatus = response.status;
-            state.retryAfterAt = providerRetryAfterAt(
-                response.headers.get("retry-after"),
-                Date.now(),
-            );
-            const chunks: Uint8Array[] = [];
-            let bytes = 0;
-            const reader = response.body?.getReader();
-            if (reader) {
-                try {
-                    while (true) {
-                        const part = await reader.read();
-                        if (part.done) break;
-                        bytes += part.value.byteLength;
-                        if (bytes > 1024 * 1024) {
-                            state.responseTooLarge = true;
-                            await reader.cancel();
-                            throw new Error(
-                                "Structured provider response exceeds its byte bound",
-                            );
-                        }
-                        chunks.push(part.value);
-                    }
-                } finally {
-                    reader.releaseLock();
-                }
-            }
-            const body = new Uint8Array(bytes);
-            let offset = 0;
-            for (const chunk of chunks) {
-                body.set(chunk, offset);
-                offset += chunk.byteLength;
-            }
-            dependencies.onResponse?.({
-                status: response.status,
-                body: new TextDecoder().decode(body),
-                requestId: response.headers.get("x-request-id") ?? undefined,
-                generationId:
-                    response.headers.get("x-generation-id") ?? undefined,
-            });
-            return new Response(body, {
-                status: response.status,
-                statusText: response.statusText,
-                headers: response.headers,
-            });
-        },
+        fetch: createBoundedModelFetch(dependencies, state),
     });
 }
 
@@ -209,19 +257,7 @@ function createRoutedModel(
     dependencies: AttemptDependencies,
     state: BoundedTransportState,
 ) {
-    const settings = {
-        provider: {
-            only: [route.provider],
-            require_parameters: true,
-            allow_fallbacks: false,
-            max_price: {
-                prompt: MODEL_MAX_INPUT_PRICE_PER_MILLION,
-                completion: MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
-            },
-        },
-        reasoning: { enabled: false, effort: "none" as const, exclude: true },
-        usage: { include: true },
-    };
+    const settings = routedModelSettings(route);
     return wrapLanguageModel({
         model: provider.chat(route.model, settings),
         middleware: {
@@ -298,35 +334,17 @@ function createRoutedModel(
                             },
                         },
                     );
-                    const finishReason = result.finishReason.unified;
-                    const observation: AgentGenerationObservation =
-                        finishReason === "stop" || finishReason === "tool-calls"
-                            ? {
-                                  ...receipt,
-                                  status: "succeeded",
-                                  finishReason,
-                                  assistantOutput: text,
-                                  requests: content
-                                      .filter(
-                                          (part) => part.type === "tool-call",
-                                      )
-                                      .map((part) => ({
-                                          callId: part.toolCallId ?? "",
-                                          name: part.toolName ?? "",
-                                          inputJson: part.input ?? "null",
-                                      })),
-                              }
-                            : {
-                                  ...receipt,
-                                  status: "failed",
-                                  errorCode: "invalid_output",
-                                  retryable: true,
-                                  outputDiagnostic: rejectedOutputDiagnostic(
-                                      "finish_reason_invalid",
-                                      text,
-                                      finishReason,
-                                  ),
-                              };
+                    const observation = generationObservation(receipt, {
+                        finishReason: result.finishReason.unified,
+                        assistantOutput: text,
+                        requests: content
+                            .filter((part) => part.type === "tool-call")
+                            .map((part) => ({
+                                callId: part.toolCallId ?? "",
+                                name: part.toolName ?? "",
+                                inputJson: part.input ?? "null",
+                            })),
+                    });
                     state.turn.result = observation;
                     try {
                         await dependencies.onObservation?.(observation);
@@ -419,6 +437,29 @@ function createAttemptReceipt(
     };
 }
 
+function httpResponseFailure(
+    receipt: AttemptReceipt,
+    status: number | undefined,
+): AttemptFailure {
+    const access = status === 401 || status === 402 || status === 403;
+    const transient =
+        receipt.httpStatus !== undefined &&
+        [408, 429, 500, 502, 503, 504].includes(status ?? 0);
+    return {
+        ...receipt,
+        status: "failed",
+        errorCode:
+            receipt.httpStatus === undefined
+                ? "transport_outcome_unknown"
+                : access
+                  ? "access_unavailable"
+                  : transient
+                    ? "transport_unavailable"
+                    : "request_invalid",
+        retryable: transient,
+    };
+}
+
 function preflightFailure(
     route: InvocationRoute,
     dependencies: AttemptDependencies,
@@ -508,26 +549,8 @@ function failedAttemptFromError(args: {
             cachedInputTokens: error.usage?.inputTokenDetails.cacheReadTokens,
             reportedCost: readReportedCost(error.usage?.raw),
         };
-    if (APICallError.isInstance(error)) {
-        const status = error.statusCode;
-        const access = status === 401 || status === 402 || status === 403;
-        const transient =
-            state.httpStatus !== undefined &&
-            [408, 429, 500, 502, 503, 504].includes(status ?? 0);
-        return {
-            ...receipt,
-            status: "failed",
-            errorCode:
-                state.httpStatus === undefined
-                    ? "transport_outcome_unknown"
-                    : access
-                      ? "access_unavailable"
-                      : transient
-                        ? "transport_unavailable"
-                        : "request_invalid",
-            retryable: transient,
-        };
-    }
+    if (APICallError.isInstance(error))
+        return httpResponseFailure(receipt, error.statusCode);
     const errorName =
         typeof error === "object" && error !== null && "name" in error
             ? error.name
@@ -606,97 +629,6 @@ export async function invokeOneShot<T>(args: {
     }
 }
 
-function modelInputSchema<Schema extends z.ZodObject>(
-    validator: Schema,
-    convexIdPaths: readonly string[] = [],
-) {
-    const strictValidator = validator.strict();
-    type Input = z.output<typeof strictValidator>;
-    const createJsonSchema = () => {
-        const convertedIdPaths = new Set<string>();
-        const schema = z.toJSONSchema(strictValidator, {
-            target: "draft-7",
-            unrepresentable: "any",
-            override: ({ zodSchema, jsonSchema, path }) => {
-                if (!(zodSchema instanceof z.ZodCustom)) return;
-                const idPath = path.join(".");
-                const fieldPath = idPath.replace(/^properties\./, "");
-                if (!convexIdPaths.includes(fieldPath))
-                    throw new Error(
-                        `Unsupported custom model input schema at ${idPath}`,
-                    );
-                convertedIdPaths.add(fieldPath);
-                jsonSchema.type = "string";
-            },
-        });
-        if (
-            convertedIdPaths.size !== convexIdPaths.length ||
-            convexIdPaths.some((path) => !convertedIdPaths.has(path))
-        )
-            throw new Error("Canonical Convex ID schema was not converted");
-        return schema;
-    };
-
-    return jsonSchema<Input>(createJsonSchema, {
-        validate: (value) => {
-            const parsed = strictValidator.safeParse(value);
-            return parsed.success
-                ? { success: true, value: parsed.data }
-                : { success: false, error: parsed.error };
-        },
-    });
-}
-
-function createAgentTools(
-    operations: Record<
-        string,
-        Pick<AgentOperationDefinition, "description" | "inputValidator">
-    >,
-): ToolSet {
-    return Object.fromEntries(
-        Object.entries(operations).map(([name, operation]) => [
-            name,
-            tool({
-                description: operation.description,
-                inputSchema: modelInputSchema(
-                    convexToZod(operation.inputValidator),
-                    Object.entries(operation.inputValidator.fields)
-                        .filter(([, validator]) => validator.kind === "id")
-                        .map(([field]) => field),
-                ),
-            }),
-        ]),
-    );
-}
-
-/** Measures the actual provider envelope after canonical schemas have been adapted. */
-export async function agentInputByteLength(args: {
-    instructions: string;
-    prompt: string;
-    operations: Record<
-        string,
-        Pick<AgentOperationDefinition, "description" | "inputValidator">
-    >;
-}): Promise<number> {
-    const tools = await Promise.all(
-        Object.entries(createAgentTools(args.operations)).map(
-            async ([name, operation]) => ({
-                name,
-                description: operation.description,
-                inputSchema: await asSchema<unknown>(operation.inputSchema)
-                    .jsonSchema,
-            }),
-        ),
-    );
-    return new TextEncoder().encode(
-        JSON.stringify({
-            instructions: args.instructions,
-            prompt: args.prompt,
-            tools,
-        }),
-    ).length;
-}
-
 /** Runs one authorized model turn and returns tool requests for persisted dispatch. */
 export async function invokeDeferredAgentTurn(args: {
     route?: AuthorizedAgentRoute;
@@ -772,3 +704,5 @@ export async function invokeDeferredAgentTurn(args: {
         });
     }
 }
+
+export { routedModelSettings } from "./modelRouting";

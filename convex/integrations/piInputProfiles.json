@@ -1,0 +1,16 @@
+{
+    "generatedBy": "UPDATE_PI_INPUT_PROFILES=1 pnpm exec vitest run src/__tests__/convex/execution/pi-input-capacity.test.ts --maxWorkers=1",
+    "versions": {
+        "pi-ai": "1.4.0",
+        "pi-durable": "1.4.0",
+        "chord": "1.4.0"
+    },
+    "profiles": {
+        "9165509365c39051ddada0ff43ff1c83f944c76dabc74940257be2853c3f25ff": 3998,
+        "3c07272856deb97dcdba0bb7fbf7304cf364f2ca8590de61de04316a1e5b9ece": 4540,
+        "4a9e644af61e46e09583085d7f9fdb05d2bfea35c5665c403940d538498696d7": 2013,
+        "9170fe1db662c5d7cbb26c50e5b3bf6eb0e59331c4c9107644757d4a8629d8d4": 2509,
+        "85b08386d444f246619e9ac5d0512cdae9ab5dfabafcd49480174c9565ad31ec": 2408,
+        "d1b93f80505bb1fcdab33328e97da5710be107fc0205e3de4e1a5bff2d2a17f1": 2950
+    }
+}

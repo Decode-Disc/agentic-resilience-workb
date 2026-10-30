@@ -93,6 +93,9 @@ import type * as execution_missionWorkflow from "../execution/missionWorkflow.js
 import type * as execution_missions from "../execution/missions.js";
 import type * as execution_modelActions from "../execution/modelActions.js";
 import type * as execution_operations from "../execution/operations.js";
+import type * as execution_piControl from "../execution/piControl.js";
+import type * as execution_piStore from "../execution/piStore.js";
+import type * as execution_piWorker from "../execution/piWorker.js";
 import type * as execution_researchControl from "../execution/researchControl.js";
 import type * as execution_simulation from "../execution/simulation.js";
 import type * as fixtureManifestStore from "../fixtureManifestStore.js";
@@ -105,8 +108,12 @@ import type * as integrations_evidenceNormalization from "../integrations/eviden
 import type * as integrations_exa from "../integrations/exa.js";
 import type * as integrations_exaContentsClient from "../integrations/exaContentsClient.js";
 import type * as integrations_exaEvidence from "../integrations/exaEvidence.js";
+import type * as integrations_modelInput from "../integrations/modelInput.js";
 import type * as integrations_modelRouting from "../integrations/modelRouting.js";
 import type * as integrations_modelTransport from "../integrations/modelTransport.js";
+import type * as integrations_piMission from "../integrations/piMission.js";
+import type * as integrations_piStorage from "../integrations/piStorage.js";
+import type * as integrations_piToolArguments from "../integrations/piToolArguments.js";
 import type * as integrations_publicPdfEvidence from "../integrations/publicPdfEvidence.js";
 import type * as integrations_sec from "../integrations/sec.js";
 import type * as integrations_secEvidence from "../integrations/secEvidence.js";
@@ -238,6 +245,9 @@ declare const fullApi: ApiFromModules<{
   "execution/missions": typeof execution_missions;
   "execution/modelActions": typeof execution_modelActions;
   "execution/operations": typeof execution_operations;
+  "execution/piControl": typeof execution_piControl;
+  "execution/piStore": typeof execution_piStore;
+  "execution/piWorker": typeof execution_piWorker;
   "execution/researchControl": typeof execution_researchControl;
   "execution/simulation": typeof execution_simulation;
   fixtureManifestStore: typeof fixtureManifestStore;
@@ -250,8 +260,12 @@ declare const fullApi: ApiFromModules<{
   "integrations/exa": typeof integrations_exa;
   "integrations/exaContentsClient": typeof integrations_exaContentsClient;
   "integrations/exaEvidence": typeof integrations_exaEvidence;
+  "integrations/modelInput": typeof integrations_modelInput;
   "integrations/modelRouting": typeof integrations_modelRouting;
   "integrations/modelTransport": typeof integrations_modelTransport;
+  "integrations/piMission": typeof integrations_piMission;
+  "integrations/piStorage": typeof integrations_piStorage;
+  "integrations/piToolArguments": typeof integrations_piToolArguments;
   "integrations/publicPdfEvidence": typeof integrations_publicPdfEvidence;
   "integrations/sec": typeof integrations_sec;
   "integrations/secEvidence": typeof integrations_secEvidence;

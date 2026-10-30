@@ -37,6 +37,7 @@ import {
     operationIdentityScope,
     retainedOperationPin,
 } from "./missionData";
+import { schedulePiMission } from "./piControl";
 
 type Outcome = Infer<typeof operationOutcomeValidator>;
 type Input = Infer<typeof requestInputValidator>;
@@ -705,7 +706,8 @@ export const recordResult = internalMutation({
             );
             const progress =
                 request.input.kind === "consult_mission_state" ||
-                request.input.kind === "consult_run_state"
+                request.input.kind === "consult_run_state" ||
+                request.input.kind === "consult_conversation"
                     ? {}
                     : definition.progress(mission, outcome);
             if (
@@ -745,6 +747,14 @@ export const recordResult = internalMutation({
             "operation_completed",
             outcome.kind === "success" ? undefined : outcome.code,
         );
+        if (
+            mission?.executionRuntime === "pi-durable" &&
+            request.status === "waiting" &&
+            !request.outcome
+        ) {
+            await ctx.db.patch(mission._id, { piResultWakePending: true });
+            await schedulePiMission(ctx, mission._id, args.expectedGeneration);
+        }
         return outcome;
     },
 });

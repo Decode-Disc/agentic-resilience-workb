@@ -6,7 +6,10 @@ import { getAgentDefinition } from "./agentCatalog";
 import { recordMissionEvent, requireMissionAuthority } from "./authority";
 import { requireInstructionVersion } from "./conversations";
 import { executionError, executionFailureCode } from "./errors";
-import { operationOutcomeValidator } from "./executionProtocol";
+import {
+    HISTORICAL_AGENT_BACKEND,
+    operationOutcomeValidator,
+} from "./executionProtocol";
 import { isRecoverableInterruption } from "./missionData";
 
 /** Only an admitted business operation can grant a child mission; models never select a runtime. */
@@ -74,6 +77,8 @@ export const startChild = internalMutation({
             childId = await ctx.runMutation(internal.execution.missions.start, {
                 runId: run._id,
                 definitionId: grant.definitionId,
+                generationBackend:
+                    mission.generationBackend ?? HISTORICAL_AGENT_BACKEND,
                 scope: grant.scope,
                 expectedGeneration: run.executionGeneration,
                 requestKey: `handoff:${request._id}`,

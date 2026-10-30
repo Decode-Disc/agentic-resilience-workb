@@ -267,16 +267,19 @@ export const recordAttempt = internalMutation({
                 mission.runId !== args.runId ||
                 invocation.corpusRevisionId !== args.corpusRevisionId ||
                 args.executionGeneration !== invocation.generation ||
-                invocation.generation !== mission.generation ||
                 args.workflowVersion !== mission.definitionVersion ||
-                args.operation !== "agent_reasoning" ||
-                args.stepKey !== "agent_reasoning" ||
+                args.operation !==
+                    (invocation.purpose === "compaction"
+                        ? "agent_compaction"
+                        : "agent_reasoning") ||
+                args.stepKey !== args.operation ||
                 args.attempt !== 1 ||
                 args.inputHash !== sha256Hex(invocation.inputJson) ||
                 args.operationKey !==
                     `mission:${mission._id}:invocation:${invocation._id}:attempt:1`
             )
                 throw sourcePreparationError("qualification_attempt_invalid");
+            // Factual settlement retains the original attempt; admission alone needs the current generation.
             if (args.status === "started")
                 await requireMissionAuthority(
                     ctx,

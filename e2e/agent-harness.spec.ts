@@ -21,7 +21,7 @@ for (const viewport of [
             if (message.type() === "error") errors.push(message.text());
         });
         await admitAnalyst(page);
-        const key = `agent-harness-${viewport.name}`;
+        const key = `pi-agent-harness-${viewport.name}`;
         const missionId = runConvexJson<string>("execution/fixtures:start", {
             fixtureKey: key,
         });
@@ -34,6 +34,12 @@ for (const viewport of [
             .toMatchObject({ status: "completed" });
         const snapshot = inspect();
         expect(snapshot.provenance).toBe("simulation");
+        expect(snapshot.generationBackends).toEqual(
+            Array.from({ length: snapshot.invocationCount }, () => ({
+                id: "pi-durable",
+                version: 1,
+            })),
+        );
         expect(snapshot.operations).toEqual([
             "consult_mission_state",
             "search_available_material",

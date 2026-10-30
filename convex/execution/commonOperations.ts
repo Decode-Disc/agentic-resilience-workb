@@ -1,6 +1,7 @@
 import { internal } from "@convex/_generated/api";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import {
+    consultConversationInputValidator,
     consultMissionStateInputValidator,
     consultRunStateInputValidator,
 } from "./agentSchemas";
@@ -81,7 +82,30 @@ export const consultRunStateOperation: AgentOperationDefinition = {
     },
 };
 
+const consultConversation: AgentOperationDefinition = {
+    ...consultMissionStateOperation,
+    description:
+        "Read exact prior processed conversation messages in bounded fragments; queued instructions are excluded.",
+    inputValidator: consultConversationInputValidator,
+    async execute(ctx, args) {
+        if (!args.missionId || args.input.kind !== "consult_conversation")
+            return { kind: "refused", code: "mission_required" };
+        return {
+            kind: "success",
+            valueJson: await ctx.runQuery(
+                internal.execution.conversations.historyForMission,
+                {
+                    missionId: args.missionId,
+                    expectedGeneration: args.expectedGeneration,
+                    cursor: args.input.cursor,
+                },
+            ),
+        };
+    },
+};
+
 export const commonOperations = {
+    consult_conversation: consultConversation,
     consult_mission_state: consultMissionStateOperation,
     consult_run_state: consultRunStateOperation,
 };

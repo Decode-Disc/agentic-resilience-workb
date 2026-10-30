@@ -10,6 +10,7 @@ test("delayed cancellation cleanup preserves a resumed newer generation", async 
     const { t, userId, args } = await seedInspectedEvidence();
     workflowTest.register(t);
     const missionId = await t.mutation(internal.execution.missions.start, {
+        generationBackend: { id: "convex-agent", version: 2 },
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
         definitionId: "saved_material_inspection_v1",
@@ -79,6 +80,7 @@ test.each([
     const { t, args } = await seedInspectedEvidence();
     workflowTest.register(t);
     const missionId = await t.mutation(internal.execution.missions.start, {
+        generationBackend: { id: "convex-agent", version: 2 },
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
         definitionId: "saved_material_inspection_v1",
@@ -129,6 +131,7 @@ test("run cancellation fences first and drains mission work in bounded scheduled
     const { t, userId, args } = await seedInspectedEvidence();
     workflowTest.register(t);
     const missionId = await t.mutation(internal.execution.missions.start, {
+        generationBackend: { id: "convex-agent", version: 2 },
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
         definitionId: "saved_material_inspection_v1",
@@ -302,6 +305,7 @@ test("browser context teardown paginates runs without nesting mission pagination
         }),
     );
     const missionId = await t.mutation(internal.execution.missions.start, {
+        generationBackend: { id: "convex-agent", version: 2 },
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
         definitionId: "saved_material_inspection_v1",

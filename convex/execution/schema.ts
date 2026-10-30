@@ -19,6 +19,13 @@ import {
 } from "./executionProtocol";
 
 const missionFields = {
+    piActiveWriter: v.optional(v.string()),
+    piRebinding: v.optional(v.boolean()),
+    executionRuntime: v.optional(v.literal("pi-durable")),
+    piWakeId: v.optional(v.id("_scheduled_functions")),
+    piWakeAt: v.optional(v.number()),
+    piWakeToken: v.optional(v.string()),
+    piResultWakePending: v.optional(v.boolean()),
     parentRequestId: v.optional(v.id("agentOperationRequests")),
     rootMissionId: v.optional(v.id("agentMissions")),
     childMissionRequests: v.optional(v.number()),
@@ -53,6 +60,24 @@ const missionFields = {
 };
 
 export const executionTables = {
+    piSessions: defineTable({
+        missionId: v.id("agentMissions"),
+        generation: v.number(),
+        writer: v.string(),
+        epoch: v.number(),
+        leaseUntil: v.number(),
+        sequence: v.number(),
+        nextId: v.number(),
+        retainedBytes: v.optional(v.number()),
+    }).index("by_mission", ["missionId"]),
+    piCommits: defineTable({
+        sessionId: v.id("piSessions"),
+        sequence: v.number(),
+        key: v.string(),
+        payload: v.string(),
+    })
+        .index("by_session_and_sequence", ["sessionId", "sequence"])
+        .index("by_session_and_key", ["sessionId", "key"]),
     agentConversations: defineTable({
         runId: v.id("researchRuns"),
         storageRef: v.string(),
@@ -136,6 +161,7 @@ export const executionTables = {
         .index("by_run_and_objective_key", ["runId", "objectiveKey"])
         .index("by_run_and_status", ["runId", "status"]),
     agentInvocations: defineTable({
+        purpose: v.optional(v.literal("compaction")),
         generationBackend: v.optional(agentBackendValidator),
         generationStorageRef: v.optional(v.string()),
         journalVersion: v.optional(v.literal(1)),

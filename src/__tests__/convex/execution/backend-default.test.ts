@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 for (const legacy of [false, true]) {
-    test(`changing the configured default ${legacy ? "preserves historical direct invocations" : "selects the actual Agent implementation"}`, async () => {
+    test(`explicit historical selection ${legacy ? "preserves direct invocations" : "selects the actual Agent implementation"}`, async () => {
         vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
         const network = vi.fn(
             async () =>
@@ -52,6 +52,7 @@ for (const legacy of [false, true]) {
         const { t, args } = await seedInspectedEvidence();
         agentTest.register(t);
         const missionId = await t.mutation(internal.execution.missions.start, {
+            generationBackend: { id: "convex-agent", version: 2 },
             runId: args.runId,
             corpusRevisionId: args.corpusRevisionId,
             definitionId: "saved_material_inspection_v1",

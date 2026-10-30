@@ -3,6 +3,10 @@ import base from "./playwright.retrieval.config";
 
 export default defineConfig({
     ...base,
-    testMatch: ["agent-harness.spec.ts", "retrieval-approval.spec.ts"],
+    testMatch: [
+        "agent-harness.spec.ts",
+        "retrieval-approval.spec.ts",
+        "invocation-journal.spec.ts",
+    ],
     timeout: 150_000,
 });

@@ -38,6 +38,7 @@ async function simulatedMissionFixture() {
         }),
     );
     const missionId = await t.mutation(internal.execution.missions.start, {
+        generationBackend: { id: "convex-agent", version: 2 },
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
         definitionId: "saved_material_inspection_v1",
@@ -285,6 +286,7 @@ test("an unconfigured live mission blocks explicitly without a fictitious provid
 test("simulation is rejected outside the local reserved browser workspace", async () => {
     const { t, args } = await seedInspectedEvidence();
     const missionId = await t.mutation(internal.execution.missions.start, {
+        generationBackend: { id: "convex-agent", version: 2 },
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
         definitionId: "saved_material_inspection_v1",

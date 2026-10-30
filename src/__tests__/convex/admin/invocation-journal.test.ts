@@ -82,7 +82,7 @@ test("only an active administrator can read paginated journal events and lazily 
         { runId: args.runId, eventId: event._id },
     );
     expect(detail.invocation).toMatchObject({
-        generationBackend: { id: "convex-agent", version: 2 },
+        generationBackend: { id: "pi-durable", version: 1 },
         journalVersion: 1,
         provenance: "simulation",
         receivedOutputJson: '{"kind":"blocked","code":"retained"}',

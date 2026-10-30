@@ -741,6 +741,7 @@ test("the fresh context automatically carries the previous observable assistant 
         corpusRevisionId: args.corpusRevisionId,
         definitionId: "saved_material_inspection_v1",
         requestKey: "assistant-continuity",
+        generationBackend: { id: "convex-agent", version: 2 },
         expectedGeneration: 4,
     });
     const first = await t.mutation(internal.execution.invocations.begin, {

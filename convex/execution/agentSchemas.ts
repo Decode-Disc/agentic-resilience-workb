@@ -28,8 +28,15 @@ export const agentCompletionValidator = v.union(
 export const consultMissionStateInputValidator = v.object({
     cursor: v.optional(v.string()),
 });
+export const consultConversationInputValidator = v.object({
+    cursor: v.optional(v.string()),
+});
 export const consultRunStateInputValidator = v.object({});
 export const operationInputValidator = v.union(
+    v.object({
+        kind: v.literal("consult_conversation"),
+        ...consultConversationInputValidator.fields,
+    }),
     v.object({
         kind: v.literal("consult_run_state"),
         ...consultRunStateInputValidator.fields,

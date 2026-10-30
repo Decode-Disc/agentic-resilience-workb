@@ -29,7 +29,7 @@ import {
 import { buildMissionContext } from "./context";
 import { publishTurn, requireInstructionVersion } from "./conversations";
 import {
-    DEFAULT_AGENT_BACKEND,
+    HISTORICAL_AGENT_BACKEND,
     invocationReplyValidator,
     invocationResponseValidator,
     invocationStructureError,
@@ -233,6 +233,7 @@ export const begin = internalMutation({
         missionId: v.id("agentMissions"),
         expectedGeneration: v.number(),
         taskKey: v.string(),
+        purpose: v.optional(v.literal("compaction")),
         provenance: v.union(v.literal("live"), v.literal("simulation")),
     },
     returns: v.union(
@@ -264,22 +265,35 @@ export const begin = internalMutation({
         if (existing) {
             if (
                 existing.provenance !== args.provenance ||
-                existing.missionId !== mission._id ||
-                existing.generation !== args.expectedGeneration
+                existing.missionId !== mission._id
             )
                 throw executionError("invocation_identity_conflict");
+            if (
+                (existing.adoptionGeneration ?? existing.generation) !==
+                args.expectedGeneration
+            ) {
+                if (
+                    mission.executionRuntime !== "pi-durable" ||
+                    !existing.receivedOutputJson ||
+                    !canAdoptRetainedResponse(mission, existing)
+                )
+                    throw executionError("invocation_identity_conflict");
+                await ctx.db.patch(existing._id, {
+                    adoptionGeneration: args.expectedGeneration,
+                });
+            }
             return {
                 kind: "ready" as const,
                 invocationId: existing._id,
                 inputJson: existing.inputJson,
             };
         }
-        if (await hasOutstandingOperations(ctx, mission._id))
+        if (!args.purpose && (await hasOutstandingOperations(ctx, mission._id)))
             return { kind: "blocked" as const, code: "pending_operations" };
         const previousInvocation = mission.lastInvocationId
             ? await ctx.db.get(mission.lastInvocationId)
             : null;
-        if (previousInvocation?.status === "started")
+        if (!args.purpose && previousInvocation?.status === "started")
             return { kind: "blocked" as const, code: "invocation_pending" };
         const context = await buildMissionContext(
             ctx,
@@ -302,10 +316,11 @@ export const begin = internalMutation({
             ? await ctx.db.get(mission.conversationTurnId)
             : null;
         const invocationId = await ctx.db.insert("agentInvocations", {
+            purpose: args.purpose,
             conversationTurnId: mission.conversationTurnId,
             instructionVersion: turn?.instructionVersion,
             generationBackend:
-                mission.generationBackend ?? DEFAULT_AGENT_BACKEND,
+                mission.generationBackend ?? HISTORICAL_AGENT_BACKEND,
             journalVersion: 1,
             missionId: mission._id,
             runId: mission.runId,
@@ -320,11 +335,12 @@ export const begin = internalMutation({
             progressCount: mission.progressKeys.length,
             createdAt: Date.now(),
         });
-        await ctx.db.patch(mission._id, {
-            lastInvocationId: invocationId,
-            status: "running",
-            provenance: args.provenance,
-        });
+        if (!args.purpose)
+            await ctx.db.patch(mission._id, {
+                lastInvocationId: invocationId,
+                status: "running",
+                provenance: args.provenance,
+            });
         await recordMissionEvent(ctx, mission, {
             kind: "invocation_started",
             cause: args.taskKey,
@@ -731,7 +747,15 @@ export const finish = internalMutation({
                 MAX_OBSERVABLE_OUTPUT_BYTES
         )
             throw executionError("response_capacity");
-        if (invocation.status === "returned") {
+        const mission = await ctx.db.get(invocation.missionId);
+        if (!mission) throw executionError("mission_unavailable");
+        if (
+            invocation.status === "returned" &&
+            !(
+                mission.executionRuntime === "pi-durable" &&
+                invocation.blockCode === "pending_operations"
+            )
+        ) {
             if (invocation.outputJson !== outputJson)
                 throw executionError("invocation_result_conflict");
             return {
@@ -744,8 +768,6 @@ export const finish = internalMutation({
                 ...(invocation.blockCode ? { code: invocation.blockCode } : {}),
             };
         }
-        const mission = await ctx.db.get(invocation.missionId);
-        if (!mission) throw executionError("mission_unavailable");
         const returned = {
             status: "returned" as const,
             outputJson,
@@ -822,15 +844,18 @@ export const finish = internalMutation({
             )
                 return block("provider_receipt_required", true);
         }
+        const awaitingOperations =
+            args.response.kind === "complete" &&
+            (await hasOutstandingOperations(ctx, mission._id));
         const notes = [mission.workingNotes, args.response.workingNotes]
             .filter(Boolean)
             .join("\n\n");
         if (new TextEncoder().encode(notes).length > MAX_WORKING_NOTES_BYTES)
             return block("working_memory_capacity", true);
-        await ctx.db.patch(mission._id, { workingNotes: notes });
+        if (!awaitingOperations || mission.executionRuntime !== "pi-durable")
+            await ctx.db.patch(mission._id, { workingNotes: notes });
+        if (awaitingOperations) return block("pending_operations");
         if (args.response.kind === "complete") {
-            if (await hasOutstandingOperations(ctx, mission._id))
-                return block("pending_operations");
             const definition = getAgentDefinition(
                 mission.definitionId,
                 mission.definitionVersion,
@@ -873,7 +898,10 @@ export const finish = internalMutation({
             });
             return { kind: "completed" as const, requestIds: [] };
         }
-        const structureError = invocationStructureError(args.response);
+        const structureError = invocationStructureError(
+            args.response,
+            mission.executionRuntime === "pi-durable",
+        );
         if (structureError) return block(structureError, true);
         const requestIds = [];
         for (const request of args.response.requests) {

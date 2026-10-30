@@ -16,7 +16,7 @@ for (const viewport of [
     { width: 1440, height: 1000 },
     { width: 390, height: 844 },
 ]) {
-    for (const backend of ["ai-sdk", "convex-agent"] as const) {
+    for (const backend of ["ai-sdk", "convex-agent", "pi-durable"] as const) {
         for (const definition of [
             "inspection",
             "validation",
@@ -153,32 +153,14 @@ for (const viewport of [
                               : "conversationInstructions",
                     );
                     if (definition === "conversation") {
-                        const recorded = JSON.parse(
-                            (await payload.textContent()) ?? "null",
-                        ) as {
-                            input: {
-                                prompt: Array<{
-                                    role: string;
-                                    content:
-                                        | string
-                                        | Array<{
-                                              type: string;
-                                              text?: string;
-                                          }>;
-                                }>;
-                            };
+                        const recorded = JSON.parse((await payload.textContent()) ?? "null") as {
+                            input?: { prompt: Array<{ role: string; content: string | Array<{ type: string; text?: string }> }> };
+                            messages?: Array<{ role: string; content: string }>;
                         };
-                        const contexts = recorded.input.prompt.flatMap(
-                            (message) =>
-                                message.role === "user" &&
-                                Array.isArray(message.content)
-                                    ? message.content.flatMap((part) =>
-                                          part.type === "text" && part.text
-                                              ? [part.text]
-                                              : [],
-                                      )
-                                    : [],
-                        );
+                        const marker = "Required current mission state:\n";
+                        const contexts = backend === "pi-durable"
+                            ? (recorded.messages ?? []).flatMap(message => message.role === "system" && message.content.includes(marker) ? [message.content.slice(message.content.indexOf(marker) + marker.length)] : [])
+                            : (recorded.input?.prompt ?? []).flatMap(message => message.role === "user" && Array.isArray(message.content) ? message.content.flatMap(part => part.type === "text" && part.text ? [part.text] : []) : []);
                         expect(contexts).toHaveLength(1);
                         expect(JSON.parse(contexts[0] ?? "null")).toMatchObject(
                             {
