@@ -36,7 +36,10 @@ for (const theme of ["dark", "light"] as const) {
                 }),
             ).toBeVisible();
             await expect(
-                log.getByRole("button", { name: "Stop response", exact: true }),
+                page.getByRole("button", {
+                    name: "Stop generation",
+                    exact: true,
+                }),
             ).toHaveCount(0);
             await expect(
                 page.getByRole("textbox", {
@@ -93,7 +96,10 @@ for (const theme of ["dark", "light"] as const) {
             await composer.press("Enter");
             await page.clock.runFor(1000);
             await expect(
-                log.getByRole("button", { name: "Stop response", exact: true }),
+                page.getByRole("button", {
+                    name: "Stop generation",
+                    exact: true,
+                }),
             ).toBeVisible();
             await expect(
                 mission.getByRole("status", {
@@ -157,7 +163,10 @@ for (const theme of ["dark", "light"] as const) {
                 }),
             ).toBeVisible();
             await expect(
-                log.getByRole("button", { name: "Stop response", exact: true }),
+                page.getByRole("button", {
+                    name: "Stop generation",
+                    exact: true,
+                }),
             ).toHaveCount(0);
             const messages = await log.getByRole("article").allTextContents();
             expect(messages.at(-3)).toContain(

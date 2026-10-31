@@ -456,3 +456,166 @@ it("does not claim preparation is ongoing when a staged example is submitted aft
         "Request recorded in this preview; freeform interpretation is not connected.",
     );
 });
+
+it("queues a message during a response and processes it in a following turn without stopping Sources", async () => {
+    const { result } = renderHook(() =>
+        useStartConversationPreview("launched"),
+    );
+    act(() => result.current.growReply());
+    const activeId = result.current.activeTurn?.id;
+    await act(async () => {
+        await result.current.conversation.submit(
+            "Keep the gap visible.",
+            "queue",
+        );
+    });
+    expect(
+        result.current.messages.find((m) => m.text === "Keep the gap visible.")
+            ?.delivery,
+    ).toBe("queued");
+    expect(result.current.activeTurn?.id).toBe(activeId);
+    act(() => result.current.finishIllustrativeTurn());
+    await waitFor(() =>
+        expect(result.current.activeTurn?.id).not.toBe(activeId),
+    );
+    expect(
+        result.current.messages.find((m) => m.text === "Keep the gap visible.")
+            ?.delivery,
+    ).toBe("processed");
+    expect(sourcePreparation(result.current.state).state).toBe("running");
+});
+
+it("steers the active response without replacing its turn or cancelling Sources", async () => {
+    const { result } = renderHook(() =>
+        useStartConversationPreview("launched"),
+    );
+    act(() => result.current.growReply());
+    const activeId = result.current.activeTurn?.id;
+    await act(async () => {
+        await result.current.conversation.submit(
+            "Separate control from execution.",
+            "steer",
+        );
+    });
+    expect(
+        result.current.messages.find(
+            (m) => m.text === "Separate control from execution.",
+        )?.delivery,
+    ).toBe("steered");
+    expect(result.current.activeTurn?.id).toBe(activeId);
+    act(() => result.current.finishIllustrativeTurn());
+    expect(
+        result.current.messages.some((m) =>
+            m.text.includes("Steering instruction received"),
+        ),
+    ).toBe(true);
+    expect(sourcePreparation(result.current.state).state).toBe("running");
+});
+
+it("holds queued instructions on Stop and preserves both the queue and draft through resume", async () => {
+    const { result } = renderHook(() =>
+        useStartConversationPreview("launched"),
+    );
+    act(() => result.current.growReply());
+    await act(async () => {
+        await result.current.conversation.submit(
+            "First queued instruction",
+            "queue",
+        );
+    });
+    act(() => result.current.setRefinement("My unsent draft"));
+    act(() => result.current.stopResponse());
+    expect(result.current.activeTurn).toBeUndefined();
+    expect(
+        result.current.messages.find(
+            (m) => m.text === "First queued instruction",
+        )?.delivery,
+    ).toBe("queued");
+    expect(result.current.state.draft).toBe("My unsent draft");
+    act(() => result.current.resumeQueue?.());
+    await waitFor(() => expect(result.current.activeTurn).toBeTruthy());
+    expect(result.current.state.draft).toBe("My unsent draft");
+});
+
+it("retains the queued order across reload and requires explicit resume", async () => {
+    const first = renderHook(() => useStartConversationPreview("launched"));
+    act(() => first.result.current.growReply());
+    await act(async () => {
+        await first.result.current.conversation.submit("First instruction");
+    });
+    await act(async () => {
+        await first.result.current.conversation.submit("Second instruction");
+    });
+    const ids = first.result.current.messages
+        .filter((m) => m.delivery === "queued")
+        .map((m) => m.id);
+    first.unmount();
+    const second = renderHook(() => useStartConversationPreview("launched"));
+    expect(second.result.current.activeTurn).toBeUndefined();
+    expect(
+        second.result.current.messages
+            .filter((m) => m.delivery === "queued")
+            .map((m) => m.id),
+    ).toEqual(ids);
+    act(() => second.result.current.resumeQueue?.());
+    await waitFor(() => expect(second.result.current.activeTurn).toBeTruthy());
+    expect(
+        second.result.current.messages.find((m) => m.id === ids[0])?.delivery,
+    ).toBe("processed");
+    expect(
+        second.result.current.messages.find((m) => m.id === ids[1])?.delivery,
+    ).toBe("queued");
+    act(() => second.result.current.finishIllustrativeTurn());
+    await waitFor(() =>
+        expect(
+            second.result.current.messages.find((m) => m.id === ids[1])
+                ?.delivery,
+        ).toBe("processed"),
+    );
+});
+
+it("saves a question edit directly while a conversational response continues", async () => {
+    const { result } = renderHook(() => useStartConversationPreview("framing"));
+    act(() => result.current.growReply());
+    const id = result.current.activeTurn?.id;
+    act(() =>
+        result.current.setQuestionAction({
+            id: "q1",
+            text: "Who sets the rules?",
+        }),
+    );
+    await act(async () => {
+        await result.current.conversation.submit("Who sets the rules?");
+    });
+    expect(result.current.state.questions[0]?.text).toBe("Who sets the rules?");
+    expect(result.current.activeTurn?.id).toBe(id);
+    expect(result.current.messages.some((m) => m.delivery === "queued")).toBe(
+        false,
+    );
+});
+
+it("places the steering message before its continuation and retains the earlier partial reply", async () => {
+    const { result } = renderHook(() =>
+        useStartConversationPreview("launched"),
+    );
+    act(() => result.current.growReply());
+    const partial = result.current.messages.at(-1);
+    await act(async () => {
+        await result.current.conversation.submit(
+            "Separate decision rights",
+            "steer",
+        );
+    });
+    act(() => result.current.finishIllustrativeTurn());
+    const messages = result.current.messages;
+    expect(messages.find((m) => m.id === partial?.id)?.text).toBe(
+        partial?.text,
+    );
+    expect(
+        messages.findIndex((m) => m.text === "Separate decision rights"),
+    ).toBeLessThan(
+        messages.findIndex((m) =>
+            m.text.includes("Steering instruction received"),
+        ),
+    );
+});

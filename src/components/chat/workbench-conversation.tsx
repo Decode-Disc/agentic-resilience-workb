@@ -1,5 +1,6 @@
 import {
     ComposerPrimitive,
+    type ExternalThreadQueueAdapter,
     MessagePrimitive,
     type ThreadMessageLike,
     ThreadPrimitive,
@@ -10,7 +11,6 @@ import {
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import {
     ArrowRight01Icon,
-    ArrowUp02Icon,
     Cancel01Icon,
     File01Icon,
     Loading03Icon,
@@ -59,6 +59,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { useResponsive } from "@/hooks/use-responsive";
 import { cn } from "@/lib/utils";
+import {
+    ConversationComposerActions,
+    ConversationQueue,
+} from "./conversation-composer-actions";
 import "./workbench-conversation.css";
 
 export {
@@ -99,12 +103,19 @@ export function useWorkbenchConversation({
     onDraftChange,
     onSend,
     isRunning = false,
+    queue,
+    onStop,
 }: {
     messages: readonly ThreadMessageLike[];
     draft: string;
     onDraftChange: (text: string) => void;
-    onSend: (text: string) => void | Promise<void>;
+    onSend: (
+        text: string,
+        delivery?: "queue" | "steer",
+    ) => void | Promise<void>;
     isRunning?: boolean;
+    queue?: ExternalThreadQueueAdapter;
+    onStop?: () => void | Promise<void>;
 }) {
     const syncingDraft = useRef(false);
     const currentDraft = useRef(draft);
@@ -114,13 +125,13 @@ export function useWorkbenchConversation({
     const [failed, setFailed] = useState(false);
     const [sending, setSending] = useState(false);
     const delivering = useRef(false);
-    async function submit(text: string) {
+    async function submit(text: string, delivery: "queue" | "steer" = "queue") {
         if (delivering.current) return false;
         delivering.current = true;
         setSending(true);
         setFailed(false);
         try {
-            await onSend(text);
+            await onSend(text, delivery);
             return true;
         } catch {
             setFailed(true);
@@ -143,6 +154,12 @@ export function useWorkbenchConversation({
             },
         }),
         isRunning,
+        queue,
+        onCancel: onStop
+            ? async () => {
+                  await onStop();
+              }
+            : undefined,
         isSendDisabled: sending,
         onNew: async (message) => {
             const text = message.content
@@ -194,8 +211,10 @@ export function ConversationComposer({
     onCancel,
     pending = false,
     submission,
+    onResumeQueue,
 }: {
     inputRef?: Ref<HTMLTextAreaElement>;
+    onResumeQueue?: () => void;
     label: string;
     placeholder?: string;
     compact?: boolean;
@@ -259,6 +278,7 @@ export function ConversationComposer({
                     </Button>
                 </div>
             )}
+            <ConversationQueue />
             <ComposerPrimitive.Root
                 data-slot="prompt-composer"
                 aria-label="Message the workbench"
@@ -269,7 +289,11 @@ export function ConversationComposer({
                               if (!submission.disabled && !pending)
                                   submission.onSubmit();
                           }
-                        : undefined
+                        : (event) => {
+                              event.preventDefault();
+                              if (aui.composer().getState().canSend)
+                                  aui.composer().send({ steer: false });
+                          }
                 }>
                 <div
                     data-slot="prompt-composer-card"
@@ -283,6 +307,26 @@ export function ConversationComposer({
                             placeholder={placeholder}
                             disabled={pending}
                             rows={1}
+                            onKeyDown={(event) => {
+                                if (
+                                    submission ||
+                                    actionLabel ||
+                                    event.key !== "Enter" ||
+                                    event.nativeEvent.isComposing
+                                )
+                                    return;
+                                if (
+                                    event.shiftKey &&
+                                    !event.ctrlKey &&
+                                    !event.metaKey
+                                )
+                                    return;
+                                event.preventDefault();
+                                if (aui.composer().getState().canSend)
+                                    aui.composer().send({
+                                        steer: event.ctrlKey || event.metaKey,
+                                    });
+                            }}
                             cancelOnEscape={false}
                             addAttachmentOnPaste={false}
                             unstable_focusOnScrollToBottom={false}
@@ -306,29 +350,10 @@ export function ConversationComposer({
                                     {actionLabel ?? "Continue"}
                                 </Button>
                             ) : (
-                                <ComposerPrimitive.Send
-                                    render={
-                                        <Button variant="round" size="icon" />
-                                    }
-                                    aria-label={
-                                        actionLabel ?? "Send refinement"
-                                    }
-                                    data-slot="prompt-composer-submit"
-                                    className={cn(
-                                        "disabled:opacity-100",
-                                        compact
-                                            ? "size-6 rounded-md"
-                                            : actionLabel
-                                              ? "h-10 w-auto px-4 rounded-full"
-                                              : "size-10 rounded-full",
-                                    )}>
-                                    {actionLabel ?? (
-                                        <Icon
-                                            iconNode={ArrowUp02Icon}
-                                            size={16}
-                                        />
-                                    )}
-                                </ComposerPrimitive.Send>
+                                <ConversationComposerActions
+                                    actionLabel={actionLabel}
+                                    onResumeQueue={onResumeQueue}
+                                />
                             )}
                         </div>
                     </div>

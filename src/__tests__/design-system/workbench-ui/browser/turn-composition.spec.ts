@@ -115,7 +115,7 @@ test("stopping a turn retains its partial answer after reload", async ({
     await page.keyboard.press("Escape");
     await page.clock.runFor(2500);
     await page
-        .getByRole("button", { name: "Stop response", exact: true })
+        .getByRole("button", { name: "Stop generation", exact: true })
         .click();
     await expect(
         page.getByRole("button", { name: "Inspect work for this turn" }),

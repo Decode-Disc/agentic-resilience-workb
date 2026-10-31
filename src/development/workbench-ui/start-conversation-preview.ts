@@ -1,5 +1,9 @@
-import type { ThreadMessageLike } from "@assistant-ui/react";
-import { useEffect, useRef, useState } from "react";
+import type {
+    AppendMessage,
+    ExternalThreadQueueAdapter,
+    ThreadMessageLike,
+} from "@assistant-ui/react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
     type ConversationAgent,
     WORKBENCH_AGENT,
@@ -107,6 +111,8 @@ export type PreviewMessage = {
     from?: "user" | "assistant";
     agentId?: string;
     status?: "running" | "interrupted";
+    delivery?: "queued" | "steered" | "processed" | "removed";
+    deliveryTurnId?: string;
 };
 type PreviewHistoryEntry =
     | { kind: "message"; message: PreviewMessage }
@@ -132,6 +138,7 @@ export type PreviewConversation = {
     questions: StartFramingQuestion[];
     suppliedContext?: { question: string; answer: string };
     draft: string;
+    queuePaused?: boolean;
     launched: boolean;
 };
 type PreviewPatch = Partial<PreviewConversation> & {
@@ -372,6 +379,12 @@ function validMessage(value: unknown): value is PreviewMessage {
             value.from === "user" ||
             value.from === "assistant") &&
         (value.agentId === undefined || typeof value.agentId === "string") &&
+        (value.deliveryTurnId === undefined ||
+            typeof value.deliveryTurnId === "string") &&
+        (value.delivery === undefined ||
+            ["queued", "steered", "processed", "removed"].includes(
+                String(value.delivery),
+            )) &&
         (value.status === undefined ||
             value.status === "running" ||
             value.status === "interrupted")
@@ -384,6 +397,8 @@ function validFraming(data: Record<string, unknown>): boolean {
         typeof data.launched === "boolean" &&
         typeof data.scope === "string" &&
         typeof data.draft === "string" &&
+        (data.queuePaused === undefined ||
+            typeof data.queuePaused === "boolean") &&
         validPreviewTime(data.startedAt) &&
         (data.selectedQuestionId === undefined ||
             typeof data.selectedQuestionId === "string") &&
@@ -556,24 +571,31 @@ export const guidedExamples = [
     },
 ] as const;
 function previewMessages(messages: PreviewMessage[]): ThreadMessageLike[] {
-    return messages.map((message) => ({
-        id: message.id,
-        role: message.from ?? "user",
-        content: message.text,
-        createdAt: message.createdAt ? new Date(message.createdAt) : undefined,
-        metadata: { custom: { agentId: message.agentId } },
-        ...(message.status
-            ? {
-                  status:
-                      message.status === "running"
-                          ? { type: "running" as const }
-                          : {
-                                type: "incomplete" as const,
-                                reason: "error" as const,
-                            },
-              }
-            : {}),
-    }));
+    return messages
+        .filter(
+            (message) =>
+                message.delivery !== "queued" && message.delivery !== "removed",
+        )
+        .map((message) => ({
+            id: message.id,
+            role: message.from ?? "user",
+            content: message.text,
+            createdAt: message.createdAt
+                ? new Date(message.createdAt)
+                : undefined,
+            metadata: { custom: { agentId: message.agentId } },
+            ...(message.status
+                ? {
+                      status:
+                          message.status === "running"
+                              ? { type: "running" as const }
+                              : {
+                                    type: "incomplete" as const,
+                                    reason: "error" as const,
+                                },
+                  }
+                : {}),
+        }));
 }
 
 type PreviewScreen =
@@ -611,6 +633,52 @@ export function sourcePreparation(state: PreviewConversation) {
                   ? 1
                   : 0,
     };
+}
+function acceptDelivery(
+    state: PreviewConversation,
+    message: PreviewMessage,
+    delivery: "queue" | "steer",
+): PreviewConversation {
+    const turn = state.turns.find((turn) => turn.state === "running");
+    const steering = delivery === "steer" && turn;
+    const priorAnswerIds = steering
+        ? new Set(
+              turn.entries.flatMap((entry) =>
+                  entry.kind === "message" && entry.phase === "answer"
+                      ? [entry.id]
+                      : [],
+              ),
+          )
+        : new Set<string>();
+    return applyPreviewPatch(state, {
+        messages: [
+            ...getMessages(state)
+                .filter((item) => priorAnswerIds.has(item.id))
+                .map((item) => ({ ...item, status: undefined })),
+            {
+                ...message,
+                delivery: steering ? "steered" : "queued",
+                deliveryTurnId: steering ? turn.id : undefined,
+            },
+        ],
+        draft: "",
+        queuePaused: false,
+        turns: steering
+            ? state.turns.map((item) =>
+                  item.id === turn.id
+                      ? {
+                            ...item,
+                            entries: item.entries.map((entry) =>
+                                entry.kind === "message" &&
+                                entry.phase === "answer"
+                                    ? { ...entry, phase: "commentary" as const }
+                                    : entry,
+                            ),
+                        }
+                      : item,
+              )
+            : state.turns,
+    });
 }
 function responseRunning(state: PreviewConversation) {
     return (
@@ -976,7 +1044,12 @@ function restoreConversation(screen: PreviewScreen): {
             current !== null
                 ? validateConversation(data)
                 : migrateConversation(data);
-        restored = applyPreviewPatch(restored, interruptTurn(restored));
+        restored = applyPreviewPatch(restored, {
+            ...interruptTurn(restored),
+            queuePaused: getMessages(restored).some(
+                (message) => message.delivery === "queued",
+            ),
+        });
         restored = applyPreviewPatch(restored, {
             messages: getMessages(restored).map((message) =>
                 message.status === "running"
@@ -1047,7 +1120,12 @@ function advanceResponse(
             },
         });
     }
-    const answerId = `${turn.id}-answer`;
+    const instructions = getMessages(current).filter(
+        (message) =>
+            message.delivery === "steered" &&
+            message.deliveryTurnId === turn.id,
+    );
+    const answerId = `${turn.id}-answer${instructions.length ? `-steer-${instructions.length}` : ""}`;
     if (
         (!script.work || step >= 2) &&
         !entries.some(
@@ -1056,10 +1134,14 @@ function advanceResponse(
     )
         entries.push({ kind: "message", id: answerId, phase: "answer" });
     const done = step >= script.steps;
-    const text = script.text.slice(
+    const latestInstruction = instructions.at(-1);
+    const responseText = latestInstruction
+        ? `**Steering instruction received:** ${latestInstruction.text}\n\nIllustrative instruction recorded in this turn. Earlier work is retained; no live interpretation was executed.`
+        : script.text;
+    const text = responseText.slice(
         0,
         Math.ceil(
-            (script.text.length * Math.max(0, step - (script.work ? 1 : 0))) /
+            (responseText.length * Math.max(0, step - (script.work ? 1 : 0))) /
                 (script.steps - (script.work ? 1 : 0)),
         ),
     );
@@ -1145,6 +1227,82 @@ export function useStartConversationPreview(
         work: true,
         steps: 10,
     });
+    const beginResponse = useCallback(
+        (nextScript: ResponseScript, priorMessages: PreviewMessage[] = []) => {
+            const id = crypto.randomUUID();
+            const message = createPreviewMessage({
+                from: "assistant",
+                text: nextScript.work
+                    ? "I'll compare the retained material on integrations and coordination."
+                    : nextScript.text.slice(0, 28),
+                status: nextScript.work ? undefined : "running",
+            });
+            const answerId = `${id}-answer`;
+            const recordedMessage = nextScript.work
+                ? message
+                : { ...message, id: answerId };
+            setState((current) => {
+                if (responseRunning(current)) return current;
+                script.current = nextScript;
+                return applyPreviewPatch(
+                    {
+                        ...current,
+                        history: current.history.filter(
+                            (entry) =>
+                                entry.kind !== "message" ||
+                                !priorMessages.some(
+                                    (message) =>
+                                        message.id === entry.message.id,
+                                ),
+                        ),
+                    },
+                    {
+                        messages: [...priorMessages, recordedMessage],
+                        draft: priorMessages.some(
+                            (message) => message.delivery === "processed",
+                        )
+                            ? current.draft
+                            : "",
+                        turns: [
+                            ...current.turns,
+                            {
+                                id,
+                                agentId: "workbench",
+                                state: "running",
+                                startedAt: message.createdAt,
+                                entries: [
+                                    {
+                                        kind: "message",
+                                        id: recordedMessage.id,
+                                        phase: nextScript.work
+                                            ? "commentary"
+                                            : "answer",
+                                    },
+                                    ...(nextScript.work
+                                        ? [
+                                              {
+                                                  kind: "operation" as const,
+                                                  operation: {
+                                                      id: `${id}-read`,
+                                                      title: "Read the retained investor presentation",
+                                                      state: "running" as const,
+                                                      summary:
+                                                          "Illustrative reading: coordination and network participation.",
+                                                      details:
+                                                          "Illustrative investor presentation input; this preview does not retrieve or verify a document.",
+                                                  },
+                                              },
+                                          ]
+                                        : []),
+                                ],
+                            },
+                        ],
+                    },
+                );
+            });
+        },
+        [],
+    );
     const advanceTurn = useRef<(() => void) | null>(null);
     useEffect(() => {
         if (!activeTurnId) return;
@@ -1217,8 +1375,93 @@ export function useStartConversationPreview(
             ? proposedScopeValue
             : "");
     const scopeAnswer = state.contextDraft?.trim() || contextChoice;
+    function dispatch(message: AppendMessage, delivery: "queue" | "steer") {
+        const text = message.content
+            .flatMap((part) => (part.type === "text" ? [part.text] : []))
+            .join("\n");
+        void conversation.submit(text, delivery).then((ok) => {
+            if (!ok && !conversation.runtime.thread.composer.getState().text)
+                conversation.runtime.thread.composer.setText(text);
+        });
+    }
+    const queued = getMessages(state).filter(
+        (message) => message.delivery === "queued",
+    );
+    const queue: ExternalThreadQueueAdapter = {
+        items: queued.map((message) => ({
+            id: message.id,
+            prompt: message.text,
+            parts: [{ type: "text", text: message.text }],
+        })),
+        steerItems: [],
+        enqueue: (message) => dispatch(message, "queue"),
+        steer: (message) =>
+            dispatch(message, message.steer ? "steer" : "queue"),
+        remove: (id) =>
+            setState((current) =>
+                applyPreviewPatch(current, {
+                    messages: getMessages(current)
+                        .filter(
+                            (message) =>
+                                message.id === id &&
+                                message.delivery === "queued",
+                        )
+                        .map((message) => ({
+                            ...message,
+                            delivery: "removed",
+                        })),
+                }),
+            ),
+        edit: (id, message) =>
+            setState((current) =>
+                applyPreviewPatch(current, {
+                    messages: getMessages(current)
+                        .filter(
+                            (item) =>
+                                item.id === id && item.delivery === "queued",
+                        )
+                        .map((item) => ({
+                            ...item,
+                            text: message.content
+                                .flatMap((part) =>
+                                    part.type === "text" ? [part.text] : [],
+                                )
+                                .join("\n"),
+                        })),
+                }),
+            ),
+        move: (id, placement) => {
+            if (placement.lane !== "steer") return;
+            setState((current) => {
+                const message = getMessages(current).find(
+                    (item) => item.id === id && item.delivery === "queued",
+                );
+                return message
+                    ? acceptDelivery(current, message, "steer")
+                    : current;
+            });
+        },
+    };
+    const nextQueuedId = queued[0]?.id;
+    useEffect(() => {
+        if (activeTurnId || state.queuePaused || !nextQueuedId) return;
+        const message = getMessages(state).find(
+            (item) => item.id === nextQueuedId,
+        );
+        if (!message) return;
+        beginResponse(
+            {
+                text: `Illustrative follow-up received: ${message.text}\n\nFreeform interpretation is not connected in this preview.`,
+                work: false,
+                steps: 12,
+            },
+            [{ ...message, delivery: "processed" }],
+        );
+    }, [activeTurnId, nextQueuedId, state, beginResponse]);
     const conversation = useWorkbenchConversation({
         messages: previewMessages(getMessages(state)),
+        queue,
+        onStop: stopResponse,
         draft:
             !state.launched && needsContext
                 ? (state.contextDraft ?? "")
@@ -1233,13 +1476,24 @@ export function useStartConversationPreview(
                   : setRefinement(text),
         onSend: send,
     });
-    async function send(text: string) {
+    async function send(text: string, delivery: "queue" | "steer" = "queue") {
         if (failNext) {
             setFailNext(false);
             throw new Error("fixture_delivery_failure");
         }
+        if (
+            !needsContext &&
+            !questionAction &&
+            (responseRunning(state) ||
+                getMessages(state).some(
+                    (message) => message.delivery === "queued",
+                ))
+        ) {
+            const message = createPreviewMessage({ from: "user", text });
+            setState((current) => acceptDelivery(current, message, delivery));
+            return;
+        }
         if (state.launched) {
-            if (responseRunning(state)) return;
             const user = createPreviewMessage({ from: "user", text });
             if (
                 canAskDuringPreparation &&
@@ -1426,65 +1680,6 @@ export function useStartConversationPreview(
         });
     }
 
-    function beginResponse(
-        nextScript: ResponseScript,
-        priorMessages: PreviewMessage[] = [],
-    ) {
-        if (responseRunning(state)) return;
-        script.current = nextScript;
-        const id = crypto.randomUUID();
-        const message = createPreviewMessage({
-            from: "assistant",
-            text: nextScript.work
-                ? "I'll compare the retained material on integrations and coordination."
-                : nextScript.text.slice(0, 28),
-            status: nextScript.work ? undefined : "running",
-        });
-        const answerId = `${id}-answer`;
-        const recordedMessage = nextScript.work
-            ? message
-            : { ...message, id: answerId };
-        setState((current) =>
-            applyPreviewPatch(current, {
-                messages: [...priorMessages, recordedMessage],
-                draft: "",
-                turns: [
-                    ...current.turns,
-                    {
-                        id,
-                        agentId: "workbench",
-                        state: "running",
-                        startedAt: message.createdAt,
-                        entries: [
-                            {
-                                kind: "message",
-                                id: recordedMessage.id,
-                                phase: nextScript.work
-                                    ? "commentary"
-                                    : "answer",
-                            },
-                            ...(nextScript.work
-                                ? [
-                                      {
-                                          kind: "operation" as const,
-                                          operation: {
-                                              id: `${id}-read`,
-                                              title: "Read the retained investor presentation",
-                                              state: "running" as const,
-                                              summary:
-                                                  "Illustrative reading: coordination and network participation.",
-                                              details:
-                                                  "Illustrative investor presentation input; this preview does not retrieve or verify a document.",
-                                          },
-                                      },
-                                  ]
-                                : []),
-                        ],
-                    },
-                ],
-            }),
-        );
-    }
     function workThenReply() {
         beginResponse({ text: illustrativeAnswer, work: true, steps: 10 });
     }
@@ -1494,7 +1689,12 @@ export function useStartConversationPreview(
     function stopResponse() {
         if (!activeTurnId) return;
         setState((current) =>
-            flushReports(applyPreviewPatch(current, interruptTurn(current))),
+            flushReports(
+                applyPreviewPatch(current, {
+                    ...interruptTurn(current),
+                    queuePaused: true,
+                }),
+            ),
         );
     }
     const interruptReply = stopResponse;
@@ -1515,12 +1715,23 @@ export function useStartConversationPreview(
     return {
         state,
         messages: getMessages(state),
-        historyEntries: state.history.map((entry) => ({
-            kind: entry.kind,
-            id: entry.kind === "message" ? entry.message.id : entry.id,
-        })),
+        historyEntries: state.history
+            .filter(
+                (entry) =>
+                    entry.kind !== "message" ||
+                    (entry.message.delivery !== "queued" &&
+                        entry.message.delivery !== "removed"),
+            )
+            .map((entry) => ({
+                kind: entry.kind,
+                id: entry.kind === "message" ? entry.message.id : entry.id,
+            })),
         update,
         conversation,
+        resumeQueue:
+            state.queuePaused && queued.length
+                ? () => update({ queuePaused: false })
+                : undefined,
         canAskDuringPreparation,
         setExample,
         setFailNext,

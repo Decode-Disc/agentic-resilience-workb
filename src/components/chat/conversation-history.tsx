@@ -11,7 +11,6 @@ import {
     type ConversationTurnSnapshot,
 } from "@/components/chat/conversation-turn";
 import { ConversationMessages } from "@/components/chat/workbench-conversation";
-import { Button } from "@/components/ui/button";
 import { LoadErrorAlert } from "@/components/ui/load-error-alert";
 
 export type ConversationHistoryEntry = {
@@ -25,13 +24,11 @@ export function ConversationHistory({
     missions = [],
     agents = DEFAULT_CONVERSATION_AGENTS,
     turns = [],
-    onStop,
 }: {
     entries: readonly ConversationHistoryEntry[];
     missions?: readonly ConversationMissionSnapshot[];
     agents?: ConversationAgents;
     turns?: readonly ConversationTurnSnapshot[];
-    onStop?: () => void;
 }) {
     const messageIds = entries.flatMap((entry) =>
         entry.kind === "message" ? [entry.id] : [],
@@ -116,11 +113,6 @@ export function ConversationHistory({
                     <ConversationMessages key={id} ids={[id]} agents={agents} />
                 ) : null;
             })}
-            {onStop && (
-                <Button variant="ghost" size="sm" onClick={onStop}>
-                    Stop response
-                </Button>
-            )}
         </>
     );
 }

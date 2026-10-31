@@ -473,6 +473,7 @@ function FramingExample({
     const composer = (
         <ConversationComposer
             inputRef={refinementRef}
+            onResumeQueue={controller.resumeQueue}
             placeholder={
                 !state.launched && isMobile && !questionAction
                     ? needsContext
@@ -884,6 +885,7 @@ function ResearchExample({
                 <ConversationComposer
                     label="Ask about the sources"
                     inputRef={inputRef}
+                    onResumeQueue={controller.resumeQueue}
                     compact
                     pending={conversation.sending}
                     failed={conversation.failed}
@@ -1099,7 +1101,6 @@ export function StartScreenPreview({
             agents={state.agents}
             missions={state.missions}
             turns={state.turns}
-            onStop={reply || activeTurn ? controller.stopResponse : undefined}
         />
     );
     const trialControls = (
