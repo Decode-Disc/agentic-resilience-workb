@@ -5,9 +5,14 @@ import {
     useEffect,
     useId,
     useLayoutEffect,
+    useRef,
     useState,
 } from "react";
 import { createPortal } from "react-dom";
+import {
+    ConversationTurn,
+    type ConversationTurnSnapshot,
+} from "@/components/chat/conversation-turn";
 import {
     Message,
     MessageBody,
@@ -103,28 +108,40 @@ const angles = [
 ];
 const activityClarification = {
     id: "activity",
-    prompt: "Which activity would you like to examine?",
+    prompt: "Which part of the claims workflow should we focus on?",
     reason: "Your request names the company. The activity determines which relationships and dependencies this dossier should investigate.",
     proposedValue: "claims",
     choices: [
-        { value: "claims", label: "Photo-led auto physical damage claims" },
-        { value: "network", label: "Repair network management" },
+        {
+            value: "claims",
+            label: "Photo-led auto claims",
+            description:
+                "From damage photos to repair estimates, connecting insurers and repairers.",
+        },
+        {
+            value: "network",
+            label: "Repair network management",
+            description:
+                "Focus on repairer participation, assignments and network coordination.",
+        },
     ],
 };
 const claimsScope =
-    "Photo-led auto physical damage claims, focusing on coordination between insurers, repairers and CCC, and what an agent could replace.";
+    "Photo-led auto claims, focusing on coordination between insurers, repairers and CCC, and what an agent could replace.";
 const networkScope =
     "Repair network management, focusing on the relationships between insurers, repairers and CCC, and the dependencies a substitute would need.";
 const initialQuestions: StartFramingQuestion[] = [
     {
         id: "q1",
         label: "Q1",
+        shortLabel: "Coordination",
         text: "Does CCC control coordination, or supply replaceable modules?",
         rationale: "Distinguish running the workflow from deciding its rules.",
     },
     {
         id: "q2",
         label: "Q2",
+        shortLabel: "Switching",
         text: "Is its operational context durable beyond contracts?",
         rationale:
             "Examine what remains useful and difficult to reproduce across renewals.",
@@ -132,6 +149,7 @@ const initialQuestions: StartFramingQuestion[] = [
     {
         id: "q3",
         label: "Q3",
+        shortLabel: "Substitution",
         text: "Could core claims platforms replace it for insurers?",
         rationale:
             "Compare substitution paths and the dependencies they would need.",
@@ -139,6 +157,7 @@ const initialQuestions: StartFramingQuestion[] = [
     {
         id: "q4",
         label: "Q4",
+        shortLabel: "Bypass",
         text: "Could agent-led claim intake bypass it?",
         rationale:
             "Trace a possible bypass and the coordination it would still require.",
@@ -231,24 +250,31 @@ function PreviewResearchContext({
     count,
     launched,
     hasReference,
+    scopePending = false,
+    onChangeScope,
 }: {
     activities: readonly ConversationWorkItem[];
     scope: string;
     count: number;
     launched: boolean;
     hasReference: boolean;
+    scopePending?: boolean;
+    onChangeScope?: () => void;
 }) {
     return (
         <ConversationContext
             title={`${company.ticker} · Research`}
             activities={activities}
+            onChangeScope={onChangeScope}
             plan={
                 <>
-                    <p>{scope}</p>
-                    <span className="chat-context-meta">
-                        {launched ? "Accepted framing" : "Proposed framing"} ·{" "}
-                        {count} questions
-                    </span>
+                    <p>{scopePending ? "Scope being clarified" : scope}</p>
+                    {!scopePending && (
+                        <span className="chat-context-meta">
+                            {launched ? "Accepted framing" : "Proposed framing"}{" "}
+                            · {count} questions
+                        </span>
+                    )}
                 </>
             }
             outputs={
@@ -458,6 +484,11 @@ function EntryExample() {
     );
 }
 type PreviewConversation = {
+    turns?: ConversationTurnSnapshot[];
+    questionAction?: { id?: string; text: string } | null;
+    selectedQuestionId?: string;
+    contextDraft?: string;
+    analystQuestionIds?: string[];
     startedAt?: string;
     scenario: "specific" | "company";
     needsContext: boolean;
@@ -483,6 +514,7 @@ function freshConversation(): PreviewConversation {
         needsContext: false,
         scope: claimsScope,
         questions: [...initialQuestions],
+        analystQuestionIds: [],
         draft: "",
         messages: [],
         launched: false,
@@ -498,10 +530,123 @@ function createPreviewMessage(
         createdAt: new Date().toISOString(),
     };
 }
+const illustrativeLongAnswer = `## Illustrative reading: coordination and substitution
+
+This is an illustrative response for examining the reading experience. It is not a finding about CCC. The question is whether replacing an application also requires replacing the relationships around it.
+
+### Start with the activity
+
+A photo-led claim connects intake, estimates, insurer requirements and repairer participation. A useful investigation separates each participant's decisions from the software used to exchange information. A workflow diagram alone cannot establish who has authority to change the rules.
+
+### Distinguish integration from control
+
+An integration can make an established process easier to operate without giving its supplier decision rights. Conversely, a company may coordinate participants through contracts or shared operating practices without controlling their individual decisions. These possibilities require different evidence and should not be treated as equivalent.
+
+### Examine what changes when agents act
+
+An agent might receive a user's intention, gather information and transmit an instruction across several tools. That does not establish that it can replace every dependency of the existing workflow. The important comparison is what the agent can execute, what it may decide and what remains dependent on other participants.
+
+### Test substitution in concrete terms
+
+- Identify which information must move between systems.
+- Establish who authorizes access and changes to the process.
+- Compare the effort of replacing a module with the effort of coordinating a replacement network.
+- Keep contractual restrictions separate from operational dependencies.
+
+### Keep competing readings visible
+
+One interpretation is that coordination makes substitution difficult. Another is that interoperable interfaces let a new coordinator reuse the same participants. A third is that an agent changes the intake channel while leaving downstream decisions and relationships intact. These are hypotheses to test, not conclusions established by this preview.
+
+### Organize the comparison
+
+| Question | Material to examine |
+| --- | --- |
+| Who sets the rules? | Decision rights and participant agreements |
+| What must be rebuilt? | Integration requirements and operating dependencies |
+| Who can redirect the work? | Routing authority and access conditions |
+| What remains unknown? | Non-public terms and unavailable readings |
+
+### Preserve the limits
+
+A source mentioning participation does not measure switching effort. An integration list does not prove exclusive access. A partnership announcement does not reveal the terms governing a relationship. Missing public detail should remain a stated gap rather than becoming evidence of either strength or weakness.
+
+### Next useful question
+
+Which dependency would actually prevent an insurer or repairer from moving the activity elsewhere? The answer requires retained material, competing interpretations and explicit limits. This response only demonstrates their presentation.
+
+**Illustrative reading complete.** No live research or analytical assessment was executed.`;
+const illustrativeAnswer =
+    "## Replacing software is not replacing coordination\n\nThe illustrative material points to two dependencies:\n\n- **Integrations:** exchanging data inside established workflows.\n- **Coordination:** connecting insurers and repairers around the same claim.\n\n| What to test | Why it matters |\n| --- | --- |\n| Switching effort | Can integrations be rebuilt? |\n| Decision rights | Who can redirect the work? |\n\n**Limit:** This example does not establish switching costs or pricing power.";
+function interruptTurn(
+    state: PreviewConversation,
+): Partial<PreviewConversation> {
+    return {
+        turns: state.turns?.map((t) =>
+            t.state === "running"
+                ? {
+                      ...t,
+                      state: "interrupted",
+                      finishedAt: new Date().toISOString(),
+                      entries: t.entries.map((e) =>
+                          e.kind === "operation" &&
+                          e.operation.state === "running"
+                              ? {
+                                    ...e,
+                                    operation: {
+                                        ...e.operation,
+                                        state: "interrupted",
+                                    },
+                                }
+                              : e,
+                      ),
+                  }
+                : t,
+        ),
+        messages: state.messages.map((m) =>
+            m.status === "running" ? { ...m, status: "interrupted" } : m,
+        ),
+    };
+}
 function validPreviewTime(value: unknown) {
     return (
         value === undefined ||
         (typeof value === "string" && Number.isFinite(Date.parse(value)))
+    );
+}
+function validStoredTurn(value: unknown): value is ConversationTurnSnapshot {
+    if (!value || typeof value !== "object") return false;
+    const t = value as Record<string, unknown>;
+    return (
+        typeof t.id === "string" &&
+        ["running", "completed", "interrupted"].includes(String(t.state)) &&
+        validPreviewTime(t.startedAt) &&
+        validPreviewTime(t.finishedAt) &&
+        Array.isArray(t.entries) &&
+        t.entries.every((entry: unknown) => {
+            if (!entry || typeof entry !== "object") return false;
+            const e = entry as Record<string, unknown>;
+            if (e.kind === "message")
+                return (
+                    typeof e.id === "string" &&
+                    (e.phase === "commentary" || e.phase === "answer")
+                );
+            if (
+                e.kind !== "operation" ||
+                !e.operation ||
+                typeof e.operation !== "object"
+            )
+                return false;
+            const op = e.operation as Record<string, unknown>;
+            return (
+                typeof op.id === "string" &&
+                typeof op.title === "string" &&
+                typeof op.summary === "string" &&
+                (op.details === undefined || typeof op.details === "string") &&
+                ["running", "completed", "interrupted"].includes(
+                    String(op.state),
+                )
+            );
+        })
     );
 }
 function readConversation(): PreviewConversation {
@@ -513,6 +658,20 @@ function readConversation(): PreviewConversation {
             typeof data === "object" &&
             data !== null &&
             (!("startedAt" in data) || validPreviewTime(data.startedAt)) &&
+            (!("turns" in data) ||
+                (Array.isArray(data.turns) &&
+                    data.turns.every(validStoredTurn))) &&
+            (!("questionAction" in data) ||
+                data.questionAction === null ||
+                (typeof data.questionAction === "object" &&
+                    data.questionAction !== null &&
+                    "text" in data.questionAction &&
+                    typeof data.questionAction.text === "string")) &&
+            (!("analystQuestionIds" in data) ||
+                (Array.isArray(data.analystQuestionIds) &&
+                    data.analystQuestionIds.every(
+                        (id: unknown) => typeof id === "string",
+                    ))) &&
             "questions" in data &&
             Array.isArray(data.questions) &&
             data.questions.every(
@@ -549,6 +708,29 @@ function readConversation(): PreviewConversation {
         )
             return {
                 ...data,
+                turns:
+                    "turns" in data && Array.isArray(data.turns)
+                        ? (data.turns as ConversationTurnSnapshot[]).map((t) =>
+                              t.state === "running"
+                                  ? {
+                                        ...t,
+                                        state: "interrupted",
+                                        entries: t.entries.map((e) =>
+                                            e.kind === "operation" &&
+                                            e.operation.state === "running"
+                                                ? {
+                                                      ...e,
+                                                      operation: {
+                                                          ...e.operation,
+                                                          state: "interrupted",
+                                                      },
+                                                  }
+                                                : e,
+                                        ),
+                                    }
+                                  : t,
+                          )
+                        : [],
                 messages: data.messages.map((message) =>
                     message.status === "running"
                         ? { ...message, status: "interrupted" }
@@ -582,10 +764,51 @@ const guidedExamples = [
 ] as const;
 function PreviewMessages({
     messages,
+    turns = [],
+    onStop,
 }: {
     messages: PreviewConversation["messages"];
+    turns?: readonly ConversationTurnSnapshot[];
+    onStop?: () => void;
 }) {
-    return <ConversationMessages ids={messages.map((message) => message.id)} />;
+    const ids = new Set(messages.map((m) => m.id));
+    const visibleTurns = turns.filter((t) =>
+        t.entries.some((e) => e.kind === "message" && ids.has(e.id)),
+    );
+    const grouped = new Set(
+        visibleTurns.flatMap((t) =>
+            t.entries.flatMap((e) => (e.kind === "message" ? [e.id] : [])),
+        ),
+    );
+    const firstIds = new Map(
+        visibleTurns.map((t) => [
+            t.entries.find((e) => e.kind === "message")?.id,
+            t,
+        ]),
+    );
+    return (
+        <>
+            {messages.map((message) => {
+                const turn = firstIds.get(message.id);
+                return turn ? (
+                    <ConversationTurn
+                        key={turn.id}
+                        turn={turn}
+                        renderMessage={(id) => (
+                            <ConversationMessages ids={[id]} />
+                        )}
+                    />
+                ) : !grouped.has(message.id) ? (
+                    <ConversationMessages key={message.id} ids={[message.id]} />
+                ) : null;
+            })}
+            {visibleTurns.some((t) => t.state === "running") && onStop && (
+                <Button variant="ghost" size="sm" onClick={onStop}>
+                    Stop response
+                </Button>
+            )}
+        </>
+    );
 }
 function previewMessages(
     messages: PreviewConversation["messages"],
@@ -619,6 +842,20 @@ function FramingExample({
     onLaunch: () => void;
     trialControls: ReactNode;
 }) {
+    const questionAction = state.questionAction ?? null;
+    const setQuestionAction = (
+        questionAction: PreviewConversation["questionAction"],
+    ) => update({ questionAction });
+    const selectedQuestionId = state.selectedQuestionId;
+    const setSelectedQuestionId = (selectedQuestionId: string) =>
+        update({ selectedQuestionId });
+    const actionTrigger = useRef<HTMLElement | null>(null);
+    const previousAction = useRef(false);
+    useEffect(() => {
+        if (previousAction.current && !questionAction)
+            actionTrigger.current?.focus();
+        previousAction.current = !!questionAction;
+    }, [questionAction]);
     const { scenario, needsContext, scope, questions, suppliedContext } = state;
     const responseText = state.launched
         ? "Research started with the framing you reviewed."
@@ -639,17 +876,28 @@ function FramingExample({
             ),
         },
     ];
-    const setNeedsContext = (needsContext: boolean) => update({ needsContext });
     const setScope = (scope: string) => update({ scope });
-    const setQuestions = (
-        next:
-            | StartFramingQuestion[]
-            | ((current: StartFramingQuestion[]) => StartFramingQuestion[]),
-    ) =>
+    const setQuestions = (proposed: StartFramingQuestion[]) => {
+        const supplied = [...initialQuestions, ...networkQuestions];
+        // Older gallery drafts have no authorship marker; retain wording absent from either supplied program.
+        const preserved = state.questions.filter(
+            (q) =>
+                state.analystQuestionIds?.includes(q.id) ||
+                !supplied.some(
+                    (initial) => initial.id === q.id && initial.text === q.text,
+                ),
+        );
         update({
-            questions:
-                typeof next === "function" ? next(state.questions) : next,
+            questions: [
+                ...proposed.map(
+                    (q) => preserved.find((edited) => edited.id === q.id) ?? q,
+                ),
+                ...preserved.filter(
+                    (q) => !proposed.some((next) => next.id === q.id),
+                ),
+            ],
         });
+    };
     const setSuppliedContext = (
         suppliedContext: PreviewConversation["suppliedContext"],
     ) => update({ suppliedContext });
@@ -658,21 +906,62 @@ function FramingExample({
         useQuickTextFill<HTMLTextAreaElement>((text) => {
             setRefinement(text);
         });
+    const actionOpen = questionAction !== null;
+    useEffect(() => {
+        if (actionOpen) refinementRef.current?.focus();
+    }, [actionOpen, refinementRef]);
     const [example, setExample] = useState<string | null>(null);
     const [failNext, setFailNext] = useState(false);
     const conversation = useWorkbenchConversation({
         messages: previewMessages(state.messages),
-        draft: state.draft,
-        isRunning: state.messages.some(
-            (message) => message.status === "running",
-        ),
-        onDraftChange: setRefinement,
+        draft: needsContext
+            ? (state.contextDraft ?? "")
+            : (questionAction?.text ?? state.draft),
+        isRunning:
+            state.turns?.some((t) => t.state === "running") ||
+            state.messages.some((message) => message.status === "running"),
+        onDraftChange: (text) =>
+            needsContext
+                ? update({ contextDraft: text })
+                : questionAction
+                  ? setQuestionAction({ ...questionAction, text })
+                  : setRefinement(text),
         onSend: send,
     });
     async function send(text: string) {
         if (failNext) {
             setFailNext(false);
             throw new Error("fixture_delivery_failure");
+        }
+        if (needsContext) {
+            applyContext(text);
+            return;
+        }
+        if (questionAction) {
+            const id = questionAction.id ?? crypto.randomUUID();
+            update({
+                analystQuestionIds: [
+                    ...new Set([...(state.analystQuestionIds ?? []), id]),
+                ],
+                messages: [
+                    ...state.messages,
+                    createPreviewMessage({
+                        from: "user",
+                        text: `${questionAction.id ? "Updated" : "Added"} research question: ${text}`,
+                    }),
+                ],
+                questions: questionAction.id
+                    ? state.questions.map((q) =>
+                          q.id === id ? { ...q, text } : q,
+                      )
+                    : [
+                          ...state.questions,
+                          { id, label: `Q${state.questions.length + 1}`, text },
+                      ],
+            });
+            setSelectedQuestionId(id);
+            setQuestionAction(null);
+            return;
         }
 
         const chosen = guidedExamples.find(
@@ -699,6 +988,9 @@ function FramingExample({
             );
             const revised = patch.questions[0];
             if (!revised) throw new Error("fixture_question_missing");
+            patch.analystQuestionIds = [
+                ...new Set([...(state.analystQuestionIds ?? []), revised.id]),
+            ];
             result = `Updated ${revised.label}: ${revised.text}`;
         }
         if (chosen?.id === "switching") {
@@ -714,6 +1006,9 @@ function FramingExample({
             ];
             const added = patch.questions.at(-1);
             if (!added) throw new Error("fixture_question_missing");
+            patch.analystQuestionIds = [
+                ...new Set([...(state.analystQuestionIds ?? []), added.id]),
+            ];
             result = `Added to the research program: ${added.text}`;
         }
         if (result)
@@ -732,8 +1027,9 @@ function FramingExample({
         );
     }
     function completeContext(text: string) {
-        setNeedsContext(false);
         update({
+            needsContext: false,
+            contextDraft: "",
             messages: [
                 ...state.messages,
                 createPreviewMessage({ text, from: "user" }),
@@ -786,12 +1082,6 @@ function FramingExample({
         }
         completeContext(`Activity selected: ${option?.label ?? answer}`);
     }
-    const selectedActivity =
-        scope === claimsScope
-            ? "claims"
-            : scope === networkScope
-              ? "network"
-              : "other";
     function selectScenario(scenario: "specific" | "company") {
         update({
             ...freshConversation(),
@@ -799,6 +1089,45 @@ function FramingExample({
             needsContext: scenario === "company",
         });
     }
+
+    function requestScopeChange() {
+        update({
+            needsContext: true,
+            contextDraft:
+                scope === claimsScope || scope === networkScope
+                    ? ""
+                    : (suppliedContext?.answer ?? scope),
+        });
+    }
+
+    const composer = (
+        <ConversationComposer
+            inputRef={refinementRef}
+            label={
+                needsContext
+                    ? "Or describe a different scope…"
+                    : questionAction
+                      ? questionAction.id
+                          ? "Edit research question"
+                          : "Add research question"
+                      : "Refine the framing in your own words"
+            }
+            actionLabel={
+                needsContext
+                    ? "Apply scope"
+                    : questionAction
+                      ? questionAction.id
+                          ? "Save changes"
+                          : "Add question"
+                      : undefined
+            }
+            onCancel={
+                questionAction ? () => setQuestionAction(null) : undefined
+            }
+            pending={conversation.sending}
+            failed={conversation.failed}
+        />
+    );
 
     return (
         <>
@@ -859,8 +1188,21 @@ function FramingExample({
             <StartFramingScreen
                 context={
                     <PreviewResearchContext
-                        activities={activities}
+                        activities={[
+                            ...activities,
+                            ...(state.turns
+                                ?.at(-1)
+                                ?.entries.flatMap((e) =>
+                                    e.kind === "operation" ? [e.operation] : [],
+                                ) ?? []),
+                        ]}
                         scope={scope}
+                        scopePending={needsContext}
+                        onChangeScope={
+                            !state.launched && !needsContext && !questionAction
+                                ? requestScopeChange
+                                : undefined
+                        }
                         count={questions.length}
                         launched={state.launched}
                         hasReference={scenario === "specific"}
@@ -869,7 +1211,13 @@ function FramingExample({
                 runtime={conversation.runtime}
                 responseText={responseText}
                 responseCreatedAt={state.startedAt}
-                history={<PreviewMessages messages={state.messages} />}
+                history={
+                    <PreviewMessages
+                        messages={state.messages}
+                        turns={state.turns}
+                        onStop={() => update(interruptTurn(state))}
+                    />
+                }
                 suggestions={
                     !state.launched &&
                     !needsContext && (
@@ -955,56 +1303,11 @@ function FramingExample({
                     state.launched ? undefined : (
                         <FramingProposal
                             collapsible
-                            scope={scope}
-                            activity={
-                                <div className="start-framing-activity">
-                                    {state.launched ? (
-                                        <span>{scope}</span>
-                                    ) : (
-                                        <ToggleGroup
-                                            aria-label="Activity"
-                                            value={[selectedActivity]}
-                                            onValueChange={(values) => {
-                                                const value = values[0];
-                                                if (typeof value === "string")
-                                                    applyContext(value);
-                                            }}>
-                                            {activityClarification.choices.map(
-                                                (choice) => (
-                                                    <ToggleGroupItem
-                                                        key={choice.value}
-                                                        value={choice.value}>
-                                                        {selectedActivity ===
-                                                            choice.value && (
-                                                            <WorkbenchIcon
-                                                                name="check"
-                                                                size={12}
-                                                            />
-                                                        )}
-                                                        {choice.label}
-                                                    </ToggleGroupItem>
-                                                ),
-                                            )}
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                aria-label="Adjust scope"
-                                                disabled={needsContext}
-                                                onClick={() =>
-                                                    setNeedsContext(true)
-                                                }>
-                                                Other…
-                                            </Button>
-                                        </ToggleGroup>
-                                    )}
-                                    {selectedActivity === "other" && (
-                                        <p>{scope}</p>
-                                    )}
-                                </div>
-                            }
+                            composer={composer}
                             clarification={
                                 needsContext ? (
                                     <FramingClarification
+                                        externalComposer
                                         question={{
                                             ...activityClarification,
                                             reason:
@@ -1030,62 +1333,24 @@ function FramingExample({
                                     />
                                 ) : undefined
                             }
-                            onAdjustScope={
-                                state.launched
-                                    ? undefined
-                                    : () => setNeedsContext(true)
-                            }
                             questions={questions}
-                            onQuestionChange={(id, text) => {
-                                setQuestions((current) =>
-                                    current.map((question) =>
-                                        question.id === id
-                                            ? { ...question, text }
-                                            : question,
-                                    ),
-                                );
-                                update({
-                                    messages: [
-                                        ...state.messages,
-                                        createPreviewMessage({
-                                            text: `Question updated: ${text}`,
-                                            from: "user",
-                                        }),
-                                    ],
-                                });
+                            actionActive={questionAction !== null}
+                            selectedQuestionId={selectedQuestionId}
+                            onEditRequest={(q) => {
+                                actionTrigger.current =
+                                    document.activeElement as HTMLElement;
+                                setQuestionAction({ id: q.id, text: q.text });
                             }}
-                            onAddQuestion={(text) => {
-                                setQuestions((current) => [
-                                    ...current,
-                                    {
-                                        id: `q${current.length + 1}`,
-                                        label: `Q${current.length + 1}`,
-                                        text,
-                                        rationale:
-                                            "Additional question suggested by the analyst.",
-                                    },
-                                ]);
-                                update({
-                                    messages: [
-                                        ...state.messages,
-                                        createPreviewMessage({
-                                            text: `Question added: ${text}`,
-                                            from: "user",
-                                        }),
-                                    ],
-                                });
+                            onAddRequest={() => {
+                                actionTrigger.current =
+                                    document.activeElement as HTMLElement;
+                                setQuestionAction({ text: "" });
                             }}
                             onStart={state.launched ? undefined : onLaunch}
                         />
                     )
                 }
-                refinement={
-                    <ConversationComposer
-                        inputRef={refinementRef}
-                        label="Refine the framing in your own words"
-                        failed={conversation.failed}
-                    />
-                }
+                refinement={state.launched ? composer : undefined}
             />
         </>
     );
@@ -1257,9 +1522,9 @@ function ResearchExample({
     const conversation = useWorkbenchConversation({
         messages: previewMessages(state.messages),
         draft: state.draft,
-        isRunning: state.messages.some(
-            (message) => message.status === "running",
-        ),
+        isRunning:
+            state.turns?.some((t) => t.state === "running") ||
+            state.messages.some((message) => message.status === "running"),
         onDraftChange: (draft) => update({ draft }),
         onSend: (text) =>
             update({
@@ -1387,6 +1652,8 @@ function ResearchExample({
                         messages={state.messages.slice(
                             state.framingMessageCount,
                         )}
+                        turns={state.turns}
+                        onStop={() => update(interruptTurn(state))}
                     />
                     <div
                         data-slot="conversation-assistant-turn"
@@ -1424,6 +1691,7 @@ function ResearchExample({
                 <ConversationComposer
                     label="Ask about the sources"
                     compact
+                    pending={conversation.sending}
                     failed={conversation.failed}
                 />
             }
@@ -1599,11 +1867,14 @@ export function StartScreenPreview({
                     message.id === reply.id
                         ? {
                               ...message,
-                              text: Array.from(
-                                  { length: reply.step + 1 },
-                                  (_, index) =>
-                                      `**Illustrative reading ${index + 1}.** Examine who sets the routing rules, owns operational context, and can substitute each integration. This preview does not establish an analytical finding. [Source context](https://www.sec.gov/edgar/search/).`,
-                              ).join("\n\n"),
+                              text: illustrativeLongAnswer.slice(
+                                  0,
+                                  Math.ceil(
+                                      (illustrativeLongAnswer.length *
+                                          (reply.step + 1)) /
+                                          24,
+                                  ),
+                              ),
                               status: reply.step < 23 ? "running" : undefined,
                           }
                         : message,
@@ -1615,10 +1886,221 @@ export function StartScreenPreview({
         }, 200);
         return () => window.clearTimeout(timer);
     }, [reply]);
+    const activeTurn = state.turns?.find((t) => t.state === "running");
+    const activeTurnId = activeTurn?.id;
+    const advanceTurn = useRef<(() => void) | null>(null);
+    useEffect(() => {
+        if (!activeTurnId) return;
+        let step = 0;
+        const advance = () => {
+            const next = ++step;
+            setState((current) => {
+                const turn = current.turns?.find((t) => t.id === activeTurnId);
+                if (turn?.state !== "running") return current;
+                const entries = turn.entries.map((e) =>
+                    e.kind === "operation"
+                        ? { ...e, operation: { ...e.operation } }
+                        : e,
+                );
+                if (next === 1) {
+                    const first = entries.find((e) => e.kind === "operation");
+                    if (first?.kind === "operation")
+                        first.operation = {
+                            ...first.operation,
+                            state: "completed",
+                        };
+                    entries.push({
+                        kind: "operation",
+                        operation: {
+                            id: `${turn.id}-compare`,
+                            title: "Compare switching dependencies",
+                            state: "running",
+                            summary:
+                                "Checking what is contractual and what is operational.",
+                            details:
+                                "Illustrative comparison of integrations and participation; no switching-cost conclusion is established.",
+                        },
+                    });
+                }
+                const answerId = `${turn.id}-answer`;
+                if (next === 2)
+                    entries.push({
+                        kind: "message",
+                        id: answerId,
+                        phase: "answer",
+                    });
+                const done = next >= 10;
+                const text = illustrativeAnswer.slice(
+                    0,
+                    Math.ceil(
+                        (illustrativeAnswer.length * Math.max(0, next - 1)) / 9,
+                    ),
+                );
+                const messages =
+                    next < 2
+                        ? current.messages
+                        : [
+                              ...current.messages.filter(
+                                  (m) => m.id !== answerId,
+                              ),
+                              {
+                                  id: answerId,
+                                  createdAt:
+                                      current.messages.find(
+                                          (m) => m.id === answerId,
+                                      )?.createdAt ?? new Date().toISOString(),
+                                  from: "assistant" as const,
+                                  text,
+                                  status: done
+                                      ? undefined
+                                      : ("running" as const),
+                              },
+                          ];
+                return {
+                    ...current,
+                    messages,
+                    turns: current.turns?.map((t) =>
+                        t.id !== turn.id
+                            ? t
+                            : {
+                                  ...turn,
+                                  entries: entries.map((e) =>
+                                      done && e.kind === "operation"
+                                          ? {
+                                                ...e,
+                                                operation: {
+                                                    ...e.operation,
+                                                    state: "completed",
+                                                },
+                                            }
+                                          : e,
+                                  ),
+                                  state: done ? "completed" : "running",
+                                  finishedAt: done
+                                      ? new Date().toISOString()
+                                      : undefined,
+                              },
+                    ),
+                };
+            });
+        };
+        advanceTurn.current = advance;
+        const timer = window.setInterval(advance, 800);
+        return () => {
+            window.clearInterval(timer);
+            advanceTurn.current = null;
+        };
+    }, [activeTurnId]);
+    function finishIllustrativeTurn() {
+        if (!activeTurnId) return;
+        setState((current) => {
+            const turn = current.turns?.find((t) => t.id === activeTurnId);
+            if (turn?.state !== "running") return current;
+            const answerId = `${turn.id}-answer`;
+            const entries = turn.entries.filter(
+                (e) => e.kind !== "message" || e.phase !== "answer",
+            );
+            entries.push({ kind: "message", id: answerId, phase: "answer" });
+            return {
+                ...current,
+                messages: [
+                    ...current.messages.filter((m) => m.id !== answerId),
+                    {
+                        id: answerId,
+                        from: "assistant",
+                        text: illustrativeAnswer,
+                        createdAt:
+                            current.messages.find((m) => m.id === answerId)
+                                ?.createdAt ?? new Date().toISOString(),
+                    },
+                ],
+                turns: current.turns?.map((t) =>
+                    t.id !== turn.id
+                        ? t
+                        : {
+                              ...t,
+                              state: "completed",
+                              finishedAt: new Date().toISOString(),
+                              entries: entries.map((e) =>
+                                  e.kind === "operation"
+                                      ? {
+                                            ...e,
+                                            operation: {
+                                                ...e.operation,
+                                                state: "completed",
+                                            },
+                                        }
+                                      : e,
+                              ),
+                          },
+                ),
+            };
+        });
+    }
     const trialControls = (
         <section
             aria-label="Illustrative conversation controls"
             className="flex flex-wrap gap-1">
+            <Button
+                variant="ghost"
+                size="sm"
+                disabled={!!activeTurn || reply !== null}
+                onClick={() => {
+                    const id = crypto.randomUUID();
+                    const comment = createPreviewMessage({
+                        from: "assistant",
+                        text: "I'll compare the retained material on integrations and coordination.",
+                    });
+                    setState((current) => ({
+                        ...current,
+                        messages: [...current.messages, comment],
+                        turns: [
+                            ...(current.turns ?? []),
+                            {
+                                id,
+                                state: "running",
+                                startedAt: new Date().toISOString(),
+                                entries: [
+                                    {
+                                        kind: "message",
+                                        id: comment.id,
+                                        phase: "commentary",
+                                    },
+                                    {
+                                        kind: "operation",
+                                        operation: {
+                                            id: `${id}-read`,
+                                            title: "Read the retained investor presentation",
+                                            summary:
+                                                "Illustrative reading: coordination and network participation.",
+                                            details:
+                                                "Illustrative investor presentation input; this preview does not retrieve or verify a document.",
+                                            state: "running",
+                                        },
+                                    },
+                                ],
+                            },
+                        ],
+                    }));
+                }}>
+                Work then reply
+            </Button>
+            {activeTurn && (
+                <>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => advanceTurn.current?.()}>
+                        Advance illustrative turn
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={finishIllustrativeTurn}>
+                        Finish illustrative turn
+                    </Button>
+                </>
+            )}
             {(name === "framing" || name === "handoff") && (
                 <Button
                     variant="ghost"
@@ -1630,11 +2112,11 @@ export function StartScreenPreview({
             <Button
                 variant="ghost"
                 size="sm"
-                disabled={reply !== null}
+                disabled={reply !== null || !!activeTurn}
                 onClick={() => {
                     const message = createPreviewMessage({
                         from: "assistant",
-                        text: "**Illustrative reading",
+                        text: "## Illustrative reading",
                         status: "running",
                     });
                     setState((current) => ({

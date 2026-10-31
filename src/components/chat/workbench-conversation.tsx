@@ -26,6 +26,7 @@ import {
     useRef,
     useState,
 } from "react";
+import remarkGfm from "remark-gfm";
 import {
     Message,
     MessageBody,
@@ -48,6 +49,7 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import { useResponsive } from "@/hooks/use-responsive";
 import { cn } from "@/lib/utils";
 import "./workbench-conversation.css";
 
@@ -65,6 +67,11 @@ export function useWorkbenchConversation({
     onSend: (text: string) => void | Promise<void>;
     isRunning?: boolean;
 }) {
+    const syncingDraft = useRef(false);
+    const currentDraft = useRef(draft);
+    currentDraft.current = draft;
+    const draftHandler = useRef(onDraftChange);
+    draftHandler.current = onDraftChange;
     const [failed, setFailed] = useState(false);
     const [sending, setSending] = useState(false);
     const runtime = useExternalStoreRuntime({
@@ -101,18 +108,30 @@ export function useWorkbenchConversation({
         },
     });
     useEffect(() => {
-        if (runtime.thread.composer.getState().text !== draft)
+        if (sending) return;
+        if (runtime.thread.composer.getState().text !== draft) {
+            syncingDraft.current = true;
             runtime.thread.composer.setText(draft);
-    }, [runtime, draft]);
+            syncingDraft.current = false;
+        }
+    }, [runtime, draft, sending]);
     useEffect(
         () =>
-            runtime.thread.composer.subscribe(() => {
-                const next = runtime.thread.composer.getState().text;
-                if (next !== draft) onDraftChange(next);
-            }),
-        [runtime, draft, onDraftChange],
+            runtime.thread.composer.unstable_on(
+                "textChange",
+                ({ text, origin }) => {
+                    if (
+                        !syncingDraft.current &&
+                        origin !== "send" &&
+                        origin !== "reset" &&
+                        text !== currentDraft.current
+                    )
+                        draftHandler.current(text);
+                },
+            ),
+        [runtime],
     );
-    return { runtime, failed };
+    return { runtime, failed, sending };
 }
 
 /** The project's floating composer, with input and submission owned by assistant-ui. */
@@ -121,22 +140,68 @@ export function ConversationComposer({
     label,
     compact = false,
     failed = false,
+    actionLabel,
+    onCancel,
+    pending = false,
 }: {
     inputRef?: Ref<HTMLTextAreaElement>;
     label: string;
     compact?: boolean;
     failed?: boolean;
+    pending?: boolean;
+    actionLabel?: string;
+    onCancel?: () => void;
 }) {
     const aui = useAui();
+    const root = useRef<HTMLDivElement>(null);
+    const [expanded, setExpanded] = useState(false);
+    useEffect(() => {
+        const dock = root.current?.closest<HTMLElement>(
+            '[data-slot="conversation-thread-dock"]',
+        );
+        if (!dock) return;
+        // Keep typing geometry when focus moves to attached controls, until it leaves the dock.
+        const leaveDock = (event: FocusEvent) => {
+            if (
+                !(event.relatedTarget instanceof Node) ||
+                !dock.contains(event.relatedTarget)
+            )
+                setExpanded(false);
+        };
+        dock.addEventListener("focusout", leaveDock);
+        return () => dock.removeEventListener("focusout", leaveDock);
+    }, []);
     return (
-        <div data-slot="conversation-composer" className="min-w-0 shrink-0">
+        <div
+            ref={root}
+            onFocusCapture={() => setExpanded(true)}
+            data-slot="conversation-composer"
+            data-composer-action={actionLabel ? true : undefined}
+            data-composer-expanded={expanded || Boolean(actionLabel) || failed}
+            className="min-w-0 shrink-0">
             {failed && (
                 <LoadErrorAlert
                     variant="inline"
-                    title="Your message could not be sent"
+                    title={
+                        actionLabel
+                            ? "Your changes could not be saved"
+                            : "Your message could not be sent"
+                    }
                     description="Your draft is still available. Try sending it again."
                     onRetry={() => aui.composer().send()}
                 />
+            )}
+            {onCancel && (
+                <div className="chat-composer-mode">
+                    <span>{label}</span>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={pending}
+                        onClick={onCancel}>
+                        Cancel
+                    </Button>
+                </div>
             )}
             <ComposerPrimitive.Root
                 data-slot="prompt-composer"
@@ -151,6 +216,7 @@ export function ConversationComposer({
                             data-slot="prompt-composer-input"
                             aria-label={label}
                             placeholder={label}
+                            disabled={pending}
                             rows={1}
                             cancelOnEscape={false}
                             addAttachmentOnPaste={false}
@@ -168,15 +234,19 @@ export function ConversationComposer({
                             </span>
                             <ComposerPrimitive.Send
                                 render={<Button variant="round" size="icon" />}
-                                aria-label="Send refinement"
+                                aria-label={actionLabel ?? "Send refinement"}
                                 data-slot="prompt-composer-submit"
                                 className={cn(
                                     "disabled:opacity-100",
                                     compact
                                         ? "size-6 rounded-md"
-                                        : "size-10 rounded-full",
+                                        : actionLabel
+                                          ? "h-10 w-auto px-4 rounded-full"
+                                          : "size-10 rounded-full",
                                 )}>
-                                <Icon iconNode={ArrowUp02Icon} size={16} />
+                                {actionLabel ?? (
+                                    <Icon iconNode={ArrowUp02Icon} size={16} />
+                                )}
                             </ComposerPrimitive.Send>
                         </div>
                     </div>
@@ -227,7 +297,8 @@ function ConversationMessage() {
 function ConversationMarkdown() {
     return (
         <MarkdownTextPrimitive
-            smooth={false}
+            smooth
+            remarkPlugins={[remarkGfm]}
             className="min-w-0 wrap-anywhere [&_p]:my-0 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_a]:text-accent-foreground [&_a]:underline [&_a]:underline-offset-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
         />
     );
@@ -252,11 +323,13 @@ export function ConversationPendingPanel({
     summary,
     children,
     footer,
+    composer,
 }: {
     title: string;
     summary: string;
     children: ReactNode;
     footer?: ReactNode;
+    composer?: ReactNode;
 }) {
     return (
         <section data-slot="conversation-pending-panel">
@@ -268,7 +341,10 @@ export function ConversationPendingPanel({
                 </summary>
                 <div data-slot="conversation-pending-body">{children}</div>
             </details>
-            {footer}
+            {footer && (
+                <div data-slot="conversation-pending-footer">{footer}</div>
+            )}
+            {composer}
         </section>
     );
 }
@@ -337,12 +413,16 @@ export function ConversationActivityGroup({
     summary,
     state,
     activities,
+    content,
+    triggerLabel,
 }: {
     id: string;
     title: string;
     summary: string;
     state: ConversationWorkItem["state"];
     activities: readonly ConversationWorkItem[];
+    content?: ReactNode;
+    triggerLabel?: string;
 }) {
     const [expanded, setExpanded] = useState(false);
     const trigger = useRef<HTMLButtonElement>(null);
@@ -365,7 +445,9 @@ export function ConversationActivityGroup({
                 <CollapsibleTrigger
                     ref={trigger}
                     render={<Button variant="ghost" />}
-                    aria-label={`Inspect ${title.toLowerCase()}`}>
+                    aria-label={
+                        triggerLabel ?? `Inspect ${title.toLowerCase()}`
+                    }>
                     <Icon iconNode={ArrowRight01Icon} size={13} />
                     <span className="chat-work-description">
                         <strong>{title}</strong>
@@ -387,15 +469,16 @@ export function ConversationActivityGroup({
                             event.relatedTarget,
                         );
                     }}>
-                    {activities.map((activity) => (
-                        <ConversationActivity
-                            key={activity.id}
-                            title={activity.title}
-                            summary={activity.summary}
-                            state={activity.state}>
-                            {activity.details}
-                        </ConversationActivity>
-                    ))}
+                    {content ??
+                        activities.map((activity) => (
+                            <ConversationActivity
+                                key={activity.id}
+                                title={activity.title}
+                                summary={activity.summary}
+                                state={activity.state}>
+                                {activity.details}
+                            </ConversationActivity>
+                        ))}
                 </div>
             </CollapsibleContent>
         </Collapsible>
@@ -505,16 +588,31 @@ export function ConversationContext({
     plan,
     outputs,
     sources,
+    onChangeScope,
 }: {
     title?: string;
     activities?: readonly ConversationWorkItem[];
     plan: ReactNode;
     outputs: ReactNode;
     sources: ReactNode;
+    onChangeScope?: () => void;
 }) {
     const [open, setOpen] = useState(true);
+    const { isMobile } = useResponsive();
     return (
-        <Popover open={open} onOpenChange={setOpen} modal={false}>
+        <Popover
+            open={open}
+            onOpenChange={(next, details) => {
+                if (
+                    details.reason === "outside-press" ||
+                    details.reason === "focus-out"
+                ) {
+                    details.cancel();
+                    return;
+                }
+                setOpen(next);
+            }}
+            modal={false}>
             <PopoverTrigger
                 render={<Button variant="ghost" size="icon-sm" />}
                 aria-label="Research context"
@@ -546,6 +644,18 @@ export function ConversationContext({
                 <section aria-label="Plan">
                     <h2>Plan</h2>
                     {plan}
+                    {onChangeScope && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="chat-context-scope-action"
+                            onClick={() => {
+                                onChangeScope();
+                                if (isMobile) setOpen(false);
+                            }}>
+                            Change scope
+                        </Button>
+                    )}
                 </section>
                 <section aria-label="Outputs">
                     <h2>Outputs</h2>

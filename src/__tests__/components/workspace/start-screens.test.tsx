@@ -7,13 +7,13 @@ import {
 } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { StartScreenPreview } from "@/development/workbench-ui/start-screen-examples";
 import { ResearchComposerView } from "@/components/workspace/start/research-composer-view";
 import {
     CompanyMandatePanel,
     FramingClarification,
     FramingProposal,
 } from "@/components/workspace/start/start-screens";
+import { StartScreenPreview } from "@/development/workbench-ui/start-screen-examples";
 
 describe("Start presentation without backend providers", () => {
     it("reports composer edits and leaves its supplied value under caller control", () => {
@@ -115,55 +115,55 @@ describe("Start presentation without backend providers", () => {
             ).getByText("Claims intake"),
         ).toBeTruthy();
     });
-    it("preserves optional corrections and additional research questions", () => {
-        render(<FramingFixture />);
-        fireEvent.click(screen.getByRole("button", { name: "Edit Q1" }));
-        expect(
-            screen.queryByRole("textbox", { name: "Edit Q2 wording" }),
-        ).toBeNull();
-        fireEvent.change(
-            screen.getByRole("textbox", { name: "Edit Q1 wording" }),
-            {
-                target: { value: "Who can change routing rules?" },
-            },
+    it("preserves optional corrections through the shared composer", () => {
+        sessionStorage.clear();
+        render(
+            <StartScreenPreview
+                name="framing"
+                theme="light"
+                onNavigate={vi.fn()}
+                onOpenProgress={vi.fn()}
+            />,
         );
+        fireEvent.click(screen.getByRole("button", { name: "Edit question" }));
+        fireEvent.change(screen.getByRole("textbox"), {
+            target: { value: "Who can change routing rules?" },
+        });
         expect(
             screen.getByRole<HTMLButtonElement>("button", {
                 name: "Start research",
             }).disabled,
         ).toBe(true);
-        fireEvent.click(screen.getByRole("button", { name: "Save question" }));
-        fireEvent.click(screen.getByText("Add a research question"));
-        fireEvent.change(
-            screen.getByRole("textbox", {
-                name: "Another question to investigate",
+        fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+        expect(
+            screen.getByRole("heading", {
+                name: "Who can change routing rules?",
             }),
-            { target: { value: "Who owns the repairer relationship?" } },
-        );
-        fireEvent.click(screen.getByRole("button", { name: "Add to framing" }));
-        const summary = screen.getByRole("region", { name: "Framing summary" });
-        expect(
-            within(summary).getByText("Who can change routing rules?"),
-        ).toBeTruthy();
-        expect(
-            within(summary).getByText("Who owns the repairer relationship?"),
         ).toBeTruthy();
     });
     it("cancels a question edit without changing its wording and returns focus", () => {
-        render(<FramingFixture />);
-        const edit = screen.getByRole("button", {
-            name: "Edit Q1",
-        });
-        fireEvent.click(edit);
-        fireEvent.change(
-            screen.getByRole("textbox", { name: "Edit Q1 wording" }),
-            { target: { value: "Discard this change" } },
+        sessionStorage.clear();
+        render(
+            <StartScreenPreview
+                name="framing"
+                theme="light"
+                onNavigate={vi.fn()}
+                onOpenProgress={vi.fn()}
+            />,
         );
+        const original = screen.getByRole("region", {
+            name: "Framing summary",
+        }).textContent;
+        const edit = screen.getByRole("button", { name: "Edit question" });
+        edit.focus();
+        fireEvent.click(edit);
+        fireEvent.change(screen.getByRole("textbox"), {
+            target: { value: "Discard this change" },
+        });
         fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
         expect(
-            screen.queryByRole("textbox", { name: "Edit Q1 wording" }),
-        ).toBeNull();
-        expect(screen.getByText("Who controls routing?")).toBeTruthy();
+            screen.getByRole("region", { name: "Framing summary" }).textContent,
+        ).toBe(original);
         expect(document.activeElement).toBe(edit);
     });
     it("keeps shifted and composing Enter inside the composer and sends an ordinary Enter", async () => {
@@ -241,7 +241,7 @@ function FramingFixture({
         question: string;
         answer: string;
     }>();
-    const [questions, setQuestions] = useState([
+    const [questions] = useState([
         {
             id: "q1",
             label: "Q1",
@@ -293,52 +293,36 @@ function FramingFixture({
             }
             onAdjustScope={() => setShowContext(true)}
             questions={questions}
-            onQuestionChange={(id, text) =>
-                setQuestions((current) =>
-                    current.map((question) =>
-                        question.id === id ? { ...question, text } : question,
-                    ),
-                )
-            }
-            onAddQuestion={(text) =>
-                setQuestions((current) => [
-                    ...current,
-                    {
-                        id: `q${current.length + 1}`,
-                        label: `Q${current.length + 1}`,
-                        text,
-                        rationale: "Additional research question.",
-                    },
-                ])
-            }
             onStart={onStart}
         />
     );
 }
 
 it("keeps an unfinished question edit and launch guard when the pending program is folded", () => {
+    sessionStorage.clear();
     render(
-        <FramingProposal
-            collapsible
-            scope="Claims coordination"
-            questions={[
-                { id: "q1", label: "Q1", text: "Who controls the workflow?" },
-            ]}
-            onQuestionChange={vi.fn()}
-            onStart={vi.fn()}
+        <StartScreenPreview
+            name="framing"
+            theme="light"
+            onNavigate={vi.fn()}
+            onOpenProgress={vi.fn()}
         />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /^Edit Q1$/ }));
-    const editor = screen.getByRole("textbox", { name: "Edit Q1 wording" });
+    fireEvent.click(screen.getByRole("button", { name: "Edit question" }));
+    const editor = screen.getByRole("textbox", {
+        name: "Edit research question",
+    });
     fireEvent.change(editor, {
         target: { value: "Who can replace a service?" },
     });
     const disclosure = screen
-        .getByText("Proposed research", { selector: "summary span" })
+        .getByText("Proposed research program", { selector: "summary span" })
         .closest("details");
     if (!disclosure) throw new Error("Missing pending program disclosure");
     fireEvent.click(
-        screen.getByText("Proposed research", { selector: "summary span" }),
+        screen.getByText("Proposed research program", {
+            selector: "summary span",
+        }),
     );
     expect(disclosure.open).toBe(false);
     expect(
@@ -347,11 +331,13 @@ it("keeps an unfinished question edit and launch guard when the pending program 
         }).disabled,
     ).toBe(true);
     fireEvent.click(
-        screen.getByText("Proposed research", { selector: "summary span" }),
+        screen.getByText("Proposed research program", {
+            selector: "summary span",
+        }),
     );
     expect(
         screen.getByRole<HTMLTextAreaElement>("textbox", {
-            name: "Edit Q1 wording",
+            name: "Edit research question",
         }).value,
     ).toBe("Who can replace a service?");
 });

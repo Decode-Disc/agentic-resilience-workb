@@ -246,23 +246,20 @@ test("START freeform context is reflected in the scope and retained when reopene
     await page
         .getByRole("button", { name: "Company only", exact: true })
         .click();
-    await page
-        .getByRole("radio", { name: "Another activity or boundary" })
-        .click();
     const context = page.getByRole("textbox", {
-        name: "Another activity or boundary",
+        name: "Or describe a different scope…",
         exact: true,
     });
     await context.fill("Claims intake");
     await page
-        .getByRole("button", { name: "Update framing", exact: true })
+        .getByRole("button", { name: "Apply scope", exact: true })
         .click();
     await expect(page.getByRole("log")).toContainText("Claims intake");
     await expect(
-        page.getByRole("region", { name: "Proposed research scope" }),
+        page.getByRole("region", { name: "Plan", exact: true }),
     ).toContainText("Claims intake");
     await page
-        .getByRole("button", { name: "Adjust scope", exact: true })
+        .getByRole("button", { name: "Change scope", exact: true })
         .click();
     await expect(context).toHaveValue("Claims intake");
 });

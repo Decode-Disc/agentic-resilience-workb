@@ -578,92 +578,11 @@
     line-height: normal;
 }
 
-.framingAuthor span {
-    color: var(--brand-purple);
-    letter-spacing: -0.04em;
-}
-.framingQuestionId {
-    font: 500 10.5px var(--font-mono);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
-    background: var(--tint-ink);
-    letter-spacing: normal;
-}
-.framingRecap:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 6px;
-    border-radius: 8px;
-}
-.framingRecap header > span {
-    font-size: 12px;
-    color: var(--muted-foreground);
-}
-.additionalQuestion {
-    display: grid;
-    gap: 10px;
-    padding-top: 20px;
-    border-top: 1px solid var(--divider);
-}
-.additionalQuestionLabel {
-    font-size: 13px;
-    font-weight: 500;
-}
-.additionalQuestion > div {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-.additionalQuestion button {
-    flex-shrink: 0;
-    min-height: 44px;
-}
-@media (max-width: 550px) {
-    .additionalQuestion > div {
-        flex-direction: column;
-        align-items: stretch;
-    }
-}
-
 .requestLabel {
     margin: 0 0 8px;
     text-align: right;
     font-size: 12px;
     color: var(--muted-foreground);
-}
-.suppliedContext {
-    padding: 14px 16px;
-    border-radius: 14px;
-    background: color-mix(in oklab, var(--brand-purple) 4%, var(--card));
-}
-.suppliedContext h2 {
-    margin: 0 0 8px;
-    font-size: 13px;
-    font-weight: 500;
-}
-.suppliedContext dl {
-    margin: 0;
-}
-.suppliedContext dt {
-    font-size: 12px;
-    color: var(--muted-foreground);
-}
-.suppliedContext dd {
-    margin: 4px 0 0;
-    font-size: 14px;
-    overflow-wrap: anywhere;
-}
-.framingCorrections .additionalQuestion {
-    margin-top: 20px;
-}
-.framingCorrections [data-slot="textarea"]:focus-visible {
-    box-shadow: var(--surface-shadow-input);
-    outline: 2px solid var(--ring);
-    outline-offset: 3px;
 }
 
 /* The host supplies the viewport height; only the message log and progress scroll. */
@@ -671,13 +590,6 @@
     margin-top: 0;
     padding: 12px 4px 0;
     flex-shrink: 0;
-}
-.framingQuestions li > button {
-    opacity: 0.7;
-}
-.framingQuestions li:hover > button,
-.framingQuestions li:focus-within > button {
-    opacity: 1;
 }
 .research {
     height: 100%;
@@ -727,27 +639,6 @@
     color: var(--foreground);
     font: 400 14.5px / 20px var(--font-sans);
 }
-.framingAuthor {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    line-height: 20px;
-    font-weight: 500;
-}
-.framingAuthor span {
-    color: var(--brand-purple);
-    letter-spacing: -0.04em;
-}
-.framingIntroduction {
-    margin: 0;
-    font-size: 15.5px;
-    line-height: 24px;
-}
-.framingCard {
-    min-width: 0;
-    background: transparent;
-}
 .framingScope {
     padding: 18px 20px 14px;
     display: flex;
@@ -760,105 +651,10 @@
     justify-content: space-between;
     gap: 12px;
 }
-.framingScope h2,
-.framingRecap h2 {
-    margin: 0;
-    font: 500 11px / 16px var(--font-mono);
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--muted-foreground);
-}
 .framingScope p {
     margin: 0;
     font-size: 14.5px;
     line-height: 22px;
-}
-.framingRecap {
-    padding: 4px 20px 6px;
-    min-width: 0;
-}
-.framingRecap:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: -3px;
-}
-.framingRecap header {
-    padding-bottom: 6px;
-}
-.framingQuestions {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-.framingQuestions li {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 9px 0;
-    border-top: 1px solid var(--divider);
-    font-size: 14.5px;
-    line-height: 20px;
-}
-.framingQuestions li > div {
-    flex: 1;
-    min-width: 0;
-}
-.framingQuestions li p {
-    margin: 0;
-}
-.framingQuestions li > button {
-    width: 28px;
-    height: 28px;
-    min-height: 28px;
-    border-radius: 8px;
-    padding: 0;
-    color: var(--muted-foreground);
-}
-.questionReason summary {
-    cursor: help;
-    list-style: none;
-}
-.questionReason summary::-webkit-details-marker {
-    display: none;
-}
-.questionReason[open] summary {
-    margin-bottom: 6px;
-}
-.questionReason > span {
-    display: block;
-    font-size: 12.5px;
-    line-height: 19px;
-    color: var(--muted-foreground);
-}
-.framingCorrections {
-    margin: 0 20px;
-    padding: 0;
-    border-top: 1px solid var(--divider);
-}
-.framingCorrections > summary {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    min-height: 40px;
-    padding: 9px 0;
-    cursor: pointer;
-    color: var(--muted-foreground);
-    font-size: 13px;
-    line-height: 20px;
-    list-style: none;
-}
-.framingCorrections > summary > span:first-child {
-    width: 28px;
-    text-align: center;
-    font-size: 16px;
-}
-.framingCorrections > summary::-webkit-details-marker {
-    display: none;
-}
-.questionCorrection {
-    display: grid;
-    gap: 10px;
-    padding: 4px 0;
-    font-size: 12px;
 }
 .conversation .framingProposal {
     gap: 12px;
@@ -866,34 +662,15 @@
 .conversation .framingScope {
     padding: 14px 12px;
 }
-.conversation .framingRecap {
-    padding: 4px 12px 6px;
-}
-.conversation .framingQuestions li {
-    align-items: flex-start;
-    gap: 8px;
-    font-size: 13px;
-    line-height: 19px;
-}
 @media (max-width: 550px) {
     .framingScope {
         padding: 16px 16px 12px;
-    }
-    .framingRecap {
-        padding-inline: 16px;
-    }
-    .framingCorrections {
-        margin-inline: 16px;
     }
 }
 
 .request {
     justify-self: end;
     width: min(560px, 100%);
-}
-
-.framingAuthor strong {
-    font: inherit;
 }
 
 body:has(.framing),
@@ -915,7 +692,7 @@ body:has(.research) {
     border-radius: 0;
 }
 .framing [data-slot="conversation-thread-content"] {
-    width: min(732px, calc(100% - 48px));
+    width: min(1152px, calc(100% - 80px));
     margin-inline: auto;
     gap: 26px;
     padding: 28px 0 0;
@@ -928,7 +705,7 @@ body:has(.research) {
     position: absolute;
     inset-inline: 0;
     bottom: 12px;
-    width: min(748px, calc(100% - 32px));
+    width: min(1168px, calc(100% - 64px));
     margin-inline: auto;
     display: flex;
     flex-direction: column;
@@ -940,13 +717,6 @@ body:has(.research) {
 }
 .pendingAction .framingProposal {
     gap: 0;
-}
-.pendingAction .framingCard {
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-    backdrop-filter: none;
 }
 .pendingAction [data-slot="agent-question"] {
     max-width: none;
@@ -962,29 +732,6 @@ body:has(.research) {
 }
 .pendingAction .framingScope header {
     display: none;
-}
-.pendingAction .framingRecap {
-    padding: 0 12px;
-}
-.pendingAction .framingRecap header {
-    display: none;
-}
-.pendingAction .framingQuestions li {
-    padding-block: 8px;
-    border: 0;
-    font-size: 12.5px;
-    line-height: 18px;
-    gap: 9px;
-}
-.pendingAction .framingQuestionId {
-    background: transparent;
-    color: var(--muted-foreground);
-    padding: 0;
-    min-width: 18px;
-}
-.pendingAction .framingCorrections {
-    margin: 0 12px;
-    border: 0;
 }
 .framingLaunch {
     display: flex;
@@ -1002,26 +749,6 @@ body:has(.research) {
     font-size: 10px;
     line-height: 15px;
     color: var(--muted-foreground);
-}
-.framingScope > div [data-slot="toggle-group"] {
-    flex-wrap: wrap;
-    gap: 4px;
-}
-.framingScope > div [data-slot="toggle-group-item"],
-.framingScope > div [data-slot="toggle-group"] > button {
-    height: auto;
-    min-height: 28px;
-    padding: 4px 8px;
-    font-size: 11px;
-    line-height: 16px;
-    border-radius: 6px;
-    box-shadow: none;
-    border: 1px solid var(--divider);
-    white-space: normal;
-}
-.framingScope > div [data-slot="toggle-group-item"][data-pressed] {
-    background: var(--fill-quiet);
-    border-color: var(--ring);
 }
 .composerSuggestions {
     padding: 5px 12px 0;
@@ -1134,15 +861,6 @@ body:has(.research) {
     flex-shrink: 0;
 }
 
-.pendingAction .framingQuestions li > button {
-    width: 22px;
-    height: 22px;
-    min-height: 22px;
-}
-.pendingAction .framingQuestions li {
-    padding-block: 6px;
-}
-
 .research:has(> .conversationHeader) {
     grid-template-rows: auto minmax(0, 1fr);
 }
@@ -1161,5 +879,169 @@ body:has(.research) {
         )
         > [data-slot="conversation-thread"] {
         width: calc(100% - 344px);
+    }
+}
+
+.framing [aria-label="Jump to latest"] {
+    z-index: 2;
+}
+
+/* The same mounted composer joins the program surface only during contextual input. */
+.pendingAction [data-slot="conversation-pending-panel"] {
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+}
+.pendingAction [data-slot="conversation-pending-details"] {
+    border: 1px solid var(--border);
+    border-bottom: 0;
+    border-radius: 20px 20px 0 0;
+    background: color-mix(in oklab, var(--foreground) 2%, var(--card));
+}
+.pendingAction [data-slot="conversation-pending-details"] > summary {
+    min-height: 46px;
+    padding: 14px 20px;
+    font-size: 14px;
+    gap: 12px;
+}
+.pendingAction
+    [data-slot="conversation-pending-details"][open]
+    > summary
+    > span:nth-child(2) {
+    display: none;
+}
+.pendingAction
+    [data-slot="conversation-pending-details"][open]
+    > summary
+    > svg {
+    margin-left: auto;
+}
+.pendingAction [data-slot="conversation-pending-body"] {
+    max-height: min(40dvh, 380px);
+}
+.pendingAction [data-slot="conversation-pending-footer"] {
+    border-inline: 1px solid var(--border);
+    background: color-mix(in oklab, var(--foreground) 2%, var(--card));
+}
+.pendingAction [data-slot="conversation-composer"] {
+    margin-inline: -8px;
+}
+.pendingAction .framingLaunch {
+    padding: 14px 20px;
+    min-height: 72px;
+    gap: 20px;
+}
+.pendingAction .framingLaunch > button {
+    margin-left: auto;
+    height: 44px;
+    padding-inline: 22px;
+    flex-shrink: 0;
+}
+.pendingAction
+    [data-slot="conversation-pending-panel"]:has([data-composer-action]) {
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: color-mix(in oklab, var(--foreground) 2%, var(--card));
+}
+.pendingAction
+    [data-slot="conversation-pending-panel"]:has([data-composer-action])
+    > details {
+    border: 0;
+    background: transparent;
+}
+.pendingAction
+    [data-slot="conversation-pending-panel"]:has([data-composer-action])
+    > [data-slot="conversation-pending-footer"] {
+    order: 3;
+    border: 0;
+    background: transparent;
+}
+.pendingAction [data-composer-action] {
+    margin: 14px 20px 0;
+}
+.pendingAction [data-composer-action] [class~="chat-composer-mode"] {
+    padding: 0 0 10px;
+}
+.framingDock
+    .pendingAction
+    [data-composer-action]
+    [data-slot="composer-fields"] {
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+.framingDock
+    .pendingAction
+    [data-composer-action]
+    [data-slot="prompt-composer-input"] {
+    min-height: 40px;
+    max-height: 110px;
+    padding: 7px 0;
+    font-size: 16px;
+    line-height: 24px;
+}
+.framingDock
+    .pendingAction
+    [data-composer-action]
+    [data-slot="composer-bottom"]
+    > span {
+    display: none;
+}
+.pendingAction [data-slot="agent-question-body"] {
+    padding: 4px 20px 0;
+}
+.pendingAction [data-slot="agent-question-title"] {
+    font-size: 18px;
+    line-height: 1.45;
+}
+.pendingAction [data-slot="agent-question-option"] {
+    border: 1px solid var(--border);
+    min-height: 66px;
+    margin-block: 3px;
+}
+.pendingAction [data-slot="agent-question-option"]:has([data-checked]) {
+    border-color: var(--brand-purple);
+}
+.pendingAction [data-slot="agent-question-footer"] {
+    padding: 10px 0 4px;
+}
+.pendingAction
+    [data-slot="conversation-pending-panel"]:has([data-slot="agent-question"])
+    [data-composer-action] {
+    margin-bottom: 18px;
+}
+@media (max-width: 640px) {
+    .pendingAction [data-slot="conversation-pending-body"] {
+        max-height: 34dvh;
+    }
+    .pendingAction
+        [data-slot="conversation-pending-panel"]:has(
+            [class~="chat-composer-mode"]
+        )
+        [data-slot="conversation-pending-body"] {
+        max-height: 26dvh;
+    }
+    .pendingAction .framingLaunch {
+        flex-wrap: wrap;
+        padding: 12px 14px;
+        gap: 8px;
+    }
+    .pendingAction [data-composer-action] {
+        margin-inline: 14px;
+    }
+    .framingDock
+        .pendingAction
+        [data-composer-action]
+        [data-slot="composer-fields"] {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .framingDock
+        .pendingAction
+        [data-composer-action]
+        [data-slot="composer-bottom"] {
+        justify-content: flex-end;
+    }
+    .pendingAction [data-slot="agent-question-body"] {
+        padding-inline: 14px;
     }
 }

@@ -14,8 +14,12 @@ for (const theme of ["light", "dark"] as const) {
             await page.emulateMedia({
                 reducedMotion: width === 1440 ? "no-preference" : "reduce",
             });
-            await page.clock.install();
-            await page.goto(`/?layout=start&screen=framing&theme=${theme}`);
+            const time = new Date("2026-10-31T12:00:00Z");
+            await page.clock.install({ time });
+            await page.clock.pauseAt(new Date(time.getTime() + 60_000));
+            await page.goto(`/?layout=start&screen=framing&theme=${theme}`, {
+                waitUntil: "domcontentloaded",
+            });
             const viewport = page.getByRole("region", {
                 name: "Conversation scroll area",
             });
@@ -24,14 +28,26 @@ for (const theme of ["light", "dark"] as const) {
             await page
                 .getByRole("button", { name: "Preview tools", exact: true })
                 .click();
+            await page.clock.runFor(300);
             await page
                 .getByRole("button", { name: "Grow illustrative reply" })
                 .click();
             await page.keyboard.press("Escape");
+            let lastLength =
+                (await page.getByRole("log").textContent())?.length ?? 0;
             for (let reading = 1; reading <= 8; reading++) {
                 await page.clock.runFor(250);
+                await expect
+                    .poll(
+                        async () =>
+                            (await page.getByRole("log").textContent())
+                                ?.length ?? 0,
+                    )
+                    .toBeGreaterThan(lastLength);
+                lastLength =
+                    (await page.getByRole("log").textContent())?.length ?? 0;
                 await expect(page.getByRole("log")).toContainText(
-                    `Illustrative reading ${reading}.`,
+                    "Illustrative reading",
                 );
             }
             await expect
@@ -44,12 +60,23 @@ for (const theme of ["light", "dark"] as const) {
             await expect(
                 page.getByRole("button", { name: "Jump to latest" }),
             ).toBeVisible();
+            const lengthWhenReaderLeft = lastLength;
             for (let reading = 9; reading <= 24; reading++) {
                 await page.clock.runFor(250);
+                await expect
+                    .poll(
+                        async () =>
+                            (await page.getByRole("log").textContent())
+                                ?.length ?? 0,
+                    )
+                    .toBeGreaterThanOrEqual(lastLength);
+                lastLength =
+                    (await page.getByRole("log").textContent())?.length ?? 0;
                 await expect(page.getByRole("log")).toContainText(
-                    `Illustrative reading ${reading}.`,
+                    "Illustrative reading",
                 );
             }
+            expect(lastLength).toBeGreaterThan(lengthWhenReaderLeft);
             await expect(
                 page.getByRole("log").getByRole("article").last(),
             ).not.toHaveAttribute("aria-busy", "true");
@@ -77,12 +104,6 @@ for (const theme of ["light", "dark"] as const) {
                     ),
                 )
                 .toBeLessThan(32);
-            await expect(
-                page
-                    .getByRole("log")
-                    .getByRole("link", { name: "Source context" })
-                    .first(),
-            ).toHaveAttribute("href", "https://www.sec.gov/edgar/search/");
             expect(
                 await page.evaluate(
                     () =>
@@ -111,11 +132,9 @@ test("START compact activities reveal useful material and keep their keyboard di
         name: "Inspect Find company reporting",
         exact: true,
     });
-    await expect(
-        page.getByText(
-            "Looking for filings and earnings material about claims coordination.",
-        ),
-    ).toBeVisible();
+    await expect(trigger).toContainText(
+        "Looking for filings and earnings material about claims coordination.",
+    );
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
     await trigger.focus();
     await page.keyboard.press("Enter");
@@ -207,7 +226,12 @@ for (const theme of ["light", "dark"]) {
             });
             const draft =
                 "Examine decision rights.\nRetain competing interpretations.\nCheck substitution costs.";
+            const resting = await composer.boundingBox();
+            if (!resting) throw new Error("Missing resting composer");
             await input.fill(draft);
+            await expect
+                .poll(async () => (await composer.boundingBox())?.height ?? 0)
+                .toBeGreaterThan(resting.height);
             const expanded = await composer.boundingBox();
             if (!expanded) throw new Error("Missing expanded composer");
             await page
