@@ -239,16 +239,31 @@
     padding-inline: 8px;
 }
 .research {
-    min-height: calc(100svh - 60px);
-    display: grid;
-    grid-template-columns: 320px minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+.researchPanels {
+    flex: 1;
+    min-height: 0;
+}
+.researchPane {
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
 }
 .conversation {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    padding: 22px 22px 22px 48px;
-    border-right: 1px solid var(--divider);
+    padding: 20px 16px;
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
     background: color-mix(in oklab, var(--card) 35%, transparent);
 }
 .conversation .message {
@@ -262,7 +277,11 @@
     margin-top: auto;
 }
 .progress {
-    padding: 26px 48px 32px 36px;
+    container: research-progress / inline-size;
+    padding: 24px;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
     min-width: 0;
     position: relative;
     display: flex;
@@ -288,8 +307,10 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 14px;
-    flex: 1;
-    min-height: 0;
+    flex: 0 0 auto;
+}
+.progress > * {
+    flex-shrink: 0;
 }
 .completed {
     opacity: 0.45;
@@ -332,33 +353,6 @@
     }
     .showcaseIdentity {
         align-items: flex-start;
-    }
-    .research {
-        grid-template-columns: minmax(0, 1fr);
-    }
-    .conversation {
-        padding: 24px 16px;
-        border-right: 0;
-        border-bottom: 1px solid var(--divider);
-    }
-    .progress {
-        padding: 24px 16px;
-    }
-    .summaryPanel {
-        flex-wrap: wrap;
-        gap: 20px;
-    }
-    .stages {
-        flex-basis: 100%;
-    }
-    .lanes,
-    .completed {
-        grid-template-columns: minmax(0, 1fr);
-    }
-    .handoff {
-        position: static;
-        transform: none;
-        width: 100%;
     }
     .handoff button {
         white-space: normal;
@@ -538,26 +532,6 @@
     color: var(--brand-purple);
     font-weight: 500;
 }
-@media (max-width: 760px) {
-    .sourceHeading {
-        align-items: flex-start;
-        flex-direction: column;
-        gap: 14px;
-    }
-    .sourceHeading h1 {
-        font-size: 30px;
-        line-height: 34px;
-    }
-    .openProgress {
-        align-items: flex-start;
-    }
-    .counts {
-        gap: 26px;
-    }
-    .stageLabels {
-        flex-wrap: wrap;
-    }
-}
 
 .framing,
 .research {
@@ -591,42 +565,64 @@
     padding: 12px 4px 0;
     flex-shrink: 0;
 }
-.research {
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-}
-.conversation {
-    min-height: 0;
-    min-width: 0;
-    padding: 20px 16px;
-}
 .conversationComposer {
     margin-top: 0;
     padding-top: 10px;
 }
-.progress {
-    overflow-y: auto;
-    min-height: 0;
-}
 .mobileTabs {
     display: none;
+    flex-shrink: 0;
 }
-@media (max-width: 760px) {
-    .research {
-        grid-template-rows: auto minmax(0, 1fr);
+.research[data-compact="true"] .mobileTabs {
+    display: flex;
+    padding: 8px 16px;
+}
+.research[data-compact="true"] .conversation {
+    padding: 8px 16px 16px;
+}
+.research[data-compact="true"] .progress {
+    padding: 24px 16px;
+}
+.research[data-compact="true"] .handoff {
+    position: static;
+    transform: none;
+    width: 100%;
+}
+@container research-progress (max-width: 42rem) {
+    .lanes,
+    .completed {
+        grid-template-columns: minmax(0, 1fr);
     }
-    .mobileTabs {
-        display: flex;
-        padding: 8px 16px;
+    .summaryPanel {
+        flex-wrap: wrap;
+        gap: 16px;
+        padding: 16px;
     }
-    .research[data-mobile-view="progress"] .conversation,
-    .research[data-mobile-view="conversation"] .progress {
-        display: none;
+    .stages {
+        flex-basis: 100%;
     }
-    .conversation {
-        border: 0;
-        padding: 8px 16px 16px;
+    .sourceHeading {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 14px;
+    }
+    .sourceHeading h1 {
+        font-size: 28px;
+        line-height: 34px;
+        letter-spacing: -0.03em;
+    }
+    .openProgress {
+        align-items: flex-start;
+    }
+    .counts {
+        gap: 26px;
+    }
+    .counts b {
+        font-size: 36px;
+        line-height: 40px;
+    }
+    .stageLabels {
+        flex-wrap: wrap;
     }
 }
 
@@ -862,16 +858,8 @@ body:has(.research) {
     flex-shrink: 0;
 }
 
-.research:has(> .conversationHeader) {
-    grid-template-rows: auto minmax(0, 1fr);
-}
 .research > .conversationHeader {
-    grid-column: 1 / -1;
-}
-@media (max-width: 760px) {
-    .research:has(> .conversationHeader) {
-        grid-template-rows: auto auto minmax(0, 1fr);
-    }
+    flex-shrink: 0;
 }
 
 @media (min-width: 960px) {

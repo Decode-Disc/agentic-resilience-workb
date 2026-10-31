@@ -10,9 +10,12 @@ import {
     type ComponentProps,
     type ReactNode,
     useEffect,
+    useId,
+    useLayoutEffect,
     useRef,
     useState,
 } from "react";
+import type { GroupImperativeHandle, Layout } from "react-resizable-panels";
 import {
     AgentQuestion,
     AgentQuestionDescription,
@@ -37,9 +40,15 @@ import {
 import { ConversationPendingPanel } from "@/components/chat/workbench-conversation";
 import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
+import {
+    ResizableHandle,
+    ResizablePanel,
+    ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WorkbenchIcon } from "@/components/workbench-ui/glyphs";
 import { CompanyResolutionCard } from "@/components/workspace/company-resolution-card";
+import { useMediaQuery } from "@/hooks/use-responsive";
 import { StartDossierHeading } from "./start-dossier-heading";
 import styles from "./start-screens.module.css";
 
@@ -274,8 +283,29 @@ export function StartResearchScreen({
     handoff?: ReactNode;
 }) {
     const [view, setView] = useState("progress");
+    const compact = useMediaQuery("(width < 52rem)");
+    const group = useRef<GroupImperativeHandle | null>(null);
+    const id = useId();
+    const conversationId = `${id}-conversation`;
+    const progressId = `${id}-progress`;
+    const desktopLayout = useRef<Layout>({
+        [conversationId]: 40,
+        [progressId]: 60,
+    });
+    // Keep both panes mounted when a narrow viewport exposes only one of them.
+    useLayoutEffect(() => {
+        group.current?.setLayout(
+            compact
+                ? {
+                      [conversationId]: view === "conversation" ? 100 : 0,
+                      [progressId]: view === "progress" ? 100 : 0,
+                  }
+                : desktopLayout.current,
+        );
+    }, [compact, view, conversationId, progressId]);
     return (
         <section
+            data-compact={compact}
             data-mobile-view={view}
             className={styles.research}
             aria-label="Research preparation">
@@ -289,41 +319,91 @@ export function StartResearchScreen({
                 </TabsList>
             </Tabs>
             {context && <ConversationHeader context={context} />}
-            <aside className={styles.conversation} aria-label="Conversation">
-                <ConversationThread
-                    runtime={runtime}
-                    variant="compact"
-                    aria-label="Research conversation">
-                    <ConversationThreadLog>
-                        {conversation}
-                    </ConversationThreadLog>
-                    {conversationComposer && (
-                        <ConversationThreadDock
-                            className={styles.conversationComposer}>
-                            {conversationComposer}
-                        </ConversationThreadDock>
-                    )}
-                </ConversationThread>
-            </aside>
-            <div className={styles.progress}>
-                <header className={handoff ? styles.muted : undefined}>
-                    {heading}
-                </header>
-                <div
-                    className={
-                        handoff
-                            ? `${styles.summaryPanel} ${styles.muted}`
-                            : styles.summaryPanel
-                    }>
-                    {summary}
-                    <div className={styles.stages}>{stages}</div>
-                </div>
-                <div className={handoff ? styles.completed : styles.lanes}>
-                    {lanes}
-                </div>
-                {limitations}
-                {handoff && <div className={styles.handoff}>{handoff}</div>}
-            </div>
+            <ResizablePanelGroup
+                groupRef={group}
+                orientation="horizontal"
+                disabled={compact}
+                defaultLayout={desktopLayout.current}
+                onLayoutChanged={(layout, { isUserInteraction }) => {
+                    if (!compact && isUserInteraction)
+                        desktopLayout.current = layout;
+                }}
+                className={styles.researchPanels}>
+                <ResizablePanel
+                    id={conversationId}
+                    minSize={compact ? 0 : "22rem"}
+                    maxSize={compact && view !== "conversation" ? 0 : "100%"}
+                    className={styles.researchPane}
+                    style={{
+                        display:
+                            compact && view !== "conversation"
+                                ? "none"
+                                : undefined,
+                        overflow: "hidden",
+                    }}>
+                    <aside
+                        className={styles.conversation}
+                        aria-label="Conversation">
+                        <ConversationThread
+                            runtime={runtime}
+                            variant="compact"
+                            aria-label="Research conversation">
+                            <ConversationThreadLog>
+                                {conversation}
+                            </ConversationThreadLog>
+                            {conversationComposer && (
+                                <ConversationThreadDock
+                                    className={styles.conversationComposer}>
+                                    {conversationComposer}
+                                </ConversationThreadDock>
+                            )}
+                        </ConversationThread>
+                    </aside>
+                </ResizablePanel>
+                <ResizableHandle
+                    withHandle
+                    disabled={compact}
+                    style={compact ? { display: "none" } : undefined}
+                    aria-label="Resize conversation and progress"
+                />
+                <ResizablePanel
+                    id={progressId}
+                    minSize={compact ? 0 : "26rem"}
+                    maxSize={compact && view !== "progress" ? 0 : "100%"}
+                    className={styles.researchPane}
+                    style={{
+                        display:
+                            compact && view !== "progress" ? "none" : undefined,
+                        overflow: "hidden",
+                    }}>
+                    <section
+                        className={styles.progress}
+                        aria-label="Documentary progress">
+                        <header className={handoff ? styles.muted : undefined}>
+                            {heading}
+                        </header>
+                        <div
+                            className={
+                                handoff
+                                    ? `${styles.summaryPanel} ${styles.muted}`
+                                    : styles.summaryPanel
+                            }>
+                            {summary}
+                            <div className={styles.stages}>{stages}</div>
+                        </div>
+                        <div
+                            className={
+                                handoff ? styles.completed : styles.lanes
+                            }>
+                            {lanes}
+                        </div>
+                        {limitations}
+                        {handoff && (
+                            <div className={styles.handoff}>{handoff}</div>
+                        )}
+                    </section>
+                </ResizablePanel>
+            </ResizablePanelGroup>
         </section>
     );
 }

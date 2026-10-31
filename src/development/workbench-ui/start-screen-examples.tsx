@@ -265,6 +265,7 @@ function PreviewResearchContext({
 }) {
     return (
         <ConversationContext
+            defaultOpen={!launched}
             title={`${company.ticker} · Research`}
             activities={activities}
             onChangeScope={onChangeScope}
@@ -1712,7 +1713,6 @@ function ResearchExample({
                                         <strong>Workbench</strong>
                                     </div>
                                     <p className="start-preview-reply">
-                                        <span>{"// "}</span>
                                         {replyText}
                                     </p>
                                 </MessageContent>
@@ -1813,18 +1813,23 @@ function ResearchExample({
             }
             limitations={
                 !done ? (
-                    <div className="start-preview-limitations">
-                        <span className="wb-label">Not available</span>
-                        <span>
-                            <WorkbenchIcon name="unestablished" size={12} />
-                            Analyst coverage · searched, none found
-                        </span>
-                        <span>
-                            <WorkbenchIcon name="clock" size={12} />
-                            Patent register · search unavailable
-                        </span>
-                        <span>Kept as stated limits, never as irrelevance</span>
-                    </div>
+                    <section
+                        className="start-preview-limitations"
+                        aria-label="Coverage gaps">
+                        <h2>Coverage gaps</h2>
+                        <ul>
+                            <li>
+                                <WorkbenchIcon name="unestablished" size={14} />
+                                <span>Analyst coverage</span>
+                                <span>No results found</span>
+                            </li>
+                            <li>
+                                <WorkbenchIcon name="clock" size={14} />
+                                <span>Patent register</span>
+                                <span>Search unavailable</span>
+                            </li>
+                        </ul>
+                    </section>
                 ) : undefined
             }
             handoff={

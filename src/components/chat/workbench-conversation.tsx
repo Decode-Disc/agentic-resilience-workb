@@ -648,6 +648,7 @@ function ConversationWorkList({
 
 /** A header-anchored overview of the current plan, retained outputs and reference inputs. */
 export function ConversationContext({
+    defaultOpen = true,
     title = "Research context",
     activities = [],
     plan,
@@ -656,6 +657,7 @@ export function ConversationContext({
     sources,
     onChangeScope,
 }: {
+    defaultOpen?: boolean;
     title?: string;
     activities?: readonly ConversationWorkItem[];
     plan: ReactNode;
@@ -664,7 +666,7 @@ export function ConversationContext({
     sources: ReactNode;
     onChangeScope?: () => void;
 }) {
-    const [open, setOpen] = useState(true);
+    const [open, setOpen] = useState(defaultOpen);
     const { isMobile } = useResponsive();
     return (
         <Popover
