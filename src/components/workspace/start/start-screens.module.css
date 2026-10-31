@@ -259,8 +259,7 @@
 .conversation {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    padding: 20px 16px;
+    padding: 0;
     height: 100%;
     min-height: 0;
     min-width: 0;
@@ -570,19 +569,46 @@
     margin-top: 0;
     padding-top: 10px;
 }
-.mobileTabs {
-    display: none;
-    flex-shrink: 0;
+.mobileConversation {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    gap: 0;
+    overflow: hidden;
+    background: var(--card);
 }
-.research[data-compact="true"] .mobileTabs {
-    display: flex;
-    padding: 8px 16px;
+.mobileConversation [data-slot="conversation-header"] {
+    height: calc(54px + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
 }
-.research[data-compact="true"] .conversation {
-    padding: 8px 16px 16px;
+.mobileConversation > .conversation {
+    flex: 1;
+    overflow: hidden;
+}
+.conversation [data-slot="conversation-thread-body"] {
+    position: relative;
+    padding: 12px 16px 0;
+}
+.askAi {
+    position: fixed;
+    right: max(16px, env(safe-area-inset-right));
+    bottom: max(16px, env(safe-area-inset-bottom));
+    z-index: 30;
+    height: 44px;
+    gap: 8px;
+    padding-inline: 16px;
+    border-radius: 999px;
+    box-shadow: 0 4px 16px
+        color-mix(in oklab, var(--foreground) 16%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+    .mobileConversation {
+        translate: none;
+        transition: opacity 100ms ease-out;
+    }
 }
 .research[data-compact="true"] .progress {
-    padding: 24px 16px;
+    padding: 24px 16px calc(84px + env(safe-area-inset-bottom));
 }
 .research[data-compact="true"] .handoff {
     position: static;
@@ -776,8 +802,8 @@ body:has(.research) {
 }
 .conversationComposer {
     position: absolute;
-    inset-inline: 0;
-    bottom: 0;
+    inset-inline: 16px;
+    bottom: max(16px, env(safe-area-inset-bottom));
     margin-top: 0;
     padding: 0;
 }
@@ -792,9 +818,26 @@ body:has(.research) {
     border-bottom: 1px solid var(--divider);
 }
 @media (max-width: 760px) {
+    .framing [data-slot="conversation-thread"] {
+        --conversation-jump-gap: 12px;
+    }
+    .framing [data-slot="conversation-thread-body"] {
+        container-type: size;
+    }
     .framing [data-slot="conversation-thread-content"] {
         width: calc(100% - 36px);
-        padding-top: 22px;
+        padding-top: 14px;
+        gap: 18px;
+    }
+    .framing [data-slot="conversation-thread"] [data-slot="message-content"] {
+        font-size: 13px;
+        line-height: 20px;
+    }
+    .framing
+        [data-slot="conversation-thread"]
+        [data-role="user"]
+        [data-slot="message-content"] {
+        padding: 8px 12px;
     }
     .framingDock {
         width: calc(100% - 20px);
@@ -804,72 +847,24 @@ body:has(.research) {
         max-width: 24ch;
     }
 }
-.conversationHeader {
-    height: 54px;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    padding: 0 18px;
-    border-bottom: 1px solid var(--divider);
-    font-size: 12px;
-}
-.conversationBrand {
-    color: var(--brand-purple);
-    font-size: 16px;
-    font-weight: 500;
-}
-.conversationHeader > div {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-    flex: 1;
-}
-.conversationHeader > div > :last-child:not(:first-child) {
-    margin-left: auto;
-}
-.conversationHeader [data-slot="badge"] {
-    background: transparent;
-    font-size: 11px;
-    min-width: 0;
-}
-@media (max-width: 550px) {
-    .conversationHeader {
-        padding-inline: 12px;
+@media (max-width: 760px) {
+    .framing [data-slot="conversation-header"] {
+        height: 44px;
     }
-    .conversationHeader > div {
-        overflow: visible;
-    }
-    .conversationHeader > div > :last-child:not(:first-child) {
-        max-width: 90px;
-        overflow: hidden;
-        white-space: nowrap;
-        text-overflow: ellipsis;
-    }
-}
-
-.conversationHeader [data-slot="badge"] {
-    flex: 0 1 auto;
-    justify-content: flex-start;
-    overflow: hidden;
-    white-space: nowrap;
-}
-.conversationHeader [data-slot="badge"] img {
-    flex-shrink: 0;
-}
-
-.research > .conversationHeader {
-    flex-shrink: 0;
 }
 
 @media (min-width: 960px) {
     .framing:has(
             [data-slot="conversation-context-trigger"][aria-expanded="true"]
         )
-        > [data-slot="conversation-thread"] {
+        > [data-slot="conversation-thread"]
+        > [data-slot="conversation-thread-body"] {
         width: calc(100% - 344px);
     }
+}
+
+.framing [data-slot="conversation-thread-body"] {
+    position: relative;
 }
 
 .framing [aria-label="Jump to latest"] {
@@ -999,23 +994,81 @@ body:has(.research) {
     margin-bottom: 12px;
 }
 @media (max-width: 640px) {
+    .framingDock {
+        --conversation-composer-focus-min-height: 52px;
+        --conversation-composer-focus-max-height: 112px;
+        --conversation-composer-focus-padding: 8px;
+        bottom: 8px;
+    }
+    .framing .framingDock [data-slot="prompt-composer-card"] {
+        padding: 6px 8px;
+    }
+    .framing .framingDock [data-slot="prompt-composer-input"] {
+        min-height: 36px;
+        max-height: 36px;
+        padding-block: 8px;
+        font-size: 13px;
+        line-height: 20px;
+    }
+    .framingDock
+        [data-slot="conversation-composer"]:not([data-composer-action])
+        [data-slot="prompt-composer-submit"] {
+        position: relative;
+        width: 34px;
+        height: 34px;
+    }
+    .framingDock
+        [data-slot="conversation-composer"]:not([data-composer-action])
+        [data-slot="prompt-composer-submit"]::after {
+        content: "";
+        position: absolute;
+        inset: -5px;
+    }
+    .pendingAction [data-slot="conversation-pending-details"] > summary {
+        min-height: 32px;
+        padding: 8px 12px;
+        font-size: 12px;
+    }
     .pendingAction [data-slot="conversation-pending-body"] {
-        max-height: 34dvh;
+        max-height: 40cqh;
     }
     .pendingAction
         [data-slot="conversation-pending-panel"]:has(
             [class~="chat-composer-mode"]
         )
         [data-slot="conversation-pending-body"] {
-        max-height: 26dvh;
+        max-height: 26cqh;
     }
     .pendingAction .framingLaunch {
-        flex-wrap: wrap;
-        padding: 10px 12px;
+        flex-wrap: nowrap;
+        min-height: 46px;
+        padding: 6px 10px;
         gap: 8px;
     }
+    .pendingAction [class~="chat-question-navigation"] {
+        flex-wrap: nowrap;
+    }
+    .pendingAction [class~="chat-question-topics"] {
+        width: auto;
+        flex: 1;
+    }
+    .pendingAction [class~="chat-question-pagination"] {
+        gap: 4px;
+    }
+    .pendingAction [class~="chat-question-actions"] {
+        flex-wrap: nowrap;
+        gap: 12px;
+    }
+    .pendingAction [class~="chat-question-actions"] button {
+        width: 32px;
+        padding-inline: 0;
+    }
     .pendingAction [data-composer-action] {
-        margin-inline: 14px;
+        --conversation-composer-focus-min-height: 28px;
+        --conversation-composer-focus-max-height: 72px;
+        --conversation-composer-focus-padding: 6px 8px;
+        --conversation-composer-focus-input-padding: 4px 0;
+        margin: 6px 12px 0;
     }
     .framingDock
         .pendingAction
@@ -1030,13 +1083,37 @@ body:has(.research) {
         justify-content: flex-end;
     }
     .pendingAction [data-slot="agent-question-body"] {
-        padding-inline: 14px;
+        padding: 0;
+    }
+    .pendingAction [data-slot="agent-question-title"] {
+        font-size: 14.5px;
+        line-height: 21px;
+    }
+    .pendingAction [data-slot="agent-question-option"] {
+        min-height: 44px;
+    }
+    .pendingAction [data-slot="agent-question-option"] > label {
+        padding: 6px 8px;
+    }
+    .composerSuggestions {
+        padding-top: 3px;
+        font-size: 10.5px;
     }
 }
 
 .pendingAction [data-slot="agent-question-option"] > label {
     padding-block: 8px;
     align-items: start;
+}
+
+@media (max-width: 640px) and (max-height: 560px) {
+    .framingDock {
+        max-height: calc(100cqh - 20px);
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
+    }
 }
 
 .framingDock
@@ -1058,14 +1135,36 @@ body:has(.research) {
             [data-slot="agent-question"]
         )
         [data-slot="conversation-pending-body"] {
-        max-height: 42dvh;
+        max-height: min(42dvh, 66cqh);
     }
     .pendingAction .framingLaunch > button,
-    .pendingAction [class~="chat-composer-mode"] button,
     .framingDock
         .pendingAction
         [data-composer-action]
         [data-slot="prompt-composer-submit"] {
-        min-height: 44px;
+        position: relative;
+        height: 34px;
+        min-height: 34px;
+        padding-inline: 14px;
+        font-size: 12.5px;
+    }
+    .pendingAction .framingLaunch > button::after,
+    .framingDock
+        .pendingAction
+        [data-composer-action]
+        [data-slot="prompt-composer-submit"]::after {
+        content: "";
+        position: absolute;
+        inset: -5px 0;
+    }
+    .pendingAction [class~="chat-composer-mode"] button {
+        position: relative;
+        height: 32px;
+        min-height: 32px;
+    }
+    .pendingAction [class~="chat-composer-mode"] button::after {
+        content: "";
+        position: absolute;
+        inset: -6px;
     }
 }

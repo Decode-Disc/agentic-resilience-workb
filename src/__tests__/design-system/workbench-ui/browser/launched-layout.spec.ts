@@ -1,5 +1,140 @@
 import { expect, test } from "@playwright/test";
 
+for (const width of [320, 390, 768]) {
+    test(`mobile launched opens conversation from Ask AI and retains the reader at ${width}px`, async ({
+        page,
+    }) => {
+        const errors: string[] = [];
+        page.on("pageerror", (error) => errors.push(error.message));
+        await page.setViewportSize({ width, height: 844 });
+        await page.emulateMedia({
+            reducedMotion: width === 390 ? "no-preference" : "reduce",
+        });
+        await page.goto(
+            `/?layout=start&screen=launched&theme=${width === 390 ? "dark" : "light"}`,
+        );
+        const progress = page.getByRole("region", {
+            name: "Documentary progress",
+            exact: true,
+        });
+        await expect(progress).toBeVisible();
+        await expect(
+            page.getByRole("button", { name: "Research context", exact: true }),
+        ).toHaveCount(0);
+        await expect(
+            page.getByRole("tablist", { name: "Research view" }),
+        ).toHaveCount(0);
+        const trigger = page.getByRole("button", {
+            name: "Ask AI",
+            exact: true,
+        });
+        await trigger.focus();
+        await page.keyboard.press("Enter");
+        const dialog = page.getByRole("dialog", {
+            name: "Conversation",
+            exact: true,
+        });
+        await expect(dialog).toBeVisible();
+        const input = dialog.getByRole("textbox", {
+            name: "Ask about the sources",
+        });
+        await input.fill(
+            Array.from(
+                { length: 60 },
+                (_, index) =>
+                    `Inspect coordination point ${index + 1} and the carrier's control of this workflow.`,
+            ).join("\n"),
+        );
+        await dialog
+            .getByRole("button", { name: "Send refinement", exact: true })
+            .click();
+        await input.fill("Keep this question while I inspect the progress.");
+        const back = dialog.getByRole("button", {
+            name: "Back to progress",
+            exact: true,
+        });
+        await back.focus();
+        const viewport = dialog.getByRole("region", {
+            name: "Conversation scroll area",
+        });
+        await viewport.evaluate((node) => {
+            node.scrollTop = 100;
+            node.dispatchEvent(new Event("scroll"));
+        });
+        await back.click();
+        await expect(dialog).toBeHidden();
+        await expect(trigger).toBeFocused();
+        await expect(progress).toBeVisible();
+        await trigger.click();
+        await expect(input).toHaveValue(
+            "Keep this question while I inspect the progress.",
+        );
+        await expect
+            .poll(() => viewport.evaluate((node) => node.scrollTop))
+            .toBeCloseTo(100, 0);
+        if (width === 390) {
+            const readingAnchor = page.getByRole("button", {
+                name: "View framing",
+                exact: true,
+            });
+            await expect(readingAnchor).toBeInViewport();
+            await page.setViewportSize({ width: 1440, height: 1000 });
+            await expect(
+                page.getByRole("textbox", { name: "Ask about the sources" }),
+            ).toHaveValue("Keep this question while I inspect the progress.");
+            await expect(readingAnchor).toBeInViewport();
+            await expect
+                .poll(() =>
+                    page
+                        .getByRole("region", {
+                            name: "Conversation scroll area",
+                        })
+                        .evaluate(
+                            (node) =>
+                                node.scrollHeight -
+                                node.clientHeight -
+                                node.scrollTop,
+                        ),
+                )
+                .toBeGreaterThan(40);
+            await page.setViewportSize({ width, height: 844 });
+            await expect(dialog).toBeVisible();
+            await expect(readingAnchor).toBeInViewport();
+            await expect
+                .poll(() =>
+                    viewport.evaluate(
+                        (node) =>
+                            node.scrollHeight -
+                            node.clientHeight -
+                            node.scrollTop,
+                    ),
+                )
+                .toBeGreaterThan(40);
+        }
+        await dialog
+            .getByRole("button", { name: "Research context", exact: true })
+            .click();
+        await expect(
+            page.getByRole("region", { name: "Plan", exact: true }),
+        ).toBeVisible();
+        await page
+            .getByRole("button", {
+                name: "Close research context",
+                exact: true,
+            })
+            .click();
+        await page.keyboard.press("Escape");
+        await expect(dialog).toBeHidden();
+        await expect(trigger).toBeFocused();
+        expect(
+            await page.evaluate(
+                () => document.documentElement.scrollWidth <= innerWidth,
+            ),
+        ).toBe(true);
+        expect(errors).toEqual([]);
+    });
+}
+
 test("launched context starts closed and retains the analyst's choice during work updates", async ({
     page,
 }) => {
@@ -11,6 +146,11 @@ test("launched context starts closed and retains the analyst's choice during wor
     });
     await expect(context).toHaveAttribute("aria-expanded", "false");
     await context.click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("button", { name: "Ask AI", exact: true }).click();
+    await expect(context).toHaveAttribute("aria-expanded", "true");
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await expect(context).toHaveAttribute("aria-expanded", "true");
     await page
         .getByRole("button", { name: "Preview tools", exact: true })
         .click();
@@ -39,7 +179,7 @@ test("launched context starts closed and retains the analyst's choice during wor
     await expect(context).toHaveAttribute("aria-expanded", "false");
 });
 
-test("conversation and progress resize without replacing the composer or losing its draft", async ({
+test("conversation stays on the right and retains its draft across resizing", async ({
     page,
 }) => {
     const errors: string[] = [];
@@ -56,12 +196,20 @@ test("conversation and progress resize without replacing the composer or losing 
         exact: true,
     });
     const before = await conversation.boundingBox();
+    const progressBounds = await page
+        .getByRole("region", { name: "Documentary progress" })
+        .boundingBox();
+    expect(
+        before &&
+            progressBounds &&
+            before.x >= progressBounds.x + progressBounds.width,
+    ).toBe(true);
     const separator = page.getByRole("separator", {
         name: "Resize conversation and progress",
         exact: true,
     });
     await separator.focus();
-    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowLeft");
     await expect
         .poll(async () => (await conversation.boundingBox())?.width ?? 0)
         .toBeGreaterThan(before?.width ?? 0);
@@ -72,7 +220,7 @@ test("conversation and progress resize without replacing the composer or losing 
         handle.y + handle.height / 2,
     );
     await page.mouse.down();
-    await page.mouse.move(handle.x - 120, handle.y + handle.height / 2, {
+    await page.mouse.move(handle.x + 120, handle.y + handle.height / 2, {
         steps: 5,
     });
     await page.mouse.up();
@@ -84,12 +232,14 @@ test("conversation and progress resize without replacing the composer or losing 
         "Keep this question while I inspect the material.",
     );
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.getByRole("tab", { name: "Conversation", exact: true }).click();
+    await page.getByRole("button", { name: "Ask AI", exact: true }).click();
     await expect(input).toHaveValue(
         "Keep this question while I inspect the material.",
     );
     await expect(separator).not.toBeVisible();
-    await page.getByRole("tab", { name: "Progress", exact: true }).click();
+    await page
+        .getByRole("button", { name: "Back to progress", exact: true })
+        .click();
     await expect(page.getByRole("textbox")).not.toBeVisible();
     await page.setViewportSize({ width: 1440, height: 1000 });
     await expect(separator).toBeVisible();

@@ -1,3 +1,58 @@
+[data-slot="conversation-header"] {
+    height: 54px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 18px;
+    border-bottom: 1px solid var(--divider);
+    font-size: 12px;
+}
+[data-slot="conversation-brand"] {
+    color: var(--brand-purple);
+    font-size: 16px;
+    font-weight: 500;
+}
+[data-slot="conversation-header"] > div {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1;
+}
+[data-slot="conversation-header"] > div > :last-child:not(:first-child) {
+    margin-left: auto;
+}
+[data-slot="conversation-header"] [data-slot="badge"] {
+    background: transparent;
+    font-size: 11px;
+    min-width: 0;
+}
+@media (max-width: 550px) {
+    [data-slot="conversation-header"] {
+        padding-inline: 12px;
+    }
+    [data-slot="conversation-header"] > div {
+        overflow: visible;
+    }
+    [data-slot="conversation-header"] > div > :last-child:not(:first-child) {
+        max-width: 90px;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+}
+
+[data-slot="conversation-header"] [data-slot="badge"] {
+    flex: 0 1 auto;
+    justify-content: flex-start;
+    overflow: hidden;
+    white-space: nowrap;
+}
+[data-slot="conversation-header"] [data-slot="badge"] img {
+    flex-shrink: 0;
+}
+
 /* Shared conversation materials; screen owners supply width and dock placement. */
 [data-slot="conversation-thread"] {
     background: var(--card);
@@ -33,7 +88,7 @@
 [data-slot="conversation-thread"] [data-slot="prompt-composer"] {
     border: 1px solid var(--input-border);
     border-radius: 16px;
-    background: var(--card);
+    background: var(--secondary);
     box-shadow: none;
     transition: border-color 160ms ease-out;
 }
@@ -467,12 +522,34 @@
 }
 [data-slot="conversation-jump-to-latest"] {
     background: var(--card);
-    border: 1px solid var(--input-border);
-    box-shadow: 0 3px 10px
-        color-mix(in oklab, var(--foreground) 12%, transparent);
+    color: var(--muted-foreground);
+    border: 1px solid var(--divider);
+    animation: conversation-jump-in 140ms ease-out;
 }
 [data-slot="conversation-jump-to-latest"]:hover {
     background: var(--popover);
+    color: var(--foreground);
+}
+@keyframes conversation-jump-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+@media (pointer: coarse) {
+    [data-slot="conversation-jump-to-latest"]::after {
+        content: "";
+        position: absolute;
+        inset: -6px;
+        border-radius: inherit;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    [data-slot="conversation-jump-to-latest"] {
+        animation-duration: 80ms;
+    }
 }
 .chat-context-card {
     --context-card-max-height: min(78dvh, 660px);
@@ -871,27 +948,53 @@
     .chat-question-navigation {
         flex-wrap: wrap;
         gap: 8px;
-        padding: 2px 12px 10px;
+        padding: 6px 10px 8px;
     }
     .chat-question-topics {
         width: 100%;
+        padding-block: 6px;
+        margin-block: -6px;
     }
-    .chat-question-topics button,
-    .chat-question-pagination button {
-        min-height: 44px;
+    .chat-question-topics button {
+        position: relative;
+        height: 32px;
+        min-height: 32px;
+        padding-inline: 8px;
+        font-size: 12px;
+    }
+    .chat-question-topics button::after {
+        content: "";
+        position: absolute;
+        inset: -6px 0;
     }
     .chat-question-pagination button {
-        width: 44px;
+        position: relative;
+    }
+    .chat-question-pagination button::after,
+    .chat-question-actions button::after {
+        content: "";
+        position: absolute;
+        inset: -6px;
     }
     .chat-question-actions button {
-        min-height: 44px;
+        position: relative;
+        height: 32px;
+        min-height: 32px;
     }
     .chat-focused-question {
-        margin-inline: 12px;
-        padding: 12px;
+        margin-inline: 10px;
+        padding: 10px 12px;
     }
     .chat-focused-question h3 {
-        font-size: 16px;
+        font-size: 14.5px;
+        line-height: 21px;
+    }
+    .chat-question-rationale {
+        margin-top: 8px;
+    }
+    .chat-question-rationale p {
+        font-size: 12.5px;
+        line-height: 18px;
     }
 }
 [data-slot="conversation-thread"] table {

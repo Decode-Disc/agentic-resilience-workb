@@ -617,17 +617,15 @@ for (const theme of ["light", "dark"] as const) {
             .getByRole("button", { name: "Start research", exact: true })
             .click();
         await page.setViewportSize({ width: 390, height: 844 });
-        await page
-            .getByRole("tab", { name: "Conversation", exact: true })
-            .click();
+        await page.getByRole("button", { name: "Ask AI", exact: true }).click();
         const followUp = page.getByRole("textbox", {
             name: "Ask about the sources",
         });
         await followUp.fill("Keep this draft\nwith a second line");
-        await page.getByRole("tab", { name: "Progress", exact: true }).click();
         await page
-            .getByRole("tab", { name: "Conversation", exact: true })
+            .getByRole("button", { name: "Back to progress", exact: true })
             .click();
+        await page.getByRole("button", { name: "Ask AI", exact: true }).click();
         await expect(followUp).toHaveValue(
             "Keep this draft\nwith a second line",
         );
@@ -649,7 +647,7 @@ test("START opening the accepted framing keeps its disclosure in view on mobile"
 }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/?layout=start&screen=launched&theme=light");
-    await page.getByRole("tab", { name: "Conversation", exact: true }).click();
+    await page.getByRole("button", { name: "Ask AI", exact: true }).click();
     const disclosure = page.getByRole("button", {
         name: "View framing",
         exact: true,

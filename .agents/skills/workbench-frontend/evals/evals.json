@@ -383,6 +383,30 @@
         "Treats fixture-based UI evidence and connected workflow delivery separately and reports the remaining validation without claiming the candidate is installed or integrated."
       ],
       "expected_output": "A source-backed migration boundary preserving the installed UI, identifying the candidate trial and preventing registry changes from becoming implicit runtime or product changes."
+    },
+    {
+      "id": 21,
+      "name": "primitive-defaults-and-motion-exceptions",
+      "prompt": "Plan a compact source-summary and attached Coverage gaps disclosure for the START gallery using the installed Workbench components. A proposed implementation copies the panel's background and shadow CSS and disables disclosure animation in previews and the admin journal to simplify testing. Assess that proposal against current owners and the automatic source-preparation collapse that preserves a reading anchor. Preserve the approved composition and loading boundaries. Read-only; do not edit, start services or run providers.",
+      "files": [
+        "../../../DESIGN.md",
+        "../../../src/components/workbench-ui/glass-panel.tsx",
+        "../../../src/components/workspace/start/start-screens.tsx",
+        "../../../src/components/ui/collapsible.tsx",
+        "../../../src/components/ui/disclosure-motion.tsx",
+        "../../../src/components/workspace/source-preparation-status.tsx",
+        "../../../src/components/admin/admin-execution-journal.tsx",
+        "../../../src/development/workbench-ui/chat-composition-mocks.tsx",
+        "../../../workbench-ui.playwright.config.ts"
+      ],
+      "expectations": [
+        "Inspects GlassPanel and the shared Button and Badge owners before proposing copied materials or duplicate controls; keeps consumer geometry local.",
+        "Preserves installed animation defaults for ordinary disclosures instead of treating previews, administration or test convenience as sufficient reasons to disable them.",
+        "Traces centralized reduced-motion handling and the automatic reading-anchor collapse; preserves a justified exception rather than deleting all overrides indiscriminately.",
+        "Proposes checks with normal and reduced motion on the affected consumers, recognizing that the gallery's reduced-motion configuration cannot establish ordinary animation behavior.",
+        "Preserves deferred snapshot loading and selection boundaries, distinguishes component tests from a protected admin browser journey, and respects the read-only scope."
+      ],
+      "expected_output": "A bounded reuse proposal identifying existing owners, justified exceptions and focused verification while preserving the approved composition and data-loading behavior."
     }
   ]
 }

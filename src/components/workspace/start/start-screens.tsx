@@ -1,5 +1,6 @@
 import type { AssistantRuntime } from "@assistant-ui/react";
 import {
+    AiChat02Icon,
     ArrowLeft01Icon,
     ArrowRight01Icon,
     File01Icon,
@@ -9,6 +10,7 @@ import {
 import {
     type ComponentProps,
     type ReactNode,
+    type RefObject,
     useEffect,
     useId,
     useLayoutEffect,
@@ -38,6 +40,7 @@ import {
     MessageFooter,
 } from "@/components/chat/message";
 import {
+    ConversationHeader,
     ConversationPendingPanel,
     WORKBENCH_AGENT_NAME,
 } from "@/components/chat/workbench-conversation";
@@ -48,7 +51,14 @@ import {
     ResizablePanel,
     ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+    Sheet,
+    SheetClose,
+    SheetContent,
+    SheetDescription,
+    SheetTitle,
+    SheetTrigger,
+} from "@/components/ui/sheet";
 import { GlassPanel } from "@/components/workbench-ui/glass-panel";
 import { WorkbenchIcon } from "@/components/workbench-ui/glyphs";
 import { CompanyResolutionCard } from "@/components/workspace/company-resolution-card";
@@ -174,22 +184,6 @@ export function StartRequestMessage({
         </div>
     );
 }
-function ConversationHeader({
-    identity,
-    context,
-}: {
-    identity?: ReactNode;
-    context?: ReactNode;
-}) {
-    return (
-        <header className={styles.conversationHeader}>
-            <span className={styles.conversationBrand}>{"//"}</span>
-            <span>Workbench</span>
-            <div>{identity}</div>
-            {context}
-        </header>
-    );
-}
 /** The pending action and composer stay anchored while only the message history scrolls. */
 export function StartFramingScreen({
     identity,
@@ -220,11 +214,16 @@ export function StartFramingScreen({
 }) {
     return (
         <section className={styles.framing} aria-label="Research framing">
-            {(identity || context) && (
-                <ConversationHeader identity={identity} context={context} />
-            )}
             <ConversationThread
                 runtime={runtime}
+                header={
+                    (identity || context) && (
+                        <ConversationHeader
+                            identity={identity}
+                            context={context}
+                        />
+                    )
+                }
                 aria-label="Framing conversation">
                 <ConversationThreadLog>
                     <div className={styles.request}>
@@ -267,6 +266,83 @@ export function StartFramingScreen({
         </section>
     );
 }
+function ResearchConversation({
+    runtime,
+    children,
+    composer,
+    header,
+    visible,
+    scrollPosition,
+}: {
+    runtime: AssistantRuntime;
+    children: ReactNode;
+    composer?: ReactNode;
+    header: ReactNode;
+    visible: boolean;
+    scrollPosition: RefObject<number>;
+}) {
+    const container = useRef<HTMLElement>(null);
+    const restoringScroll = useRef(false);
+    useLayoutEffect(() => {
+        if (!visible) return;
+        const viewport = container.current?.querySelector<HTMLElement>(
+            '[data-slot="conversation-thread-log"]',
+        );
+        if (!viewport) return;
+        const offset = scrollPosition.current;
+        restoringScroll.current = true;
+        let frame: number | undefined;
+        // A kept-mounted sheet has no scrolling geometry until it becomes visible.
+        const restore = () => {
+            if (viewport.clientHeight === 0) return;
+            observer.disconnect();
+            frame = requestAnimationFrame(() => {
+                viewport.scrollTop = offset;
+                restoringScroll.current = false;
+            });
+        };
+        const observer = new ResizeObserver(restore);
+        observer.observe(viewport);
+        restore();
+        return () => {
+            observer.disconnect();
+            if (frame !== undefined) cancelAnimationFrame(frame);
+            restoringScroll.current = false;
+        };
+    }, [visible, scrollPosition]);
+    return (
+        <aside
+            ref={container}
+            className={styles.conversation}
+            aria-label="Conversation"
+            onScrollCapture={(event) => {
+                const target = event.target;
+                if (
+                    visible &&
+                    !restoringScroll.current &&
+                    target instanceof HTMLElement &&
+                    target.dataset.slot === "conversation-thread-log" &&
+                    target.clientHeight > 0
+                )
+                    scrollPosition.current = target.scrollTop;
+            }}>
+            <ConversationThread
+                runtime={runtime}
+                variant="compact"
+                header={header}
+                aria-label="Research conversation">
+                <ConversationThreadLog>{children}</ConversationThreadLog>
+                {composer && (
+                    <ConversationThreadDock
+                        className={styles.conversationComposer}>
+                        {composer}
+                    </ConversationThreadDock>
+                )}
+            </ConversationThread>
+        </aside>
+    );
+}
+
 /** Conversation and documentary progress remain supplied independently of workflow state. */
 export function StartResearchScreen({
     context,
@@ -291,130 +367,150 @@ export function StartResearchScreen({
     limitations?: ReactNode;
     handoff?: ReactNode;
 }) {
-    const [view, setView] = useState("progress");
+    const [conversationOpen, setConversationOpen] = useState(false);
     const compact = useMediaQuery("(width < 52rem)");
+    const conversationScroll = useRef(0);
+    const askAiRef = useRef<HTMLButtonElement>(null);
     const group = useRef<GroupImperativeHandle | null>(null);
     const id = useId();
     const conversationId = `${id}-conversation`;
     const progressId = `${id}-progress`;
     const desktopLayout = useRef<Layout>({
-        [conversationId]: 40,
         [progressId]: 60,
+        [conversationId]: 40,
     });
-    // Keep both panes mounted when a narrow viewport exposes only one of them.
     useLayoutEffect(() => {
         group.current?.setLayout(
             compact
-                ? {
-                      [conversationId]: view === "conversation" ? 100 : 0,
-                      [progressId]: view === "progress" ? 100 : 0,
-                  }
+                ? { [progressId]: 100, [conversationId]: 0 }
                 : desktopLayout.current,
         );
-    }, [compact, view, conversationId, progressId]);
+    }, [compact, conversationId, progressId]);
+    const conversationPane = (
+        <ResearchConversation
+            runtime={runtime}
+            composer={conversationComposer}
+            scrollPosition={conversationScroll}
+            visible={!compact || conversationOpen}
+            header={
+                <ConversationHeader
+                    context={context}
+                    leading={
+                        compact ? (
+                            <SheetClose
+                                render={
+                                    <Button variant="ghost" size="icon-lg" />
+                                }
+                                aria-label="Back to progress">
+                                <Icon iconNode={ArrowLeft01Icon} size={18} />
+                            </SheetClose>
+                        ) : undefined
+                    }
+                />
+            }>
+            {conversation}
+        </ResearchConversation>
+    );
     return (
         <section
             data-compact={compact}
-            data-mobile-view={view}
+            data-mobile-view={conversationOpen ? "conversation" : "progress"}
             className={styles.research}
             aria-label="Research preparation">
-            <Tabs
-                value={view}
-                onValueChange={setView}
-                className={styles.mobileTabs}>
-                <TabsList aria-label="Research view">
-                    <TabsTrigger value="conversation">Conversation</TabsTrigger>
-                    <TabsTrigger value="progress">Progress</TabsTrigger>
-                </TabsList>
-            </Tabs>
-            {context && <ConversationHeader context={context} />}
-            <ResizablePanelGroup
-                groupRef={group}
-                orientation="horizontal"
-                disabled={compact}
-                defaultLayout={desktopLayout.current}
-                onLayoutChanged={(layout, { isUserInteraction }) => {
-                    if (!compact && isUserInteraction)
-                        desktopLayout.current = layout;
-                }}
-                className={styles.researchPanels}>
-                <ResizablePanel
-                    id={conversationId}
-                    minSize={compact ? 0 : "22rem"}
-                    maxSize={compact && view !== "conversation" ? 0 : "100%"}
-                    className={styles.researchPane}
-                    style={{
-                        display:
-                            compact && view !== "conversation"
-                                ? "none"
-                                : undefined,
-                        overflow: "hidden",
-                    }}>
-                    <aside
-                        className={styles.conversation}
-                        aria-label="Conversation">
-                        <ConversationThread
-                            runtime={runtime}
-                            variant="compact"
-                            aria-label="Research conversation">
-                            <ConversationThreadLog>
-                                {conversation}
-                            </ConversationThreadLog>
-                            {conversationComposer && (
-                                <ConversationThreadDock
-                                    className={styles.conversationComposer}>
-                                    {conversationComposer}
-                                </ConversationThreadDock>
-                            )}
-                        </ConversationThread>
-                    </aside>
-                </ResizablePanel>
-                <ResizableHandle
-                    withHandle
+            <Sheet
+                open={compact && conversationOpen}
+                onOpenChange={setConversationOpen}>
+                <ResizablePanelGroup
+                    groupRef={group}
+                    orientation="horizontal"
                     disabled={compact}
-                    style={compact ? { display: "none" } : undefined}
-                    aria-label="Resize conversation and progress"
-                />
-                <ResizablePanel
-                    id={progressId}
-                    minSize={compact ? 0 : "26rem"}
-                    maxSize={compact && view !== "progress" ? 0 : "100%"}
-                    className={styles.researchPane}
-                    style={{
-                        display:
-                            compact && view !== "progress" ? "none" : undefined,
-                        overflow: "hidden",
-                    }}>
-                    <section
-                        className={styles.progress}
-                        aria-label="Documentary progress">
-                        <header className={handoff ? styles.muted : undefined}>
-                            {heading}
-                        </header>
-                        <GlassPanel className={styles.summaryPanel}>
+                    defaultLayout={desktopLayout.current}
+                    onLayoutChanged={(layout, { isUserInteraction }) => {
+                        if (!compact && isUserInteraction)
+                            desktopLayout.current = layout;
+                    }}
+                    className={styles.researchPanels}>
+                    <ResizablePanel
+                        id={progressId}
+                        minSize={compact ? 0 : "26rem"}
+                        className={styles.researchPane}
+                        style={{ overflow: "hidden" }}>
+                        <section
+                            className={styles.progress}
+                            aria-label="Documentary progress">
+                            <header
+                                className={handoff ? styles.muted : undefined}>
+                                {heading}
+                            </header>
+                            <GlassPanel className={styles.summaryPanel}>
+                                <div
+                                    className={
+                                        handoff
+                                            ? `${styles.summaryOverview} ${styles.muted}`
+                                            : styles.summaryOverview
+                                    }>
+                                    {summary}
+                                    <div className={styles.stages}>
+                                        {stages}
+                                    </div>
+                                </div>
+                                {limitations}
+                            </GlassPanel>
                             <div
                                 className={
-                                    handoff
-                                        ? `${styles.summaryOverview} ${styles.muted}`
-                                        : styles.summaryOverview
+                                    handoff ? styles.completed : styles.lanes
                                 }>
-                                {summary}
-                                <div className={styles.stages}>{stages}</div>
+                                {lanes}
                             </div>
-                            {limitations}
-                        </GlassPanel>
-                        <div
-                            className={
-                                handoff ? styles.completed : styles.lanes
-                            }>
-                            {lanes}
-                        </div>
-                        {handoff && (
-                            <div className={styles.handoff}>{handoff}</div>
-                        )}
-                    </section>
-                </ResizablePanel>
-            </ResizablePanelGroup>
+                            {handoff && (
+                                <div className={styles.handoff}>{handoff}</div>
+                            )}
+                        </section>
+                    </ResizablePanel>
+                    <ResizableHandle
+                        withHandle
+                        disabled={compact}
+                        style={compact ? { display: "none" } : undefined}
+                        aria-label="Resize conversation and progress"
+                    />
+                    <ResizablePanel
+                        id={conversationId}
+                        minSize={compact ? 0 : "22rem"}
+                        maxSize={compact ? 0 : "100%"}
+                        className={styles.researchPane}
+                        style={{
+                            display: compact ? "none" : undefined,
+                            overflow: "hidden",
+                        }}>
+                        {!compact && conversationPane}
+                    </ResizablePanel>
+                </ResizablePanelGroup>
+                {compact && (
+                    <>
+                        <SheetTrigger
+                            render={<Button ref={askAiRef} variant="default" />}
+                            className={styles.askAi}>
+                            <Icon iconNode={AiChat02Icon} size={19} />
+                            Ask AI
+                        </SheetTrigger>
+                        <SheetContent
+                            side="right"
+                            keepMounted
+                            showCloseButton={false}
+                            finalFocus={askAiRef}
+                            className={styles.mobileConversation}>
+                            <SheetTitle className="sr-only">
+                                Conversation
+                            </SheetTitle>
+                            <SheetDescription className="sr-only">
+                                Ask about the research and return to its
+                                progress.
+                            </SheetDescription>
+                            {conversationPane}
+                        </SheetContent>
+                    </>
+                )}
+            </Sheet>
         </section>
     );
 }
@@ -616,6 +712,7 @@ export function FramingProposal({
     error?: string;
 }) {
     const summaryRef = useRef<HTMLElement>(null);
+    const topicsRef = useRef<HTMLFieldSetElement>(null);
     const previousClarification = useRef(Boolean(clarification));
     useEffect(() => {
         if (previousClarification.current && !clarification)
@@ -624,6 +721,27 @@ export function FramingProposal({
     }, [clarification]);
     const [selected, setSelected] = useState(questions[0]?.id);
     const current = questions.find((q) => q.id === selected) ?? questions[0];
+    useLayoutEffect(() => {
+        const topics = topicsRef.current;
+        if (!topics || clarification || !current) return;
+        const revealSelection = () => {
+            const button = topics.querySelector<HTMLButtonElement>(
+                '[aria-pressed="true"]',
+            );
+            if (!button) return;
+            const strip = topics.getBoundingClientRect();
+            const selectedTopic = button.getBoundingClientRect();
+            const shift =
+                selectedTopic.left < strip.left
+                    ? selectedTopic.left - strip.left
+                    : Math.max(0, selectedTopic.right - strip.right);
+            topics.scrollLeft += shift;
+        };
+        revealSelection();
+        const observer = new ResizeObserver(revealSelection);
+        observer.observe(topics);
+        return () => observer.disconnect();
+    }, [current, clarification]);
     const busy = pending || actionActive;
     const body = (
         <div className={styles.framingProposal}>
@@ -655,6 +773,7 @@ export function FramingProposal({
                     )}
                     <div className="chat-question-navigation">
                         <fieldset
+                            ref={topicsRef}
                             className="chat-question-topics"
                             aria-label="Research questions">
                             {questions.map((q) => (
@@ -756,20 +875,28 @@ export function FramingProposal({
                         <Button
                             variant="ghost"
                             size="sm"
+                            aria-label="Edit question"
+                            title="Edit question"
                             disabled={busy}
                             onClick={() => onEditRequest(current)}>
                             <Icon iconNode={PencilEdit01Icon} size={16} />
-                            Edit question
+                            <span className="hidden sm:inline">
+                                Edit question
+                            </span>
                         </Button>
                     )}
                     {onAddRequest && (
                         <Button
                             variant="ghost"
                             size="sm"
+                            aria-label="Add research question"
+                            title="Add research question"
                             disabled={busy}
                             onClick={onAddRequest}>
                             <Icon iconNode={PlusSignIcon} size={16} />
-                            Add research question
+                            <span className="hidden sm:inline">
+                                Add research question
+                            </span>
                         </Button>
                     )}
                 </div>

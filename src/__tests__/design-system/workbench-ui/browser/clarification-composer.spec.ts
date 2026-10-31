@@ -12,6 +12,10 @@ for (const width of [1440, 390]) {
             waitUntil: "domcontentloaded",
         });
         await page.getByRole("textbox").fill("Keep my unsent message.");
+        if (width === 390)
+            await page
+                .getByRole("button", { name: "Research context", exact: true })
+                .click();
         await page
             .getByRole("button", { name: "Change scope", exact: true })
             .click();

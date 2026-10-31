@@ -17,6 +17,7 @@ import {
     Task01Icon,
     Tick02Icon,
 } from "@hugeicons/core-free-icons";
+import { useControllableState } from "@radix-ui/react-use-controllable-state";
 import {
     type ReactNode,
     type Ref,
@@ -55,6 +56,27 @@ import { cn } from "@/lib/utils";
 import "./workbench-conversation.css";
 
 export const WORKBENCH_AGENT_NAME = "Workbench Agent";
+
+/** Keeps conversation identity and its context together wherever the chat is composed. */
+export function ConversationHeader({
+    identity,
+    context,
+    leading,
+}: {
+    identity?: ReactNode;
+    context?: ReactNode;
+    leading?: ReactNode;
+}) {
+    return (
+        <header data-slot="conversation-header">
+            {leading}
+            <span data-slot="conversation-brand">{"//"}</span>
+            <span>{WORKBENCH_AGENT_NAME}</span>
+            <div>{identity}</div>
+            {context}
+        </header>
+    );
+}
 
 /** Shares delivery state across composer messages and contextual answers; the caller owns history and drafts. */
 export function useWorkbenchConversation({
@@ -151,6 +173,7 @@ export function useWorkbenchConversation({
 export function ConversationComposer({
     inputRef,
     label,
+    placeholder = label,
     compact = false,
     failed = false,
     actionLabel,
@@ -160,6 +183,7 @@ export function ConversationComposer({
 }: {
     inputRef?: Ref<HTMLTextAreaElement>;
     label: string;
+    placeholder?: string;
     compact?: boolean;
     failed?: boolean;
     pending?: boolean;
@@ -242,7 +266,7 @@ export function ConversationComposer({
                             ref={inputRef}
                             data-slot="prompt-composer-input"
                             aria-label={label}
-                            placeholder={label}
+                            placeholder={placeholder}
                             disabled={pending}
                             rows={1}
                             cancelOnEscape={false}
@@ -664,6 +688,8 @@ function ConversationWorkList({
 /** A header-anchored overview of the current plan, retained outputs and reference inputs. */
 export function ConversationContext({
     defaultOpen = true,
+    open: controlledOpen,
+    onOpenChange,
     title = "Research context",
     activities = [],
     plan,
@@ -673,6 +699,8 @@ export function ConversationContext({
     onChangeScope,
 }: {
     defaultOpen?: boolean;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
     title?: string;
     activities?: readonly ConversationWorkItem[];
     plan: ReactNode;
@@ -681,7 +709,12 @@ export function ConversationContext({
     sources: ReactNode;
     onChangeScope?: () => void;
 }) {
-    const [open, setOpen] = useState(defaultOpen);
+    const [open, setOpen] = useControllableState({
+        prop: controlledOpen,
+        defaultProp: defaultOpen,
+        onChange: onOpenChange,
+        caller: "ConversationContext",
+    });
     const { isMobile } = useResponsive();
     return (
         <Popover

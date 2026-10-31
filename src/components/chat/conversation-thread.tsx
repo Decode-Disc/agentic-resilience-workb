@@ -11,9 +11,11 @@ import { useReducedMotion } from "motion/react";
 import {
     type ComponentProps,
     createContext,
+    type ReactNode,
     useContext,
     useLayoutEffect,
     useRef,
+    useState,
 } from "react";
 import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
@@ -30,10 +32,13 @@ export type ConversationThreadVariant =
 export type ConversationThreadProps = ComponentProps<"section"> & {
     variant?: ConversationThreadVariant;
     runtime: AssistantRuntime;
+    header?: ReactNode;
 };
 
 type ThreadContext = { variant: ConversationThreadVariant };
 const Context = createContext<ThreadContext | null>(null);
+const SCROLL_END_TOLERANCE_PX = 40;
+const SCROLL_JUMP_REVEAL_DELAY_MS = 150;
 function useThread(part: string) {
     const context = useContext(Context);
     if (!context)
@@ -45,6 +50,7 @@ function useThread(part: string) {
 export function ConversationThread({
     variant = "chat",
     runtime,
+    header,
     children,
     className,
     ...props
@@ -62,7 +68,9 @@ export function ConversationThread({
                             className,
                         )}
                         {...props}>
+                        {header}
                         <div
+                            data-slot="conversation-thread-body"
                             className={cn(
                                 "flex min-h-0 flex-1 flex-col",
                                 variant === "compact" ? "gap-3" : "gap-4",
@@ -120,6 +128,43 @@ export function ConversationThreadLog({
 }: Omit<ComponentProps<"div">, "ref">) {
     const { variant } = useThread("ConversationThreadLog");
     const reduceMotion = useReducedMotion();
+    const viewportRef = useRef<HTMLDivElement>(null);
+    const [showJump, setShowJump] = useState(false);
+    useLayoutEffect(() => {
+        const viewport = viewportRef.current;
+        const content = viewport?.firstElementChild;
+        if (!viewport || !content) return;
+        let revealTimeout: ReturnType<typeof setTimeout> | undefined;
+        let revealed = false;
+        const awayFromEnd = () =>
+            viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop >
+            SCROLL_END_TOLERANCE_PX;
+        const measure = () => {
+            if (!awayFromEnd()) {
+                clearTimeout(revealTimeout);
+                revealTimeout = undefined;
+                revealed = false;
+                setShowJump(false);
+            } else if (!revealed && revealTimeout === undefined) {
+                revealTimeout = setTimeout(() => {
+                    revealTimeout = undefined;
+                    if (!awayFromEnd()) return;
+                    revealed = true;
+                    setShowJump(true);
+                }, SCROLL_JUMP_REVEAL_DELAY_MS);
+            }
+        };
+        viewport.addEventListener("scroll", measure, { passive: true });
+        const observer = new ResizeObserver(measure);
+        observer.observe(viewport);
+        observer.observe(content);
+        measure();
+        return () => {
+            clearTimeout(revealTimeout);
+            viewport.removeEventListener("scroll", measure);
+            observer.disconnect();
+        };
+    }, []);
     return (
         <ThreadPrimitive.ViewportProvider>
             <div
@@ -127,6 +172,7 @@ export function ConversationThreadLog({
                 className="relative flex min-h-0 min-w-0 flex-1 flex-col">
                 <ThreadPrimitive.Viewport
                     {...props}
+                    ref={viewportRef}
                     render={<section />}
                     aria-label="Conversation scroll area"
                     tabIndex={0}
@@ -154,17 +200,19 @@ export function ConversationThreadLog({
                         </div>
                     </div>
                 </ThreadPrimitive.Viewport>
-                <ThreadPrimitive.ScrollToBottom
-                    render={<Button variant="outline" size="icon" />}
-                    data-slot="conversation-jump-to-latest"
-                    aria-label="Jump to latest"
-                    behavior={reduceMotion ? "instant" : "smooth"}
-                    className="absolute left-1/2 -translate-x-1/2 rounded-full shadow-sm disabled:hidden"
-                    style={{
-                        bottom: "calc(var(--conversation-dock-height, 0px) + 40px)",
-                    }}>
-                    <Icon iconNode={ArrowDown02Icon} size={16} />
-                </ThreadPrimitive.ScrollToBottom>
+                {showJump && (
+                    <ThreadPrimitive.ScrollToBottom
+                        render={<Button variant="outline" size="icon-sm" />}
+                        data-slot="conversation-jump-to-latest"
+                        aria-label="Jump to latest"
+                        behavior={reduceMotion ? "instant" : "smooth"}
+                        className="absolute left-1/2 -translate-x-1/2 rounded-full disabled:hidden"
+                        style={{
+                            bottom: "calc(var(--conversation-dock-height, 0px) + var(--conversation-jump-gap, 40px))",
+                        }}>
+                        <Icon iconNode={ArrowDown02Icon} size={16} />
+                    </ThreadPrimitive.ScrollToBottom>
+                )}
             </div>
         </ThreadPrimitive.ViewportProvider>
     );

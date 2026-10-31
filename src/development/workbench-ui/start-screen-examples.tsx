@@ -260,6 +260,8 @@ function PreviewResearchContext({
     hasReference,
     scopePending = false,
     onChangeScope,
+    open,
+    onOpenChange,
 }: {
     activities: readonly ConversationWorkItem[];
     scope: string;
@@ -268,10 +270,15 @@ function PreviewResearchContext({
     hasReference: boolean;
     scopePending?: boolean;
     onChangeScope?: () => void;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
 }) {
+    const { isMobile } = useResponsive();
     return (
         <ConversationContext
-            defaultOpen={!launched}
+            defaultOpen={!launched && !isMobile}
+            open={open}
+            onOpenChange={onOpenChange}
             title={`${company.ticker} · Research`}
             activities={activities}
             onChangeScope={onChangeScope}
@@ -866,6 +873,7 @@ function FramingExample({
     onLaunch: () => void;
     trialControls: ReactNode;
 }) {
+    const { isMobile } = useResponsive();
     const questionAction = state.questionAction ?? null;
     const setQuestionAction = (
         questionAction: PreviewConversation["questionAction"],
@@ -1145,6 +1153,13 @@ function FramingExample({
     const composer = (
         <ConversationComposer
             inputRef={refinementRef}
+            placeholder={
+                isMobile && !questionAction
+                    ? needsContext
+                        ? "Describe another scope…"
+                        : "Refine the framing…"
+                    : undefined
+            }
             label={
                 needsContext
                     ? "Or describe a different scope…"
@@ -1476,6 +1491,7 @@ function ResearchExample({
     onOpenProgress: () => void;
     trialControls: ReactNode;
 }) {
+    const [contextOpen, setContextOpen] = useState(false);
     const [workPreview, setWorkPreview] = useState<{
         step: number;
         state: ConversationWorkItem["state"];
@@ -1581,6 +1597,8 @@ function ResearchExample({
                     scope={state.scope}
                     count={state.questions.length}
                     launched
+                    open={contextOpen}
+                    onOpenChange={setContextOpen}
                     hasReference={state.scenario === "specific"}
                 />
             }

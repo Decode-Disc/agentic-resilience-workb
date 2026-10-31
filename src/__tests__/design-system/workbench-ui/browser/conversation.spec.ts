@@ -57,6 +57,7 @@ for (const theme of ["light", "dark"] as const) {
                 node.scrollTop = 0;
                 node.dispatchEvent(new Event("scroll"));
             });
+            await page.clock.runFor(200);
             await expect(
                 page.getByRole("button", { name: "Jump to latest" }),
             ).toBeVisible();
@@ -94,6 +95,7 @@ for (const theme of ["light", "dark"] as const) {
                 before && after && Math.abs(before.height - after.height),
             ).toBeLessThan(2);
             await page.getByRole("button", { name: "Jump to latest" }).click();
+            await page.clock.runFor(500);
             await expect
                 .poll(() =>
                     viewport.evaluate(
@@ -121,7 +123,7 @@ test("START compact activities reveal useful material and keep their keyboard di
 }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/?layout=start&screen=launched&theme=dark");
-    await page.getByRole("tab", { name: "Conversation", exact: true }).click();
+    await page.getByRole("button", { name: "Ask AI", exact: true }).click();
     await expect(
         page.getByRole("button", {
             name: "Inspect source preparation",
@@ -265,6 +267,10 @@ for (const width of [390, 1440]) {
     }) => {
         await page.setViewportSize({ width, height: 1000 });
         await page.goto("/?layout=start&screen=framing&theme=dark");
+        if (width === 390)
+            await page
+                .getByRole("button", { name: "Research context", exact: true })
+                .click();
         const log = page.getByRole("log");
         await expect(
             log.getByRole("button", { name: /Inspect reference/ }),
@@ -365,7 +371,7 @@ for (const width of [390, 1440])
         await expect(page).toHaveURL(/screen=launched/);
         if (width === 390)
             await page
-                .getByRole("tab", { name: "Conversation", exact: true })
+                .getByRole("button", { name: "Ask AI", exact: true })
                 .click();
         const context = page.getByRole("button", {
             name: "Research context",

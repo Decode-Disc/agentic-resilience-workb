@@ -51,6 +51,9 @@ test("context disclosures stay usable while their details scroll under the close
     page.on("pageerror", (error) => errors.push(error.message));
     await page.setViewportSize({ width: 390, height: 600 });
     await page.goto("/?layout=start&screen=framing&theme=light");
+    await page
+        .getByRole("button", { name: "Research context", exact: true })
+        .click();
     const details = page.getByRole("region", {
         name: "Research context details",
         exact: true,

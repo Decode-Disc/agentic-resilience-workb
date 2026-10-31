@@ -19,6 +19,10 @@ for (const width of [1440, 390]) {
         await expect(
             plan.getByRole("group", { name: "Activity", exact: true }),
         ).toHaveCount(0);
+        if (width === 390)
+            await page
+                .getByRole("button", { name: "Research context", exact: true })
+                .click();
         await page
             .getByRole("button", { name: "Change scope", exact: true })
             .click();

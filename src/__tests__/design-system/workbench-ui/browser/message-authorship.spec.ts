@@ -12,7 +12,7 @@ for (const screen of ["framing", "launched"] as const) {
             await page.goto(`/?layout=start&screen=${screen}&theme=light`);
             if (screen === "launched" && width === 390) {
                 await page
-                    .getByRole("tab", { name: "Conversation", exact: true })
+                    .getByRole("button", { name: "Ask AI", exact: true })
                     .click();
             }
             const log = page.getByRole("log");
@@ -29,6 +29,13 @@ for (const screen of ["framing", "launched"] as const) {
                 log.getByText("Workbench Agent", { exact: true }),
             ).toHaveCount(0);
             if (screen === "framing") {
+                if (width === 390)
+                    await page
+                        .getByRole("button", {
+                            name: "Research context",
+                            exact: true,
+                        })
+                        .click();
                 await page
                     .getByRole("button", { name: "Change scope", exact: true })
                     .click();

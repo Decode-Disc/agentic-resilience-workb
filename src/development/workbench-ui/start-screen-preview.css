@@ -182,6 +182,7 @@
     #start-preview-controls {
         order: 4;
         flex-basis: 100%;
+        min-width: 0;
         margin: 0;
     }
     .start-screen-toolbar nav {
@@ -203,9 +204,21 @@
     }
     .start-preview-scenarios .preview-control-group {
         min-width: 0;
+        flex-wrap: nowrap;
     }
     .start-preview-scenarios .preview-control-group button {
         padding-inline: 8px;
         font-size: 11px;
+    }
+}
+@media (max-width: 360px) {
+    .start-preview-scenarios .preview-control-group button {
+        flex: 1;
+        min-width: 0;
+        height: auto;
+        min-height: 32px;
+        padding: 4px 6px;
+        line-height: 14px;
+        white-space: normal;
     }
 }
