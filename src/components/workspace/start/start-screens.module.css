@@ -494,45 +494,6 @@
     font-size: 12.5px;
     color: var(--muted-foreground);
 }
-.framingSummary {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 12px;
-    border-radius: 14px;
-    background: var(--card);
-    box-shadow: 0 0 0 1px var(--divider);
-}
-.framingSummary b {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12.5px;
-    font-weight: 500;
-}
-.framingSummary > div {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-}
-.framingSummary > div > span {
-    font-size: 12px;
-    background: var(--tint-ink);
-    padding: 2px 6px;
-    border-radius: 4px;
-}
-.framingSummary button {
-    justify-content: flex-start;
-    align-self: flex-start;
-    height: auto;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    font-size: 12.5px;
-    color: var(--brand-purple);
-    font-weight: 500;
-}
-
 .framing,
 .research {
     line-height: normal;
@@ -809,13 +770,6 @@ body:has(.research) {
 }
 .conversation [data-slot="conversation-thread-content"] {
     padding-bottom: calc(var(--conversation-dock-height, 0px) + 24px);
-}
-.framingSummary {
-    padding: 8px 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-    border-bottom: 1px solid var(--divider);
 }
 @media (max-width: 760px) {
     .framing [data-slot="conversation-thread"] {

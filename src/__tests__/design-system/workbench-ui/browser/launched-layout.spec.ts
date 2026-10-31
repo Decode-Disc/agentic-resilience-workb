@@ -73,10 +73,12 @@ for (const width of [320, 390, 768]) {
             .poll(() => viewport.evaluate((node) => node.scrollTop))
             .toBeCloseTo(100, 0);
         if (width === 390) {
-            const readingAnchor = page.getByRole("button", {
-                name: "View framing",
-                exact: true,
-            });
+            const readingAnchor = page.getByText(
+                "I can help frame this research before it starts.",
+                {
+                    exact: true,
+                },
+            );
             await expect(readingAnchor).toBeInViewport();
             await page.setViewportSize({ width: 1440, height: 1000 });
             await expect(

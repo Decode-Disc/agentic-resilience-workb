@@ -5,9 +5,9 @@ import "./preview-controls.css";
 import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
 import "@/styles.css";
 import "./gallery.css";
+import { ChatCompositionMocks } from "./chat-composition-mocks";
 import { examples } from "./examples";
 import { StartScreenPreview, startScreenNames } from "./start-screen-examples";
-import { ChatCompositionMocks } from "./chat-composition-mocks";
 
 const params = new URLSearchParams(location.search);
 const theme = params.get("theme") === "dark" ? "dark" : "light";
@@ -21,6 +21,25 @@ const requestedScreen =
 document.body.dataset.single = String(!!requested);
 function Gallery() {
     const [action, setAction] = useState("");
+    const [activeScreen, setActiveScreen] = useState(requestedScreen);
+    const navigateToScreen = (screen: (typeof startScreenNames)[number]) => {
+        const url = new URL(location.href);
+        url.searchParams.set("screen", screen);
+        history.pushState(null, "", url);
+        setActiveScreen(screen);
+    };
+    useEffect(() => {
+        const restore = () =>
+            setActiveScreen(
+                startScreenNames.find(
+                    (name) =>
+                        name ===
+                        new URLSearchParams(location.search).get("screen"),
+                ) ?? "composer",
+            );
+        window.addEventListener("popstate", restore);
+        return () => window.removeEventListener("popstate", restore);
+    }, []);
     useEffect(() => {
         const listener = (e: Event) =>
             setAction((e as CustomEvent<string>).detail);
@@ -30,7 +49,7 @@ function Gallery() {
     }, []);
     if (params.get("layout") === "chat-mocks")
         return <ChatCompositionMocks initialTheme={theme} />;
-    if (requestedScreen)
+    if (activeScreen)
         return (
             <>
                 <header className="start-screen-toolbar">
@@ -43,16 +62,26 @@ function Gallery() {
                                 key={name}
                                 className={buttonVariants({
                                     variant:
-                                        name === requestedScreen
+                                        name === activeScreen
                                             ? "secondary"
                                             : "ghost",
                                     size: "sm",
                                 })}
                                 href={`?layout=start&screen=${name}&theme=${theme}`}
+                                onClick={(event) => {
+                                    if (
+                                        event.button !== 0 ||
+                                        event.metaKey ||
+                                        event.ctrlKey ||
+                                        event.shiftKey ||
+                                        event.altKey
+                                    )
+                                        return;
+                                    event.preventDefault();
+                                    navigateToScreen(name);
+                                }}
                                 aria-current={
-                                    name === requestedScreen
-                                        ? "page"
-                                        : undefined
+                                    name === activeScreen ? "page" : undefined
                                 }>
                                 {name}
                             </a>
@@ -65,20 +94,17 @@ function Gallery() {
                             size: "sm",
                         })}
                         aria-label="Switch theme"
-                        href={`?layout=start&screen=${requestedScreen}&theme=${theme === "dark" ? "light" : "dark"}`}>
+                        href={`?layout=start&screen=${activeScreen}&theme=${theme === "dark" ? "light" : "dark"}`}>
                         {theme === "dark" ? "Light theme" : "Dark theme"}
                     </a>
                     <p>Illustrative · no research executed</p>
                     <output aria-live="polite">{action}</output>
                 </header>
                 <StartScreenPreview
-                    name={requestedScreen}
+                    name={activeScreen}
                     theme={theme}
-                    onNavigate={(screen) => {
-                        const url = new URL(location.href);
-                        url.searchParams.set("screen", screen);
-                        location.assign(url.href);
-                    }}
+                    onStatus={setAction}
+                    onNavigate={navigateToScreen}
                     onOpenProgress={() => {
                         const url = new URL(location.href);
                         url.searchParams.delete("layout");

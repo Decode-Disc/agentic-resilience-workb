@@ -86,11 +86,15 @@
     width: 100%;
 }
 [data-slot="conversation-thread"] [data-slot="prompt-composer"] {
-    border: 1px solid var(--input-border);
+    border: 1px solid transparent;
     border-radius: 16px;
-    background: var(--secondary);
-    box-shadow: none;
+    background: color-mix(in oklab, var(--card) 93%, var(--foreground));
+    box-shadow: 0 3px 12px
+        color-mix(in oklab, var(--foreground) 10%, transparent);
     transition: border-color 160ms ease-out;
+}
+[data-slot="conversation-thread"] [data-slot="prompt-composer"]:focus-within {
+    border-color: var(--ring);
 }
 [data-slot="conversation-thread"] [data-slot="prompt-composer-card"] {
     padding: 10px;

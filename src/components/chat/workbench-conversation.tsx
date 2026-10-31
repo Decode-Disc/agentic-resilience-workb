@@ -694,6 +694,7 @@ export function ConversationContext({
     activities = [],
     plan,
     planSummary,
+    planAction,
     outputs,
     sources,
     onChangeScope,
@@ -705,6 +706,7 @@ export function ConversationContext({
     activities?: readonly ConversationWorkItem[];
     plan: ReactNode;
     planSummary?: ReactNode;
+    planAction?: ReactNode;
     outputs: ReactNode;
     sources: ReactNode;
     onChangeScope?: () => void;
@@ -770,6 +772,7 @@ export function ConversationContext({
                         <section aria-label="Plan">
                             <div className="chat-context-section-heading">
                                 <h2>Plan</h2>
+                                {planAction}
                                 {onChangeScope && (
                                     <Button
                                         variant="ghost"

@@ -34,7 +34,7 @@ export interface OutcomeCardProps {
     kind: OutcomeKind;
     title: string;
     children: ReactNode;
-    next: string;
+    next: ReactNode;
 }
 /** Named presentation states; the caller supplies the outcome and its explanation. */
 export function OutcomeCard({ kind, title, children, next }: OutcomeCardProps) {
@@ -75,7 +75,9 @@ export function OutcomeCard({ kind, title, children, next }: OutcomeCardProps) {
                 </b>
             </span>
             <span className={styles.d}>{children}</span>
-            <span className="wb-meta">{next}</span>
+            <span className={typeof next === "string" ? "wb-meta" : undefined}>
+                {next}
+            </span>
         </div>
     );
 }

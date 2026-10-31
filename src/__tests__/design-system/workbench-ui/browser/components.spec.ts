@@ -182,14 +182,21 @@ test("START View framing navigates from source collection to its framing screen"
 }) => {
     await page.goto("/?layout=start&screen=launched&theme=dark");
     await page
+        .getByRole("button", { name: "Research context", exact: true })
+        .click();
+    await page
         .getByRole("button", { name: "View framing", exact: true })
         .click();
     await expect(
-        page.getByRole("region", { name: "Proposed framing" }),
+        page.getByRole("region", {
+            name: "Accepted research program",
+            exact: true,
+        }),
     ).toBeVisible();
     await expect(
         page.getByRole("button", { name: "Start research", exact: true }),
     ).toHaveCount(0);
+    await page.goBack();
     await page
         .getByRole("button", { name: "Open Progress", exact: true })
         .click();
@@ -556,6 +563,7 @@ test("START conversation keeps a guided correction through launch and reload", a
         .click();
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Send refinement" }).click();
+    await page.getByRole("button", { name: "Q5", exact: true }).click();
     await expect(
         page.getByRole("region", { name: "Framing summary" }),
     ).toContainText(
@@ -567,8 +575,12 @@ test("START conversation keeps a guided correction through launch and reload", a
     await expect(page).toHaveURL(/screen=launched/);
     await page.reload();
     await page
+        .getByRole("button", { name: "Research context", exact: true })
+        .click();
+    await page
         .getByRole("button", { name: "View framing", exact: true })
         .click();
+    await page.getByRole("button", { name: "Q5", exact: true }).click();
     await expect(
         page.getByRole("region", { name: "Framing summary" }),
     ).toContainText(
@@ -577,9 +589,9 @@ test("START conversation keeps a guided correction through launch and reload", a
     await expect(
         page.getByRole("button", { name: "Start research", exact: true }),
     ).toHaveCount(0);
-    await page
-        .getByText("Earlier conversation · 1 refinement", { exact: true })
-        .click();
+    await expect(
+        page.getByRole("log").getByText(/Earlier conversation/),
+    ).toHaveCount(0);
     await expect(page.getByRole("log")).toContainText(
         "Added to the research program: What would insurers and repairers need to change to switch away from CCC?",
     );
@@ -642,18 +654,24 @@ for (const theme of ["light", "dark"] as const) {
     });
 }
 
-test("START opening the accepted framing keeps its disclosure in view on mobile", async ({
+test("START the accepted program stays inspectable from the mobile chat context", async ({
     page,
 }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/?layout=start&screen=launched&theme=light");
     await page.getByRole("button", { name: "Ask AI", exact: true }).click();
-    const disclosure = page.getByRole("button", {
-        name: "View framing",
-        exact: true,
-    });
-    await disclosure.click();
-    await expect(disclosure).toBeInViewport();
+    await page
+        .getByRole("button", { name: "Research context", exact: true })
+        .click();
+    await page
+        .getByRole("button", { name: "View framing", exact: true })
+        .click();
+    await expect(
+        page.getByRole("region", {
+            name: "Accepted research program",
+            exact: true,
+        }),
+    ).toBeInViewport();
 });
 
 test("START a freeform request stays visible without silently changing framing or moving the reader", async ({

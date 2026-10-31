@@ -21,7 +21,7 @@ for (const screen of ["framing", "launched"] as const) {
                     name: "Workbench Agent message",
                     exact: true,
                 }),
-            ).toHaveCount(1);
+            ).toHaveCount(screen === "framing" ? 1 : 2);
             await expect(
                 log.getByText("Workbench", { exact: true }),
             ).toHaveCount(0);

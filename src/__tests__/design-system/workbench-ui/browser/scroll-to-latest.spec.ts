@@ -23,6 +23,8 @@ for (const screen of ["framing", "launched"] as const) {
                     await page
                         .getByRole("button", { name: "Ask AI", exact: true })
                         .click();
+                    // Let the sheet restore its recorded reading position before simulating a new scroll.
+                    await page.clock.runFor(300);
                 }
                 await page
                     .getByRole("textbox", {

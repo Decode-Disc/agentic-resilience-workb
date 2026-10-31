@@ -54,7 +54,13 @@ export function SourcingLane({
                     />
                 ) : (
                     <WorkbenchIcon
-                        name={state === "found" ? "search" : "check"}
+                        name={
+                            state === "found"
+                                ? "search"
+                                : state === "captured"
+                                  ? "check"
+                                  : "clock"
+                        }
                         size={14}
                         strokeWidth={state === "captured" ? 2.2 : 1.8}
                     />

@@ -42,7 +42,6 @@ import {
 import {
     ConversationHeader,
     ConversationPendingPanel,
-    WORKBENCH_AGENT_NAME,
 } from "@/components/chat/workbench-conversation";
 import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
@@ -189,27 +188,19 @@ export function StartFramingScreen({
     identity,
     context,
     runtime,
-    request,
-    response,
-    responseText,
-    responseCreatedAt,
-    responseAuthorName = WORKBENCH_AGENT_NAME,
+    conversation,
     action,
+    actionLabel = "Pending action",
     refinement,
-    history,
     suggestions,
 }: {
     identity?: ReactNode;
     context?: ReactNode;
     runtime: AssistantRuntime;
-    request: ReactNode;
-    response?: ReactNode;
-    responseText?: string;
-    responseCreatedAt?: string;
-    responseAuthorName?: string;
+    conversation: ReactNode;
     action?: ReactNode;
+    actionLabel?: string;
     refinement?: ReactNode;
-    history?: ReactNode;
     suggestions?: ReactNode;
 }) {
     return (
@@ -225,31 +216,11 @@ export function StartFramingScreen({
                     )
                 }
                 aria-label="Framing conversation">
-                <ConversationThreadLog>
-                    <div className={styles.request}>
-                        <span className="sr-only">Your request</span>
-                        {request}
-                    </div>
-                    {response && (
-                        <Message
-                            from="assistant"
-                            authorName={responseAuthorName}
-                            variant="plain">
-                            <MessageBody>
-                                <MessageContent>{response}</MessageContent>
-                                <MessageFooter
-                                    createdAt={responseCreatedAt}
-                                    text={responseText}
-                                />
-                            </MessageBody>
-                        </Message>
-                    )}
-                    {history}
-                </ConversationThreadLog>
+                <ConversationThreadLog>{conversation}</ConversationThreadLog>
                 <ConversationThreadDock className={styles.framingDock}>
                     {action && (
                         <section
-                            aria-label="Pending action"
+                            aria-label={actionLabel}
                             className={styles.pendingAction}>
                             {action}
                         </section>
@@ -350,6 +321,7 @@ export function StartResearchScreen({
     conversation,
     conversationComposer,
     heading,
+    notice,
     summary,
     stages,
     lanes,
@@ -361,6 +333,7 @@ export function StartResearchScreen({
     conversation: ReactNode;
     conversationComposer?: ReactNode;
     heading: ReactNode;
+    notice?: ReactNode;
     summary?: ReactNode;
     stages?: ReactNode;
     lanes: ReactNode;
@@ -442,6 +415,7 @@ export function StartResearchScreen({
                                 className={handoff ? styles.muted : undefined}>
                                 {heading}
                             </header>
+                            {notice}
                             <GlassPanel className={styles.summaryPanel}>
                                 <div
                                     className={
@@ -680,6 +654,7 @@ export function FramingClarification({
 /** Separates the proposed research program from optional analyst context and corrections. */
 export function FramingProposal({
     collapsible = false,
+    title,
     introduction,
     scope,
     composer,
@@ -696,6 +671,7 @@ export function FramingProposal({
     error,
 }: {
     collapsible?: boolean;
+    title?: string;
     introduction?: ReactNode;
     scope?: string;
     composer?: ReactNode;
@@ -917,13 +893,13 @@ export function FramingProposal({
         if (selectedQuestionId) setSelected(selectedQuestionId);
     }, [selectedQuestionId]);
     return (
-        <section aria-label="Proposed framing">
+        <section aria-label={title ?? "Proposed framing"}>
             {collapsible ? (
                 <ConversationPendingPanel
                     title={
                         clarification
                             ? "Clarify the scope"
-                            : "Proposed research program"
+                            : (title ?? "Proposed research program")
                     }
                     summary={
                         clarification
@@ -1024,47 +1000,6 @@ export function StartSourcesHeader({
                     </Button>
                     {detail && <span>{detail}</span>}
                 </div>
-            )}
-        </div>
-    );
-}
-export function StartFramingSummary({
-    scope,
-    questionCount,
-    onInspect,
-    expanded,
-    detailsId,
-}: {
-    scope?: string;
-    questionCount?: number;
-    onInspect?: () => void;
-    expanded?: boolean;
-    detailsId?: string;
-}) {
-    return (
-        <div
-            className={styles.framingSummary}
-            data-message-id="accepted-framing">
-            <b>
-                <WorkbenchIcon name="check" size={13} />
-                Framing fixed
-            </b>
-            {(scope || questionCount !== undefined) && (
-                <div>
-                    {scope && <span>{scope}</span>}
-                    {questionCount !== undefined && (
-                        <span>{questionCount} questions</span>
-                    )}
-                </div>
-            )}
-            {onInspect && (
-                <Button
-                    variant="ghost"
-                    onClick={onInspect}
-                    aria-expanded={expanded}
-                    aria-controls={detailsId}>
-                    View framing
-                </Button>
             )}
         </div>
     );

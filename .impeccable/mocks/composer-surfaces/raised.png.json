@@ -1,0 +1,7 @@
+{
+  "prompt": "Browser-render the existing compact ConversationComposer in launched, in light and dark, with identical 480px-wide geometry and content. Change only this candidate's component-scoped CSS: [data-slot=\"conversation-thread\"] [data-slot=\"prompt-composer\"] { background:color-mix(in oklab, var(--card) 93%, var(--foreground)); border-color:transparent; box-shadow:0 3px 12px color-mix(in oklab, var(--foreground) 10%, transparent); }",
+  "approved": true,
+  "tool": "playwright",
+  "purpose": "Actual component render for the approved two-surface comparison; no image generation or application palette change.",
+  "approval": "User selected Raised neutral in the structured composer surface question."
+}

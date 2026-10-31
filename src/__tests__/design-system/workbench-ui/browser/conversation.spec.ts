@@ -197,7 +197,11 @@ test("START copying initial and retained messages preserves text and creation ti
     ).toHaveAttribute("datetime", createdAt ?? "");
     await page.evaluate(() => {
         const key = "start-conversation-preview-v3";
-        const saved = JSON.parse(sessionStorage.getItem(key) ?? "{}");
+        const saved = JSON.parse(
+            sessionStorage.getItem("start-conversation-preview-v4") ?? "{}",
+        );
+        sessionStorage.removeItem("start-conversation-preview-v4");
+        delete saved.version;
         delete saved.startedAt;
         for (const message of saved.messages) delete message.createdAt;
         sessionStorage.setItem(key, JSON.stringify(saved));
@@ -316,32 +320,37 @@ test("START grouped work precedes the assistant answer and keeps details optiona
     page,
 }) => {
     await page.goto("/?layout=start&screen=framing&theme=light");
+    await page
+        .getByRole("button", { name: "Preview tools", exact: true })
+        .click();
+    await page
+        .getByRole("button", { name: "Work then reply", exact: true })
+        .click();
+    await page
+        .getByRole("button", { name: "Finish illustrative turn", exact: true })
+        .click();
+    await page.keyboard.press("Escape");
     const group = page.getByRole("button", {
-        name: "Inspect framing preparation",
+        name: "Inspect work for this turn",
         exact: true,
     });
     await expect(group).toHaveAttribute("aria-expanded", "false");
-    await expect(
-        page.getByRole("button", {
-            name: "Inspect Prepare research framing",
-            exact: true,
-        }),
-    ).not.toBeVisible();
+    const operation = page.getByRole("button", {
+        name: "Inspect Read the retained investor presentation",
+        exact: true,
+    });
+    await expect(operation).not.toBeVisible();
     const before = await group.boundingBox();
     const answer = await page
-        .getByText("I can help frame this research before it starts.", {
+        .getByRole("heading", {
+            name: "Replacing software is not replacing coordination",
             exact: true,
         })
         .boundingBox();
     expect(before && answer && before.y < answer.y).toBe(true);
     await group.focus();
     await page.keyboard.press("Enter");
-    await expect(
-        page.getByRole("button", {
-            name: "Inspect Prepare research framing",
-            exact: true,
-        }),
-    ).toBeVisible();
+    await expect(operation).toBeVisible();
     await page.keyboard.press("Enter");
     await expect(group).toBeFocused();
 });
@@ -378,10 +387,13 @@ for (const width of [390, 1440])
             exact: true,
         });
         const log = page.getByRole("log");
-        const group = log.getByRole("button", {
-            name: "Inspect source preparation",
-            exact: true,
-        });
+        const group = log
+            .locator('[data-slot="conversation-turn"]')
+            .last()
+            .getByRole("button", {
+                name: "Inspect work for this turn",
+                exact: true,
+            });
         await expect(group).toHaveCount(0);
         await expect(
             log.getByText("Check supplied reference", { exact: true }),
@@ -393,16 +405,25 @@ for (const width of [390, 1440])
             name: "Message the workbench",
         });
         const before = await composer.boundingBox();
-        await page
-            .getByRole("button", { name: "Preview tools", exact: true })
-            .click();
-        await page
-            .getByRole("button", {
-                name: "Advance illustrative work",
-                exact: true,
-            })
-            .click();
-        await page.keyboard.press("Escape");
+        const runWorkControl = async (name: string) => {
+            if (width === 390)
+                await page
+                    .getByRole("button", {
+                        name: "Back to progress",
+                        exact: true,
+                    })
+                    .click();
+            await page
+                .getByRole("button", { name: "Preview tools", exact: true })
+                .click();
+            await page.getByRole("button", { name, exact: true }).click();
+            await page.keyboard.press("Escape");
+            if (width === 390)
+                await page
+                    .getByRole("button", { name: "Ask AI", exact: true })
+                    .click();
+        };
+        await runWorkControl("Advance illustrative work");
         await expect(
             log.getByText(
                 "Filing and earnings candidates listed; contents remain unverified.",
@@ -425,16 +446,7 @@ for (const width of [390, 1440])
                 exact: true,
             })
             .click();
-        await page
-            .getByRole("button", { name: "Preview tools", exact: true })
-            .click();
-        await page
-            .getByRole("button", {
-                name: "Finish illustrative work",
-                exact: true,
-            })
-            .click();
-        await page.keyboard.press("Escape");
+        await runWorkControl("Finish illustrative work");
         await expect(group).toHaveAttribute("aria-expanded", "false");
         await expect(
             log.getByText("Find company reporting", { exact: true }),
@@ -465,6 +477,10 @@ for (const width of [390, 1440])
                 exact: true,
             })
             .click();
+        if (width === 390)
+            await page
+                .getByRole("button", { name: "Back to progress", exact: true })
+                .click();
         await page
             .getByRole("button", { name: "Preview tools", exact: true })
             .click();
@@ -481,6 +497,15 @@ for (const width of [390, 1440])
             })
             .click();
         await page.keyboard.press("Escape");
+        if (width === 390)
+            await page
+                .getByRole("button", { name: "Ask AI", exact: true })
+                .click();
+        await expect(
+            log.locator(
+                '[data-slot="conversation-turn"][data-state="completed"]',
+            ),
+        ).toHaveCount(1);
         await expect(group).toHaveCount(0);
         await expect(
             log.getByText(
@@ -491,16 +516,7 @@ for (const width of [390, 1440])
         await expect(
             page.getByRole("textbox", { name: "Ask about the sources" }),
         ).toHaveValue("Keep this trial draft.");
-        await page
-            .getByRole("button", { name: "Preview tools", exact: true })
-            .click();
-        await page
-            .getByRole("button", {
-                name: "Finish illustrative work",
-                exact: true,
-            })
-            .click();
-        await page.keyboard.press("Escape");
+        await runWorkControl("Finish illustrative work");
         await expect(group).toHaveAttribute("aria-expanded", "false");
         expect(errors).toEqual([]);
     });
