@@ -7,7 +7,9 @@ import {
     useState,
 } from "react";
 import { createPortal } from "react-dom";
+import type { ConversationAgents } from "@/components/chat/conversation-agent";
 import { ConversationHistory } from "@/components/chat/conversation-history";
+import type { ConversationMissionSnapshot } from "@/components/chat/conversation-mission";
 import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
 import Icon from "@/components/icon";
 import {
@@ -34,7 +36,6 @@ import { SmoothDropdwon } from "@/components/ui/smooth-dropdown";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { WorkbenchShellSurface } from "@/components/workbench-shell/workbench-shell-surface";
 import { WorkbenchIcon } from "@/components/workbench-ui/glyphs";
-import { Handoff } from "@/components/workbench-ui/handoff";
 import { OutcomeCard } from "@/components/workbench-ui/outcome-card";
 import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
 import { SourcingLane } from "@/components/workbench-ui/sourcing-lane";
@@ -74,6 +75,7 @@ import { useResponsive } from "@/hooks/use-responsive";
 import {
     activityClarification,
     guidedExamples,
+    preparationQuestionExample,
     report,
     type StartConversationPreview,
     sourcePreparation,
@@ -153,6 +155,8 @@ function ReferenceChip() {
 }
 function PreviewResearchContext({
     activities,
+    missions,
+    agents,
     scope,
     count,
     launched,
@@ -164,6 +168,8 @@ function PreviewResearchContext({
     onInspectFraming,
 }: {
     activities: readonly ConversationWorkItem[];
+    missions: readonly ConversationMissionSnapshot[];
+    agents: ConversationAgents;
     scope: string;
     count: number;
     launched: boolean;
@@ -182,6 +188,8 @@ function PreviewResearchContext({
             onOpenChange={onOpenChange}
             title={`${company.ticker} · Research`}
             activities={activities}
+            missions={missions}
+            agents={agents}
             onChangeScope={onChangeScope}
             planSummary={
                 <>
@@ -564,6 +572,8 @@ function FramingExample({
             <StartFramingScreen
                 context={
                     <PreviewResearchContext
+                        missions={state.missions}
+                        agents={state.agents}
                         activities={
                             state.turns?.flatMap((turn) =>
                                 turn.entries.flatMap((entry) =>
@@ -777,6 +787,9 @@ function ResearchExample({
     trialControls: ReactNode;
 }) {
     const { state, conversation } = controller;
+    const { inputRef, fill } = useQuickTextFill<HTMLTextAreaElement>(
+        controller.setRefinement,
+    );
     const [contextOpen, setContextOpen] = useState(false);
     const preparation = sourcePreparation(state);
     const done = preparation.state === "completed";
@@ -789,11 +802,12 @@ function ResearchExample({
                 entry.kind === "operation" ? [entry.operation] : [],
             ),
         ) ?? [];
-    const [handoffVisible, setHandoffVisible] = useState(true);
     return (
         <StartResearchScreen
             context={
                 <PreviewResearchContext
+                    missions={state.missions}
+                    agents={state.agents}
                     activities={activities}
                     scope={state.scope}
                     count={state.questions.length}
@@ -810,6 +824,18 @@ function ResearchExample({
                     <PreviewControls>
                         <PreviewTools>
                             {trialControls}
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={!controller.canAskDuringPreparation}
+                                onClick={() => {
+                                    controller.setExample(
+                                        preparationQuestionExample.id,
+                                    );
+                                    fill(preparationQuestionExample.text);
+                                }}>
+                                {preparationQuestionExample.label}
+                            </Button>
                             {
                                 <>
                                     <Button
@@ -857,6 +883,7 @@ function ResearchExample({
             conversationComposer={
                 <ConversationComposer
                     label="Ask about the sources"
+                    inputRef={inputRef}
                     compact
                     pending={conversation.sending}
                     failed={conversation.failed}
@@ -879,15 +906,13 @@ function ResearchExample({
                               ? "Documentary preparation stopped"
                               : "Collecting the documentary material"
                     }
-                    onOpenProgress={
-                        !done || !handoffVisible ? onOpenProgress : undefined
-                    }
+                    onOpenProgress={onOpenProgress}
                     detail={
                         done
                             ? "Ready when you are"
                             : interrupted
                               ? "Recorded inputs remain available"
-                              : "Opens on its own when Sources finishes"
+                              : "Ready when you are"
                     }
                 />
             }
@@ -951,6 +976,7 @@ function ResearchExample({
                         label="Found"
                         count={done ? 0 : 6}
                         documents={done ? [] : found}
+                        emptyMessage="No documents awaiting capture."
                         remainingLabel={done ? undefined : "+2 more"}
                     />
                     <SourcingLane
@@ -959,6 +985,7 @@ function ResearchExample({
                         label={interrupted ? "Waiting" : "Capturing"}
                         count={done ? 0 : 2}
                         documents={done ? [] : capturing}
+                        emptyMessage="No captures in progress."
                     />
                     <SourcingLane
                         state="captured"
@@ -966,9 +993,9 @@ function ResearchExample({
                         count={done ? 38 : 6}
                         documents={
                             done
-                                ? [captured[0], capturing[0], captured[2]].map(
-                                      (doc) => ({ ...doc, meta: "" }),
-                                  )
+                                ? captured
+                                      .slice(0, 3)
+                                      .map((doc) => ({ ...doc, meta: "" }))
                                 : captured
                         }
                         remainingLabel={done ? "+35 more" : "+2 more"}
@@ -976,55 +1003,38 @@ function ResearchExample({
                 </>
             }
             limitations={
-                !done ? (
-                    <Collapsible
-                        defaultOpen
-                        className="start-preview-limitations"
-                        role="region"
-                        aria-label="Coverage gaps">
-                        <h2>
-                            <CollapsibleTrigger
-                                render={<Button variant="ghost" />}
-                                aria-label="Coverage gaps · 2"
-                                className="start-preview-limitations-toggle">
-                                <span className="start-preview-limitations-heading">
-                                    Coverage gaps
-                                    <Badge tone="ink">2</Badge>
-                                </span>
-                                <WorkbenchIcon name="chevron" size={14} />
-                            </CollapsibleTrigger>
-                        </h2>
-                        <CollapsibleContent>
-                            <ul>
-                                <li>
-                                    <WorkbenchIcon
-                                        name="unestablished"
-                                        size={14}
-                                    />
-                                    <span>Analyst coverage</span>
-                                    <Badge tone="ink">No results found</Badge>
-                                </li>
-                                <li>
-                                    <WorkbenchIcon name="clock" size={14} />
-                                    <span>Patent register</span>
-                                    <Badge tone="dashed">
-                                        Search unavailable
-                                    </Badge>
-                                </li>
-                            </ul>
-                        </CollapsibleContent>
-                    </Collapsible>
-                ) : undefined
-            }
-            handoff={
-                done && handoffVisible ? (
-                    <Handoff
-                        summary="38 captured · 29 selected · 9 kept as context"
-                        gaps="2 gaps disclosed"
-                        onContinue={onOpenProgress}
-                        onStay={() => setHandoffVisible(false)}
-                    />
-                ) : undefined
+                <Collapsible
+                    defaultOpen
+                    className="start-preview-limitations"
+                    role="region"
+                    aria-label="Coverage gaps">
+                    <h2>
+                        <CollapsibleTrigger
+                            render={<Button variant="ghost" />}
+                            aria-label="Coverage gaps · 2"
+                            className="start-preview-limitations-toggle">
+                            <span className="start-preview-limitations-heading">
+                                Coverage gaps
+                                <Badge tone="ink">2</Badge>
+                            </span>
+                            <WorkbenchIcon name="chevron" size={14} />
+                        </CollapsibleTrigger>
+                    </h2>
+                    <CollapsibleContent>
+                        <ul>
+                            <li>
+                                <WorkbenchIcon name="unestablished" size={14} />
+                                <span>Analyst coverage</span>
+                                <Badge tone="ink">No results found</Badge>
+                            </li>
+                            <li>
+                                <WorkbenchIcon name="clock" size={14} />
+                                <span>Patent register</span>
+                                <Badge tone="dashed">Search unavailable</Badge>
+                            </li>
+                        </ul>
+                    </CollapsibleContent>
+                </Collapsible>
             }
         />
     );
@@ -1085,7 +1095,9 @@ export function StartScreenPreview({
     const { state, reply, activeTurn } = controller;
     const history = (
         <ConversationHistory
-            messageIds={state.messages.map((message) => message.id)}
+            entries={controller.historyEntries}
+            agents={state.agents}
+            missions={state.missions}
             turns={state.turns}
             onStop={reply || activeTurn ? controller.stopResponse : undefined}
         />

@@ -72,7 +72,7 @@ for (const width of [1440, 390]) {
     });
 }
 
-test("source preparation belongs to the same turns and survives completion and reload", async ({
+test("source preparation belongs to the same history and survives completion and reload", async ({
     page,
 }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
@@ -84,7 +84,7 @@ test("source preparation belongs to the same turns and survives completion and r
     await expect(
         log.getByText("Find company reporting", { exact: true }),
     ).toBeVisible();
-    const turn = log.locator('[data-slot="conversation-turn"]').last();
+    const turn = log.locator('[data-slot="conversation-mission"]').last();
     await expect(turn).toHaveAttribute("data-state", "running");
     await page
         .getByRole("button", { name: "Preview tools", exact: true })
@@ -107,12 +107,10 @@ test("source preparation belongs to the same turns and survives completion and r
     await page.keyboard.press("Escape");
     await expect(turn).toHaveAttribute("data-state", "completed");
     const group = turn.getByRole("button", {
-        name: "Inspect work for this turn",
+        name: "Inspect Sources mission: Documentary preparation",
     });
     await expect(group).toHaveAttribute("aria-expanded", "false");
-    await expect(log).toContainText(
-        "The illustrative candidate list is ready.",
-    );
+    await expect(log).toContainText("Material ready for examination");
     await page.reload();
     await expect(turn).toHaveAttribute("data-state", "completed");
     await expect(
@@ -120,9 +118,9 @@ test("source preparation belongs to the same turns and survives completion and r
             exact: true,
         }),
     ).toBeVisible();
-    await expect(
-        log.getByText(/The illustrative candidate list is ready\./),
-    ).toHaveCount(1);
+    await expect(log.getByText(/Material ready for examination/)).toHaveCount(
+        1,
+    );
 });
 
 test("the accepted program remains inspectable from Plan without inserting another transcript", async ({
@@ -165,7 +163,7 @@ test("an unreadable saved preview is explained before an explicit reset", async 
     page,
 }) => {
     await page.addInitScript(() =>
-        sessionStorage.setItem("start-conversation-preview-v4", "invalid-json"),
+        sessionStorage.setItem("start-conversation-preview-v5", "invalid-json"),
     );
     await page.goto("/?layout=start&screen=framing&theme=light");
     await expect(
@@ -176,7 +174,7 @@ test("an unreadable saved preview is explained before an explicit reset", async 
     ).toBeVisible();
     expect(
         await page.evaluate(() =>
-            sessionStorage.getItem("start-conversation-preview-v4"),
+            sessionStorage.getItem("start-conversation-preview-v5"),
         ),
     ).toBe("invalid-json");
     await page
@@ -196,13 +194,13 @@ test("an unreadable saved preview is explained before an explicit reset", async 
     expect(
         JSON.parse(
             (await page.evaluate(() =>
-                sessionStorage.getItem("start-conversation-preview-v4"),
+                sessionStorage.getItem("start-conversation-preview-v5"),
             )) ?? "null",
         ).version,
-    ).toBe(4);
+    ).toBe(5);
 });
 
-test("Back and Forward retain the same conversation and preparation turn", async ({
+test("Back and Forward retain the same conversation and preparation mission", async ({
     page,
 }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
@@ -215,8 +213,8 @@ test("Back and Forward retain the same conversation and preparation turn", async
         .fill("Keep this draft across navigation.");
     const turn = page
         .getByRole("log")
-        .locator('[data-slot="conversation-turn"]');
-    const id = await turn.getAttribute("data-message-id");
+        .locator('[data-slot="conversation-mission"]');
+    const id = await turn.getAttribute("data-mission-id");
     await page.goBack();
     await expect(page).toHaveURL(/screen=framing/);
     await expect(
@@ -231,7 +229,7 @@ test("Back and Forward retain the same conversation and preparation turn", async
     await page.goForward();
     await expect(page).toHaveURL(/screen=launched/);
     await expect(turn).toHaveCount(1);
-    await expect(turn).toHaveAttribute("data-message-id", id ?? "");
+    await expect(turn).toHaveAttribute("data-mission-id", id ?? "");
     await expect(turn).toHaveAttribute("data-state", "running");
     await expect(
         page.getByRole("textbox", { name: "Ask about the sources" }),
@@ -263,7 +261,7 @@ for (const width of [1440, 390]) {
             })
             .fill("Keep this follow-up draft.");
         const saved = await page.evaluate(() =>
-            sessionStorage.getItem("start-conversation-preview-v4"),
+            sessionStorage.getItem("start-conversation-preview-v5"),
         );
         if (width === 390) {
             await page
@@ -317,7 +315,7 @@ for (const width of [1440, 390]) {
         await expect(question).toBeVisible();
         expect(
             await page.evaluate(() =>
-                sessionStorage.getItem("start-conversation-preview-v4"),
+                sessionStorage.getItem("start-conversation-preview-v5"),
             ),
         ).toBe(saved);
         expect(
@@ -371,9 +369,9 @@ for (const width of [1440, 390]) {
         const oldTurnId = await page.evaluate(
             () =>
                 JSON.parse(
-                    sessionStorage.getItem("start-conversation-preview-v4") ??
+                    sessionStorage.getItem("start-conversation-preview-v5") ??
                         "null",
-                ).sourcePreparationTurnId,
+                ).sourcePreparationMissionId,
         );
         const restart = notice.getByRole("button", {
             name: "Restart illustrative work",
@@ -393,15 +391,15 @@ for (const width of [1440, 390]) {
         ).toBeVisible();
         const saved = await page.evaluate(() =>
             JSON.parse(
-                sessionStorage.getItem("start-conversation-preview-v4") ??
+                sessionStorage.getItem("start-conversation-preview-v5") ??
                     "null",
             ),
         );
         expect(
-            saved.turns.find((turn: { id: string }) => turn.id === oldTurnId)
+            saved.missions.find((turn: { id: string }) => turn.id === oldTurnId)
                 .state,
         ).toBe("interrupted");
-        expect(saved.sourcePreparationTurnId).not.toBe(oldTurnId);
+        expect(saved.sourcePreparationMissionId).not.toBe(oldTurnId);
         if (width === 390)
             await page
                 .getByRole("button", { name: "Ask AI", exact: true })

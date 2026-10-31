@@ -198,11 +198,15 @@ test("START copying initial and retained messages preserves text and creation ti
     await page.evaluate(() => {
         const key = "start-conversation-preview-v3";
         const saved = JSON.parse(
-            sessionStorage.getItem("start-conversation-preview-v4") ?? "{}",
+            sessionStorage.getItem("start-conversation-preview-v5") ?? "{}",
         );
-        sessionStorage.removeItem("start-conversation-preview-v4");
+        sessionStorage.removeItem("start-conversation-preview-v5");
         delete saved.version;
         delete saved.startedAt;
+        saved.messages = saved.history
+            .filter((entry: { kind: string }) => entry.kind === "message")
+            .map((entry: { message: { createdAt?: string } }) => entry.message);
+        delete saved.history;
         for (const message of saved.messages) delete message.createdAt;
         sessionStorage.setItem(key, JSON.stringify(saved));
     });
@@ -356,7 +360,7 @@ test("START grouped work precedes the assistant answer and keeps details optiona
 });
 
 for (const width of [390, 1440])
-    test(`START ${width} observable work stays continuous until its turn ends and then folds`, async ({
+    test(`START ${width} mission work stays continuous until completion and then folds`, async ({
         page,
     }) => {
         await page.setViewportSize({
@@ -388,10 +392,10 @@ for (const width of [390, 1440])
         });
         const log = page.getByRole("log");
         const group = log
-            .locator('[data-slot="conversation-turn"]')
+            .locator('[data-slot="conversation-mission"]')
             .last()
             .getByRole("button", {
-                name: "Inspect work for this turn",
+                name: "Inspect Sources mission: Documentary preparation",
                 exact: true,
             });
         await expect(group).toHaveCount(0);
@@ -452,9 +456,9 @@ for (const width of [390, 1440])
             log.getByText("Find company reporting", { exact: true }),
         ).not.toBeVisible();
         await expect(
-            log.getByRole("paragraph").filter({
-                hasText:
-                    "The illustrative candidate list is ready. Document contents still need to be retrieved and checked.",
+            log.getByRole("heading", {
+                name: "Material ready for examination",
+                exact: true,
             }),
         ).toBeVisible();
         const after = await composer.boundingBox();
@@ -503,7 +507,7 @@ for (const width of [390, 1440])
                 .click();
         await expect(
             log.locator(
-                '[data-slot="conversation-turn"][data-state="completed"]',
+                '[data-slot="conversation-mission"][data-state="completed"]',
             ),
         ).toHaveCount(1);
         await expect(group).toHaveCount(0);

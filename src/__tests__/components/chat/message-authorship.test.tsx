@@ -75,3 +75,75 @@ function ConversationFixture() {
         </ConversationThread>
     );
 }
+
+it("attributes mixed runtime messages by their supplied agent identity", () => {
+    const agents = {
+        workbench: { id: "workbench", name: "Workbench Agent" },
+        partner: { id: "partner", name: "Research Partner" },
+    };
+    function MixedAgents() {
+        const conversation = useWorkbenchConversation({
+            messages: [
+                {
+                    id: "one",
+                    role: "assistant",
+                    content: "Framing is ready.",
+                    metadata: { custom: { agentId: "workbench" } },
+                },
+                {
+                    id: "two",
+                    role: "assistant",
+                    content: "A competing reading is available.",
+                    metadata: { custom: { agentId: "partner" } },
+                },
+            ],
+            draft: "",
+            onDraftChange: () => {},
+            onSend: () => {},
+        });
+        return (
+            <ConversationThread runtime={conversation.runtime}>
+                <ConversationMessages agents={agents} />
+            </ConversationThread>
+        );
+    }
+    render(<MixedAgents />);
+    expect(
+        screen.getByRole("article", { name: "Research Partner message" }),
+    ).toBeTruthy();
+    expect(
+        screen.getByRole("article", { name: "Workbench Agent message" }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Research Partner")).toBeNull();
+});
+
+it("keeps an unresolved author explicit instead of attributing it to the default agent", () => {
+    function UnresolvedAgent() {
+        const conversation = useWorkbenchConversation({
+            messages: [
+                {
+                    id: "retained",
+                    role: "assistant",
+                    content: "Retained statement.",
+                    metadata: { custom: { agentId: "missing-agent" } },
+                },
+            ],
+            draft: "",
+            onDraftChange: () => {},
+            onSend: () => {},
+        });
+        return (
+            <ConversationThread runtime={conversation.runtime}>
+                <ConversationMessages />
+            </ConversationThread>
+        );
+    }
+    render(<UnresolvedAgent />);
+    expect(
+        screen.getByRole("article", { name: "Unidentified agent message" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Message attribution unavailable")).toBeTruthy();
+    expect(
+        screen.queryByRole("article", { name: "Workbench Agent message" }),
+    ).toBeNull();
+});

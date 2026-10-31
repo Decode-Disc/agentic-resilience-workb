@@ -1,5 +1,10 @@
 import type { ThreadMessageLike } from "@assistant-ui/react";
 import { useEffect, useRef, useState } from "react";
+import {
+    type ConversationAgent,
+    WORKBENCH_AGENT,
+} from "@/components/chat/conversation-agent";
+import type { ConversationMissionSnapshot } from "@/components/chat/conversation-mission";
 import type { ConversationTurnSnapshot } from "@/components/chat/conversation-turn";
 import { useWorkbenchConversation } from "@/components/chat/workbench-conversation";
 import type { StartFramingQuestion } from "@/components/workspace/start/start-screens";
@@ -95,9 +100,26 @@ export function report(detail: string) {
         }),
     );
 }
-/** The gallery's recorded conversation and framing, persisted as a single preview. */
+export type PreviewMessage = {
+    id: string;
+    createdAt?: string;
+    text: string;
+    from?: "user" | "assistant";
+    agentId?: string;
+    status?: "running" | "interrupted";
+};
+type PreviewHistoryEntry =
+    | { kind: "message"; message: PreviewMessage }
+    | { kind: "mission"; id: string };
+/** One recorded history references independently owned mission snapshots. */
 export type PreviewConversation = {
-    turns?: ConversationTurnSnapshot[];
+    version: 5;
+    agents: Record<string, ConversationAgent>;
+    history: PreviewHistoryEntry[];
+    turns: ConversationTurnSnapshot[];
+    missions: ConversationMissionSnapshot[];
+    pendingReports: { missionId: string; text: string }[];
+    sourcePreparationMissionId?: string;
     questionAction?: { id?: string; text: string } | null;
     selectedQuestionId?: string;
     contextDraft?: string;
@@ -110,33 +132,75 @@ export type PreviewConversation = {
     questions: StartFramingQuestion[];
     suppliedContext?: { question: string; answer: string };
     draft: string;
-    messages: {
-        id: string;
-        createdAt?: string;
-        text: string;
-        from?: "user" | "assistant";
-        status?: "running" | "interrupted";
-    }[];
     launched: boolean;
-    version?: 4;
-    sourcePreparationTurnId?: string;
 };
-export const previewKey = "start-conversation-preview-v4";
-const legacyPreviewKey = "start-conversation-preview-v3";
+type PreviewPatch = Partial<PreviewConversation> & {
+    messages?: PreviewMessage[];
+};
+export const previewKey = "start-conversation-preview-v5";
+const previousKeys = [
+    "start-conversation-preview-v4",
+    "start-conversation-preview-v3",
+];
+const previewAgents = {
+    workbench: WORKBENCH_AGENT,
+    sources: { id: "sources", name: "Sources" },
+};
+function messageEntries(messages: PreviewMessage[]): PreviewHistoryEntry[] {
+    return messages.map((message) => ({ kind: "message", message }));
+}
+function getMessages(state: PreviewConversation): PreviewMessage[] {
+    return state.history.flatMap((entry) =>
+        entry.kind === "message" ? [entry.message] : [],
+    );
+}
+/** Upserts recorded messages without moving them or losing independent updates and mission anchors. */
+function applyPreviewPatch(
+    state: PreviewConversation,
+    patch: PreviewPatch,
+): PreviewConversation {
+    const { messages, ...rest } = patch;
+    if (!messages) return { ...state, ...rest };
+    const updates = new Map(messages.map((message) => [message.id, message]));
+    const seen = new Set<string>();
+    const history = (rest.history ?? state.history).map((entry) => {
+        if (entry.kind !== "message") return entry;
+        seen.add(entry.message.id);
+        return {
+            ...entry,
+            message: updates.get(entry.message.id) ?? entry.message,
+        };
+    });
+    return {
+        ...state,
+        ...rest,
+        history: [
+            ...history,
+            ...messageEntries(
+                messages.filter((message) => !seen.has(message.id)),
+            ),
+        ],
+    };
+}
 function freshConversation(
     scenario: PreviewConversation["scenario"] = "specific",
 ): PreviewConversation {
     const startedAt = new Date().toISOString();
     return {
+        version: 5,
+        agents: previewAgents,
+        turns: [],
+        missions: [],
+        pendingReports: [],
         startedAt,
         scenario,
         needsContext: scenario === "company",
-        contextChoice: undefined,
         scope: claimsScope,
         questions: [...initialQuestions],
         analystQuestionIds: [],
         draft: "",
-        messages: [
+        launched: false,
+        history: messageEntries([
             {
                 id: "initial-request",
                 from: "user",
@@ -149,19 +213,21 @@ function freshConversation(
             {
                 id: "framing-introduction",
                 from: "assistant",
+                agentId: "workbench",
                 text: "I can help frame this research before it starts.",
                 createdAt: startedAt,
             },
-        ],
-        launched: false,
-        version: 4,
+        ]),
     };
 }
 function createPreviewMessage(
-    message: Omit<PreviewConversation["messages"][number], "id" | "createdAt">,
-): PreviewConversation["messages"][number] {
+    message: Omit<PreviewMessage, "id" | "createdAt">,
+): PreviewMessage {
     return {
         ...message,
+        ...(message.from === "assistant"
+            ? { agentId: message.agentId ?? "workbench" }
+            : {}),
         id: crypto.randomUUID(),
         createdAt: new Date().toISOString(),
     };
@@ -213,33 +279,42 @@ Which dependency would actually prevent an insurer or repairer from moving the a
 **Illustrative reading complete.** No live research or analytical assessment was executed.`;
 const illustrativeAnswer =
     "## Replacing software is not replacing coordination\n\nThe illustrative material points to two dependencies:\n\n- **Integrations:** exchanging data inside established workflows.\n- **Coordination:** connecting insurers and repairers around the same claim.\n\n| What to test | Why it matters |\n| --- | --- |\n| Switching effort | Can integrations be rebuilt? |\n| Decision rights | Who can redirect the work? |\n\n**Limit:** This example does not establish switching costs or pricing power.";
-function interruptTurn(
-    state: PreviewConversation,
-): Partial<PreviewConversation> {
+function interruptTurn(state: PreviewConversation): PreviewPatch {
+    const stoppedIds = new Set(
+        state.turns
+            .filter((turn) => turn.state === "running")
+            .flatMap((turn) =>
+                turn.entries.flatMap((entry) =>
+                    entry.kind === "message" ? [entry.id] : [],
+                ),
+            ),
+    );
     return {
-        turns: state.turns?.map((t) =>
-            t.state === "running"
-                ? {
-                      ...t,
+        turns: state.turns.map((turn) =>
+            turn.state !== "running"
+                ? turn
+                : {
+                      ...turn,
                       state: "interrupted",
                       finishedAt: new Date().toISOString(),
-                      entries: t.entries.map((e) =>
-                          e.kind === "operation" &&
-                          e.operation.state === "running"
+                      entries: turn.entries.map((entry) =>
+                          entry.kind === "operation" &&
+                          entry.operation.state === "running"
                               ? {
-                                    ...e,
+                                    ...entry,
                                     operation: {
-                                        ...e.operation,
+                                        ...entry.operation,
                                         state: "interrupted",
                                     },
                                 }
-                              : e,
+                              : entry,
                       ),
-                  }
-                : t,
+                  },
         ),
-        messages: state.messages.map((m) =>
-            m.status === "running" ? { ...m, status: "interrupted" } : m,
+        messages: getMessages(state).map((message) =>
+            stoppedIds.has(message.id) && message.status === "running"
+                ? { ...message, status: "interrupted" }
+                : message,
         ),
     };
 }
@@ -249,125 +324,219 @@ function validPreviewTime(value: unknown) {
         (typeof value === "string" && Number.isFinite(Date.parse(value)))
     );
 }
-function validStoredTurn(value: unknown): value is ConversationTurnSnapshot {
-    if (!value || typeof value !== "object") return false;
-    const t = value as Record<string, unknown>;
+function record(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function workState(value: unknown) {
     return (
-        typeof t.id === "string" &&
-        ["running", "completed", "interrupted"].includes(String(t.state)) &&
-        validPreviewTime(t.startedAt) &&
-        validPreviewTime(t.finishedAt) &&
-        Array.isArray(t.entries) &&
-        t.entries.every((entry: unknown) => {
-            if (!entry || typeof entry !== "object") return false;
-            const e = entry as Record<string, unknown>;
-            if (e.kind === "message")
-                return (
-                    typeof e.id === "string" &&
-                    (e.phase === "commentary" || e.phase === "answer")
-                );
-            if (
-                e.kind !== "operation" ||
-                !e.operation ||
-                typeof e.operation !== "object"
-            )
-                return false;
-            const op = e.operation as Record<string, unknown>;
-            return (
-                typeof op.id === "string" &&
-                typeof op.title === "string" &&
-                typeof op.summary === "string" &&
-                (op.details === undefined || typeof op.details === "string") &&
-                ["running", "completed", "interrupted"].includes(
-                    String(op.state),
-                )
-            );
-        })
+        value === "running" || value === "completed" || value === "interrupted"
     );
 }
-function validSavedConversation(data: unknown): data is PreviewConversation {
-    return Boolean(
-        typeof data === "object" &&
-            data !== null &&
-            (!("selectedQuestionId" in data) ||
-                data.selectedQuestionId === undefined ||
-                typeof data.selectedQuestionId === "string") &&
-            (!("contextDraft" in data) ||
-                data.contextDraft === undefined ||
-                typeof data.contextDraft === "string") &&
-            (!("suppliedContext" in data) ||
-                data.suppliedContext === undefined ||
-                (typeof data.suppliedContext === "object" &&
-                    data.suppliedContext !== null &&
-                    "question" in data.suppliedContext &&
-                    typeof data.suppliedContext.question === "string" &&
-                    "answer" in data.suppliedContext &&
-                    typeof data.suppliedContext.answer === "string")) &&
-            (!("startedAt" in data) || validPreviewTime(data.startedAt)) &&
-            (!("turns" in data) ||
-                (Array.isArray(data.turns) &&
-                    data.turns.every(validStoredTurn))) &&
-            (!("questionAction" in data) ||
-                data.questionAction === null ||
-                (typeof data.questionAction === "object" &&
-                    data.questionAction !== null &&
-                    "text" in data.questionAction &&
-                    typeof data.questionAction.text === "string" &&
-                    (!("id" in data.questionAction) ||
-                        data.questionAction.id === undefined ||
-                        typeof data.questionAction.id === "string"))) &&
-            (!("analystQuestionIds" in data) ||
-                (Array.isArray(data.analystQuestionIds) &&
-                    data.analystQuestionIds.every(
-                        (id: unknown) => typeof id === "string",
-                    ))) &&
-            (!("contextChoice" in data) ||
-                data.contextChoice === undefined ||
-                (typeof data.contextChoice === "string" &&
-                    activityClarification.choices.some(
-                        (choice) => choice.value === data.contextChoice,
-                    ))) &&
-            "questions" in data &&
-            Array.isArray(data.questions) &&
-            data.questions.every(
-                (q) =>
-                    q !== null &&
-                    typeof q === "object" &&
-                    typeof q.id === "string" &&
-                    typeof q.text === "string" &&
-                    typeof q.label === "string" &&
-                    (q.rationale === undefined ||
-                        typeof q.rationale === "string") &&
-                    (q.shortLabel === undefined ||
-                        typeof q.shortLabel === "string"),
-            ) &&
-            "scope" in data &&
-            typeof data.scope === "string" &&
-            "draft" in data &&
-            typeof data.draft === "string" &&
-            "messages" in data &&
-            Array.isArray(data.messages) &&
-            data.messages.every(
-                (m) =>
-                    m !== null &&
-                    typeof m === "object" &&
-                    typeof m.id === "string" &&
-                    typeof m.text === "string" &&
-                    (m.status === undefined ||
-                        m.status === "running" ||
-                        m.status === "interrupted") &&
-                    validPreviewTime(m.createdAt) &&
-                    (m.from === undefined ||
-                        m.from === "user" ||
-                        m.from === "assistant"),
-            ) &&
-            "scenario" in data &&
-            (data.scenario === "specific" || data.scenario === "company") &&
-            "needsContext" in data &&
-            typeof data.needsContext === "boolean" &&
-            "launched" in data &&
-            typeof data.launched === "boolean",
+function validOperation(value: unknown): boolean {
+    return (
+        record(value) &&
+        typeof value.id === "string" &&
+        typeof value.title === "string" &&
+        typeof value.summary === "string" &&
+        (value.details === undefined || typeof value.details === "string") &&
+        workState(value.state)
     );
+}
+function validStoredTurn(value: unknown): value is ConversationTurnSnapshot {
+    return (
+        record(value) &&
+        typeof value.id === "string" &&
+        workState(value.state) &&
+        validPreviewTime(value.startedAt) &&
+        validPreviewTime(value.finishedAt) &&
+        (value.agentId === undefined || typeof value.agentId === "string") &&
+        Array.isArray(value.entries) &&
+        value.entries.every(
+            (entry) =>
+                record(entry) &&
+                (entry.kind === "message"
+                    ? typeof entry.id === "string" &&
+                      (entry.phase === "commentary" || entry.phase === "answer")
+                    : entry.kind === "operation" &&
+                      validOperation(entry.operation)),
+        )
+    );
+}
+function validMessage(value: unknown): value is PreviewMessage {
+    return (
+        record(value) &&
+        typeof value.id === "string" &&
+        typeof value.text === "string" &&
+        validPreviewTime(value.createdAt) &&
+        (value.from === undefined ||
+            value.from === "user" ||
+            value.from === "assistant") &&
+        (value.agentId === undefined || typeof value.agentId === "string") &&
+        (value.status === undefined ||
+            value.status === "running" ||
+            value.status === "interrupted")
+    );
+}
+function validFraming(data: Record<string, unknown>): boolean {
+    return (
+        (data.scenario === "specific" || data.scenario === "company") &&
+        typeof data.needsContext === "boolean" &&
+        typeof data.launched === "boolean" &&
+        typeof data.scope === "string" &&
+        typeof data.draft === "string" &&
+        validPreviewTime(data.startedAt) &&
+        (data.selectedQuestionId === undefined ||
+            typeof data.selectedQuestionId === "string") &&
+        (data.contextDraft === undefined ||
+            typeof data.contextDraft === "string") &&
+        (data.suppliedContext === undefined ||
+            (record(data.suppliedContext) &&
+                typeof data.suppliedContext.question === "string" &&
+                typeof data.suppliedContext.answer === "string")) &&
+        (data.questionAction === undefined ||
+            data.questionAction === null ||
+            (record(data.questionAction) &&
+                typeof data.questionAction.text === "string" &&
+                (data.questionAction.id === undefined ||
+                    typeof data.questionAction.id === "string"))) &&
+        (data.analystQuestionIds === undefined ||
+            (Array.isArray(data.analystQuestionIds) &&
+                data.analystQuestionIds.every(
+                    (id) => typeof id === "string",
+                ))) &&
+        (data.contextChoice === undefined ||
+            activityClarification.choices.some(
+                (choice) => choice.value === data.contextChoice,
+            )) &&
+        Array.isArray(data.questions) &&
+        data.questions.every(
+            (q) =>
+                record(q) &&
+                typeof q.id === "string" &&
+                typeof q.text === "string" &&
+                typeof q.label === "string" &&
+                (q.rationale === undefined ||
+                    typeof q.rationale === "string") &&
+                (q.shortLabel === undefined ||
+                    typeof q.shortLabel === "string"),
+        )
+    );
+}
+function validateConversation(value: unknown): PreviewConversation {
+    if (
+        !record(value) ||
+        value.version !== 5 ||
+        !validFraming(value) ||
+        !record(value.agents) ||
+        !Object.entries(value.agents).every(
+            ([id, agent]) =>
+                record(agent) &&
+                agent.id === id &&
+                typeof agent.name === "string" &&
+                agent.name.trim().length > 0,
+        ) ||
+        !Array.isArray(value.history) ||
+        !value.history.every(
+            (entry) =>
+                record(entry) &&
+                (entry.kind === "message"
+                    ? validMessage(entry.message)
+                    : entry.kind === "mission" && typeof entry.id === "string"),
+        ) ||
+        !Array.isArray(value.turns) ||
+        !value.turns.every(validStoredTurn) ||
+        !Array.isArray(value.missions) ||
+        !value.missions.every(
+            (mission) =>
+                record(mission) &&
+                typeof mission.id === "string" &&
+                typeof mission.agentId === "string" &&
+                typeof mission.title === "string" &&
+                workState(mission.state) &&
+                validPreviewTime(mission.startedAt) &&
+                validPreviewTime(mission.finishedAt) &&
+                Array.isArray(mission.operations) &&
+                mission.operations.every(validOperation),
+        ) ||
+        !Array.isArray(value.pendingReports) ||
+        !value.pendingReports.every(
+            (report) =>
+                record(report) &&
+                typeof report.missionId === "string" &&
+                typeof report.text === "string",
+        )
+    )
+        throw new Error("Invalid saved preview");
+    const state = value as PreviewConversation;
+    const messages = getMessages(state);
+    const ids = new Set(messages.map((message) => message.id));
+    const anchors = state.history.flatMap((entry) =>
+        entry.kind === "mission" ? [entry.id] : [],
+    );
+    const missionIds = new Set(state.missions.map((mission) => mission.id));
+    if (
+        ids.size !== messages.length ||
+        missionIds.size !== state.missions.length ||
+        new Set(anchors).size !== anchors.length ||
+        anchors.length !== missionIds.size ||
+        anchors.some((id) => !missionIds.has(id)) ||
+        new Set(state.turns.map((turn) => turn.id)).size !== state.turns.length
+    )
+        throw new Error("Invalid history references");
+    if (
+        (state.launched && !state.sourcePreparationMissionId) ||
+        (state.sourcePreparationMissionId !== undefined &&
+            !missionIds.has(state.sourcePreparationMissionId))
+    )
+        throw new Error("Missing preparation mission");
+    const referenced = new Set<string>();
+    const operationIds = new Set<string>();
+    for (const turn of state.turns) {
+        if (!turn.agentId || !state.agents[turn.agentId])
+            throw new Error("Missing response agent");
+        for (const entry of turn.entries) {
+            if (entry.kind === "message") {
+                if (!ids.has(entry.id) || referenced.has(entry.id))
+                    throw new Error("Invalid response reference");
+                referenced.add(entry.id);
+            } else {
+                if (operationIds.has(entry.operation.id))
+                    throw new Error("Duplicate operation");
+                operationIds.add(entry.operation.id);
+            }
+        }
+    }
+    for (const mission of state.missions) {
+        if (!state.agents[mission.agentId])
+            throw new Error("Missing mission agent");
+        for (const operation of mission.operations) {
+            if (operationIds.has(operation.id))
+                throw new Error("Duplicate operation");
+            operationIds.add(operation.id);
+        }
+    }
+    if (
+        messages.some(
+            (message) =>
+                message.from === "assistant" &&
+                (!message.agentId || !state.agents[message.agentId]),
+        )
+    )
+        throw new Error("Missing message agent");
+    if (
+        new Set(state.pendingReports.map((report) => report.missionId)).size !==
+            state.pendingReports.length ||
+        state.pendingReports.some(
+            (report) =>
+                !state.missions.some(
+                    (mission) =>
+                        mission.id === report.missionId &&
+                        mission.state !== "running",
+                ),
+        )
+    )
+        throw new Error("Invalid pending result");
+    return state;
 }
 export const guidedExamples = [
     {
@@ -386,14 +555,13 @@ export const guidedExamples = [
         text: "Add a question about switching costs.",
     },
 ] as const;
-function previewMessages(
-    messages: PreviewConversation["messages"],
-): ThreadMessageLike[] {
+function previewMessages(messages: PreviewMessage[]): ThreadMessageLike[] {
     return messages.map((message) => ({
         id: message.id,
         role: message.from ?? "user",
         content: message.text,
         createdAt: message.createdAt ? new Date(message.createdAt) : undefined,
+        metadata: { custom: { agentId: message.agentId } },
         ...(message.status
             ? {
                   status:
@@ -415,36 +583,79 @@ type PreviewScreen =
     | "launched"
     | "handoff";
 const launchText =
-    "Research started. I’ll keep you updated as the material is prepared.";
+    "Research started. Sources is preparing the documentary material.";
 const preparationReply =
-    "The illustrative candidate list is ready. Document contents still need to be retrieved and checked.";
+    "## Material ready for examination\n\nThe illustrative corpus includes company reporting and integration documentation.\n\n- Examine coordination and substitution dependencies.\n- Gaps: analyst coverage and an unavailable patent search.\n\nThis mock establishes no conclusion about CCC.";
+export const preparationQuestionExample = {
+    id: "during-preparation",
+    label: "Example: ask during preparation",
+    text: "Does this already establish that CCC controls the workflow?",
+};
+const preparationAnswer =
+    "No conclusion is established yet. Sources is still collecting material. I’ll distinguish who sets the rules from who executes them. This illustrative exchange does not establish control or switching costs.";
 
-/** Projects the recorded preparation turn for chat context and documentary progress. */
+/** Projects the same recorded mission for the transcript, context and documentary progress. */
 export function sourcePreparation(state: PreviewConversation) {
-    const turn = state.turns?.find(
-        (entry) => entry.id === state.sourcePreparationTurnId,
+    const mission = state.missions.find(
+        (entry) => entry.id === state.sourcePreparationMissionId,
     );
-    const activities =
-        turn?.entries.flatMap((entry) =>
-            entry.kind === "operation" ? [entry.operation] : [],
-        ) ?? [];
-    const integration = activities.find((entry) =>
-        entry.id.endsWith("-integration"),
-    );
+    const activities = mission?.operations ?? [];
     return {
-        turn,
+        mission,
         activities,
-        state: turn?.state ?? "not-started",
-        step: turn?.state === "completed" ? 2 : integration ? 1 : 0,
+        state: mission?.state ?? "not-started",
+        step:
+            mission?.state === "completed"
+                ? 2
+                : activities.some((entry) => entry.id.endsWith("-integration"))
+                  ? 1
+                  : 0,
     };
 }
-
+function responseRunning(state: PreviewConversation) {
+    return (
+        state.turns.some((turn) => turn.state === "running") ||
+        getMessages(state).some((message) => message.status === "running")
+    );
+}
+function flushReports(state: PreviewConversation): PreviewConversation {
+    if (responseRunning(state) || !state.pendingReports.length) return state;
+    const reports = state.pendingReports.map((report) => ({
+        message: createPreviewMessage({ from: "assistant", text: report.text }),
+        turnId: `report-${report.missionId}`,
+    }));
+    return {
+        ...state,
+        pendingReports: [],
+        history: [
+            ...state.history,
+            ...messageEntries(reports.map((report) => report.message)),
+        ],
+        turns: [
+            ...state.turns,
+            ...reports.map(({ message, turnId }) => ({
+                id: turnId,
+                agentId: "workbench",
+                state: "completed" as const,
+                startedAt: message.createdAt,
+                finishedAt: message.createdAt,
+                entries: [
+                    {
+                        kind: "message" as const,
+                        id: message.id,
+                        phase: "answer" as const,
+                    },
+                ],
+            })),
+        ],
+    };
+}
 function startResearch(state: PreviewConversation): PreviewConversation {
     if (
         state.launched ||
         state.needsContext ||
         state.questionAction ||
-        state.questions.length === 0
+        !state.questions.length
     )
         return state;
     const id = crypto.randomUUID();
@@ -452,147 +663,136 @@ function startResearch(state: PreviewConversation): PreviewConversation {
         from: "assistant",
         text: launchText,
     });
+    const mission: ConversationMissionSnapshot = {
+        id,
+        agentId: "sources",
+        title: "Documentary preparation",
+        state: "running",
+        startedAt: message.createdAt,
+        operations: [
+            ...(state.scenario === "specific"
+                ? [
+                      {
+                          id: `${id}-reference`,
+                          title: "Check supplied reference",
+                          state: "completed" as const,
+                          summary:
+                              "Investor presentation recorded as an input; contents not retrieved.",
+                          details:
+                              "Illustrative reference check. The supplied document has not been read by this preview.",
+                      },
+                  ]
+                : []),
+            {
+                id: `${id}-reporting`,
+                title: "Find company reporting",
+                state: "running",
+                summary:
+                    "Looking for filings and earnings material about claims coordination.",
+                details:
+                    "Illustrative activity — these documents have not been retrieved by this preview.",
+            },
+        ],
+    };
     return {
         ...state,
         launched: true,
-        sourcePreparationTurnId: id,
-        messages: [...state.messages, message],
+        sourcePreparationMissionId: id,
+        history: [
+            ...state.history,
+            ...messageEntries([message]),
+            { kind: "mission", id },
+        ],
+        missions: [...state.missions, mission],
         turns: [
-            ...(state.turns ?? []),
+            ...state.turns,
             {
-                id,
-                state: "running",
+                id: `launch-${id}`,
+                agentId: "workbench",
+                state: "completed",
                 startedAt: message.createdAt,
-                entries: [
-                    { kind: "message", id: message.id, phase: "commentary" },
-                    ...(state.scenario === "specific"
-                        ? [
-                              {
-                                  kind: "operation" as const,
-                                  operation: {
-                                      id: `${id}-reference`,
-                                      title: "Check supplied reference",
-                                      state: "completed" as const,
-                                      summary:
-                                          "Investor presentation recorded as an input; contents not retrieved.",
-                                      details:
-                                          "Illustrative reference check. The supplied document has not been read by this preview.",
-                                  },
-                              },
-                          ]
-                        : []),
-                    {
-                        kind: "operation",
-                        operation: {
-                            id: `${id}-reporting`,
-                            title: "Find company reporting",
-                            state: "running",
-                            summary:
-                                "Looking for filings and earnings material about claims coordination.",
-                            details:
-                                "Illustrative activity — these documents have not been retrieved by this preview.",
-                        },
-                    },
-                ],
+                finishedAt: message.createdAt,
+                entries: [{ kind: "message", id: message.id, phase: "answer" }],
             },
         ],
     };
 }
-
 function advancePreparation(state: PreviewConversation): PreviewConversation {
-    const { turn, step } = sourcePreparation(state);
-    if (turn?.state !== "running" || step > 0) return state;
+    const { mission, step } = sourcePreparation(state);
+    if (mission?.state !== "running" || step > 0) return state;
     return {
         ...state,
-        turns: state.turns?.map((entry) =>
-            entry.id !== turn.id
+        missions: state.missions.map((entry) =>
+            entry.id !== mission.id
                 ? entry
                 : {
                       ...entry,
-                      entries: [
-                          ...entry.entries.map((item) =>
-                              item.kind === "operation" &&
-                              item.operation.id.endsWith("-reporting")
+                      operations: [
+                          ...entry.operations.map((item) =>
+                              item.id.endsWith("-reporting")
                                   ? {
                                         ...item,
-                                        operation: {
-                                            ...item.operation,
-                                            state: "completed" as const,
-                                            summary:
-                                                "Filing and earnings candidates listed; contents remain unverified.",
-                                        },
+                                        state: "completed" as const,
+                                        summary:
+                                            "Filing and earnings candidates listed; contents remain unverified.",
                                     }
                                   : item,
                           ),
                           {
-                              kind: "operation" as const,
-                              operation: {
-                                  id: `${turn.id}-integration`,
-                                  title: "Find product and integration documentation",
-                                  state: "running" as const,
-                                  summary:
-                                      "Looking for insurer integration and workflow documentation.",
-                                  details:
-                                      "Illustrative candidate search, not a verified reading or analytical finding.",
-                              },
+                              id: `${mission.id}-integration`,
+                              title: "Find product and integration documentation",
+                              state: "running" as const,
+                              summary:
+                                  "Looking for insurer integration and workflow documentation.",
+                              details:
+                                  "Illustrative candidate search, not a verified reading or analytical finding.",
                           },
                       ],
                   },
         ),
     };
 }
-
 function endPreparation(
     state: PreviewConversation,
     outcome: "completed" | "interrupted",
 ): PreviewConversation {
-    const { turn } = sourcePreparation(state);
-    if (turn?.state !== "running") return state;
-    const message = createPreviewMessage({
-        from: "assistant",
-        text:
-            outcome === "completed"
-                ? preparationReply
-                : "The illustrative preparation stopped. Recorded inputs and any listed candidates remain available.",
-    });
-    return {
+    const { mission } = sourcePreparation(state);
+    if (mission?.state !== "running") return state;
+    return flushReports({
         ...state,
-        messages: [...state.messages, message],
-        turns: state.turns?.map((entry) =>
-            entry.id !== turn.id
+        missions: state.missions.map((entry) =>
+            entry.id !== mission.id
                 ? entry
                 : {
                       ...entry,
                       state: outcome,
-                      finishedAt: message.createdAt,
-                      entries: [
-                          ...entry.entries.map((item) =>
-                              item.kind === "operation" &&
-                              item.operation.state === "running"
-                                  ? {
-                                        ...item,
-                                        operation: {
-                                            ...item.operation,
-                                            state: outcome,
-                                            summary:
-                                                outcome === "completed"
-                                                    ? "Candidates listed; contents remain unverified."
-                                                    : "Work stopped; recorded inputs remain available.",
-                                        },
-                                    }
-                                  : item,
-                          ),
-                          {
-                              kind: "message" as const,
-                              id: message.id,
-                              phase: "answer" as const,
-                          },
-                      ],
+                      finishedAt: new Date().toISOString(),
+                      operations: entry.operations.map((item) =>
+                          item.state !== "running"
+                              ? item
+                              : {
+                                    ...item,
+                                    state: outcome,
+                                    summary:
+                                        outcome === "completed"
+                                            ? "Candidates listed; contents remain unverified."
+                                            : "Work stopped; recorded inputs remain available.",
+                                },
+                      ),
                   },
         ),
-    };
+        pendingReports: [
+            ...state.pendingReports,
+            {
+                missionId: mission.id,
+                text:
+                    outcome === "completed"
+                        ? preparationReply
+                        : "Sources stopped its illustrative preparation. Recorded inputs and any listed candidates remain available. Restart illustrative work to continue this preview.",
+            },
+        ],
+    });
 }
-
 function sceneState(
     screen: PreviewScreen,
     scenario: PreviewConversation["scenario"] = "specific",
@@ -605,6 +805,156 @@ function sceneState(
         : started;
 }
 
+/** Migrates prior preview records without assigning dates that were never recorded. */
+function migrateConversation(data: unknown): PreviewConversation {
+    if (
+        !record(data) ||
+        (data.version !== undefined && data.version !== 4) ||
+        !validFraming(data) ||
+        !Array.isArray(data.messages) ||
+        !data.messages.every(validMessage) ||
+        (data.turns !== undefined &&
+            (!Array.isArray(data.turns) || !data.turns.every(validStoredTurn)))
+    )
+        throw new Error("Invalid legacy preview");
+    const savedMessages = data.messages;
+    const ids = new Set(savedMessages.map((message) => message.id));
+    if (ids.size !== savedMessages.length)
+        throw new Error("Duplicate legacy message");
+    const scenario = data.scenario === "company" ? "company" : "specific";
+    const seed = getMessages(freshConversation(scenario))
+        .filter((message) => !ids.has(message.id))
+        .map((message) => ({
+            ...message,
+            createdAt:
+                typeof data.startedAt === "string" ? data.startedAt : undefined,
+        }));
+    let messages: PreviewMessage[] = [...seed, ...savedMessages].map(
+        (message) => ({
+            ...message,
+            ...(message.from === "assistant" ? { agentId: "workbench" } : {}),
+        }),
+    );
+    const oldTurns: ConversationTurnSnapshot[] = data.turns ?? [];
+    if (
+        data.sourcePreparationTurnId !== undefined &&
+        (typeof data.sourcePreparationTurnId !== "string" ||
+            !oldTurns.some((turn) => turn.id === data.sourcePreparationTurnId))
+    )
+        throw new Error("Invalid legacy mission");
+    if (data.version === 4 && data.launched && !data.sourcePreparationTurnId)
+        throw new Error("Missing legacy mission");
+    let oldSource = oldTurns.find(
+        (turn) => turn.id === data.sourcePreparationTurnId,
+    );
+    if (data.launched && !oldSource) {
+        const acknowledgement = messages.find(
+            (message) =>
+                message.from === "assistant" &&
+                message.text.startsWith("Research started."),
+        ) ?? {
+            id: "legacy-research-start",
+            from: "assistant",
+            agentId: "workbench",
+            text: launchText,
+        };
+        if (!messages.some((message) => message.id === acknowledgement.id)) {
+            const boundary =
+                typeof data.framingMessageCount === "number"
+                    ? data.framingMessageCount + seed.length
+                    : messages.length;
+            messages = [
+                ...messages.slice(0, boundary),
+                acknowledgement,
+                ...messages.slice(boundary),
+            ];
+        }
+        oldSource = {
+            id: "legacy-source-preparation",
+            state: "interrupted",
+            startedAt: acknowledgement.createdAt,
+            entries: [
+                {
+                    kind: "message",
+                    id: acknowledgement.id,
+                    phase: "commentary",
+                },
+                {
+                    kind: "operation",
+                    operation: {
+                        id: "legacy-source-preparation-status",
+                        title: "Source preparation",
+                        state: "interrupted",
+                        summary:
+                            "This saved preview did not retain preparation progress. Restart illustrative work to inspect it.",
+                    },
+                },
+            ],
+        };
+    }
+    const mission: ConversationMissionSnapshot | undefined = oldSource && {
+        id: oldSource.id,
+        agentId: "sources",
+        title: "Documentary preparation",
+        state: oldSource.state,
+        startedAt: oldSource.startedAt,
+        finishedAt: oldSource.finishedAt,
+        operations: oldSource.entries.flatMap((entry) =>
+            entry.kind === "operation" ? [entry.operation] : [],
+        ),
+    };
+    const sourceMessageIds =
+        oldSource?.entries.flatMap((entry) =>
+            entry.kind === "message" ? [entry.id] : [],
+        ) ?? [];
+    const firstSourceId = sourceMessageIds[0];
+    if (mission && !messages.some((message) => message.id === firstSourceId))
+        throw new Error("Missing legacy acknowledgement");
+    const history = messageEntries(messages).flatMap((entry) =>
+        mission &&
+        entry.kind === "message" &&
+        entry.message.id === firstSourceId
+            ? [entry, { kind: "mission" as const, id: mission.id }]
+            : [entry],
+    );
+    const {
+        messages: _messages,
+        turns: _turns,
+        sourcePreparationTurnId: _source,
+        framingMessageCount: _boundary,
+        ...framing
+    } = data;
+    return validateConversation({
+        ...framing,
+        version: 5,
+        agents: previewAgents,
+        history,
+        turns: [
+            ...oldTurns
+                .filter((turn) => turn.id !== oldSource?.id)
+                .map((turn) => ({ ...turn, agentId: "workbench" })),
+            ...(oldSource
+                ? oldSource.entries.flatMap((entry) =>
+                      entry.kind === "message"
+                          ? [
+                                {
+                                    id: `${oldSource.id}-${entry.id}`,
+                                    agentId: "workbench",
+                                    state: "completed" as const,
+                                    entries: [
+                                        { ...entry, phase: "answer" as const },
+                                    ],
+                                },
+                            ]
+                          : [],
+                  )
+                : []),
+        ],
+        missions: mission ? [mission] : [],
+        pendingReports: [],
+        sourcePreparationMissionId: mission?.id,
+    });
+}
 function restoreConversation(screen: PreviewScreen): {
     state: PreviewConversation;
     saveAllowed: boolean;
@@ -612,135 +962,51 @@ function restoreConversation(screen: PreviewScreen): {
 } {
     try {
         const current = sessionStorage.getItem(previewKey);
-        const legacy =
-            current === null ? sessionStorage.getItem(legacyPreviewKey) : null;
-        const stored = current ?? legacy;
-        if (stored === null)
+        const old =
+            current === null
+                ? previousKeys
+                      .map((key) => sessionStorage.getItem(key))
+                      .find((value) => value !== null)
+                : undefined;
+        const stored = current ?? old;
+        if (stored === undefined || stored === null)
             return { state: sceneState(screen), saveAllowed: true };
         const data: unknown = JSON.parse(stored);
-        if (!validSavedConversation(data))
-            throw new Error("Invalid saved preview");
-        const ids = new Set(data.messages.map((message) => message.id));
-        const referenced = new Set<string>();
-        const operationIds = new Set<string>();
-        if (
-            ids.size !== data.messages.length ||
-            new Set(data.turns?.map((turn) => turn.id)).size !==
-                (data.turns?.length ?? 0)
-        )
-            throw new Error("Duplicate preview identity");
-        for (const turn of data.turns ?? [])
-            for (const entry of turn.entries) {
-                if (entry.kind === "message") {
-                    if (!ids.has(entry.id) || referenced.has(entry.id))
-                        throw new Error("Invalid preview message reference");
-                    referenced.add(entry.id);
-                } else {
-                    if (operationIds.has(entry.operation.id))
-                        throw new Error("Duplicate preview operation");
-                    operationIds.add(entry.operation.id);
-                }
-            }
-        if (
-            (current !== null && data.version !== 4) ||
-            (data.version !== undefined && data.version !== 4)
-        )
-            throw new Error("Unsupported saved preview");
-        if (
-            (current !== null &&
-                data.launched &&
-                data.sourcePreparationTurnId === undefined) ||
-            (data.sourcePreparationTurnId !== undefined &&
-                (typeof data.sourcePreparationTurnId !== "string" ||
-                    !data.turns?.some(
-                        (turn) => turn.id === data.sourcePreparationTurnId,
-                    )))
-        )
-            throw new Error("Missing preparation turn");
-        const seed = freshConversation(data.scenario).messages.map(
-            (message) => ({ ...message, createdAt: data.startedAt }),
-        );
-        let restored: PreviewConversation = {
-            ...data,
-            version: 4,
-            messages: [
-                ...seed.filter((message) => !ids.has(message.id)),
-                ...data.messages,
-            ],
-        };
-        if (legacy !== null && data.launched && !data.sourcePreparationTurnId) {
-            // The old screen never retained its preparation state. Recover the fact of launch without claiming success.
-            const oldAcknowledgement = restored.messages.find(
-                (message) =>
-                    message.from === "assistant" &&
-                    message.text.startsWith("Research started."),
-            );
-            const acknowledgement: PreviewConversation["messages"][number] =
-                oldAcknowledgement ?? {
-                    id: "legacy-research-start",
-                    from: "assistant" as const,
-                    text: launchText,
-                };
-            const boundary =
-                (data as PreviewConversation & { framingMessageCount?: number })
-                    .framingMessageCount ?? data.messages.length;
-            const messages = oldAcknowledgement
-                ? restored.messages
-                : [
-                      ...restored.messages.slice(
-                          0,
-                          boundary +
-                              seed.filter((message) => !ids.has(message.id))
-                                  .length,
-                      ),
-                      acknowledgement,
-                      ...restored.messages.slice(
-                          boundary +
-                              seed.filter((message) => !ids.has(message.id))
-                                  .length,
-                      ),
-                  ];
-            restored = {
-                ...restored,
-                messages,
-                sourcePreparationTurnId: "legacy-source-preparation",
-                turns: [
-                    ...(restored.turns ?? []),
-                    {
-                        id: "legacy-source-preparation",
-                        state: "interrupted",
-                        startedAt: acknowledgement.createdAt,
-                        entries: [
-                            {
-                                kind: "message",
-                                id: acknowledgement.id,
-                                phase: "commentary",
-                            },
-                            {
-                                kind: "operation",
-                                operation: {
-                                    id: "legacy-source-preparation-status",
-                                    title: "Source preparation",
-                                    state: "interrupted",
-                                    summary:
-                                        "This saved preview did not retain preparation progress. Restart illustrative work to inspect it.",
-                                },
-                            },
-                        ],
-                    },
-                ],
-            };
-        }
-        delete (
-            restored as PreviewConversation & { framingMessageCount?: number }
-        ).framingMessageCount;
-        restored = { ...restored, ...interruptTurn(restored) };
+        let restored =
+            current !== null
+                ? validateConversation(data)
+                : migrateConversation(data);
+        restored = applyPreviewPatch(restored, interruptTurn(restored));
+        restored = applyPreviewPatch(restored, {
+            messages: getMessages(restored).map((message) =>
+                message.status === "running"
+                    ? { ...message, status: "interrupted" }
+                    : message,
+            ),
+        });
+        restored = flushReports({
+            ...restored,
+            missions: restored.missions.map((mission) =>
+                mission.state !== "running"
+                    ? mission
+                    : {
+                          ...mission,
+                          state: "interrupted",
+                          finishedAt: new Date().toISOString(),
+                          operations: mission.operations.map((operation) =>
+                              operation.state !== "running"
+                                  ? operation
+                                  : { ...operation, state: "interrupted" },
+                          ),
+                      },
+            ),
+        });
         if (
             !restored.launched &&
             (screen === "launched" || screen === "handoff")
         )
             restored = startResearch(restored);
-        return { state: restored, saveAllowed: true };
+        return { state: validateConversation(restored), saveAllowed: true };
     } catch {
         return {
             state: sceneState(screen),
@@ -750,22 +1016,23 @@ function restoreConversation(screen: PreviewScreen): {
     }
 }
 
+type ResponseScript = { text: string; work: boolean; steps: number };
 function advanceResponse(
     current: PreviewConversation,
-    activeTurnId: string,
-    next: number,
+    turnId: string,
+    step: number,
+    script: ResponseScript,
 ): PreviewConversation {
-    const turn = current.turns?.find((t) => t.id === activeTurnId);
+    const turn = current.turns.find((entry) => entry.id === turnId);
     if (turn?.state !== "running") return current;
-    const entries = turn.entries.map((e) =>
-        e.kind === "operation" ? { ...e, operation: { ...e.operation } } : e,
-    );
-    if (next === 1) {
-        const first = entries.find((e) => e.kind === "operation");
-        if (first?.kind === "operation")
-            first.operation = {
-                ...first.operation,
-                state: "completed",
+    const entries = [...turn.entries];
+    if (script.work && step === 1) {
+        const first = entries.findIndex((entry) => entry.kind === "operation");
+        const operation = entries[first];
+        if (operation?.kind === "operation")
+            entries[first] = {
+                ...operation,
+                operation: { ...operation.operation, state: "completed" },
             };
         entries.push({
             kind: "operation",
@@ -781,103 +1048,65 @@ function advanceResponse(
         });
     }
     const answerId = `${turn.id}-answer`;
-    if (next === 2)
-        entries.push({
-            kind: "message",
-            id: answerId,
-            phase: "answer",
-        });
-    const done = next >= 10;
-    const text = illustrativeAnswer.slice(
+    if (
+        (!script.work || step >= 2) &&
+        !entries.some(
+            (entry) => entry.kind === "message" && entry.id === answerId,
+        )
+    )
+        entries.push({ kind: "message", id: answerId, phase: "answer" });
+    const done = step >= script.steps;
+    const text = script.text.slice(
         0,
-        Math.ceil((illustrativeAnswer.length * Math.max(0, next - 1)) / 9),
-    );
-    const messages =
-        next < 2
-            ? current.messages
-            : [
-                  ...current.messages.filter((m) => m.id !== answerId),
-                  {
-                      id: answerId,
-                      createdAt:
-                          current.messages.find((m) => m.id === answerId)
-                              ?.createdAt ?? new Date().toISOString(),
-                      from: "assistant" as const,
-                      text,
-                      status: done ? undefined : ("running" as const),
-                  },
-              ];
-    return {
-        ...current,
-        messages,
-        turns: current.turns?.map((t) =>
-            t.id !== turn.id
-                ? t
-                : {
-                      ...turn,
-                      entries: entries.map((e) =>
-                          done && e.kind === "operation"
-                              ? {
-                                    ...e,
-                                    operation: {
-                                        ...e.operation,
-                                        state: "completed",
-                                    },
-                                }
-                              : e,
-                      ),
-                      state: done ? "completed" : "running",
-                      finishedAt: done ? new Date().toISOString() : undefined,
-                  },
+        Math.ceil(
+            (script.text.length * Math.max(0, step - (script.work ? 1 : 0))) /
+                (script.steps - (script.work ? 1 : 0)),
         ),
-    };
-}
-
-function finishResponse(
-    current: PreviewConversation,
-    activeTurnId: string,
-): PreviewConversation {
-    const turn = current.turns?.find((t) => t.id === activeTurnId);
-    if (turn?.state !== "running") return current;
-    const answerId = `${turn.id}-answer`;
-    const entries = turn.entries.filter(
-        (e) => e.kind !== "message" || e.phase !== "answer",
     );
-    entries.push({ kind: "message", id: answerId, phase: "answer" });
-    return {
-        ...current,
-        messages: [
-            ...current.messages.filter((m) => m.id !== answerId),
-            {
-                id: answerId,
-                from: "assistant",
-                text: illustrativeAnswer,
-                createdAt:
-                    current.messages.find((m) => m.id === answerId)
-                        ?.createdAt ?? new Date().toISOString(),
-            },
-        ],
-        turns: current.turns?.map((t) =>
-            t.id !== turn.id
-                ? t
-                : {
-                      ...t,
-                      state: "completed",
-                      finishedAt: new Date().toISOString(),
-                      entries: entries.map((e) =>
-                          e.kind === "operation"
-                              ? {
-                                    ...e,
-                                    operation: {
-                                        ...e.operation,
-                                        state: "completed",
-                                    },
-                                }
-                              : e,
-                      ),
-                  },
-        ),
-    };
+    return flushReports(
+        applyPreviewPatch(current, {
+            messages:
+                !script.work || step >= 2
+                    ? [
+                          {
+                              id: answerId,
+                              agentId: turn.agentId,
+                              from: "assistant",
+                              text,
+                              createdAt:
+                                  getMessages(current).find(
+                                      (message) => message.id === answerId,
+                                  )?.createdAt ?? new Date().toISOString(),
+                              status: done ? undefined : "running",
+                          },
+                      ]
+                    : [],
+            turns: current.turns.map((entry) =>
+                entry.id !== turn.id
+                    ? entry
+                    : {
+                          ...turn,
+                          state: done ? "completed" : "running",
+                          finishedAt: done
+                              ? new Date().toISOString()
+                              : undefined,
+                          entries: done
+                              ? entries.map((entry) =>
+                                    entry.kind === "operation"
+                                        ? {
+                                              ...entry,
+                                              operation: {
+                                                  ...entry.operation,
+                                                  state: "completed",
+                                              },
+                                          }
+                                        : entry,
+                                )
+                              : entries,
+                      },
+            ),
+        }),
+    );
 }
 
 /** Owns one illustrative conversation, its runtime, persistence and deterministic preview commands. */
@@ -888,8 +1117,8 @@ export function useStartConversationPreview(
     const [restoration] = useState(() => restoreConversation(screen));
     const [state, setState] = useState(restoration.state);
     const [saveAllowed, setSaveAllowed] = useState(restoration.saveAllowed);
-    const update = (patch: Partial<PreviewConversation>) =>
-        setState((current) => ({ ...current, ...patch }));
+    const update = (patch: PreviewPatch) =>
+        setState((current) => applyPreviewPatch(current, patch));
     useEffect(() => {
         if ((screen === "launched" || screen === "handoff") && !state.launched)
             setState(startResearch);
@@ -902,51 +1131,35 @@ export function useStartConversationPreview(
         update({ questionAction: value });
     const setSelectedQuestionId = (value: string) =>
         update({ selectedQuestionId: value });
-    const [reply, setReply] = useState<{ id: string; step: number } | null>(
-        null,
-    );
-    useEffect(() => {
-        if (!reply) return;
-        const timer = window.setTimeout(() => {
-            setState((current) => ({
-                ...current,
-                messages: current.messages.map((message) =>
-                    message.id === reply.id
-                        ? {
-                              ...message,
-                              text: illustrativeLongAnswer.slice(
-                                  0,
-                                  Math.ceil(
-                                      (illustrativeLongAnswer.length *
-                                          (reply.step + 1)) /
-                                          24,
-                                  ),
-                              ),
-                              status: reply.step < 23 ? "running" : undefined,
-                          }
-                        : message,
-                ),
-            }));
-            setReply(
-                reply.step < 23 ? { ...reply, step: reply.step + 1 } : null,
-            );
-        }, 200);
-        return () => window.clearTimeout(timer);
-    }, [reply]);
-    const activeTurn = state.turns?.find(
-        (t) => t.state === "running" && t.id !== state.sourcePreparationTurnId,
-    );
+    const activeTurn = state.turns.find((turn) => turn.state === "running");
+    const canAskDuringPreparation =
+        sourcePreparation(state).state === "running" && !responseRunning(state);
     const activeTurnId = activeTurn?.id;
+    const reply =
+        activeTurn &&
+        !activeTurn.entries.some((entry) => entry.kind === "operation")
+            ? { id: activeTurn.id }
+            : null;
+    const script = useRef<ResponseScript>({
+        text: illustrativeAnswer,
+        work: true,
+        steps: 10,
+    });
     const advanceTurn = useRef<(() => void) | null>(null);
     useEffect(() => {
         if (!activeTurnId) return;
         let step = 0;
         const advance = () => {
             const next = ++step;
-            setState((current) => advanceResponse(current, activeTurnId, next));
+            setState((current) =>
+                advanceResponse(current, activeTurnId, next, script.current),
+            );
         };
         advanceTurn.current = advance;
-        const timer = window.setInterval(advance, 800);
+        const timer = window.setInterval(
+            advance,
+            script.current.work ? 800 : 200,
+        );
         return () => {
             window.clearInterval(timer);
             advanceTurn.current = null;
@@ -954,7 +1167,14 @@ export function useStartConversationPreview(
     }, [activeTurnId]);
     function finishIllustrativeTurn() {
         if (activeTurnId)
-            setState((current) => finishResponse(current, activeTurnId));
+            setState((current) =>
+                advanceResponse(
+                    current,
+                    activeTurnId,
+                    script.current.steps,
+                    script.current,
+                ),
+            );
     }
 
     const setScope = (scope: string) => update({ scope });
@@ -998,18 +1218,13 @@ export function useStartConversationPreview(
             : "");
     const scopeAnswer = state.contextDraft?.trim() || contextChoice;
     const conversation = useWorkbenchConversation({
-        messages: previewMessages(state.messages),
+        messages: previewMessages(getMessages(state)),
         draft:
             !state.launched && needsContext
                 ? (state.contextDraft ?? "")
                 : ((!state.launched ? questionAction?.text : undefined) ??
                   state.draft),
-        isRunning:
-            state.turns?.some(
-                (t) =>
-                    t.state === "running" &&
-                    t.id !== state.sourcePreparationTurnId,
-            ) || state.messages.some((message) => message.status === "running"),
+        isRunning: responseRunning(state),
         onDraftChange: (text) =>
             !state.launched && needsContext
                 ? update({ contextDraft: text })
@@ -1024,13 +1239,24 @@ export function useStartConversationPreview(
             throw new Error("fixture_delivery_failure");
         }
         if (state.launched) {
-            update({
-                messages: [...state.messages, createPreviewMessage({ text })],
-                draft: "",
-            });
-            onStatus(
-                "Request recorded in this preview; freeform interpretation is not connected.",
-            );
+            if (responseRunning(state)) return;
+            const user = createPreviewMessage({ from: "user", text });
+            if (
+                canAskDuringPreparation &&
+                example === preparationQuestionExample.id &&
+                text === preparationQuestionExample.text
+            ) {
+                beginResponse(
+                    { text: preparationAnswer, work: false, steps: 24 },
+                    [user],
+                );
+                setExample(null);
+            } else {
+                update({ messages: [user], draft: "" });
+                onStatus(
+                    "Request recorded in this preview; freeform interpretation is not connected.",
+                );
+            }
             return;
         }
         if (needsContext) {
@@ -1044,7 +1270,7 @@ export function useStartConversationPreview(
                     ...new Set([...(state.analystQuestionIds ?? []), id]),
                 ],
                 messages: [
-                    ...state.messages,
+                    ...getMessages(state),
                     createPreviewMessage({
                         from: "user",
                         text: `${questionAction.id ? "Updated" : "Added"} research question: ${text}`,
@@ -1067,11 +1293,11 @@ export function useStartConversationPreview(
         const chosen = guidedExamples.find(
             (item) => item.id === example && item.text === text,
         );
-        const messages: PreviewConversation["messages"] = [
-            ...state.messages,
+        const messages: PreviewMessage[] = [
+            ...getMessages(state),
             createPreviewMessage({ text }),
         ];
-        const patch: Partial<PreviewConversation> = { messages, draft: "" };
+        const patch: PreviewPatch = { messages, draft: "" };
         let result: string | undefined;
         if (chosen?.id === "scope") {
             patch.scope = chosen.text;
@@ -1132,7 +1358,7 @@ export function useStartConversationPreview(
             contextDraft: "",
             contextChoice: undefined,
             messages: [
-                ...state.messages,
+                ...getMessages(state),
                 createPreviewMessage({ text, from: "user" }),
                 createPreviewMessage({
                     text: "The framing is ready to review.",
@@ -1184,7 +1410,6 @@ export function useStartConversationPreview(
     function selectScenario(scenario: "specific" | "company") {
         setSaveAllowed(true);
         setExample(null);
-        setReply(null);
         setState(sceneState(screen, scenario));
         onStatus("Illustrative preview reset");
     }
@@ -1201,93 +1426,78 @@ export function useStartConversationPreview(
         });
     }
 
-    function workThenReply() {
+    function beginResponse(
+        nextScript: ResponseScript,
+        priorMessages: PreviewMessage[] = [],
+    ) {
+        if (responseRunning(state)) return;
+        script.current = nextScript;
         const id = crypto.randomUUID();
-        const comment = createPreviewMessage({
-            from: "assistant",
-            text: "I'll compare the retained material on integrations and coordination.",
-        });
-        setState((current) => ({
-            ...current,
-            messages: [...current.messages, comment],
-            turns: [
-                ...(current.turns ?? []),
-                {
-                    id,
-                    state: "running",
-                    startedAt: new Date().toISOString(),
-                    entries: [
-                        {
-                            kind: "message",
-                            id: comment.id,
-                            phase: "commentary",
-                        },
-                        {
-                            kind: "operation",
-                            operation: {
-                                id: `${id}-read`,
-                                title: "Read the retained investor presentation",
-                                summary:
-                                    "Illustrative reading: coordination and network participation.",
-                                details:
-                                    "Illustrative investor presentation input; this preview does not retrieve or verify a document.",
-                                state: "running",
-                            },
-                        },
-                    ],
-                },
-            ],
-        }));
-    }
-    function growReply() {
         const message = createPreviewMessage({
             from: "assistant",
-            text: "## Illustrative reading",
-            status: "running",
+            text: nextScript.work
+                ? "I'll compare the retained material on integrations and coordination."
+                : nextScript.text.slice(0, 28),
+            status: nextScript.work ? undefined : "running",
         });
-        setState((current) => ({
-            ...current,
-            messages: [...current.messages, message],
-        }));
-        setReply({ id: message.id, step: 0 });
+        const answerId = `${id}-answer`;
+        const recordedMessage = nextScript.work
+            ? message
+            : { ...message, id: answerId };
+        setState((current) =>
+            applyPreviewPatch(current, {
+                messages: [...priorMessages, recordedMessage],
+                draft: "",
+                turns: [
+                    ...current.turns,
+                    {
+                        id,
+                        agentId: "workbench",
+                        state: "running",
+                        startedAt: message.createdAt,
+                        entries: [
+                            {
+                                kind: "message",
+                                id: recordedMessage.id,
+                                phase: nextScript.work
+                                    ? "commentary"
+                                    : "answer",
+                            },
+                            ...(nextScript.work
+                                ? [
+                                      {
+                                          kind: "operation" as const,
+                                          operation: {
+                                              id: `${id}-read`,
+                                              title: "Read the retained investor presentation",
+                                              state: "running" as const,
+                                              summary:
+                                                  "Illustrative reading: coordination and network participation.",
+                                              details:
+                                                  "Illustrative investor presentation input; this preview does not retrieve or verify a document.",
+                                          },
+                                      },
+                                  ]
+                                : []),
+                        ],
+                    },
+                ],
+            }),
+        );
     }
-    function interruptReply() {
-        const replyId = reply?.id;
-        if (!replyId) return;
-        setState((current) => ({
-            ...current,
-            messages: current.messages.map((message) =>
-                message.id === replyId
-                    ? { ...message, status: "interrupted" }
-                    : message,
-            ),
-        }));
-        setReply(null);
+    function workThenReply() {
+        beginResponse({ text: illustrativeAnswer, work: true, steps: 10 });
+    }
+    function growReply() {
+        beginResponse({ text: illustrativeLongAnswer, work: false, steps: 24 });
     }
     function stopResponse() {
-        if (reply) {
-            interruptReply();
-            return;
-        }
         if (!activeTurnId) return;
-        setState((current) => {
-            const interrupted = interruptTurn({
-                ...current,
-                turns: current.turns?.filter(
-                    (turn) => turn.id === activeTurnId,
-                ),
-            });
-            return {
-                ...current,
-                messages: interrupted.messages ?? current.messages,
-                turns: current.turns?.map((turn) =>
-                    turn.id === activeTurnId
-                        ? (interrupted.turns?.[0] ?? turn)
-                        : turn,
-                ),
-            };
-        });
+        setState((current) =>
+            flushReports(applyPreviewPatch(current, interruptTurn(current))),
+        );
     }
+    const interruptReply = stopResponse;
     useEffect(() => {
         if (restoration.error) onStatus(restoration.error);
     }, [restoration.error, onStatus]);
@@ -1295,7 +1505,7 @@ export function useStartConversationPreview(
         if (!saveAllowed) return;
         try {
             sessionStorage.setItem(previewKey, JSON.stringify(state));
-            sessionStorage.removeItem(legacyPreviewKey);
+            for (const key of previousKeys) sessionStorage.removeItem(key);
         } catch {
             onStatus(
                 "Preview continuity is unavailable in this browser. Your current conversation remains open.",
@@ -1304,8 +1514,14 @@ export function useStartConversationPreview(
     }, [state, saveAllowed, onStatus]);
     return {
         state,
+        messages: getMessages(state),
+        historyEntries: state.history.map((entry) => ({
+            kind: entry.kind,
+            id: entry.kind === "message" ? entry.message.id : entry.id,
+        })),
         update,
         conversation,
+        canAskDuringPreparation,
         setExample,
         setFailNext,
         setQuestionAction,

@@ -3,9 +3,10 @@ import {
     ConversationActivity,
     ConversationActivityGroup,
     type ConversationWorkItem,
-} from "@/components/chat/workbench-conversation";
+} from "@/components/chat/conversation-activity";
 export type ConversationTurnSnapshot = {
     id: string;
+    agentId?: string;
     state: "running" | "completed" | "interrupted";
     startedAt?: string;
     finishedAt?: string;

@@ -1,11 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-test("START Stay here dismisses the handoff and cancels its automatic navigation", async ({
+test("START completed material stays readable until explicit navigation", async ({
     page,
 }) => {
     await page.clock.install();
     await page.goto("/?layout=start&screen=handoff&theme=light");
-    await page.getByRole("button", { name: "Stay here", exact: true }).click();
     await expect(
         page.getByRole("button", { name: "Stay here", exact: true }),
     ).toHaveCount(0);

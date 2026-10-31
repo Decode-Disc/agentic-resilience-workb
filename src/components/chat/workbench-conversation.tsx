@@ -18,16 +18,22 @@ import {
     Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { useControllableState } from "@radix-ui/react-use-controllable-state";
-import {
-    type ReactNode,
-    type Ref,
-    useEffect,
-    useId,
-    useLayoutEffect,
-    useRef,
-    useState,
-} from "react";
+import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
 import remarkGfm from "remark-gfm";
+import {
+    type ConversationWorkItem,
+    workStateLabels,
+} from "@/components/chat/conversation-activity";
+import {
+    type ConversationAgent,
+    type ConversationAgents,
+    DEFAULT_CONVERSATION_AGENTS,
+    WORKBENCH_AGENT,
+} from "@/components/chat/conversation-agent";
+import {
+    ConversationMission,
+    type ConversationMissionSnapshot,
+} from "@/components/chat/conversation-mission";
 import {
     Message,
     MessageBody,
@@ -55,23 +61,31 @@ import { useResponsive } from "@/hooks/use-responsive";
 import { cn } from "@/lib/utils";
 import "./workbench-conversation.css";
 
-export const WORKBENCH_AGENT_NAME = "Workbench Agent";
+export {
+    ConversationActivity,
+    ConversationActivityGroup,
+    type ConversationWorkItem,
+} from "@/components/chat/conversation-activity";
+
+export const WORKBENCH_AGENT_NAME = WORKBENCH_AGENT.name;
 
 /** Keeps conversation identity and its context together wherever the chat is composed. */
 export function ConversationHeader({
     identity,
     context,
     leading,
+    agent = WORKBENCH_AGENT,
 }: {
     identity?: ReactNode;
     context?: ReactNode;
     leading?: ReactNode;
+    agent?: ConversationAgent;
 }) {
     return (
         <header data-slot="conversation-header">
             {leading}
             <span data-slot="conversation-brand">{"//"}</span>
-            <span>{WORKBENCH_AGENT_NAME}</span>
+            <span>{agent.name}</span>
             <div>{identity}</div>
             {context}
         </header>
@@ -324,8 +338,21 @@ export function ConversationComposer({
     );
 }
 
-function ConversationMessage({ authorName }: { authorName: string }) {
+function ConversationMessage({
+    authorName,
+    agents,
+}: {
+    authorName: string;
+    agents: ConversationAgents;
+}) {
     const role = useAuiState((s) => s.message.role);
+    const agentId = useAuiState((s) => s.message.metadata.custom.agentId);
+    const resolvedAuthor =
+        agentId === undefined
+            ? authorName
+            : typeof agentId === "string"
+              ? agents[agentId]?.name
+              : undefined;
     const createdAt = useAuiState((s) =>
         s.message.metadata.custom.creationTimeRecorded
             ? s.message.createdAt
@@ -346,11 +373,22 @@ function ConversationMessage({ authorName }: { authorName: string }) {
             render={
                 <Message
                     from={role}
-                    authorName={role === "assistant" ? authorName : undefined}
+                    authorName={
+                        role === "assistant"
+                            ? (resolvedAuthor ?? "Unidentified agent")
+                            : undefined
+                    }
                     streaming={streaming}
                 />
             }>
             <MessageBody>
+                {role === "assistant" && !resolvedAuthor && (
+                    <LoadErrorAlert
+                        variant="inline"
+                        title="Message attribution unavailable"
+                        description="The message is retained, but its author could not be identified."
+                    />
+                )}
                 <MessageContent>
                     <MessagePrimitive.Parts
                         components={{ Text: ConversationMarkdown }}
@@ -382,16 +420,21 @@ function ConversationMarkdown() {
 export function ConversationMessages({
     ids,
     authorName = WORKBENCH_AGENT_NAME,
+    agents = DEFAULT_CONVERSATION_AGENTS,
 }: {
     ids?: readonly string[];
     /** Identity of the assistant whose messages the caller selects. */
     authorName?: string;
+    agents?: ConversationAgents;
 }) {
     return (
         <ThreadPrimitive.Messages>
             {({ message }) =>
                 !ids || ids.includes(message.id) ? (
-                    <ConversationMessage authorName={authorName} />
+                    <ConversationMessage
+                        authorName={authorName}
+                        agents={agents}
+                    />
                 ) : null
             }
         </ThreadPrimitive.Messages>
@@ -430,142 +473,6 @@ export function ConversationPendingPanel({
     );
 }
 
-/** Compact useful work in an assistant turn, with supporting detail disclosed in place. */
-export function ConversationActivity({
-    title,
-    summary,
-    state,
-    children,
-}: {
-    title: string;
-    summary: string;
-    state: ConversationWorkItem["state"];
-    children?: ReactNode;
-}) {
-    const id = useId();
-    const row = (
-        <>
-            <Icon
-                iconNode={
-                    state === "running"
-                        ? Loading03Icon
-                        : state === "completed"
-                          ? Tick02Icon
-                          : Cancel01Icon
-                }
-                size={15}
-                className={
-                    state === "running" ? "chat-working-icon" : undefined
-                }
-            />
-            <span>
-                <span data-slot="activity-title">{title}</span>
-                <span data-slot="activity-summary">{summary}</span>
-            </span>
-            <span data-slot="activity-state">{workStateLabels[state]}</span>
-            {children && <Icon iconNode={ArrowRight01Icon} size={12} />}
-        </>
-    );
-    return children ? (
-        <Collapsible
-            data-message-id={id}
-            data-slot="conversation-activity"
-            data-state={state}>
-            <CollapsibleTrigger
-                render={<Button variant="ghost" />}
-                aria-label={`Inspect ${title}`}>
-                {row}
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-                <div data-slot="activity-detail">{children}</div>
-            </CollapsibleContent>
-        </Collapsible>
-    ) : (
-        <div data-slot="conversation-activity" data-state={state}>
-            <div className="chat-activity-row">{row}</div>
-        </div>
-    );
-}
-
-/** Keeps operations visible during a turn and folds the same retained work when that turn ends. */
-export function ConversationActivityGroup({
-    id,
-    title,
-    summary,
-    state,
-    activities,
-    content,
-    triggerLabel,
-}: {
-    id: string;
-    title: string;
-    summary: string;
-    state: ConversationWorkItem["state"];
-    activities: readonly ConversationWorkItem[];
-    content?: ReactNode;
-    triggerLabel?: string;
-}) {
-    const [expanded, setExpanded] = useState(false);
-    const trigger = useRef<HTMLButtonElement>(null);
-    const workHasFocus = useRef(false);
-    const running = state === "running";
-    useLayoutEffect(() => {
-        if (!running && workHasFocus.current) trigger.current?.focus();
-    }, [running]);
-    if (!activities.length) return null;
-    return (
-        <Collapsible
-            open={running || expanded}
-            onOpenChange={setExpanded}
-            role="region"
-            aria-label={title}
-            data-slot="conversation-work-group"
-            data-message-id={id}
-            data-state={state}>
-            {!running && (
-                <CollapsibleTrigger
-                    ref={trigger}
-                    render={<Button variant="ghost" />}
-                    aria-label={
-                        triggerLabel ?? `Inspect ${title.toLowerCase()}`
-                    }>
-                    <Icon iconNode={ArrowRight01Icon} size={13} />
-                    <span className="chat-work-description">
-                        <strong>{title}</strong>
-                        <span>{summary}</span>
-                    </span>
-                    {state === "interrupted" && (
-                        <span className="chat-work-limit">Interrupted</span>
-                    )}
-                </CollapsibleTrigger>
-            )}
-            <CollapsibleContent keepMounted>
-                <div
-                    className="chat-work-entries"
-                    onFocusCapture={() => {
-                        workHasFocus.current = true;
-                    }}
-                    onBlurCapture={(event) => {
-                        workHasFocus.current = event.currentTarget.contains(
-                            event.relatedTarget,
-                        );
-                    }}>
-                    {content ??
-                        activities.map((activity) => (
-                            <ConversationActivity
-                                key={activity.id}
-                                title={activity.title}
-                                summary={activity.summary}
-                                state={activity.state}>
-                                {activity.details}
-                            </ConversationActivity>
-                        ))}
-                </div>
-            </CollapsibleContent>
-        </Collapsible>
-    );
-}
-
 /** An inspectable input in the context card; opening it does not imply that it has been read. */
 export function ConversationReference({
     title,
@@ -595,19 +502,6 @@ export function ConversationReference({
         </Collapsible>
     );
 }
-
-export type ConversationWorkItem = {
-    id: string;
-    title: string;
-    state: "running" | "completed" | "interrupted";
-    summary: string;
-    details?: ReactNode;
-};
-const workStateLabels = {
-    running: "Working",
-    completed: "Complete",
-    interrupted: "Interrupted",
-} as const;
 
 function ContextWorkItems({
     items,
@@ -649,12 +543,18 @@ function ContextWorkItems({
 /** Reflects supplied activity snapshots; it never schedules or simulates work. */
 function ConversationWorkList({
     activities,
+    missions,
+    agents,
 }: {
     activities: readonly ConversationWorkItem[];
+    missions: readonly ConversationMissionSnapshot[];
+    agents: ConversationAgents;
 }) {
     const current = activities.filter((item) => item.state !== "completed");
     const completed = activities.filter((item) => item.state === "completed");
-    const working = current.filter((item) => item.state === "running").length;
+    const working =
+        current.filter((item) => item.state === "running").length +
+        missions.filter((mission) => mission.state === "running").length;
     return (
         <section className="chat-context-work" aria-label="Work">
             <div className="chat-context-work-heading">
@@ -663,6 +563,23 @@ function ConversationWorkList({
                     {working ? `${working} working` : "No active work"}
                 </span>
             </div>
+            {missions.map((mission) => {
+                const agent = agents[mission.agentId];
+                return agent ? (
+                    <ConversationMission
+                        key={mission.id}
+                        mission={mission}
+                        agent={agent}
+                    />
+                ) : (
+                    <LoadErrorAlert
+                        key={mission.id}
+                        variant="inline"
+                        title="Work attribution unavailable"
+                        description="This mission’s agent could not be restored."
+                    />
+                );
+            })}
             {current.length > 0 && <ContextWorkItems items={current} />}
             {completed.length > 0 && (
                 <Collapsible className="chat-context-completed">
@@ -678,7 +595,7 @@ function ConversationWorkList({
                     </CollapsibleContent>
                 </Collapsible>
             )}
-            {!activities.length && (
+            {!activities.length && !missions.length && (
                 <p className="chat-context-empty">No work recorded yet.</p>
             )}
         </section>
@@ -692,6 +609,8 @@ export function ConversationContext({
     onOpenChange,
     title = "Research context",
     activities = [],
+    missions = [],
+    agents = DEFAULT_CONVERSATION_AGENTS,
     plan,
     planSummary,
     planAction,
@@ -704,6 +623,8 @@ export function ConversationContext({
     onOpenChange?: (open: boolean) => void;
     title?: string;
     activities?: readonly ConversationWorkItem[];
+    missions?: readonly ConversationMissionSnapshot[];
+    agents?: ConversationAgents;
     plan: ReactNode;
     planSummary?: ReactNode;
     planAction?: ReactNode;
@@ -818,7 +739,11 @@ export function ConversationContext({
                             <h2>Sources</h2>
                             {sources}
                         </section>
-                        <ConversationWorkList activities={activities} />
+                        <ConversationWorkList
+                            activities={activities}
+                            missions={missions}
+                            agents={agents}
+                        />
                     </div>
                 </ScrollArea>
             </PopoverContent>

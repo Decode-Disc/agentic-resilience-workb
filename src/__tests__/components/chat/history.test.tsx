@@ -30,7 +30,10 @@ function InterleavedHistory() {
     return (
         <ConversationThread runtime={conversation.runtime}>
             <ConversationHistory
-                messageIds={["start", "follow-up", "answer"]}
+                entries={["start", "follow-up", "answer"].map((id) => ({
+                    kind: "message" as const,
+                    id,
+                }))}
                 turns={[
                     {
                         id: "preparation",

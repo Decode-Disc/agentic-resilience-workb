@@ -13,6 +13,7 @@ export interface SourcingLaneProps {
     count: number;
     documents: readonly SourcingDocument[];
     remainingLabel?: string;
+    emptyMessage?: string;
     active?: boolean;
 }
 export function SourcingLane({
@@ -21,6 +22,7 @@ export function SourcingLane({
     count,
     documents,
     remainingLabel,
+    emptyMessage,
     active = state === "capturing",
 }: SourcingLaneProps) {
     const running = active;
@@ -68,6 +70,11 @@ export function SourcingLane({
                 <b>{label}</b>
                 <span className="wb-meta">{count}</span>
             </span>
+            {!documents.length && emptyMessage && (
+                <p className="wb-meta" style={{ padding: 4 }}>
+                    {emptyMessage}
+                </p>
+            )}
             {documents.map((d) => (
                 <span
                     key={d.id}

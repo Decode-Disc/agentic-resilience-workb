@@ -1031,3 +1031,34 @@
     border-radius: 999px;
     padding-inline: 16px;
 }
+
+.chat-mission-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 14px 0 8px;
+    font-size: 12.5px;
+    line-height: 18px;
+}
+.chat-mission-heading > strong {
+    flex: 1;
+    min-width: 0;
+    font-weight: 500;
+}
+.chat-mission-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--brand-purple);
+    white-space: nowrap;
+    font-size: 11px;
+}
+.chat-mission-duration {
+    color: var(--muted-foreground);
+    font-size: 11px;
+}
+.chat-mission-interruption {
+    margin: 6px 0;
+    font-size: 12px;
+    color: var(--muted-foreground);
+}
