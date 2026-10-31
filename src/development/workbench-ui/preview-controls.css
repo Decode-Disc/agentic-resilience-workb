@@ -10,8 +10,10 @@
 }
 .preview-control-group > a,
 .preview-control-group > button {
-    border: 0;
+    border: 1px solid transparent;
     border-radius: 7px;
+    background: transparent;
+    color: var(--muted-foreground);
     font-size: 12px;
     font-weight: 500;
     box-shadow: none;
@@ -19,7 +21,9 @@
 .preview-control-group > button[data-pressed],
 .preview-control-group > a[aria-current="page"],
 .preview-control-group > button[aria-pressed="true"] {
-    background: color-mix(in oklab, var(--foreground) 10%, var(--card));
+    background: var(--card);
+    border-color: var(--input-border);
+    box-shadow: var(--surface-shadow-tab);
     color: var(--foreground);
 }
 .preview-tools-panel {

@@ -48,6 +48,7 @@ import {
     PopoverTitle,
     PopoverTrigger,
 } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { useResponsive } from "@/hooks/use-responsive";
 import { cn } from "@/lib/utils";
@@ -569,15 +570,52 @@ const workStateLabels = {
     interrupted: "Interrupted",
 } as const;
 
+function ContextWorkItems({
+    items,
+}: {
+    items: readonly ConversationWorkItem[];
+}) {
+    return (
+        <ul>
+            {items.map((item) => (
+                <li key={item.id} data-state={item.state}>
+                    <Icon
+                        iconNode={
+                            item.state === "running"
+                                ? Loading03Icon
+                                : item.state === "completed"
+                                  ? Tick02Icon
+                                  : Cancel01Icon
+                        }
+                        size={16}
+                        className={
+                            item.state === "running"
+                                ? "chat-working-icon"
+                                : undefined
+                        }
+                    />
+                    <div>
+                        <strong>{item.title}</strong>
+                        <span>{item.summary}</span>
+                    </div>
+                    <span className="chat-context-work-state">
+                        {workStateLabels[item.state]}
+                    </span>
+                </li>
+            ))}
+        </ul>
+    );
+}
+
 /** Reflects supplied activity snapshots; it never schedules or simulates work. */
 function ConversationWorkList({
     activities,
 }: {
     activities: readonly ConversationWorkItem[];
 }) {
-    const working = activities.filter(
-        (item) => item.state === "running",
-    ).length;
+    const current = activities.filter((item) => item.state !== "completed");
+    const completed = activities.filter((item) => item.state === "completed");
+    const working = current.filter((item) => item.state === "running").length;
     return (
         <section className="chat-context-work" aria-label="Work">
             <div className="chat-context-work-heading">
@@ -586,36 +624,22 @@ function ConversationWorkList({
                     {working ? `${working} working` : "No active work"}
                 </span>
             </div>
-            {activities.length ? (
-                <ul>
-                    {activities.map((item) => (
-                        <li key={item.id} data-state={item.state}>
-                            <Icon
-                                iconNode={
-                                    item.state === "running"
-                                        ? Loading03Icon
-                                        : item.state === "completed"
-                                          ? Tick02Icon
-                                          : Cancel01Icon
-                                }
-                                size={16}
-                                className={
-                                    item.state === "running"
-                                        ? "chat-working-icon"
-                                        : undefined
-                                }
-                            />
-                            <div>
-                                <strong>{item.title}</strong>
-                                <span>{item.summary}</span>
-                            </div>
-                            <span className="chat-context-work-state">
-                                {workStateLabels[item.state]}
-                            </span>
-                        </li>
-                    ))}
-                </ul>
-            ) : (
+            {current.length > 0 && <ContextWorkItems items={current} />}
+            {completed.length > 0 && (
+                <Collapsible className="chat-context-completed">
+                    <CollapsibleTrigger
+                        render={<Button variant="ghost" size="sm" />}
+                        aria-label="Completed work">
+                        <Icon iconNode={Tick02Icon} size={15} />
+                        <span>{completed.length} completed</span>
+                        <Icon iconNode={ArrowRight01Icon} size={12} />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                        <ContextWorkItems items={completed} />
+                    </CollapsibleContent>
+                </Collapsible>
+            )}
+            {!activities.length && (
                 <p className="chat-context-empty">No work recorded yet.</p>
             )}
         </section>
@@ -627,6 +651,7 @@ export function ConversationContext({
     title = "Research context",
     activities = [],
     plan,
+    planSummary,
     outputs,
     sources,
     onChangeScope,
@@ -634,6 +659,7 @@ export function ConversationContext({
     title?: string;
     activities?: readonly ConversationWorkItem[];
     plan: ReactNode;
+    planSummary?: ReactNode;
     outputs: ReactNode;
     sources: ReactNode;
     onChangeScope?: () => void;
@@ -670,43 +696,78 @@ export function ConversationContext({
                 <div className="chat-context-topline">
                     <Icon iconNode={Task01Icon} size={16} />
                     <PopoverTitle>{title}</PopoverTitle>
+                    <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        className="chat-context-close"
+                        aria-label="Close research context"
+                        onClick={() => setOpen(false)}>
+                        <Icon iconNode={Cancel01Icon} size={14} />
+                    </Button>
                 </div>
                 <PopoverDescription className="sr-only">
                     Current plan, retained outputs and reference inputs.
                 </PopoverDescription>
-                <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    className="chat-context-close"
-                    aria-label="Close research context"
-                    onClick={() => setOpen(false)}>
-                    <Icon iconNode={Cancel01Icon} size={14} />
-                </Button>
-                <section aria-label="Plan">
-                    <h2>Plan</h2>
-                    {plan}
-                    {onChangeScope && (
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="chat-context-scope-action"
-                            onClick={() => {
-                                onChangeScope();
-                                if (isMobile) setOpen(false);
-                            }}>
-                            Change scope
-                        </Button>
-                    )}
-                </section>
-                <section aria-label="Outputs">
-                    <h2>Outputs</h2>
-                    {outputs}
-                </section>
-                <section aria-label="Sources">
-                    <h2>Sources</h2>
-                    {sources}
-                </section>
-                <ConversationWorkList activities={activities} />
+                <ScrollArea
+                    className="chat-context-scroll"
+                    viewportClassName="chat-context-viewport"
+                    viewportProps={{
+                        role: "region",
+                        "aria-label": "Research context details",
+                        tabIndex: 0,
+                    }}>
+                    <div className="chat-context-sections">
+                        <section aria-label="Plan">
+                            <div className="chat-context-section-heading">
+                                <h2>Plan</h2>
+                                {onChangeScope && (
+                                    <Button
+                                        variant="ghost"
+                                        size="xs"
+                                        className="chat-context-scope-action"
+                                        onClick={() => {
+                                            onChangeScope();
+                                            if (isMobile) setOpen(false);
+                                        }}>
+                                        Change scope
+                                    </Button>
+                                )}
+                            </div>
+                            {planSummary ? (
+                                <Collapsible className="chat-context-plan">
+                                    <CollapsibleTrigger
+                                        render={
+                                            <Button variant="ghost" size="sm" />
+                                        }
+                                        aria-label="Inspect research plan">
+                                        <Icon iconNode={Task01Icon} size={15} />
+                                        <span>{planSummary}</span>
+                                        <Icon
+                                            iconNode={ArrowRight01Icon}
+                                            size={12}
+                                        />
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent>
+                                        <div className="chat-context-plan-details">
+                                            {plan}
+                                        </div>
+                                    </CollapsibleContent>
+                                </Collapsible>
+                            ) : (
+                                plan
+                            )}
+                        </section>
+                        <section aria-label="Outputs">
+                            <h2>Outputs</h2>
+                            {outputs}
+                        </section>
+                        <section aria-label="Sources">
+                            <h2>Sources</h2>
+                            {sources}
+                        </section>
+                        <ConversationWorkList activities={activities} />
+                    </div>
+                </ScrollArea>
             </PopoverContent>
         </Popover>
     );

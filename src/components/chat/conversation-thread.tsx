@@ -2,8 +2,8 @@
 "use client";
 
 import {
-    AssistantRuntimeProvider,
     type AssistantRuntime,
+    AssistantRuntimeProvider,
     ThreadPrimitive,
 } from "@assistant-ui/react";
 import { ArrowDown02Icon } from "@hugeicons/core-free-icons";
@@ -16,9 +16,8 @@ import {
     useRef,
 } from "react";
 import Icon from "@/components/icon";
-
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export const CONVERSATION_THREAD_VARIANTS = [
@@ -157,6 +156,7 @@ export function ConversationThreadLog({
                 </ThreadPrimitive.Viewport>
                 <ThreadPrimitive.ScrollToBottom
                     render={<Button variant="outline" size="icon" />}
+                    data-slot="conversation-jump-to-latest"
                     aria-label="Jump to latest"
                     behavior={reduceMotion ? "instant" : "smooth"}
                     className="absolute left-1/2 -translate-x-1/2 rounded-full shadow-sm disabled:hidden"

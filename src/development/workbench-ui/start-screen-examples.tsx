@@ -106,6 +106,10 @@ const angles = [
     "Which integrations would an agent have to replace?",
     "Where could value move if agents coordinate the work?",
 ];
+const claimsScope =
+    "Photo-led auto claims, focusing on coordination between insurers, repairers and CCC, and what an agent could replace.";
+const networkScope =
+    "Repair network management, focusing on the relationships between insurers, repairers and CCC, and the dependencies a substitute would need.";
 const activityClarification = {
     id: "activity",
     prompt: "Which part of the claims workflow should we focus on?",
@@ -114,22 +118,20 @@ const activityClarification = {
     choices: [
         {
             value: "claims",
+            scope: claimsScope,
             label: "Photo-led auto claims",
             description:
                 "From damage photos to repair estimates, connecting insurers and repairers.",
         },
         {
             value: "network",
+            scope: networkScope,
             label: "Repair network management",
             description:
                 "Focus on repairer participation, assignments and network coordination.",
         },
     ],
 };
-const claimsScope =
-    "Photo-led auto claims, focusing on coordination between insurers, repairers and CCC, and what an agent could replace.";
-const networkScope =
-    "Repair network management, focusing on the relationships between insurers, repairers and CCC, and the dependencies a substitute would need.";
 const initialQuestions: StartFramingQuestion[] = [
     {
         id: "q1",
@@ -266,9 +268,15 @@ function PreviewResearchContext({
             title={`${company.ticker} · Research`}
             activities={activities}
             onChangeScope={onChangeScope}
-            plan={
+            planSummary={
                 <>
-                    <p>{scopePending ? "Scope being clarified" : scope}</p>
+                    <span>
+                        {scopePending
+                            ? "Scope being clarified"
+                            : (activityClarification.choices.find(
+                                  (choice) => choice.scope === scope,
+                              )?.label ?? scope)}
+                    </span>
                     {!scopePending && (
                         <span className="chat-context-meta">
                             {launched ? "Accepted framing" : "Proposed framing"}{" "}
@@ -277,6 +285,7 @@ function PreviewResearchContext({
                     )}
                 </>
             }
+            plan={<p>{scopePending ? "Scope being clarified" : scope}</p>}
             outputs={
                 <p className="chat-context-empty">No retained outputs yet.</p>
             }
@@ -1071,14 +1080,12 @@ function FramingExample({
             question: activityClarification.prompt,
             answer: option?.label ?? answer,
         });
+        setScope(option?.scope ?? answer);
         if (answer === "claims") {
-            setScope(claimsScope);
             setQuestions(initialQuestions);
         } else if (answer === "network") {
-            setScope(networkScope);
             setQuestions(networkQuestions);
         } else {
-            setScope(answer);
             setQuestions([
                 {
                     id: "q1",

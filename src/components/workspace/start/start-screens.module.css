@@ -703,6 +703,7 @@ body:has(.research) {
 }
 .framingDock {
     position: absolute;
+    z-index: 3;
     inset-inline: 0;
     bottom: 12px;
     width: min(1040px, calc(100% - 64px));
@@ -892,7 +893,8 @@ body:has(.research) {
     flex-direction: column;
     overflow: visible;
     border: 0;
-    background: transparent;
+    background: color-mix(in oklab, var(--foreground) 2%, var(--card));
+    border-radius: 14px 14px 0 0;
 }
 .pendingAction [data-slot="conversation-pending-details"] {
     border: 1px solid var(--border);
