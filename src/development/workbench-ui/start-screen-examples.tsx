@@ -36,9 +36,15 @@ import {
     ConversationReference,
     type ConversationWorkItem,
     useWorkbenchConversation,
+    WORKBENCH_AGENT_NAME,
 } from "@/components/chat/workbench-conversation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { SmoothDropdwon } from "@/components/ui/smooth-dropdown";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { WorkbenchShellSurface } from "@/components/workbench-shell/workbench-shell-surface";
@@ -1326,10 +1332,6 @@ function FramingExample({
                                 }
                             />
                         )}
-                        <div className="start-conversation-author">
-                            <span>{"//"}</span>
-                            <strong>Workbench</strong>
-                        </div>
                         <p>{responseText}</p>
                         {state.launched && (
                             <FramingProposal
@@ -1705,13 +1707,12 @@ function ResearchExample({
                             state={workState}
                             activities={activities}
                         />
-                        <Message from="assistant" variant="plain">
+                        <Message
+                            from="assistant"
+                            authorName={WORKBENCH_AGENT_NAME}
+                            variant="plain">
                             <MessageBody>
                                 <MessageContent>
-                                    <div className="start-conversation-author">
-                                        <span>{"//"}</span>
-                                        <strong>Workbench</strong>
-                                    </div>
                                     <p className="start-preview-reply">
                                         {replyText}
                                     </p>
@@ -1813,23 +1814,43 @@ function ResearchExample({
             }
             limitations={
                 !done ? (
-                    <section
+                    <Collapsible
+                        defaultOpen
                         className="start-preview-limitations"
+                        role="region"
                         aria-label="Coverage gaps">
-                        <h2>Coverage gaps</h2>
-                        <ul>
-                            <li>
-                                <WorkbenchIcon name="unestablished" size={14} />
-                                <span>Analyst coverage</span>
-                                <span>No results found</span>
-                            </li>
-                            <li>
-                                <WorkbenchIcon name="clock" size={14} />
-                                <span>Patent register</span>
-                                <span>Search unavailable</span>
-                            </li>
-                        </ul>
-                    </section>
+                        <h2>
+                            <CollapsibleTrigger
+                                render={<Button variant="ghost" />}
+                                aria-label="Coverage gaps · 2"
+                                className="start-preview-limitations-toggle">
+                                <span className="start-preview-limitations-heading">
+                                    Coverage gaps
+                                    <Badge tone="ink">2</Badge>
+                                </span>
+                                <WorkbenchIcon name="chevron" size={14} />
+                            </CollapsibleTrigger>
+                        </h2>
+                        <CollapsibleContent>
+                            <ul>
+                                <li>
+                                    <WorkbenchIcon
+                                        name="unestablished"
+                                        size={14}
+                                    />
+                                    <span>Analyst coverage</span>
+                                    <Badge tone="ink">No results found</Badge>
+                                </li>
+                                <li>
+                                    <WorkbenchIcon name="clock" size={14} />
+                                    <span>Patent register</span>
+                                    <Badge tone="dashed">
+                                        Search unavailable
+                                    </Badge>
+                                </li>
+                            </ul>
+                        </CollapsibleContent>
+                    </Collapsible>
                 ) : undefined
             }
             handoff={

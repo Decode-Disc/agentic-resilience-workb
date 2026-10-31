@@ -116,7 +116,6 @@ function InvocationPayloads({
             {(["request", "reply"] as const).map((value) => (
                 <Collapsible
                     key={value}
-                    animated={false}
                     open={part === value}
                     onOpenChange={(open) => setPart(open ? value : null)}>
                     <CollapsibleTrigger
@@ -252,7 +251,6 @@ function JournalEvents({ runId }: { runId: Id<"researchRuns"> }) {
                         key={event._id}
                         className="min-w-0 rounded-lg border p-3">
                         <Collapsible
-                            animated={false}
                             open={selectedId === event._id}
                             onOpenChange={(open) =>
                                 setSelectedId(open ? event._id : null)

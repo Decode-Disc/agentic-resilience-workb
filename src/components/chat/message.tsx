@@ -33,8 +33,10 @@ export type MessageVariant = (typeof MESSAGE_VARIANTS)[number];
 export type MessageRole = (typeof MESSAGE_ROLES)[number];
 export type MessageProps = ComponentProps<"article"> & {
     variant?: MessageVariant;
-    /** Who authored the message. */
+    /** Technical role used for alignment and message treatment. */
     from?: MessageRole;
+    /** Human-readable identity, independent of the technical message role. */
+    authorName?: string;
     /** Marks the message as still receiving content. */
     streaming?: boolean;
 };
@@ -42,6 +44,7 @@ export type MessageProps = ComponentProps<"article"> & {
 type MessageContextValue = {
     id: string;
     role: MessageRole;
+    authorName: string;
     variant: MessageVariant;
     streaming: boolean;
     contentRef: React.RefObject<HTMLDivElement | null>;
@@ -86,6 +89,7 @@ const messageVariants = cva(
 export function Message({
     variant = "bubble",
     from: role = "assistant",
+    authorName = roleDetails[role].label,
     streaming = false,
     className,
     children,
@@ -97,10 +101,10 @@ export function Message({
     const alignEnd = variant === "bubble" && role === "user";
     return (
         <MessageContext.Provider
-            value={{ id, role, variant, streaming, contentRef }}>
+            value={{ id, role, authorName, variant, streaming, contentRef }}>
             <article
                 data-slot="message"
-                aria-label={ariaLabel ?? `${roleDetails[role].label} message`}
+                aria-label={ariaLabel ?? `${authorName} message`}
                 className={cn(
                     messageVariants({ variant, alignEnd }),
                     className,
@@ -190,7 +194,7 @@ export function MessageAuthor({
             data-slot="message-author"
             className={cn("text-[12.5px] font-medium", className)}
             {...props}>
-            {children ?? roleDetails[context.role].label}
+            {children ?? context.authorName}
         </span>
     );
 }

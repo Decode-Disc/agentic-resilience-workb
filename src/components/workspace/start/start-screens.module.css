@@ -288,15 +288,16 @@
     flex-direction: column;
     gap: 22px;
 }
-.summaryPanel {
+.progress > .summaryPanel {
+    min-height: 0;
+    padding: 0;
+    gap: 0;
+}
+.summaryOverview {
     display: flex;
     align-items: center;
     gap: 36px;
-    border-radius: 22px;
     padding: 18px 22px;
-    background: color-mix(in oklab, var(--card) 70%, transparent);
-    backdrop-filter: blur(24px);
-    box-shadow: var(--shadow-glass);
 }
 .stages {
     flex: 1;
@@ -593,7 +594,7 @@
     .completed {
         grid-template-columns: minmax(0, 1fr);
     }
-    .summaryPanel {
+    .summaryOverview {
         flex-wrap: wrap;
         gap: 16px;
         padding: 16px;

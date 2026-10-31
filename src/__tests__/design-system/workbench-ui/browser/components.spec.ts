@@ -292,7 +292,10 @@ test("START a specific request receives a framing directly and needs an explicit
     ).toContainText("4 questions");
     await expect(page.getByText("Your request", { exact: true })).toBeVisible();
     await expect(
-        page.getByRole("log").getByText("Workbench", { exact: true }),
+        page.getByRole("log").getByRole("article", {
+            name: "Workbench Agent message",
+            exact: true,
+        }),
     ).toBeVisible();
     await page
         .getByRole("button", { name: "Start research", exact: true })

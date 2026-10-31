@@ -37,7 +37,10 @@ import {
     MessageContent,
     MessageFooter,
 } from "@/components/chat/message";
-import { ConversationPendingPanel } from "@/components/chat/workbench-conversation";
+import {
+    ConversationPendingPanel,
+    WORKBENCH_AGENT_NAME,
+} from "@/components/chat/workbench-conversation";
 import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +49,7 @@ import {
     ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { GlassPanel } from "@/components/workbench-ui/glass-panel";
 import { WorkbenchIcon } from "@/components/workbench-ui/glyphs";
 import { CompanyResolutionCard } from "@/components/workspace/company-resolution-card";
 import { useMediaQuery } from "@/hooks/use-responsive";
@@ -195,6 +199,7 @@ export function StartFramingScreen({
     response,
     responseText,
     responseCreatedAt,
+    responseAuthorName = WORKBENCH_AGENT_NAME,
     action,
     refinement,
     history,
@@ -207,6 +212,7 @@ export function StartFramingScreen({
     response?: ReactNode;
     responseText?: string;
     responseCreatedAt?: string;
+    responseAuthorName?: string;
     action?: ReactNode;
     refinement?: ReactNode;
     history?: ReactNode;
@@ -226,7 +232,10 @@ export function StartFramingScreen({
                         {request}
                     </div>
                     {response && (
-                        <Message from="assistant" variant="plain">
+                        <Message
+                            from="assistant"
+                            authorName={responseAuthorName}
+                            variant="plain">
                             <MessageBody>
                                 <MessageContent>{response}</MessageContent>
                                 <MessageFooter
@@ -382,22 +391,24 @@ export function StartResearchScreen({
                         <header className={handoff ? styles.muted : undefined}>
                             {heading}
                         </header>
-                        <div
-                            className={
-                                handoff
-                                    ? `${styles.summaryPanel} ${styles.muted}`
-                                    : styles.summaryPanel
-                            }>
-                            {summary}
-                            <div className={styles.stages}>{stages}</div>
-                        </div>
+                        <GlassPanel className={styles.summaryPanel}>
+                            <div
+                                className={
+                                    handoff
+                                        ? `${styles.summaryOverview} ${styles.muted}`
+                                        : styles.summaryOverview
+                                }>
+                                {summary}
+                                <div className={styles.stages}>{stages}</div>
+                            </div>
+                            {limitations}
+                        </GlassPanel>
                         <div
                             className={
                                 handoff ? styles.completed : styles.lanes
                             }>
                             {lanes}
                         </div>
-                        {limitations}
                         {handoff && (
                             <div className={styles.handoff}>{handoff}</div>
                         )}

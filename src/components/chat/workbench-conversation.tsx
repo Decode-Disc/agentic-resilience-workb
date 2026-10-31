@@ -54,6 +54,8 @@ import { useResponsive } from "@/hooks/use-responsive";
 import { cn } from "@/lib/utils";
 import "./workbench-conversation.css";
 
+export const WORKBENCH_AGENT_NAME = "Workbench Agent";
+
 /** Shares delivery state across composer messages and contextual answers; the caller owns history and drafts. */
 export function useWorkbenchConversation({
     messages,
@@ -298,7 +300,7 @@ export function ConversationComposer({
     );
 }
 
-function ConversationMessage() {
+function ConversationMessage({ authorName }: { authorName: string }) {
     const role = useAuiState((s) => s.message.role);
     const createdAt = useAuiState((s) =>
         s.message.metadata.custom.creationTimeRecorded
@@ -317,7 +319,13 @@ function ConversationMessage() {
     );
     return (
         <MessagePrimitive.Root
-            render={<Message from={role} streaming={streaming} />}>
+            render={
+                <Message
+                    from={role}
+                    authorName={role === "assistant" ? authorName : undefined}
+                    streaming={streaming}
+                />
+            }>
             <MessageBody>
                 <MessageContent>
                     <MessagePrimitive.Parts
@@ -347,12 +355,19 @@ function ConversationMarkdown() {
 }
 
 /** Keeps historical groups on the same runtime and preserves their stable message identities. */
-export function ConversationMessages({ ids }: { ids?: readonly string[] }) {
+export function ConversationMessages({
+    ids,
+    authorName = WORKBENCH_AGENT_NAME,
+}: {
+    ids?: readonly string[];
+    /** Identity of the assistant whose messages the caller selects. */
+    authorName?: string;
+}) {
     return (
         <ThreadPrimitive.Messages>
             {({ message }) =>
                 !ids || ids.includes(message.id) ? (
-                    <ConversationMessage />
+                    <ConversationMessage authorName={authorName} />
                 ) : null
             }
         </ThreadPrimitive.Messages>

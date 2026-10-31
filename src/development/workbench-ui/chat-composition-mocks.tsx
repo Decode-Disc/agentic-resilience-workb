@@ -12,8 +12,8 @@ import {
     Search01Icon,
 } from "@hugeicons/core-free-icons";
 import { useEffect, useId, useState } from "react";
-import Icon from "@/components/icon";
 import { useWorkbenchConversation } from "@/components/chat/workbench-conversation";
+import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
 import {
     Collapsible,
@@ -106,7 +106,7 @@ function WorkEntries({
     return (
         <div className="cm-work-entries">
             {work.map((entry) => (
-                <Collapsible key={entry.title} animated={false}>
+                <Collapsible key={entry.title}>
                     <CollapsibleTrigger className="cm-work-line">
                         <Icon
                             iconNode={
@@ -154,10 +154,7 @@ function WorkGroup({
     if (composition === "continuous")
         return <WorkEntries research={research} />;
     return (
-        <Collapsible
-            className="cm-work-group"
-            defaultOpen={false}
-            animated={false}>
+        <Collapsible className="cm-work-group" defaultOpen={false}>
             <CollapsibleTrigger className="cm-group-trigger">
                 <Icon iconNode={ArrowRight01Icon} size={12} />
                 <span>
@@ -200,8 +197,7 @@ function PendingPanel({
         <Collapsible
             className="cm-pending"
             open={expanded}
-            onOpenChange={setExpanded}
-            animated={false}>
+            onOpenChange={setExpanded}>
             <CollapsibleTrigger className="cm-pending-heading">
                 <span className="cm-pending-state" />
                 <span>{proposal ? "Proposed research" : "Your direction"}</span>

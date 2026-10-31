@@ -107,39 +107,58 @@ test("conversation and progress resize without replacing the composer or losing 
     expect(errors).toEqual([]);
 });
 
-for (const width of [1024, 390]) {
-    test(`coverage gaps follow the documents without overlap ${width}`, async ({
+for (const width of [1440, 1024, 390]) {
+    test(`coverage gaps are visible with the summary before documents ${width}`, async ({
         page,
     }) => {
+        const errors: string[] = [];
+        page.on("pageerror", (error) => errors.push(error.message));
         await page.setViewportSize({
             width,
-            height: width === 390 ? 844 : 768,
+            height: width === 390 ? 844 : 900,
         });
         await page.goto("/?layout=start&screen=launched&theme=light");
-        // The gallery's document grid precedes the coverage section in the same scroll region.
-        await expect
-            .poll(() =>
-                page
-                    .locator(".start-preview-limitations")
-                    .evaluate((limits) => {
-                        const grid = limits.previousElementSibling;
-                        if (!grid) return false;
-                        return [...grid.children].every(
-                            (lane) =>
-                                lane.getBoundingClientRect().bottom <=
-                                limits.getBoundingClientRect().top,
-                        );
-                    }),
-            )
-            .toBe(true);
-        const gaps = page.getByRole("region", {
+        const progress = page.getByRole("region", {
+            name: "Documentary progress",
+            exact: true,
+        });
+        const gaps = progress.getByRole("region", {
             name: "Coverage gaps",
             exact: true,
         });
-        await gaps.scrollIntoViewIfNeeded();
+        const toggle = gaps.getByRole("button", {
+            name: "Coverage gaps · 2",
+            exact: true,
+        });
+        await expect(toggle).toBeInViewport();
+        await expect(toggle).toHaveAttribute("aria-expanded", "true");
         await expect(gaps.getByRole("listitem")).toHaveCount(2);
-        await expect(gaps).toContainText("No results found");
-        await expect(gaps).toContainText("Search unavailable");
-        await expect(gaps).not.toContainText("never as irrelevance");
+        await expect(
+            gaps.getByText("No results found", { exact: true }),
+        ).toBeInViewport();
+        await expect(
+            gaps.getByText("Search unavailable", { exact: true }),
+        ).toBeInViewport();
+        const firstDocument = progress.getByText("Repair networks and claims", {
+            exact: true,
+        });
+        await expect
+            .poll(async () => {
+                const gapBounds = await gaps.boundingBox();
+                const documentBounds = await firstDocument.boundingBox();
+                return gapBounds && documentBounds
+                    ? gapBounds.y + gapBounds.height <= documentBounds.y
+                    : false;
+            })
+            .toBe(true);
+        await toggle.focus();
+        await page.keyboard.press("Enter");
+        await expect(toggle).toHaveAttribute("aria-expanded", "false");
+        await expect(gaps.getByRole("listitem")).toHaveCount(0);
+        await expect(toggle).toBeFocused();
+        await page.keyboard.press("Space");
+        await expect(toggle).toHaveAttribute("aria-expanded", "true");
+        await expect(gaps.getByRole("listitem")).toHaveCount(2);
+        expect(errors).toEqual([]);
     });
 }
