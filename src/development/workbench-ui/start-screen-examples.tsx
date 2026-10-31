@@ -8,6 +8,12 @@ import {
     useState,
 } from "react";
 import { createPortal } from "react-dom";
+import {
+    Message,
+    MessageBody,
+    MessageContent,
+    MessageFooter,
+} from "@/components/chat/message";
 import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
 import Icon from "@/components/icon";
 import {
@@ -452,6 +458,7 @@ function EntryExample() {
     );
 }
 type PreviewConversation = {
+    startedAt?: string;
     scenario: "specific" | "company";
     needsContext: boolean;
     scope: string;
@@ -460,6 +467,7 @@ type PreviewConversation = {
     draft: string;
     messages: {
         id: string;
+        createdAt?: string;
         text: string;
         from?: "user" | "assistant";
         status?: "running" | "interrupted";
@@ -470,6 +478,7 @@ type PreviewConversation = {
 const previewKey = "start-conversation-preview-v3";
 function freshConversation(): PreviewConversation {
     return {
+        startedAt: new Date().toISOString(),
         scenario: "specific",
         needsContext: false,
         scope: claimsScope,
@@ -480,6 +489,21 @@ function freshConversation(): PreviewConversation {
         framingMessageCount: 0,
     };
 }
+function createPreviewMessage(
+    message: Omit<PreviewConversation["messages"][number], "id" | "createdAt">,
+): PreviewConversation["messages"][number] {
+    return {
+        ...message,
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+    };
+}
+function validPreviewTime(value: unknown) {
+    return (
+        value === undefined ||
+        (typeof value === "string" && Number.isFinite(Date.parse(value)))
+    );
+}
 function readConversation(): PreviewConversation {
     try {
         const stored = sessionStorage.getItem(previewKey);
@@ -488,6 +512,7 @@ function readConversation(): PreviewConversation {
         if (
             typeof data === "object" &&
             data !== null &&
+            (!("startedAt" in data) || validPreviewTime(data.startedAt)) &&
             "questions" in data &&
             Array.isArray(data.questions) &&
             data.questions.every(
@@ -508,6 +533,7 @@ function readConversation(): PreviewConversation {
                     typeof m === "object" &&
                     typeof m.id === "string" &&
                     typeof m.text === "string" &&
+                    validPreviewTime(m.createdAt) &&
                     (m.from === undefined ||
                         m.from === "user" ||
                         m.from === "assistant"),
@@ -568,6 +594,7 @@ function previewMessages(
         id: message.id,
         role: message.from ?? "user",
         content: message.text,
+        createdAt: message.createdAt ? new Date(message.createdAt) : undefined,
         ...(message.status
             ? {
                   status:
@@ -593,6 +620,9 @@ function FramingExample({
     trialControls: ReactNode;
 }) {
     const { scenario, needsContext, scope, questions, suppliedContext } = state;
+    const responseText = state.launched
+        ? "Research started with the framing you reviewed."
+        : "I can help frame this research before it starts.";
     const activities: ConversationWorkItem[] = [
         {
             id: "research-framing",
@@ -650,7 +680,7 @@ function FramingExample({
         );
         const messages: PreviewConversation["messages"] = [
             ...state.messages,
-            { id: crypto.randomUUID(), text },
+            createPreviewMessage({ text }),
         ];
         const patch: Partial<PreviewConversation> = { messages, draft: "" };
         let result: string | undefined;
@@ -687,11 +717,12 @@ function FramingExample({
             result = `Added to the research program: ${added.text}`;
         }
         if (result)
-            messages.push({
-                id: crypto.randomUUID(),
-                from: "assistant",
-                text: result,
-            });
+            messages.push(
+                createPreviewMessage({
+                    from: "assistant",
+                    text: result,
+                }),
+            );
         update(patch);
         setExample(null);
         report(
@@ -705,12 +736,11 @@ function FramingExample({
         update({
             messages: [
                 ...state.messages,
-                { id: crypto.randomUUID(), text, from: "user" },
-                {
-                    id: crypto.randomUUID(),
+                createPreviewMessage({ text, from: "user" }),
+                createPreviewMessage({
                     text: "The framing is ready to review.",
                     from: "assistant",
-                },
+                }),
             ],
         });
     }
@@ -837,6 +867,8 @@ function FramingExample({
                     />
                 }
                 runtime={conversation.runtime}
+                responseText={responseText}
+                responseCreatedAt={state.startedAt}
                 history={<PreviewMessages messages={state.messages} />}
                 suggestions={
                     !state.launched &&
@@ -884,7 +916,7 @@ function FramingExample({
                     </Badge>
                 }
                 request={
-                    <StartRequestMessage>
+                    <StartRequestMessage createdAt={state.startedAt}>
                         {scenario === "specific"
                             ? request
                             : "Study CCC Intelligent Solutions."}
@@ -909,11 +941,7 @@ function FramingExample({
                             <span>{"//"}</span>
                             <strong>Workbench</strong>
                         </div>
-                        <p>
-                            {state.launched
-                                ? "Research started with the framing you reviewed."
-                                : "I can help frame this research before it starts."}
-                        </p>
+                        <p>{responseText}</p>
                         {state.launched && (
                             <FramingProposal
                                 scope={scope}
@@ -1019,11 +1047,10 @@ function FramingExample({
                                 update({
                                     messages: [
                                         ...state.messages,
-                                        {
-                                            id: crypto.randomUUID(),
+                                        createPreviewMessage({
                                             text: `Question updated: ${text}`,
                                             from: "user",
-                                        },
+                                        }),
                                     ],
                                 });
                             }}
@@ -1041,11 +1068,10 @@ function FramingExample({
                                 update({
                                     messages: [
                                         ...state.messages,
-                                        {
-                                            id: crypto.randomUUID(),
+                                        createPreviewMessage({
                                             text: `Question added: ${text}`,
                                             from: "user",
-                                        },
+                                        }),
                                     ],
                                 });
                             }}
@@ -1174,7 +1200,7 @@ function ResearchExample({
             title: "Find company reporting",
             state: step > 0 ? "completed" : workState,
             summary:
-                step > 0
+                step > 0 || workState === "completed"
                     ? "Filing and earnings candidates listed; contents remain unverified."
                     : workState === "interrupted"
                       ? "Reporting search stopped; no new reading is available."
@@ -1214,6 +1240,13 @@ function ResearchExample({
             : workState === "completed"
               ? "Candidates listed; document contents remain unverified."
               : "Preparing the documentary basis";
+    const replyText = done
+        ? `The material is ready. Investigation is starting on the ${state.questions.length} questions.`
+        : workState === "completed"
+          ? "The illustrative candidate list is ready. Document contents still need to be retrieved and checked."
+          : workState === "interrupted"
+            ? "The illustrative preparation stopped. Recorded inputs and any listed candidates remain available."
+            : "Research started. I'll bring you to Progress when the material is ready.";
     const [handoffVisible, setHandoffVisible] = useState(true);
     const [framingOpen, setFramingOpen] = useState(false);
     const framingDetailsId = useId();
@@ -1230,10 +1263,7 @@ function ResearchExample({
         onDraftChange: (draft) => update({ draft }),
         onSend: (text) =>
             update({
-                messages: [
-                    ...state.messages,
-                    { id: crypto.randomUUID(), text },
-                ],
+                messages: [...state.messages, createPreviewMessage({ text })],
                 draft: "",
             }),
     });
@@ -1278,7 +1308,8 @@ function ResearchExample({
                                         onClick={() =>
                                             setWorkPreview((current) => ({
                                                 ...current,
-                                                step: 2,
+                                                step:
+                                                    current.step === 0 ? 0 : 2,
                                                 state: "completed",
                                             }))
                                         }>
@@ -1316,7 +1347,7 @@ function ResearchExample({
                         </PreviewTools>
                     </PreviewControls>
                     <span className="wb-label">Conversation</span>
-                    <StartRequestMessage>
+                    <StartRequestMessage createdAt={state.startedAt}>
                         {state.scenario === "specific"
                             ? request
                             : "Study CCC Intelligent Solutions."}
@@ -1368,20 +1399,24 @@ function ResearchExample({
                             state={workState}
                             activities={activities}
                         />
-                        <div className="start-conversation-author">
-                            <span>{"//"}</span>
-                            <strong>Workbench</strong>
-                        </div>
-                        <p className="start-preview-reply">
-                            <span>{"// "}</span>
-                            {done
-                                ? `The material is ready. Investigation is starting on the ${state.questions.length} questions.`
-                                : workState === "completed"
-                                  ? "The illustrative candidate list is ready. Document contents still need to be retrieved and checked."
-                                  : workState === "interrupted"
-                                    ? "The illustrative preparation stopped. Recorded inputs and any listed candidates remain available."
-                                    : "Research started. I'll bring you to Progress when the material is ready."}
-                        </p>
+                        <Message from="assistant" variant="plain">
+                            <MessageBody>
+                                <MessageContent>
+                                    <div className="start-conversation-author">
+                                        <span>{"//"}</span>
+                                        <strong>Workbench</strong>
+                                    </div>
+                                    <p className="start-preview-reply">
+                                        <span>{"// "}</span>
+                                        {replyText}
+                                    </p>
+                                </MessageContent>
+                                <MessageFooter
+                                    text={replyText}
+                                    createdAt={state.startedAt}
+                                />
+                            </MessageBody>
+                        </Message>
                     </div>
                 </>
             }
@@ -1597,20 +1632,16 @@ export function StartScreenPreview({
                 size="sm"
                 disabled={reply !== null}
                 onClick={() => {
-                    const id = crypto.randomUUID();
+                    const message = createPreviewMessage({
+                        from: "assistant",
+                        text: "**Illustrative reading",
+                        status: "running",
+                    });
                     setState((current) => ({
                         ...current,
-                        messages: [
-                            ...current.messages,
-                            {
-                                id,
-                                from: "assistant",
-                                text: "**Illustrative reading",
-                                status: "running",
-                            },
-                        ],
+                        messages: [...current.messages, message],
                     }));
-                    setReply({ id, step: 0 });
+                    setReply({ id: message.id, step: 0 });
                 }}>
                 Grow illustrative reply
             </Button>

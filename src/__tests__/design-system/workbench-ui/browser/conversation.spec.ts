@@ -133,28 +133,63 @@ test("START compact activities reveal useful material and keep their keyboard di
     await expect(trigger).toBeFocused();
 });
 
-test("START copying a retained message preserves its text", async ({
+test("START copying initial and retained messages preserves text and creation time after reload", async ({
     page,
 }) => {
     await page
         .context()
         .grantPermissions(["clipboard-read", "clipboard-write"]);
     await page.goto("/?layout=start&screen=framing&theme=light");
+    const initial = page
+        .getByRole("log")
+        .getByRole("article", { name: "You message" })
+        .first();
+    await initial.hover();
+    await initial.getByRole("button", { name: "Copy message" }).click();
+    await expect
+        .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+        .toBe(
+            "Does CCC control the photo-led claim workflow, or supply modules an agent could replace?",
+        );
     await page
         .getByRole("textbox", { name: "Refine the framing in your own words" })
-        .fill("Inspect the carrier's decision rights.");
+        .fill("Inspect **carrier control**.\nKeep the scope.");
     await page.getByRole("button", { name: "Send refinement" }).click();
     const message = page
         .getByRole("log")
         .getByRole("article", { name: "You message" })
         .last();
-    await expect(message).toContainText(
-        "Inspect the carrier's decision rights.",
-    );
+    await expect(message).toContainText("Inspect carrier control.");
     await message.getByRole("button", { name: "Copy message" }).click();
     await expect
         .poll(() => page.evaluate(() => navigator.clipboard.readText()))
-        .toBe("Inspect the carrier's decision rights.");
+        .toBe("Inspect **carrier control**.\nKeep the scope.");
+    const createdAt = await message.locator("time").getAttribute("datetime");
+    expect(createdAt).toBeTruthy();
+    await page.reload();
+    await expect(
+        page
+            .getByRole("log")
+            .getByRole("article", { name: "You message" })
+            .last()
+            .locator("time"),
+    ).toHaveAttribute("datetime", createdAt ?? "");
+    await page.evaluate(() => {
+        const key = "start-conversation-preview-v3";
+        const saved = JSON.parse(sessionStorage.getItem(key) ?? "{}");
+        delete saved.startedAt;
+        for (const message of saved.messages) delete message.createdAt;
+        sessionStorage.setItem(key, JSON.stringify(saved));
+    });
+    await page.reload();
+    const legacyMessage = page
+        .getByRole("log")
+        .getByRole("article", { name: "You message" })
+        .last();
+    await expect(legacyMessage.locator("time")).toHaveCount(0);
+    await expect(
+        legacyMessage.getByText("Time not recorded", { exact: true }),
+    ).toBeVisible();
 });
 
 for (const theme of ["light", "dark"]) {

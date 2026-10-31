@@ -51,6 +51,17 @@ it("opens the activity trial from framing tools and keeps it available to restar
             name: "Finish illustrative work",
         }).disabled,
     ).toBe(true);
+    const retained = within(screen.getByRole("log")).getByRole("button", {
+        name: "Inspect source preparation",
+    });
+    fireEvent.click(retained);
+    expect(
+        within(screen.getByRole("log")).queryByText(
+            "Find product and integration documentation",
+            { exact: true },
+        ),
+    ).toBeNull();
+    fireEvent.click(retained);
     fireEvent.click(
         screen.getByRole("button", { name: "Restart illustrative work" }),
     );

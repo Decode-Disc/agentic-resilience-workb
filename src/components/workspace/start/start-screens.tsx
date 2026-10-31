@@ -26,6 +26,7 @@ import {
     Message,
     MessageBody,
     MessageContent,
+    MessageFooter,
 } from "@/components/chat/message";
 import { ConversationPendingPanel } from "@/components/chat/workbench-conversation";
 import { Button } from "@/components/ui/button";
@@ -137,15 +138,18 @@ export function StartEntryScreen({
 export function StartRequestMessage({
     children,
     context,
+    createdAt,
 }: {
     children: ReactNode;
     context?: ReactNode;
+    createdAt?: string;
 }) {
     return (
         <div className={styles.messageGroup}>
             <Message from="user">
                 <MessageBody>
                     <MessageContent>{children}</MessageContent>
+                    <MessageFooter createdAt={createdAt} />
                 </MessageBody>
             </Message>
             {context && <div className={styles.messageContext}>{context}</div>}
@@ -175,6 +179,8 @@ export function StartFramingScreen({
     runtime,
     request,
     response,
+    responseText,
+    responseCreatedAt,
     action,
     refinement,
     history,
@@ -185,6 +191,8 @@ export function StartFramingScreen({
     runtime: AssistantRuntime;
     request: ReactNode;
     response?: ReactNode;
+    responseText?: string;
+    responseCreatedAt?: string;
     action?: ReactNode;
     refinement?: ReactNode;
     history?: ReactNode;
@@ -207,6 +215,10 @@ export function StartFramingScreen({
                         <Message from="assistant" variant="plain">
                             <MessageBody>
                                 <MessageContent>{response}</MessageContent>
+                                <MessageFooter
+                                    createdAt={responseCreatedAt}
+                                    text={responseText}
+                                />
                             </MessageBody>
                         </Message>
                     )}

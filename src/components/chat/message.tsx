@@ -12,6 +12,7 @@ import Icon from "@/components/icon";
 ("use client");
 
 import { cva } from "class-variance-authority";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 import {
     type ComponentProps,
@@ -302,6 +303,66 @@ export function MessageActions({ className, ...props }: ComponentProps<"div">) {
     );
 }
 
+/** Shares copy and creation metadata across supplied messages and runtime-backed history. */
+export function MessageFooter({
+    createdAt,
+    text,
+}: {
+    createdAt?: Date | string;
+    text?: string;
+}) {
+    const date =
+        typeof createdAt === "string" ? new Date(createdAt) : createdAt;
+    const valid = date && Number.isFinite(date.getTime());
+    let label = "Time not recorded";
+    if (valid) {
+        const now = new Date();
+        const calendarDay = (value: Date) =>
+            Date.UTC(value.getFullYear(), value.getMonth(), value.getDate());
+        const days = (calendarDay(now) - calendarDay(date)) / 86_400_000;
+        const time = date.toLocaleTimeString("en-GB", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hourCycle: "h23",
+        });
+        const day =
+            days === 0
+                ? ""
+                : days === 1
+                  ? "Yesterday"
+                  : days > 1 && days < 7
+                    ? date.toLocaleDateString("en-GB", { weekday: "long" })
+                    : date.toLocaleDateString("en-GB", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                      });
+        label = [day, time].filter(Boolean).join(" ");
+    }
+    return (
+        <MessageActions className="chat-message-footer">
+            {valid ? (
+                <MessageTime
+                    dateTime={date.toISOString()}
+                    title={date.toLocaleString("en-GB", {
+                        weekday: "long",
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hourCycle: "h23",
+                    })}>
+                    {label}
+                </MessageTime>
+            ) : (
+                <span data-slot="message-time">{label}</span>
+            )}
+            <MessageCopy text={text} />
+        </MessageActions>
+    );
+}
+
 const messageActionVariants = cva(
     "cursor-pointer rounded-lg p-0 text-muted-foreground [transition:background-color_120ms_ease-out,color_120ms_ease-out,scale_140ms_cubic-bezier(0.23,1,0.32,1)] hover:bg-accent hover:text-accent-foreground focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-1 focus-visible:outline-ring active:scale-[0.94] motion-reduce:transition-none motion-reduce:active:scale-100 dark:hover:bg-accent [&_svg:not([class*='size-'])]:size-3.5",
     {
@@ -356,6 +417,8 @@ export function MessageCopy({
 }: MessageCopyProps) {
     const context = useMessage("MessageCopy");
     const [copied, setCopied] = useState(false);
+    const [failed, setFailed] = useState(false);
+    const reduceMotion = useReducedMotion();
     useEffect(() => {
         if (!copied) return;
         const timeout = window.setTimeout(() => setCopied(false), 1600);
@@ -369,7 +432,8 @@ export function MessageCopy({
                 variant="ghost"
                 size="icon"
                 aria-label="Copy message"
-                title="Copy message"
+                title={copied ? "Copied" : "Copy message"}
+                data-copied={copied || undefined}
                 className={cn(
                     messageActionVariants({ variant: context.variant }),
                     className,
@@ -380,50 +444,72 @@ export function MessageCopy({
                     if (event.defaultPrevented) return;
                     const value =
                         text ?? context.contentRef.current?.textContent ?? "";
+                    setFailed(false);
                     try {
+                        if (!navigator.clipboard?.writeText)
+                            throw new Error("Clipboard unavailable");
                         await navigator.clipboard.writeText(value);
-                        setCopied(true);
-                        onCopied?.(value);
                     } catch {
                         setCopied(false);
+                        setFailed(true);
+                        return;
                     }
+                    setCopied(true);
+                    onCopied?.(value);
                 }}>
-                <span className="grid place-items-center [&>*]:[grid-area:1/1]">
-                    <span
-                        className={cn(
-                            "grid place-items-center transition-[opacity,scale,filter] duration-200 ease-out motion-reduce:transition-none",
-                            copied
-                                ? "scale-100 opacity-100 blur-none"
-                                : "scale-50 opacity-0 blur-[2px]",
-                        )}>
-                        <Icon
-                            iconNode={Tick02Icon}
-                            size={14}
-                            aria-hidden="true"
-                            className="text-approved size-3.5"
-                        />
-                    </span>
-                    <span
-                        className={cn(
-                            "grid place-items-center transition-[opacity,scale,filter] duration-200 ease-out motion-reduce:transition-none",
-                            copied
-                                ? "scale-50 opacity-0 blur-[2px]"
-                                : "scale-100 opacity-100 blur-none",
-                        )}>
-                        {children ?? (
+                <AnimatePresence initial={false} mode="wait">
+                    <motion.span
+                        key={copied ? "copied" : "copy"}
+                        initial={
+                            reduceMotion
+                                ? false
+                                : {
+                                      opacity: 0,
+                                      scale: 0.7,
+                                      filter: "blur(2px)",
+                                  }
+                        }
+                        animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+                        exit={
+                            reduceMotion
+                                ? { opacity: 0 }
+                                : {
+                                      opacity: 0,
+                                      scale: 0.7,
+                                      filter: "blur(2px)",
+                                  }
+                        }
+                        transition={{
+                            duration: reduceMotion ? 0 : 0.12,
+                            ease: [0.16, 1, 0.3, 1],
+                        }}
+                        className="grid place-items-center">
+                        {copied ? (
                             <Icon
-                                iconNode={Copy01Icon}
+                                iconNode={Tick02Icon}
                                 size={14}
-                                className="size-3.5"
                                 aria-hidden="true"
                             />
+                        ) : (
+                            (children ?? (
+                                <Icon
+                                    iconNode={Copy01Icon}
+                                    size={14}
+                                    aria-hidden="true"
+                                />
+                            ))
                         )}
-                    </span>
-                </span>
+                    </motion.span>
+                </AnimatePresence>
             </Button>
             <span role="status" className="sr-only">
                 {copied ? "Copied to clipboard" : ""}
             </span>
+            {failed && (
+                <span role="alert" data-slot="message-copy-error">
+                    Could not copy. Select the message text to copy it manually.
+                </span>
+            )}
         </>
     );
 }

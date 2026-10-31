@@ -1,5 +1,4 @@
 import {
-    ActionBarPrimitive,
     ComposerPrimitive,
     MessagePrimitive,
     type ThreadMessageLike,
@@ -13,7 +12,6 @@ import {
     ArrowRight01Icon,
     ArrowUp02Icon,
     Cancel01Icon,
-    Copy01Icon,
     File01Icon,
     Loading03Icon,
     Task01Icon,
@@ -30,9 +28,9 @@ import {
 } from "react";
 import {
     Message,
-    MessageActions,
     MessageBody,
     MessageContent,
+    MessageFooter,
 } from "@/components/chat/message";
 import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
@@ -50,11 +48,6 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import "./workbench-conversation.css";
 
@@ -76,7 +69,16 @@ export function useWorkbenchConversation({
     const [sending, setSending] = useState(false);
     const runtime = useExternalStoreRuntime({
         messages,
-        convertMessage: (message) => message,
+        convertMessage: (message) => ({
+            ...message,
+            metadata: {
+                ...message.metadata,
+                custom: {
+                    ...message.metadata?.custom,
+                    creationTimeRecorded: Boolean(message.createdAt),
+                },
+            },
+        }),
         isRunning,
         isSendDisabled: sending,
         onNew: async (message) => {
@@ -186,7 +188,17 @@ export function ConversationComposer({
 
 function ConversationMessage() {
     const role = useAuiState((s) => s.message.role);
-    const copied = useAuiState((s) => s.message.isCopied);
+    const createdAt = useAuiState((s) =>
+        s.message.metadata.custom.creationTimeRecorded
+            ? s.message.createdAt
+            : undefined,
+    );
+    const text = useAuiState((s) =>
+        s.message.content
+            .filter((part) => part.type === "text")
+            .map((part) => part.text)
+            .join("\n"),
+    );
     const streaming = useAuiState((s) => s.message.status?.type === "running");
     const interrupted = useAuiState(
         (s) => s.message.status?.type === "incomplete",
@@ -206,33 +218,7 @@ function ConversationMessage() {
                         available.
                     </p>
                 )}
-                <MessageActions>
-                    <Tooltip>
-                        <TooltipTrigger
-                            render={
-                                <ActionBarPrimitive.Copy
-                                    render={
-                                        <Button
-                                            variant="ghost"
-                                            size="icon-xs"
-                                        />
-                                    }
-                                    aria-label="Copy message"
-                                />
-                            }>
-                            <Icon
-                                iconNode={copied ? Tick02Icon : Copy01Icon}
-                                size={14}
-                            />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            {copied ? "Copied" : "Copy message"}
-                        </TooltipContent>
-                    </Tooltip>
-                    <span role="status" className="sr-only">
-                        {copied ? "Copied to clipboard" : ""}
-                    </span>
-                </MessageActions>
+                <MessageFooter createdAt={createdAt} text={text} />
             </MessageBody>
         </MessagePrimitive.Root>
     );
@@ -327,8 +313,7 @@ export function ConversationActivity({
         <Collapsible
             data-message-id={id}
             data-slot="conversation-activity"
-            data-state={state}
-            animated={false}>
+            data-state={state}>
             <CollapsibleTrigger
                 render={<Button variant="ghost" />}
                 aria-label={`Inspect ${title}`}>
@@ -369,7 +354,6 @@ export function ConversationActivityGroup({
     if (!activities.length) return null;
     return (
         <Collapsible
-            animated={false}
             open={running || expanded}
             onOpenChange={setExpanded}
             role="region"
@@ -429,7 +413,7 @@ export function ConversationReference({
     children: ReactNode;
 }) {
     return (
-        <Collapsible animated={false}>
+        <Collapsible>
             <CollapsibleTrigger
                 render={<Button variant="ghost" size="sm" />}
                 data-slot="conversation-reference"
