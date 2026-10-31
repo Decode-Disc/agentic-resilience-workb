@@ -59,19 +59,20 @@ test("START missing context can use the proposed scope without answering", async
     await expect(
         page.getByRole("region", { name: "Clarify research context" }),
     ).toBeVisible();
-    await page
-        .getByRole("button", { name: "Use proposed scope", exact: true })
-        .click();
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
     await expect(
         page.getByRole("region", { name: "Clarify research context" }),
     ).toHaveCount(0);
     await expect(
-        page.getByRole("region", { name: "Proposed research scope" }),
-    ).toContainText("Photo-led auto physical damage claims");
+        page.getByRole("region", { name: "Plan", exact: true }),
+    ).toContainText("Photo-led auto claims");
     await expect(
         page.getByRole("region", { name: "Your clarification" }),
     ).toHaveCount(0);
-    await expect(page.locator(".start-screen-toolbar output")).toBeEmpty();
+    await expect(page).toHaveURL(/screen=framing/);
+    await expect(
+        page.getByRole("button", { name: "Start research", exact: true }),
+    ).toBeEnabled();
 });
 
 test("START confirmation preserves the approved company card and opens framing without a composer", async ({
@@ -251,9 +252,7 @@ test("START freeform context is reflected in the scope and retained when reopene
         exact: true,
     });
     await context.fill("Claims intake");
-    await page
-        .getByRole("button", { name: "Apply scope", exact: true })
-        .click();
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
     await expect(page.getByRole("log")).toContainText("Claims intake");
     await expect(
         page.getByRole("region", { name: "Plan", exact: true }),
@@ -749,9 +748,7 @@ test("START pending actions stay above the composer and company-only clarificati
     await page
         .getByRole("radio", { name: "Repair network management", exact: true })
         .click();
-    await page
-        .getByRole("button", { name: "Update framing", exact: true })
-        .click();
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
     await expect(log).toContainText("Repair network management");
     await expect(
         log.getByRole("region", { name: "Framing summary" }),

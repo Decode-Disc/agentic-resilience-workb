@@ -488,6 +488,7 @@ type PreviewConversation = {
     questionAction?: { id?: string; text: string } | null;
     selectedQuestionId?: string;
     contextDraft?: string;
+    contextChoice?: string;
     analystQuestionIds?: string[];
     startedAt?: string;
     scenario: "specific" | "company";
@@ -512,6 +513,7 @@ function freshConversation(): PreviewConversation {
         startedAt: new Date().toISOString(),
         scenario: "specific",
         needsContext: false,
+        contextChoice: undefined,
         scope: claimsScope,
         questions: [...initialQuestions],
         analystQuestionIds: [],
@@ -671,6 +673,12 @@ function readConversation(): PreviewConversation {
                 (Array.isArray(data.analystQuestionIds) &&
                     data.analystQuestionIds.every(
                         (id: unknown) => typeof id === "string",
+                    ))) &&
+            (!("contextChoice" in data) ||
+                data.contextChoice === undefined ||
+                (typeof data.contextChoice === "string" &&
+                    activityClarification.choices.some(
+                        (choice) => choice.value === data.contextChoice,
                     ))) &&
             "questions" in data &&
             Array.isArray(data.questions) &&
@@ -912,6 +920,20 @@ function FramingExample({
     }, [actionOpen, refinementRef]);
     const [example, setExample] = useState<string | null>(null);
     const [failNext, setFailNext] = useState(false);
+    const proposedScopeValue =
+        activityClarification.choices.find(
+            (choice) => choice.label === suppliedContext?.answer,
+        )?.value ??
+        suppliedContext?.answer ??
+        "claims";
+    const contextChoice =
+        state.contextChoice ??
+        (activityClarification.choices.some(
+            (choice) => choice.value === proposedScopeValue,
+        )
+            ? proposedScopeValue
+            : "");
+    const scopeAnswer = state.contextDraft?.trim() || contextChoice;
     const conversation = useWorkbenchConversation({
         messages: previewMessages(state.messages),
         draft: needsContext
@@ -1030,6 +1052,7 @@ function FramingExample({
         update({
             needsContext: false,
             contextDraft: "",
+            contextChoice: undefined,
             messages: [
                 ...state.messages,
                 createPreviewMessage({ text, from: "user" }),
@@ -1093,11 +1116,16 @@ function FramingExample({
     function requestScopeChange() {
         update({
             needsContext: true,
+            contextChoice: undefined,
             contextDraft:
                 scope === claimsScope || scope === networkScope
                     ? ""
                     : (suppliedContext?.answer ?? scope),
         });
+    }
+
+    function submitScope() {
+        if (scopeAnswer) void conversation.submit(scopeAnswer);
     }
 
     const composer = (
@@ -1114,7 +1142,7 @@ function FramingExample({
             }
             actionLabel={
                 needsContext
-                    ? "Apply scope"
+                    ? "Continue"
                     : questionAction
                       ? questionAction.id
                           ? "Save changes"
@@ -1126,6 +1154,11 @@ function FramingExample({
             }
             pending={conversation.sending}
             failed={conversation.failed}
+            submission={
+                needsContext
+                    ? { disabled: !scopeAnswer, onSubmit: submitScope }
+                    : undefined
+            }
         />
     );
 
@@ -1307,7 +1340,17 @@ function FramingExample({
                             clarification={
                                 needsContext ? (
                                     <FramingClarification
-                                        externalComposer
+                                        selection={{
+                                            value: state.contextDraft?.trim()
+                                                ? ""
+                                                : contextChoice,
+                                            onChange: (value) =>
+                                                update({
+                                                    contextChoice: value,
+                                                    contextDraft: "",
+                                                }),
+                                        }}
+                                        pending={conversation.sending}
                                         question={{
                                             ...activityClarification,
                                             reason:
@@ -1315,21 +1358,9 @@ function FramingExample({
                                                 !suppliedContext
                                                     ? activityClarification.reason
                                                     : "Adjust the activity or boundary if the proposed scope does not match your intention.",
-                                            proposedValue:
-                                                activityClarification.choices.find(
-                                                    (choice) =>
-                                                        choice.label ===
-                                                        suppliedContext?.answer,
-                                                )?.value ??
-                                                suppliedContext?.answer ??
-                                                "claims",
+                                            proposedValue: proposedScopeValue,
                                         }}
-                                        onUseProposal={() =>
-                                            completeContext(
-                                                "Use the proposed activity scope.",
-                                            )
-                                        }
-                                        onAnswer={applyContext}
+                                        onAnswer={submitScope}
                                     />
                                 ) : undefined
                             }

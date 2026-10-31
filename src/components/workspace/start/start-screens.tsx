@@ -414,14 +414,12 @@ export interface StartFramingContextQuestion {
 export function FramingClarification({
     question,
     onAnswer,
-    onUseProposal,
     pending = false,
-    externalComposer = false,
+    selection,
 }: {
-    externalComposer?: boolean;
+    selection?: { value: string; onChange: (value: string) => void };
     question: StartFramingContextQuestion;
     onAnswer: (answer: string) => void;
-    onUseProposal: () => void;
     pending?: boolean;
 }) {
     return (
@@ -429,6 +427,20 @@ export function FramingClarification({
             key={question.id + question.proposedValue}
             aria-label="Clarify research context"
             status={pending ? "submitting" : "asking"}
+            value={
+                selection
+                    ? { [question.id]: selection.value || "other" }
+                    : undefined
+            }
+            onValueChange={
+                selection
+                    ? (answers) => {
+                          const value = answers[question.id];
+                          if (typeof value === "string")
+                              selection.onChange(value);
+                      }
+                    : undefined
+            }
             defaultValue={{
                 [question.id]: question.choices.some(
                     (c) => c.value === question.proposedValue,
@@ -455,14 +467,18 @@ export function FramingClarification({
                         <AgentQuestionOption
                             key={choice.value}
                             value={choice.value}
-                            recommended={
-                                choice.value === question.proposedValue
-                            }
+                            shortcutPosition="start"
                             label={choice.label}
-                            description={choice.description}
+                            description={
+                                choice.value === question.proposedValue
+                                    ? choice.description
+                                        ? `Suggested · ${choice.description}`
+                                        : "Suggested"
+                                    : choice.description
+                            }
                         />
                     ))}
-                    {!externalComposer && (
+                    {!selection && (
                         <AgentQuestionOther
                             label="Another activity or boundary"
                             placeholder="Describe the scope you have in mind…"
@@ -470,14 +486,7 @@ export function FramingClarification({
                     )}
                 </AgentQuestionOptions>
             </AgentQuestionItem>
-            <AgentQuestionFooter>
-                <Button
-                    variant="ghost"
-                    disabled={pending}
-                    onClick={onUseProposal}>
-                    Use proposed scope
-                </Button>
-            </AgentQuestionFooter>
+            {!selection && <AgentQuestionFooter />}
         </AgentQuestion>
     );
 }

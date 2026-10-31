@@ -53,7 +53,7 @@ import { useResponsive } from "@/hooks/use-responsive";
 import { cn } from "@/lib/utils";
 import "./workbench-conversation.css";
 
-/** Bridges externally owned history and drafts without dispatching client-side tools. */
+/** Shares delivery state across composer messages and contextual answers; the caller owns history and drafts. */
 export function useWorkbenchConversation({
     messages,
     draft,
@@ -74,6 +74,23 @@ export function useWorkbenchConversation({
     draftHandler.current = onDraftChange;
     const [failed, setFailed] = useState(false);
     const [sending, setSending] = useState(false);
+    const delivering = useRef(false);
+    async function submit(text: string) {
+        if (delivering.current) return false;
+        delivering.current = true;
+        setSending(true);
+        setFailed(false);
+        try {
+            await onSend(text);
+            return true;
+        } catch {
+            setFailed(true);
+            return false;
+        } finally {
+            delivering.current = false;
+            setSending(false);
+        }
+    }
     const runtime = useExternalStoreRuntime({
         messages,
         convertMessage: (message) => ({
@@ -89,21 +106,14 @@ export function useWorkbenchConversation({
         isRunning,
         isSendDisabled: sending,
         onNew: async (message) => {
-            setSending(true);
-            setFailed(false);
             const text = message.content
                 .filter((part) => part.type === "text")
                 .map((part) => part.text)
                 .join("\n");
-            try {
-                await onSend(text);
-            } catch {
+            if (!(await submit(text))) {
                 // Delivery failed; preserve a newer draft if the analyst already continued typing.
                 if (!runtime.thread.composer.getState().text)
                     runtime.thread.composer.setText(text);
-                setFailed(true);
-            } finally {
-                setSending(false);
             }
         },
     });
@@ -131,10 +141,10 @@ export function useWorkbenchConversation({
             ),
         [runtime],
     );
-    return { runtime, failed, sending };
+    return { runtime, failed, sending, submit };
 }
 
-/** The project's floating composer, with input and submission owned by assistant-ui. */
+/** Keeps the floating input on assistant-ui while allowing contextual answers through the same form. */
 export function ConversationComposer({
     inputRef,
     label,
@@ -143,6 +153,7 @@ export function ConversationComposer({
     actionLabel,
     onCancel,
     pending = false,
+    submission,
 }: {
     inputRef?: Ref<HTMLTextAreaElement>;
     label: string;
@@ -151,6 +162,8 @@ export function ConversationComposer({
     pending?: boolean;
     actionLabel?: string;
     onCancel?: () => void;
+    /** Uses the same field for a contextual choice or written answer, including an empty field with a selected choice. */
+    submission?: { disabled: boolean; onSubmit: () => void };
 }) {
     const aui = useAui();
     const root = useRef<HTMLDivElement>(null);
@@ -188,7 +201,9 @@ export function ConversationComposer({
                             : "Your message could not be sent"
                     }
                     description="Your draft is still available. Try sending it again."
-                    onRetry={() => aui.composer().send()}
+                    onRetry={
+                        submission ? undefined : () => aui.composer().send()
+                    }
                 />
             )}
             {onCancel && (
@@ -205,7 +220,16 @@ export function ConversationComposer({
             )}
             <ComposerPrimitive.Root
                 data-slot="prompt-composer"
-                aria-label="Message the workbench">
+                aria-label="Message the workbench"
+                onSubmit={
+                    submission
+                        ? (event) => {
+                              event.preventDefault();
+                              if (!submission.disabled && !pending)
+                                  submission.onSubmit();
+                          }
+                        : undefined
+                }>
                 <div
                     data-slot="prompt-composer-card"
                     className="rounded-[14px] border bg-card p-1.5">
@@ -232,22 +256,39 @@ export function ConversationComposer({
                             <span>
                                 Enter to send · Shift + Enter for a new line
                             </span>
-                            <ComposerPrimitive.Send
-                                render={<Button variant="round" size="icon" />}
-                                aria-label={actionLabel ?? "Send refinement"}
-                                data-slot="prompt-composer-submit"
-                                className={cn(
-                                    "disabled:opacity-100",
-                                    compact
-                                        ? "size-6 rounded-md"
-                                        : actionLabel
-                                          ? "h-10 w-auto px-4 rounded-full"
-                                          : "size-10 rounded-full",
-                                )}>
-                                {actionLabel ?? (
-                                    <Icon iconNode={ArrowUp02Icon} size={16} />
-                                )}
-                            </ComposerPrimitive.Send>
+                            {submission ? (
+                                <Button
+                                    type="submit"
+                                    variant="round"
+                                    disabled={submission.disabled || pending}
+                                    data-slot="prompt-composer-submit">
+                                    {actionLabel ?? "Continue"}
+                                </Button>
+                            ) : (
+                                <ComposerPrimitive.Send
+                                    render={
+                                        <Button variant="round" size="icon" />
+                                    }
+                                    aria-label={
+                                        actionLabel ?? "Send refinement"
+                                    }
+                                    data-slot="prompt-composer-submit"
+                                    className={cn(
+                                        "disabled:opacity-100",
+                                        compact
+                                            ? "size-6 rounded-md"
+                                            : actionLabel
+                                              ? "h-10 w-auto px-4 rounded-full"
+                                              : "size-10 rounded-full",
+                                    )}>
+                                    {actionLabel ?? (
+                                        <Icon
+                                            iconNode={ArrowUp02Icon}
+                                            size={16}
+                                        />
+                                    )}
+                                </ComposerPrimitive.Send>
+                            )}
                         </div>
                     </div>
                 </div>

@@ -401,6 +401,11 @@ export function AgentQuestion({
             event.preventDefault();
             if (primaryRef.current && !primaryRef.current.disabled)
                 primaryRef.current.click();
+            else if (!primaryRef.current && onSubmit) {
+                // A host can place its single submit action outside the question footer.
+                const item = items[step];
+                if (item && (!item.required || isAnswered(item))) next();
+            }
         }
     };
 
@@ -834,6 +839,7 @@ const controlClass =
     "mt-px size-4 shrink-0 border-0 bg-transparent shadow-[inset_0_0_0_1.5px_var(--muted-foreground)] transition-[background-color,box-shadow] duration-[140ms] ease-out focus-visible:ring-0 data-[state=checked]:bg-primary data-checked:bg-primary data-[state=checked]:shadow-none data-checked:shadow-none disabled:opacity-100 motion-reduce:transition-none dark:bg-transparent dark:data-[state=checked]:bg-primary dark:data-checked:bg-primary";
 
 type OptionBaseProps = {
+    shortcutPosition?: "start" | "end";
     value: string;
     label: string;
     description?: ReactNode;
@@ -847,6 +853,7 @@ export type AgentQuestionOptionProps = Omit<
     ComponentProps<"div">,
     "children"
 > & {
+    shortcutPosition?: OptionBaseProps["shortcutPosition"];
     value: string;
     label: string;
     description?: ReactNode;
@@ -855,6 +862,7 @@ export type AgentQuestionOptionProps = Omit<
 };
 
 function OptionRow({
+    shortcutPosition = "end",
     value,
     label,
     description,
@@ -900,6 +908,16 @@ function OptionRow({
     const shortcut = index >= 0 && index < 9 ? String(index + 1) : null;
     const showDescription = !compact && description && !(reveal && selected);
     const labelId = useId();
+
+    const shortcutControl = shortcut ? (
+        <span aria-hidden="true" className="flex">
+            <kbd className="min-w-5 rounded-md bg-muted px-1.5 text-center font-mono text-[11px]/[18px] font-medium text-muted-foreground group-has-data-checked/option:bg-background group-has-data-[state=checked]/option:bg-background">
+                {shortcut}
+            </kbd>
+        </span>
+    ) : (
+        <span />
+    );
 
     const control =
         item.type === "single" ? (
@@ -947,11 +965,15 @@ function OptionRow({
             {...props}>
             <label
                 className={cn(
-                    "grid cursor-pointer grid-cols-[16px_minmax(0,1fr)_auto] items-start gap-2.5",
+                    "grid cursor-pointer items-start gap-2.5",
+                    shortcutPosition === "start"
+                        ? "grid-cols-[16px_20px_minmax(0,1fr)]"
+                        : "grid-cols-[16px_minmax(0,1fr)_auto]",
                     compact ? "py-[7px] pr-2 pl-2.5" : "py-2.5 pr-2.5 pl-3",
                     (disabled || context.busy) && "cursor-not-allowed",
                 )}>
                 {control}
+                {shortcutPosition === "start" && shortcutControl}
                 <span className="grid min-w-0 gap-0.5">
                     <span
                         id={labelId}
@@ -978,15 +1000,7 @@ function OptionRow({
                         </span>
                     ) : null}
                 </span>
-                {shortcut ? (
-                    <span aria-hidden="true" className="flex">
-                        <kbd className="min-w-5 rounded-md bg-muted px-1.5 text-center font-mono text-[11px]/[18px] font-medium text-muted-foreground group-has-data-checked/option:bg-background group-has-data-[state=checked]/option:bg-background">
-                            {shortcut}
-                        </kbd>
-                    </span>
-                ) : (
-                    <span />
-                )}
+                {shortcutPosition === "end" && shortcutControl}
             </label>
             {reveal ? reveal(selected) : null}
         </div>

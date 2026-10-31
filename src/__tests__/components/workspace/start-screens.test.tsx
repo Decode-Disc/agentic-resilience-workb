@@ -68,7 +68,7 @@ describe("Start presentation without backend providers", () => {
             ).getByText("Repair network management"),
         ).toBeTruthy();
         expect(
-            screen.queryByRole("form", { name: "Clarify research context" }),
+            screen.queryByRole("region", { name: "Clarify research context" }),
         ).toBeNull();
         expect(document.activeElement).toBe(
             screen.getByRole("region", { name: "Framing summary" }),
@@ -78,15 +78,15 @@ describe("Start presentation without backend providers", () => {
     it("accepts the system proposal without requiring a contextual answer", () => {
         const start = vi.fn();
         render(<FramingFixture needsContext onStart={start} />);
-        fireEvent.click(
-            screen.getByRole("button", { name: "Use proposed scope" }),
-        );
+        fireEvent.click(screen.getByRole("button", { name: "Update framing" }));
         expect(
-            screen.queryByRole("form", { name: "Clarify research context" }),
+            screen.queryByRole("region", { name: "Clarify research context" }),
         ).toBeNull();
         expect(
-            screen.queryByRole("region", { name: "Your clarification" }),
-        ).toBeNull();
+            within(
+                screen.getByRole("region", { name: "Your clarification" }),
+            ).getByText("Photo-led claims"),
+        ).toBeTruthy();
         expect(
             within(
                 screen.getByRole("region", { name: "Proposed research scope" }),
@@ -125,18 +125,21 @@ describe("Start presentation without backend providers", () => {
                 onOpenProgress={vi.fn()}
             />,
         );
-        fireEvent.click(screen.getByRole("button", { name: "Edit question" }));
-        fireEvent.change(screen.getByRole("textbox"), {
+        const program = within(
+            screen.getByRole("region", { name: "Proposed framing" }),
+        );
+        fireEvent.click(program.getByRole("button", { name: "Edit question" }));
+        fireEvent.change(program.getByRole("textbox"), {
             target: { value: "Who can change routing rules?" },
         });
         expect(
-            screen.getByRole<HTMLButtonElement>("button", {
+            program.getByRole<HTMLButtonElement>("button", {
                 name: "Start research",
             }).disabled,
         ).toBe(true);
-        fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+        fireEvent.click(program.getByRole("button", { name: "Save changes" }));
         expect(
-            screen.getByRole("heading", {
+            program.getByRole("heading", {
                 name: "Who can change routing rules?",
             }),
         ).toBeTruthy();
@@ -151,18 +154,22 @@ describe("Start presentation without backend providers", () => {
                 onOpenProgress={vi.fn()}
             />,
         );
-        const original = screen.getByRole("region", {
+        const program = within(
+            screen.getByRole("region", { name: "Proposed framing" }),
+        );
+        const original = program.getByRole("region", {
             name: "Framing summary",
         }).textContent;
-        const edit = screen.getByRole("button", { name: "Edit question" });
+        const edit = program.getByRole("button", { name: "Edit question" });
         edit.focus();
         fireEvent.click(edit);
-        fireEvent.change(screen.getByRole("textbox"), {
+        fireEvent.change(program.getByRole("textbox"), {
             target: { value: "Discard this change" },
         });
-        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+        fireEvent.click(program.getByRole("button", { name: "Cancel" }));
         expect(
-            screen.getByRole("region", { name: "Framing summary" }).textContent,
+            program.getByRole("region", { name: "Framing summary" })
+                .textContent,
         ).toBe(original);
         expect(document.activeElement).toBe(edit);
     });
@@ -287,7 +294,6 @@ function FramingFixture({
                             });
                             setShowContext(false);
                         }}
-                        onUseProposal={() => setShowContext(false)}
                     />
                 ) : undefined
             }

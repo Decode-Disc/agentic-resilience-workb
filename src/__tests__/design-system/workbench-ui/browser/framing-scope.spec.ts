@@ -39,8 +39,8 @@ for (const width of [1440, 390]) {
             .getByRole("radio", { name: /Repair network management/ })
             .click();
         await page
-            .getByRole("region", { name: "Clarify research context" })
-            .getByRole("button", { name: "Update framing", exact: true })
+            .getByRole("region", { name: "Proposed framing", exact: true })
+            .getByRole("button", { name: "Continue", exact: true })
             .click();
         await expect(
             page.getByRole("region", { name: "Clarify research context" }),
@@ -83,8 +83,8 @@ test("changing scope keeps an analyst-added question and the ordinary draft", as
         .getByRole("radio", { name: "Repair network management", exact: true })
         .click();
     await page
-        .getByRole("region", { name: "Clarify research context" })
-        .getByRole("button", { name: "Update framing", exact: true })
+        .getByRole("region", { name: "Proposed framing", exact: true })
+        .getByRole("button", { name: "Continue", exact: true })
         .click();
     await expect(
         page.getByRole("heading", {

@@ -692,7 +692,7 @@ body:has(.research) {
     border-radius: 0;
 }
 .framing [data-slot="conversation-thread-content"] {
-    width: min(1152px, calc(100% - 80px));
+    width: min(1024px, calc(100% - 80px));
     margin-inline: auto;
     gap: 26px;
     padding: 28px 0 0;
@@ -705,7 +705,7 @@ body:has(.research) {
     position: absolute;
     inset-inline: 0;
     bottom: 12px;
-    width: min(1168px, calc(100% - 64px));
+    width: min(1040px, calc(100% - 64px));
     margin-inline: auto;
     display: flex;
     flex-direction: column;
@@ -897,13 +897,13 @@ body:has(.research) {
 .pendingAction [data-slot="conversation-pending-details"] {
     border: 1px solid var(--border);
     border-bottom: 0;
-    border-radius: 20px 20px 0 0;
+    border-radius: 14px 14px 0 0;
     background: color-mix(in oklab, var(--foreground) 2%, var(--card));
 }
 .pendingAction [data-slot="conversation-pending-details"] > summary {
-    min-height: 46px;
-    padding: 14px 20px;
-    font-size: 14px;
+    min-height: 36px;
+    padding: 10px 14px;
+    font-size: 12.5px;
     gap: 12px;
 }
 .pendingAction
@@ -919,7 +919,7 @@ body:has(.research) {
     margin-left: auto;
 }
 .pendingAction [data-slot="conversation-pending-body"] {
-    max-height: min(40dvh, 380px);
+    max-height: min(38dvh, 340px);
 }
 .pendingAction [data-slot="conversation-pending-footer"] {
     border-inline: 1px solid var(--border);
@@ -929,20 +929,21 @@ body:has(.research) {
     margin-inline: -8px;
 }
 .pendingAction .framingLaunch {
-    padding: 14px 20px;
-    min-height: 72px;
-    gap: 20px;
+    padding: 10px 14px;
+    min-height: 52px;
+    gap: 14px;
 }
 .pendingAction .framingLaunch > button {
     margin-left: auto;
-    height: 44px;
-    padding-inline: 22px;
+    height: 36px;
+    padding-inline: 18px;
+    font-size: 13px;
     flex-shrink: 0;
 }
 .pendingAction
     [data-slot="conversation-pending-panel"]:has([data-composer-action]) {
     border: 1px solid var(--border);
-    border-radius: 20px;
+    border-radius: 14px;
     background: color-mix(in oklab, var(--foreground) 2%, var(--card));
 }
 .pendingAction
@@ -959,10 +960,14 @@ body:has(.research) {
     background: transparent;
 }
 .pendingAction [data-composer-action] {
-    margin: 14px 20px 0;
+    --conversation-composer-focus-min-height: 32px;
+    --conversation-composer-focus-max-height: 84px;
+    --conversation-composer-focus-padding: 8px 10px;
+    --conversation-composer-focus-input-padding: 4px 0;
+    margin: 10px 14px 0;
 }
 .pendingAction [data-composer-action] [class~="chat-composer-mode"] {
-    padding: 0 0 10px;
+    padding: 0 0 6px;
 }
 .framingDock
     .pendingAction
@@ -970,16 +975,7 @@ body:has(.research) {
     [data-slot="composer-fields"] {
     grid-template-columns: minmax(0, 1fr) auto;
 }
-.framingDock
-    .pendingAction
-    [data-composer-action]
-    [data-slot="prompt-composer-input"] {
-    min-height: 40px;
-    max-height: 110px;
-    padding: 7px 0;
-    font-size: 16px;
-    line-height: 24px;
-}
+
 .framingDock
     .pendingAction
     [data-composer-action]
@@ -988,16 +984,17 @@ body:has(.research) {
     display: none;
 }
 .pendingAction [data-slot="agent-question-body"] {
-    padding: 4px 20px 0;
+    padding: 2px 14px 0;
 }
 .pendingAction [data-slot="agent-question-title"] {
-    font-size: 18px;
+    font-size: 16px;
     line-height: 1.45;
+    font-weight: 500;
 }
 .pendingAction [data-slot="agent-question-option"] {
     border: 1px solid var(--border);
-    min-height: 66px;
-    margin-block: 3px;
+    min-height: 52px;
+    margin-block: 2px;
 }
 .pendingAction [data-slot="agent-question-option"]:has([data-checked]) {
     border-color: var(--brand-purple);
@@ -1008,7 +1005,7 @@ body:has(.research) {
 .pendingAction
     [data-slot="conversation-pending-panel"]:has([data-slot="agent-question"])
     [data-composer-action] {
-    margin-bottom: 18px;
+    margin-bottom: 12px;
 }
 @media (max-width: 640px) {
     .pendingAction [data-slot="conversation-pending-body"] {
@@ -1023,7 +1020,7 @@ body:has(.research) {
     }
     .pendingAction .framingLaunch {
         flex-wrap: wrap;
-        padding: 12px 14px;
+        padding: 10px 12px;
         gap: 8px;
     }
     .pendingAction [data-composer-action] {
@@ -1033,7 +1030,7 @@ body:has(.research) {
         .pendingAction
         [data-composer-action]
         [data-slot="composer-fields"] {
-        grid-template-columns: minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr) auto;
     }
     .framingDock
         .pendingAction
@@ -1043,5 +1040,41 @@ body:has(.research) {
     }
     .pendingAction [data-slot="agent-question-body"] {
         padding-inline: 14px;
+    }
+}
+
+.pendingAction [data-slot="agent-question-option"] > label {
+    padding-block: 8px;
+    align-items: start;
+}
+
+.framingDock
+    .pendingAction
+    [data-composer-action]
+    [data-slot="prompt-composer-submit"] {
+    height: 34px;
+    padding-inline: 14px;
+    font-size: 13px;
+}
+@media (min-width: 761px) {
+    .framingDock:has([data-slot="agent-question"]) {
+        width: min(880px, calc(100% - 64px));
+    }
+}
+@media (max-width: 640px) {
+    .pendingAction
+        [data-slot="conversation-pending-panel"]:has(
+            [data-slot="agent-question"]
+        )
+        [data-slot="conversation-pending-body"] {
+        max-height: 42dvh;
+    }
+    .pendingAction .framingLaunch > button,
+    .pendingAction [class~="chat-composer-mode"] button,
+    .framingDock
+        .pendingAction
+        [data-composer-action]
+        [data-slot="prompt-composer-submit"] {
+        min-height: 44px;
     }
 }
