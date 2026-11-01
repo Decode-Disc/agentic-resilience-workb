@@ -40,11 +40,13 @@ export function ConversationActivity({
     summary,
     state,
     children,
+    compact = false,
 }: {
     title: string;
     summary: string;
     state: ConversationWorkItem["state"];
     children?: ReactNode;
+    compact?: boolean;
 }) {
     const id = useId();
     const row = (
@@ -64,13 +66,17 @@ export function ConversationActivity({
             />
             <span>
                 <span data-slot="activity-title">{title}</span>
-                <span data-slot="activity-summary">{summary}</span>
+                {!compact && (
+                    <span data-slot="activity-summary">{summary}</span>
+                )}
             </span>
             <span data-slot="activity-state">{workStateLabels[state]}</span>
-            {children && <Icon iconNode={ArrowRight01Icon} size={12} />}
+            {(children || compact) && (
+                <Icon iconNode={ArrowRight01Icon} size={12} />
+            )}
         </>
     );
-    return children ? (
+    return children || compact ? (
         <Collapsible
             data-message-id={id}
             data-slot="conversation-activity"
@@ -81,7 +87,10 @@ export function ConversationActivity({
                 {row}
             </CollapsibleTrigger>
             <CollapsibleContent>
-                <div data-slot="activity-detail">{children}</div>
+                <div data-slot="activity-detail">
+                    {compact && <p className="chat-work-result">{summary}</p>}
+                    {children}
+                </div>
             </CollapsibleContent>
         </Collapsible>
     ) : (
@@ -163,7 +172,8 @@ export function ConversationActivityGroup({
                                 key={activity.id}
                                 title={activity.title}
                                 summary={activity.summary}
-                                state={activity.state}>
+                                state={activity.state}
+                                compact={!running}>
                                 {activity.details}
                             </ConversationActivity>
                         ))}

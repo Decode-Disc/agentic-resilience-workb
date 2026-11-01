@@ -1117,3 +1117,41 @@
 .chat-queued-viewport {
     max-height: min(144px, 22dvh);
 }
+
+[data-slot="conversation-work-note"] {
+    margin: 0;
+    padding: 4px 0 6px;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--muted-foreground);
+    overflow-wrap: anywhere;
+}
+[data-slot="conversation-work-group"][data-state="completed"]
+    .chat-work-entries,
+[data-slot="conversation-work-group"][data-state="interrupted"]
+    .chat-work-entries {
+    margin-top: 4px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    gap: 2px;
+}
+[data-slot="conversation-work-group"]:not([data-state="running"])
+    [data-slot="conversation-activity"] {
+    margin: 0;
+}
+[data-slot="conversation-work-group"]:not([data-state="running"])
+    [data-slot="conversation-activity"]
+    > button {
+    align-items: center;
+    padding: 4px 0;
+}
+[data-slot="conversation-work-group"]:not([data-state="running"])
+    [data-slot="conversation-activity"]
+    > button
+    > svg {
+    margin-top: 0;
+}
+.chat-work-result {
+    margin: 0 0 6px;
+}

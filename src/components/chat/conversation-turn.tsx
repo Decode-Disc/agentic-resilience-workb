@@ -21,7 +21,7 @@ export function ConversationTurn({
     renderMessage,
 }: {
     turn: ConversationTurnSnapshot;
-    renderMessage: (id: string) => ReactNode;
+    renderMessage: (id: string, presentation?: "work-note") => ReactNode;
 }) {
     const running = turn.state === "running";
     const activities = turn.entries.flatMap((e) =>
@@ -29,11 +29,21 @@ export function ConversationTurn({
     );
     const render = (entry: ConversationTurnSnapshot["entries"][number]) =>
         entry.kind === "operation" ? (
-            <ConversationActivity key={entry.operation.id} {...entry.operation}>
+            <ConversationActivity
+                key={entry.operation.id}
+                {...entry.operation}
+                compact={!running}>
                 {entry.operation.details}
             </ConversationActivity>
         ) : (
-            <Fragment key={entry.id}>{renderMessage(entry.id)}</Fragment>
+            <Fragment key={entry.id}>
+                {renderMessage(
+                    entry.id,
+                    activities.length && entry.phase === "commentary"
+                        ? "work-note"
+                        : undefined,
+                )}
+            </Fragment>
         );
     const elapsed =
         turn.startedAt && turn.finishedAt

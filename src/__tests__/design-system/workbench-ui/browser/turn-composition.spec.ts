@@ -6,6 +6,9 @@ for (const width of [1440, 390])
             const errors: string[] = [];
             page.on("pageerror", (e) => errors.push(e.message));
             await page.setViewportSize({ width, height: 1000 });
+            await page.emulateMedia({
+                reducedMotion: width === 1440 ? "no-preference" : "reduce",
+            });
             const time = new Date("2026-10-31T12:00:00Z");
             await page.clock.install({ time });
             await page.clock.pauseAt(new Date(time.getTime() + 60_000));
@@ -46,6 +49,52 @@ for (const width of [1440, 390])
             ).toBeVisible();
             await expect(
                 page.getByRole("columnheader", { name: "What to test" }),
+            ).toBeVisible();
+            const note = page.getByRole("note", {
+                name: "Workbench Agent progress note",
+            });
+            await expect(note).toBeVisible();
+            await expect(note.getByRole("button")).toHaveCount(0);
+            const answer = page.getByRole("heading", {
+                name: "Replacing software is not replacing coordination",
+                exact: true,
+            });
+            expect(
+                await answer.evaluate(
+                    (node) => node.closest(".chat-work-entries") === null,
+                ),
+            ).toBe(true);
+            await page.clock.resume();
+            await expect
+                .poll(() =>
+                    note.evaluate((element) => {
+                        let opacity = 1;
+                        for (
+                            let node: HTMLElement | null =
+                                element as HTMLElement;
+                            node;
+                            node = node.parentElement
+                        )
+                            opacity *= Number(getComputedStyle(node).opacity);
+                        return opacity;
+                    }),
+                )
+                .toBeGreaterThan(0.99);
+            await page.screenshot({
+                path: `/tmp/work-log-after-${theme}-${width}.png`,
+            });
+            const operation = page.getByRole("button", {
+                name: "Inspect Read the retained investor presentation",
+                exact: true,
+            });
+            await operation.focus();
+            await page.keyboard.press("Enter");
+            await page.clock.runFor(250);
+            await expect(
+                page.getByText(
+                    "Illustrative reading: coordination and network participation.",
+                    { exact: true },
+                ),
             ).toBeVisible();
             expect(
                 await page.evaluate(

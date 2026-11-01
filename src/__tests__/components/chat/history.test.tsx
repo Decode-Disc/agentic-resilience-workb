@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it } from "vitest";
 import { ConversationHistory } from "@/components/chat/conversation-history";
 import { ConversationThread } from "@/components/chat/conversation-thread";
@@ -76,5 +76,35 @@ it("keeps a later completion after the analyst's intervening message", () => {
         "Keep the evidence gap explicit.",
         "The candidate list is ready.",
     ]);
-    expect(container.querySelectorAll("article")).toHaveLength(3);
+    expect(container.querySelectorAll("article")).toHaveLength(2);
+    expect(container.querySelectorAll('[role="note"]')).toHaveLength(1);
+});
+
+it("renders retained commentary as an activity note without message actions, keeping the answer outside the work details", () => {
+    const { container } = render(<InterleavedHistory />);
+    const trigger = screen.getByRole("button", {
+        name: "Inspect work for this turn",
+    });
+    fireEvent.click(trigger);
+    const note = screen.getByRole("note", {
+        name: "Workbench Agent progress note",
+    });
+    expect(note.textContent).toBe("I'll prepare the source material.");
+    expect(
+        within(note).queryByRole("group", { name: "Message actions" }),
+    ).toBeNull();
+    const details = container.querySelector(".chat-work-entries");
+    expect(details?.contains(note)).toBe(true);
+    expect(
+        within(details as HTMLElement).queryByText("Candidates recorded."),
+    ).toBeNull();
+    fireEvent.click(
+        screen.getByRole("button", { name: "Inspect Find company reporting" }),
+    );
+    expect(
+        within(details as HTMLElement).getByText("Candidates recorded."),
+    ).toBeTruthy();
+    expect(
+        details?.contains(screen.getByText("The candidate list is ready.")),
+    ).toBe(false);
 });

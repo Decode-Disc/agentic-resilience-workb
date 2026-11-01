@@ -100,11 +100,12 @@ export function ConversationHistory({
                     <ConversationTurn
                         key={turn.id}
                         turn={turn}
-                        renderMessage={(id) =>
+                        renderMessage={(id, presentation) =>
                             initialSegments.get(turn.id)?.has(id) ? (
                                 <ConversationMessages
                                     ids={[id]}
                                     agents={agents}
+                                    presentation={presentation}
                                 />
                             ) : null
                         }

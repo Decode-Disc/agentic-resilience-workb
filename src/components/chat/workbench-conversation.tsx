@@ -366,7 +366,9 @@ export function ConversationComposer({
 function ConversationMessage({
     authorName,
     agents,
+    presentation,
 }: {
+    presentation?: "work-note";
     authorName: string;
     agents: ConversationAgents;
 }) {
@@ -393,6 +395,30 @@ function ConversationMessage({
     const interrupted = useAuiState(
         (s) => s.message.status?.type === "incomplete",
     );
+    const attributionError =
+        role === "assistant" && !resolvedAuthor ? (
+            <LoadErrorAlert
+                variant="inline"
+                title="Message attribution unavailable"
+                description="The message is retained, but its author could not be identified."
+            />
+        ) : null;
+    if (presentation === "work-note" && role === "assistant")
+        return (
+            <MessagePrimitive.Root
+                render={
+                    <div
+                        role="note"
+                        aria-label={`${resolvedAuthor ?? "Unidentified agent"} progress note`}
+                        data-slot="conversation-work-note"
+                    />
+                }>
+                {attributionError}
+                <MessagePrimitive.Parts
+                    components={{ Text: ConversationMarkdown }}
+                />
+            </MessagePrimitive.Root>
+        );
     return (
         <MessagePrimitive.Root
             render={
@@ -407,13 +433,7 @@ function ConversationMessage({
                 />
             }>
             <MessageBody>
-                {role === "assistant" && !resolvedAuthor && (
-                    <LoadErrorAlert
-                        variant="inline"
-                        title="Message attribution unavailable"
-                        description="The message is retained, but its author could not be identified."
-                    />
-                )}
+                {attributionError}
                 <MessageContent>
                     <MessagePrimitive.Parts
                         components={{ Text: ConversationMarkdown }}
@@ -446,7 +466,9 @@ export function ConversationMessages({
     ids,
     authorName = WORKBENCH_AGENT_NAME,
     agents = DEFAULT_CONVERSATION_AGENTS,
+    presentation,
 }: {
+    presentation?: "work-note";
     ids?: readonly string[];
     /** Identity of the assistant whose messages the caller selects. */
     authorName?: string;
@@ -459,6 +481,7 @@ export function ConversationMessages({
                     <ConversationMessage
                         authorName={authorName}
                         agents={agents}
+                        presentation={presentation}
                     />
                 ) : null
             }

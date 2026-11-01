@@ -117,7 +117,10 @@ it("attributes mixed runtime messages by their supplied agent identity", () => {
     expect(screen.queryByText("Research Partner")).toBeNull();
 });
 
-it("keeps an unresolved author explicit instead of attributing it to the default agent", () => {
+it.each([
+    undefined,
+    "work-note",
+] as const)("keeps an unresolved author explicit in %s presentation", (presentation) => {
     function UnresolvedAgent() {
         const conversation = useWorkbenchConversation({
             messages: [
@@ -134,13 +137,19 @@ it("keeps an unresolved author explicit instead of attributing it to the default
         });
         return (
             <ConversationThread runtime={conversation.runtime}>
-                <ConversationMessages />
+                <ConversationMessages presentation={presentation} />
             </ConversationThread>
         );
     }
     render(<UnresolvedAgent />);
     expect(
-        screen.getByRole("article", { name: "Unidentified agent message" }),
+        presentation === "work-note"
+            ? screen.getByRole("note", {
+                  name: "Unidentified agent progress note",
+              })
+            : screen.getByRole("article", {
+                  name: "Unidentified agent message",
+              }),
     ).toBeTruthy();
     expect(screen.getByText("Message attribution unavailable")).toBeTruthy();
     expect(
