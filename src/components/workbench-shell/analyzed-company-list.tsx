@@ -1,10 +1,8 @@
 import { api } from "@convex/_generated/api";
-import {
-  ArrowRight02Icon,
-  ChevronDownIcon,
-  Folder02Icon,
-  Tick02Icon,
-} from "@hugeicons/core-free-icons";
+import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
+import ChevronDownIcon from "@hugeicons/core-free-icons/ChevronDownIcon";
+import Folder02Icon from "@hugeicons/core-free-icons/Folder02Icon";
+import Tick02Icon from "@hugeicons/core-free-icons/Tick02Icon";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useAction } from "convex/react";
 import React, { useEffect, useRef } from "react";
@@ -18,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useResponsive } from "@/hooks/use-responsive";
 import { useWorkspaceDossiers } from "@/hooks/use-workspace-dossiers";
 import { cn } from "@/lib/utils";
+import PlusIcon from "@hugeicons/core-free-icons/PlusIcon";
 
 export interface AnalyzedCompanyListProps {
   activeRunId?: string;
@@ -109,6 +108,12 @@ function AnalyzedCompanyListContent({
     workspace?.isTestData,
   ]);
 
+  const companyBtnClassNames = (isActive: boolean) =>
+    cn(
+      "h-8 gap-1 text-xs font-medium rounded-none!",
+      isActive ? "bg-accent! border-accent-foreground/50!" : "border! border-muted-foreground/50!",
+    );
+
   if (isAdmissionLoading || (enabled && isLoading)) {
     return (
       <div
@@ -146,9 +151,9 @@ function AnalyzedCompanyListContent({
       {
         key: "research-dossiers",
         title: (
-          <div className="flex items-center gap-3 justify-between">
-            <span>Research dossiers</span>
-            <DossiersButton view="label" />
+          <div className="flex items-center gap-3 justify-between px-2">
+            <span className="text-muted-foreground">Research dossiers</span>
+            <DossiersButton view="label" className="px-0" />
           </div>
         ),
         items: [
@@ -190,12 +195,12 @@ function AnalyzedCompanyListContent({
                   key: "start-new-analysis",
                   label: "Start a company dossier",
                   className: buttonVariants({
-                    variant: "secondary",
+                    variant: "ghost",
                     size: "sm",
                     className: "my-1 w-full",
                   }),
                   icon: ({ className: iconClassName }: { className?: string }) => (
-                    <span className={cn("start-double-slash", iconClassName)}>{"//"}</span>
+                    <Icon iconNode={PlusIcon} className={cn("start-double-slash", iconClassName)} />
                   ),
                   onSelect: () => {
                     void navigate({ to: "/workspace/start" });
@@ -214,7 +219,11 @@ function AnalyzedCompanyListContent({
           side="bottom"
           align="center"
           trigger={
-            <Button variant="outline" size="sm" className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className={companyBtnClassNames(activeRun ? true : false)}
+            >
               {activeRun?.company ? (
                 <>
                   <CompanyFaviconAvatar company={activeRun.company} size="xs" />
@@ -260,12 +269,7 @@ function AnalyzedCompanyListContent({
                 className={buttonVariants({
                   variant: "outline",
                   size: "sm",
-                  className: cn(
-                    "h-8 gap-1 px-0 text-xs font-medium rounded-none!",
-                    activeRunId === run.runId
-                      ? "bg-accent! border-accent-foreground/50!"
-                      : "border! border-muted-foreground/50!",
-                  ),
+                  className: companyBtnClassNames(activeRunId === run.runId),
                 })}
               >
                 {activeRunId === run.runId ? (

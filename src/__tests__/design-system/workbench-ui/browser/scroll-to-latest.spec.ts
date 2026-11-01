@@ -50,7 +50,7 @@ for (const screen of ["framing", "launched"] as const) {
                     name: "Conversation scroll area",
                 });
                 const jump = page.getByRole("button", {
-                    name: "Jump to latest",
+                    name: "Scroll to end",
                 });
                 const scrollFromEnd = (distance: number) =>
                     viewport.evaluate((node, offset) => {

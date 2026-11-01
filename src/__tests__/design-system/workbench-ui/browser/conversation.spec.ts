@@ -61,7 +61,7 @@ for (const theme of ["light", "dark"] as const) {
                 .poll(async () => {
                     await page.clock.runFor(50);
                     return page
-                        .getByRole("button", { name: "Jump to latest" })
+                        .getByRole("button", { name: "Scroll to end" })
                         .isVisible();
                 })
                 .toBe(true);
@@ -98,7 +98,7 @@ for (const theme of ["light", "dark"] as const) {
             expect(
                 before && after && Math.abs(before.height - after.height),
             ).toBeLessThan(2);
-            await page.getByRole("button", { name: "Jump to latest" }).click();
+            await page.getByRole("button", { name: "Scroll to end" }).click();
             await page.clock.runFor(500);
             await expect
                 .poll(() =>

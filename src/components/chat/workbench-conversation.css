@@ -525,14 +525,23 @@
     font-size: 11px;
 }
 [data-slot="conversation-jump-to-latest"] {
-    background: var(--card);
-    color: var(--muted-foreground);
-    border: 1px solid var(--divider);
+    width: max-content;
+    height: 22px;
+    padding: 0 8px;
+    gap: 3px;
+    font-size: 11px;
+    line-height: 16px;
+    background: var(--background);
+    color: var(--foreground);
+    border: 0;
+    box-shadow: none;
     animation: conversation-jump-in 140ms ease-out;
 }
+[data-slot="conversation-jump-to-latest"] > svg {
+    color: var(--muted-foreground);
+}
 [data-slot="conversation-jump-to-latest"]:hover {
-    background: var(--popover);
-    color: var(--foreground);
+    background: var(--card);
 }
 @keyframes conversation-jump-in {
     from {
@@ -546,7 +555,7 @@
     [data-slot="conversation-jump-to-latest"]::after {
         content: "";
         position: absolute;
-        inset: -6px;
+        inset: -11px -6px;
         border-radius: inherit;
     }
 }

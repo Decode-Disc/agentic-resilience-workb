@@ -810,12 +810,12 @@ test("START conversation scroll uses the pane width and offers a return to lates
         node.dispatchEvent(new Event("scroll"));
     });
     await expect(
-        page.getByRole("button", { name: "Jump to latest", exact: true }),
+        page.getByRole("button", { name: "Scroll to end", exact: true }),
     ).toBeVisible();
     const after = await input.boundingBox();
     expect(Math.abs((before?.y ?? 0) - (after?.y ?? 0))).toBeLessThan(1);
     await page
-        .getByRole("button", { name: "Jump to latest", exact: true })
+        .getByRole("button", { name: "Scroll to end", exact: true })
         .click();
     await expect
         .poll(() =>
