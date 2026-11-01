@@ -281,8 +281,16 @@ test("START previews keep screen navigation and theme within the START layout", 
     await expect(
         page.getByRole("region", { name: "Confirm company and mandate" }),
     ).toBeVisible();
-    await page.getByRole("link", { name: "Switch theme", exact: true }).click();
+    await page
+        .getByRole("button", { name: "Switch theme", exact: true })
+        .click();
     await expect(page).toHaveURL(/layout=start&screen=confirm&theme=light/);
+    await page.goBack();
+    await expect(page).toHaveURL(/layout=start&screen=composer&theme=dark/);
+    await expect(page.locator(".start-screen-preview")).toHaveAttribute(
+        "data-theme",
+        "dark",
+    );
 });
 
 test("START a specific request receives a framing directly and needs an explicit research start", async ({

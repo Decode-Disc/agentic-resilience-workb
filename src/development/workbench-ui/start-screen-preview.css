@@ -189,7 +189,7 @@
         order: 3;
         flex-basis: 100%;
     }
-    .start-screen-toolbar > a {
+    .start-screen-toolbar > [data-slot="theme-toggle"] {
         margin-left: auto;
     }
     .start-screen-toolbar p {

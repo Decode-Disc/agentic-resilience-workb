@@ -11,9 +11,10 @@ import {
     File01Icon,
     Search01Icon,
 } from "@hugeicons/core-free-icons";
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import { useWorkbenchConversation } from "@/components/chat/workbench-conversation";
 import Icon from "@/components/icon";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
     Collapsible,
@@ -535,11 +536,12 @@ function MockConversation({
 
 /** Standalone visual studies; choosing a study does not replace the installed conversation. */
 export function ChatCompositionMocks({
-    initialTheme,
+    theme,
+    onThemeChange,
 }: {
-    initialTheme: "light" | "dark";
+    theme: "light" | "dark";
+    onThemeChange: (theme: "light" | "dark") => void;
 }) {
-    const [theme, setTheme] = useState(initialTheme);
     const query = new URLSearchParams(location.search);
     const [view, setView] = useState<Composition | "compare">(
         () =>
@@ -557,9 +559,6 @@ export function ChatCompositionMocks({
         view === "compare"
             ? compositions
             : compositions.filter((item) => item.id === view);
-    useEffect(() => {
-        document.documentElement.classList.toggle("dark", theme === "dark");
-    }, [theme]);
     return (
         <WorkbenchUiRoot theme={theme} className="cm-gallery">
             <header className="cm-study-header">
@@ -573,16 +572,7 @@ export function ChatCompositionMocks({
                         it at full size.
                     </p>
                 </div>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                        setTheme((current) =>
-                            current === "light" ? "dark" : "light",
-                        )
-                    }>
-                    {theme === "dark" ? "Light theme" : "Dark theme"}
-                </Button>
+                <ThemeToggle theme={theme} onThemeChange={onThemeChange} />
             </header>
             <nav
                 className="cm-study-controls"

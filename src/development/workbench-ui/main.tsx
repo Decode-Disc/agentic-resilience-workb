@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { buttonVariants } from "@/components/ui/button";
 import "./preview-controls.css";
 import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
@@ -10,8 +11,8 @@ import { examples } from "./examples";
 import { StartScreenPreview, startScreenNames } from "./start-screen-examples";
 
 const params = new URLSearchParams(location.search);
-const theme = params.get("theme") === "dark" ? "dark" : "light";
-document.documentElement.classList.toggle("dark", theme === "dark");
+const initialTheme = params.get("theme") === "dark" ? "dark" : "light";
+document.documentElement.classList.toggle("dark", initialTheme === "dark");
 const requested = params.get("component");
 const requestedScreen =
     params.get("layout") === "start"
@@ -20,8 +21,18 @@ const requestedScreen =
         : undefined;
 document.body.dataset.single = String(!!requested);
 function Gallery() {
+    const [theme, setTheme] = useState<"light" | "dark">(initialTheme);
     const [action, setAction] = useState("");
     const [activeScreen, setActiveScreen] = useState(requestedScreen);
+    const changeTheme = (nextTheme: "light" | "dark") => {
+        const url = new URL(location.href);
+        url.searchParams.set("theme", nextTheme);
+        history.replaceState(history.state, "", url);
+        setTheme(nextTheme);
+    };
+    useEffect(() => {
+        document.documentElement.classList.toggle("dark", theme === "dark");
+    }, [theme]);
     const navigateToScreen = (screen: (typeof startScreenNames)[number]) => {
         const url = new URL(location.href);
         url.searchParams.set("screen", screen);
@@ -29,7 +40,12 @@ function Gallery() {
         setActiveScreen(screen);
     };
     useEffect(() => {
-        const restore = () =>
+        const restore = () => {
+            setTheme(
+                new URLSearchParams(location.search).get("theme") === "dark"
+                    ? "dark"
+                    : "light",
+            );
             setActiveScreen(
                 startScreenNames.find(
                     (name) =>
@@ -37,6 +53,7 @@ function Gallery() {
                         new URLSearchParams(location.search).get("screen"),
                 ) ?? "composer",
             );
+        };
         window.addEventListener("popstate", restore);
         return () => window.removeEventListener("popstate", restore);
     }, []);
@@ -48,7 +65,9 @@ function Gallery() {
             window.removeEventListener("workbench-example-action", listener);
     }, []);
     if (params.get("layout") === "chat-mocks")
-        return <ChatCompositionMocks initialTheme={theme} />;
+        return (
+            <ChatCompositionMocks theme={theme} onThemeChange={changeTheme} />
+        );
     if (activeScreen)
         return (
             <>
@@ -88,15 +107,7 @@ function Gallery() {
                         ))}
                     </nav>
                     <div id="start-preview-controls" />
-                    <a
-                        className={buttonVariants({
-                            variant: "ghost",
-                            size: "sm",
-                        })}
-                        aria-label="Switch theme"
-                        href={`?layout=start&screen=${activeScreen}&theme=${theme === "dark" ? "light" : "dark"}`}>
-                        {theme === "dark" ? "Light theme" : "Dark theme"}
-                    </a>
+                    <ThemeToggle theme={theme} onThemeChange={changeTheme} />
                     <p>Illustrative · no research executed</p>
                     <output aria-live="polite">{action}</output>
                 </header>
@@ -137,9 +148,7 @@ function Gallery() {
                         Illustrative component fixtures. No research is
                         executed.
                     </p>
-                    <a href={`/?theme=${theme === "dark" ? "light" : "dark"}`}>
-                        Switch theme
-                    </a>
+                    <ThemeToggle theme={theme} onThemeChange={changeTheme} />
                     <output aria-live="polite">{action}</output>
                 </header>
             )}
