@@ -2,7 +2,7 @@ import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { executionError } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import type { TranscriptContext } from "@earendil-works/pi-ai";
-import { asSchema, jsonSchema, type JSONSchema7, type ToolSet, tool } from "ai";
+import { asSchema, type JSONSchema7, jsonSchema, type ToolSet, tool } from "ai";
 import { convexToZod } from "convex-helpers/server/zod4";
 import { z } from "zod";
 import {
@@ -17,17 +17,85 @@ export const PI_MISSION_EXTENSION = "workbench";
 export const PI_MISSION_INPUT =
     "Continue the authorized mission using its current required state. Return its domain completion JSON when its work is complete.";
 
+/** Pins the effective model tool declarations independently of object-key order and SDK metadata. */
+export function modelToolSetKey(
+    tools: readonly {
+        name: string;
+        description: string;
+        parameters: unknown;
+    }[],
+) {
+    const wireTools: unknown = JSON.parse(
+        JSON.stringify(
+            tools
+                .map(({ name, description, parameters }) => {
+                    if (
+                        !parameters ||
+                        typeof parameters !== "object" ||
+                        Array.isArray(parameters)
+                    )
+                        throw executionError("model_tool_schema_invalid");
+                    return {
+                        name,
+                        description,
+                        parameters: { ...parameters, "~standard": undefined },
+                    };
+                })
+                .sort((a, b) =>
+                    a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
+                ),
+        ),
+    );
+    return sha256Hex(stableStringify(wireTools));
+}
+
+/** Canonical counterpart of the declarations actually retained in Pi's request transcript. */
+export async function agentToolSetKey(
+    operations: Record<
+        string,
+        Pick<AgentOperationDefinition, "description" | "inputValidator">
+    >,
+) {
+    return modelToolSetKey(
+        await Promise.all(
+            Object.entries(operations).map(async ([name, operation]) => ({
+                name,
+                description: operation.description,
+                parameters: await asSchema(agentOperationInputSchema(operation))
+                    .jsonSchema,
+            })),
+        ),
+    );
+}
+
+/** One native user entry can carry an admitted FIFO lot; exact message references stay in its manifest. */
+export function nativeAnalystInput(
+    messages: readonly { text: string }[],
+): string {
+    return messages.map((message) => message.text).join("\n\n");
+}
+
+export function requiredAnalystInput(prompt: string): string {
+    const snapshot: {
+        conversationInstructions?: { messages: { text: string }[] } | null;
+    } = JSON.parse(prompt);
+    return nativeAnalystInput(
+        snapshot.conversationInstructions?.messages ?? [],
+    );
+}
+
 /** Keeps required state outside Pi's lossy summary; profile generation uses this exact rendering. */
 export function piMissionMessages(
     instructions: string,
     prompt: string,
     history: TranscriptContext["messages"],
     timestamp = Date.now(),
+    nativeConversation = false,
 ): TranscriptContext["messages"] {
     return [
         {
             role: "system",
-            content: `${instructions}\n\nRequired current mission state:\n${prompt}`,
+            content: `${nativeConversation ? "" : `${instructions}\n\n`}Required current mission state:\n${prompt}`,
             timestamp,
         },
         ...history,
@@ -155,6 +223,7 @@ type AgentInput = {
     >;
     nativeRoute?: ModelRoute;
     definitionVersion?: number;
+    nativeConversation?: boolean;
 };
 
 /** Fingerprints every application-owned part of the required native request. SDK versions are checked by calibration. */
@@ -162,7 +231,13 @@ export async function piInputProfileKey(args: AgentInput): Promise<string> {
     return sha256Hex(
         stableStringify({
             version: args.definitionVersion,
-            requiredMessage: piMissionMessages(args.instructions, "", [], 0),
+            requiredMessage: piMissionMessages(
+                args.instructions,
+                "",
+                [],
+                0,
+                args.nativeConversation,
+            ),
             tools: await serializedTools(args.operations),
             continuation: PI_MISSION_INPUT,
             extension: PI_MISSION_EXTENSION,
@@ -180,7 +255,13 @@ export async function piInputProfileKey(args: AgentInput): Promise<string> {
                 args.nativeRoute?.model === SIMULATION_MODEL_ROUTE.model &&
                 args.nativeRoute.provider === SIMULATION_MODEL_ROUTE.provider
                     ? preparePiSimulationRequest(
-                          piMissionMessages(args.instructions, "", [], 0),
+                          piMissionMessages(
+                              args.instructions,
+                              "",
+                              [],
+                              0,
+                              args.nativeConversation,
+                          ),
                       ).json
                     : undefined,
         }),
@@ -211,7 +292,14 @@ export async function agentInputByteLength(args: AgentInput): Promise<number> {
         return (
             overhead +
             new TextEncoder().encode(JSON.stringify(args.prompt)).length -
-            2
+            2 +
+            (args.nativeConversation
+                ? new TextEncoder().encode(
+                      JSON.stringify(requiredAnalystInput(args.prompt)),
+                  ).length -
+                  new TextEncoder().encode(JSON.stringify(PI_MISSION_INPUT))
+                      .length
+                : 0)
         );
     }
     const tools = await serializedTools(args.operations);

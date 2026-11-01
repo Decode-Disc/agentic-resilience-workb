@@ -1,0 +1,161 @@
+{
+  "node": "v24.18.0",
+  "results": [
+    {
+      "workload": "admission",
+      "sources": 1,
+      "messages": 1,
+      "milliseconds": {
+        "samples": 7,
+        "median": 15.715509999999995,
+        "p95": 38.380089999999655
+      },
+      "captureQueries": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "workload": "admission",
+      "sources": 60,
+      "messages": 1,
+      "milliseconds": {
+        "samples": 7,
+        "median": 59.00716700000066,
+        "p95": 73.09454900000037
+      },
+      "captureQueries": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "workload": "admission",
+      "sources": 60,
+      "messages": 20,
+      "milliseconds": {
+        "samples": 7,
+        "median": 1334.234672999999,
+        "p95": 1535.2431719999986
+      },
+      "captureQueries": [
+        20,
+        20,
+        20,
+        20,
+        20,
+        20,
+        20
+      ]
+    },
+    {
+      "workload": "replay",
+      "commits": 128,
+      "bytes": 1054817,
+      "milliseconds": {
+        "samples": 7,
+        "median": 4.864195999998628,
+        "p95": 11.728973000001133
+      },
+      "heapDeltaBytes": {
+        "samples": 7,
+        "median": 1774992,
+        "p95": 1933720
+      },
+      "scans": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "renewals": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "workload": "replay",
+      "commits": 1024,
+      "bytes": 8497938,
+      "milliseconds": {
+        "samples": 7,
+        "median": 37.86540299999979,
+        "p95": 44.64865299999656
+      },
+      "heapDeltaBytes": {
+        "samples": 7,
+        "median": 12746072,
+        "p95": 12828872
+      },
+      "scans": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      "renewals": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "workload": "replay",
+      "commits": 1024,
+      "bytes": 33365022,
+      "milliseconds": {
+        "samples": 7,
+        "median": 131.55922599999758,
+        "p95": 171.72288299999855
+      },
+      "heapDeltaBytes": {
+        "samples": 7,
+        "median": 31641040,
+        "p95": 39101624
+      },
+      "scans": [
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16
+      ],
+      "renewals": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

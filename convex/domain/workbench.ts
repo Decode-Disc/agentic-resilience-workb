@@ -1,20 +1,62 @@
 import { internal } from "@convex/_generated/api";
-import type { AgentDefinition } from "@convex/execution/agentDefinition";
-import { executionError } from "@convex/execution/errors";
+import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { QueryCtx } from "@convex/_generated/server";
+import {
+    type AgentDefinition,
+    agentToolSchemas,
+    type OperationOutcome,
+} from "@convex/execution/agentDefinition";
+import { readOperationCause } from "@convex/execution/authority";
+import { conversationInstructions } from "@convex/execution/conversations";
+import { executionError, executionFailureCode } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import {
     operationProgressKeys,
     operationReuseIdentity,
 } from "@convex/execution/missionData";
-import { savedMaterialOperations } from "./savedMaterialInspection";
+import { researchControlConfirmation } from "@convex/execution/researchControl";
+import { v } from "convex/values";
+import {
+    requireSavedMaterialScope,
+    savedMaterialOperations,
+} from "./savedMaterialInspection";
 import { sha256Hex } from "./sourcePassages";
 import { supportsResearchControl } from "./transitions";
 import {
     adjustFramingInput,
     controlResearchInput,
+    explicitFramingPreservation,
+    explicitResearchCommand,
+    explicitResearchControl,
+    nativeAdjustFramingInput,
+    nativeSourceRequestInput,
     workbenchSchemas as schemas,
     sourceRequestInput,
 } from "./workbenchContracts";
+
+function recoverableWorkbenchRefusal(
+    error: unknown,
+): OperationOutcome | undefined {
+    const code = executionFailureCode(error);
+    return code &&
+        [
+            "stale_instructions",
+            "framing_version_conflict",
+            "framing_fixed",
+            "framing_read_only",
+            "framing_analyst_conflict",
+            "framing_authority_unavailable",
+            "framing_authority_capacity",
+            "explicit_research_intent_required",
+            "instruction_not_authorized",
+            "instruction_capacity",
+            "source_request_target_required",
+            "version_conflict",
+            "human_prerequisite_required",
+        ].includes(code)
+        ? { kind: "refused", code }
+        : undefined;
+}
 
 const adjustFraming: AgentOperationDefinition = {
     version: 1,
@@ -43,14 +85,20 @@ const adjustFraming: AgentOperationDefinition = {
     async execute(ctx, args) {
         if (!args.requestId)
             return { kind: "refused", code: "request_unavailable" };
-        const revision = await ctx.runMutation(
-            internal.framing.applyFromWorkbench,
-            {
-                requestId: args.requestId,
-                expectedGeneration: args.expectedGeneration,
-            },
-        );
-        return { kind: "success", valueJson: JSON.stringify({ revision }) };
+        try {
+            const revision = await ctx.runMutation(
+                internal.framing.applyFromWorkbench,
+                {
+                    requestId: args.requestId,
+                    expectedGeneration: args.expectedGeneration,
+                },
+            );
+            return { kind: "success", valueJson: JSON.stringify({ revision }) };
+        } catch (error) {
+            const refusal = recoverableWorkbenchRefusal(error);
+            if (refusal) return refusal;
+            throw error;
+        }
     },
     validateOutcome(_request, outcome) {
         return outcome;
@@ -115,18 +163,73 @@ const instructionBehavior: Pick<
     async execute(ctx, args) {
         if (!args.requestId)
             return { kind: "refused", code: "request_unavailable" };
-        const value = await ctx.runMutation(
-            internal.workbench.performInstruction,
-            {
-                requestId: args.requestId,
-                expectedGeneration: args.expectedGeneration,
-            },
-        );
-        return { kind: "success", valueJson: value };
+        try {
+            const value = await ctx.runMutation(
+                internal.workbench.performInstruction,
+                {
+                    requestId: args.requestId,
+                    expectedGeneration: args.expectedGeneration,
+                },
+            );
+            return { kind: "success", valueJson: value };
+        } catch (error) {
+            const refusal = recoverableWorkbenchRefusal(error);
+            if (refusal) return refusal;
+            throw error;
+        }
     },
     validateOutcome(_request, outcome) {
         return outcome;
     },
+};
+
+async function framingFailureReceipt(
+    ctx: QueryCtx,
+    requests: readonly Doc<"agentOperationRequests">[],
+) {
+    let latest:
+        | { request: Doc<"agentOperationRequests">; sequence: number }
+        | undefined;
+    for (const request of requests) {
+        if (
+            request.input.kind !== "adjust_framing" &&
+            !(
+                request.input.kind === "invalid" &&
+                request.input.name === "adjust_framing"
+            )
+        )
+            continue;
+        const cause = await readOperationCause(
+            ctx,
+            request,
+            request.admissionEventId,
+        );
+        if (cause?.sequence === undefined)
+            throw executionError("framing_receipt_unavailable");
+        if (!latest || cause.sequence > latest.sequence)
+            latest = { request, sequence: cause.sequence };
+    }
+    if (
+        !latest ||
+        latest.request.effect?.outcome.kind === "success" ||
+        (latest.request.outcome?.kind === "success" &&
+            !latest.request.adoptionRefusalCode)
+    )
+        return;
+    if (
+        latest.request.outcome?.kind !== "refused" &&
+        latest.request.outcome?.kind !== "unavailable"
+    )
+        throw executionError("framing_receipt_unavailable");
+    return "The proposed framing change was not saved. No framing change from this response is waiting to run.";
+}
+
+const transmitSourceRequest: AgentOperationDefinition = {
+    ...instructionBehavior,
+    version: 1,
+    inputValidator: sourceRequestInput,
+    description:
+        "Register an analyst's documentary instruction with its original message and your interpreted need. Supply a coverage role only for a supported targeted search within the fixed framing. Initial work or an analyst pause may defer transmission. Other requests receive an explicit limitation; this tool does not open another documentary phase.",
 };
 
 /** Workbench handles analyst conversation; domain operations alone change framing or research. */
@@ -162,13 +265,7 @@ export const workbenchDefinition: AgentDefinition & { id: "workbench_v1" } = {
             description:
                 "Pause or resume research only on an explicit, unambiguous analyst request in the supplied message. A pause request lets admitted work finish before suspension; never claim an effective pause before its persisted state confirms it.",
         },
-        transmit_source_request: {
-            ...instructionBehavior,
-            version: 1,
-            inputValidator: sourceRequestInput,
-            description:
-                "Register an analyst's documentary instruction with its original message and your interpreted need. Supply a coverage role only for a supported targeted search within the fixed framing. Initial work or an analyst pause may defer transmission. Other requests receive an explicit limitation; this tool does not open another documentary phase.",
-        },
+        transmit_source_request: transmitSourceRequest,
     },
     initialState() {
         return {
@@ -319,4 +416,324 @@ export const workbenchDefinition: AgentDefinition & { id: "workbench_v1" } = {
             throw executionError("invalid_completion");
         return result.text;
     },
+};
+
+/** The conversation contract is pinned at creation; historical missions retain version 1. */
+export const nativeWorkbenchDefinition: AgentDefinition & {
+    id: "workbench_v1";
+} = {
+    ...workbenchDefinition,
+    version: 2,
+    nativeConversation: true,
+    operations: {
+        ...workbenchDefinition.operations,
+        adjust_framing: {
+            ...adjustFraming,
+            version: 2,
+            inputValidator: nativeAdjustFramingInput,
+        },
+        transmit_source_request: {
+            ...transmitSourceRequest,
+            version: 2,
+            inputValidator: nativeSourceRequestInput,
+            description: `${transmitSourceRequest.description} Choose the matching coverageRole explicitly, or null if no supported role matches; never omit this choice. Public commercial terms use official_commercial_terms.`,
+        },
+    },
+    instructions: [
+        ...workbenchDefinition.instructions.split("\n").slice(0, -1),
+        "Finish with your natural-language response in Markdown. The application constructs the completion envelope. Text accompanying tool calls is not a completed response.",
+        "The harness supplies observed revision numbers and a unique active message reference. When several active analyst messages are present, select their supplied reference explicitly. Never invent a reference or a documentary passage.",
+        "For a company-only request, propose one concrete transaction or activity with named participant roles, rather than using the company name as the activity. Explain why control or substitution in that workflow could affect value capture. Mark the proposal as tentative before documentary research; do not present industry assumptions as evidence.",
+        "A targeted refinement must retain the original economic relationship and direction of the question. For example, a question about constraints on a participant switching providers must remain about switching providers, not become a generic question about relationships. Preserve the other questions and the supplied scope.",
+        "Search saved material with search_available_material before choosing a passageOrder for read_in_context. Use only a locator returned by the tools. After an unavailable passage, search instead of guessing another index. Explain the evidence or a specific reading limitation; never copy a tool diagnostic into the analyst's answer.",
+        "A refused control did not change research state. Continue independent authorized work, such as recording a documentary request, and ask a concise clarification for ambiguous intent. The application supplies control confirmations; keep your explanation focused on the analyst's question and never announce anticipated research execution.",
+    ].join("\n"),
+    async context(ctx, mission, run) {
+        const state = await workbenchDefinition.context(ctx, mission, run);
+        if (state.kind === "blocked") return state;
+        try {
+            await requireSavedMaterialScope(ctx, mission, run);
+        } catch (error) {
+            if (executionFailureCode(error) !== "corpus_not_approved")
+                throw error;
+            return {
+                ...state,
+                context: { ...state.context, availableMaterials: [] },
+            };
+        }
+        const candidates = state.context.availableMaterials as {
+            sourceId: Id<"sources">;
+            title: string;
+            url: string;
+        }[];
+        const available = new Set(
+            await ctx.runQuery(
+                internal.sourceRetrieval.availableCapturesForMission,
+                {
+                    missionId: mission._id,
+                    expectedGeneration: mission.generation,
+                    sourceIds: candidates.map((material) => material.sourceId),
+                },
+            ),
+        );
+        return {
+            ...state,
+            context: {
+                ...state.context,
+                availableMaterials: candidates.filter((material) =>
+                    available.has(material.sourceId),
+                ),
+            },
+        };
+    },
+    textCompletion: (text) => ({ kind: "complete", text }),
+    operationDiagnostic(code) {
+        if (code === "framing_read_only")
+            return "The active instructions do not authorize this framing change. Answer without editing the saved program, or use a separate active edit request when permitted.";
+        if (code === "source_request_target_required")
+            return "No documentary target was selected. Choose a supported coverage role, or explicitly select null when none matches. Missing routing information does not establish that the requested operation is unavailable.";
+        if (code === "framing_analyst_conflict")
+            return "The analyst directly edited part of the research program after this message was received. Their newer edit takes precedence. Keep it unchanged; do not retry the original refinement on that part. Explain that the newer edit was preserved, or continue independent changes to parts the analyst did not edit. A later analyst message can authorize a new refinement.";
+        if (
+            code === "framing_authority_unavailable" ||
+            code === "framing_authority_capacity"
+        )
+            return "The original request's framing authority cannot be established within the retained revision boundary. Preserve the current program and explain that a new analyst request is needed before changing it.";
+        if (
+            code === "passage_unavailable" ||
+            code === "retrieval_passage_invalid"
+        )
+            return "No passage was read. Use search_available_material on the same authorized source with the analyst's question, then choose a passageOrder returned by that search before read_in_context. If nothing matches, explain the specific reading limitation without claiming the source lacks the information.";
+        if (code === "stale_instructions")
+            return "The analyst changed the active instructions. Read the current state before choosing another action.";
+        if (code === "framing_version_conflict" || code === "version_conflict")
+            return "The observed version changed. Inspect the current program, preserve the analyst's edits and reconsider the action.";
+        if (code === "human_prerequisite_required")
+            return "Research is waiting for a human decision. Inspect the pending review; resuming cannot bypass it.";
+        if (
+            code === "instruction_not_authorized" ||
+            code === "explicit_research_intent_required"
+        )
+            return "This message does not authorize that operation. No change was applied. Re-read the actual analyst request and choose an authorized operation; documentary instructions can be registered with transmit_source_request while research is paused. Clarify only if the analyst's actual request is ambiguous, not to obtain permission for an action they did not request.";
+        if (code === "framing_fixed")
+            return "Research has started and framing is fixed. Explain the limitation instead of editing the fixed research program.";
+        return "The operation was not performed. Inspect the current state and correct its arguments or explain the unmet prerequisite.";
+    },
+    async complete(ctx, mission, response) {
+        const completion = await workbenchDefinition.complete(
+            ctx,
+            mission,
+            response,
+        );
+        if (completion.kind !== "completed") return completion;
+        if (!("text" in completion.result))
+            throw executionError("invalid_completion");
+        const instructions = await conversationInstructions(ctx, mission);
+        if (!instructions?.messages.length) return completion;
+        const commands = instructions.messages.flatMap((message) => {
+            const action = explicitResearchCommand(message.text);
+            return action ? [{ message, action }] : [];
+        });
+        const run = await ctx.db.get(mission.runId);
+        if (!run) throw executionError("run_unavailable");
+        const requests = await ctx.db
+            .query("agentOperationRequests")
+            .withIndex("by_mission_and_status", (q) =>
+                q.eq("missionId", mission._id).eq("status", "completed"),
+            )
+            .take(129);
+        if (requests.length > 128)
+            return { kind: "blocked", code: "context_capacity" };
+        const confirmations = commands.map(({ message, action }) => {
+            const executed = requests.some(
+                (request) =>
+                    request.input.kind === "control_research" &&
+                    request.input.messageId === message.messageId &&
+                    request.input.action === action &&
+                    request.outcome?.kind === "success" &&
+                    !request.adoptionRefusalCode,
+            );
+            return researchControlConfirmation(action, executed, run);
+        });
+        const framingReceipt = await framingFailureReceipt(ctx, requests);
+        if (framingReceipt) confirmations.push(framingReceipt);
+        for (const request of requests) {
+            if (
+                request.input.kind !== "transmit_source_request" ||
+                request.outcome?.kind !== "success" ||
+                request.adoptionRefusalCode
+            )
+                continue;
+            const instruction = await ctx.db
+                .query("workbenchInstructions")
+                .withIndex("by_request", (q) => q.eq("requestId", request._id))
+                .unique();
+            if (!instruction)
+                throw executionError("instruction_receipt_unavailable");
+            confirmations.push(instruction.outcome);
+        }
+        return {
+            kind: "completed",
+            result: {
+                kind: "workbench_v1",
+                text: [
+                    ...new Set([
+                        ...(commands.length === instructions.messages.length
+                            ? []
+                            : [completion.result.text]),
+                        ...confirmations,
+                    ]),
+                ].join("\n\n"),
+            },
+        };
+    },
+    modelOperation(name, operation, input) {
+        const snapshot = input as WorkbenchModelSnapshot | undefined;
+        const messages = snapshot?.conversationInstructions?.messages ?? [];
+        if (snapshot) {
+            if (
+                name === "adjust_framing" &&
+                (!snapshot.framing ||
+                    snapshot.framing.fixed ||
+                    messages.some((message) =>
+                        explicitFramingPreservation(message.text),
+                    ) ||
+                    (messages.length > 0 &&
+                        messages.every((message) =>
+                            explicitResearchCommand(message.text),
+                        )))
+            )
+                return null;
+            if (
+                name === "control_research" &&
+                (!snapshot.research?.controlAvailable ||
+                    !snapshot.conversationInstructions?.messages.some(
+                        (message) => explicitResearchControl(message.text),
+                    ))
+            )
+                return null;
+            if (name === "transmit_source_request" && !snapshot.framing?.fixed)
+                return null;
+            if (
+                name in savedMaterialOperations &&
+                !snapshot.availableMaterials?.length
+            )
+                return null;
+        }
+        if (name === "adjust_framing")
+            return {
+                ...operation,
+                description: operation.description.replace(
+                    "Supply the currently observed revision; stale edits are refused.",
+                    "The harness binds the observed revision; stale edits are refused.",
+                ),
+                inputValidator:
+                    snapshot?.conversationInstructions?.messages.length === 1
+                        ? nativeAdjustFramingInput.omit(
+                              "expectedRevision",
+                              "messageId",
+                          )
+                        : nativeAdjustFramingInput.omit("expectedRevision"),
+            };
+        if (name === "control_research" && snapshot) {
+            const actions = new Set(
+                snapshot.conversationInstructions?.messages
+                    .map((message) => explicitResearchControl(message.text))
+                    .filter((action) => action !== undefined),
+            );
+            const action = actions.size === 1 ? [...actions][0] : undefined;
+            const validator = action
+                ? controlResearchInput.extend({ action: v.literal(action) })
+                : controlResearchInput;
+            return {
+                ...operation,
+                inputValidator:
+                    snapshot.conversationInstructions?.messages.length === 1
+                        ? validator.omit("messageId")
+                        : validator,
+            };
+        }
+        if (
+            name === "transmit_source_request" &&
+            snapshot?.conversationInstructions?.messages.length === 1
+        )
+            return {
+                ...operation,
+                inputValidator: operation.inputValidator.omit("messageId"),
+            };
+        return operation;
+    },
+    normalizeOperationInput(name, input, value) {
+        const snapshot = value as WorkbenchModelSnapshot;
+        if (
+            name === "adjust_framing" ||
+            name === "control_research" ||
+            name === "transmit_source_request"
+        ) {
+            const messages = snapshot.conversationInstructions?.messages ?? [];
+            const messageId =
+                messages.length === 1
+                    ? messages[0]?.messageId
+                    : input.messageId;
+            if (!messages.some((m) => m.messageId === messageId))
+                throw executionError("instruction_not_observed");
+            return {
+                ...input,
+                messageId,
+                ...(name === "adjust_framing"
+                    ? { expectedRevision: snapshot.framing?.revision }
+                    : {}),
+            };
+        }
+        return input;
+    },
+    consultationContext: (snapshot) => ({
+        company: snapshot.company,
+        originalRequest: snapshot.originalRequest,
+        framing: snapshot.framing,
+        research: snapshot.research,
+        availableMaterials: snapshot.availableMaterials,
+        analystRequests: snapshot.analystRequests,
+        conversationInstructions: snapshot.conversationInstructions,
+    }),
+    simulate(input) {
+        if (!workbenchDefinition.simulate)
+            throw executionError("simulation_not_configured");
+        const response = workbenchDefinition.simulate(input);
+        if (response.kind !== "operations") return response;
+        const offered = agentToolSchemas(nativeWorkbenchDefinition, input);
+        return {
+            ...response,
+            requests: response.requests.map((request) => {
+                const values: Record<string, unknown> = JSON.parse(
+                    request.inputJson,
+                );
+                const fields =
+                    offered[request.name]?.inputValidator.fields ?? {};
+                if ("messageId" in fields)
+                    values.messageId = (
+                        input as WorkbenchModelSnapshot
+                    ).conversationInstructions?.messages.at(-1)?.messageId;
+                return {
+                    ...request,
+                    inputJson: JSON.stringify(
+                        Object.fromEntries(
+                            Object.entries(values).filter(
+                                ([key]) => key in fields,
+                            ),
+                        ),
+                    ),
+                };
+            }),
+        };
+    },
+};
+
+type WorkbenchModelSnapshot = {
+    framing?: { revision: number; fixed: boolean } | null;
+    research?: { controlAvailable: boolean };
+    availableMaterials?: unknown[];
+    conversationInstructions?: {
+        messages: { messageId: string; text: string }[];
+    } | null;
 };

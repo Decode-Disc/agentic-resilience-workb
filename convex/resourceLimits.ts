@@ -175,3 +175,4 @@ export const MAX_PREPARATION_DIAGNOSTIC_BYTES = 64 * 1024;
 /** Bounds the retained log replayed by one Pi worker without discarding originals. */
 export const PI_SESSION_MAX_BYTES = 32 * 1024 * 1024;
 export const PI_COMMIT_MAX_BYTES = 512 * 1024;
+export const PI_LEASE_RENEW_INTERVAL_MS = 25_000;

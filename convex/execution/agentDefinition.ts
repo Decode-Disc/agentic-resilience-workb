@@ -35,6 +35,25 @@ export type AgentDefinition = {
     version: number;
     authority: string;
     executionScope?: "research" | "conversation";
+    nativeConversation?: true;
+    textCompletion?(text: string): AgentCompletion;
+    modelOperation?(
+        name: string,
+        operation: Pick<
+            AgentOperationDefinition,
+            "description" | "inputValidator"
+        >,
+        snapshot: unknown,
+    ): Pick<AgentOperationDefinition, "description" | "inputValidator"> | null;
+    normalizeOperationInput?(
+        name: string,
+        input: Record<string, unknown>,
+        snapshot: unknown,
+    ): Record<string, unknown>;
+    consultationContext?(
+        snapshot: Record<string, unknown>,
+    ): Record<string, unknown>;
+    operationDiagnostic?(code: string): string;
     conversationReply?(result: AgentResult): string;
     instructions: string;
     scopeValidator: Validator<AgentScope, "required", string>;
@@ -88,15 +107,43 @@ export type AgentDefinition = {
 
 /** Exposes model-visible schemas while keeping server execution callbacks out of SDK tools. */
 export function agentToolSchemas(
-    definition: Pick<AgentDefinition, "operations">,
+    definition: Pick<AgentDefinition, "operations" | "modelOperation">,
+    snapshot?: unknown,
 ): AgentGenerationInput["operations"] {
     return Object.fromEntries(
-        Object.entries(definition.operations).map(([name, operation]) => [
-            name,
-            {
-                description: operation.description,
-                inputValidator: operation.inputValidator,
-            },
-        ]),
+        Object.entries(definition.operations).flatMap(([name, operation]) => {
+            const projected = definition.modelOperation
+                ? definition.modelOperation(name, operation, snapshot)
+                : {
+                      description: operation.description,
+                      inputValidator: operation.inputValidator,
+                  };
+            return projected ? [[name, projected]] : [];
+        }),
     );
+}
+
+/** Keep the canonical outcome intact in Convex while giving the native model readable result data. */
+export function modelOperationOutcome(
+    definition: AgentDefinition,
+    outcome: OperationOutcome,
+): string {
+    if (!definition.nativeConversation) return JSON.stringify(outcome);
+    if (outcome.kind === "success")
+        return JSON.stringify({
+            kind: "success",
+            value: JSON.parse(outcome.valueJson),
+        });
+    return JSON.stringify({
+        ...outcome,
+        ...("code" in outcome
+            ? {
+                  diagnostic:
+                      outcome.code === "history_cursor_invalid"
+                          ? "No history page was read. Omit cursor to start at the first page; for later pages copy only continueCursor returned by the same history operation. Use consult_conversation for prior analyst exchanges; consult_mission_state reads only the current mission."
+                          : (definition.operationDiagnostic?.(outcome.code) ??
+                            "This operation was not performed. Inspect the current state and correct the request before trying again."),
+              }
+            : {}),
+    });
 }

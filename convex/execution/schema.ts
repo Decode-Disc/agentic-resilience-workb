@@ -1,5 +1,9 @@
 import { savedMaterialMissionFields } from "@convex/domain/savedMaterialOperations";
 import { preparationModelLimitsValidator } from "@convex/domain/sourcePreparationAuthority";
+import {
+    workbenchCommand,
+    workbenchCommandOutcome,
+} from "@convex/domain/workbenchContracts";
 import { defineTable } from "convex/server";
 import { v } from "convex/values";
 import {
@@ -60,8 +64,14 @@ const missionFields = {
 };
 
 export const executionTables = {
+    piPublication: defineTable({
+        key: v.literal("workers"),
+        held: v.boolean(),
+    }).index("by_key", ["key"]),
     piSessions: defineTable({
         missionId: v.id("agentMissions"),
+        conversationId: v.optional(v.id("agentConversations")),
+        settledSequence: v.optional(v.number()),
         generation: v.number(),
         writer: v.string(),
         epoch: v.number(),
@@ -69,7 +79,10 @@ export const executionTables = {
         sequence: v.number(),
         nextId: v.number(),
         retainedBytes: v.optional(v.number()),
-    }).index("by_mission", ["missionId"]),
+    })
+        .index("by_mission", ["missionId"])
+        .index("by_conversation", ["conversationId"])
+        .index("by_lease_until", ["leaseUntil"]),
     piCommits: defineTable({
         sessionId: v.id("piSessions"),
         sequence: v.number(),
@@ -79,6 +92,8 @@ export const executionTables = {
         .index("by_session_and_sequence", ["sessionId", "sequence"])
         .index("by_session_and_key", ["sessionId", "key"]),
     agentConversations: defineTable({
+        definitionId: v.optional(agentDefinitionIdValidator),
+        definitionVersion: v.optional(agentDefinitionVersionValidator),
         queuePaused: v.optional(v.boolean()),
         admissionFailure: v.optional(
             v.object({
@@ -105,6 +120,10 @@ export const executionTables = {
         generation: v.number(),
         messageCount: v.number(),
         hasOperations: v.optional(v.boolean()),
+        nativeInitialMessageIds: v.optional(
+            v.array(v.id("agentMessageDeliveries")),
+        ),
+        nativeInitialInstructionVersion: v.optional(v.number()),
         missionId: v.optional(v.id("agentMissions")),
         publishedMessageId: v.optional(v.id("agentMessageDeliveries")),
         publicationHash: v.optional(v.string()),
@@ -115,6 +134,18 @@ export const executionTables = {
         runId: v.id("researchRuns"),
         conversationId: v.id("agentConversations"),
         storageMessageRef: v.string(),
+        framingBaseRevisionId: v.optional(v.id("framingRevisions")),
+        controlCommand: v.optional(
+            v.object({
+                name: workbenchCommand,
+                expectedGeneration: v.number(),
+                outcome: workbenchCommandOutcome,
+                confirmationMessageId: v.id("agentMessageDeliveries"),
+            }),
+        ),
+        nativeControlStatus: v.optional(
+            v.union(v.literal("pending"), v.literal("recorded")),
+        ),
         requestKey: v.string(),
         contentHash: v.string(),
         role: v.union(v.literal("user"), v.literal("assistant")),
@@ -122,6 +153,7 @@ export const executionTables = {
             v.literal("queue"),
             v.literal("steer"),
             v.literal("reply"),
+            v.literal("control"),
         ),
         status: v.union(
             v.literal("queued"),
@@ -136,7 +168,8 @@ export const executionTables = {
         .index("by_run_and_key", ["runId", "requestKey"])
         .index("by_run", ["runId"])
         .index("by_run_and_status", ["runId", "status"])
-        .index("by_turn", ["turnId"]),
+        .index("by_turn", ["turnId"])
+        .index("by_run_and_native_control", ["runId", "nativeControlStatus"]),
     agentInvocationPayloads: defineTable({
         invocationId: v.id("agentInvocations"),
         runId: v.id("researchRuns"),
@@ -169,7 +202,8 @@ export const executionTables = {
     )
         .index("by_run_and_request_key", ["runId", "requestKey"])
         .index("by_run_and_objective_key", ["runId", "objectiveKey"])
-        .index("by_run_and_status", ["runId", "status"]),
+        .index("by_run_and_status", ["runId", "status"])
+        .index("by_pi_active_writer", ["piActiveWriter"]),
     agentInvocations: defineTable({
         purpose: v.optional(v.literal("compaction")),
         generationBackend: v.optional(agentBackendValidator),

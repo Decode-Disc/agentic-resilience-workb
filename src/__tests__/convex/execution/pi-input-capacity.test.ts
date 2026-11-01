@@ -13,6 +13,7 @@ import {
     piMissionMessages,
     preparePiModelPayload,
     preparePiSimulationRequest,
+    requiredAnalystInput,
 } from "@convex/integrations/modelInput";
 import {
     MODEL_MAX_OUTPUT_TOKENS,
@@ -38,7 +39,7 @@ import {
     Harness,
     MemoryStorage,
 } from "@earendil-works/pi-durable";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 
@@ -99,13 +100,16 @@ async function minimalTranscript(definition: AgentDefinition) {
         },
     ]);
     const tools = await Promise.all(
-        Object.entries(definition.operations).map(async ([name, operation]) =>
-            defineTool({
-                ...(await piToolMetadata(name, operation)),
-                async execute() {
-                    throw new Error("Profile calibration cannot execute tools");
-                },
-            }),
+        Object.entries(agentToolSchemas(definition)).map(
+            async ([name, operation]) =>
+                defineTool({
+                    ...(await piToolMetadata(name, operation)),
+                    async execute() {
+                        throw new Error(
+                            "Profile calibration cannot execute tools",
+                        );
+                    },
+                }),
         ),
     );
     const registry = createRegistry();
@@ -144,13 +148,25 @@ async function nativeBytes(
     prompt: string,
     route: ModelRoute,
 ) {
+    if (definition.nativeConversation && prompt)
+        history = history.map((message) =>
+            message.role === "user"
+                ? { ...message, content: requiredAnalystInput(prompt) }
+                : message,
+        );
     if (
         route.model === SIMULATION_MODEL_ROUTE.model &&
         route.provider === SIMULATION_MODEL_ROUTE.provider
     )
         return new TextEncoder().encode(
             preparePiSimulationRequest(
-                piMissionMessages(definition.instructions, prompt, history, 0),
+                piMissionMessages(
+                    definition.instructions,
+                    prompt,
+                    history,
+                    0,
+                    definition.nativeConversation,
+                ),
             ).json,
         ).length;
     const provider = openrouterProvider();
@@ -173,6 +189,7 @@ async function nativeBytes(
                 prompt,
                 history,
                 0,
+                definition.nativeConversation,
             ),
         }),
         {
@@ -217,46 +234,130 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
     const productionRouting = await vi.importActual<
         typeof import("@convex/integrations/modelRouting")
     >("@convex/integrations/modelRouting");
-    for (const id of agentDefinitionIdValidator.members.map(
-        (member) => member.value,
+    for (const [id, version] of agentDefinitionIdValidator.members.flatMap<
+        [AgentDefinition["id"], number]
+    >((member) =>
+        member.value === "workbench_v1"
+            ? [
+                  [member.value, 1],
+                  [member.value, 2],
+              ]
+            : [[member.value, 1]],
     )) {
-        const definition = getAgentDefinition(id);
-        const history = await minimalTranscript(definition);
-        const routes = [
-            SIMULATION_MODEL_ROUTE,
-            nativePiFixtureRoute,
-            ...(id === "workbench_v1" ? [WORKBENCH_MODEL_ROUTE] : []),
-            ...(productionRouting.missionRoutes[id]
-                ? [productionRouting.missionRoutes[id]]
-                : []),
-        ];
-        for (const route of routes) {
-            if (!route) continue;
-            const input = {
-                instructions: definition.instructions,
-                operations: agentToolSchemas(definition),
-                definitionVersion: definition.version,
-                nativeRoute: route,
+        const canonical = getAgentDefinition(id, version);
+        const snapshots: unknown[] = [undefined];
+        if (canonical.nativeConversation)
+            for (const framing of [
+                null,
+                { revision: 1, fixed: false },
+                { revision: 1, fixed: true },
+            ])
+                for (const controlAvailable of [false, true])
+                    for (const material of [false, true])
+                        for (const single of [false, true])
+                            for (const text of [
+                                "",
+                                "Pause research.",
+                                "Resume research.",
+                                "Keep the saved program unchanged.",
+                            ])
+                                for (const secondText of single
+                                    ? [""]
+                                    : [
+                                          "",
+                                          "Pause research.",
+                                          "Resume research.",
+                                          "Keep the saved program unchanged.",
+                                      ])
+                                    snapshots.push({
+                                        framing,
+                                        research: { controlAvailable },
+                                        availableMaterials: material
+                                            ? [{}]
+                                            : [],
+                                        conversationInstructions: {
+                                            messages: single
+                                                ? [{ messageId: "one", text }]
+                                                : [
+                                                      {
+                                                          messageId: "one",
+                                                          text,
+                                                      },
+                                                      {
+                                                          messageId: "two",
+                                                          text: secondText,
+                                                      },
+                                                  ],
+                                        },
+                                    });
+        const seen = new Set<string>();
+        for (const snapshot of snapshots) {
+            const projected = agentToolSchemas(canonical, snapshot);
+            const signature = JSON.stringify(projected);
+            if (seen.has(signature)) continue;
+            seen.add(signature);
+            const definition = {
+                ...canonical,
+                modelOperation: undefined,
+                operations: Object.fromEntries(
+                    Object.entries(projected).map(([name, schema]) => {
+                        const operation = canonical.operations[name];
+                        assert(operation);
+                        return [name, { ...operation, ...schema }];
+                    }),
+                ),
             };
-            const overhead = await nativeBytes(definition, history, "", route);
-            profiles[await piInputProfileKey({ ...input, prompt: "" })] =
-                overhead;
-            for (const text of [
-                "plain ASCII",
-                'quoted "text" and \\ paths',
-                "Économie 日本語 🧭",
-                "x".repeat(64000),
-            ]) {
-                const prompt = JSON.stringify({ text });
-                samples.push({
-                    input: { ...input, prompt },
-                    actual: await nativeBytes(
-                        definition,
-                        history,
-                        prompt,
-                        route,
-                    ),
-                });
+            const history = await minimalTranscript(definition);
+            const routes = [
+                SIMULATION_MODEL_ROUTE,
+                nativePiFixtureRoute,
+                ...(id === "workbench_v1" ? [WORKBENCH_MODEL_ROUTE] : []),
+                ...(productionRouting.missionRoutes[id]
+                    ? [productionRouting.missionRoutes[id]]
+                    : []),
+            ];
+            for (const route of routes) {
+                if (!route) continue;
+                const input = {
+                    instructions: definition.instructions,
+                    operations: agentToolSchemas(definition),
+                    definitionVersion: definition.version,
+                    nativeRoute: route,
+                    nativeConversation: canonical.nativeConversation,
+                };
+                const overhead = await nativeBytes(
+                    definition,
+                    history,
+                    "",
+                    route,
+                );
+                profiles[await piInputProfileKey({ ...input, prompt: "" })] =
+                    overhead;
+                for (const text of [
+                    "plain ASCII",
+                    'quoted "text" and \\ paths',
+                    "Économie 日本語 🧭",
+                    "x".repeat(64000),
+                ]) {
+                    const prompt = JSON.stringify(
+                        definition.nativeConversation
+                            ? {
+                                  conversationInstructions: {
+                                      messages: [{ text }],
+                                  },
+                              }
+                            : { text },
+                    );
+                    samples.push({
+                        input: { ...input, prompt },
+                        actual: await nativeBytes(
+                            definition,
+                            history,
+                            prompt,
+                            route,
+                        ),
+                    });
+                }
             }
         }
     }
@@ -275,7 +376,14 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
         "@convex/integrations/modelInput"
     );
     for (const sample of samples)
-        expect(await agentInputByteLength(sample.input)).toBe(sample.actual);
+        expect(
+            await agentInputByteLength(sample.input),
+            JSON.stringify({
+                route: sample.input.nativeRoute,
+                version: sample.input.definitionVersion,
+                nativeConversation: sample.input.nativeConversation,
+            }),
+        ).toBe(sample.actual);
     const sample = samples[0];
     if (!sample) throw new Error("No native profile samples were generated");
     await expect(

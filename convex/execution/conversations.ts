@@ -37,7 +37,7 @@ import {
     MAX_OPERATION_RESULT_BYTES,
     missionStatusValidator,
 } from "./executionProtocol";
-import { cancelPiWake } from "./piControl";
+import { cancelPiWake, schedulePiMission } from "./piControl";
 
 async function conversationForRun(ctx: QueryCtx, runId: Id<"researchRuns">) {
     return ctx.db
@@ -63,6 +63,7 @@ async function event(
                 "message_removed",
                 "response_stopped",
                 "queue_resumed",
+                "research_control_command",
             ].includes(kind) && run?.ownerVisitorId
                 ? { type: "visitor", visitorId: run.ownerVisitorId }
                 : { type: "system" }),
@@ -73,6 +74,91 @@ async function event(
         messageId,
         occurredAt: Date.now(),
     });
+}
+
+/** Request identities are shared by ordinary messages and explicit control exchanges. */
+export function requireConversationRequestKey(requestKey: string) {
+    if (!/^[a-zA-Z0-9._:-]{1,120}$/.test(requestKey))
+        throw executionError("message_capacity");
+}
+
+/** Persists a server-owned control receipt without admitting a response or changing its queue. */
+export async function recordControlExchange(
+    ctx: MutationCtx,
+    conversation: Doc<"agentConversations">,
+    args: {
+        requestKey: string;
+        contentHash: string;
+        name: NonNullable<
+            Doc<"agentMessageDeliveries">["controlCommand"]
+        >["name"];
+        expectedGeneration: number;
+        outcome: NonNullable<
+            Doc<"agentMessageDeliveries">["controlCommand"]
+        >["outcome"];
+        text: string;
+    },
+) {
+    const createdAt = Date.now();
+    const storageMessageRef = await saveConversationMessage(
+        ctx,
+        conversation.storageRef,
+        "user",
+        args.name,
+    );
+    const messageId = await ctx.db.insert("agentMessageDeliveries", {
+        runId: conversation.runId,
+        conversationId: conversation._id,
+        requestKey: args.requestKey,
+        contentHash: args.contentHash,
+        storageMessageRef,
+        role: "user",
+        delivery: "control",
+        status: "processed",
+        createdAt,
+    });
+    const confirmationRef = await saveConversationMessage(
+        ctx,
+        conversation.storageRef,
+        "assistant",
+        args.text,
+    );
+    const confirmationMessageId = await ctx.db.insert(
+        "agentMessageDeliveries",
+        {
+            runId: conversation.runId,
+            conversationId: conversation._id,
+            requestKey: `control-reply:${messageId}`,
+            contentHash: sha256Hex(args.text),
+            storageMessageRef: confirmationRef,
+            role: "assistant",
+            delivery: "reply",
+            status: "processed",
+            createdAt,
+        },
+    );
+    await ctx.db.patch(messageId, {
+        controlCommand: {
+            name: args.name,
+            expectedGeneration: args.expectedGeneration,
+            outcome: args.outcome,
+            confirmationMessageId,
+        },
+        nativeControlStatus: "pending",
+    });
+    await event(
+        ctx,
+        conversation.runId,
+        "research_control_command",
+        undefined,
+        messageId,
+    );
+    return {
+        messageId,
+        confirmationMessageId,
+        outcome: args.outcome,
+        text: args.text,
+    };
 }
 
 const messageInput = v.object({
@@ -89,9 +175,9 @@ export async function submitAuthorizedMessage(
     args: Infer<typeof messageInput>,
     actor?: { type: "system" },
 ): Promise<Id<"agentMessageDeliveries">> {
-    const { visitor } = await requireDossierAuthority(ctx, args.runId);
+    const { visitor, run } = await requireDossierAuthority(ctx, args.runId);
+    requireConversationRequestKey(args.requestKey);
     if (
-        !/^[a-zA-Z0-9._:-]{1,120}$/.test(args.requestKey) ||
         !args.text.trim() ||
         new TextEncoder().encode(args.text).length > MAX_OPERATION_RESULT_BYTES
     )
@@ -118,6 +204,12 @@ export async function submitAuthorizedMessage(
     if (!conversation) {
         const storageRef = await createConversationStorage(ctx, visitor._id);
         const id = await ctx.db.insert("agentConversations", {
+            ...((await ctx.db.get(args.runId))?.startMode === "framed"
+                ? {
+                      definitionId: "workbench_v1" as const,
+                      definitionVersion: 2,
+                  }
+                : {}),
             runId: args.runId,
             storageRef,
             queuedCount: 0,
@@ -147,6 +239,7 @@ export async function submitAuthorizedMessage(
         runId: args.runId,
         conversationId: conversation._id,
         storageMessageRef,
+        framingBaseRevisionId: run.currentFramingRevisionId,
         requestKey: args.requestKey,
         contentHash,
         role: "user",
@@ -373,7 +466,7 @@ export async function conversationInstructions(
     return readTurnInstructions(ctx, turn);
 }
 
-async function readTurnInstructions(
+export async function readTurnInstructions(
     ctx: QueryCtx,
     turn: Doc<"agentConversationTurns">,
 ) {
@@ -418,6 +511,7 @@ async function readTurnInstructions(
         batch.length = 0;
     };
     for await (const message of messages) {
+        if (message.role !== "user") continue;
         batch.push(message);
         if (batch.length === HISTORY_PAGE_SIZE) await appendBatch();
     }
@@ -581,7 +675,13 @@ export const startTurn = internalMutation({
     },
     returns: startTurnResult,
     handler: async (ctx, args): Promise<Infer<typeof startTurnResult>> => {
-        const definition = getAgentDefinition(args.definitionId);
+        const conversation = await conversationForRun(ctx, args.runId);
+        const definition = getAgentDefinition(
+            args.definitionId,
+            conversation?.definitionId === args.definitionId
+                ? (conversation.definitionVersion ?? 1)
+                : 1,
+        );
         if (
             definition.executionScope !== "conversation" ||
             !definition.conversationReply
@@ -869,6 +969,11 @@ export const resumeQueue = mutation({
         await requireWorkspaceRun(ctx, runId);
         await requireDossierAuthority(ctx, runId);
         const conversation = await conversationForRun(ctx, runId);
+        if (
+            conversation?.admissionFailure?.code === "pi_storage_capacity" ||
+            conversation?.admissionFailure?.code === "pi_commit_capacity"
+        )
+            throw executionError(conversation.admissionFailure.code);
         if (conversation)
             await ctx.db.patch(conversation._id, { queuePaused: false });
         await ctx.scheduler.runAfter(
@@ -895,6 +1000,27 @@ export const pumpWorkbench = internalMutation({
             !conversation.queuedCount
         )
             return null;
+        if (conversation.definitionVersion === 2) {
+            const session = await ctx.db
+                .query("piSessions")
+                .withIndex("by_conversation", (q) =>
+                    q.eq("conversationId", conversation._id),
+                )
+                .unique();
+            if (
+                session &&
+                (session.settledSequence !== session.sequence ||
+                    session.leaseUntil > Date.now())
+            ) {
+                await schedulePiMission(
+                    ctx,
+                    session.missionId,
+                    session.generation,
+                    Math.max(Date.now(), session.leaseUntil),
+                );
+                return null;
+            }
+        }
         try {
             await ctx.runMutation(internal.execution.conversations.startTurn, {
                 runId,
@@ -953,6 +1079,21 @@ async function stopActiveResponse(
                 piWakeId: undefined,
                 piWakeToken: undefined,
             });
+            if (conversation.definitionVersion === 2) {
+                const session = await ctx.db
+                    .query("piSessions")
+                    .withIndex("by_conversation", (q) =>
+                        q.eq("conversationId", conversation._id),
+                    )
+                    .unique();
+                if (session)
+                    await schedulePiMission(
+                        ctx,
+                        mission._id,
+                        mission.generation,
+                        Math.max(Date.now(), session.leaseUntil),
+                    );
+            }
         }
     }
     await ctx.db.patch(turn._id, {

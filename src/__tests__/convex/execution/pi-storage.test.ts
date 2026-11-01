@@ -11,7 +11,7 @@ import {
     ROOT_CONVERSATION_ID,
 } from "@earendil-works/pi-durable";
 import { registerStorageConformance } from "@earendil-works/pi-durable/testing";
-import { describe, expect, it, test } from "vitest";
+import { describe, expect, it, test, vi } from "vitest";
 
 function database() {
     const commits: PiCommit[] = [];
@@ -72,6 +72,45 @@ registerStorageConformance(
         }
     },
 );
+
+test("replay renews by elapsed lease time rather than once per page", async () => {
+    vi.useFakeTimers();
+    try {
+        const db = database();
+        db.commits.push(
+            ...Array.from({ length: 4 }, (_, index) => ({
+                sequence: index + 1,
+                key: `page-${index}`,
+                payload: "[]",
+            })),
+        );
+        const renewLease = vi.fn(async () => undefined);
+        const quick = await PiConvexStorage.open(
+            { ...db.store, renewLease },
+            BACKGROUND_CONTEXT,
+        );
+        expect(renewLease).not.toHaveBeenCalled();
+        await quick.close(BACKGROUND_CONTEXT);
+        let page = 0;
+        const slow = await PiConvexStorage.open(
+            {
+                ...db.store,
+                renewLease,
+                async scan(cursor) {
+                    vi.setSystemTime(Date.now() + 10000);
+                    page++;
+                    return db.store.scan(cursor);
+                },
+            },
+            BACKGROUND_CONTEXT,
+        );
+        expect(page).toBe(4);
+        expect(renewLease).toHaveBeenCalledOnce();
+        await slow.close(BACKGROUND_CONTEXT);
+    } finally {
+        vi.useRealTimers();
+    }
+});
 
 test("a rejected append never becomes visible in the Pi read projection", async () => {
     const db = database();

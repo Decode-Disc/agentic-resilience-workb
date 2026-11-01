@@ -118,6 +118,7 @@ function writeNativeConfig(
         join(root, ".convex/local/default/config.json"),
         JSON.stringify({
             deploymentName,
+            backendVersion: "precompiled-fixture",
             ports: { cloud, site: cloud + 1 },
             adminKey: "fixture-secret-must-never-be-projected",
         }),
@@ -422,6 +423,7 @@ if (process.env.LOCAL_RUNTIME_FIXTURE_KEEP_CONFIG === "yes") {
         mkdirSync(directory, { recursive: true });
         writeFileSync(join(directory, "config.json"), JSON.stringify({
             deploymentName,
+            backendVersion: process.argv.includes("--local-backend-version") ? process.argv[process.argv.indexOf("--local-backend-version") + 1] : "precompiled-fixture",
             ports: { cloud: address.port, site: siteIndex < 0 ? address.port + 1 : Number(process.argv[siteIndex + 1]) },
             adminKey: "fixture-secret",
         }));
@@ -710,6 +712,8 @@ it("forwards e2e arguments through the startup lock to Playwright", async () => 
     ]);
     expect(JSON.parse(readFileSync(convexArgsPath, "utf8"))).toEqual([
         "dev",
+        "--local-backend-version",
+        "precompiled-fixture",
         "--local-cloud-port",
         String(runtimeModule.readNativeLocalDeployment(first).cloudPort),
         "--local-site-port",
@@ -736,6 +740,8 @@ it("forwards Convex CLI arguments through the startup lock", async () => {
     await waitForRuntimeManifest(first);
     expect(JSON.parse(readFileSync(argsPath, "utf8"))).toEqual([
         "dev",
+        "--local-backend-version",
+        "precompiled-fixture",
         "--local-cloud-port",
         String(runtimeModule.readNativeLocalDeployment(first).cloudPort),
         "--local-site-port",
@@ -778,6 +784,8 @@ it("forwards dev arguments to Convex while preserving its Vite start command", a
     });
     expect(JSON.parse(readFileSync(argsPath, "utf8"))).toEqual([
         "dev",
+        "--local-backend-version",
+        "precompiled-fixture",
         "--local-cloud-port",
         String(runtimeModule.readNativeLocalDeployment(first).cloudPort),
         "--local-site-port",
@@ -876,6 +884,44 @@ it("pins both native Convex ports instead of letting the CLI allocate replacemen
     );
     child.kill("SIGTERM");
     expect(await processExit(child)).toBe(0);
+}, 20_000);
+
+it.each([
+    undefined,
+    "precompiled-fixture-explicit",
+] as const)("preserves the configured backend version unless explicitly overridden: %s", async (override) => {
+    const { first } = await createWorktreePair();
+    const cloudPort = await freePort();
+    writeNativeConfig(first, "runtime-first", `http://127.0.0.1:${cloudPort}`);
+    const configPath = join(first, ".convex/local/default/config.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    writeFileSync(
+        configPath,
+        JSON.stringify({
+            ...config,
+            backendVersion: "precompiled-fixture-pinned",
+        }),
+    );
+    const argsPath = join(first, "native-version-args.json");
+    const child = spawnLocalDev(
+        first,
+        "convex:dev",
+        { LOCAL_RUNTIME_CONVEX_ARGS_FILE: argsPath },
+        override ? ["--local-backend-version", override] : [],
+    );
+    try {
+        await waitForRuntimeManifest(first);
+        const args: string[] = JSON.parse(readFileSync(argsPath, "utf8"));
+        expect(
+            args.filter((argument) => argument === "--local-backend-version"),
+        ).toHaveLength(1);
+        expect(args[args.indexOf("--local-backend-version") + 1]).toBe(
+            override ?? "precompiled-fixture-pinned",
+        );
+    } finally {
+        child.kill("SIGTERM");
+        expect(await processExit(child)).toBe(0);
+    }
 }, 20_000);
 
 it("reconciles a stopped listener before dev web readiness validation", async () => {
@@ -1397,3 +1443,29 @@ it("does not terminate a process outside the local runtime run", async () => {
     expect(() => process.kill(unrelatedPid, 0)).not.toThrow();
     unrelated.kill("SIGTERM");
 }, 20_000);
+
+it("refuses an unversioned existing deployment before native startup", async () => {
+    const { first } = await createWorktreePair();
+    const cloudPort = await freePort();
+    writeNativeConfig(first, "runtime-first", `http://127.0.0.1:${cloudPort}`);
+    const configPath = join(first, ".convex/local/default/config.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    delete config.backendVersion;
+    writeFileSync(configPath, JSON.stringify(config));
+    const argsPath = join(first, "unversioned-args.json");
+    const child = spawnLocalDev(
+        first,
+        "convex:dev",
+        { LOCAL_RUNTIME_CONVEX_ARGS_FILE: argsPath },
+        [],
+        "pipe",
+    );
+    let output = "";
+    child.stderr?.on("data", (chunk: Buffer) => {
+        output += chunk.toString();
+    });
+    expect(await processExit(child)).toBe(1);
+    expect(output).toContain("Refusing an automatic backend upgrade");
+    expect(output).not.toContain("fixture-secret-must-never-be-projected");
+    expect(existsSync(argsPath)).toBe(false);
+});

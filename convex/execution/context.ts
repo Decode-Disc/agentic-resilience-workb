@@ -263,12 +263,14 @@ export async function buildMissionContext(
         if (!code) throw error;
         return { kind: "blocked" as const, code };
     }
-    const inputJson = JSON.stringify({
+    const assembled = {
         version: mission.definitionVersion,
         definition: {
             id: definition.id,
             version: definition.version,
-            instructions: definition.instructions,
+            ...(definition.nativeConversation
+                ? {}
+                : { instructions: definition.instructions }),
             operationNames: Object.keys(definition.operations),
         },
         mission: {
@@ -286,7 +288,15 @@ export async function buildMissionContext(
             operations: Object.keys(definition.operations),
             authority: definition.authority,
         },
-        conversationInstructions: activeInstructions ?? null,
+        conversationInstructions:
+            definition.nativeConversation && activeInstructions
+                ? {
+                      ...activeInstructions,
+                      messages: activeInstructions.messages.map(
+                          ({ messageId, text }) => ({ messageId, text }),
+                      ),
+                  }
+                : (activeInstructions ?? null),
         workingNotes: {
             status: "working_notes_not_established_facts",
             text: mission.workingNotes,
@@ -322,12 +332,17 @@ export async function buildMissionContext(
             description:
                 "Exact prior observable inputs, outputs, requests and results are retained and can be read in pages.",
         },
-    });
+    };
+    const operations = agentToolSchemas(definition, assembled);
+    assembled.definition.operationNames = Object.keys(operations);
+    assembled.constraints.operations = Object.keys(operations);
+    const inputJson = JSON.stringify(assembled);
     if (
         (await agentInputByteLength({
             instructions: definition.instructions,
             prompt: inputJson,
-            operations: agentToolSchemas(definition),
+            operations,
+            nativeConversation: definition.nativeConversation,
             definitionVersion: definition.version,
             nativeRoute:
                 mission.executionRuntime === "pi-durable"

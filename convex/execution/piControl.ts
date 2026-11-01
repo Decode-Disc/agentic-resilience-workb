@@ -4,9 +4,11 @@ import {
     internalMutation,
     internalQuery,
     type MutationCtx,
+    type QueryCtx,
 } from "@convex/_generated/server";
 import schema from "@convex/schema";
 import { v } from "convex/values";
+import { getAgentDefinition } from "./agentCatalog";
 import {
     executionError,
     executionFailureCode,
@@ -14,6 +16,156 @@ import {
     requireDossierAuthority,
     requireMissionAuthority,
 } from "./authority";
+import { readTurnInstructions } from "./conversations";
+import { needsNativeSettlement, sessionForMission } from "./piStore";
+
+async function publicationControl(ctx: QueryCtx) {
+    return ctx.db
+        .query("piPublication")
+        .withIndex("by_key", (q) => q.eq("key", "workers"))
+        .unique();
+}
+
+async function publicationStatusValue(ctx: QueryCtx) {
+    const control = await publicationControl(ctx);
+    const active = await ctx.db
+        .query("agentMissions")
+        .withIndex("by_pi_active_writer", (q) =>
+            q.gt("piActiveWriter", undefined),
+        )
+        .first();
+    const lease = await ctx.db
+        .query("piSessions")
+        .withIndex("by_lease_until", (q) => q.gt("leaseUntil", Date.now()))
+        .first();
+    return {
+        held: control?.held ?? false,
+        hasActiveWorkers: !!active || !!lease,
+    };
+}
+
+/** Administrative publication control shares the worker admission transaction; it never pauses domain research. */
+export const holdPublication = internalMutation({
+    args: { held: v.boolean() },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        if (!args.held && (await publicationStatusValue(ctx)).hasActiveWorkers)
+            throw executionError("publication_workers_active");
+        const current = await publicationControl(ctx);
+        if (current) await ctx.db.patch(current._id, { held: args.held });
+        else
+            await ctx.db.insert("piPublication", {
+                key: "workers",
+                held: args.held,
+            });
+        return null;
+    },
+});
+
+export const publicationStatus = internalQuery({
+    args: {},
+    returns: v.object({ held: v.boolean(), hasActiveWorkers: v.boolean() }),
+    handler: publicationStatusValue,
+});
+
+/** Freezes the initial admission lot; later admitted messages keep individual native steering identities. */
+export const admittedInputs = internalMutation({
+    args: { missionId: v.id("agentMissions"), expectedGeneration: v.number() },
+    returns: v.array(
+        v.object({
+            requestId: v.string(),
+            instructionVersion: v.number(),
+            messages: v.array(
+                v.object({
+                    messageId: v.id("agentMessageDeliveries"),
+                    text: v.string(),
+                }),
+            ),
+        }),
+    ),
+    handler: async (ctx, args) => {
+        const mission = await ctx.db.get(args.missionId);
+        if (!mission || mission.generation !== args.expectedGeneration)
+            throw executionError("stale_execution");
+        if (mission.status === "completed")
+            await requireDossierAuthority(ctx, mission.runId);
+        else
+            await requireMissionAuthority(
+                ctx,
+                mission._id,
+                args.expectedGeneration,
+            );
+        const turn = mission.conversationTurnId
+            ? await ctx.db.get(mission.conversationTurnId)
+            : null;
+        if (!turn || turn.missionId !== mission._id)
+            throw executionError("active_turn_required");
+        const instructions = await readTurnInstructions(ctx, turn);
+        const analystMessages = instructions.messages.map(
+            ({ messageId, text }) => ({ messageId, text }),
+        );
+        const initialIds =
+            turn.nativeInitialMessageIds ??
+            analystMessages.map((m) => m.messageId);
+        const initialVersion =
+            turn.nativeInitialInstructionVersion ?? turn.instructionVersion;
+        if (!turn.nativeInitialMessageIds)
+            await ctx.db.patch(turn._id, {
+                nativeInitialMessageIds: initialIds,
+                nativeInitialInstructionVersion: initialVersion,
+            });
+        return [
+            {
+                requestId: `turn:${turn._id}:initial`,
+                instructionVersion: initialVersion,
+                messages: analystMessages.filter((m) =>
+                    initialIds.includes(m.messageId),
+                ),
+            },
+            ...analystMessages
+                .filter((m) => !initialIds.includes(m.messageId))
+                .map((m) => ({
+                    requestId: `message:${m.messageId}`,
+                    instructionVersion: turn.instructionVersion,
+                    messages: [m],
+                })),
+        ];
+    },
+});
+
+/** Original task identity survives worker restart; reading a terminal tail grants no progression authority. */
+export const nativeInvocation = internalQuery({
+    args: {
+        missionId: v.id("agentMissions"),
+        expectedGeneration: v.number(),
+        sessionId: v.id("piSessions"),
+        taskKey: v.string(),
+    },
+    returns: v.union(schema.doc("agentInvocations"), v.null()),
+    handler: async (ctx, args) => {
+        const mission = await ctx.db.get(args.missionId);
+        const session = await ctx.db.get(args.sessionId);
+        if (
+            !mission ||
+            session?.missionId !== mission._id ||
+            session.generation !== args.expectedGeneration ||
+            mission.generation !== args.expectedGeneration
+        )
+            throw executionError("pi_writer_fenced");
+        await requireDossierAuthority(ctx, mission.runId);
+        const invocation = await ctx.db
+            .query("agentInvocations")
+            .withIndex("by_run_and_task_key", (q) =>
+                q
+                    .eq("runId", mission.runId)
+                    .eq("taskKey", `${session._id}:${args.taskKey}`),
+            )
+            .unique();
+        if (invocation && invocation.missionId !== mission._id)
+            throw executionError("pi_task_mission_conflict");
+        return invocation;
+    },
+});
 
 /** A generation fence retires an already running wake; only pending jobs need cancellation. */
 export async function cancelPiWake(
@@ -36,7 +188,14 @@ export async function schedulePiMission(
         !mission ||
         mission.piRebinding ||
         mission.generation !== generation ||
-        ["completed", "cancelled", "blocked"].includes(mission.status)
+        (["completed", "cancelled", "blocked"].includes(mission.status) &&
+            !(
+                ["completed", "cancelled"].includes(mission.status) &&
+                needsNativeSettlement(
+                    mission,
+                    await sessionForMission(ctx, mission),
+                )
+            ))
     )
         return;
     if (
@@ -101,14 +260,32 @@ export const prepare = internalMutation({
             piWakeAt: undefined,
             piWakeToken: undefined,
         });
-        if (["completed", "cancelled", "blocked"].includes(mission.status))
-            return false;
-        try {
-            await requireMissionAuthority(
+        if ((await publicationControl(ctx))?.held) {
+            await schedulePiMission(
                 ctx,
                 mission._id,
                 args.expectedGeneration,
+                Date.now() + 5000,
             );
+            return false;
+        }
+        const session = await sessionForMission(ctx, mission);
+        const settling =
+            ["completed", "cancelled"].includes(mission.status) &&
+            needsNativeSettlement(mission, session);
+        if (
+            ["completed", "cancelled", "blocked"].includes(mission.status) &&
+            !settling
+        )
+            return false;
+        try {
+            if (settling) await requireDossierAuthority(ctx, mission.runId);
+            else
+                await requireMissionAuthority(
+                    ctx,
+                    mission._id,
+                    args.expectedGeneration,
+                );
         } catch (error) {
             const code = executionFailureCode(error);
             if (!code) throw error;
@@ -120,10 +297,6 @@ export const prepare = internalMutation({
             return false;
         }
         // A second scheduled action must wait for the admitted writer's lease to expire.
-        const session = await ctx.db
-            .query("piSessions")
-            .withIndex("by_mission", (q) => q.eq("missionId", mission._id))
-            .unique();
         if (
             session &&
             session.generation === args.expectedGeneration &&
@@ -160,14 +333,28 @@ export const prepare = internalMutation({
 export const state = internalQuery({
     args: { missionId: v.id("agentMissions"), expectedGeneration: v.number() },
     returns: schema.doc("agentMissions"),
-    handler: async (ctx, args) =>
-        (
+    handler: async (ctx, args) => {
+        const mission = await ctx.db.get(args.missionId);
+        if (
+            mission &&
+            mission.generation === args.expectedGeneration &&
+            ["completed", "cancelled"].includes(mission.status) &&
+            needsNativeSettlement(
+                mission,
+                await sessionForMission(ctx, mission),
+            )
+        ) {
+            await requireDossierAuthority(ctx, mission.runId);
+            return mission;
+        }
+        return (
             await requireMissionAuthority(
                 ctx,
                 args.missionId,
                 args.expectedGeneration,
             )
-        ).mission,
+        ).mission;
+    },
 });
 
 export const operation = internalQuery({
@@ -242,26 +429,30 @@ export const closeWorker = internalMutation({
         writer: v.string(),
         at: v.optional(v.number()),
         error: v.optional(v.string()),
+        nativeSettled: v.optional(v.boolean()),
     },
     returns: v.null(),
     handler: async (ctx, args) => {
         const mission = await ctx.db.get(args.missionId);
-        const session = await ctx.db
-            .query("piSessions")
-            .withIndex("by_mission", (q) => q.eq("missionId", args.missionId))
-            .unique();
+        const session = mission ? await sessionForMission(ctx, mission) : null;
         if (
             !mission ||
             (mission.piActiveWriter !== undefined
                 ? mission.piActiveWriter !== args.writer
                 : session?.writer !== args.writer) ||
             (session &&
-                (session.generation !== args.expectedGeneration ||
+                (session.missionId !== args.missionId ||
+                    session.generation !== args.expectedGeneration ||
                     session.writer !== args.writer))
         )
             return null;
         if (session)
-            await ctx.db.patch(session._id, { leaseUntil: Date.now() });
+            await ctx.db.patch(session._id, {
+                leaseUntil: Date.now(),
+                ...(session.conversationId && args.nativeSettled && !args.error
+                    ? { settledSequence: session.sequence }
+                    : {}),
+            });
         if (mission.generation !== args.expectedGeneration) return null;
         let code = args.error;
         if (code === "generation_backend_interrupted") {
@@ -275,6 +466,13 @@ export const closeWorker = internalMutation({
                   : "execution_interrupted";
         }
         if (code) await recordWorkerFailure(ctx, mission, code);
+        const storageExhausted =
+            code === "pi_storage_capacity" || code === "pi_commit_capacity";
+        if (session?.conversationId && code && storageExhausted)
+            await ctx.db.patch(session.conversationId, {
+                queuePaused: true,
+                admissionFailure: { code },
+            });
         if (mission.piWakeId) await cancelPiWake(ctx, mission.piWakeId);
         await ctx.db.patch(mission._id, {
             piWakeId: undefined,
@@ -290,10 +488,28 @@ export const closeWorker = internalMutation({
                 args.expectedGeneration,
                 Math.min(nextAt, mission.piWakeAt ?? nextAt),
             );
+        if (
+            session?.conversationId &&
+            !args.nativeSettled &&
+            !storageExhausted &&
+            ["completed", "cancelled"].includes(mission.status)
+        )
+            await schedulePiMission(
+                ctx,
+                mission._id,
+                args.expectedGeneration,
+                Date.now() + 1000,
+            );
         if (mission.parentRequestId)
             await ctx.runMutation(internal.execution.handoffs.finishChild, {
                 missionId: mission._id,
             });
+        if (session?.conversationId && args.nativeSettled && !args.error)
+            await ctx.scheduler.runAfter(
+                0,
+                internal.execution.conversations.pumpWorkbench,
+                { runId: mission.runId },
+            );
         return null;
     },
 });
@@ -402,6 +618,7 @@ export const publicationState = internalQuery({
     returns: v.object({
         completed: v.boolean(),
         staleInstructions: v.boolean(),
+        publishedText: v.optional(v.string()),
     }),
     handler: async (ctx, args) => {
         const mission = await ctx.db.get(args.missionId);
@@ -416,6 +633,16 @@ export const publicationState = internalQuery({
             : null;
         return {
             completed: mission.status === "completed",
+            ...(mission.status === "completed" &&
+            "result" in mission &&
+            mission.result
+                ? {
+                      publishedText: getAgentDefinition(
+                          mission.definitionId,
+                          mission.definitionVersion,
+                      ).conversationReply?.(mission.result),
+                  }
+                : {}),
             staleInstructions:
                 !!turn &&
                 turn.status === "active" &&

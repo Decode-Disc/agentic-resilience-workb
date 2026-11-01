@@ -1,23 +1,35 @@
-import { internal } from "@convex/_generated/api";
+import { api, internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
     internalMutation,
+    mutation,
     type QueryCtx,
     query,
 } from "@convex/_generated/server";
 import { mergeRunCompanyMetadata } from "@convex/domain/companyMetadata";
+import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { preparationFailureCode } from "@convex/domain/sourcePreparationAuthority";
 import { supportsResearchControl } from "@convex/domain/transitions";
 import { companySnapshotValidator } from "@convex/domain/validators";
 import {
+    explicitResearchControl,
+    workbenchCommand,
+    workbenchCommandOutcome,
+} from "@convex/domain/workbenchContracts";
+import {
     requireDossierAuthority,
     requireMissionAuthority,
 } from "@convex/execution/authority";
-import { requireInstructionVersion } from "@convex/execution/conversations";
-import { executionError } from "@convex/execution/errors";
+import {
+    recordControlExchange,
+    requireConversationRequestKey,
+    requireInstructionVersion,
+} from "@convex/execution/conversations";
+import { executionError, executionFailureCode } from "@convex/execution/errors";
 import { retainOperationEffect } from "@convex/execution/operations";
 import {
     pauseResearch,
+    researchControlConfirmation,
     resumeResearch,
 } from "@convex/execution/researchControl";
 import { readConversationMessages } from "@convex/integrations/agentStorage";
@@ -29,7 +41,149 @@ import {
     paginationOptsValidator,
     paginationResultValidator,
 } from "convex/server";
-import { v } from "convex/values";
+import { type Infer, v } from "convex/values";
+
+const commandResult = v.object({
+    messageId: v.id("agentMessageDeliveries"),
+    confirmationMessageId: v.id("agentMessageDeliveries"),
+    outcome: workbenchCommandOutcome,
+    text: v.string(),
+});
+
+/** Explicit controls share button authorization/effects; free-text submission is unchanged. */
+export const command = mutation({
+    args: {
+        runId: v.id("researchRuns"),
+        requestKey: v.string(),
+        command: workbenchCommand,
+        expectedGeneration: v.number(),
+    },
+    returns: commandResult,
+    handler: async (ctx, args): Promise<Infer<typeof commandResult>> => {
+        const { run } = await requireWorkspaceRun(ctx, args.runId);
+        await requireDossierAuthority(ctx, run._id);
+        requireConversationRequestKey(args.requestKey);
+        if (
+            !Number.isSafeInteger(args.expectedGeneration) ||
+            args.expectedGeneration < 1
+        )
+            throw executionError("stale_execution");
+        const conversation = await ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", run._id))
+            .unique();
+        if (
+            conversation?.definitionId !== "workbench_v1" ||
+            conversation.definitionVersion !== 2
+        )
+            throw executionError("native_conversation_required");
+        const contentHash = sha256Hex(
+            stableStringify({
+                command: args.command,
+                expectedGeneration: args.expectedGeneration,
+            }),
+        );
+        const previous = await ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_run_and_key", (q) =>
+                q.eq("runId", run._id).eq("requestKey", args.requestKey),
+            )
+            .unique();
+        if (previous) {
+            if (
+                !previous.controlCommand ||
+                previous.contentHash !== contentHash
+            )
+                throw executionError("message_identity_conflict");
+            const confirmation = await ctx.db.get(
+                previous.controlCommand.confirmationMessageId,
+            );
+            if (
+                !confirmation ||
+                confirmation.conversationId !== conversation._id
+            )
+                throw executionError("conversation_message_unavailable");
+            const [text] = await readConversationMessages(
+                ctx,
+                conversation.storageRef,
+                [confirmation.storageMessageRef],
+            );
+            if (text === undefined)
+                throw executionError("conversation_message_unavailable");
+            return {
+                messageId: previous._id,
+                confirmationMessageId: confirmation._id,
+                outcome: previous.controlCommand.outcome,
+                text,
+            };
+        }
+        const action = args.command === "/pause" ? "pause" : "resume";
+        let outcome: Infer<typeof workbenchCommandOutcome> = "refused";
+        let refusal: string | undefined;
+        if (run.executionGeneration !== args.expectedGeneration)
+            refusal = "stale_execution";
+        else if (run.lifecycleState !== "framing") {
+            if (
+                (action === "pause" &&
+                    (run.researchPauseRequested ||
+                        (run.executionStatus === "paused" &&
+                            run.pauseReason === "analyst"))) ||
+                (action === "resume" &&
+                    run.executionStatus === "running" &&
+                    !run.researchPauseRequested)
+            )
+                outcome = "unchanged";
+            else
+                try {
+                    await ctx.runMutation(
+                        action === "pause"
+                            ? api.execution.researchControl.pause
+                            : api.execution.researchControl.resume,
+                        {
+                            runId: run._id,
+                            expectedGeneration: args.expectedGeneration,
+                        },
+                    );
+                    outcome = "applied";
+                } catch (error) {
+                    const code = executionFailureCode(error);
+                    if (
+                        !code ||
+                        ![
+                            "research_control_not_supported",
+                            "stale_execution",
+                            "human_prerequisite_required",
+                            "execution_slot_unavailable",
+                        ].includes(code)
+                    )
+                        throw error;
+                    refusal = code;
+                }
+        }
+        const current = await ctx.db.get(run._id);
+        if (!current) throw executionError("run_unavailable");
+        const text =
+            refusal === "stale_execution"
+                ? "Research changed while this command was submitted. Check the current state and try again."
+                : refusal === "execution_slot_unavailable"
+                  ? "Another research dossier is running. Pause it before resuming this one."
+                  : outcome === "unchanged" && action === "resume"
+                    ? "Research is already running."
+                    : researchControlConfirmation(
+                          action,
+                          outcome !== "refused",
+                          current,
+                      );
+        return recordControlExchange(ctx, conversation, {
+            requestKey: args.requestKey,
+            contentHash,
+            name: args.command,
+            expectedGeneration: args.expectedGeneration,
+            outcome,
+            text,
+        });
+    },
+});
 
 const operationView = v.object({
     id: v.id("agentOperationRequests"),
@@ -377,6 +531,12 @@ export const performInstruction = internalMutation({
         )
             throw executionError("instruction_not_authorized");
         const input = request.input;
+        if (
+            input.kind === "transmit_source_request" &&
+            request.operationVersion !== 1 &&
+            input.coverageRole === undefined
+        )
+            throw executionError("source_request_target_required");
         const message = await ctx.db.get(input.messageId);
         const conversation = message
             ? await ctx.db.get(message.conversationId)
@@ -405,16 +565,7 @@ export const performInstruction = internalMutation({
                 conversation.storageRef,
                 [message.storageMessageRef],
             );
-            const normalized = text
-                ?.trim()
-                .toLowerCase()
-                .replace(/[.!]+$/g, "")
-                .replace(/\s+/g, " ");
-            const allowed =
-                input.action === "pause"
-                    ? /^(please )?(pause|suspend|stop) (the |my |this )?research$|^(mets la recherche en pause|suspends la recherche)$/
-                    : /^(please )?(resume|continue) (the |my |this )?research$|^(reprends la recherche|reprendre la recherche)$/;
-            if (!normalized || !allowed.test(normalized))
+            if (!text || explicitResearchControl(text) !== input.action)
                 throw executionError("explicit_research_intent_required");
             const generation = await (input.action === "pause"
                 ? pauseResearch
@@ -468,7 +619,7 @@ export const performInstruction = internalMutation({
             messageId: message._id,
             interpretedNeed: input.interpretedNeed,
             framingRevisionId: run.fixedFramingRevisionId,
-            coverageRole: input.coverageRole,
+            coverageRole: input.coverageRole ?? undefined,
             status,
             outcome,
             createdAt: Date.now(),

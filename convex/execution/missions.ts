@@ -40,7 +40,18 @@ export const start = internalMutation({
     },
     returns: v.id("agentMissions"),
     handler: async (ctx, args) => {
-        const definition = getAgentDefinition(args.definitionId);
+        const conversationTurn = args.conversationTurnId
+            ? await ctx.db.get(args.conversationTurnId)
+            : null;
+        const conversation = conversationTurn
+            ? await ctx.db.get(conversationTurn.conversationId)
+            : null;
+        const definition = getAgentDefinition(
+            args.definitionId,
+            conversation?.definitionId === args.definitionId
+                ? (conversation.definitionVersion ?? 1)
+                : 1,
+        );
         const executionScope = definition.executionScope ?? "research";
         const { run, visitor } =
             executionScope === "conversation"

@@ -35,3 +35,14 @@ test("a research pause during documentary preparation is visible independently o
         ),
     ).toBe("paused");
 });
+
+test("a full conversation journal explains preservation without inviting a futile new request", async () => {
+    const { workbenchFailureCopy } = await import(
+        "@/lib/presentation/workbench"
+    );
+    const copy = workbenchFailureCopy("pi_storage_capacity");
+    expect(copy).toContain("conversation");
+    expect(copy).toContain("remain available");
+    expect(copy).not.toMatch(/send.*message|narrower request/i);
+    expect(copy).not.toContain("pi_storage_capacity");
+});

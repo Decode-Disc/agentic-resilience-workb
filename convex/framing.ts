@@ -7,10 +7,12 @@ import {
     query,
 } from "@convex/_generated/server";
 import { framingContentValidator } from "@convex/domain/framingContracts";
+import { requireFramingEditAuthority } from "@convex/domain/framingEditAuthority";
 import { MAX_RESEARCH_PLAN_QUESTIONS } from "@convex/domain/researchPlan";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { readPreparationConcurrency } from "@convex/domain/sourcePreparationAuthority";
 import { coveragePresetValidator } from "@convex/domain/validators";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import {
     requireDossierAuthority,
     requireMissionAuthority,
@@ -325,6 +327,14 @@ export const applyFromWorkbench = internalMutation({
                 throw executionError("operation_result_conflict");
             return value.revision;
         }
+        if (
+            getAgentDefinition(mission.definitionId, mission.definitionVersion)
+                .nativeConversation
+        )
+            await requireFramingEditAuthority(ctx, mission, {
+                messageId: request.input.messageId,
+                proposed: request.input.content,
+            });
         const revision = await saveFraming(
             ctx,
             {

@@ -1,0 +1,142 @@
+{
+  "node": "v24.18.0",
+  "results": [
+    {
+      "workload": "admission",
+      "sources": 1,
+      "messages": 1,
+      "milliseconds": {
+        "samples": 7,
+        "median": 20.149179000000004,
+        "p95": 40.85814399999981
+      },
+      "captureQueries": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "workload": "admission",
+      "sources": 60,
+      "messages": 1,
+      "milliseconds": {
+        "samples": 7,
+        "median": 89.68619899999976,
+        "p95": 125.68889500000114
+      },
+      "captureQueries": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "workload": "replay",
+      "commits": 128,
+      "bytes": 1054817,
+      "milliseconds": {
+        "samples": 7,
+        "median": 107.43791099998634,
+        "p95": 863.1307079999824
+      },
+      "heapDeltaBytes": {
+        "samples": 7,
+        "median": 1266096,
+        "p95": 1637080
+      },
+      "scans": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "renewals": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "workload": "replay",
+      "commits": 1024,
+      "bytes": 8497938,
+      "milliseconds": {
+        "samples": 7,
+        "median": 624.8941360000172,
+        "p95": 1323.9638679999625
+      },
+      "heapDeltaBytes": {
+        "samples": 7,
+        "median": 11570648,
+        "p95": 12078008
+      },
+      "scans": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      "renewals": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "workload": "replay",
+      "commits": 1024,
+      "bytes": 33365022,
+      "milliseconds": {
+        "samples": 7,
+        "median": 796.0343570000259,
+        "p95": 2037.5944050000398
+      },
+      "heapDeltaBytes": {
+        "samples": 7,
+        "median": 34205872,
+        "p95": 38533096
+      },
+      "scans": [
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16
+      ],
+      "renewals": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

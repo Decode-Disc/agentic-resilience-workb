@@ -69,6 +69,8 @@ export function workbenchTurn(work: Work): ConversationTurnSnapshot {
     };
 }
 export function workbenchFailureCopy(code?: string) {
+    if (code === "pi_storage_capacity" || code === "pi_commit_capacity")
+        return "This conversation has reached its storage limit. Your messages and recorded work remain available in the dossier.";
     if (
         code === "missing_authorized_route" ||
         code === "configuration_unavailable" ||

@@ -1,0 +1,1571 @@
+
+> agentic-resilience-workbench@ test /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> TMPDIR=/tmp TEMP=/tmp TMP=/tmp vitest run --maxWorkers=2
+
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+ ❯ src/__tests__/components/workspace/conversation.test.tsx (5 tests | 1 failed) 9423ms
+   × opens the activity trial from framing tools and keeps it available to restart after completion 3565ms
+ ❯ src/__tests__/routes/index.test.tsx (6 tests | 1 failed) 5951ms
+     × introduces the research question with an illustrative evidence matrix 2099ms
+ ❯ src/__tests__/config/local-convex-sync.test.ts (17 tests | 5 failed) 8193ms
+   × publishes to the verified existing backend without changing environment files or exposing credentials 475ms
+   × propagates publication failure, cleans credentials and preserves the existing backend 504ms
+   × lets the publisher complete typechecking beyond the former two-minute budget 456ms
+   × reports the publisher timeout, cleans credentials and leaves the backend running 488ms
+   × cleans credentials on cancellation without stopping the backend 2118ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/config/local-convex-sync.test.ts > publishes to the verified existing backend without changing environment files or exposing credentials
+AssertionError: target: local (local-fixture, http://127.0.0.1:38873)
+The publication guard is unavailable. Initialize it only on a verified quiet backend; publication was refused.
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ src/__tests__/config/local-convex-sync.test.ts:175:42
+    175| }
+    176|
+    177| it("publishes to the verified existing backend without changing enviro…
+       |                                       ^
+    178|     const { root, url, state, env, config } = await fixture();
+    179|     const result = await run(root, ["--url", url], {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  src/__tests__/config/local-convex-sync.test.ts > propagates publication failure, cleans credentials and preserves the existing backend
+AssertionError: expected 1 to be 17 // Object.is equality
+
+- Expected
++ Received
+
+- 17
++ 1
+
+ ❯ src/__tests__/config/local-convex-sync.test.ts:208:27
+    206|     expect(state.requests).toBe(5);
+    207|     expect(state.held).toBe(false);
+    208|     expect(await (await fetch(`${url}/instance_name`)).text()).toBe(
+       |                           ^
+    209|         "local-fixture",
+    210|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  src/__tests__/config/local-convex-sync.test.ts > lets the publisher complete typechecking beyond the former two-minute budget
+AssertionError: target: local (local-fixture, http://127.0.0.1:33061)
+The publication guard is unavailable. Initialize it only on a verified quiet backend; publication was refused.
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ src/__tests__/config/local-convex-sync.test.ts:247:42
+    246| }
+    247|
+    248| it("lets the publisher complete typechecking beyond the former two-min…
+       |                                         ^
+    249|     const { root, url, env, config } = await fixture();
+    250|     writeFileSync(join(root, "publication-delay"), "1800");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  src/__tests__/config/local-convex-sync.test.ts > reports the publisher timeout, cleans credentials and leaves the backend running
+AssertionError: expected 'target: local (local-fixture, http://…' to contain 'Local publication timed out'
+
+- Expected
++ Received
+
+- Local publication timed out
++ target: local (local-fixture, http://127.0.0.1:39013)
++ The publication guard is unavailable. Initialize it only on a verified quiet backend; publication was refused.
++
+
+ ❯ src/__tests__/config/local-convex-sync.test.ts:269:27
+    267| }, 10_000);
+    268|
+    269| it("reports the publisher timeout, cleans credentials and leaves the b…
+       |                           ^
+    270|     const { root, url, env, config } = await fixture();
+    271|     writeFileSync(join(root, "pause-publication"), "yes");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  src/__tests__/config/local-convex-sync.test.ts > cleans credentials on cancellation without stopping the backend
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/__tests__/config/local-convex-sync.test.ts:399:36
+    398|         },
+    399|     );
+    400|     const exit = new Promise<number | null>((done, fail) => {
+       |                             ^
+    401|         child.once("error", fail);
+    402|         child.once("exit", done);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  src/__tests__/routes/index.test.tsx > IndexPage > introduces the research question with an illustrative evidence matrix
+TestingLibraryElementError: Unable to find an accessible element with the role "heading" and name "Evidence matrix"
+
+Here are the accessible roles:
+
+  banner:
+
+  Name "":
+  [36m<header[39m
+    [33mclass[39m=[32m"fixed top-4 left-1/2 z-50 w-[min(calc(100%-1.5rem),64rem)] -translate-x-1/2"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<header[39m
+    [33mclass[39m=[32m"_header_512046"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  img:
+
+  Name "Agentic Resilience Workbench":
+  [36m<span[39m
+    [33maria-label[39m=[32m"Agentic Resilience Workbench"[39m
+    [33mclass[39m=[32m"grid size-8 place-items-center rounded-full bg-primary text-primary-foreground"[39m
+    [33mrole[39m=[32m"img"[39m
+  [36m/>[39m
+
+  Name "Agentic Resilience Workbench":
+  [36m<img[39m
+    [33malt[39m=[32m"Agentic Resilience Workbench"[39m
+    [33mclass[39m=[32m"size-8 rounded-full"[39m
+    [33msrc[39m=[32m"/src/assets/logos/logo-bgdark.png"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  navigation:
+
+  Name "Project context":
+  [36m<nav[39m
+    [33maria-label[39m=[32m"Project context"[39m
+    [33mclass[39m=[32m"group/navigation-menu max-w-max flex-1 items-center justify-center hidden lg:flex"[39m
+    [33mdata-slot[39m=[32m"navigation-menu"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  list:
+
+  Name "":
+  [36m<ul[39m
+    [33mclass[39m=[32m"flex flex-1 list-none items-center justify-center gap-1"[39m
+    [33mdata-slot[39m=[32m"navigation-menu-list"[39m
+  [36m/>[39m
+
+  Name "Research capabilities":
+  [36m<ul[39m
+    [33maria-label[39m=[32m"Research capabilities"[39m
+    [33mclass[39m=[32m"grid w-full list-none gap-px overflow-hidden rounded-2xl border border-border/70 bg-border/70 shadow-soft motion-reduce:!transform-none motion-reduce:!opacity-100 sm:grid-cols-2 xl:grid-cols-3"[39m
+    [33mstyle[39m=[32m"opacity: 1; transform: none;"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  listitem:
+
+  Name "":
+  [36m<li[39m
+    [33mdata-slot[39m=[32m"navigation-menu-item"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<li[39m
+    [33mdata-slot[39m=[32m"navigation-menu-item"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<li[39m
+    [33mdata-slot[39m=[32m"navigation-menu-item"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<li[39m
+    [33mclass[39m=[32m"bg-card/10 p-5 backdrop-blur-md"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<li[39m
+    [33mclass[39m=[32m"bg-card/10 p-5 backdrop-blur-md"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<li[39m
+    [33mclass[39m=[32m"bg-card/10 p-5 backdrop-blur-md"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<li[39m
+    [33mclass[39m=[32m"bg-card/10 p-5 backdrop-blur-md"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<li[39m
+    [33mclass[39m=[32m"bg-card/10 p-5 backdrop-blur-md"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<li[39m
+    [33mclass[39m=[32m"bg-card/10 p-5 backdrop-blur-md"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Value at stake":
+  [36m<button[39m
+    [33maria-disabled[39m=[32m"false"[39m
+    [33maria-expanded[39m=[32m"false"[39m
+    [33mclass[39m=[32m"group inline-flex h-9 items-center justify-center rounded-md px-3 font-medium text-muted-foreground outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/30 hover:bg-brand-purple/8 text-base hover:text-brand-purple data-popup-open:bg-brand-purple/10 data-popup-open:text-brand-purple"[39m
+    [33mdata-base-ui-navigation-menu-trigger[39m=[32m""[39m
+    [33mdata-slot[39m=[32m"navigation-menu-trigger"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Test the thesis":
+  [36m<button[39m
+    [33maria-disabled[39m=[32m"false"[39m
+    [33maria-expanded[39m=[32m"false"[39m
+    [33mclass[39m=[32m"group inline-flex h-9 items-center justify-center rounded-md px-3 font-medium text-muted-foreground outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/30 hover:bg-brand-purple/8 text-base hover:text-brand-purple data-popup-open:bg-brand-purple/10 data-popup-open:text-brand-purple"[39m
+    [33mdata-base-ui-navigation-menu-trigger[39m=[32m""[39m
+    [33mdata-slot[39m=[32m"navigation-menu-trigger"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Your judgment":
+  [36m<button[39m
+    [33maria-disabled[39m=[32m"false"[39m
+    [33maria-expanded[39m=[32m"false"[39m
+    [33mclass[39m=[32m"group inline-flex h-9 items-center justify-center rounded-md px-3 font-medium text-muted-foreground outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/30 hover:bg-brand-purple/8 text-base hover:text-brand-purple data-popup-open:bg-brand-purple/10 data-popup-open:text-brand-purple"[39m
+    [33mdata-base-ui-navigation-menu-trigger[39m=[32m""[39m
+    [33mdata-slot[39m=[32m"navigation-menu-trigger"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Open project menu":
+  [36m<button[39m
+    [33maria-expanded[39m=[32m"false"[39m
+    [33maria-haspopup[39m=[32m"dialog"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50 size-8 lg:hidden"[39m
+    [33mdata-base-ui-click-trigger[39m=[32m""[39m
+    [33mdata-slot[39m=[32m"sheet-trigger"[39m
+    [33mid[39m=[32m"base-ui-_r_8_"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Q1 Does ExampleCo control coordination?":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Q1 Does ExampleCo control coordination?"[39m
+    [33maria-pressed[39m=[32m"true"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/80 h-9 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 _qcard_cf24c0 _sel_cf24c0"[39m
+    [33mdata-slot[39m=[32m"button"[39m
+    [33mstyle[39m=[32m"--question-selection: 1;"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Q2 Is its operational context durable?":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Q2 Is its operational context durable?"[39m
+    [33maria-pressed[39m=[32m"false"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/80 h-9 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 _qcard_cf24c0"[39m
+    [33mdata-slot[39m=[32m"button"[39m
+    [33mstyle[39m=[32m"--question-selection: 0;"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Q3 Could core platforms replace it?":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Q3 Could core platforms replace it?"[39m
+    [33maria-pressed[39m=[32m"false"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/80 h-9 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 _qcard_cf24c0"[39m
+    [33mdata-slot[39m=[32m"button"[39m
+    [33mstyle[39m=[32m"--question-selection: 0;"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Q4 Could an agent bypass it?":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Q4 Could an agent bypass it?"[39m
+    [33maria-pressed[39m=[32m"false"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/80 h-9 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 _qcard_cf24c0"[39m
+    [33mdata-slot[39m=[32m"button"[39m
+    [33mstyle[39m=[32m"--question-selection: 0;"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "A-014 · Q1 · Supports":
+  [36m<button[39m
+    [33maria-expanded[39m=[32m"false"[39m
+    [33maria-haspopup[39m=[32m"dialog"[39m
+    [33maria-label[39m=[32m"A-014 · Q1 · Supports"[39m
+    [33maria-pressed[39m=[32m"true"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/80 h-9 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 _use_cf24c0"[39m
+    [33mdata-base-ui-click-trigger[39m=[32m""[39m
+    [33mdata-slot[39m=[32m"popover-trigger"[39m
+    [33mdata-use[39m=[32m"supports"[39m
+    [33mid[39m=[32m"base-ui-_r_c_"[39m
+    [33mstyle[39m=[32m"--use-selection: 1;"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "A-014 · Q2 · Context":
+  [36m<button[39m
+    [33maria-expanded[39m=[32m"false"[39m
+    [33maria-haspopup[39m=[32m"dialog"[39m
+    [33maria-label[39m=[32m"A-014 · Q2 · Context"[39m
+    [33maria-pressed[39m=[32m"false"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/80 h-9 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 _use_cf24c0"[39m
+    [33mdata-base-ui-click-trigger[39m=[32m""[39m
+    [33mdata-slot[39m=[32m"popover-trigger"[39m
+    [33mdata-use[39m=[32m"context"[39m
+    [33mid[39m=[32m"base-ui-_r_e_"[39m
+    [33mstyle[39m=[32m"--use-selection: 0;"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "A-014 · Q3 · Context":
+  [36m<button[39m
+    [33maria-expanded[39m=[32m"false"[39m
+    [33maria-haspopup[39m=[32m"dialog"[39m
+    [33maria-label[39m=[32m"A-014 · Q3 · Context"[39m
+    [33maria-pressed[39m=[32m"false"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/80 h-9 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 _use_cf24c0"[39m
+    [33mdata-base-ui-click-trigger[39m=[32m""[39m
+    [33mdata-slot[39m=[32m"popover-trigger"[39m
+    [33mdata-use[39m=[32m"context"[39m
+    [33mid[39m=[32m"base-ui-_r_g_"[39m
+    [33mstyle[39m=[32m"--use-selection: 0;"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "A-021 · Q1 · Opposes":
+  [36m<button[39m
+    [33maria-expanded[39m=[32m"false"[39m
+    [33maria-haspopup[39m=[32m"dialog"[39m
+    [33maria-label[39m=[32m"A-021 · Q1 · Opposes"[39m
+    [33maria-pressed[39m=[32m"false"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/80 h-9 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 _use_cf24c0"[39m
+    [33mdata-base-ui-click-trigger[39m=[32m""[39m
+    [33mdata-slot[39m=[32m"popover-trigger"[39m
+    [33mdata-use[39m=[32m"opposes"[39m
+    [33mid[39m=[32m"base-ui-_r_i_"[39m
+    [33mstyle[39m=[32m"--use-selection: 0;"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "A-021 · Q3 · Supports":
+  [36m<button[39m
+    [33maria-expanded[39m=[32m"false"[39m
+    [33maria-haspopup[39m=[32m"dialog"[39m
+    [33maria-label[39m=[32m"A-021 · Q3 · Supports"[39m
+    [33maria-pressed[39m=[32m"false"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/80 h-9 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 _use_cf24c0"[39m
+    [33mdata-base-ui-click-trigger[39m=[32m""[39m
+    [33mdata-slot[39m=[32m"popover-trigger"[39m
+    [33mdata-use[39m=[32m"supports"[39m
+    [33mid[39m=[32m"base-ui-_r_k_"[39m
+    [33mstyle[39m=[32m"--use-selection: 0;"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "A-021 · Q4 · Context":
+  [36m<button[39m
+    [33maria-expanded[39m=[32m"false"[39m
+    [33maria-haspopup[39m=[32m"dialog"[39m
+    [33maria-label[39m=[32m"A-021 · Q4 · Context"[39m
+    [33maria-pressed[39m=[32m"false"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/80 h-9 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 _use_cf24c0"[39m
+    [33mdata-base-ui-click-trigger[39m=[32m""[39m
+    [33mdata-slot[39m=[32m"popover-trigger"[39m
+    [33mdata-use[39m=[32m"context"[39m
+    [33mid[39m=[32m"base-ui-_r_m_"[39m
+    [33mstyle[39m=[32m"--use-selection: 0;"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "A-027 · Q1 · Supports":
+  [36m<button[39m
+    [33maria-expanded[39m=[32m"false"[39m
+    [33maria-haspopup[39m=[32m"dialog"[39m
+    [33maria-label[39m=[32m"A-027 · Q1 · Supports"[39m
+    [33maria-pressed[39m=[32m"false"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/80 h-9 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 _use_cf24c0"[39m
+    [33mdata-base-ui-click-trigger[39m=[32m""[39m
+    [33mdata-slot[39m=[32m"popover-trigger"[39m
+    [33mdata-use[39m=[32m"supports"[39m
+    [33mid[39m=[32m"base-ui-_r_o_"[39m
+    [33mstyle[39m=[32m"--use-selection: 0;"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "A-027 · Q2 · Supports":
+  [36m<button[39m
+    [33maria-expanded[39m=[32m"false"[39m
+    [33maria-haspopup[39m=[32m"dialog"[39m
+    [33maria-label[39m=[32m"A-027 · Q2 · Supports"[39m
+    [33maria-pressed[39m=[32m"false"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/80 h-9 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 _use_cf24c0"[39m
+    [33mdata-base-ui-click-trigger[39m=[32m""[39m
+    [33mdata-slot[39m=[32m"popover-trigger"[39m
+    [33mdata-use[39m=[32m"supports"[39m
+    [33mid[39m=[32m"base-ui-_r_q_"[39m
+    [33mstyle[39m=[32m"--use-selection: 0;"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "A-033 · Q1 · Opposes":
+  [36m<button[39m
+    [33maria-expanded[39m=[32m"false"[39m
+    [33maria-haspopup[39m=[32m"dialog"[39m
+    [33maria-label[39m=[32m"A-033 · Q1 · Opposes"[39m
+    [33maria-pressed[39m=[32m"false"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/80 h-9 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 _use_cf24c0"[39m
+    [33mdata-base-ui-click-trigger[39m=[32m""[39m
+    [33mdata-slot[39m=[32m"popover-trigger"[39m
+    [33mdata-use[39m=[32m"opposes"[39m
+    [33mid[39m=[32m"base-ui-_r_s_"[39m
+    [33mstyle[39m=[32m"--use-selection: 0;"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "A-033 · Q4 · Supports":
+  [36m<button[39m
+    [33maria-expanded[39m=[32m"false"[39m
+    [33maria-haspopup[39m=[32m"dialog"[39m
+    [33maria-label[39m=[32m"A-033 · Q4 · Supports"[39m
+    [33maria-pressed[39m=[32m"false"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/80 h-9 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 _use_cf24c0"[39m
+    [33mdata-base-ui-click-trigger[39m=[32m""[39m
+    [33mdata-slot[39m=[32m"popover-trigger"[39m
+    [33mdata-use[39m=[32m"supports"[39m
+    [33mid[39m=[32m"base-ui-_r_u_"[39m
+    [33mstyle[39m=[32m"--use-selection: 0;"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "A-040 · Q1 · Context":
+  [36m<button[39m
+    [33maria-expanded[39m=[32m"false"[39m
+    [33maria-haspopup[39m=[32m"dialog"[39m
+    [33maria-label[39m=[32m"A-040 · Q1 · Context"[39m
+    [33maria-pressed[39m=[32m"false"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/80 h-9 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 _use_cf24c0"[39m
+    [33mdata-base-ui-click-trigger[39m=[32m""[39m
+    [33mdata-slot[39m=[32m"popover-trigger"[39m
+    [33mdata-use[39m=[32m"context"[39m
+    [33mid[39m=[32m"base-ui-_r_10_"[39m
+    [33mstyle[39m=[32m"--use-selection: 0;"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "A-040 · Q4 · Context":
+  [36m<button[39m
+    [33maria-expanded[39m=[32m"false"[39m
+    [33maria-haspopup[39m=[32m"dialog"[39m
+    [33maria-label[39m=[32m"A-040 · Q4 · Context"[39m
+    [33maria-pressed[39m=[32m"false"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/80 h-9 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 _use_cf24c0"[39m
+    [33mdata-base-ui-click-trigger[39m=[32m""[39m
+    [33mdata-slot[39m=[32m"popover-trigger"[39m
+    [33mdata-use[39m=[32m"context"[39m
+    [33mid[39m=[32m"base-ui-_r_12_"[39m
+    [33mstyle[39m=[32m"--use-selection: 0;"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  link:
+
+  Name "Open workbench":
+  [36m<a[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/80 h-11 gap-1.5 px-5 has-data-[icon=inline-end]:pr-3.5 has-data-[icon=inline-start]:pl-3.5 text-base"[39m
+    [33mhref[39m=[32m"/workspace/start"[39m
+  [36m/>[39m
+
+  Name "Explore the workbench":
+  [36m<a[39m
+    [33maria-label[39m=[32m"Explore the workbench"[39m
+    [33mhref[39m=[32m"/workspace/start"[39m
+    [33mstyle[39m=[32m"position: absolute; top: 0px; left: 0px; width: 142px; height: 46px; background: transparent; border: medium; cursor: pointer; outline: none; z-index: 40; transform-style: preserve-3d; transform: translateZ(25px); transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.4s ease, height 0.4s ease; overflow: hidden; border-radius: 100px;"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  main:
+
+  Name "":
+  [36m<main[39m
+    [33mclass[39m=[32m"relative z-10 mx-auto flex w-full min-h-0 max-w-4xl flex-col items-center px-4 pb-10 pt-20 md:pt-30"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  region:
+
+  Name "Which advantages survive the agentic shift?":
+  [36m<section[39m
+    [33maria-labelledby[39m=[32m"index-title"[39m
+    [33mclass[39m=[32m"flex max-w-[40rem] xl:max-w-[50rem] flex-col gap-4 items-center text-center motion-reduce:transform-none! motion-reduce:opacity-100!"[39m
+    [33mstyle[39m=[32m"opacity: 0; transform: translateY(14px);"[39m
+  [36m/>[39m
+
+  Name "Evidence matrix preview":
+  [36m<section[39m
+    [33maria-label[39m=[32m"Evidence matrix preview"[39m
+    [33mclass[39m=[32m"mt-8 w-[min(72rem,calc(100vw-2rem))] motion-reduce:!transform-none motion-reduce:!opacity-100"[39m
+    [33mstyle[39m=[32m"opacity: 0; transform: translateY(18px);"[39m
+  [36m/>[39m
+
+  Name "Illustrative evidence matrix":
+  [36m<section[39m
+    [33maria-label[39m=[32m"Illustrative evidence matrix"[39m
+    [33mclass[39m=[32m"_scroller_512046"[39m
+  [36m/>[39m
+
+  Name "How it holds up":
+  [36m<section[39m
+    [33maria-label[39m=[32m"How it holds up"[39m
+    [33mclass[39m=[32m"mt-10 w-full scroll-mt-24"[39m
+    [33mid[39m=[32m"capabilities"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  heading:
+
+  Name "Which advantages survive the agentic shift?":
+  [36m<h1[39m
+    [33mclass[39m=[32m"text-5xl leading-[0.96] font-medium tracking-[-0.045em] text-balance sm:text-6xl lg:text-[4.4rem]"[39m
+    [33mid[39m=[32m"index-title"[39m
+  [36m/>[39m
+
+  Name "Which evidence bearson which question":
+  [36m<h2 />[39m
+
+  Name "See the business in context":
+  [36m<h3[39m
+    [33mclass[39m=[32m"mt-3 text-sm font-medium tracking-tight sm:min-h-10"[39m
+  [36m/>[39m
+
+  Name "Find the control points":
+  [36m<h3[39m
+    [33mclass[39m=[32m"mt-3 text-sm font-medium tracking-tight sm:min-h-10"[39m
+  [36m/>[39m
+
+  Name "Examine what agents could change":
+  [36m<h3[39m
+    [33mclass[39m=[32m"mt-3 text-sm font-medium tracking-tight sm:min-h-10"[39m
+  [36m/>[39m
+
+  Name "Confront competing interpretations":
+  [36m<h3[39m
+    [33mclass[39m=[32m"mt-3 text-sm font-medium tracking-tight sm:min-h-10"[39m
+  [36m/>[39m
+
+  Name "Surface the decisive unknowns":
+  [36m<h3[39m
+    [33mclass[39m=[32m"mt-3 text-sm font-medium tracking-tight sm:min-h-10"[39m
+  [36m/>[39m
+
+  Name "Connect evidence to economic consequences":
+  [36m<h3[39m
+    [33mclass[39m=[32m"mt-3 text-sm font-medium tracking-tight sm:min-h-10"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"max-w-lg text-lg leading-7 text-foreground/90"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-micro text-[10px]"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"_disclosure_512046"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-sm leading-5 text-muted-foreground"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-sm leading-5 text-muted-foreground"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-sm leading-5 text-muted-foreground"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-sm leading-5 text-muted-foreground"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-sm leading-5 text-muted-foreground"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-sm leading-5 text-muted-foreground"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-xs leading-5 text-muted-foreground"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  table:
+
+  Name "Evidence by question":
+  [36m<table[39m
+    [33maria-label[39m=[32m"Evidence by question"[39m
+    [33mclass[39m=[32m"wb-glass _box_cf24c0 _matrix_512046"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  rowgroup:
+
+  Name "":
+  [36m<thead />[39m
+
+  Name "":
+  [36m<tbody />[39m
+
+  --------------------------------------------------
+  row:
+
+  Name "Evidence Questions Source":
+  [36m<tr[39m
+    [33mclass[39m=[32m"_grid_cf24c0 _axes_cf24c0"[39m
+    [33mstyle[39m=[32m"grid-template-columns: minmax(260px,1fr) repeat(4,132px) 132px;"[39m
+  [36m/>[39m
+
+  Name "5 fictional assertionsExampleCo · Claims coordination Q1Does ExampleCo control coordination? Q2Is its operational context durable? Q3Could core platforms replace it? Q4Could an agent bypass it? Checked againstthe cited passage":
+  [36m<tr[39m
+    [33mclass[39m=[32m"_grid_cf24c0 _head_cf24c0"[39m
+    [33mstyle[39m=[32m"grid-template-columns: minmax(260px,1fr) repeat(4,132px) 132px;"[39m
+  [36m/>[39m
+
+  Name "FactA-014 · selected ExampleCo reports insurer-configurable workflows connecting insurers and repair facilities.Fictional annual report, p. 8 Supports Context Context Not used Verified":
+  [36m<tr[39m
+    [33mclass[39m=[32m"_grid_cf24c0 _row_cf24c0 _selectedRow_cf24c0"[39m
+    [33mstyle[39m=[32m"grid-template-columns: minmax(260px,1fr) repeat(4,132px) 132px; --row-selection: 1;"[39m
+  [36m/>[39m
+
+  Name "FactA-021 Insurers set assignment and routing through their own rules.Fictional annual report, pp. 8–9 Opposes Not used Supports Context Verified":
+  [36m<tr[39m
+    [33mclass[39m=[32m"_grid_cf24c0 _row_cf24c0"[39m
+    [33mstyle[39m=[32m"grid-template-columns: minmax(260px,1fr) repeat(4,132px) 132px; --row-selection: 0;"[39m
+  [36m/>[39m
+
+  Name "InferenceA-027 Participants rely on the shared workflow to exchange estimate data.Reasoned from fictional assertion A-014 Supports Supports Not used Not used Verified":
+  [36m<tr[39m
+    [33mclass[39m=[32m"_grid_cf24c0 _row_cf24c0"[39m
+    [33mstyle[39m=[32m"grid-template-columns: minmax(260px,1fr) repeat(4,132px) 132px; --row-selection: 0;"[39m
+  [36m/>[39m
+
+  Name "HypothesisA-033 An external agent could coordinate a claim, using ExampleCo only for specific tasks.Illustrative hypothesis · to be tested Opposes Not used Not used Supports Sources disagree":
+  [36m<tr[39m
+    [33mclass[39m=[32m"_grid_cf24c0 _row_cf24c0"[39m
+    [33mstyle[39m=[32m"grid-template-columns: minmax(260px,1fr) repeat(4,132px) 132px; --row-selection: 0;"[39m
+  [36m/>[39m
+
+  Name "UnknownA-040 Who can change the routing rules is not documented.Not established by the fictional passages Context Not used Not used Context Not established":
+  [36m<tr[39m
+    [33mclass[39m=[32m"_grid_cf24c0 _row_cf24c0"[39m
+    [33mstyle[39m=[32m"grid-template-columns: minmax(260px,1fr) repeat(4,132px) 132px; --row-selection: 0;"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  columnheader:
+
+  Name "Evidence":
+  [36m<th[39m
+    [33mscope[39m=[32m"col"[39m
+  [36m/>[39m
+
+  Name "Questions":
+  [36m<th[39m
+    [33mclass[39m=[32m"_questionAxis_cf24c0"[39m
+    [33mcolspan[39m=[32m"4"[39m
+    [33mscope[39m=[32m"colgroup"[39m
+    [33mstyle[39m=[32m"grid-column: span 4;"[39m
+  [36m/>[39m
+
+  Name "Source":
+  [36m<th[39m
+    [33mclass[39m=[32m"_sourceHeading_cf24c0"[39m
+    [33mscope[39m=[32m"col"[39m
+  [36m/>[39m
+
+  Name "5 fictional assertionsExampleCo · Claims coordination":
+  [36m<th[39m
+    [33mscope[39m=[32m"col"[39m
+    [33mstyle[39m=[32m"display: flex; flex-direction: column; gap: 6px; justify-content: flex-end;"[39m
+  [36m/>[39m
+
+  Name "Q1Does ExampleCo control coordination?":
+  [36m<th[39m
+    [33mscope[39m=[32m"col"[39m
+  [36m/>[39m
+
+  Name "Q2Is its operational context durable?":
+  [36m<th[39m
+    [33mscope[39m=[32m"col"[39m
+  [36m/>[39m
+
+  Name "Q3Could core platforms replace it?":
+  [36m<th[39m
+    [33mscope[39m=[32m"col"[39m
+  [36m/>[39m
+
+  Name "Q4Could an agent bypass it?":
+  [36m<th[39m
+    [33mscope[39m=[32m"col"[39m
+  [36m/>[39m
+
+  Name "Checked againstthe cited passage":
+  [36m<th[39m
+    [33mclass[39m=[32m"_sourceIntro_cf24c0"[39m
+    [33mscope[39m=[32m"col"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  rowheader:
+
+  Name "FactA-014 · selected ExampleCo reports insurer-configurable workflows connecting insurers and repair facilities.Fictional annual report, p. 8":
+  [36m<th[39m
+    [33mclass[39m=[32m"_ev_cf24c0"[39m
+    [33mscope[39m=[32m"row"[39m
+  [36m/>[39m
+
+  Name "FactA-021 Insurers set assignment and routing through their own rules.Fictional annual report, pp. 8–9":
+  [36m<th[39m
+    [33mclass[39m=[32m"_ev_cf24c0"[39m
+    [33mscope[39m=[32m"row"[39m
+  [36m/>[39m
+
+  Name "InferenceA-027 Participants rely on the shared workflow to exchange estimate data.Reasoned from fictional assertion A-014":
+  [36m<th[39m
+    [33mclass[39m=[32m"_ev_cf24c0"[39m
+    [33mscope[39m=[32m"row"[39m
+  [36m/>[39m
+
+  Name "HypothesisA-033 An external agent could coordinate a claim, using ExampleCo only for specific tasks.Illustrative hypothesis · to be tested":
+  [36m<th[39m
+    [33mclass[39m=[32m"_ev_cf24c0"[39m
+    [33mscope[39m=[32m"row"[39m
+  [36m/>[39m
+
+  Name "UnknownA-040 Who can change the routing rules is not documented.Not established by the fictional passages":
+  [36m<th[39m
+    [33mclass[39m=[32m"_ev_cf24c0"[39m
+    [33mscope[39m=[32m"row"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  cell:
+
+  Name "Supports":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 1;"[39m
+  [36m/>[39m
+
+  Name "Context":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 0;"[39m
+  [36m/>[39m
+
+  Name "Context":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 0;"[39m
+  [36m/>[39m
+
+  Name "Not used":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 0;"[39m
+  [36m/>[39m
+
+  Name "Verified":
+  [36m<td[39m
+    [33mclass[39m=[32m"_source_cf24c0"[39m
+    [33mdata-source-status[39m=[32m"verified"[39m
+  [36m/>[39m
+
+  Name "Opposes":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 1;"[39m
+  [36m/>[39m
+
+  Name "Not used":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 0;"[39m
+  [36m/>[39m
+
+  Name "Supports":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 0;"[39m
+  [36m/>[39m
+
+  Name "Context":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 0;"[39m
+  [36m/>[39m
+
+  Name "Verified":
+  [36m<td[39m
+    [33mclass[39m=[32m"_source_cf24c0"[39m
+    [33mdata-source-status[39m=[32m"verified"[39m
+  [36m/>[39m
+
+  Name "Supports":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 1;"[39m
+  [36m/>[39m
+
+  Name "Supports":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 0;"[39m
+  [36m/>[39m
+
+  Name "Not used":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 0;"[39m
+  [36m/>[39m
+
+  Name "Not used":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 0;"[39m
+  [36m/>[39m
+
+  Name "Verified":
+  [36m<td[39m
+    [33mclass[39m=[32m"_source_cf24c0"[39m
+    [33mdata-source-status[39m=[32m"verified"[39m
+  [36m/>[39m
+
+  Name "Opposes":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 1;"[39m
+  [36m/>[39m
+
+  Name "Not used":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 0;"[39m
+  [36m/>[39m
+
+  Name "Not used":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 0;"[39m
+  [36m/>[39m
+
+  Name "Supports":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 0;"[39m
+  [36m/>[39m
+
+  Name "Sources disagree":
+  [36m<td[39m
+    [33mclass[39m=[32m"_source_cf24c0"[39m
+    [33mdata-source-status[39m=[32m"disputed"[39m
+  [36m/>[39m
+
+  Name "Context":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 1;"[39m
+  [36m/>[39m
+
+  Name "Not used":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 0;"[39m
+  [36m/>[39m
+
+  Name "Not used":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 0;"[39m
+  [36m/>[39m
+
+  Name "Context":
+  [36m<td[39m
+    [33mclass[39m=[32m"_cell_cf24c0"[39m
+    [33mstyle[39m=[32m"--column-selection: 0;"[39m
+  [36m/>[39m
+
+  Name "Not established":
+  [36m<td[39m
+    [33mclass[39m=[32m"_source_cf24c0"[39m
+    [33mdata-source-status[39m=[32m"unestablished"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  contentinfo:
+
+  Name "":
+  [36m<footer[39m
+    [33mclass[39m=[32m"mt-14 w-full border-t border-border pt-6 pb-2 text-center"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"relative isolate min-h-screen overflow-x-clip bg-(image:--landing-gradient)"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"absolute inset-0 bg-[radial-gradient(circle_620px_at_50%_200px,rgba(103,37,235,0.35),transparent_70%)]"[39m
+      [36m/>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#94a3b81f_1px,transparent_1px),linear-gradient(to_bottom,#94a3b81f_1px,transparent_1px)] bg-[size:22px_22px] [mask-image:radial-gradient(ellipse_85%_55%_at_50%_15%,#000_75%,transparent_100%)] [-webkit-mask-image:radial-gradient(ellipse_85%_55%_at_50%_15%,#000_75%,transparent_100%)] [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat]"[39m
+      [36m/>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"fixed top-4 left-1/2 z-50 w-[min(calc(100%-1.5rem),64rem)] -translate-x-1/2"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex h-14 items-center justify-between gap-4 rounded-full border border-border/70 bg-card/30 px-3 shadow-floating backdrop-blur-xl sm:px-4"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex min-w-0 items-center gap-2.5"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"Agentic Resilience Workbench"[39m
+              [33mclass[39m=[32m"grid size-8 place-items-center rounded-full bg-primary text-primary-foreground"[39m
+              [33mrole[39m=[32m"img"[39m
+            [36m>[39m
+              [36m<img[39m
+                [33malt[39m=[32m"Agentic Resilience Workbench"[39m
+                [33mclass[39m=[32m"size-8 rounded-full"[39m
+                [33msrc[39m=[32m"/src/assets/logos/logo-bgdark.png"[39m
+              [36m/>[39m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"text-sm sm:text-base font-semibold tracking-tight"[39m
+            [36m>[39m
+              [0mAgentic Resilience[0m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<nav[39m
+            [33maria-label[39m=[32m"Project context"[39m
+            [33mclass[39m=[32m"group/navigation-menu max-w-max flex-1 items-center justify-center hidden lg:flex"[39m
+            [33mdata-slot[39m=[32m"navigation-menu"[39m
+          [36m>[39m
+            [36m<ul[39m
+              [33mclass[39m=[32m"flex flex-1 list-none items-center justify-center gap-1"[39m
+              [33mdata-slot[39m=[32m"navigation-menu-list"[39m
+            [36m>[39m
+              [36m<li[39m
+                [33mdata-slot[39m=[32m"navigation-menu-item"[39m
+              [36m>[39m
+                [36m<button[39m
+                  [33maria-disabled[39m=[32m"false"[39m
+                  [33maria-expanded[39m=[32m"false"[39m
+                  [33mclass[39m=[32m"group inline-flex h-9 items-center justify-center rounded-md px-3 font-medium text-muted-foreground outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/30 hover:bg-brand-purple/8 text-base hover:text-brand-purple data-popup-open:bg-brand-purple/10 data-popup-open:text-brand-purple"[39m
+                  [33mdata-base-ui-navigation-menu-trigger[39m=[32m""[39m
+                  [33mdata-slot[39m=[32m"navigation-menu-trigger"[39m
+                  [33mtabindex[39m=[32m"0"[39m
+                  [33mtype[39m=[32m"button"[39m
+                [36m>[39m
+                  [0mValue at stake[0m
+                  [36m<span[39m
+                    [33maria-hidden[39m=[32m"true"[39m
+                    [33mclass[39m=[32m"ml-1 transition-transform duration-200 group-data-popup-open:rotate-180"[39m
+                  [36m>[39m
+                    [36m<svg[39m
+                      [33mclass[39m=[32m"size-3"[39m
+                      [33mcolor[39m=[32m"currentColor"[39m
+                      [33mfill[39m=[32m"none"[39m
+                      [33mheight[39m=[32m"24"[39m
+                      [33mstroke[39m=[32m"currentColor"[39m
+                      [33mstroke-width[39m=[32m"2"[39m
+                      [33mviewBox[39m=[32m"0 0 24 24"[39m
+                      [33mwidth[39m=[32m"24"[39m
+                      [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                    [36m>[39m
+                      [36m<path[39m
+                        [33md[39m=[32m"M18 9.00005C18 9.00005 13.5811 15 12 15C10.4188 15 6 9 6 9"[39m
+                        [33mstroke[39m=[32m"currentColor"[39m
+                        [33mstroke-linecap[39m=[32m"round"[39m
+                        [33mstroke-linejoin[39m=[32m"round"[39m
+                        [33mstroke-width[39m=[32m"2"[39m
+                      [36m/>[39m
+                    [36m</svg>[39m
+                  [36m</span>[39m
+                [36m</button>[39m
+              [36m</li>[39m
+              [36m<li[39m
+                [33mdata-slot[39m=[32m"navigation-menu-item"[39m
+              [36m>[39m
+                [36m<button[39m
+                  [33maria-disabled[39m=[32m"false"[39m
+                  [33maria-expanded[39m=[32m"false"[39m
+                  [33mclass[39m=[32m"group inline-flex h-9 items-center justify-center rounded-md px-3 font-medium text-muted-foreground outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/30 hover:bg-brand-purple/8 text-base hover:text-brand-purple data-popup-open:bg-brand-purple/10 data-popup-open:text-brand-purple"[39m
+                  [33mdata-base-ui-navigation-menu-trigger[39m=[32m""[39m
+                  [33mdata-slot[39m=[32m"navigation-menu-trigger"[39m
+                  [33mtabindex[39m=[32m"0"[39m
+                  [33mtype[39m=[32m"button"[39m
+                [36m>[39m
+                  [0mTest the thesis[0m
+                  [36m<span[39m
+                    [33maria-hidden[39m=[32m"true"[39m
+                    [33mclass[39m=[32m"ml-1 transition-transform duration-200 group-data-popup-open:rotate-180"[39m
+                  [36m>[39m
+                    [36m<svg[39m
+                      [33mclass[39m=[32m"size-3"[39m
+                      [33mcolor[39m=[32m"currentColor"[39m
+                      [33mfill[39m=[32m"none"[39m
+                      [33mheight[39m=[32m"24"[39m
+                      [33mstroke[39m=[32m"currentColor"[39m
+                      [33mstroke-width[39m=[32m"2"[39m
+                      [33mviewBox[39m=[32m"0 0 24 24"[39m
+                      [33mwidth[39m=[32m"24"[39m
+                      [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                    [36m>[39m
+                      [36m<path[39m
+                        [33md[39m=[32m"M18 9.00005C18 9.00005 13.5811 15 12 15C10.4188 15 6 ...
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ src/__tests__/routes/index.test.tsx:40:20
+     38|         ).toBeTruthy();
+     39|         expect(
+     40|             screen.getByRole("heading", { name: "Evidence matrix" }),
+       |                    ^
+     41|         ).toBeTruthy();
+     42|         expect(
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  src/__tests__/components/workspace/conversation.test.tsx > opens the activity trial from framing tools and keeps it available to restart after completion
+TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "Inspect source preparation"
+
+Here are the accessible roles:
+
+  region:
+
+  Name "Illustrative framing scenarios":
+  [36m<section[39m
+    [33maria-label[39m=[32m"Illustrative framing scenarios"[39m
+    [33mclass[39m=[32m"start-preview-scenarios"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Preview tools":
+  [36m<button[39m
+    [33maria-controls[39m=[32m"_r_15_"[39m
+    [33maria-expanded[39m=[32m"true"[39m
+    [33maria-haspopup[39m=[32m"dialog"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-transparent border-primary/35 hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:bg-transparent dark:hover:bg-input/30 h-8 gap-1 px-3 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"[39m
+    [33mdata-base-ui-click-trigger[39m=[32m""[39m
+    [33mdata-popup-open[39m=[32m""[39m
+    [33mdata-pressed[39m=[32m""[39m
+    [33mdata-slot[39m=[32m"popover-trigger"[39m
+    [33mid[39m=[32m"base-ui-_r_16_"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  --------------------------------------------------article:
+
+  Name "You message":
+  [36m<article[39m
+    [33maria-label[39m=[32m"You message"[39m
+    [33mclass[39m=[32m"flex min-w-0 animate-in items-start fade-in-0 slide-in-from-bottom-1 text-[13px]/[18px] text-foreground duration-240 ease-out motion-reduce:animate-none gap-3 flex-row-reverse"[39m
+    [33mdata-message-id[39m=[32m"initial-request"[39m
+    [33mdata-role[39m=[32m"user"[39m
+    [33mdata-slot[39m=[32m"message"[39m
+    [33mdata-variant[39m=[32m"bubble"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  [36m<p />[39m
+
+  --------------------------------------------------
+  group:
+
+  Name "Message actions":
+  [36m<div[39m
+    [33maria-label[39m=[32m"Message actions"[39m
+    [33mclass[39m=[32m"-mt-0.5 flex animate-in flex-wrap items-center gap-0 duration-200 ease-out fade-in-0 motion-reduce:animate-none ml-0 chat-message-footer"[39m
+    [33mdata-slot[39m=[32m"message-actions"[39m
+    [33mrole[39m=[32m"group"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  time:
+
+  Name "Sunday, 1 November 2026 at 21:17":
+  [36m<time[39m
+    [33mclass[39m=[32m"text-[11.5px] text-muted-foreground tabular-nums"[39m
+    [33mdata-slot[39m=[32m"message-time"[39m
+    [33mdatetime[39m=[32m"2026-11-01T20:17:18.517Z"[39m
+    [33mtitle[39m=[32m"Sunday, 1 November 2026 at 21:17"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Copy message":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Copy message"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 aria-expanded:bg-muted aria-expanded:text-foreground cursor-pointer rounded-lg p-0 text-muted-foreground [transition:background-color_120ms_ease-out,color_120ms_ease-out,scale_140ms_cubic-bezier(0.23,1,0.32,1)] hover:bg-accent hover:text-accent-foreground focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-1 focus-visible:outline-ring active:scale-[0.94] motion-reduce:transition-none motion-reduce:active:scale-100 dark:hover:bg-accent [&_svg:not([class*='size-'])]:size-3.5 size-7"[39m
+    [33mdata-slot[39m=[32m"message-copy"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtitle[39m=[32m"Copy message"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  status:
+
+  Name "":
+  [36m<span[39m
+    [33mclass[39m=[32m"sr-only"[39m
+    [33mrole[39m=[32m"status"[39m
+  [36m/>[39m
+
+  --------------------------------------------------article:
+
+  Name "Workbench Agent message":
+  [36m<article[39m
+    [33maria-label[39m=[32m"Workbench Agent message"[39m
+    [33mclass[39m=[32m"flex min-w-0 animate-in items-start fade-in-0 slide-in-from-bottom-1 text-[13px]/[18px] text-foreground duration-240 ease-out motion-reduce:animate-none gap-3 flex-row"[39m
+    [33mdata-message-id[39m=[32m"framing-introduction"[39m
+    [33mdata-role[39m=[32m"assistant"[39m
+    [33mdata-slot[39m=[32m"message"[39m
+    [33mdata-variant[39m=[32m"bubble"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  [36m<p />[39m
+
+  --------------------------------------------------
+  group:
+
+  Name "Message actions":
+  [36m<div[39m
+    [33maria-label[39m=[32m"Message actions"[39m
+    [33mclass[39m=[32m"-mt-0.5 flex animate-in flex-wrap items-center gap-0 duration-200 ease-out fade-in-0 motion-reduce:animate-none -ml-1.5 chat-message-footer"[39m
+    [33mdata-slot[39m=[32m"message-actions"[39m
+    [33mrole[39m=[32m"group"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  time:
+
+  Name "Sunday, 1 November 2026 at 21:17":
+  [36m<time[39m
+    [33mclass[39m=[32m"text-[11.5px] text-muted-foreground tabular-nums"[39m
+    [33mdata-slot[39m=[32m"message-time"[39m
+    [33mdatetime[39m=[32m"2026-11-01T20:17:18.517Z"[39m
+    [33mtitle[39m=[32m"Sunday, 1 November 2026 at 21:17"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Copy message":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Copy message"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 aria-expanded:bg-muted aria-expanded:text-foreground cursor-pointer rounded-lg p-0 text-muted-foreground [transition:background-color_120ms_ease-out,color_120ms_ease-out,scale_140ms_cubic-bezier(0.23,1,0.32,1)] hover:bg-accent hover:text-accent-foreground focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-1 focus-visible:outline-ring active:scale-[0.94] motion-reduce:transition-none motion-reduce:active:scale-100 dark:hover:bg-accent [&_svg:not([class*='size-'])]:size-3.5 size-7"[39m
+    [33mdata-slot[39m=[32m"message-copy"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtitle[39m=[32m"Copy message"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  status:
+
+  Name "":
+  [36m<span[39m
+    [33mclass[39m=[32m"sr-only"[39m
+    [33mrole[39m=[32m"status"[39m
+  [36m/>[39m
+
+  --------------------------------------------------article:
+
+  Name "Workbench Agent message":
+  [36m<article[39m
+    [33maria-label[39m=[32m"Workbench Agent message"[39m
+    [33mclass[39m=[32m"flex min-w-0 animate-in items-start fade-in-0 slide-in-from-bottom-1 text-[13px]/[18px] text-foreground duration-240 ease-out motion-reduce:animate-none gap-3 flex-row"[39m
+    [33mdata-message-id[39m=[32m"5e4ba991-e301-4822-8cfe-a639f6ee3a0f"[39m
+    [33mdata-role[39m=[32m"assistant"[39m
+    [33mdata-slot[39m=[32m"message"[39m
+    [33mdata-variant[39m=[32m"bubble"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  [36m<p />[39m
+
+  --------------------------------------------------
+  group:
+
+  Name "Message actions":
+  [36m<div[39m
+    [33maria-label[39m=[32m"Message actions"[39m
+    [33mclass[39m=[32m"-mt-0.5 flex animate-in flex-wrap items-center gap-0 duration-200 ease-out fade-in-0 motion-reduce:animate-none -ml-1.5 chat-message-footer"[39m
+    [33mdata-slot[39m=[32m"message-actions"[39m
+    [33mrole[39m=[32m"group"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  time:
+
+  Name "Sunday, 1 November 2026 at 21:17":
+  [36m<time[39m
+    [33mclass[39m=[32m"text-[11.5px] text-muted-foreground tabular-nums"[39m
+    [33mdata-slot[39m=[32m"message-time"[39m
+    [33mdatetime[39m=[32m"2026-11-01T20:17:20.366Z"[39m
+    [33mtitle[39m=[32m"Sunday, 1 November 2026 at 21:17"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Copy message":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Copy message"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 aria-expanded:bg-muted aria-expanded:text-foreground cursor-pointer rounded-lg p-0 text-muted-foreground [transition:background-color_120ms_ease-out,color_120ms_ease-out,scale_140ms_cubic-bezier(0.23,1,0.32,1)] hover:bg-accent hover:text-accent-foreground focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-1 focus-visible:outline-ring active:scale-[0.94] motion-reduce:transition-none motion-reduce:active:scale-100 dark:hover:bg-accent [&_svg:not([class*='size-'])]:size-3.5 size-7"[39m
+    [33mdata-slot[39m=[32m"message-copy"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtitle[39m=[32m"Copy message"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  status:
+
+  Name "":
+  [36m<span[39m
+    [33mclass[39m=[32m"sr-only"[39m
+    [33mrole[39m=[32m"status"[39m
+  [36m/>[39m
+
+  --------------------------------------------------region:
+
+  Name "Sources · Documentary preparation":
+  [36m<div[39m
+    [33maria-label[39m=[32m"Sources · Documentary preparation"[39m
+    [33mdata-closed[39m=[32m""[39m
+    [33mdata-message-id[39m=[32m"74f1c384-146a-404a-af9d-fda686442f8f"[39m
+    [33mdata-slot[39m=[32m"conversation-work-group"[39m
+    [33mdata-state[39m=[32m"completed"[39m
+    [33mrole[39m=[32m"region"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Inspect Sources mission: Documentary preparation":
+  [36m<button[39m
+    [33maria-disabled[39m=[32m"false"[39m
+    [33maria-expanded[39m=[32m"false"[39m
+    [33maria-label[39m=[32m"Inspect Sources mission: Documentary preparation"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50 h-9 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5"[39m
+    [33mdata-slot[39m=[32m"collapsible-trigger"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  strong:
+
+  Name "":
+  [36m<strong />[39m
+
+  --------------------------------------------------article:
+
+  Name "Workbench Agent message":
+  [36m<article[39m
+    [33maria-label[39m=[32m"Workbench Agent message"[39m
+    [33mclass[39m=[32m"flex min-w-0 animate-in items-start fade-in-0 slide-in-from-bottom-1 text-[13px]/[18px] text-foreground duration-240 ease-out motion-reduce:animate-none gap-3 flex-row"[39m
+    [33mdata-message-id[39m=[32m"21d374c8-8332-4dbf-9323-352062fdaa42"[39m
+    [33mdata-role[39m=[32m"assistant"[39m
+    [33mdata-slot[39m=[32m"message"[39m
+    [33mdata-variant[39m=[32m"bubble"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  heading:
+
+  Name "Material ready for examination":
+  [36m<h2 />[39m
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  --------------------------------------------------
+  list:
+
+  Name "":
+  [36m<ul />[39m
+
+  --------------------------------------------------
+  listitem:
+
+  Name "":
+  [36m<li />[39m
+
+  Name "":
+  [36m<li />[39m
+
+  --------------------------------------------------
+  group:
+
+  Name "Message actions":
+  [36m<div[39m
+    [33maria-label[39m=[32m"Message actions"[39m
+    [33mclass[39m=[32m"-mt-0.5 flex animate-in flex-wrap items-center gap-0 duration-200 ease-out fade-in-0 motion-reduce:animate-none -ml-1.5 chat-message-footer"[39m
+    [33mdata-slot[39m=[32m"message-actions"[39m
+    [33mrole[39m=[32m"group"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  time:
+
+  Name "Sunday, 1 November 2026 at 21:17":
+  [36m<time[39m
+    [33mclass[39m=[32m"text-[11.5px] text-muted-foreground tabular-nums"[39m
+    [33mdata-slot[39m=[32m"message-time"[39m
+    [33mdatetime[39m=[32m"2026-11-01T20:17:21.243Z"[39m
+    [33mtitle[39m=[32m"Sunday, 1 November 2026 at 21:17"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Copy message":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Copy message"[39m
+    [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 aria-expanded:bg-muted aria-expanded:text-foreground cursor-pointer rounded-lg p-0 text-muted-foreground [transition:background-color_120ms_ease-out,color_120ms_ease-out,scale_140ms_cubic-bezier(0.23,1,0.32,1)] hover:bg-accent hover:text-accent-foreground focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-1 focus-visible:outline-ring active:scale-[0.94] motion-reduce:transition-none motion-reduce:active:scale-100 dark:hover:bg-accent [&_svg:not([class*='size-'])]:size-3.5 size-7"[39m
+    [33mdata-slot[39m=[32m"message-copy"[39m
+    [33mtabindex[39m=[32m"0"[39m
+    [33mtitle[39m=[32m"Copy message"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  status:
+
+  Name "":
+  [36m<span[39m
+    [33mclass[39m=[32m"sr-only"[39m
+    [33mrole[39m=[32m"status"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<div[39m
+  [33maria-label[39m=[32m"Conversation"[39m
+  [33maria-live[39m=[32m"polite"[39m
+  [33maria-relevant[39m=[32m"additions"[39m
+  [33mclass[39m=[32m"flex min-w-0 flex-col gap-3 px-0.5 py-1"[39m
+  [33mdata-slot[39m=[32m"conversation-thread-content"[39m
+  [33mrole[39m=[32m"log"[39m
+[36m>[39m
+  [36m<section[39m
+    [33maria-label[39m=[32m"Illustrative framing scenarios"[39m
+    [33mclass[39m=[32m"start-preview-scenarios"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33maria-hidden[39m=[32m"true"[39m
+      [33mdata-base-ui-focus-guard[39m=[32m""[39m
+      [33mstyle[39m=[32m"clip-path: inset(50%); overflow: hidden; white-space: nowrap; border: 0px; padding: 0px; width: 1px; height: 1px; margin: -1px; position: fixed; top: 0px; left: 0px;"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+    [36m<button[39m
+      [33maria-controls[39m=[32m"_r_15_"[39m
+      [33maria-expanded[39m=[32m"true"[39m
+      [33maria-haspopup[39m=[32m"dialog"[39m
+      [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center rounded-md border text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 bg-transparent border-primary/35 hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:bg-transparent dark:hover:bg-input/30 h-8 gap-1 px-3 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"[39m
+      [33mdata-base-ui-click-trigger[39m=[32m""[39m
+      [33mdata-popup-open[39m=[32m""[39m
+      [33mdata-pressed[39m=[32m""[39m
+      [33mdata-slot[39m=[32m"popover-trigger"[39m
+      [33mid[39m=[32m"base-ui-_r_16_"[39m
+      [33mtabindex[39m=[32m"0"[39m
+      [33mtype[39m=[32m"button"[39m
+    [36m>[39m
+      [0mPreview tools[0m
+    [36m</button>[39m
+    [36m<span[39m
+      [33maria-hidden[39m=[32m"true"[39m
+      [33mdata-base-ui-focus-guard[39m=[32m""[39m
+      [33mstyle[39m=[32m"clip-path: inset(50%); overflow: hidden; white-space: nowrap; border: 0px; padding: 0px; width: 1px; height: 1px; margin: -1px; position: fixed; top: 0px; left: 0px;"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+    [36m<span[39m
+      [33maria-hidden[39m=[32m"true"[39m
+      [33mdata-base-ui-focus-guard[39m=[32m""[39m
+      [33mdata-type[39m=[32m"outside"[39m
+      [33mstyle[39m=[32m"clip-path: inset(50%); overflow: hidden; white-space: nowrap; border: 0px; padding: 0px; width: 1px; height: 1px; margin: -1px; position: fixed; top: 0px; left: 0px;"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+    [36m<span[39m
+      [33maria-owns[39m=[32m"_r_1r_"[39m
+      [33mstyle[39m=[32m"clip-path: inset(50%); position: fixed; top: 0px; left: 0px;"[39m
+    [36m/>[39m
+    [36m<span[39m
+      [33maria-hidden[39m=[32m"true"[39m
+      [33mdata-base-ui-focus-guard[39m=[32m""[39m
+      [33mdata-type[39m=[32m"outside"[39m
+      [33mstyle[39m=[32m"clip-path: inset(50%); overflow: hidden; white-space: nowrap; border: 0px; padding: 0px; width: 1px; height: 1px; margin: -1px; position: fixed; top: 0px; left: 0px;"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+  [36m</section>[39m
+  [36m<article[39m
+    [33maria-label[39m=[32m"You message"[39m
+    [33mclass[39m=[32m"flex min-w-0 animate-in items-start fade-in-0 slide-in-from-bottom-1 text-[13px]/[18px] text-foreground duration-240 ease-out motion-reduce:animate-none gap-3 flex-row-reverse"[39m
+    [33mdata-message-id[39m=[32m"initial-request"[39m
+    [33mdata-role[39m=[32m"user"[39m
+    [33mdata-slot[39m=[32m"message"[39m
+    [33mdata-variant[39m=[32m"bubble"[39m
+  [36m>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"grid min-w-0 flex-auto justify-items-end gap-1.5"[39m
+      [33mdata-slot[39m=[32m"message-body"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"max-w-full min-w-0 border-0 text-pretty wrap-anywhere px-3 py-2 rounded-2xl bg-muted text-foreground text-[13px]/5"[39m
+        [33mdata-slot[39m=[32m"message-content"[39m
+        [33mid[39m=[32m"_r_17_-content"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"min-w-0 wrap-anywhere [&_p]:my-0 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_a]:text-accent-foreground [&_a]:underline [&_a]:underline-offset-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"[39m
+          [33mdata-status[39m=[32m"complete"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0mDoes CCC control the photo-led claim workflow, or supply modules an agent could replace?[0m
+          [36m</p>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33maria-label[39m=[32m"Message actions"[39m
+        [33mclass[39m=[32m"-mt-0.5 flex animate-in flex-wrap items-center gap-0 duration-200 ease-out fade-in-0 motion-reduce:animate-none ml-0 chat-message-footer"[39m
+        [33mdata-slot[39m=[32m"message-actions"[39m
+        [33mrole[39m=[32m"group"[39m
+      [36m>[39m
+        [36m<time[39m
+          [33mclass[39m=[32m"text-[11.5px] text-muted-foreground tabular-nums"[39m
+          [33mdata-slot[39m=[32m"message-time"[39m
+          [33mdatetime[39m=[32m"2026-11-01T20:17:18.517Z"[39m
+          [33mtitle[39m=[32m"Sunday, 1 November 2026 at 21:17"[39m
+        [36m>[39m
+          [0m21:17[0m
+        [36m</time>[39m
+        [36m<button[39m
+          [33maria-label[39m=[32m"Copy message"[39m
+          [33mclass[39m=[32m"group/button inline-flex shrink-0 items-center justify-center border border-transparent text-md font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 aria-expanded:bg-muted aria-expanded:text-foreground cursor-pointer rounded-lg p-0 text-muted-foreground [transition:background-color_120ms_ease-out,color_120ms_ease-out,scale_140ms_cubic-bezier(0.23,1,0.32,1)] hover:bg-accent hover:text-accent-foreground focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-1 focus-visible:outline-ring active:scale-[0.94] motion-reduce:transition-none motion-reduce:a...
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ src/__tests__/components/workspace/conversation.test.tsx:54:54
+     52|         }).disabled,
+     53|     ).toBe(true);
+     54|     const retained = within(screen.getByRole("log")).getByRole("button…
+       |                                                      ^
+     55|         name: "Inspect source preparation",
+     56|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  3 failed | 252 passed (255)
+      Tests  7 failed | 2125 passed (2132)
+   Start at  21:17:06
+   Duration  565.73s (transform 16.70s, setup 36.27s, import 263.10s, tests 595.76s, environment 184.65s)
+
+ ELIFECYCLE  Test failed. See above for more details.

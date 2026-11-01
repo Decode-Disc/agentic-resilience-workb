@@ -250,6 +250,7 @@ test("Workbench retains an analyst's documentary request separately from its eve
         cause: "analyst_followup",
         input: {
             kind: "transmit_source_request",
+            coverageRole: null,
             messageId,
             interpretedNeed: "Independent assessment of switching constraints",
         },

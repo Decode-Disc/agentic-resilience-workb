@@ -12,7 +12,8 @@ import { consultMissionState } from "./missionHistory";
 /** Read policies and execution are the same for native callers and generated tools. */
 export const consultMissionStateOperation: AgentOperationDefinition = {
     version: 1,
-    description: "Read persisted mission state and bounded observable history.",
+    description:
+        "Read only the current mission state and its bounded observable work history. For earlier analyst exchanges use consult_conversation. Omit cursor on the first read; on later pages copy only continueCursor returned by this operation, never a mission, turn or conversation ID.",
     inputValidator: consultMissionStateInputValidator,
     identity(context) {
         return {
@@ -85,7 +86,7 @@ export const consultRunStateOperation: AgentOperationDefinition = {
 const consultConversation: AgentOperationDefinition = {
     ...consultMissionStateOperation,
     description:
-        "Read exact prior processed conversation messages in bounded fragments; queued instructions are excluded.",
+        "Read exact prior processed conversation messages in bounded fragments; queued instructions are excluded. Omit cursor on the first read; on later pages copy only continueCursor returned by this operation, never a mission, turn or conversation ID.",
     inputValidator: consultConversationInputValidator,
     async execute(ctx, args) {
         if (!args.missionId || args.input.kind !== "consult_conversation")

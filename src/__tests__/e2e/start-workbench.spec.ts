@@ -1,4 +1,6 @@
+import type { internal } from "@convex/_generated/api";
 import { expect } from "@playwright/test";
+import type { FunctionReturnType } from "convex/server";
 import { test } from "../../../e2e/support/browser-workspace";
 import { runConvexCli, runConvexJson } from "../../../e2e/support/convex-cli";
 import { admitAnalyst } from "../../../e2e/support/source-review-fixture";
@@ -20,7 +22,7 @@ for (const viewport of [
         await admitAnalyst(page);
         const runId = runConvexJson<string>(
             "execution/fixtures:startWorkbench",
-            { fixtureKey: `start-workbench-${viewport.name}` },
+            { fixtureKey: `native-start-workbench-${viewport.name}` },
         );
         await page.goto(`/workspace/${runId}?section=progress`);
         await expect(
@@ -71,6 +73,16 @@ for (const viewport of [
         await expect(
             page.getByRole("button", { name: "Start research", exact: true }),
         ).toBeEnabled();
+        const originalNative = runConvexJson<
+            FunctionReturnType<
+                typeof internal.execution.fixtures.inspectWorkbench
+            >
+        >("execution/fixtures:inspectWorkbench", {
+            runId,
+            fixtureKey: `native-start-workbench-${viewport.name}`,
+        });
+        expect(originalNative.definitionVersion).toBe(2);
+        expect(originalNative.nativeSessionId).toBeTruthy();
         await input.fill("Retain this boundary for our discussion.");
         await page
             .getByRole("button", { name: "Send refinement", exact: true })
@@ -120,7 +132,27 @@ for (const viewport of [
             page.getByLabel("Access code", { exact: true }),
         ).toHaveCount(0);
         await expect(page.getByRole("textbox")).toBeInViewport();
-        const fixtureKey = `start-workbench-${viewport.name}`;
+        await page.getByRole("textbox").fill("Start research now");
+        await page
+            .getByRole("button", { name: "Send refinement", exact: true })
+            .click();
+        await expect(
+            page.getByText(
+                "Research has not started. Review the research program and choose Start research when ready.",
+                { exact: true },
+            ),
+        ).toBeVisible({ timeout: 60000 });
+        await expect(
+            page.getByRole("button", { name: "Start research", exact: true }),
+        ).toBeEnabled();
+        await page.reload();
+        await expect(
+            page.getByText(
+                "Research has not started. Review the research program and choose Start research when ready.",
+                { exact: true },
+            ),
+        ).toBeVisible();
+        const fixtureKey = `native-start-workbench-${viewport.name}`;
         expect(
             runConvexJson("execution/fixtures:inspectWorkbench", {
                 runId,
@@ -131,6 +163,9 @@ for (const viewport of [
             allMissionsSimulated: true,
             queuedCount: 0,
             phase: "framing",
+            definitionVersion: 2,
+            nativeSessionId: originalNative.nativeSessionId,
+            nativeSettled: true,
         });
         runConvexCli([
             "run",

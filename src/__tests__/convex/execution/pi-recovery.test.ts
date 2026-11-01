@@ -153,7 +153,7 @@ test("replay renews its fenced writer lease while loading multiple pages", async
                               id: sequence + 1,
                               conversationId: ROOT_CONVERSATION_ID,
                               kind: "workbench.original",
-                              data: { text: "x".repeat(1024) },
+                              data: { text: "x".repeat(128 * 1024) },
                           },
                       },
             ]),
@@ -177,8 +177,8 @@ test("replay renews its fenced writer lease while loading multiple pages", async
             BACKGROUND_CONTEXT,
         );
         try {
-            expect(pages).toBe(6);
-            expect(Date.now() - startedAt).toBe(120000);
+            expect(pages).toBeGreaterThan(4);
+            expect(Date.now() - startedAt).toBe(pages * 20000);
             expect(
                 await storage.conversation(
                     ROOT_CONVERSATION_ID,

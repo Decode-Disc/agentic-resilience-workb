@@ -73,6 +73,7 @@ type RuntimeProjectionUpdate =
     | { kind: "run-stop"; runId: string };
 
 type NativeLocalDeployment = {
+    backendVersion?: string;
     deploymentName: string;
     selector: string;
     cloudPort: number;
@@ -576,6 +577,10 @@ export function readNativeLocalDeployment(root: string): NativeLocalDeployment {
         selector,
         cloudPort,
         sitePort,
+        ...(typeof config.backendVersion === "string" &&
+        config.backendVersion.trim()
+            ? { backendVersion: config.backendVersion }
+            : {}),
     };
 }
 

@@ -4,6 +4,7 @@ import type { ActionCtx } from "@convex/_generated/server";
 import { executionError } from "@convex/execution/errors";
 import {
     PI_COMMIT_MAX_BYTES,
+    PI_LEASE_RENEW_INTERVAL_MS,
     PI_SESSION_MAX_BYTES,
 } from "@convex/resourceLimits";
 import type { Context } from "@earendil-works/chord/context";
@@ -13,6 +14,7 @@ import {
     type Seq,
     type StorageWrite,
 } from "@earendil-works/pi-durable";
+import type { FunctionReturnType } from "convex/server";
 
 export type PiCommit = Pick<Doc<"piCommits">, "sequence" | "key" | "payload">;
 
@@ -48,7 +50,7 @@ export async function openMissionPiStorage(
                     {
                         ...lease,
                         paginationOpts: {
-                            numItems: 16,
+                            numItems: 256,
                             maximumBytesRead: 2 * 1024 * 1024,
                             cursor,
                         },
@@ -77,6 +79,7 @@ export async function openMissionPiStorage(
                 ctx.runMutation(internal.execution.piStore.mint, lease),
         },
         context,
+        lease,
     );
 }
 
@@ -86,16 +89,27 @@ export class PiConvexStorage extends MemoryStorage {
     private retainedBytes = 0;
     private ended = false;
 
-    private constructor(private readonly store: PiCommitStore) {
+    private constructor(
+        private readonly store: PiCommitStore,
+        readonly lease?: FunctionReturnType<
+            typeof internal.execution.piStore.claim
+        >,
+    ) {
         super();
+    }
+
+    get sessionId() {
+        return this.lease?.sessionId;
     }
 
     static async open(
         store: PiCommitStore,
         context: Context,
+        lease?: FunctionReturnType<typeof internal.execution.piStore.claim>,
     ): Promise<PiConvexStorage> {
-        const storage = new PiConvexStorage(store);
+        const storage = new PiConvexStorage(store, lease);
         let cursor: string | null = null;
+        let renewAt = Date.now() + PI_LEASE_RENEW_INTERVAL_MS;
         do {
             context.abortSignal?.throwIfAborted();
             const page = await store.scan(cursor);
@@ -110,9 +124,10 @@ export class PiConvexStorage extends MemoryStorage {
             }
             if (page.cursor !== null && page.cursor === cursor)
                 throw new Error("pi_log_cursor_conflict");
-            if (page.cursor !== null) {
+            if (Date.now() >= renewAt) {
                 context.abortSignal?.throwIfAborted();
                 await store.renewLease?.();
+                renewAt = Date.now() + PI_LEASE_RENEW_INTERVAL_MS;
             }
             cursor = page.cursor;
         } while (cursor !== null);

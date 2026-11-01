@@ -376,13 +376,14 @@ export async function persistOperationRequest(
     });
     const request = await ctx.db.get(requestId);
     if (!request) throw executionError("request_unavailable");
-    await recordEvent(
+    const admissionEventId = await recordEvent(
         ctx,
         request,
         outcome ? "operation_refused" : "operation_requested",
         outcome?.code,
         outcome,
     );
+    await ctx.db.patch(requestId, { admissionEventId });
     return requestId;
 }
 export const enqueue = internalMutation({

@@ -185,3 +185,42 @@ test("the Convex writer rejects a commit beyond retained replay capacity without
         [],
     );
 });
+
+test("a generation change fences an older mission writer without waiting for its obsolete lease", async () => {
+    const { t, args } = await seedInspectedEvidence();
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "generation-handover",
+        expectedGeneration: args.executionGeneration,
+    });
+    const first = await t.mutation(claim, {
+        missionId,
+        expectedGeneration: args.executionGeneration,
+        writer: "old-generation",
+    });
+    await t.run(async (ctx) => {
+        await ctx.db.patch(args.runId, {
+            executionGeneration: args.executionGeneration + 1,
+        });
+        await ctx.db.patch(missionId, {
+            generation: args.executionGeneration + 1,
+        });
+    });
+    const next = await t.mutation(claim, {
+        missionId,
+        expectedGeneration: args.executionGeneration + 1,
+        writer: "new-generation",
+    });
+    expect(next.sessionId).toBe(first.sessionId);
+    expect(next.epoch).toBe(first.epoch + 1);
+    await expect(
+        t.mutation(append, {
+            ...first,
+            sequence: 1,
+            key: "late-generation",
+            payload: "[]",
+        }),
+    ).rejects.toThrow("pi_writer_fenced");
+});

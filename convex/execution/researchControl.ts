@@ -376,3 +376,55 @@ export async function resumeResearch(
     await recordControl(ctx, run, "research_resumed");
     return generation;
 }
+
+/** Confirms only persisted research state and an observed control effect. */
+export function researchControlConfirmation(
+    action: "start" | "pause" | "resume",
+    executed: boolean,
+    run: Doc<"researchRuns">,
+): string {
+    if (run.lifecycleState === "framing")
+        return "Research has not started. Review the research program and choose Start research when ready.";
+    if (
+        run.pauseReason === "source_review" ||
+        (run.lifecycleState === "awaiting_source_review" &&
+            run.executionStatus !== "running")
+    )
+        return "Research is waiting for source review. Review the proposed sources to continue.";
+    if (run.pauseReason && run.pauseReason !== "analyst")
+        return "Research is waiting for an analyst decision. Complete the pending review to continue.";
+    if (action === "start")
+        return run.executionStatus === "running"
+            ? "Research has already started. Inspect the current research progress."
+            : "Research has already started. Check the current research state and use Resume when the prerequisites are satisfied.";
+    if (
+        action === "pause" &&
+        executed &&
+        run.executionStatus === "running" &&
+        run.researchPauseRequested
+    )
+        return "Pause requested. Research will pause after the work already in progress finishes.";
+    if (
+        action === "pause" &&
+        executed &&
+        run.executionStatus === "paused" &&
+        run.pauseReason === "analyst"
+    )
+        return "Research is paused.";
+    if (
+        action === "resume" &&
+        executed &&
+        run.executionStatus === "running" &&
+        !run.researchPauseRequested
+    )
+        return "Research has resumed.";
+    if (executed && action === "pause" && run.executionStatus !== "paused")
+        return "The pause request was recorded. Research is not currently paused.";
+    if (executed)
+        return action === "pause"
+            ? "The pause request was recorded. Inspect the current research state."
+            : "The resume request was recorded. Inspect the current research state.";
+    return action === "pause"
+        ? "No pause was executed. Check the current research state and use the research controls to pause it."
+        : "No resume was executed. Check the current research state and complete any pending review before resuming.";
+}

@@ -17,7 +17,7 @@ import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
-import { agentToolSchemas } from "./agentDefinition";
+import { type AgentDefinition, agentToolSchemas } from "./agentDefinition";
 import { executionError, executionFailureCode } from "./authority";
 import {
     type AgentGenerationBackend,
@@ -37,6 +37,7 @@ function decodeReceivedReply(
     result: Extract<AgentGenerationResult, { status: "succeeded" }>,
     pi = false,
     auxiliary = false,
+    textCompletion?: AgentDefinition["textCompletion"],
 ): {
     reply: Infer<typeof invocationReplyValidator>;
     errorCode?: string;
@@ -70,6 +71,8 @@ function decodeReceivedReply(
         decoded = { kind: "operations", requests: [] };
     } else if (result.requests.length) {
         decoded = { kind: "operations", requests: result.requests };
+    } else if (textCompletion) {
+        decoded = textCompletion(result.assistantOutput);
     } else {
         try {
             decoded = JSON.parse(result.assistantOutput);
@@ -166,12 +169,16 @@ export async function invokeControlledGeneration(
         mission.definitionId,
         mission.definitionVersion,
     );
-    const tools = agentToolSchemas(definition);
+    const tools = agentToolSchemas(
+        definition,
+        JSON.parse(invocation.inputJson),
+    );
     if (
         (await agentInputByteLength({
             instructions: definition.instructions,
             prompt: invocation.inputJson,
             operations: tools,
+            nativeConversation: definition.nativeConversation,
             definitionVersion: definition.version,
             nativeRoute:
                 mission.executionRuntime === "pi-durable"
@@ -296,6 +303,7 @@ export async function invokeControlledGeneration(
                       result,
                       backend.id === "pi-durable",
                       invocation.purpose === "compaction",
+                      definition.textCompletion,
                   )
                 : {
                       reply: {
@@ -358,6 +366,7 @@ export async function invokeControlledGeneration(
         ? await ctx.runQuery(internal.execution.simulation.invoke, args)
         : undefined;
     let result: AgentGenerationResult;
+    let dispatchRefusal: string | undefined;
     try {
         result = await backend.generate(
             {
@@ -368,25 +377,31 @@ export async function invokeControlledGeneration(
             },
             {
                 beforeDispatch: async (requestJson) => {
-                    const retained = await ctx.runMutation(
-                        internal.execution.invocationLifecycle.retainRequest,
-                        {
-                            ...args,
-                            requestJson: simulated
-                                ? JSON.stringify({
-                                      ...JSON.parse(requestJson),
-                                      provenance: "simulation",
-                                  })
-                                : requestJson,
-                        },
-                    );
-                    if (retained.kind === "blocked")
-                        throw executionError(retained.code);
-                    await ctx.runQuery(
-                        internal.execution.invocationLifecycle
-                            .authorizeDispatch,
-                        args,
-                    );
+                    try {
+                        const retained = await ctx.runMutation(
+                            internal.execution.invocationLifecycle
+                                .retainRequest,
+                            {
+                                ...args,
+                                requestJson: simulated
+                                    ? JSON.stringify({
+                                          ...JSON.parse(requestJson),
+                                          provenance: "simulation",
+                                      })
+                                    : requestJson,
+                            },
+                        );
+                        if (retained.kind === "blocked")
+                            throw executionError(retained.code);
+                        await ctx.runQuery(
+                            internal.execution.invocationLifecycle
+                                .authorizeDispatch,
+                            args,
+                        );
+                    } catch (error) {
+                        dispatchRefusal = executionFailureCode(error);
+                        throw error;
+                    }
                 },
                 observe: async (observation) => {
                     await recordObservation(observation);
@@ -408,6 +423,16 @@ export async function invokeControlledGeneration(
             },
         );
     } catch {
+        if (dispatchRefusal)
+            return recordReply(
+                { response: { kind: "blocked", code: dispatchRefusal } },
+                {
+                    status: "failed",
+                    errorCode: dispatchRefusal,
+                    dispatchOutcome: "not_dispatched",
+                    retryable: false,
+                },
+            );
         await ctx.runMutation(
             internal.execution.invocationLifecycle.noteBackendInterruption,
             args,

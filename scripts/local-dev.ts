@@ -135,18 +135,38 @@ async function runNativeWatcher(
     if (!existsSync(cli))
         throw new LocalDevError("The installed Convex CLI is missing.");
 
+    const nativeArgs = runE2e ? [] : args;
+    const explicitBackendVersion = nativeArgs.some(
+        (argument) =>
+            argument === "--local-backend-version" ||
+            argument.startsWith("--local-backend-version="),
+    );
+    let backendVersionArgs: string[] = [];
+    if (
+        !explicitBackendVersion &&
+        existsSync(join(root, ".convex/local/default/config.json"))
+    ) {
+        const { backendVersion } = readNativeLocalDeployment(root);
+        if (!backendVersion)
+            throw new LocalDevError(
+                "The existing local deployment has no configured backend version. Refusing an automatic backend upgrade.",
+            );
+        backendVersionArgs = ["--local-backend-version", backendVersion];
+    }
+
     const runId = randomUUID();
     const child = spawn(
         process.execPath,
         [
             cli,
             "dev",
+            ...backendVersionArgs,
             "--local-cloud-port",
             String(ports.convex),
             "--local-site-port",
             String(ports.site),
             ...(startWeb ? ["--start", "pnpm exec vite dev"] : []),
-            ...(!runE2e ? args : []),
+            ...nativeArgs,
         ],
         {
             cwd: root,

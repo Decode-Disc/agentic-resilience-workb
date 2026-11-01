@@ -585,19 +585,43 @@ async function validateApprovedCapture(
         (await readPreparationSourceDecision(ctx.db, args)) !== "accepted"
     )
         throw sourcePreparationError("source_not_approved");
+    return validatePreparedCapture(
+        ctx,
+        args,
+        await approvedCaptureProposal(ctx, revision),
+    );
+}
+
+async function approvedCaptureProposal(
+    ctx: QueryCtx,
+    revision: Doc<"corpusRevisions">,
+) {
     const proposal = revision.sourceSelectionProposalId
         ? await ctx.db.get(revision.sourceSelectionProposalId)
         : null;
+    if (
+        proposal &&
+        (proposal.runId !== revision.runId ||
+            proposal.corpusRevisionId !== revision._id)
+    )
+        throw sourcePreparationError("capture_identity_conflict");
+    return proposal;
+}
+
+async function validatePreparedCapture(
+    ctx: QueryCtx,
+    args: {
+        runId: Id<"researchRuns">;
+        corpusRevisionId: Id<"corpusRevisions">;
+        sourceId: Id<"sources">;
+    },
+    proposal: Doc<"sourceSelectionProposals"> | null,
+) {
     if (!proposal?.sourcePreparationId)
         return {
             status: "unavailable" as const,
             reason: "no_prepared_capture" as const,
         };
-    if (
-        proposal.runId !== args.runId ||
-        proposal.corpusRevisionId !== args.corpusRevisionId
-    )
-        throw sourcePreparationError("capture_identity_conflict");
     const item = await ctx.db
         .query("sourceSelectionProposalItems")
         .withIndex("by_proposal_and_source", (q) =>
@@ -670,6 +694,48 @@ export type MissionApprovedCapture = Awaited<
 export const approvedCaptureForMission = internalQuery({
     args: missionApprovedSourceScope,
     handler: validateMissionApprovedCapture,
+});
+
+/** One authority/scope check per bounded listing; each source retains its decision and capture checks. */
+export const availableCapturesForMission = internalQuery({
+    args: {
+        missionId: v.id("agentMissions"),
+        expectedGeneration: v.number(),
+        sourceIds: v.array(v.id("sources")),
+    },
+    returns: v.array(v.id("sources")),
+    handler: async (ctx, args) => {
+        if (args.sourceIds.length > 60)
+            throw sourcePreparationError("context_capacity");
+        const { mission, run } = await requireMissionAuthority(
+            ctx,
+            args.missionId,
+            args.expectedGeneration,
+        );
+        const revision = await requireSavedMaterialScope(ctx, mission, run);
+        const proposal = await approvedCaptureProposal(ctx, revision);
+        const available = await Promise.all(
+            args.sourceIds.map(async (sourceId) => {
+                const scope = {
+                    runId: run._id,
+                    corpusRevisionId: revision._id,
+                    sourceId,
+                };
+                if (
+                    (await readPreparationSourceDecision(ctx.db, scope)) !==
+                    "accepted"
+                )
+                    return null;
+                const capture = await validatePreparedCapture(
+                    ctx,
+                    scope,
+                    proposal,
+                );
+                return capture.status === "available" ? sourceId : null;
+            }),
+        );
+        return available.filter((sourceId) => sourceId !== null);
+    },
 });
 
 async function searchApprovedCapture(

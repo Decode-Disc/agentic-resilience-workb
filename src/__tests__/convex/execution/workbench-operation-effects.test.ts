@@ -1,10 +1,12 @@
 import { api, internal } from "@convex/_generated/api";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import schema from "@convex/schema";
 import agentTest from "@convex-dev/agent/test";
 import { convexTest } from "convex-test";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, assert, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { createAdmittedPreflight } from "@/__tests__/setup/research-launch";
+import type { seedWorkbench } from "@/__tests__/setup/workbench";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 afterEach(() => vi.useRealTimers());
@@ -36,6 +38,7 @@ test("a committed framing effect is adopted as success", async () => {
         cause: "fixture",
         input: {
             kind: "adjust_framing",
+            messageId: await activeMessage(t, active.turnId),
             expectedRevision: 1,
             content: {
                 scope: "Accepted claims",
@@ -276,6 +279,7 @@ test("an applied framing receipt is adopted after dispatch is interrupted withou
         cause: "fixture",
         input: {
             kind: "adjust_framing",
+            messageId: await activeMessage(t, active.turnId),
             expectedRevision: 1,
             content: { scope: "Claims", questions: [] },
         },
@@ -346,6 +350,120 @@ async function framedTurn(key: string, launch = false) {
     if (!active) throw Error("Expected turn");
     return { t, client, runId, active };
 }
+test("a refused control settles and does not prevent an independent documentary request", async () => {
+    const { t, client, runId, active } = await framedTurn(
+        "recoverable-refusal",
+        true,
+    );
+    const messageId = await client.mutation(
+        api.execution.conversations.submit,
+        {
+            runId,
+            requestKey: "documentary-message",
+            text: "Please inspect the public commercial terms for switching restrictions.",
+            delivery: "steer",
+            turnId: active.turnId,
+        },
+    );
+    const refusedId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        cause: "incorrect-control",
+        input: { kind: "control_research", action: "resume", messageId },
+    });
+    expect(
+        await t.action(internal.execution.operations.dispatch, {
+            requestId: refusedId,
+            expectedGeneration: 1,
+        }),
+    ).toEqual({ kind: "refused", code: "explicit_research_intent_required" });
+    expect(await t.run((ctx) => ctx.db.get(refusedId))).toMatchObject({
+        status: "completed",
+        outcome: { kind: "refused", code: "explicit_research_intent_required" },
+    });
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        cause: "documentary-request",
+        input: {
+            kind: "transmit_source_request",
+            coverageRole: null,
+            messageId,
+            interpretedNeed: "Public switching restrictions.",
+        },
+    });
+    expect(
+        await t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({ kind: "success" });
+    await t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 1,
+    });
+    const instructions = await t.run((ctx) =>
+        ctx.db
+            .query("workbenchInstructions")
+            .withIndex("by_request", (q) => q.eq("requestId", requestId))
+            .collect(),
+    );
+    expect(instructions).toHaveLength(1);
+    expect(instructions[0]).toMatchObject({
+        messageId,
+        interpretedNeed: "Public switching restrictions.",
+    });
+});
+
+test("an edit between claim and framing effect returns a refusal without overwriting the analyst", async () => {
+    const { t, client, runId, active } = await framedTurn(
+        "framing-effect-race",
+    );
+    const input = {
+        kind: "adjust_framing" as const,
+        messageId: await activeMessage(t, active.turnId),
+        expectedRevision: 1,
+        content: { scope: "Superseded model scope", questions: [] },
+    };
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        cause: "effect-race",
+        input,
+    });
+    expect(
+        (
+            await t.mutation(internal.execution.operations.claim, {
+                requestId,
+                expectedGeneration: 1,
+            })
+        ).kind,
+    ).toBe("execute");
+    await client.mutation(api.framing.save, {
+        runId,
+        expectedRevision: 1,
+        requestKey: "new-analyst-edit",
+        content: { scope: "Latest analyst scope", questions: [] },
+    });
+    const operation = getAgentDefinition("workbench_v1", 2).operations
+        .adjust_framing;
+    assert(operation);
+    expect(
+        await t.action((ctx) =>
+            operation.execute(ctx, {
+                requestId,
+                missionId: active.missionId,
+                runId,
+                expectedGeneration: 1,
+                input,
+            }),
+        ),
+    ).toMatchObject({ kind: "refused", code: "stale_instructions" });
+    expect(await client.query(api.framing.get, { runId })).toMatchObject({
+        revision: 2,
+        content: { scope: "Latest analyst scope" },
+    });
+});
 test("a committed pause remains successful after its documentary checkpoint settles", async () => {
     const { t, client, runId, active } = await framedTurn(
         "pause-settlement",
@@ -396,6 +514,7 @@ test("a superseded framing receipt settles the request without applying the old 
         cause: "fixture",
         input: {
             kind: "adjust_framing",
+            messageId: await activeMessage(t, active.turnId),
             expectedRevision: 1,
             content: { scope: "Agent scope", questions: [] },
         },
@@ -430,3 +549,17 @@ test("a superseded framing receipt settles the request without applying the old 
         content: { scope: "New analyst scope" },
     });
 });
+
+async function activeMessage(
+    t: Awaited<ReturnType<typeof seedWorkbench>>["t"],
+    turnId: import("@convex/_generated/dataModel").Id<"agentConversationTurns">,
+) {
+    const message = await t.run((ctx) =>
+        ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_turn", (q) => q.eq("turnId", turnId))
+            .first(),
+    );
+    assert(message);
+    return message._id;
+}

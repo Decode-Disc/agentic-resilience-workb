@@ -14,6 +14,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
 
+import { servePublicationGuard } from "@/__tests__/setup/convex-publication";
+
 const roots: string[] = [];
 const servers: Server[] = [];
 
@@ -70,9 +72,15 @@ it("checks backend types without starting or synchronizing a backend", () => {
 async function fixture() {
     const root = mkdtempSync(join(tmpdir(), "local-convex-sync-test-"));
     roots.push(root);
-    const state = { instance: "local-fixture", requests: 0, redirect: false };
-    const server = createServer((request, response) => {
+    const state = {
+        instance: "local-fixture",
+        requests: 0,
+        redirect: false,
+        held: false,
+    };
+    const server = createServer(async (request, response) => {
         state.requests++;
+        if (await servePublicationGuard(request, response, state)) return;
         if (request.url !== "/instance_name") {
             response.writeHead(404).end();
             return;
@@ -195,7 +203,8 @@ it("publishes to the verified existing backend without changing environment file
     expect(readFileSync(join(root, ".env"), "utf8")).toBe(
         "PRESERVE_THIS_FILE=yes\n",
     );
-    expect(state.requests).toBe(1);
+    expect(state.requests).toBe(5);
+    expect(state.held).toBe(false);
     expect(await (await fetch(`${url}/instance_name`)).text()).toBe(
         "local-fixture",
     );
@@ -227,7 +236,7 @@ function acceleratedPublisherClock(root: string): NodeJS.ProcessEnv {
 import childProcess from 'node:child_process';
 import {syncBuiltinESMExports} from 'node:module';
 const execFile=childProcess.execFile.bind(childProcess);
-childProcess.execFile=(file,args,options,callback)=>execFile(file,args,{...options,timeout:options.timeout/100},callback);
+childProcess.execFile=(file,args,options,callback)=>execFile(file,args,{...options,timeout:args.includes('deploy')?options.timeout/100:options.timeout},callback);
 syncBuiltinESMExports();
 `,
     );

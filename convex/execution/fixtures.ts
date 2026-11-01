@@ -639,6 +639,9 @@ export const inspectWorkbench = internalQuery({
         allMissionsSimulated: v.boolean(),
         queuedCount: v.number(),
         phase: v.string(),
+        definitionVersion: v.number(),
+        nativeSessionId: v.union(v.id("piSessions"), v.null()),
+        nativeSettled: v.boolean(),
     }),
     handler: async (ctx, args) => {
         const { run } = await requireLocalFixtureRun(ctx, args);
@@ -656,7 +659,21 @@ export const inspectWorkbench = internalQuery({
             .query("agentConversations")
             .withIndex("by_run", (q) => q.eq("runId", run._id))
             .unique();
+        const session = conversation
+            ? await ctx.db
+                  .query("piSessions")
+                  .withIndex("by_conversation", (q) =>
+                      q.eq("conversationId", conversation._id),
+                  )
+                  .unique()
+            : null;
         return {
+            definitionVersion: conversation?.definitionVersion ?? 1,
+            nativeSessionId: session?._id ?? null,
+            nativeSettled:
+                !!session &&
+                session.settledSequence === session.sequence &&
+                session.leaseUntil <= Date.now(),
             providerCallCount: calls.length,
             allMissionsSimulated:
                 missions.length > 0 &&

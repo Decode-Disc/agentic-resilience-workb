@@ -1,6 +1,7 @@
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import {
     existsSync,
+    mkdirSync,
     mkdtempSync,
     readFileSync,
     rmSync,
@@ -8,18 +9,38 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs, parseEnv } from "node:util";
+import type { internal } from "@convex/_generated/api";
+import { ConvexHttpClient } from "convex/browser";
+import {
+    type FunctionArgs,
+    type FunctionReturnType,
+    makeFunctionReference,
+} from "convex/server";
 
 // Codegen and backend typechecking share this publisher process budget.
 const PUBLICATION_TIMEOUT_MS = 10 * 60_000;
+const GUARD_TIMEOUT_MS = 5_000;
+// The lock-owning parent also covers identity, guard RPCs and child startup.
+const COMMAND_TIMEOUT_MS = PUBLICATION_TIMEOUT_MS + 6 * GUARD_TIMEOUT_MS;
 
 class LocalSyncError extends Error {}
 
 async function main(): Promise<number> {
-    const { values } = parseArgs({ options: { url: { type: "string" } } });
+    const { values } = parseArgs({
+        options: {
+            url: { type: "string" },
+            hold: { type: "boolean" },
+            release: { type: "boolean" },
+            "lock-held": { type: "boolean" },
+        },
+    });
+    if (values.hold && values.release)
+        throw new LocalSyncError("Choose --hold or --release, not both.");
     if (!values.url)
         throw new LocalSyncError(
-            "Usage: pnpm convex:sync --url http://127.0.0.1:<port>",
+            "Usage: pnpm convex:sync --url http://127.0.0.1:<port> [--hold | --release]",
         );
     const target = new URL(values.url);
     if (
@@ -77,12 +98,74 @@ async function main(): Promise<number> {
     const cli = resolve("node_modules/convex/bin/main.js");
     if (!existsSync(cli))
         throw new LocalSyncError("The installed Convex CLI is missing.");
+    const lockDirectory = resolve(".local-runtime");
+    mkdirSync(lockDirectory, { recursive: true, mode: 0o700 });
+    const lock = join(lockDirectory, "pi-publication.lock");
+    if (!values["lock-held"]) {
+        return new Promise<number>((done) => {
+            let cancelled = false;
+            const child = execFile(
+                "flock",
+                [
+                    "--nonblock",
+                    "--no-fork",
+                    lock,
+                    process.execPath,
+                    "--experimental-strip-types",
+                    fileURLToPath(import.meta.url),
+                    ...process.argv.slice(2),
+                    "--lock-held",
+                ],
+                {
+                    timeout: COMMAND_TIMEOUT_MS,
+                    maxBuffer: 4 * 1024 * 1024,
+                },
+                (error, stdout, stderr) => {
+                    process.removeListener("SIGINT", cancel);
+                    process.removeListener("SIGTERM", cancel);
+                    process.stdout.write(
+                        stdout.replaceAll(
+                            String(config.adminKey),
+                            "[redacted]",
+                        ),
+                    );
+                    process.stderr.write(
+                        stderr.replaceAll(
+                            String(config.adminKey),
+                            "[redacted]",
+                        ),
+                    );
+                    if (error && !stdout && !stderr)
+                        console.error(
+                            "Another local publication command is active, or its lock is unavailable.",
+                        );
+                    done(
+                        cancelled
+                            ? 130
+                            : error
+                              ? typeof error.code === "number"
+                                  ? error.code
+                                  : 1
+                              : 0,
+                    );
+                },
+            );
+            const cancel = () => {
+                cancelled = true;
+                child.kill("SIGTERM");
+            };
+            process.once("SIGINT", cancel);
+            process.once("SIGTERM", cancel);
+        });
+    }
+    if (spawnSync("flock", ["--nonblock", lock, "true"]).status !== 1)
+        throw new LocalSyncError("The local publication lock must be held.");
     console.log(`target: local (${config.deploymentName}, ${target.origin})`);
     let instance: string;
     try {
         const response = await fetch(`${target.origin}/instance_name`, {
             redirect: "error",
-            signal: AbortSignal.timeout(5_000),
+            signal: AbortSignal.timeout(GUARD_TIMEOUT_MS),
         });
         if (!response.ok) throw new LocalSyncError("Unavailable instance");
         instance = await response.text();
@@ -95,6 +178,62 @@ async function main(): Promise<number> {
         throw new LocalSyncError(
             "The running backend does not match the project's local deployment.",
         );
+
+    const client = new ConvexHttpClient(target.origin, {
+        logger: false,
+        fetch: (input, init) =>
+            fetch(input, {
+                ...init,
+                redirect: "error",
+                signal: AbortSignal.timeout(GUARD_TIMEOUT_MS),
+            }),
+    });
+    (
+        client as ConvexHttpClient & { setAdminAuth(key: string): void }
+    ).setAdminAuth(config.adminKey);
+    const status = makeFunctionReference<
+        "query",
+        Record<string, never>,
+        FunctionReturnType<
+            typeof internal.execution.piControl.publicationStatus
+        >
+    >("execution/piControl:publicationStatus");
+    const hold = makeFunctionReference<
+        "mutation",
+        FunctionArgs<typeof internal.execution.piControl.holdPublication>,
+        FunctionReturnType<typeof internal.execution.piControl.holdPublication>
+    >("execution/piControl:holdPublication");
+    let prior: FunctionReturnType<
+        typeof internal.execution.piControl.publicationStatus
+    >;
+    try {
+        prior = await client.query(status, {});
+    } catch {
+        throw new LocalSyncError(
+            "The publication guard is unavailable. Initialize it only on a verified quiet backend; publication was refused.",
+        );
+    }
+    if (values.release) {
+        if (prior.hasActiveWorkers)
+            throw new LocalSyncError(
+                "Workers are still draining; admission remains held.",
+            );
+        await client.mutation(hold, { held: false });
+        console.log("Pi worker admission released.");
+        return 0;
+    }
+    await client.mutation(hold, { held: true });
+    const quiet = await client.query(status, {});
+    if (!quiet.held || quiet.hasActiveWorkers)
+        throw new LocalSyncError(
+            "Workers are still draining; publication was refused and admission remains held. Retry after they close.",
+        );
+    if (values.hold) {
+        console.log(
+            "Pi worker admission held; no active writer or live lease remains. Automatic watcher publications are safe while this hold remains set.",
+        );
+        return 0;
+    }
 
     // An explicit credential file selects the existing server without invoking
     // the dev command's backend lifecycle or rewriting the project's env files.
@@ -118,7 +257,7 @@ async function main(): Promise<number> {
             "CONVEX_SELF_HOSTED_ADMIN_KEY",
         ])
             delete env[key];
-        return await new Promise<number>((done) => {
+        const result = await new Promise<number>((done) => {
             let cancelled = false;
             const child = execFile(
                 process.execPath,
@@ -162,6 +301,13 @@ async function main(): Promise<number> {
             process.once("SIGINT", cancel);
             process.once("SIGTERM", cancel);
         });
+        if (result === 0 && !prior.held)
+            await client.mutation(hold, { held: false });
+        if (result !== 0 || prior.held)
+            console.log(
+                "Pi worker admission remains held; inspect or retry, then use --release.",
+            );
+        return result;
     } finally {
         rmSync(directory, { recursive: true, force: true });
     }

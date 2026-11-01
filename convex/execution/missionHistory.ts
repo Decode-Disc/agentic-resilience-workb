@@ -1,7 +1,10 @@
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
+import { validate } from "convex-helpers/validators";
+import { getAgentDefinition } from "./agentCatalog";
 import type { OperationOutcome } from "./agentDefinition";
+import { agentDefinitionIdValidator } from "./agentSchemas";
 import { executionFailureCode } from "./errors";
 
 const MAX_HISTORY_RESULT_BYTES = 48 * 1024;
@@ -72,7 +75,18 @@ export async function consultMissionState(
         }
         if (!isRecord(parsedContext))
             return { kind: "unavailable", code: "mission_state_unavailable" };
+        const binding = parsedContext.definition;
+        if (
+            !isRecord(binding) ||
+            !validate(agentDefinitionIdValidator, binding.id) ||
+            typeof binding.version !== "number"
+        )
+            return { kind: "unavailable", code: "mission_state_unavailable" };
         const state = {
+            ...getAgentDefinition(
+                binding.id,
+                binding.version,
+            ).consultationContext?.(parsedContext),
             mission: parsedContext.mission,
             humanInstructions: parsedContext.humanInstructions,
             decisions: parsedContext.decisions,

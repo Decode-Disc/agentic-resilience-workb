@@ -2,7 +2,10 @@ import type { Doc } from "@convex/_generated/dataModel";
 import { conversationValidationDefinition } from "@convex/domain/conversationValidation";
 import { executionValidationDefinition } from "@convex/domain/executionValidationAgent";
 import { savedMaterialInspectionDefinition } from "@convex/domain/savedMaterialInspection";
-import { workbenchDefinition } from "@convex/domain/workbench";
+import {
+    nativeWorkbenchDefinition,
+    workbenchDefinition,
+} from "@convex/domain/workbench";
 import type { AgentDefinition } from "./agentDefinition";
 import { commonOperations } from "./commonOperations";
 import { executionError } from "./errors";
@@ -37,7 +40,10 @@ export function getAgentDefinition(
     id: Doc<"agentMissions">["definitionId"],
     version?: number,
 ): AgentDefinition {
-    const definition: AgentDefinition = definitions[id];
+    const definition: AgentDefinition =
+        id === nativeWorkbenchDefinition.id && version === 2
+            ? nativeWorkbenchDefinition
+            : definitions[id];
     if (
         !definition ||
         (version !== undefined && definition.version !== version)

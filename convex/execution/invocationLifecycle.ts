@@ -12,11 +12,13 @@ import {
     assertPreparationComparisonFence,
     assertPreparationExecutionFence,
 } from "@convex/domain/sourcePreparationAuthority";
+import { agentToolSetKey } from "@convex/integrations/modelInput";
 import { providerAttemptValidator } from "@convex/providerCalls";
 import schema from "@convex/schema";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
+import { agentToolSchemas } from "./agentDefinition";
 import {
     canAdoptRetainedResponse,
     executionError,
@@ -27,7 +29,11 @@ import {
     requireMissionObservationAuthority,
 } from "./authority";
 import { buildMissionContext } from "./context";
-import { publishTurn, requireInstructionVersion } from "./conversations";
+import {
+    conversationInstructions,
+    publishTurn,
+    requireInstructionVersion,
+} from "./conversations";
 import {
     HISTORICAL_AGENT_BACKEND,
     invocationReplyValidator,
@@ -233,6 +239,13 @@ export const begin = internalMutation({
         missionId: v.id("agentMissions"),
         expectedGeneration: v.number(),
         taskKey: v.string(),
+        piSessionId: v.optional(v.id("piSessions")),
+        nativeInput: v.optional(
+            v.object({
+                messageIds: v.array(v.id("agentMessageDeliveries")),
+                toolSetKey: v.string(),
+            }),
+        ),
         purpose: v.optional(v.literal("compaction")),
         provenance: v.union(v.literal("live"), v.literal("simulation")),
     },
@@ -254,12 +267,19 @@ export const begin = internalMutation({
             throw executionError("invocation_identity_conflict");
         if (!/^[a-zA-Z0-9._:-]{1,160}$/.test(args.taskKey))
             throw executionError("invalid_task_key");
+        if (args.piSessionId) {
+            const session = await ctx.db.get(args.piSessionId);
+            if (
+                session?.missionId !== mission._id ||
+                session.generation !== args.expectedGeneration
+            )
+                throw executionError("pi_writer_fenced");
+        }
+        const taskKey = `${args.piSessionId ?? mission._id}:${args.taskKey}`;
         const existing = await ctx.db
             .query("agentInvocations")
             .withIndex("by_run_and_task_key", (q) =>
-                q
-                    .eq("runId", mission.runId)
-                    .eq("taskKey", `${mission._id}:${args.taskKey}`),
+                q.eq("runId", mission.runId).eq("taskKey", taskKey),
             )
             .unique();
         if (existing) {
@@ -315,6 +335,37 @@ export const begin = internalMutation({
         const turn = mission.conversationTurnId
             ? await ctx.db.get(mission.conversationTurnId)
             : null;
+        const definition = getAgentDefinition(
+            mission.definitionId,
+            mission.definitionVersion,
+        );
+        if (definition.nativeConversation && !args.purpose) {
+            // Delivery proves native messages and tools; the fresh context returned
+            // by begin supplies business state, fenced by the invocation's version.
+            const instructions = await conversationInstructions(ctx, mission);
+            const native = args.nativeInput;
+            if (
+                !native ||
+                !instructions ||
+                stableStringify([...native.messageIds].sort()) !==
+                    stableStringify(
+                        instructions.messages
+                            .map((message) => message.messageId)
+                            .sort(),
+                    ) ||
+                native.toolSetKey !==
+                    (await agentToolSetKey(
+                        agentToolSchemas(
+                            definition,
+                            JSON.parse(context.inputJson),
+                        ),
+                    ))
+            )
+                return {
+                    kind: "blocked" as const,
+                    code: "native_input_changed",
+                };
+        }
         const invocationId = await ctx.db.insert("agentInvocations", {
             purpose: args.purpose,
             conversationTurnId: mission.conversationTurnId,
@@ -328,7 +379,7 @@ export const begin = internalMutation({
             ...invocationScopeFields(mission),
             generation: mission.generation,
             definitionVersion: mission.definitionVersion,
-            taskKey: `${mission._id}:${args.taskKey}`,
+            taskKey,
             provenance: args.provenance,
             status: "started",
             inputJson: context.inputJson,
@@ -904,6 +955,12 @@ export const finish = internalMutation({
         );
         if (structureError) return block(structureError, true);
         const requestIds = [];
+        const definition = getAgentDefinition(
+            mission.definitionId,
+            mission.definitionVersion,
+        );
+        const snapshot: unknown = JSON.parse(invocation.inputJson);
+        const modelOperations = agentToolSchemas(definition, snapshot);
         for (const request of args.response.requests) {
             let decoded: unknown;
             try {
@@ -911,12 +968,33 @@ export const finish = internalMutation({
             } catch {
                 decoded = null;
             }
+            let canonical = decoded;
+            if (definition.normalizeOperationInput) {
+                const operation = modelOperations[request.name];
+                if (
+                    !operation ||
+                    !validate(operation.inputValidator, decoded, { db: ctx.db })
+                )
+                    canonical = null;
+                else {
+                    try {
+                        canonical = definition.normalizeOperationInput(
+                            request.name,
+                            decoded as Record<string, unknown>,
+                            snapshot,
+                        );
+                    } catch (error) {
+                        if (!executionFailureCode(error)) throw error;
+                        canonical = null;
+                    }
+                }
+            }
             const input =
-                decoded &&
-                typeof decoded === "object" &&
-                !Array.isArray(decoded) &&
-                !("kind" in decoded)
-                    ? { ...decoded, kind: request.name }
+                canonical &&
+                typeof canonical === "object" &&
+                !Array.isArray(canonical) &&
+                !("kind" in canonical)
+                    ? { ...canonical, kind: request.name }
                     : null;
             const valid = validate(operationInputValidator, input, {
                 db: ctx.db,
