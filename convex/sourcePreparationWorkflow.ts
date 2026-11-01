@@ -1,3 +1,4 @@
+import { awaitResearchControl } from "@convex/execution/researchControl";
 import { vResultValidator, vWorkflowId } from "@convex-dev/workflow";
 import type { FunctionReturnType } from "convex/server";
 import { v } from "convex/values";
@@ -44,14 +45,23 @@ export const onComplete = internalMutation({
 
 export const run = workflow
     .define({
-        args: { preparationId: v.id("sourceSelectionProposalRebuilds") },
+        args: {
+            preparationId: v.id("sourceSelectionProposalRebuilds"),
+            controlRunId: v.optional(v.id("researchRuns")),
+        },
         returns: v.null(),
     })
-    .handler(async (step, args): Promise<null> => {
+    .handler(async (step, { controlRunId, ...args }): Promise<null> => {
         let configurationChecked = false;
         // Bootstrap through the original scheduled step so historical journals replay unchanged.
         let inlineControls = false;
         while (true) {
+            if (controlRunId)
+                await awaitResearchControl(
+                    step,
+                    controlRunId,
+                    args.preparationId,
+                );
             const batch: FunctionReturnType<
                 typeof internal.sourcePreparation.nextBatch
             > = await step.runMutation(
@@ -60,6 +70,14 @@ export const run = workflow
                 inlineControls ? { inline: true } : {},
             );
             if (batch.completed) return null;
+            const checkpoint = async () => {
+                if (controlRunId)
+                    batch.executionGeneration = await awaitResearchControl(
+                        step,
+                        controlRunId,
+                        args.preparationId,
+                    );
+            };
             inlineControls =
                 batch.executionPlanVersion === "inline_controls_v2" ||
                 batch.executionPlanVersion ===
@@ -89,6 +107,7 @@ export const run = workflow
             }
             if (batch.sourceIds.length === 0) {
                 const compareSources = async () => {
+                    await checkpoint();
                     if (batch.comparisonVersion === SOURCE_COMPARISON_VERSION) {
                         const targets = await step.runQuery(
                             internal.sourcePreparation.comparisonTargets,
@@ -110,6 +129,7 @@ export const run = workflow
                             offset < targets.length;
                             offset += concurrency
                         ) {
+                            await checkpoint();
                             const outcomes = await Promise.all(
                                 targets
                                     .slice(offset, offset + concurrency)
@@ -167,6 +187,7 @@ export const run = workflow
                         { ...args, phase: "supplement" },
                         controlOptions,
                     );
+                await checkpoint();
                 const supplement = batch.canSupplement
                     ? await step.runAction(
                           internal.sourcePreparationActions.searchSupplement,
@@ -182,6 +203,7 @@ export const run = workflow
                         { ...args, phase: "proposal" },
                         controlOptions,
                     );
+                await checkpoint();
                 await step.runMutation(internal.sourcePreparation.finish, {
                     ...args,
                     expectedExecutionGeneration: batch.executionGeneration,

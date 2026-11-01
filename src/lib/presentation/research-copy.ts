@@ -147,6 +147,7 @@ export function sourceAddErrorMessage(error: unknown): string {
 }
 
 const lifecycleLabels = {
+    framing: "Framing research",
     draft: "Preparing research",
     checking_public_evidence: "Checking public evidence",
     awaiting_evidence_sufficiency_review: "Review evidence coverage",

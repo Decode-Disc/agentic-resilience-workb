@@ -8,6 +8,7 @@ import { assertSourceCandidateRequestFits } from "./domain/sourceCandidateCapaci
 import { readPreparationConcurrency } from "./domain/sourcePreparationAuthority";
 import { coveragePresetValidator } from "./domain/validators";
 import {
+    MAX_ANALYSES_PER_VISITOR,
     sourceCandidateLimit,
     sourcePreparationEnabled,
 } from "./resourceLimits";
@@ -15,13 +16,13 @@ import { workspaceForVisitor } from "./runWorkspace";
 import { insertPendingManualSource } from "./sources";
 import { workflow } from "./workflow";
 
-const MAX_ANALYSES_PER_VISITOR = 3;
 export const confirmAndStartReserved = internalMutation({
     args: {
         preflightId: v.id("companyPreflights"),
         idempotencyKey: v.string(),
         coveragePreset: coveragePresetValidator,
         researchAngle: v.optional(v.string()),
+        framingOnly: v.optional(v.boolean()),
         manualSourcePreparationIds: v.optional(
             v.array(v.id("manualSourcePreparations")),
         ),
@@ -70,7 +71,10 @@ export const confirmAndStartReserved = internalMutation({
             )
             .unique();
         if (existing) {
-            if (existing.companyPreflightId !== args.preflightId) {
+            if (
+                existing.companyPreflightId !== args.preflightId ||
+                (existing.startMode === "framed") !== !!args.framingOnly
+            ) {
                 throw new Error(
                     "Idempotency key belongs to another company preflight",
                 );
@@ -82,7 +86,8 @@ export const confirmAndStartReserved = internalMutation({
             };
         }
 
-        if (sourcePreparationEnabled()) readPreparationConcurrency();
+        if (!args.framingOnly && sourcePreparationEnabled())
+            readPreparationConcurrency();
         const now = Date.now();
         const manualSources = new Map<
             string,
@@ -125,10 +130,13 @@ export const confirmAndStartReserved = internalMutation({
                     .eq("executionStatus", "running"),
             )
             .first();
-        if (running) {
+        if (running && !args.framingOnly) {
             throw new Error("A research workflow is already running");
         }
-        if (visitor.analysesReserved >= MAX_ANALYSES_PER_VISITOR) {
+        if (
+            !args.framingOnly &&
+            visitor.analysesReserved >= MAX_ANALYSES_PER_VISITOR
+        ) {
             throw new Error("Analysis limit reached");
         }
 
@@ -165,14 +173,15 @@ export const confirmAndStartReserved = internalMutation({
             purpose: "research",
             ownerVisitorId: visitor._id,
             reservationKey: idempotencyKey,
-            reservationStatus: "consumed",
+            reservationStatus: args.framingOnly ? undefined : "consumed",
+            startMode: args.framingOnly ? "framed" : undefined,
             companyId: company._id,
             companySnapshot,
             companyPreflightId: preflight._id,
             coveragePreset: args.coveragePreset,
             researchAngle: researchAngle || undefined,
-            lifecycleState: "draft",
-            executionStatus: "running",
+            lifecycleState: args.framingOnly ? "framing" : "draft",
+            executionStatus: args.framingOnly ? "idle" : "running",
             executionGeneration: 1,
             nextEventSequence: 2,
             workflowVersion: 2,
@@ -199,6 +208,43 @@ export const confirmAndStartReserved = internalMutation({
             await ctx.db.patch(manualSource.preparationId, {
                 consumedAt: now,
             });
+        }
+        if (args.framingOnly) {
+            await ctx.db.patch(runId, {
+                activeCorpusRevisionId: corpusRevisionId,
+            });
+            await ctx.db.patch(preflight._id, {
+                ownerVisitorId: visitor._id,
+                status: "consumed",
+            });
+            await ctx.db.insert("runEvents", {
+                runId,
+                sequence: 1,
+                type: "run_created",
+                lifecycleState: "framing",
+                executionStatus: "idle",
+                occurredAt: now,
+            });
+            await ctx.db.insert("runEvents", {
+                runId,
+                sequence: 2,
+                type: "company_confirmed",
+                lifecycleState: "framing",
+                executionStatus: "idle",
+                occurredAt: now,
+            });
+            await ctx.db.insert("auditEvents", {
+                actor: { type: "visitor", visitorId: visitor._id },
+                action: "company_confirmed",
+                targetType: "research_run",
+                targetId: runId,
+                occurredAt: now,
+            });
+            return {
+                runId,
+                remainingAnalyses:
+                    MAX_ANALYSES_PER_VISITOR - visitor.analysesReserved,
+            };
         }
         const workflowId = await workflow.start(
             ctx,

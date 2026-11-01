@@ -1,5 +1,5 @@
-import type { Infer } from "convex/values";
 import type { Doc } from "@convex/_generated/dataModel";
+import type { Infer } from "convex/values";
 
 import type {
     executionStatusValidator,
@@ -8,6 +8,33 @@ import type {
 
 export type ResearchRunLifecycle = Infer<typeof researchRunLifecycleValidator>;
 export type ExecutionStatus = Infer<typeof executionStatusValidator>;
+
+/** Includes documentary discovery, preparation and their human checkpoints. */
+export function isDocumentaryResearchPhase(
+    phase: ResearchRunLifecycle,
+): boolean {
+    return [
+        "draft",
+        "checking_public_evidence",
+        "discovering_sources",
+        "awaiting_evidence_sufficiency_review",
+        "awaiting_source_review",
+    ].includes(phase);
+}
+
+/** Reports implemented continuation support; commands still enforce ownership, state and generation. */
+export function supportsResearchControl(
+    run: Pick<
+        Doc<"researchRuns">,
+        "agentExecutionVersion" | "startMode" | "lifecycleState"
+    >,
+): boolean {
+    return (
+        run.agentExecutionVersion === 3 &&
+        (run.startMode !== "framed" ||
+            isDocumentaryResearchPhase(run.lifecycleState))
+    );
+}
 
 export function canStartNewCorpusRevision(
     run: Pick<Doc<"researchRuns">, "lifecycleState" | "executionStatus">,
@@ -24,6 +51,7 @@ const allowedTransitions: Record<
     ResearchRunLifecycle,
     ReadonlyArray<ResearchRunLifecycle>
 > = {
+    framing: ["draft"],
     draft: ["checking_public_evidence"],
     checking_public_evidence: [
         "awaiting_evidence_sufficiency_review",
@@ -45,6 +73,7 @@ const allowedTransitions: Record<
 };
 
 const requiredExecutionStatus: Record<ResearchRunLifecycle, ExecutionStatus> = {
+    framing: "idle",
     draft: "idle",
     checking_public_evidence: "running",
     awaiting_evidence_sufficiency_review: "paused",

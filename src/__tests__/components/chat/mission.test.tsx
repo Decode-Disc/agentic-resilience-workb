@@ -183,3 +183,30 @@ it("refreshes a running duration and fixes it at the supplied completion time", 
         vi.useRealTimers();
     }
 });
+
+it("shows supplied mission progress without inventing a zero operation count", () => {
+    render(
+        <ConversationMission
+            agent={agents.sources}
+            mission={{
+                id: "aggregate",
+                agentId: "sources",
+                title: "Documentary preparation",
+                state: "completed",
+                operations: [],
+                summary: "3 references · 0 captures",
+                details: <p>Inspect the retained documentary progress.</p>,
+            }}
+        />,
+    );
+    expect(screen.getByText(/3 references · 0 captures/)).toBeTruthy();
+    expect(screen.queryByText(/0 operations/)).toBeNull();
+    fireEvent.click(
+        screen.getByRole("button", {
+            name: "Inspect Sources mission: Documentary preparation",
+        }),
+    );
+    expect(
+        screen.getByText("Inspect the retained documentary progress."),
+    ).toBeTruthy();
+});

@@ -16,6 +16,7 @@ export type WorkspaceSubsection =
 
 export type WorkspaceSearch = {
     section: WorkspaceSection;
+    detail?: "timeline" | "framing";
     subsection?: WorkspaceSubsection;
     inventory?: 1;
     view?: Exclude<SourceReviewNavigation["view"], "overview">;
@@ -59,6 +60,11 @@ export function workspaceSearch(
                 ? legacy
                 : "progress";
     const result: WorkspaceSearch = { section };
+    if (
+        section === "progress" &&
+        (search.detail === "timeline" || search.detail === "framing")
+    )
+        result.detail = search.detail;
     if (section === "investigation") {
         result.subsection =
             legacy === "assessment"

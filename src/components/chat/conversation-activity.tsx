@@ -24,7 +24,13 @@ import "./workbench-conversation.css";
 export type ConversationWorkItem = {
     id: string;
     title: string;
-    state: "running" | "completed" | "interrupted";
+    state:
+        | "running"
+        | "completed"
+        | "interrupted"
+        | "waiting"
+        | "blocked"
+        | "paused";
     summary: string;
     details?: ReactNode;
 };
@@ -32,6 +38,9 @@ export const workStateLabels = {
     running: "Working",
     completed: "Complete",
     interrupted: "Interrupted",
+    waiting: "Waiting",
+    paused: "Paused",
+    blocked: "Unavailable",
 } as const;
 
 /** Compact useful work in an assistant turn, with supporting detail disclosed in place. */
@@ -116,7 +125,7 @@ export function ConversationActivityGroup({
     summary: string;
     state: ConversationWorkItem["state"];
     activities: readonly ConversationWorkItem[];
-    content?: ReactNode;
+    content?: ReactNode | ((open: boolean) => ReactNode);
     triggerLabel?: string;
     runningHeader?: ReactNode;
 }) {
@@ -127,10 +136,12 @@ export function ConversationActivityGroup({
     useLayoutEffect(() => {
         if (!running && workHasFocus.current) trigger.current?.focus();
     }, [running]);
-    if (!activities.length && !runningHeader) return null;
+    const open =
+        running || state === "waiting" || state === "paused" || expanded;
+    if (!activities.length && !runningHeader && !content) return null;
     return (
         <Collapsible
-            open={running || expanded}
+            open={open}
             onOpenChange={setExpanded}
             role="region"
             aria-label={title}
@@ -166,7 +177,9 @@ export function ConversationActivityGroup({
                             event.relatedTarget,
                         );
                     }}>
-                    {content ??
+                    {(typeof content === "function"
+                        ? content(open)
+                        : content) ??
                         activities.map((activity) => (
                             <ConversationActivity
                                 key={activity.id}

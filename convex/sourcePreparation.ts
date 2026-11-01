@@ -1,3 +1,4 @@
+import { readResearchContext } from "@convex/domain/researchContext";
 import {
     SOURCE_COMPARISON_MAX_OUTPUT_BYTES,
     SOURCE_COMPARISON_VERSION,
@@ -15,6 +16,7 @@ import {
     SOURCE_RETRIEVAL_RANKING_POLICY,
     SOURCE_RETRIEVAL_VERSION,
 } from "@convex/domain/sourceRetrievalPolicy";
+import { applyRequestedResearchPause } from "@convex/execution/researchControl";
 import {
     MAX_HISTORICAL_SOURCE_CANDIDATES,
     MAX_SUPPLEMENT_SEARCHES,
@@ -26,7 +28,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { type Infer, v } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
@@ -85,12 +87,37 @@ import {
 import { companySnapshotValidator } from "./domain/validators";
 import { requireWorkspaceRun } from "./runWorkspace";
 import schema from "./schema";
-import { createSourceSelectionProposal } from "./sourceSelectionProposals";
+import {
+    createSourceSelectionProposal,
+    readCurrentSourceSelection,
+} from "./sourceSelectionProposals";
 import { workflow } from "./workflow";
 
 const sourceComparisonOutputValidator = zodToConvex(
     sourceComparisonOutputSchema,
 );
+
+async function scopeSupplementQueries(
+    ctx: QueryCtx,
+    run: Doc<"researchRuns">,
+    preparation: Doc<"sourceSelectionProposalRebuilds">,
+    queries: NonNullable<
+        Doc<"sourceSelectionProposalRebuilds">["supplementQueries"]
+    >,
+) {
+    const { framing, scope } = await readResearchContext(ctx, run);
+    return queries.map((query) => ({
+        ...query,
+        query: [
+            query.query,
+            framing ? scope : undefined,
+            preparation.documentaryNeed,
+        ]
+            .filter(Boolean)
+            .join(" "),
+        ...(framing ? { dimensionKeys: [] } : {}),
+    }));
+}
 
 /** Starts or resumes the review preparation while preserving the main approval workflow. Callers validate ownership and the current draft before entering. */
 export async function startReviewPreparation(
@@ -103,6 +130,7 @@ export async function startReviewPreparation(
         requestId: string;
         manualSourceId?: Id<"sources">;
         target?: RecoveryTarget;
+        documentaryNeed?: string;
     },
 ) {
     let { run } = args;
@@ -113,6 +141,13 @@ export async function startReviewPreparation(
         invitation.claimedByVisitorId !== visitor._id
     )
         throw new Error("Unauthorized");
+    if (!sourcePreparationEnabled())
+        throw sourcePreparationError("preparation_disabled");
+    if (
+        args.documentaryNeed &&
+        (!args.target || args.documentaryNeed.trim().length > 2000)
+    )
+        throw sourcePreparationError("request_invalid");
     const requestId = args.requestId.trim();
     if (!requestId || requestId.length > 128)
         throw new Error("Invalid preparation request");
@@ -131,7 +166,8 @@ export async function startReviewPreparation(
                 replay.entryPoint === "targeted_search"
                     ? (replay.target ?? null)
                     : null,
-            ) !== JSON.stringify(args.target ?? null)
+            ) !== JSON.stringify(args.target ?? null) ||
+            replay.documentaryNeed !== args.documentaryNeed
         )
             throw new Error(
                 "Preparation request was reused for a different proposal",
@@ -225,10 +261,10 @@ export async function startReviewPreparation(
         return { preparationId: previous._id, status: previous.status };
     }
     if (args.target) {
-        const current = await ctx.runQuery(
-            api.sourceSelectionProposals.getCurrent,
-            { runId: run._id, corpusRevisionId: revision._id },
-        );
+        const current = await readCurrentSourceSelection(ctx, {
+            run,
+            revision,
+        });
         if (
             !current ||
             (args.target.kind === "coverage"
@@ -367,6 +403,7 @@ export async function startReviewPreparation(
                 : {}),
             operationKey,
             requestId,
+            documentaryNeed: args.documentaryNeed,
             cycle: 1,
             status: slotUnavailable ? "blocked" : "started",
             progress: { phase: "reading", updatedAt: now },
@@ -399,7 +436,10 @@ export async function startReviewPreparation(
     const workflowId = await workflow.start(
         ctx,
         internal.sourcePreparationWorkflow.run,
-        { preparationId },
+        {
+            preparationId,
+            ...(run.startMode === "framed" ? { controlRunId: run._id } : {}),
+        },
         {
             onComplete: internal.sourcePreparationWorkflow.onComplete,
             context: { preparationId },
@@ -448,8 +488,6 @@ export const startForReview = mutation({
             proposal.corpusRevisionId !== revision._id
         )
             throw new Error("Unauthorized");
-        if (!sourcePreparationEnabled())
-            throw sourcePreparationError("preparation_disabled");
         return startReviewPreparation(ctx, {
             run,
             revision,
@@ -493,12 +531,13 @@ export const getQualificationInput = internalQuery({
         );
         if (capture.runId !== run._id || !source || !company)
             throw sourcePreparationError("capture_unavailable");
+        const { researchAngle } = await readResearchContext(ctx, run);
         return {
             capture,
             source,
             company,
             asOfTime: preparation.asOfTime ?? preparation.createdAt,
-            researchAngle: run.researchAngle,
+            researchAngle,
         };
     },
 });
@@ -1802,7 +1841,10 @@ export const reserveSupplementPlan = internalMutation({
             ? recoverySearchPlan({
                   company,
                   coveragePreset,
-                  researchAngle: run.researchAngle,
+                  researchAngle:
+                      run.startMode === "framed"
+                          ? undefined
+                          : run.researchAngle,
                   target: preparation.target,
                   failedFamilies: preparation.failedDiscoveryFamilies,
               }).queries.slice(0, 1)
@@ -1817,19 +1859,33 @@ export const reserveSupplementPlan = internalMutation({
                           recoverySearchPlan({
                               company,
                               coveragePreset,
-                              researchAngle: run.researchAngle,
+                              researchAngle:
+                                  run.startMode === "framed"
+                                      ? undefined
+                                      : run.researchAngle,
                               target: { kind: "coverage", role },
                               failedFamilies: [],
                           }).queries,
                   )
                   .filter((query) => query.discoveryIntent !== "regulatory")
                   .slice(0, MAX_SUPPLEMENT_SEARCHES);
+        const scopedQueries = await scopeSupplementQueries(
+            ctx,
+            run,
+            preparation,
+            queries,
+        );
         if (queries.length === 0) return null;
-        await ctx.db.patch(preparation._id, { supplementQueries: queries });
+        await ctx.db.patch(preparation._id, {
+            supplementQueries: scopedQueries,
+        });
         await ctx.db.patch(run._id, {
             automaticSupplementOperationId: preparation._id,
         });
-        return { supplementOperationId: preparation._id, queries };
+        return {
+            supplementOperationId: preparation._id,
+            queries: scopedQueries,
+        };
     },
 });
 
@@ -1936,13 +1992,21 @@ export const reserveNextSupplementSearch = internalMutation({
             );
             if (!company || !run.coveragePreset)
                 throw sourcePreparationError("company_unavailable");
-            const targetedQueries = recoverySearchPlan({
-                company,
-                coveragePreset: run.coveragePreset,
-                researchAngle: run.researchAngle,
-                target: preparation.target,
-                failedFamilies: preparation.failedDiscoveryFamilies,
-            }).queries;
+            const targetedQueries = await scopeSupplementQueries(
+                ctx,
+                run,
+                preparation,
+                recoverySearchPlan({
+                    company,
+                    coveragePreset: run.coveragePreset,
+                    researchAngle:
+                        run.startMode === "framed"
+                            ? undefined
+                            : run.researchAngle,
+                    target: preparation.target,
+                    failedFamilies: preparation.failedDiscoveryFamilies,
+                }).queries,
+            );
             if (!targetedQueries.length)
                 throw sourcePreparationError("request_invalid");
             const targetedQuery =
@@ -2314,11 +2378,14 @@ export const finish = internalMutation({
             proposalVersion: proposal.version,
             completedAt: now,
         });
-        const currentRun = await ctx.db.get(run._id);
-        if (!currentRun) throw sourcePreparationError("stale_execution");
         const reviewEntry = preparation.entryPoint !== "initial_discovery";
+        const latestRun = await ctx.db.get(run._id);
+        if (!latestRun) throw sourcePreparationError("stale_execution");
+        const currentRun = reviewEntry
+            ? await applyRequestedResearchPause(ctx, latestRun)
+            : latestRun;
         await ctx.db.patch(run._id, {
-            ...(reviewEntry
+            ...(reviewEntry && currentRun.pauseReason !== "analyst"
                 ? {
                       executionStatus: "paused" as const,
                       pauseReason: "source_review" as const,
@@ -2349,6 +2416,12 @@ export const finish = internalMutation({
                       : undefined),
             occurredAt: now,
         });
+        if (run.startMode === "framed")
+            await ctx.scheduler.runAfter(
+                0,
+                internal.workbench.processInstructions,
+                { runId: run._id },
+            );
         return {
             proposalId: proposal.proposalId,
             version: proposal.version,

@@ -1,3 +1,5 @@
+import { framingContentValidator } from "@convex/domain/framingContracts";
+import { coverageRoleValidator } from "@convex/domain/sourceDiscoveryRecovery";
 import {
     retrievalMetadataValidator,
     SOURCE_RETRIEVAL_RANKING_POLICY,
@@ -156,8 +158,50 @@ export default defineSchema({
     })
         .index("by_owner_and_context_key", ["ownerVisitorId", "contextKey"])
         .index("by_auth_user_id_and_status", ["authUserId", "status"]),
+    workbenchInstructions: defineTable({
+        runId: v.id("researchRuns"),
+        requestId: v.id("agentOperationRequests"),
+        messageId: v.id("agentMessageDeliveries"),
+        interpretedNeed: v.string(),
+        framingRevisionId: v.id("framingRevisions"),
+        coverageRole: v.optional(coverageRoleValidator),
+        status: v.union(
+            v.literal("waiting"),
+            v.literal("transmitted"),
+            v.literal("limited"),
+            v.literal("blocked"),
+        ),
+        outcome: v.string(),
+        preparationId: v.optional(v.id("sourceSelectionProposalRebuilds")),
+        createdAt: v.number(),
+    })
+        .index("by_request", ["requestId"])
+        .index("by_run", ["runId"])
+        .index("by_run_and_status", ["runId", "status"]),
+    framingRevisions: defineTable({
+        runId: v.id("researchRuns"),
+        revision: v.number(),
+        content: framingContentValidator,
+        requestKey: v.string(),
+        contentHash: v.string(),
+        origin: v.union(
+            v.literal("analyst"),
+            v.literal("workbench"),
+            v.literal("initial"),
+        ),
+        createdAt: v.number(),
+    })
+        .index("by_run_and_key", ["runId", "requestKey"])
+        .index("by_run_and_revision", ["runId", "revision"]),
     researchRuns: defineTable({
+        currentFramingRevisionId: v.optional(v.id("framingRevisions")),
+        fixedFramingRevisionId: v.optional(v.id("framingRevisions")),
+        researchStartRequestKey: v.optional(v.string()),
         agentExecutionVersion: v.optional(v.literal(3)),
+        startMode: v.optional(v.literal("framed")),
+        researchPauseRequested: v.optional(v.boolean()),
+        researchControlRevision: v.optional(v.number()),
+        researchStartedAt: v.optional(v.number()),
         purpose: runPurposeValidator,
         browserTestContextId: v.optional(v.id("browserTestContexts")),
         ownerVisitorId: v.optional(v.id("visitors")),
@@ -376,6 +420,7 @@ export default defineSchema({
             "status",
         ])
         .index("by_preparation_and_source", ["preparationId", "sourceId"])
+        .index("by_source_and_updated_at", ["sourceId", "updatedAt"])
         .index("by_source_and_status_and_updated_at", [
             "sourceId",
             "status",
@@ -541,6 +586,7 @@ export default defineSchema({
         asOfTime: v.optional(v.number()),
         manualSourceIds: v.optional(v.array(v.id("sources"))),
         readingSourceIds: v.optional(v.array(v.id("sources"))),
+        documentaryNeed: v.optional(v.string()),
         supplementQueries: v.optional(sourceDiscoveryQueriesValidator),
         supplementClaimedQueryIndexes: v.optional(v.array(v.number())),
         supplementSourceIds: v.optional(v.array(v.id("sources"))),

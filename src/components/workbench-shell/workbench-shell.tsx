@@ -27,6 +27,7 @@ import { uiLayerClasses } from "@/lib/ui-layers";
 import { cn } from "@/lib/utils";
 import { getWorkspaceDestination } from "@/lib/workspace/access-destination";
 import { WorkbenchShellSurface } from "./workbench-shell-surface";
+import { WorkbenchViewportContext } from "./workbench-viewport";
 
 export interface WorkbenchShellProps {
     children: ReactNode;
@@ -42,22 +43,39 @@ function LogoutMenuIcon({ className }: { className?: string }) {
 }
 
 export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
+    const [viewport, setViewport] = useState(false);
     return (
-        <WorkbenchShellSurface
-            header={
-                <LoadErrorBoundary
-                    title="Workspace navigation unavailable"
-                    description="We couldn’t load the workspace navigation. Try again."
-                    retryLabel="Retry"
-                    variant="compact"
-                    className="max-width-container py-2.5">
-                    <WorkbenchHeader activeRunId={activeRunId} />
-                </LoadErrorBoundary>
-            }>
-            <main className="max-width-container min-h-[calc(100svh-var(--bar-height))] py-4">
-                {children}
-            </main>
-        </WorkbenchShellSurface>
+        <WorkbenchViewportContext.Provider value={setViewport}>
+            <WorkbenchShellSurface
+                plain={viewport}
+                className={
+                    viewport
+                        ? "grid h-dvh min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden"
+                        : undefined
+                }
+                contentClassName={
+                    viewport ? "flex min-h-0 flex-col" : undefined
+                }
+                header={
+                    <LoadErrorBoundary
+                        title="Workspace navigation unavailable"
+                        description="We couldn’t load the workspace navigation. Try again."
+                        retryLabel="Retry"
+                        variant="compact"
+                        className="max-width-container py-2.5">
+                        <WorkbenchHeader activeRunId={activeRunId} />
+                    </LoadErrorBoundary>
+                }>
+                <main
+                    className={
+                        viewport
+                            ? "flex h-full min-h-0 min-w-0 flex-col"
+                            : "max-width-container min-h-[calc(100svh-var(--bar-height))] py-4"
+                    }>
+                    {children}
+                </main>
+            </WorkbenchShellSurface>
+        </WorkbenchViewportContext.Provider>
     );
 }
 

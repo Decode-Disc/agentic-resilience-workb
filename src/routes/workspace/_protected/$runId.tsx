@@ -18,7 +18,7 @@ export const Route = createFileRoute("/workspace/_protected/$runId")({
 
 function RunRoute() {
     const { runId } = Route.useParams();
-    const { section, subsection, inventory, view, coverage } =
+    const { section, subsection, inventory, view, coverage, detail } =
         Route.useSearch();
     const navigate = Route.useNavigate();
     const router = useRouter();
@@ -27,6 +27,7 @@ function RunRoute() {
         <RunRouteComponent
             runId={runId as Id<"researchRuns">}
             section={section}
+            detail={detail}
             subsection={subsection}
             inventoryOpen={inventory === 1}
             onInventoryOpenChange={(open) => {

@@ -1,0 +1,939 @@
+import type {
+    AppendMessage,
+    ExternalThreadQueueAdapter,
+} from "@assistant-ui/react";
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { useNavigate } from "@tanstack/react-router";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { ConversationHistory } from "@/components/chat/conversation-history";
+import type { ConversationMissionSnapshot } from "@/components/chat/conversation-mission";
+import {
+    ConversationComposer,
+    ConversationContext,
+    ConversationReference,
+    useWorkbenchConversation,
+} from "@/components/chat/workbench-conversation";
+import { LoadErrorBoundary } from "@/components/load-error-boundary";
+import { Button } from "@/components/ui/button";
+import {
+    Empty,
+    EmptyDescription,
+    EmptyHeader,
+    EmptyTitle,
+} from "@/components/ui/empty";
+import { LoadErrorAlert } from "@/components/ui/load-error-alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useWorkbenchViewport } from "@/components/workbench-shell/workbench-viewport";
+import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
+import { SourcingLane } from "@/components/workbench-ui/sourcing-lane";
+import { useResponsive } from "@/hooks/use-responsive";
+import {
+    sourceMissionState,
+    workbenchFailureCopy,
+    workbenchTurn,
+} from "@/lib/presentation/workbench";
+import {
+    FramingProposal,
+    StartFramingScreen,
+    StartResearchScreen,
+    StartSourceCounts,
+    StartSourcesHeader,
+} from "./start-screens";
+
+import { WorkbenchTurnDetails } from "./workbench-turn-details";
+
+type Snapshot = FunctionReturnType<typeof api.workbench.snapshot>;
+type Edit = {
+    kind: "scope" | "question";
+    id?: string;
+    text: string;
+    revision: number;
+    content: NonNullable<Snapshot["framing"]>["content"];
+    requestKey: string;
+    newQuestionId?: string;
+};
+const agents = {
+    workbench: { id: "workbench", name: "Workbench Agent" },
+    sources: { id: "sources", name: "Sources" },
+};
+const textOf = (message: AppendMessage) =>
+    message.content
+        .flatMap((part) => (part.type === "text" ? [part.text] : []))
+        .join("\n");
+
+type StartWorkspaceProps = {
+    runId: Id<"researchRuns">;
+    detail?: "timeline" | "framing";
+    progress?: ReactNode;
+    checkpoint?: ReactNode;
+};
+function useStartDraft() {
+    const [draft, setDraft] = useState("");
+    const [edit, setEdit] = useState<Edit | null>(null);
+    const launchKey = useRef(crypto.randomUUID());
+    const delivery = useRef<{ text: string; mode: string; key: string } | null>(
+        null,
+    );
+    return { draft, setDraft, edit, setEdit, launchKey, delivery };
+}
+/** Keeps each dossier's draft above recoverable subscription failures. */
+export function ConnectedStartWorkspace(props: StartWorkspaceProps) {
+    return <StartWorkspaceSession key={props.runId} {...props} />;
+}
+function StartWorkspaceSession(props: StartWorkspaceProps) {
+    const drafts = useStartDraft();
+    useWorkbenchViewport(props.detail !== "timeline");
+    return (
+        <LoadErrorBoundary
+            title="Research conversation unavailable"
+            description="Your saved work and current draft are retained. Try again to reconnect."
+            className="m-4">
+            <StartWorkspaceQuery {...props} drafts={drafts} />
+        </LoadErrorBoundary>
+    );
+}
+function StartWorkspaceQuery({
+    runId,
+    detail,
+    progress,
+    checkpoint,
+    drafts,
+}: StartWorkspaceProps & { drafts: ReturnType<typeof useStartDraft> }) {
+    const snapshot = useQuery(api.workbench.snapshot, { runId });
+    if (snapshot === undefined)
+        return (
+            <div
+                role="status"
+                aria-label="Loading research conversation"
+                className="flex min-h-0 flex-1 flex-col gap-6 p-6">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-24 w-3/4" />
+                <Skeleton className="mt-auto h-64 w-full" />
+            </div>
+        );
+    return (
+        <StartWorkspaceContent
+            key={runId}
+            snapshot={snapshot}
+            detail={detail}
+            progress={progress}
+            checkpoint={checkpoint}
+            drafts={drafts}
+        />
+    );
+}
+function StartWorkspaceContent({
+    snapshot,
+    detail,
+    progress,
+    checkpoint,
+    drafts,
+}: {
+    snapshot: Snapshot;
+    detail?: "timeline" | "framing";
+    progress?: ReactNode;
+    checkpoint?: ReactNode;
+    drafts: ReturnType<typeof useStartDraft>;
+}) {
+    const { run, company, framing } = snapshot;
+    const runId = run._id;
+    const navigate = useNavigate();
+    const { isMobile } = useResponsive();
+    const state = useQuery(api.execution.conversations.get, { runId });
+    const history = usePaginatedQuery(
+        api.workbench.history,
+        { runId },
+        { initialNumItems: 20 },
+    );
+    const submit = useMutation(api.execution.conversations.submit),
+        remove = useMutation(api.execution.conversations.removeQueued),
+        promote = useMutation(api.execution.conversations.promoteQueued),
+        stop = useMutation(api.execution.conversations.stopResponse),
+        resume = useMutation(api.execution.conversations.resumeQueue);
+    const save = useMutation(api.framing.save),
+        start = useMutation(api.framing.startResearch);
+    const pauseResearch = useMutation(api.execution.researchControl.pause),
+        resumeResearch = useMutation(api.execution.researchControl.resume);
+    const { draft, setDraft, edit, setEdit, launchKey, delivery } = drafts;
+    const [error, setError] = useState<string | null>(null);
+    const [saving, setSaving] = useState(false);
+    const inputRef = useRef<HTMLTextAreaElement>(null);
+    const trigger = useRef<HTMLElement | null>(null);
+    const activeTurnId = state?.activeTurn?._id;
+    const editKey = edit ? `${edit.kind}:${edit.id ?? ""}` : null;
+    const insufficient =
+        run.completionOutcome === "insufficient_public_evidence";
+    const launched = !!run.fixedFramingRevisionId;
+    const inspecting = !launched || detail === "framing";
+    const running =
+        !!state?.activeTurn &&
+        (state.execution?.status === "running" ||
+            state.execution?.status === "ready");
+    const control = (operation: Promise<unknown>) => {
+        void operation.catch(() =>
+            setError(
+                "That action could not be completed. Your saved work is unchanged. Try again.",
+            ),
+        );
+    };
+    const send = async (text: string, mode: "queue" | "steer" = "queue") => {
+        setError(null);
+        if (edit) {
+            const content =
+                edit.kind === "scope"
+                    ? { ...edit.content, scope: text }
+                    : {
+                          ...edit.content,
+                          questions: edit.id
+                              ? edit.content.questions.map((q) =>
+                                    q.id === edit.id ? { ...q, text } : q,
+                                )
+                              : [
+                                    ...edit.content.questions,
+                                    {
+                                        id:
+                                            edit.newQuestionId ??
+                                            crypto.randomUUID(),
+                                        text,
+                                        shortLabel: `Question ${edit.content.questions.length + 1}`,
+                                        rationale: "Added by the analyst.",
+                                    },
+                                ],
+                      };
+            try {
+                setSaving(true);
+                await save({
+                    runId,
+                    expectedRevision: edit.revision,
+                    requestKey: edit.requestKey,
+                    content,
+                });
+                setEdit(null);
+                queueMicrotask(() => trigger.current?.focus());
+            } catch (cause) {
+                setError(
+                    "The research program could not be saved. If it changed, cancel this edit and review the latest version before trying again.",
+                );
+                throw cause;
+            } finally {
+                setSaving(false);
+            }
+            return;
+        }
+        if (delivery.current?.text !== text || delivery.current?.mode !== mode)
+            delivery.current = { text, mode, key: crypto.randomUUID() };
+        await submit({
+            runId,
+            requestKey: delivery.current.key,
+            text,
+            delivery: mode,
+            turnId: mode === "steer" ? state?.activeTurn?._id : undefined,
+        });
+        delivery.current = null;
+        setDraft((current) => (current === text ? "" : current));
+    };
+    const queue: ExternalThreadQueueAdapter = {
+        items: history.results
+            .filter((m) => m.status === "queued")
+            .slice()
+            .reverse()
+            .map((m) => ({
+                id: m._id,
+                prompt: m.text,
+                parts: [{ type: "text", text: m.text }],
+            })),
+        steerItems: [],
+        enqueue: (m) => {
+            control(send(textOf(m), "queue"));
+        },
+        steer: (m) => {
+            control(send(textOf(m), m.steer ? "steer" : "queue"));
+        },
+        remove: (id) =>
+            control(
+                remove({
+                    runId,
+                    messageId: id as Id<"agentMessageDeliveries">,
+                }),
+            ),
+        move: (id, placement) => {
+            if (placement.lane === "steer" && state?.activeTurn)
+                control(
+                    promote({
+                        runId,
+                        messageId: id as Id<"agentMessageDeliveries">,
+                        turnId: state.activeTurn._id,
+                    }),
+                );
+        },
+        edit: () =>
+            setError(
+                "Remove the queued message and send your revised instruction.",
+            ),
+    };
+    const messages = history.results
+        .filter((m) => m.status !== "queued" && m.status !== "removed")
+        .slice()
+        .reverse();
+    const conversation = useWorkbenchConversation({
+        messages: messages.map((m) => ({
+            id: m._id,
+            role: m.role,
+            content: m.text,
+            createdAt: new Date(m.createdAt),
+            metadata: {
+                custom: {
+                    agentId: m.role === "assistant" ? "workbench" : undefined,
+                },
+            },
+        })),
+        draft: edit?.text ?? draft,
+        onDraftChange: (text) =>
+            edit
+                ? setEdit({ ...edit, text, requestKey: crypto.randomUUID() })
+                : setDraft(text),
+        onSend: send,
+        isRunning: running,
+        queue: edit ? undefined : queue,
+        onStop: activeTurnId
+            ? () => stop({ runId, turnId: activeTurnId }).then(() => {})
+            : undefined,
+    });
+    useEffect(() => {
+        if (editKey) inputRef.current?.focus();
+    }, [editKey]);
+    const work = new Map(
+        history.results.flatMap(({ work }) => {
+            if (!work) return [];
+            return [
+                [
+                    work.turn._id,
+                    {
+                        ...workbenchTurn(work),
+                        ...(work.deferred
+                            ? {
+                                  workDetails: (open: boolean) => (
+                                      <WorkbenchTurnDetails
+                                          runId={runId}
+                                          turnId={work.turn._id}
+                                          open={open}
+                                      />
+                                  ),
+                              }
+                            : {}),
+                    },
+                ] as const,
+            ];
+        }),
+    );
+    if (snapshot.activeWork)
+        work.set(
+            snapshot.activeWork.turn._id,
+            workbenchTurn(snapshot.activeWork),
+        );
+    const captured = snapshot.sources.filter(
+        (s) => s.state === "captured",
+    ).length;
+    const sourceState = sourceMissionState(run, snapshot.preparation);
+    const missions: ConversationMissionSnapshot[] = launched
+        ? [
+              {
+                  id: `sources:${runId}`,
+                  agentId: "sources",
+                  title: "Documentary preparation",
+                  state: sourceState,
+                  startedAt: run.researchStartedAt
+                      ? new Date(run.researchStartedAt).toISOString()
+                      : undefined,
+                  operations: [],
+                  summary: `${snapshot.sources.length} references · ${captured} captures`,
+                  details: (
+                      <>
+                          <p>
+                              Inspect the retained material and preparation
+                              limits before continuing.
+                          </p>
+                          <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                  void navigate({
+                                      to: "/workspace/$runId",
+                                      params: { runId },
+                                      search: {
+                                          section: "progress",
+                                          detail: "timeline",
+                                      },
+                                  })
+                              }>
+                              Open progress
+                          </Button>
+                      </>
+                  ),
+              },
+          ]
+        : [];
+    const researchControls =
+        launched && snapshot.researchControlAvailable ? (
+            <div className="flex flex-wrap items-center gap-2">
+                {run.researchPauseRequested ? (
+                    <>
+                        <p
+                            role="status"
+                            className="text-sm text-muted-foreground">
+                            Pause requested. The current operation will finish
+                            first.
+                        </p>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                                control(
+                                    resumeResearch({
+                                        runId,
+                                        expectedGeneration:
+                                            run.executionGeneration,
+                                    }),
+                                )
+                            }>
+                            Keep researching
+                        </Button>
+                    </>
+                ) : run.pauseReason === "analyst" ? (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                            control(
+                                resumeResearch({
+                                    runId,
+                                    expectedGeneration: run.executionGeneration,
+                                }),
+                            )
+                        }>
+                        Resume research
+                    </Button>
+                ) : run.executionStatus === "running" ? (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                            control(
+                                pauseResearch({
+                                    runId,
+                                    expectedGeneration: run.executionGeneration,
+                                }),
+                            )
+                        }>
+                        Pause research
+                    </Button>
+                ) : null}
+            </div>
+        ) : null;
+    const log = (
+        <>
+            {history.status === "CanLoadMore" && (
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => history.loadMore(20)}>
+                    Load earlier conversation
+                </Button>
+            )}
+            {history.status === "LoadingFirstPage" ? (
+                <Skeleton className="h-24 w-3/4" />
+            ) : (
+                <ConversationHistory
+                    entries={[
+                        ...messages.map((m) => ({
+                            kind: "message" as const,
+                            id: m._id,
+                            time: m.createdAt,
+                        })),
+                        ...[...work.values()]
+                            .filter(
+                                (turn) =>
+                                    !turn.entries.some(
+                                        (entry) =>
+                                            entry.kind === "message" &&
+                                            messages.some(
+                                                (m) => m._id === entry.id,
+                                            ),
+                                    ),
+                            )
+                            .map((turn) => ({
+                                kind: "turn" as const,
+                                id: turn.id,
+                                time: Date.parse(turn.startedAt ?? "") || 0,
+                            })),
+                        ...missions.map((m) => ({
+                            kind: "mission" as const,
+                            id: m.id,
+                            time: run.researchStartedAt ?? run.updatedAt,
+                        })),
+                    ].sort((a, b) => a.time - b.time)}
+                    turns={[...work.values()]}
+                    missions={missions}
+                    agents={agents}
+                />
+            )}
+            {state?.execution?.status === "blocked" && (
+                <LoadErrorAlert
+                    variant="inline"
+                    title="Response unavailable"
+                    description={workbenchFailureCopy(state.execution.code)}
+                />
+            )}
+            {state && state.queuedCount > queue.items.length && (
+                <p className="text-sm text-muted-foreground">
+                    {state.queuedCount} messages are queued. Load earlier
+                    conversation to inspect the remaining messages.
+                </p>
+            )}
+            {(snapshot.activeWork?.operationsLimited ||
+                history.results.some((m) => m.work?.operationsLimited)) && (
+                <p className="text-sm text-muted-foreground">
+                    Showing the latest operations in each response.
+                </p>
+            )}
+            {snapshot.instructions.map((instruction) => (
+                <div
+                    key={instruction.id}
+                    className="rounded-md border p-3 text-sm">
+                    <p className="font-medium">{instruction.need}</p>
+                    <p className="text-muted-foreground">
+                        {instruction.outcome}
+                    </p>
+                </div>
+            ))}
+            {state?.admissionFailure && (
+                <LoadErrorAlert
+                    variant="inline"
+                    title="A queued message needs attention"
+                    description={
+                        state.admissionFailure.code === "context_capacity"
+                            ? "A queued message could not fit in this response. Remove it from the queue and send a shorter request; later messages are saved."
+                            : workbenchFailureCopy(state.admissionFailure.code)
+                    }
+                />
+            )}
+            {error && (
+                <LoadErrorAlert
+                    variant="inline"
+                    title="Action unavailable"
+                    description={error}
+                />
+            )}
+        </>
+    );
+    const beginEdit = (kind: Edit["kind"], id?: string) => {
+        if (!framing) return;
+        trigger.current =
+            document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null;
+        setEdit({
+            kind,
+            id,
+            text:
+                kind === "scope"
+                    ? framing.content.scope
+                    : (framing.content.questions.find((q) => q.id === id)
+                          ?.text ?? ""),
+            revision: framing.revision,
+            content: framing.content,
+            requestKey: crypto.randomUUID(),
+            newQuestionId:
+                kind === "question" && !id ? crypto.randomUUID() : undefined,
+        });
+        setError(null);
+    };
+    const composer = (
+        <ConversationComposer
+            inputRef={inputRef}
+            label={
+                edit
+                    ? edit.kind === "scope"
+                        ? "Edit research scope"
+                        : edit.id
+                          ? "Edit research question"
+                          : "Add research question"
+                    : launched
+                      ? "Ask about the sources"
+                      : "Refine the framing in your own words"
+            }
+            actionLabel={
+                edit
+                    ? edit.kind === "scope" || edit.id
+                        ? "Save changes"
+                        : "Add question"
+                    : undefined
+            }
+            onCancel={
+                edit
+                    ? () => {
+                          setEdit(null);
+                          setError(null);
+                          trigger.current?.focus();
+                      }
+                    : undefined
+            }
+            pending={conversation.sending || saving}
+            failed={conversation.failed}
+            compact={launched && !inspecting}
+            onResumeQueue={
+                state?.queuePaused &&
+                state.queuedCount &&
+                state.admissionFailure?.code !== "context_capacity"
+                    ? () => control(resume({ runId }))
+                    : undefined
+            }
+        />
+    );
+    const context = (
+        <ConversationContext
+            title={`${company?.ticker ?? "Company"} · Research`}
+            defaultOpen={!launched && !isMobile}
+            missions={missions}
+            agents={agents}
+            activities={[...work.values()].flatMap((t) =>
+                t.entries.flatMap((e) =>
+                    e.kind === "operation" ? [e.operation] : [],
+                ),
+            )}
+            onChangeScope={!launched ? () => beginEdit("scope") : undefined}
+            planSummary={
+                <>
+                    <span>
+                        {framing?.content.scope || "Scope being prepared"}
+                    </span>
+                    <span className="chat-context-meta">
+                        {launched ? "Accepted framing" : "Proposed framing"} ·{" "}
+                        {framing?.content.questions.length ?? 0} questions
+                    </span>
+                </>
+            }
+            plan={
+                <p>
+                    {framing?.content.scope ||
+                        "Workbench will propose an activity and a research program."}
+                </p>
+            }
+            planAction={
+                launched ? (
+                    <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={() =>
+                            void navigate({
+                                to: "/workspace/$runId",
+                                params: { runId },
+                                search: {
+                                    section: "progress",
+                                    detail: "framing",
+                                },
+                                resetScroll: false,
+                            })
+                        }>
+                        View framing
+                    </Button>
+                ) : undefined
+            }
+            outputs={
+                <p className="chat-context-empty">
+                    No retained analytical outputs yet.
+                </p>
+            }
+            sources={
+                snapshot.sources.length ? (
+                    snapshot.sources.map((s) => (
+                        <ConversationReference
+                            key={s.id}
+                            title={s.title}
+                            description={
+                                s.state === "captured"
+                                    ? "Retained capture"
+                                    : "Research input"
+                            }>
+                            <a href={s.url} target="_blank" rel="noreferrer">
+                                Open original
+                            </a>
+                            <p>
+                                {s.state === "captured"
+                                    ? "A capture is retained. Inclusion and factual support remain separate decisions."
+                                    : "This reference has not yet been captured."}
+                            </p>
+                        </ConversationReference>
+                    ))
+                ) : (
+                    <p className="chat-context-empty">
+                        No references supplied.
+                    </p>
+                )
+            }
+        />
+    );
+    const launch = async () => {
+        if (!framing) return;
+        try {
+            setSaving(true);
+            setError(null);
+            await start({
+                runId,
+                expectedRevision: framing.revision,
+                requestKey: launchKey.current,
+            });
+        } catch {
+            setError(
+                "Research could not start. Review the latest program and your available analysis capacity, then try again.",
+            );
+        } finally {
+            setSaving(false);
+        }
+    };
+    const program = (
+        <FramingProposal
+            collapsible
+            title={launched ? "Accepted research program" : undefined}
+            scope={framing?.content.scope}
+            onAdjustScope={!launched ? () => beginEdit("scope") : undefined}
+            questions={
+                framing?.content.questions.map((q, index) => ({
+                    ...q,
+                    label: `Q${index + 1}`,
+                })) ?? []
+            }
+            composer={composer}
+            actionActive={!!edit}
+            pending={saving}
+            startDisabled={
+                !framing?.content.scope.trim() ||
+                !framing.content.questions.length ||
+                running
+            }
+            onEditRequest={
+                !launched ? (q) => beginEdit("question", q.id) : undefined
+            }
+            onAddRequest={!launched ? () => beginEdit("question") : undefined}
+            onStart={!launched ? () => void launch() : undefined}
+            error={undefined}
+        />
+    );
+    if (detail === "timeline")
+        return (
+            <div className="py-4">
+                <Button
+                    variant="ghost"
+                    onClick={() =>
+                        void navigate({
+                            to: "/workspace/$runId",
+                            params: { runId },
+                            search: { section: "progress" },
+                        })
+                    }>
+                    Back to research
+                </Button>
+                {progress}
+            </div>
+        );
+    return (
+        <WorkbenchUiRoot className="flex h-full min-h-0 flex-1 flex-col">
+            {inspecting ? (
+                <StartFramingScreen
+                    runtime={conversation.runtime}
+                    context={context}
+                    conversation={log}
+                    action={program}
+                    actionLabel={
+                        launched ? "Research program" : "Pending action"
+                    }
+                />
+            ) : (
+                <StartResearchScreen
+                    runtime={conversation.runtime}
+                    context={context}
+                    conversation={log}
+                    conversationComposer={composer}
+                    heading={
+                        <>
+                            <StartSourcesHeader
+                                running={sourceState === "running"}
+                                label={
+                                    sourceState === "running"
+                                        ? "// Sources · live"
+                                        : sourceState === "paused"
+                                          ? "// Sources · paused"
+                                          : "// Sources"
+                                }
+                                title={
+                                    insufficient
+                                        ? "Public evidence is insufficient"
+                                        : sourceState === "completed"
+                                          ? "Documentary material ready"
+                                          : sourceState === "paused"
+                                            ? "Documentary preparation paused"
+                                            : sourceState === "waiting"
+                                              ? "Documentary preparation needs review"
+                                              : sourceState === "interrupted"
+                                                ? "Documentary preparation interrupted"
+                                                : "Collecting the documentary material"
+                                }
+                                onOpenProgress={() =>
+                                    void navigate({
+                                        to: "/workspace/$runId",
+                                        params: { runId },
+                                        search: {
+                                            section: "progress",
+                                            detail: "timeline",
+                                        },
+                                    })
+                                }
+                            />
+                            {researchControls}
+                        </>
+                    }
+                    summary={
+                        <StartSourceCounts
+                            counts={[
+                                {
+                                    value: snapshot.sources.length,
+                                    label: "found",
+                                },
+                                {
+                                    value: snapshot.sources.filter(
+                                        (s) => s.state === "capturing",
+                                    ).length,
+                                    label:
+                                        sourceState === "running"
+                                            ? "capturing"
+                                            : "waiting",
+                                    highlight: sourceState === "running",
+                                },
+                                { value: captured, label: "captured" },
+                            ]}
+                        />
+                    }
+                    lanes={
+                        snapshot.sources.length ? (
+                            (["found", "capturing", "captured"] as const).map(
+                                (stage) => {
+                                    const docs = snapshot.sources.filter(
+                                        (s) => s.state === stage,
+                                    );
+                                    return (
+                                        <SourcingLane
+                                            key={stage}
+                                            state={stage}
+                                            active={
+                                                stage === "capturing" &&
+                                                sourceState === "running"
+                                            }
+                                            label={
+                                                stage === "found"
+                                                    ? "Found"
+                                                    : stage === "capturing"
+                                                      ? sourceState ===
+                                                        "running"
+                                                          ? "Capturing"
+                                                          : "Waiting"
+                                                      : "Captured"
+                                            }
+                                            count={docs.length}
+                                            documents={docs
+                                                .slice(0, 4)
+                                                .map((s) => ({
+                                                    id: s.id,
+                                                    title: s.title,
+                                                    format: s.format,
+                                                    meta: s.unavailable
+                                                        ? "Reading unavailable"
+                                                        : "",
+                                                }))}
+                                            remainingLabel={
+                                                docs.length > 4
+                                                    ? `+${docs.length - 4} more`
+                                                    : undefined
+                                            }
+                                            emptyMessage="No documents at this stage."
+                                        />
+                                    );
+                                },
+                            )
+                        ) : (
+                            <Empty>
+                                <EmptyHeader>
+                                    <EmptyTitle>
+                                        {insufficient
+                                            ? "No documentary preparation completed"
+                                            : "Preparing source discovery"}
+                                    </EmptyTitle>
+                                    <EmptyDescription>
+                                        {insufficient
+                                            ? "Research ended before documentary preparation could proceed."
+                                            : "Documents will appear as they are found."}
+                                    </EmptyDescription>
+                                </EmptyHeader>
+                            </Empty>
+                        )
+                    }
+                    notice={
+                        insufficient ? (
+                            <div className="p-4">
+                                <p>
+                                    There is not enough public evidence to
+                                    continue this research.
+                                </p>
+                                <Button
+                                    variant="launch"
+                                    onClick={() =>
+                                        void navigate({
+                                            to: "/workspace/start",
+                                        })
+                                    }>
+                                    Start another analysis
+                                </Button>
+                            </div>
+                        ) : (
+                            (checkpoint ??
+                            (run.lifecycleState === "awaiting_source_review" ? (
+                                <div className="p-4">
+                                    <p>
+                                        Review the retained sources and their
+                                        limitations before continuing.
+                                    </p>
+                                    <Button
+                                        variant="launch"
+                                        onClick={() =>
+                                            void navigate({
+                                                to: "/workspace/$runId",
+                                                params: { runId },
+                                                search: { section: "sources" },
+                                            })
+                                        }>
+                                        Review sources
+                                    </Button>
+                                </div>
+                            ) : undefined))
+                        )
+                    }
+                />
+            )}
+            {launched && inspecting && (
+                <Button
+                    variant="ghost"
+                    onClick={() =>
+                        void navigate({
+                            to: "/workspace/$runId",
+                            params: { runId },
+                            search: { section: "progress" },
+                        })
+                    }>
+                    Back to preparation
+                </Button>
+            )}
+        </WorkbenchUiRoot>
+    );
+}

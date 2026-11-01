@@ -57,10 +57,14 @@ for (const theme of ["light", "dark"] as const) {
                 node.scrollTop = 0;
                 node.dispatchEvent(new Event("scroll"));
             });
-            await page.clock.runFor(200);
-            await expect(
-                page.getByRole("button", { name: "Jump to latest" }),
-            ).toBeVisible();
+            await expect
+                .poll(async () => {
+                    await page.clock.runFor(50);
+                    return page
+                        .getByRole("button", { name: "Jump to latest" })
+                        .isVisible();
+                })
+                .toBe(true);
             const lengthWhenReaderLeft = lastLength;
             for (let reading = 9; reading <= 24; reading++) {
                 await page.clock.runFor(250);

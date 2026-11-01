@@ -79,6 +79,13 @@ export const executionTables = {
         .index("by_session_and_sequence", ["sessionId", "sequence"])
         .index("by_session_and_key", ["sessionId", "key"]),
     agentConversations: defineTable({
+        queuePaused: v.optional(v.boolean()),
+        admissionFailure: v.optional(
+            v.object({
+                code: v.string(),
+                messageId: v.optional(v.id("agentMessageDeliveries")),
+            }),
+        ),
         runId: v.id("researchRuns"),
         storageRef: v.string(),
         queuedCount: v.number(),
@@ -91,11 +98,13 @@ export const executionTables = {
         status: v.union(
             v.literal("active"),
             v.literal("published"),
+            v.literal("interrupted"),
             v.literal("cancelled"),
         ),
         instructionVersion: v.number(),
         generation: v.number(),
         messageCount: v.number(),
+        hasOperations: v.optional(v.boolean()),
         missionId: v.optional(v.id("agentMissions")),
         publishedMessageId: v.optional(v.id("agentMessageDeliveries")),
         publicationHash: v.optional(v.string()),
@@ -116,6 +125,7 @@ export const executionTables = {
         ),
         status: v.union(
             v.literal("queued"),
+            v.literal("removed"),
             v.literal("active"),
             v.literal("processed"),
             v.literal("interrupted"),
@@ -218,6 +228,12 @@ export const executionTables = {
         cause: v.string(),
         input: requestInputValidator,
         pin: v.optional(operationPinValidator),
+        effect: v.optional(
+            v.object({
+                pin: operationPinValidator,
+                outcome: operationOutcomeValidator,
+            }),
+        ),
         expectedCaptureId: v.optional(v.id("sourceCaptures")),
         expectedContentHash: v.optional(v.string()),
         operationVersion: v.number(),

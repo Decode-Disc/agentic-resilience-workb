@@ -18,6 +18,7 @@ import { EvidenceSufficiencyReview } from "@/components/workspace/evidence-suffi
 import { LiveSourceReview } from "@/components/workspace/live-source-review";
 import { RunProgress } from "@/components/workspace/run-progress";
 import type { SourceReviewNavigation } from "@/components/workspace/source-proposal-review";
+import { ConnectedStartWorkspace } from "@/components/workspace/start/connected-start-workspace";
 import { WorkspaceNavigation } from "@/components/workspace/workspace-navigation";
 import {
     type WorkspaceSection,
@@ -33,6 +34,7 @@ function decisionKey(prefix: string) {
 export function RunRouteComponent({
     runId,
     section,
+    detail,
     sourceReviewNavigation,
     onSourceReviewNavigate,
     subsection,
@@ -41,6 +43,7 @@ export function RunRouteComponent({
 }: {
     runId: Id<"researchRuns">;
     section: WorkspaceSection;
+    detail?: "timeline" | "framing";
     subsection?: WorkspaceSubsection;
     inventoryOpen?: boolean;
     onInventoryOpenChange?: (open: boolean) => void;
@@ -58,7 +61,10 @@ export function RunRouteComponent({
     const routedToSourceReview = useRef(false);
 
     useEffect(() => {
-        if (run?.lifecycleState !== "awaiting_source_review") {
+        if (
+            run?.startMode === "framed" ||
+            run?.lifecycleState !== "awaiting_source_review"
+        ) {
             routedToSourceReview.current = false;
             return;
         }
@@ -75,7 +81,14 @@ export function RunRouteComponent({
                 replace: true,
             });
         }
-    }, [navigate, run?.lifecycleState, runId, section, inventoryOpen]);
+    }, [
+        navigate,
+        run?.lifecycleState,
+        run?.startMode,
+        runId,
+        section,
+        inventoryOpen,
+    ]);
 
     if (run === undefined || events === undefined) {
         return (
@@ -149,6 +162,38 @@ export function RunRouteComponent({
             },
         });
     }
+
+    if (run.startMode === "framed" && section === "progress")
+        return (
+            <ConnectedStartWorkspace
+                runId={runId}
+                detail={detail}
+                checkpoint={
+                    run.lifecycleState ===
+                    "awaiting_evidence_sufficiency_review" ? (
+                        <EvidenceSufficiencyReview
+                            onAddManualUrl={handleAddManualUrl}
+                            onDecide={async (decision) => {
+                                await decideSufficiency({ runId, decision });
+                            }}
+                        />
+                    ) : undefined
+                }
+                progress={
+                    <RunProgress
+                        run={run}
+                        events={events}
+                        onOpenSources={() =>
+                            void navigate({
+                                to: "/workspace/$runId",
+                                params: { runId },
+                                search: { section: "sources" },
+                            })
+                        }
+                    />
+                }
+            />
+        );
 
     return (
         <div className="min-w-0 pb-28 pt-2 sm:pb-36">

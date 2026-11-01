@@ -15,7 +15,8 @@ process.env.LOCAL_RUNTIME_CONVEX_ORIGIN = runtime.origins.convex;
 process.env.LOCAL_RUNTIME_WORKTREE_ID = runtime.identity.worktreeId;
 
 export default defineConfig({
-    testDir: "./e2e",
+    testDir: ".",
+    testMatch: ["e2e/**/*.spec.ts", "src/__tests__/e2e/**/*.spec.ts"],
     outputDir: join(outputRoot, "results"),
     fullyParallel: false,
     forbidOnly: Boolean(process.env.CI),
@@ -29,6 +30,9 @@ export default defineConfig({
     expect: { timeout: 10_000 },
     use: {
         baseURL: runtime.origins.web,
+        launchOptions: process.env.WORKBENCH_UI_BROWSER_PATH
+            ? { executablePath: process.env.WORKBENCH_UI_BROWSER_PATH }
+            : {},
         actionTimeout: 10_000,
         navigationTimeout: 20_000,
         // Automatic diagnostics are disabled because they can capture the

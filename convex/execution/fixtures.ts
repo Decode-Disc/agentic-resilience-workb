@@ -5,12 +5,14 @@ import {
     internalMutation,
     internalQuery,
     type MutationCtx,
+    type QueryCtx,
 } from "@convex/_generated/server";
 import {
     claimCorpusApprovedRunExecution,
     claimPausedRunExecution,
 } from "@convex/domain/executionClaim";
 import { upsertSourceReviewItem } from "@convex/domain/sourceReviewProjection";
+import { initializeFraming } from "@convex/framing";
 import {
     BROWSER_TEST_SLOT,
     requireBrowserFixtureContext,
@@ -26,7 +28,7 @@ import {
 } from "./executionProtocol";
 
 async function requireLocalFixtureRun(
-    ctx: MutationCtx,
+    ctx: MutationCtx | QueryCtx,
     args: { runId: Id<"researchRuns">; fixtureKey: string },
 ) {
     const visitor = await requireBrowserTestOwner(ctx, BROWSER_TEST_SLOT);
@@ -554,5 +556,113 @@ export const startConversation = internalAction({
             { requestId: created.requestId, expectedGeneration: 1 },
         );
         return created.missionId;
+    },
+});
+
+/** Prepares a labelled START scenario in the already-admitted local browser workspace. */
+export const startWorkbench = internalAction({
+    args: { fixtureKey: v.string() },
+    returns: v.id("researchRuns"),
+    handler: async (ctx, args): Promise<Id<"researchRuns">> => {
+        await ctx.runQuery(internal.execution.fixtures.authorize, {});
+        const base = await ctx.runMutation(
+            internal.e2eFixtures.seedSourceReviewScenario,
+            { slotKey: BROWSER_TEST_SLOT, fixtureKey: args.fixtureKey },
+        );
+        return ctx.runMutation(internal.execution.fixtures.activateWorkbench, {
+            runId: base.runId,
+            fixtureKey: args.fixtureKey,
+        });
+    },
+});
+export const activateWorkbench = internalMutation({
+    args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
+    returns: v.id("researchRuns"),
+    handler: async (ctx, args): Promise<Id<"researchRuns">> => {
+        const { run } = await requireLocalFixtureRun(ctx, args);
+        if (run.startMode === "framed") return run._id;
+        if (run.workflowId)
+            await workflow.cancel(ctx, run.workflowId as WorkflowId);
+        await ctx.db.patch(run._id, {
+            startMode: "framed",
+            lifecycleState: "framing",
+            executionStatus: "idle",
+            reservationStatus: undefined,
+            workflowId: undefined,
+            pauseReason: undefined,
+            researchAngle:
+                "Simulation: propose a claims workflow research program.",
+        });
+        await initializeFraming(ctx, run._id);
+        return run._id;
+    },
+});
+
+/** Reveals the existing labelled documentary fixture after framing; no acquisition or provider is simulated as live. */
+export const revealWorkbenchSources = internalMutation({
+    args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
+    returns: v.null(),
+    handler: async (ctx, args): Promise<null> => {
+        const { run } = await requireLocalFixtureRun(ctx, args);
+        const framing = run.currentFramingRevisionId
+            ? await ctx.db.get(run.currentFramingRevisionId)
+            : null;
+        if (
+            run.startMode !== "framed" ||
+            !framing?.content.questions.length ||
+            run.researchStartRequestKey
+        )
+            throw new Error("Unlaunched START fixture required");
+        if (run.fixedFramingRevisionId) return null;
+        const workflowId = await workflow.start(
+            ctx,
+            internal.e2eFixtures.sourceReviewWorkflow,
+            { runId: run._id },
+        );
+        await ctx.db.patch(run._id, {
+            fixedFramingRevisionId: framing._id,
+            agentExecutionVersion: 3,
+            researchStartedAt: Date.now(),
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+            workflowId,
+        });
+        return null;
+    },
+});
+
+export const inspectWorkbench = internalQuery({
+    args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
+    returns: v.object({
+        providerCallCount: v.number(),
+        allMissionsSimulated: v.boolean(),
+        queuedCount: v.number(),
+        phase: v.string(),
+    }),
+    handler: async (ctx, args) => {
+        const { run } = await requireLocalFixtureRun(ctx, args);
+        const missions = await ctx.db
+            .query("agentMissions")
+            .withIndex("by_run_and_request_key", (q) => q.eq("runId", run._id))
+            .take(21);
+        if (missions.length > 20)
+            throw new Error("Fixture inspection capacity exceeded");
+        const calls = await ctx.db
+            .query("providerCalls")
+            .withIndex("by_run", (q) => q.eq("runId", run._id))
+            .take(1);
+        const conversation = await ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", run._id))
+            .unique();
+        return {
+            providerCallCount: calls.length,
+            allMissionsSimulated:
+                missions.length > 0 &&
+                missions.every((m) => m.provenance === "simulation"),
+            queuedCount: conversation?.queuedCount ?? 0,
+            phase: run.lifecycleState,
+        };
     },
 });

@@ -1223,3 +1223,71 @@ test.each([
     },
     20000,
 );
+
+test("a controlled documentary workflow retains an engaged model result across Pause and Resume", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
+    const { t, runId, userId, preparationId } =
+        await capturedWorkflowCandidate();
+    await t.run(async (ctx) => {
+        const revisionId = await ctx.db.insert("framingRevisions", {
+            runId,
+            revision: 1,
+            content: { scope: "Workflow coordination", questions: [] },
+            contentHash: "fixture",
+            requestKey: "initial",
+            origin: "initial",
+            createdAt: Date.now(),
+        });
+        await ctx.db.patch(runId, {
+            startMode: "framed",
+            agentExecutionVersion: 3,
+            fixedFramingRevisionId: revisionId,
+            currentFramingRevisionId: revisionId,
+            workflowId: undefined,
+        });
+        await ctx.db.patch(preparationId, {
+            executionPlanVersion: "source_actions_v3",
+        });
+    });
+    const before = await t.run((ctx) => ctx.db.get(preparationId));
+    const client = t.withIdentity({ subject: userId });
+    const request = vi.fn<typeof fetch>(async () => {
+        await client.mutation(api.execution.researchControl.pause, {
+            runId,
+            expectedGeneration: 3,
+        });
+        return uncertainResponse();
+    });
+    vi.stubGlobal("fetch", request);
+    const handle = await t.run((ctx) =>
+        workflow.start(ctx, prepareWorkflow, {
+            preparationId,
+            controlRunId: runId,
+        }),
+    );
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100));
+    expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
+        executionStatus: "paused",
+        pauseReason: "analyst",
+        executionGeneration: 4,
+    });
+    expect(await t.run((ctx) => ctx.db.get(preparationId))).toMatchObject({
+        sourceOutcomes: [{ result: { status: "qualified" } }],
+        deadlineAt: before?.deadlineAt,
+    });
+    await client.mutation(api.execution.researchControl.resume, {
+        runId,
+        expectedGeneration: 4,
+    });
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(100));
+    expect(await t.run((ctx) => workflow.status(ctx, handle))).toMatchObject({
+        type: "completed",
+    });
+    expect(await t.run((ctx) => ctx.db.get(preparationId))).toMatchObject({
+        executionGeneration: 5,
+        sourceOutcomes: [{ result: { status: "qualified" } }],
+        deadlineAt: before?.deadlineAt,
+    });
+    expect(request).toHaveBeenCalledOnce();
+}, 20000);

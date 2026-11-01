@@ -36,6 +36,7 @@ export type AgentOperationDefinition = {
         mission: Doc<"agentMissions"> | undefined,
         input: Infer<typeof requestInputValidator>,
         runId?: Id<"researchRuns">,
+        effectPin?: import("./agentDefinition").OperationPin,
     ): Promise<
         | { kind: "available"; pin: import("./agentDefinition").OperationPin }
         | { kind: "unavailable"; code: string }
@@ -95,6 +96,7 @@ export type ModelAttemptReceipt = {
     outputDiagnostic?: Doc<"providerCalls">["diagnostic"];
 };
 export type AgentModelRoute = Readonly<{
+    reasoningEffort?: "low";
     model: string;
     provider: string;
     authorizedForAgent: true;

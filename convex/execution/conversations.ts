@@ -14,7 +14,10 @@ import {
     readConversationMessages,
     saveConversationMessage,
 } from "@convex/integrations/agentStorage";
-import { requireWorkspaceRun } from "@convex/runWorkspace";
+import {
+    localBrowserFixturesEnabled,
+    requireWorkspaceRun,
+} from "@convex/runWorkspace";
 import schema from "@convex/schema";
 import {
     paginationOptsValidator,
@@ -34,6 +37,7 @@ import {
     MAX_OPERATION_RESULT_BYTES,
     missionStatusValidator,
 } from "./executionProtocol";
+import { cancelPiWake } from "./piControl";
 
 async function conversationForRun(ctx: QueryCtx, runId: Id<"researchRuns">) {
     return ctx.db
@@ -53,8 +57,13 @@ async function event(
     await ctx.db.insert("agentExecutionEvents", {
         actor:
             actor ??
-            (["message_queued", "turn_steered"].includes(kind) &&
-            run?.ownerVisitorId
+            ([
+                "message_queued",
+                "turn_steered",
+                "message_removed",
+                "response_stopped",
+                "queue_resumed",
+            ].includes(kind) && run?.ownerVisitorId
                 ? { type: "visitor", visitorId: run.ownerVisitorId }
                 : { type: "system" }),
         runId,
@@ -187,7 +196,40 @@ export const submit = mutation({
     returns: v.id("agentMessageDeliveries"),
     handler: async (ctx, args) => {
         await requireWorkspaceRun(ctx, args.runId);
-        return submitAuthorizedMessage(ctx, args);
+        const existing = await ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_run_and_key", (q) =>
+                q.eq("runId", args.runId).eq("requestKey", args.requestKey),
+            )
+            .unique();
+        if (existing) return submitAuthorizedMessage(ctx, args);
+        if (args.delivery === "queue") {
+            const conversation = await conversationForRun(ctx, args.runId);
+            const turn = conversation?.activeTurnId
+                ? await ctx.db.get(conversation.activeTurnId)
+                : null;
+            const mission = turn?.missionId
+                ? await ctx.db.get(turn.missionId)
+                : null;
+            if (turn && mission?.status === "blocked")
+                await stopActiveResponse(ctx, {
+                    runId: args.runId,
+                    turnId: turn._id,
+                });
+        }
+        const id = await submitAuthorizedMessage(ctx, args);
+        const { run } = await requireDossierAuthority(ctx, args.runId);
+        if (run.startMode === "framed") {
+            const conversation = await conversationForRun(ctx, args.runId);
+            if (conversation && !conversation.admissionFailure)
+                await ctx.db.patch(conversation._id, { queuePaused: false });
+            await ctx.scheduler.runAfter(
+                0,
+                internal.execution.conversations.pumpWorkbench,
+                { runId: args.runId },
+            );
+        }
+        return id;
     },
 });
 
@@ -213,6 +255,7 @@ export const claimTurn = internalMutation({
             instructionVersion: 1,
             generation: 1,
             messageCount: messages.length,
+            hasOperations: false,
             createdAt: Date.now(),
         });
         for (const message of messages)
@@ -230,6 +273,9 @@ export const get = query({
     args: { runId: v.id("researchRuns") },
     returns: v.object({
         queuedCount: v.number(),
+        queuePaused: v.boolean(),
+        admissionFailure:
+            schema.tables.agentConversations.validator.fields.admissionFailure,
         execution: v.union(
             v.object({
                 status: missionStatusValidator,
@@ -250,6 +296,8 @@ export const get = query({
             : null;
         return {
             queuedCount: conversation?.queuedCount ?? 0,
+            queuePaused: conversation?.queuePaused ?? false,
+            admissionFailure: conversation?.admissionFailure,
             activeTurn,
             execution: mission
                 ? { status: mission.status, code: mission.blockCode }
@@ -449,6 +497,13 @@ export async function publishTurn(
     });
     await ctx.db.patch(conversation._id, { activeTurnId: undefined });
     await event(ctx, mission.runId, "turn_published", turn._id, messageId);
+    const run = await ctx.db.get(mission.runId);
+    if (run?.startMode === "framed" && !conversation.queuePaused)
+        await ctx.scheduler.runAfter(
+            0,
+            internal.execution.conversations.pumpWorkbench,
+            { runId: mission.runId },
+        );
     return messageId;
 }
 
@@ -700,3 +755,214 @@ export const appendQueuedToTurn = internalMutation({
         return true;
     },
 });
+
+export const removeQueued = mutation({
+    args: {
+        runId: v.id("researchRuns"),
+        messageId: v.id("agentMessageDeliveries"),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        await requireWorkspaceRun(ctx, args.runId);
+        await requireDossierAuthority(ctx, args.runId);
+        const message = await ctx.db.get(args.messageId);
+        if (message?.runId !== args.runId)
+            throw executionError("not_authorized");
+        if (message.status === "removed") return null;
+        if (message.status !== "queued")
+            throw executionError("message_not_queued");
+        const conversation = await ctx.db.get(message.conversationId);
+        if (!conversation) throw executionError("conversation_unavailable");
+        await ctx.db.patch(message._id, { status: "removed" });
+        await ctx.db.patch(conversation._id, {
+            queuedCount: Math.max(0, conversation.queuedCount - 1),
+            ...(conversation.admissionFailure?.messageId === message._id
+                ? { admissionFailure: undefined, queuePaused: false }
+                : {}),
+        });
+        if (
+            conversation.admissionFailure?.messageId === message._id &&
+            conversation.queuedCount > 1
+        )
+            await ctx.scheduler.runAfter(
+                0,
+                internal.execution.conversations.pumpWorkbench,
+                { runId: args.runId },
+            );
+        await event(ctx, args.runId, "message_removed", undefined, message._id);
+        return null;
+    },
+});
+
+export const promoteQueued = mutation({
+    args: {
+        runId: v.id("researchRuns"),
+        messageId: v.id("agentMessageDeliveries"),
+        turnId: v.id("agentConversationTurns"),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        await requireWorkspaceRun(ctx, args.runId);
+        await requireDossierAuthority(ctx, args.runId);
+        const message = await ctx.db.get(args.messageId);
+        const turn = await ctx.db.get(args.turnId);
+        const conversation = await conversationForRun(ctx, args.runId);
+        if (
+            !message ||
+            message.runId !== args.runId ||
+            turn?.runId !== args.runId
+        )
+            throw executionError("not_authorized");
+        if (message.status === "active" && message.turnId === turn._id)
+            return null;
+        if (
+            message.status !== "queued" ||
+            turn.status !== "active" ||
+            conversation?.activeTurnId !== turn._id
+        )
+            throw executionError("active_turn_required");
+        await ctx.db.patch(message._id, {
+            status: "active",
+            delivery: "steer",
+            turnId: turn._id,
+        });
+        await ctx.db.patch(turn._id, {
+            instructionVersion: turn.instructionVersion + 1,
+            messageCount: turn.messageCount + 1,
+        });
+        await ctx.db.patch(conversation._id, {
+            queuedCount: Math.max(0, conversation.queuedCount - 1),
+        });
+        if (turn.missionId) {
+            const mission = await ctx.db.get(turn.missionId);
+            if (!mission) throw executionError("mission_unavailable");
+            const context = await ctx.runQuery(
+                internal.execution.context.build,
+                {
+                    missionId: mission._id,
+                    expectedGeneration: mission.generation,
+                },
+            );
+            if (context.kind === "blocked") throw executionError(context.code);
+        }
+        await event(ctx, args.runId, "turn_steered", turn._id, message._id);
+        return null;
+    },
+});
+
+export const stopResponse = mutation({
+    args: {
+        runId: v.id("researchRuns"),
+        turnId: v.id("agentConversationTurns"),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        await requireWorkspaceRun(ctx, args.runId);
+        return stopActiveResponse(ctx, args);
+    },
+});
+
+export const resumeQueue = mutation({
+    args: { runId: v.id("researchRuns") },
+    returns: v.null(),
+    handler: async (ctx, { runId }) => {
+        await requireWorkspaceRun(ctx, runId);
+        await requireDossierAuthority(ctx, runId);
+        const conversation = await conversationForRun(ctx, runId);
+        if (conversation)
+            await ctx.db.patch(conversation._id, { queuePaused: false });
+        await ctx.scheduler.runAfter(
+            0,
+            internal.execution.conversations.pumpWorkbench,
+            { runId },
+        );
+        return null;
+    },
+});
+
+/** Wakes one dossier's conversational work; research slots and research generation remain untouched. */
+export const pumpWorkbench = internalMutation({
+    args: { runId: v.id("researchRuns") },
+    returns: v.null(),
+    handler: async (ctx, { runId }): Promise<null> => {
+        const { run } = await requireDossierAuthority(ctx, runId);
+        const conversation = await conversationForRun(ctx, runId);
+        if (
+            run.startMode !== "framed" ||
+            !conversation ||
+            conversation.activeTurnId ||
+            conversation.queuePaused ||
+            !conversation.queuedCount
+        )
+            return null;
+        try {
+            await ctx.runMutation(internal.execution.conversations.startTurn, {
+                runId,
+                definitionId: "workbench_v1",
+                scope: { kind: "workbench_v1" },
+                simulation:
+                    run.purpose === "browser_test" &&
+                    localBrowserFixturesEnabled(),
+            });
+            await ctx.db.patch(conversation._id, {
+                admissionFailure: undefined,
+            });
+        } catch (error) {
+            const code = executionFailureCode(error);
+            if (!code) throw error;
+            const message = await ctx.db
+                .query("agentMessageDeliveries")
+                .withIndex("by_run_and_status", (q) =>
+                    q.eq("runId", runId).eq("status", "queued"),
+                )
+                .first();
+            await ctx.db.patch(conversation._id, {
+                queuePaused: true,
+                admissionFailure: { code, messageId: message?._id },
+            });
+            await event(
+                ctx,
+                runId,
+                "conversation_admission_blocked",
+                undefined,
+                message?._id,
+            );
+        }
+        return null;
+    },
+});
+
+async function stopActiveResponse(
+    ctx: MutationCtx,
+    args: { runId: Id<"researchRuns">; turnId: Id<"agentConversationTurns"> },
+) {
+    await requireDossierAuthority(ctx, args.runId);
+    const conversation = await conversationForRun(ctx, args.runId);
+    const turn = await ctx.db.get(args.turnId);
+    if (turn?.runId !== args.runId) throw executionError("not_authorized");
+    if (turn.status === "interrupted") return null;
+    if (turn.status !== "active" || conversation?.activeTurnId !== turn._id)
+        throw executionError("active_turn_required");
+    if (turn.missionId) {
+        const mission = await ctx.db.get(turn.missionId);
+        if (mission) {
+            if (mission.piWakeId) await cancelPiWake(ctx, mission.piWakeId);
+            await ctx.db.patch(mission._id, {
+                status: "cancelled",
+                updatedAt: Date.now(),
+                piWakeId: undefined,
+                piWakeToken: undefined,
+            });
+        }
+    }
+    await ctx.db.patch(turn._id, {
+        status: "interrupted",
+        completedAt: Date.now(),
+    });
+    await ctx.db.patch(conversation._id, {
+        activeTurnId: undefined,
+        queuePaused: true,
+    });
+    await event(ctx, args.runId, "response_stopped", turn._id);
+    return null;
+}

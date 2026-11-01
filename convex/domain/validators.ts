@@ -42,6 +42,7 @@ export const companySnapshotValidator = v.object({
 });
 
 export const researchRunLifecycleValidator = v.union(
+    v.literal("framing"),
     v.literal("draft"),
     v.literal("checking_public_evidence"),
     v.literal("awaiting_evidence_sufficiency_review"),

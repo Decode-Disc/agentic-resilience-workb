@@ -18,6 +18,7 @@ import {
     MODEL_MAX_OUTPUT_TOKENS,
     type ModelRoute,
     SIMULATION_MODEL_ROUTE,
+    WORKBENCH_MODEL_ROUTE,
 } from "@convex/integrations/modelRouting";
 import inputProfilesArtifact from "@convex/integrations/piInputProfiles.json";
 import { piToolMetadata } from "@convex/integrations/piMission";
@@ -224,6 +225,7 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
         const routes = [
             SIMULATION_MODEL_ROUTE,
             nativePiFixtureRoute,
+            ...(id === "workbench_v1" ? [WORKBENCH_MODEL_ROUTE] : []),
             ...(productionRouting.missionRoutes[id]
                 ? [productionRouting.missionRoutes[id]]
                 : []),

@@ -2,6 +2,7 @@ import { api, internal } from "@convex/_generated/api";
 import type { ActionCtx } from "@convex/_generated/server";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { addManualUrlWithInspector } from "@convex/sourceActions";
+import { startReviewPreparation } from "@convex/sourcePreparation";
 import { workflow } from "@convex/workflow";
 import type { FunctionReference } from "convex/server";
 import type { Value } from "convex/values";
@@ -1274,4 +1275,66 @@ test("replaying discovery retains the existing version-three preparation identit
     expect(
         await t.mutation(internal.sourcePreparation.claimForDiscovery, args),
     ).toBe(first);
+});
+
+test("a Workbench targeted instruction reaches the reserved search with the fixed research scope", async () => {
+    vi.useFakeTimers();
+    const { t, runId, corpusRevisionId, userId, proposal } =
+        await waitingReview();
+    const initial = await t
+        .withIdentity({ subject: userId })
+        .mutation(api.sourcePreparation.startForReview, {
+            runId,
+            corpusRevisionId,
+            expectedProposalId: proposal.proposalId,
+            requestId: "initial",
+        });
+    await t.run(async (ctx) => {
+        const revisionId = await ctx.db.insert("framingRevisions", {
+            runId,
+            revision: 1,
+            content: { scope: "Fixed claims workflow", questions: [] },
+            contentHash: "fixture",
+            requestKey: "initial",
+            origin: "initial",
+            createdAt: Date.now(),
+        });
+        await ctx.db.patch(runId, {
+            startMode: "framed",
+            agentExecutionVersion: 3,
+            fixedFramingRevisionId: revisionId,
+            currentFramingRevisionId: revisionId,
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+            researchAngle: "Obsolete activity",
+        });
+        await ctx.db.patch(initial.preparationId, { status: "complete" });
+    });
+    const targeted = await t.run(async (ctx) => {
+        const run = await ctx.db.get(runId),
+            revision = await ctx.db.get(corpusRevisionId),
+            proposalDoc = await ctx.db.get(proposal.proposalId);
+        const visitor = run?.ownerVisitorId
+            ? await ctx.db.get(run.ownerVisitorId)
+            : null;
+        if (!run || !revision || !proposalDoc || !visitor)
+            throw new Error("Missing fixture");
+        return startReviewPreparation(ctx, {
+            run,
+            revision,
+            proposal: proposalDoc,
+            visitor,
+            requestId: "instruction",
+            target: { kind: "coverage", role: "official_commercial_terms" },
+            documentaryNeed: "Switching termination fees",
+        });
+    });
+    const reserved = await t.mutation(
+        internal.sourcePreparation.reserveNextSupplementSearch,
+        { preparationId: targeted.preparationId },
+    );
+    expect(reserved?.query.query).toContain("Switching termination fees");
+    expect(reserved?.query.query).toContain("Fixed claims workflow");
+    expect(reserved?.query.query).not.toContain("Obsolete activity");
 });

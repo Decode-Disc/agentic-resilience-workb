@@ -19,6 +19,7 @@ import {
 import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
 import { claimPausedRunExecution } from "./domain/executionClaim";
 import { purgePreviewCacheForSource } from "./domain/previewCache";
+import { readResearchContext } from "./domain/researchContext";
 import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
 import {
     SOURCE_COMPARISON_VERSION,
@@ -394,11 +395,12 @@ async function currentFingerprint(
         candidates,
         reads,
     );
+    const { researchAngle } = await readResearchContext(ctx, run);
     return sourceSelectionFingerprint({
         candidates,
         qualificationInputs,
         coveragePreset: run.coveragePreset,
-        researchAngle: run.researchAngle,
+        researchAngle,
         ceiling: sourceRecommendedTarget(run.sourcePreparationId),
         company,
     });
@@ -705,6 +707,7 @@ export async function createSourceSelectionProposal(
         run,
         candidates,
     );
+    const { researchAngle } = await readResearchContext(ctx, run);
     const result = buildSourceSelectionProposal({
         candidates: candidates.map((source) => ({
             sourceId: source._id,
@@ -725,7 +728,7 @@ export async function createSourceSelectionProposal(
             )?.inspection,
         })),
         coveragePreset: run.coveragePreset,
-        researchAngle: run.researchAngle,
+        researchAngle,
         company,
         ceiling: recommendationCeiling,
     });
@@ -745,7 +748,7 @@ export async function createSourceSelectionProposal(
         version,
         policyVersion: SOURCE_SELECTION_POLICY_VERSION,
         coveragePreset: run.coveragePreset,
-        researchAngle: run.researchAngle,
+        researchAngle,
         recommendedTarget: recommendationCeiling,
         recommendationCeiling,
         publisherRegistryVersion: SOURCE_PUBLISHER_REGISTRY_VERSION,
@@ -755,7 +758,7 @@ export async function createSourceSelectionProposal(
             candidates,
             qualificationInputs,
             coveragePreset: run.coveragePreset,
-            researchAngle: run.researchAngle,
+            researchAngle,
             ceiling: recommendationCeiling,
             company,
         }),
@@ -922,6 +925,314 @@ async function readProposalReviews(
     return hydrateProposalItems(ctx, items, { ...context, reads });
 }
 
+/** Projects the current selection for an already-authorized native or agent operation. */
+export async function readCurrentSourceSelection(
+    ctx: QueryCtx | MutationCtx,
+    context: ProposalContext,
+    now?: number,
+) {
+    const proposal = await readCurrentProposal(ctx, context);
+    if (!proposal) {
+        return null;
+    }
+    const { run, revision } = context;
+    const reads = new SourceReviewReads(ctx.db, run._id);
+    await reads.sources();
+    const preparation = run.sourcePreparationId
+        ? await ctx.db.get(run.sourcePreparationId)
+        : null;
+    const expiredReview =
+        preparation?.status === "started" &&
+        (preparation.deadlineAt ?? Infinity) <= (now ?? Date.now()) &&
+        preparation.executionGeneration === run.executionGeneration &&
+        run.lifecycleState === "awaiting_source_review";
+    const {
+        sources: hydrated,
+        readings,
+        preparations,
+    } = await readProposalReviews(ctx, proposal, { ...context, reads });
+    const eligibleReadings = readings.filter(
+        (reading, index) => reading && hydrated[index]?.decision !== "rejected",
+    );
+    const assessed = eligibleReadings.filter((r) => r?.assessed).length;
+    const unresolvedSourceIds = new Set(
+        hydrated
+            .filter(
+                (item, index) =>
+                    item.decision !== "rejected" && !readings[index]?.assessed,
+            )
+            .map((item) => item.sourceId),
+    );
+    const interruptedReading = preparations.find((p) => {
+        const scope = p.readingSourceIds ?? p.manualSourceIds;
+        return (
+            p.stopCode &&
+            (scope
+                ? scope.some((id) => unresolvedSourceIds.has(id))
+                : !p.target && unresolvedSourceIds.size > 0)
+        );
+    });
+    const preparationSummary = preparations.length
+        ? {
+              preparationId: preparation?._id,
+              proposalPublished:
+                  preparation?.status !== "started" &&
+                  preparation?.proposalId === proposal._id,
+              initialReadingsCompletedAt: preparations.find(
+                  (operation) =>
+                      operation.initialReadingsCompletedAt !== undefined,
+              )?.initialReadingsCompletedAt,
+              ...(preparation?.progress
+                  ? { progress: preparation.progress }
+                  : {}),
+              lastActivityAt:
+                  preparation?.completedAt ??
+                  preparation?.progress?.updatedAt ??
+                  run.updatedAt,
+              status:
+                  preparation?.status === "started" && !expiredReview
+                      ? ("started" as const)
+                      : unresolvedSourceIds.size === 0
+                        ? ("complete" as const)
+                        : assessed > 0
+                          ? ("partial" as const)
+                          : ("blocked" as const),
+              checked: eligibleReadings.filter(
+                  (r) =>
+                      r?.status !== "not_started" && r?.status !== "preparing",
+              ).length,
+              total: eligibleReadings.length,
+              excluded: hydrated.filter(
+                  (source) => source.decision === "rejected",
+              ).length,
+              captured: eligibleReadings.filter((r) => r?.captured).length,
+              assessed,
+              failed: eligibleReadings.filter(
+                  (r) =>
+                      r?.status === "reading_failed" ||
+                      r?.status === "assessment_unavailable",
+              ).length,
+              remaining: eligibleReadings.filter(
+                  (r) =>
+                      r?.status === "not_started" || r?.status === "preparing",
+              ).length,
+              stopCode: interruptedReading?.stopCode,
+              canResume: false,
+              pendingComparisons: 0,
+          }
+        : undefined;
+    const running = run.ownerVisitorId
+        ? await ctx.db
+              .query("researchRuns")
+              .withIndex("by_owner_and_execution_status", (q) =>
+                  q
+                      .eq("ownerVisitorId", run.ownerVisitorId)
+                      .eq("executionStatus", "running"),
+              )
+              .take(2)
+        : [];
+    const deadlineAt = preparation?.deadlineAt;
+    const recoveryPlan =
+        preparation?.kind === "preparation" &&
+        (preparation.status !== "started" || expiredReview) &&
+        revision.status === "draft"
+            ? await readPreparationRecovery(ctx.db, {
+                  runId: run._id,
+                  corpusRevisionId: revision._id,
+                  preparation,
+                  now: now ?? Date.now(),
+                  reads,
+                  preparations,
+              })
+            : null;
+    if (preparationSummary && recoveryPlan?.pendingComparisons) {
+        preparationSummary.pendingComparisons = recoveryPlan.pendingComparisons;
+        preparationSummary.status = "partial";
+    }
+    let configurationUnavailable =
+        recoveryPlan?.blockedReason === "preparation_configuration_invalid";
+    if (!recoveryPlan) {
+        try {
+            readPreparationLimits();
+        } catch (error) {
+            if (
+                preparationFailureCode(error) !==
+                "preparation_configuration_invalid"
+            )
+                throw error;
+            configurationUnavailable = true;
+        }
+    }
+    const preparationActionReason =
+        revision.status !== "draft"
+            ? ("read_only" as const)
+            : !sourcePreparationEnabled()
+              ? ("disabled" as const)
+              : configurationUnavailable
+                ? ("configuration_unavailable" as const)
+                : (run.executionStatus !== "paused" && !expiredReview) ||
+                    running.some(
+                        (item) => item._id !== run._id || !expiredReview,
+                    )
+                  ? ("busy" as const)
+                  : recoveryPlan &&
+                      recoveryPlan.resumableSourceIds.length === 0 &&
+                      !recoveryPlan.hasSearchWork &&
+                      recoveryPlan.blockedReason
+                    ? recoveryPlan.retryAt !== undefined
+                        ? ("cooldown" as const)
+                        : recoveryPlan.blockedReason ===
+                                "work_budget_exhausted" ||
+                            recoveryPlan.blockedReason ===
+                                "incident_budget_exhausted"
+                          ? (recoveryPlan.blockedReason as
+                                | "work_budget_exhausted"
+                                | "incident_budget_exhausted")
+                          : [
+                                  "recovery_attempt_exhausted",
+                                  "model_attempt_limit_reached",
+                              ].includes(recoveryPlan.blockedReason)
+                            ? ("attempts_exhausted" as const)
+                            : recoveryPlan.blockedReason ===
+                                "attempt_outcome_unknown"
+                              ? ("outcome_unknown" as const)
+                              : ("no_eligible_work" as const)
+                    : preparationSummary &&
+                        unresolvedSourceIds.size === 0 &&
+                        !recoveryPlan?.resumableSourceIds.length &&
+                        !recoveryPlan?.hasSearchWork
+                      ? ("complete" as const)
+                      : undefined;
+    const preparationAction = {
+        kind: preparationSummary ? ("resume" as const) : ("start" as const),
+        available: preparationActionReason === undefined,
+        ...(preparationActionReason ? { reason: preparationActionReason } : {}),
+        ...(deadlineAt !== undefined ? { deadlineAt } : {}),
+        ...(recoveryPlan?.retryAt !== undefined
+            ? { retryAt: recoveryPlan.retryAt }
+            : {}),
+    };
+    if (preparationSummary)
+        preparationSummary.canResume = preparationAction.available;
+    const fingerprint = await currentFingerprint(ctx, run, reads);
+    const coverageRequirements = evaluateSourceCoverage(
+        proposal.coveragePreset,
+        hydrated,
+    ).map((requirement) => ({
+        ...requirement,
+        ...(preparationSummary
+            ? {
+                  assessmentStatus:
+                      !requirement.covered &&
+                      requirement.candidateIds.some((sourceId) => {
+                          const index = hydrated.findIndex(
+                              (s) => s.sourceId === sourceId,
+                          );
+                          return (
+                              index >= 0 &&
+                              hydrated[index]?.included &&
+                              !readings[index]?.assessed
+                          );
+                      })
+                          ? ("pending" as const)
+                          : ("assessed" as const),
+              }
+            : {}),
+        includedSourceIds: requirement.candidateIds.filter((sourceId) =>
+            hydrated.some(
+                (source) => source.sourceId === sourceId && source.included,
+            ),
+        ),
+    }));
+    const supplement = run.automaticSupplementOperationId
+        ? await ctx.db.get(run.automaticSupplementOperationId)
+        : null;
+    const searchAllowance = preparationSummary
+        ? {
+              enabled: sourcePreparationEnabled(),
+              remainingSearches: Math.max(
+                  0,
+                  MAX_SUPPLEMENT_SEARCHES -
+                      (supplement?.supplementClaimedQueryIndexes?.length ?? 0),
+              ),
+              remainingCandidates: (
+                  await readSourceCandidateCapacity(ctx.db, run._id)
+              ).remaining,
+              ...(preparation?.status === "started" &&
+              !expiredReview &&
+              preparation.deadlineAt !== undefined
+                  ? { deadlineAt: preparation.deadlineAt }
+                  : {}),
+          }
+        : undefined;
+    const latestRecovery = await ctx.db
+        .query("sourceSelectionProposalRebuilds")
+        .withIndex("by_revision_and_created_at", (q) =>
+            q.eq("corpusRevisionId", revision._id),
+        )
+        .order("desc")
+        .first();
+    const recovery =
+        (latestRecovery?.kind !== "preparation" || latestRecovery?.target) &&
+        latestRecovery?.requestId
+            ? {
+                  status: latestRecovery.status,
+                  requestId: latestRecovery.requestId,
+                  target: latestRecovery.target,
+                  reason: latestRecovery.reason,
+                  leaseExpiresAt: latestRecovery.leaseExpiresAt,
+                  completedAt: latestRecovery.completedAt,
+                  insertedCount: latestRecovery.insertedCount,
+                  readingSourceIds: latestRecovery.readingSourceIds,
+              }
+            : null;
+    return {
+        proposalId: proposal._id,
+        version: proposal.version,
+        status: proposal.status,
+        effectiveStatus:
+            proposal.status === "failed"
+                ? ("failed" as const)
+                : !canRefreshSourceSelectionPolicy(proposal.policyVersion)
+                  ? ("outdated" as const)
+                  : proposal.policyVersion ===
+                          SOURCE_SELECTION_POLICY_VERSION &&
+                      fingerprint === proposal.candidateFingerprint
+                    ? ("ready" as const)
+                    : ("stale" as const),
+        recommendedTarget: proposal.recommendedTarget,
+        recommendationCeiling:
+            proposal.recommendationCeiling ?? proposal.recommendedTarget,
+        rebuildOutcome: proposal.rebuildOutcome,
+        failedDiscoveryFamilies: proposal.failedDiscoveryFamilies ?? [],
+        coverageGaps: coverageRequirements
+            .filter((item) => !item.covered)
+            .map((item) => item.role),
+        coverageRequirements,
+        recovery,
+        counts: proposal.counts,
+        gaps: proposal.gaps,
+        effectiveIncludedCount: hydrated.filter(({ included }) => included)
+            .length,
+        selectionExplanationRefreshAvailable:
+            revision.status === "draft" &&
+            run.activeCorpusRevisionId === revision._id &&
+            run.lifecycleState === "awaiting_source_review" &&
+            run.executionStatus === "paused" &&
+            run.pauseReason === "source_review" &&
+            canRefreshSourceSelectionPolicy(proposal.policyVersion) &&
+            hydrated.some(
+                (item) =>
+                    item.disposition === "recommended" &&
+                    !item.selectionRationale,
+            ),
+        revisionStatus: revision.status,
+        ...(preparationSummary ? { preparation: preparationSummary } : {}),
+        ...(revision.status === "draft" ? { preparationAction } : {}),
+        ...(searchAllowance ? { searchAllowance } : {}),
+    };
+}
+
 export const getCurrent = query({
     args: {
         runId: v.id("researchRuns"),
@@ -1061,315 +1372,7 @@ export const getCurrent = query({
     ),
     handler: async (ctx, args) => {
         const context = await authorizeProposalContext(ctx, args);
-        const proposal = await readCurrentProposal(ctx, context);
-        if (!proposal) {
-            return null;
-        }
-        const { run, revision } = context;
-        const reads = new SourceReviewReads(ctx.db, run._id);
-        await reads.sources();
-        const preparation = run.sourcePreparationId
-            ? await ctx.db.get(run.sourcePreparationId)
-            : null;
-        const expiredReview =
-            preparation?.status === "started" &&
-            (preparation.deadlineAt ?? Infinity) <= (args.now ?? Date.now()) &&
-            preparation.executionGeneration === run.executionGeneration &&
-            run.lifecycleState === "awaiting_source_review";
-        const {
-            sources: hydrated,
-            readings,
-            preparations,
-        } = await readProposalReviews(ctx, proposal, { ...context, reads });
-        const eligibleReadings = readings.filter(
-            (reading, index) =>
-                reading && hydrated[index]?.decision !== "rejected",
-        );
-        const assessed = eligibleReadings.filter((r) => r?.assessed).length;
-        const unresolvedSourceIds = new Set(
-            hydrated
-                .filter(
-                    (item, index) =>
-                        item.decision !== "rejected" &&
-                        !readings[index]?.assessed,
-                )
-                .map((item) => item.sourceId),
-        );
-        const interruptedReading = preparations.find((p) => {
-            const scope = p.readingSourceIds ?? p.manualSourceIds;
-            return (
-                p.stopCode &&
-                (scope
-                    ? scope.some((id) => unresolvedSourceIds.has(id))
-                    : !p.target && unresolvedSourceIds.size > 0)
-            );
-        });
-        const preparationSummary = preparations.length
-            ? {
-                  preparationId: preparation?._id,
-                  proposalPublished:
-                      preparation?.status !== "started" &&
-                      preparation?.proposalId === proposal._id,
-                  initialReadingsCompletedAt: preparations.find(
-                      (operation) =>
-                          operation.initialReadingsCompletedAt !== undefined,
-                  )?.initialReadingsCompletedAt,
-                  ...(preparation?.progress
-                      ? { progress: preparation.progress }
-                      : {}),
-                  lastActivityAt:
-                      preparation?.completedAt ??
-                      preparation?.progress?.updatedAt ??
-                      run.updatedAt,
-                  status:
-                      preparation?.status === "started" && !expiredReview
-                          ? ("started" as const)
-                          : unresolvedSourceIds.size === 0
-                            ? ("complete" as const)
-                            : assessed > 0
-                              ? ("partial" as const)
-                              : ("blocked" as const),
-                  checked: eligibleReadings.filter(
-                      (r) =>
-                          r?.status !== "not_started" &&
-                          r?.status !== "preparing",
-                  ).length,
-                  total: eligibleReadings.length,
-                  excluded: hydrated.filter(
-                      (source) => source.decision === "rejected",
-                  ).length,
-                  captured: eligibleReadings.filter((r) => r?.captured).length,
-                  assessed,
-                  failed: eligibleReadings.filter(
-                      (r) =>
-                          r?.status === "reading_failed" ||
-                          r?.status === "assessment_unavailable",
-                  ).length,
-                  remaining: eligibleReadings.filter(
-                      (r) =>
-                          r?.status === "not_started" ||
-                          r?.status === "preparing",
-                  ).length,
-                  stopCode: interruptedReading?.stopCode,
-                  canResume: false,
-                  pendingComparisons: 0,
-              }
-            : undefined;
-        const running = run.ownerVisitorId
-            ? await ctx.db
-                  .query("researchRuns")
-                  .withIndex("by_owner_and_execution_status", (q) =>
-                      q
-                          .eq("ownerVisitorId", run.ownerVisitorId)
-                          .eq("executionStatus", "running"),
-                  )
-                  .take(2)
-            : [];
-        const deadlineAt = preparation?.deadlineAt;
-        const recoveryPlan =
-            preparation?.kind === "preparation" &&
-            (preparation.status !== "started" || expiredReview) &&
-            revision.status === "draft"
-                ? await readPreparationRecovery(ctx.db, {
-                      runId: run._id,
-                      corpusRevisionId: revision._id,
-                      preparation,
-                      now: args.now ?? Date.now(),
-                      reads,
-                      preparations,
-                  })
-                : null;
-        if (preparationSummary && recoveryPlan?.pendingComparisons) {
-            preparationSummary.pendingComparisons =
-                recoveryPlan.pendingComparisons;
-            preparationSummary.status = "partial";
-        }
-        let configurationUnavailable =
-            recoveryPlan?.blockedReason === "preparation_configuration_invalid";
-        if (!recoveryPlan) {
-            try {
-                readPreparationLimits();
-            } catch (error) {
-                if (
-                    preparationFailureCode(error) !==
-                    "preparation_configuration_invalid"
-                )
-                    throw error;
-                configurationUnavailable = true;
-            }
-        }
-        const preparationActionReason =
-            revision.status !== "draft"
-                ? ("read_only" as const)
-                : !sourcePreparationEnabled()
-                  ? ("disabled" as const)
-                  : configurationUnavailable
-                    ? ("configuration_unavailable" as const)
-                    : (run.executionStatus !== "paused" && !expiredReview) ||
-                        running.some(
-                            (item) => item._id !== run._id || !expiredReview,
-                        )
-                      ? ("busy" as const)
-                      : recoveryPlan &&
-                          recoveryPlan.resumableSourceIds.length === 0 &&
-                          !recoveryPlan.hasSearchWork &&
-                          recoveryPlan.blockedReason
-                        ? recoveryPlan.retryAt !== undefined
-                            ? ("cooldown" as const)
-                            : recoveryPlan.blockedReason ===
-                                    "work_budget_exhausted" ||
-                                recoveryPlan.blockedReason ===
-                                    "incident_budget_exhausted"
-                              ? (recoveryPlan.blockedReason as
-                                    | "work_budget_exhausted"
-                                    | "incident_budget_exhausted")
-                              : [
-                                      "recovery_attempt_exhausted",
-                                      "model_attempt_limit_reached",
-                                  ].includes(recoveryPlan.blockedReason)
-                                ? ("attempts_exhausted" as const)
-                                : recoveryPlan.blockedReason ===
-                                    "attempt_outcome_unknown"
-                                  ? ("outcome_unknown" as const)
-                                  : ("no_eligible_work" as const)
-                        : preparationSummary &&
-                            unresolvedSourceIds.size === 0 &&
-                            !recoveryPlan?.resumableSourceIds.length &&
-                            !recoveryPlan?.hasSearchWork
-                          ? ("complete" as const)
-                          : undefined;
-        const preparationAction = {
-            kind: preparationSummary ? ("resume" as const) : ("start" as const),
-            available: preparationActionReason === undefined,
-            ...(preparationActionReason
-                ? { reason: preparationActionReason }
-                : {}),
-            ...(deadlineAt !== undefined ? { deadlineAt } : {}),
-            ...(recoveryPlan?.retryAt !== undefined
-                ? { retryAt: recoveryPlan.retryAt }
-                : {}),
-        };
-        if (preparationSummary)
-            preparationSummary.canResume = preparationAction.available;
-        const fingerprint = await currentFingerprint(ctx, run, reads);
-        const coverageRequirements = evaluateSourceCoverage(
-            proposal.coveragePreset,
-            hydrated,
-        ).map((requirement) => ({
-            ...requirement,
-            ...(preparationSummary
-                ? {
-                      assessmentStatus:
-                          !requirement.covered &&
-                          requirement.candidateIds.some((sourceId) => {
-                              const index = hydrated.findIndex(
-                                  (s) => s.sourceId === sourceId,
-                              );
-                              return (
-                                  index >= 0 &&
-                                  hydrated[index]?.included &&
-                                  !readings[index]?.assessed
-                              );
-                          })
-                              ? ("pending" as const)
-                              : ("assessed" as const),
-                  }
-                : {}),
-            includedSourceIds: requirement.candidateIds.filter((sourceId) =>
-                hydrated.some(
-                    (source) => source.sourceId === sourceId && source.included,
-                ),
-            ),
-        }));
-        const supplement = run.automaticSupplementOperationId
-            ? await ctx.db.get(run.automaticSupplementOperationId)
-            : null;
-        const searchAllowance = preparationSummary
-            ? {
-                  enabled: sourcePreparationEnabled(),
-                  remainingSearches: Math.max(
-                      0,
-                      MAX_SUPPLEMENT_SEARCHES -
-                          (supplement?.supplementClaimedQueryIndexes?.length ??
-                              0),
-                  ),
-                  remainingCandidates: (
-                      await readSourceCandidateCapacity(ctx.db, run._id)
-                  ).remaining,
-                  ...(preparation?.status === "started" &&
-                  !expiredReview &&
-                  preparation.deadlineAt !== undefined
-                      ? { deadlineAt: preparation.deadlineAt }
-                      : {}),
-              }
-            : undefined;
-        const latestRecovery = await ctx.db
-            .query("sourceSelectionProposalRebuilds")
-            .withIndex("by_revision_and_created_at", (q) =>
-                q.eq("corpusRevisionId", revision._id),
-            )
-            .order("desc")
-            .first();
-        const recovery =
-            (latestRecovery?.kind !== "preparation" ||
-                latestRecovery?.target) &&
-            latestRecovery?.requestId
-                ? {
-                      status: latestRecovery.status,
-                      requestId: latestRecovery.requestId,
-                      target: latestRecovery.target,
-                      reason: latestRecovery.reason,
-                      leaseExpiresAt: latestRecovery.leaseExpiresAt,
-                      completedAt: latestRecovery.completedAt,
-                      insertedCount: latestRecovery.insertedCount,
-                      readingSourceIds: latestRecovery.readingSourceIds,
-                  }
-                : null;
-        return {
-            proposalId: proposal._id,
-            version: proposal.version,
-            status: proposal.status,
-            effectiveStatus:
-                proposal.status === "failed"
-                    ? ("failed" as const)
-                    : !canRefreshSourceSelectionPolicy(proposal.policyVersion)
-                      ? ("outdated" as const)
-                      : proposal.policyVersion ===
-                              SOURCE_SELECTION_POLICY_VERSION &&
-                          fingerprint === proposal.candidateFingerprint
-                        ? ("ready" as const)
-                        : ("stale" as const),
-            recommendedTarget: proposal.recommendedTarget,
-            recommendationCeiling:
-                proposal.recommendationCeiling ?? proposal.recommendedTarget,
-            rebuildOutcome: proposal.rebuildOutcome,
-            failedDiscoveryFamilies: proposal.failedDiscoveryFamilies ?? [],
-            coverageGaps: coverageRequirements
-                .filter((item) => !item.covered)
-                .map((item) => item.role),
-            coverageRequirements,
-            recovery,
-            counts: proposal.counts,
-            gaps: proposal.gaps,
-            effectiveIncludedCount: hydrated.filter(({ included }) => included)
-                .length,
-            selectionExplanationRefreshAvailable:
-                revision.status === "draft" &&
-                run.activeCorpusRevisionId === revision._id &&
-                run.lifecycleState === "awaiting_source_review" &&
-                run.executionStatus === "paused" &&
-                run.pauseReason === "source_review" &&
-                canRefreshSourceSelectionPolicy(proposal.policyVersion) &&
-                hydrated.some(
-                    (item) =>
-                        item.disposition === "recommended" &&
-                        !item.selectionRationale,
-                ),
-            revisionStatus: revision.status,
-            ...(preparationSummary ? { preparation: preparationSummary } : {}),
-            ...(revision.status === "draft" ? { preparationAction } : {}),
-            ...(searchAllowance ? { searchAllowance } : {}),
-        };
+        return readCurrentSourceSelection(ctx, context, args.now);
     },
 });
 
@@ -1773,10 +1776,11 @@ export const claimRebuild = internalMutation({
             if (!items.some((item) => item.role === role && !item.covered))
                 throw new Error("Coverage requirement is no longer missing");
         }
+        const { researchAngle } = await readResearchContext(ctx, run);
         const plan = recoverySearchPlan({
             company,
             coveragePreset: run.coveragePreset,
-            researchAngle: run.researchAngle,
+            researchAngle,
             target: recovery?.target,
             failedFamilies,
         });

@@ -1,16 +1,13 @@
 "use client";
 
 import { api } from "@convex/_generated/api";
-import {
-    ArrowLeft01Icon,
-    ArrowRight01Icon,
-    Plus,
-} from "@hugeicons/core-free-icons";
+import { ArrowRight01Icon, Plus } from "@hugeicons/core-free-icons";
 import { useNavigate } from "@tanstack/react-router";
-import { useAction, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useRef, useState } from "react";
+import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
 import Icon from "@/components/icon";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { PaginationControls } from "@/components/pagination-controls";
@@ -18,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import { LoadErrorAlert } from "@/components/ui/load-error-alert";
 import { SmoothDropdwon } from "@/components/ui/smooth-dropdown";
 import { AddSourceDialog } from "@/components/workspace/add-source-dialog";
-import { CompanyResolutionCard } from "@/components/workspace/company-resolution-card";
 import {
     MoreOptionsButton,
     ToolbarIconButton,
@@ -36,8 +32,20 @@ import {
     ResearchComposerToolbar,
     ResearchComposerView,
 } from "@/components/workspace/start/research-composer-view";
+import { StartDossierHeading } from "@/components/workspace/start/start-dossier-heading";
+import {
+    CompanyMandatePanel,
+    StartAngleSuggestions,
+    StartEntryScreen,
+    StartShowcaseCard,
+} from "@/components/workspace/start/start-entry-screens";
+import {
+    prototypeClaims,
+    prototypeSources,
+} from "@/components/workspace-prototype/prototype-data";
 import { useAnonymousSession } from "@/hooks/use-anonymous-session";
 import { usePagination } from "@/hooks/use-pagination";
+import { useQuickTextFill } from "@/hooks/use-quick-text-fill";
 import { useResponsive } from "@/hooks/use-responsive";
 import {
     companyLookupErrorMessage,
@@ -73,6 +81,7 @@ const COMPANY_SEARCH_RESULT_LIMIT = 40;
 export interface ResearchComposerProps {
     className?: string;
     placeholderText?: string;
+    showStartScreen?: boolean;
 }
 
 /**
@@ -82,6 +91,7 @@ export interface ResearchComposerProps {
 export function ResearchComposer({
     className,
     placeholderText,
+    showStartScreen,
 }: ResearchComposerProps) {
     const { isSessionReady, sessionError, retrySession } =
         useAnonymousSession();
@@ -101,6 +111,7 @@ export function ResearchComposer({
         <ResearchComposerContent
             className={className}
             placeholderText={placeholderText}
+            showStartScreen={showStartScreen}
             isSessionReady={isSessionReady}
         />
     );
@@ -110,14 +121,17 @@ function ResearchComposerContent({
     className,
     placeholderText = "How can I help? Describe the resilience question to investigate.",
     isSessionReady,
+    showStartScreen = false,
 }: ResearchComposerProps & { isSessionReady: boolean }) {
     const navigate = useNavigate();
     const searchCompanies = useAction(api.companyResolution.search);
     const preflight = useAction(api.companyResolution.preflight);
-    const confirmAndStart = useAction(api.researchLaunch.confirmAndStart);
+    const confirmCompany = useMutation(api.framing.confirmCompany);
     const submitManualUrl = useAction(api.sourceActions.submitManualUrl);
     const reduceMotion = useReducedMotion();
     const [researchAngle, setResearchAngle] = useState("");
+    const { inputRef: angleRef, fill: fillAngle } =
+        useQuickTextFill<HTMLTextAreaElement>(setResearchAngle);
     const [companyQuery, setCompanyQuery] = useState("");
     const [coveragePreset, setCoveragePreset] =
         useState<CoveragePreset>("balanced");
@@ -229,7 +243,7 @@ function ResearchComposerContent({
         launchKey.current ??= crypto.randomUUID();
 
         try {
-            const result = await confirmAndStart({
+            const result = await confirmCompany({
                 preflightId: resolution.preflightId,
                 idempotencyKey: launchKey.current,
                 coveragePreset,
@@ -257,290 +271,334 @@ function ResearchComposerContent({
         }
     };
 
-    return (
-        <>
-            <section
-                className={cn(
-                    "@container/research-composer w-full overflow-visible",
-                    className,
-                )}
-                aria-label="Research launch">
-                <AnimatePresence initial={false} mode="wait">
-                    {view === "compose" ? (
-                        <motion.div
-                            key="compose"
-                            className="rounded-2xl bg-card shadow-raised"
-                            initial={
-                                reduceMotion
-                                    ? false
-                                    : { opacity: 0, scale: 0.97 }
+    const form = (
+        <section
+            className={cn(
+                "@container/research-composer w-full overflow-visible",
+                className,
+            )}
+            aria-label="Research launch">
+            <AnimatePresence initial={false} mode="wait">
+                {view === "compose" ? (
+                    <motion.div
+                        key="compose"
+                        className="rounded-2xl bg-card shadow-raised"
+                        initial={
+                            reduceMotion ? false : { opacity: 0, scale: 0.97 }
+                        }
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={
+                            reduceMotion
+                                ? {
+                                      opacity: 1,
+                                      transition: { duration: 0 },
+                                  }
+                                : {
+                                      opacity: 0,
+                                      scale: 0.985,
+                                      transition: viewExitTransition,
+                                  }
+                        }
+                        transition={
+                            reduceMotion ? { duration: 0 } : viewEnterTransition
+                        }
+                        style={{ transformOrigin: "50% 45%" }}>
+                        <ResearchComposerView
+                            id="research-angle"
+                            textareaRef={angleRef}
+                            value={researchAngle}
+                            onValueChange={setResearchAngle}
+                            placeholder={placeholderText}
+                            companyAdornment={
+                                resolution ? (
+                                    <CompanyContextBadge
+                                        company={resolution.company}
+                                        onRemove={clearResolution}
+                                    />
+                                ) : undefined
                             }
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={
-                                reduceMotion
-                                    ? {
-                                          opacity: 1,
-                                          transition: { duration: 0 },
-                                      }
-                                    : {
-                                          opacity: 0,
-                                          scale: 0.985,
-                                          transition: viewExitTransition,
-                                      }
-                            }
-                            transition={
-                                reduceMotion
-                                    ? { duration: 0 }
-                                    : viewEnterTransition
-                            }
-                            style={{ transformOrigin: "50% 45%" }}>
-                            <ResearchComposerView
-                                id="research-angle"
-                                value={researchAngle}
-                                onValueChange={setResearchAngle}
-                                placeholder={placeholderText}
-                                companyAdornment={
-                                    resolution ? (
-                                        <CompanyContextBadge
-                                            company={resolution.company}
-                                            onRemove={clearResolution}
-                                        />
-                                    ) : undefined
-                                }
-                                toolbar={
-                                    <ResearchComposerToolbar
-                                        tools={
-                                            <>
-                                                <SmoothDropdwon
-                                                    items={visibleCompanyCandidates.map(
-                                                        (candidate) => ({
-                                                            id: `${candidate.cik}-${candidate.ticker}`,
-                                                            label: `${candidate.legalName} ${candidate.ticker} ${candidate.exchange} CIK ${candidate.cik}`,
-                                                            closeOnSelect: false,
-                                                            onSelect: () =>
-                                                                void selectCompany(
-                                                                    candidate,
-                                                                ),
-                                                            renderLabel: () => (
-                                                                <CompanyCandidateLabel
-                                                                    company={
-                                                                        candidate
-                                                                    }
-                                                                    selecting={
-                                                                        selectingCik ===
-                                                                        candidate.cik
-                                                                    }
-                                                                />
+                            toolbar={
+                                <ResearchComposerToolbar
+                                    tools={
+                                        <>
+                                            <SmoothDropdwon
+                                                items={visibleCompanyCandidates.map(
+                                                    (candidate) => ({
+                                                        id: `${candidate.cik}-${candidate.ticker}`,
+                                                        label: `${candidate.legalName} ${candidate.ticker} ${candidate.exchange} CIK ${candidate.cik}`,
+                                                        closeOnSelect: false,
+                                                        onSelect: () =>
+                                                            void selectCompany(
+                                                                candidate,
                                                             ),
-                                                        }),
-                                                    )}
-                                                    open={pickerOpen}
-                                                    onOpenChange={setPickerOpen}
-                                                    openWidth={
-                                                        isMobile ? 300 : 400
-                                                    }
-                                                    closedWidth={215}
-                                                    closedHeight={36}
-                                                    itemsAriaLabel="Company search results"
-                                                    className={cn(
-                                                        "min-w-0 max-w-[calc(100cqw-10.25rem)] [&:not([data-open])>div]:max-w-full",
-                                                        pickerOpen && "z-10",
-                                                    )}
-                                                    trigger={
-                                                        <CompanyPickerTrigger
-                                                            label={
-                                                                resolution
-                                                                    ? resolution
-                                                                          .company
-                                                                          .legalName
-                                                                    : "Company to investigate"
-                                                            }
-                                                            ticker={
-                                                                resolution
-                                                                    ?.company
-                                                                    .ticker
-                                                            }
-                                                            highlighted={
-                                                                resolution !==
-                                                                null
-                                                            }
-                                                        />
-                                                    }
-                                                    header={
-                                                        <CompanyLookup
-                                                            companyQuery={
-                                                                companyQuery
-                                                            }
-                                                            isSearching={
-                                                                isSearching
-                                                            }
-                                                            lookupError={
-                                                                lookupError
-                                                            }
-                                                            hasResolution={
-                                                                resolution !==
-                                                                null
-                                                            }
-                                                            hasSearched={
-                                                                hasSearched
+                                                        renderLabel: () => (
+                                                            <CompanyCandidateLabel
+                                                                company={
+                                                                    candidate
+                                                                }
+                                                                selecting={
+                                                                    selectingCik ===
+                                                                    candidate.cik
+                                                                }
+                                                            />
+                                                        ),
+                                                    }),
+                                                )}
+                                                open={pickerOpen}
+                                                onOpenChange={setPickerOpen}
+                                                openWidth={isMobile ? 300 : 400}
+                                                closedWidth={215}
+                                                closedHeight={36}
+                                                itemsAriaLabel="Company search results"
+                                                className={cn(
+                                                    "min-w-0 max-w-[calc(100cqw-10.25rem)] [&:not([data-open])>div]:max-w-full",
+                                                    pickerOpen && "z-10",
+                                                )}
+                                                trigger={
+                                                    <CompanyPickerTrigger
+                                                        label={
+                                                            resolution
+                                                                ? resolution
+                                                                      .company
+                                                                      .legalName
+                                                                : "Company to investigate"
+                                                        }
+                                                        ticker={
+                                                            resolution?.company
+                                                                .ticker
+                                                        }
+                                                        highlighted={
+                                                            resolution !== null
+                                                        }
+                                                    />
+                                                }
+                                                header={
+                                                    <CompanyLookup
+                                                        companyQuery={
+                                                            companyQuery
+                                                        }
+                                                        isSearching={
+                                                            isSearching
+                                                        }
+                                                        lookupError={
+                                                            lookupError
+                                                        }
+                                                        hasResolution={
+                                                            resolution !== null
+                                                        }
+                                                        hasSearched={
+                                                            hasSearched
+                                                        }
+                                                        resultCount={
+                                                            companyCandidates.length
+                                                        }
+                                                        onCompanyQueryChange={(
+                                                            next,
+                                                        ) => {
+                                                            setCompanyQuery(
+                                                                next,
+                                                            );
+                                                            setHasSearched(
+                                                                false,
+                                                            );
+                                                            setCompanyCandidates(
+                                                                [],
+                                                            );
+                                                            setLookupError(
+                                                                null,
+                                                            );
+                                                        }}
+                                                        onClear={
+                                                            clearResolution
+                                                        }
+                                                        onSearch={() =>
+                                                            void searchForCompanies()
+                                                        }
+                                                        sessionReady={
+                                                            isSessionReady
+                                                        }
+                                                    />
+                                                }
+                                                footer={
+                                                    companyCandidates.length >
+                                                    0 ? (
+                                                        <CompanyPaginationFooter
+                                                            page={companyPage}
+                                                            pageCount={
+                                                                companyPageCount
                                                             }
                                                             resultCount={
                                                                 companyCandidates.length
                                                             }
-                                                            onCompanyQueryChange={(
-                                                                next,
-                                                            ) => {
-                                                                setCompanyQuery(
-                                                                    next,
-                                                                );
-                                                                setHasSearched(
-                                                                    false,
-                                                                );
-                                                                setCompanyCandidates(
-                                                                    [],
-                                                                );
-                                                                setLookupError(
-                                                                    null,
-                                                                );
-                                                            }}
-                                                            onClear={
-                                                                clearResolution
+                                                            disabled={
+                                                                isSearching ||
+                                                                selectingCik !==
+                                                                    null
                                                             }
-                                                            onSearch={() =>
-                                                                void searchForCompanies()
-                                                            }
-                                                            sessionReady={
-                                                                isSessionReady
+                                                            onPageChange={
+                                                                setCompanyPage
                                                             }
                                                         />
-                                                    }
-                                                    footer={
-                                                        companyCandidates.length >
-                                                        0 ? (
-                                                            <CompanyPaginationFooter
-                                                                page={
-                                                                    companyPage
-                                                                }
-                                                                pageCount={
-                                                                    companyPageCount
-                                                                }
-                                                                resultCount={
-                                                                    companyCandidates.length
-                                                                }
-                                                                disabled={
-                                                                    isSearching ||
-                                                                    selectingCik !==
-                                                                        null
-                                                                }
-                                                                onPageChange={
-                                                                    setCompanyPage
-                                                                }
-                                                            />
-                                                        ) : null
-                                                    }
-                                                />
-                                                <ToolbarIconButton
-                                                    label="Attach references"
-                                                    icon={Plus}
-                                                    count={manualSources.length}
-                                                    onClick={() =>
-                                                        setReferencesOpen(true)
-                                                    }
-                                                />
-                                                <MoreOptionsButton />
-                                            </>
-                                        }
-                                        action={
-                                            <Button
-                                                type="button"
-                                                aria-label={
-                                                    resolution
-                                                        ? "Continue"
-                                                        : "Send request"
+                                                    ) : null
                                                 }
+                                            />
+                                            <ToolbarIconButton
+                                                label="Attach references"
+                                                icon={Plus}
+                                                count={manualSources.length}
                                                 onClick={() =>
-                                                    resolution
-                                                        ? setView("confirm")
-                                                        : setPickerOpen(true)
+                                                    setReferencesOpen(true)
                                                 }
-                                                variant="round"
-                                                className="size-10">
-                                                <Icon
-                                                    iconNode={ArrowRight01Icon}
-                                                    size={18}
-                                                />
-                                            </Button>
-                                        }
+                                            />
+                                            <MoreOptionsButton />
+                                        </>
+                                    }
+                                    action={
+                                        <Button
+                                            type="button"
+                                            aria-label={
+                                                resolution
+                                                    ? "Continue"
+                                                    : "Send request"
+                                            }
+                                            onClick={() =>
+                                                resolution
+                                                    ? setView("confirm")
+                                                    : setPickerOpen(true)
+                                            }
+                                            variant="round"
+                                            className="size-10">
+                                            <Icon
+                                                iconNode={ArrowRight01Icon}
+                                                size={18}
+                                            />
+                                        </Button>
+                                    }
+                                />
+                            }
+                        />
+                    </motion.div>
+                ) : resolution ? (
+                    <motion.div
+                        key="confirm"
+                        className="w-full"
+                        initial={
+                            reduceMotion ? false : { opacity: 0, scale: 0.96 }
+                        }
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={
+                            reduceMotion
+                                ? {
+                                      opacity: 1,
+                                      transition: { duration: 0 },
+                                  }
+                                : {
+                                      opacity: 0,
+                                      scale: 0.985,
+                                      transition: viewExitTransition,
+                                  }
+                        }
+                        transition={
+                            reduceMotion ? { duration: 0 } : viewEnterTransition
+                        }
+                        style={{ transformOrigin: "50% 45%" }}>
+                        <LoadErrorBoundary
+                            title="Workspace access unavailable"
+                            description="We couldn’t verify your workspace access."
+                            variant="compact">
+                            <ResearchCompanyConfirmation
+                                company={resolution.company}
+                                coverage={
+                                    <CoveragePresetPicker
+                                        value={coveragePreset}
+                                        onChange={setCoveragePreset}
                                     />
                                 }
+                                error={launchError ?? undefined}
+                                onBack={() => setView("compose")}
+                                isSessionReady={isSessionReady}
+                                isLaunching={isLaunching}
+                                onStart={startResearch}
                             />
-                        </motion.div>
-                    ) : resolution ? (
-                        <motion.div
-                            key="confirm"
-                            className="rounded-b-2xl space-y-5 bg-tint-violet/40 px-4 py-5"
-                            initial={
-                                reduceMotion
-                                    ? false
-                                    : { opacity: 0, scale: 0.96 }
+                        </LoadErrorBoundary>
+                    </motion.div>
+                ) : null}
+            </AnimatePresence>
+        </section>
+    );
+    return (
+        <>
+            {showStartScreen && view === "compose" ? (
+                <StartEntryScreen
+                    composer={form}
+                    suggestions={
+                        <StartAngleSuggestions
+                            angles={[
+                                {
+                                    id: "coordination",
+                                    label: "Who controls the workflow once agents handle the intake?",
+                                },
+                                {
+                                    id: "integration",
+                                    label: "Which integrations would an agent have to replace?",
+                                },
+                                {
+                                    id: "value",
+                                    label: "Where could value move if agents coordinate the work?",
+                                },
+                            ]}
+                            onSelect={(id) =>
+                                fillAngle(
+                                    id === "coordination"
+                                        ? "Who controls the workflow once agents handle the intake?"
+                                        : id === "integration"
+                                          ? "Which integrations would an agent have to replace?"
+                                          : "Where could value move if agents coordinate the work?",
+                                )
                             }
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={
-                                reduceMotion
-                                    ? {
-                                          opacity: 1,
-                                          transition: { duration: 0 },
-                                      }
-                                    : {
-                                          opacity: 0,
-                                          scale: 0.985,
-                                          transition: viewExitTransition,
-                                      }
+                        />
+                    }
+                    showcase={
+                        <StartShowcaseCard
+                            title="Who holds the photo-led claim workflow?"
+                            description="CCC Intelligent Solutions · illustrative workspace, not live research"
+                            metrics={[
+                                {
+                                    value: prototypeSources.length,
+                                    label: "example sources",
+                                },
+                                {
+                                    value: prototypeClaims.length,
+                                    label: "illustrative assertions",
+                                },
+                            ]}
+                            onOpen={() =>
+                                void navigate({
+                                    to: "/prototype/workspace",
+                                    search: { variant: "a" },
+                                })
                             }
-                            transition={
-                                reduceMotion
-                                    ? { duration: 0 }
-                                    : viewEnterTransition
+                            avatar={
+                                <CompanyFaviconAvatar
+                                    company={{
+                                        legalName:
+                                            "CCC Intelligent Solutions Holdings Inc.",
+                                        ticker: "CCCS",
+                                    }}
+                                    size="lg"
+                                />
                             }
-                            style={{ transformOrigin: "50% 45%" }}>
-                            <CompanyResolutionCard
-                                company={resolution.company}
-                            />
-                            <CoveragePresetPicker
-                                value={coveragePreset}
-                                onChange={setCoveragePreset}
-                            />
-                            {launchError ? (
-                                <p
-                                    role="alert"
-                                    className="text-sm text-destructive">
-                                    {launchError}
-                                </p>
-                            ) : null}
-                            <div className="flex items-center justify-between gap-3 border-t border-border/40 pt-4">
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    onClick={() => setView("compose")}
-                                    disabled={isLaunching}>
-                                    <Icon iconNode={ArrowLeft01Icon} />
-                                    Back
-                                </Button>
-                                <LoadErrorBoundary
-                                    title="Workspace access unavailable"
-                                    description="We couldn’t verify your workspace access."
-                                    variant="compact">
-                                    <ResearchLaunchButton
-                                        isSessionReady={isSessionReady}
-                                        isLaunching={isLaunching}
-                                        onStart={startResearch}
-                                    />
-                                </LoadErrorBoundary>
-                            </div>
-                        </motion.div>
-                    ) : null}
-                </AnimatePresence>
-            </section>
+                        />
+                    }
+                />
+            ) : showStartScreen ? (
+                <div className="mx-auto w-full max-w-[640px] px-4 py-14">
+                    <StartDossierHeading />
+                    {form}
+                </div>
+            ) : (
+                form
+            )}
 
             <AddSourceDialog
                 open={referencesOpen}
@@ -579,14 +637,22 @@ function ResearchComposerContent({
     );
 }
 
-function ResearchLaunchButton({
+function ResearchCompanyConfirmation({
     isSessionReady,
     isLaunching,
     onStart,
+    company,
+    coverage,
+    error,
+    onBack,
 }: {
     isSessionReady: boolean;
     isLaunching: boolean;
     onStart: () => Promise<void>;
+    company: PreflightResult["company"];
+    coverage: import("react").ReactNode;
+    error?: string;
+    onBack: () => void;
 }) {
     const visitor = useQuery(
         api.visitors.current,
@@ -610,16 +676,30 @@ function ResearchLaunchButton({
     };
 
     return (
-        <Button
-            type="button"
-            aria-label="Confirm and start"
-            onClick={launch}
-            disabled={isLaunching}
-            variant="launch"
-            size="lg">
-            {isLaunching ? "Starting…" : "Confirm and start"}
-            <Icon iconNode={ArrowRight01Icon} size={18} />
-        </Button>
+        <CompanyMandatePanel
+            company={company}
+            coverage={coverage}
+            pending={isLaunching}
+            error={error}
+            onChangeCompany={onBack}
+            onConfirm={launch}
+            mandate={
+                <>
+                    <p>
+                        Primary sources first: SEC filings and company material,
+                        then public third-party sources.
+                    </p>
+                    <p>
+                        Counter-evidence is always sought. Every claim stays
+                        traceable to a passage.
+                    </p>
+                    <p className="text-muted-foreground">
+                        Bounded effort. You are asked only for important
+                        exceptions.
+                    </p>
+                </>
+            }
+        />
     );
 }
 

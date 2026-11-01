@@ -34,11 +34,13 @@ import type * as domain_evidencePolicy from "../domain/evidencePolicy.js";
 import type * as domain_executionClaim from "../domain/executionClaim.js";
 import type * as domain_executionValidationAgent from "../domain/executionValidationAgent.js";
 import type * as domain_executionValidationContracts from "../domain/executionValidationContracts.js";
+import type * as domain_framingContracts from "../domain/framingContracts.js";
 import type * as domain_invitationCodes from "../domain/invitationCodes.js";
 import type * as domain_manualSourceIntake from "../domain/manualSourceIntake.js";
 import type * as domain_previewCache from "../domain/previewCache.js";
 import type * as domain_providerAvailability from "../domain/providerAvailability.js";
 import type * as domain_publicSourceUrl from "../domain/publicSourceUrl.js";
+import type * as domain_researchContext from "../domain/researchContext.js";
 import type * as domain_researchPlan from "../domain/researchPlan.js";
 import type * as domain_runCancellation from "../domain/runCancellation.js";
 import type * as domain_runPurpose from "../domain/runPurpose.js";
@@ -63,6 +65,8 @@ import type * as domain_sourceSelectionPolicy from "../domain/sourceSelectionPol
 import type * as domain_sourceUsage from "../domain/sourceUsage.js";
 import type * as domain_transitions from "../domain/transitions.js";
 import type * as domain_validators from "../domain/validators.js";
+import type * as domain_workbench from "../domain/workbench.js";
+import type * as domain_workbenchContracts from "../domain/workbenchContracts.js";
 import type * as e2eFixtures from "../e2eFixtures.js";
 import type * as evidenceActions from "../evidenceActions.js";
 import type * as evidenceArtifacts from "../evidenceArtifacts.js";
@@ -100,6 +104,7 @@ import type * as execution_researchControl from "../execution/researchControl.js
 import type * as execution_simulation from "../execution/simulation.js";
 import type * as fixtureManifestStore from "../fixtureManifestStore.js";
 import type * as fixtures_cccShowcase from "../fixtures/cccShowcase.js";
+import type * as framing from "../framing.js";
 import type * as http from "../http.js";
 import type * as integrations_agentBackends from "../integrations/agentBackends.js";
 import type * as integrations_agentStorage from "../integrations/agentStorage.js";
@@ -150,6 +155,7 @@ import type * as sourceSelectionProposalActions from "../sourceSelectionProposal
 import type * as sourceSelectionProposals from "../sourceSelectionProposals.js";
 import type * as sources from "../sources.js";
 import type * as visitors from "../visitors.js";
+import type * as workbench from "../workbench.js";
 import type * as workflow from "../workflow.js";
 import type * as workflowControls from "../workflowControls.js";
 
@@ -186,11 +192,13 @@ declare const fullApi: ApiFromModules<{
   "domain/executionClaim": typeof domain_executionClaim;
   "domain/executionValidationAgent": typeof domain_executionValidationAgent;
   "domain/executionValidationContracts": typeof domain_executionValidationContracts;
+  "domain/framingContracts": typeof domain_framingContracts;
   "domain/invitationCodes": typeof domain_invitationCodes;
   "domain/manualSourceIntake": typeof domain_manualSourceIntake;
   "domain/previewCache": typeof domain_previewCache;
   "domain/providerAvailability": typeof domain_providerAvailability;
   "domain/publicSourceUrl": typeof domain_publicSourceUrl;
+  "domain/researchContext": typeof domain_researchContext;
   "domain/researchPlan": typeof domain_researchPlan;
   "domain/runCancellation": typeof domain_runCancellation;
   "domain/runPurpose": typeof domain_runPurpose;
@@ -215,6 +223,8 @@ declare const fullApi: ApiFromModules<{
   "domain/sourceUsage": typeof domain_sourceUsage;
   "domain/transitions": typeof domain_transitions;
   "domain/validators": typeof domain_validators;
+  "domain/workbench": typeof domain_workbench;
+  "domain/workbenchContracts": typeof domain_workbenchContracts;
   e2eFixtures: typeof e2eFixtures;
   evidenceActions: typeof evidenceActions;
   evidenceArtifacts: typeof evidenceArtifacts;
@@ -252,6 +262,7 @@ declare const fullApi: ApiFromModules<{
   "execution/simulation": typeof execution_simulation;
   fixtureManifestStore: typeof fixtureManifestStore;
   "fixtures/cccShowcase": typeof fixtures_cccShowcase;
+  framing: typeof framing;
   http: typeof http;
   "integrations/agentBackends": typeof integrations_agentBackends;
   "integrations/agentStorage": typeof integrations_agentStorage;
@@ -302,6 +313,7 @@ declare const fullApi: ApiFromModules<{
   sourceSelectionProposals: typeof sourceSelectionProposals;
   sources: typeof sources;
   visitors: typeof visitors;
+  workbench: typeof workbench;
   workflow: typeof workflow;
   workflowControls: typeof workflowControls;
 }>;

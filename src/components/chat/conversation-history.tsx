@@ -14,7 +14,7 @@ import { ConversationMessages } from "@/components/chat/workbench-conversation";
 import { LoadErrorAlert } from "@/components/ui/load-error-alert";
 
 export type ConversationHistoryEntry = {
-    kind: "message" | "mission";
+    kind: "message" | "mission" | "turn";
     id: string;
 };
 
@@ -67,7 +67,9 @@ export function ConversationHistory({
     );
     const firstIds = new Map(
         visibleTurns.map((t) => [
-            t.entries.find((e) => e.kind === "message")?.id,
+            t.entries.flatMap((e) =>
+                e.kind === "message" && ids.has(e.id) ? [e.id] : [],
+            )[0],
             t,
         ]),
     );
@@ -75,6 +77,23 @@ export function ConversationHistory({
         <>
             {entries.map((entry) => {
                 const id = entry.id;
+                if (entry.kind === "turn") {
+                    const turn = turns.find((turn) => turn.id === id);
+                    return turn ? (
+                        <ConversationTurn
+                            key={`turn:${id}`}
+                            turn={turn}
+                            renderMessage={() => null}
+                        />
+                    ) : (
+                        <LoadErrorAlert
+                            key={`turn:${id}`}
+                            variant="inline"
+                            title="Work details unavailable"
+                            description="This response's work could not be restored. Your messages remain available."
+                        />
+                    );
+                }
                 if (entry.kind === "mission") {
                     const mission = missions.find(
                         (mission) => mission.id === id,
@@ -114,6 +133,28 @@ export function ConversationHistory({
                     <ConversationMessages key={id} ids={[id]} agents={agents} />
                 ) : null;
             })}
+            {turns
+                .filter(
+                    (turn) =>
+                        ["running", "waiting", "paused", "blocked"].includes(
+                            turn.state,
+                        ) &&
+                        !entries.some(
+                            (entry) =>
+                                entry.kind === "turn" && entry.id === turn.id,
+                        ) &&
+                        !turn.entries.some(
+                            (entry) =>
+                                entry.kind === "message" && ids.has(entry.id),
+                        ),
+                )
+                .map((turn) => (
+                    <ConversationTurn
+                        key={turn.id}
+                        turn={turn}
+                        renderMessage={() => null}
+                    />
+                ))}
         </>
     );
 }

@@ -1,3 +1,4 @@
+import { awaitResearchControl } from "@convex/execution/researchControl";
 import { vResultValidator, vWorkflowId } from "@convex-dev/workflow";
 import { v } from "convex/values";
 
@@ -15,11 +16,20 @@ export const run = workflow
             runId: v.id("researchRuns"),
             executionGeneration: v.number(),
             prepareSources: v.optional(v.boolean()),
+            controlled: v.optional(v.boolean()),
         },
         returns: v.null(),
     })
     .handler(async (step, args): Promise<null> => {
         let executionGeneration = args.executionGeneration;
+        const checkpoint = async () => {
+            if (args.controlled)
+                executionGeneration = await awaitResearchControl(
+                    step,
+                    args.runId,
+                );
+        };
+        await checkpoint();
         const availability = await step.runAction(
             internal.companyResolution.revalidateRun,
             {
@@ -27,6 +37,7 @@ export const run = workflow
             },
             { retry: false },
         );
+        await checkpoint();
         await step.runMutation(internal.researchRuns.transition, {
             runId: args.runId,
             expectedExecutionGeneration: executionGeneration,
@@ -35,6 +46,7 @@ export const run = workflow
             stepKey: "check_public_evidence",
         });
         while (true) {
+            await checkpoint();
             const evaluation = await step.runMutation(
                 internal.evidenceSufficiency.evaluateForRun,
                 {
@@ -57,6 +69,7 @@ export const run = workflow
                     runId: args.runId,
                     expectedExecutionGeneration: executionGeneration,
                 });
+                await checkpoint();
                 await step.runAction(
                     internal.sourceDiscoveryActions.discoverForRun,
                     {
@@ -99,6 +112,7 @@ export const run = workflow
                     runId: args.runId,
                     expectedExecutionGeneration: executionGeneration,
                 });
+                await checkpoint();
                 await step.runAction(
                     internal.sourceDiscoveryActions.discoverForRun,
                     {
@@ -118,6 +132,7 @@ export const run = workflow
                 stepKey: "check_public_evidence",
             });
         }
+        await checkpoint();
         if (args.prepareSources) {
             const run = await step.runQuery(internal.researchRuns.get, {
                 runId: args.runId,
@@ -132,8 +147,10 @@ export const run = workflow
                     expectedExecutionGeneration: executionGeneration,
                 },
             );
+            await checkpoint();
             await step.runWorkflow(internal.sourcePreparationWorkflow.run, {
                 preparationId,
+                ...(args.controlled ? { controlRunId: args.runId } : {}),
             });
         } else {
             await step.runMutation(
@@ -144,6 +161,7 @@ export const run = workflow
                 },
             );
         }
+        await checkpoint();
         await step.runMutation(internal.researchRuns.transition, {
             runId: args.runId,
             expectedExecutionGeneration: executionGeneration,
@@ -151,6 +169,10 @@ export const run = workflow
             executionStatus: "paused",
             stepKey: "source_review",
         });
+        if (args.controlled)
+            await step.runMutation(internal.workbench.processInstructions, {
+                runId: args.runId,
+            });
         const approval = await step.awaitEvent(corpusRevisionApproved);
         executionGeneration = approval.executionGeneration;
         await step.runMutation(

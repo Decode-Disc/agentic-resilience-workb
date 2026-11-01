@@ -57,3 +57,9 @@ export const evidenceSufficiencyDecided = defineEvent({
         }),
     ),
 });
+
+/** Controlled documentary workflows wait here after their admitted operation drains. */
+export const researchResumed = defineEvent({
+    name: "researchResumed",
+    validator: v.object({ generation: v.number() }),
+});

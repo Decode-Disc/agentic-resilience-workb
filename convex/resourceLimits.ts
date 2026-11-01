@@ -1,6 +1,8 @@
 import type { Id } from "./_generated/dataModel";
 import { env } from "./_generated/server";
 
+export const MAX_ANALYSES_PER_VISITOR = 3;
+
 const DEFAULT_COMPANY_SEARCH_RESULT_LIMIT = 40;
 export const MAX_INITIAL_SOURCE_CANDIDATES = 48;
 const MAX_PREPARED_RECOMMENDATIONS = 24;

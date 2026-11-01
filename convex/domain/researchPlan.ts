@@ -22,6 +22,9 @@ export const assessmentDimensionKeyValidator = v.union(
 
 export const RESEARCH_PLAN_TEMPLATE_VERSION = 2;
 
+/** Bounds persisted question reads for both legacy and framed plans. */
+export const MAX_RESEARCH_PLAN_QUESTIONS = ASSESSMENT_DIMENSION_KEYS.length + 1;
+
 export const DIMENSION_LABELS: Record<AssessmentDimensionKey, string> = {
     context_ownership: "context ownership",
     workflow_control: "workflow control",

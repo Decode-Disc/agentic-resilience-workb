@@ -4,6 +4,7 @@ import { stableStringify } from "@convex/domain/sourcePassages";
 import { readConversationMessages } from "@convex/integrations/agentStorage";
 import { agentInputByteLength } from "@convex/integrations/modelInput";
 import {
+    configuredMissionRoute,
     missionRoutes,
     SIMULATION_MODEL_ROUTE,
 } from "@convex/integrations/modelRouting";
@@ -332,8 +333,10 @@ export async function buildMissionContext(
                 mission.executionRuntime === "pi-durable"
                     ? mission.provenance === "simulation"
                         ? SIMULATION_MODEL_ROUTE
-                        : (missionRoutes[mission.definitionId] ??
-                          SIMULATION_MODEL_ROUTE)
+                        : (configuredMissionRoute(
+                              mission.definitionId,
+                              missionRoutes,
+                          ) ?? SIMULATION_MODEL_ROUTE)
                     : undefined,
         })) > MAX_CONTEXT_BYTES
     )

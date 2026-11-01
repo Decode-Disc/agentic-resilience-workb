@@ -1,15 +1,14 @@
+import { readResearchContext } from "@convex/domain/researchContext";
 import { v } from "convex/values";
 
 import { internalMutation, internalQuery } from "./_generated/server";
 import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
 import {
-    ASSESSMENT_DIMENSION_KEYS,
     buildResearchPlan,
     buildResearchPlanQuestions,
+    MAX_RESEARCH_PLAN_QUESTIONS,
     RESEARCH_PLAN_TEMPLATE_VERSION,
 } from "./domain/researchPlan";
-
-const MAX_RESEARCH_PLAN_QUESTIONS = ASSESSMENT_DIMENSION_KEYS.length + 1;
 
 const planQueryValidator = v.object({
     query: v.string(),
@@ -56,15 +55,32 @@ export const createForRun = internalMutation({
         if (!company) {
             throw new Error("Confirmed company was not found");
         }
+        const { framing, scope, researchAngle } = await readResearchContext(
+            ctx,
+            run,
+        );
         const plan = buildResearchPlan({
             company,
             coveragePreset: run.coveragePreset,
-            researchAngle: run.researchAngle,
+            researchAngle: framing ? undefined : researchAngle,
         });
-        const questions = buildResearchPlanQuestions({
-            company,
-            researchAngle: run.researchAngle,
-        });
+        if (framing) {
+            plan.queries = plan.queries.map((query) => ({
+                ...query,
+                query: `${query.query} ${scope}`,
+                dimensionKeys: [],
+            }));
+        }
+        const questions = framing
+            ? framing.content.questions.map((question) => ({
+                  questionKey: `framing:${question.id}`,
+                  prompt: question.text,
+                  dimensionKeys: [],
+              }))
+            : buildResearchPlanQuestions({
+                  company,
+                  researchAngle,
+              });
         const now = Date.now();
         const planId = await ctx.db.insert("researchPlans", {
             runId: run._id,
@@ -168,11 +184,12 @@ export const getDiscoveryContext = internalQuery({
         if (!company || !plan) {
             throw new Error("Research discovery context was not found");
         }
+        const { researchAngle } = await readResearchContext(ctx, run);
         return {
             cik: company.cik,
             corpusRevisionId: run.activeCorpusRevisionId,
             executionGeneration: run.executionGeneration,
-            researchAngle: run.researchAngle,
+            researchAngle,
             queries: plan.queries,
         };
     },

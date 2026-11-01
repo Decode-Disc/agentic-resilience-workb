@@ -12,7 +12,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
     claimInvitation,
-    confirmAndStart,
+    confirmCompany,
     navigate,
     preflight,
     searchCompanies,
@@ -21,7 +21,7 @@ const {
     useAnonymousSession,
 } = vi.hoisted(() => ({
     claimInvitation: vi.fn(),
-    confirmAndStart: vi.fn(),
+    confirmCompany: vi.fn(),
     navigate: vi.fn(),
     preflight: vi.fn(),
     searchCompanies: vi.fn(),
@@ -83,7 +83,7 @@ async function searchAndSelectCompany(query = "CCC") {
     });
     fireEvent.click(candidate);
     fireEvent.click(await screen.findByRole("button", { name: /^Continue$/i }));
-    await screen.findByRole("button", { name: /Confirm and start/i });
+    await screen.findByRole("button", { name: /Confirm and propose framing/i });
 }
 
 describe("ResearchComposer", () => {
@@ -93,7 +93,7 @@ describe("ResearchComposer", () => {
         searchCompanies.mockReset();
         submitManualUrl.mockReset();
         retrySession.mockReset();
-        confirmAndStart.mockReset();
+        confirmCompany.mockReset();
         claimInvitation.mockReset();
         convexReactHarness.reset();
         convexReactHarness
@@ -113,8 +113,8 @@ describe("ResearchComposer", () => {
             .action(api.companyResolution.preflight)
             .uses(preflight);
         convexReactHarness
-            .action(api.researchLaunch.confirmAndStart)
-            .uses(confirmAndStart);
+            .mutation(api.framing.confirmCompany)
+            .uses(confirmCompany);
         convexReactHarness
             .action(api.sourceActions.submitManualUrl)
             .uses(submitManualUrl);
@@ -178,7 +178,9 @@ describe("ResearchComposer", () => {
         fireEvent.click(screen.getByRole("button", { name: /Try again/i }));
 
         expect(
-            screen.getByRole("button", { name: /Confirm and start/i }),
+            screen.getByRole("button", {
+                name: /Confirm and propose framing/i,
+            }),
         ).toBeTruthy();
         fireEvent.click(screen.getByRole("button", { name: /^Back$/i }));
         expect(await screen.findByLabelText(/Research angle/i)).toHaveProperty(
@@ -227,7 +229,9 @@ describe("ResearchComposer", () => {
             screen.getByText("Selected company:").parentElement?.textContent,
         ).toContain("CCC Intelligent Solutions Holdings Inc.");
         expect(
-            screen.queryByRole("button", { name: /Confirm and start/i }),
+            screen.queryByRole("button", {
+                name: /Confirm and propose framing/i,
+            }),
         ).toBeNull();
 
         fireEvent.change(screen.getByLabelText(/Research angle/i), {
@@ -241,7 +245,7 @@ describe("ResearchComposer", () => {
             expect(screen.queryByLabelText(/Research request/i)).toBeNull(),
         );
         expect(screen.queryByText(/Prepare research|Step 2/i)).toBeNull();
-        expect(confirmAndStart).not.toHaveBeenCalled();
+        expect(confirmCompany).not.toHaveBeenCalled();
     });
 
     it("pages ranked company results without repeating the search action", async () => {
@@ -304,7 +308,7 @@ describe("ResearchComposer", () => {
     it("defaults to Balanced and launches once with the real run id", async () => {
         searchCompanies.mockResolvedValue(companyCandidates);
         preflight.mockResolvedValue(resolvedCompany);
-        confirmAndStart.mockResolvedValue({
+        confirmCompany.mockResolvedValue({
             runId: "run-42",
             remainingAnalyses: 2,
         });
@@ -317,13 +321,13 @@ describe("ResearchComposer", () => {
             true,
         );
         const confirmButton = screen.getByRole("button", {
-            name: /Confirm and start/i,
+            name: /Confirm and propose framing/i,
         });
         fireEvent.click(confirmButton);
         fireEvent.click(confirmButton);
 
-        await waitFor(() => expect(confirmAndStart).toHaveBeenCalledTimes(1));
-        expect(confirmAndStart).toHaveBeenCalledWith(
+        await waitFor(() => expect(confirmCompany).toHaveBeenCalledTimes(1));
+        expect(confirmCompany).toHaveBeenCalledWith(
             expect.objectContaining({
                 preflightId: "preflight-1",
                 coveragePreset: "balanced",
@@ -339,7 +343,7 @@ describe("ResearchComposer", () => {
     it("allows a coverage preset and optional research angle", async () => {
         searchCompanies.mockResolvedValue(companyCandidates);
         preflight.mockResolvedValue(resolvedCompany);
-        confirmAndStart.mockResolvedValue({
+        confirmCompany.mockResolvedValue({
             runId: "run-43",
             remainingAnalyses: 1,
         });
@@ -353,11 +357,13 @@ describe("ResearchComposer", () => {
             screen.getByRole("radio", { name: /Independent scrutiny/i }),
         );
         fireEvent.click(
-            screen.getByRole("button", { name: /Confirm and start/i }),
+            screen.getByRole("button", {
+                name: /Confirm and propose framing/i,
+            }),
         );
 
         await waitFor(() =>
-            expect(confirmAndStart).toHaveBeenCalledWith(
+            expect(confirmCompany).toHaveBeenCalledWith(
                 expect.objectContaining({
                     coveragePreset: "independent_scrutiny",
                     researchAngle: "Test workflow control claims.",
@@ -369,7 +375,7 @@ describe("ResearchComposer", () => {
     it("collects public references from the toolbar and includes them at launch", async () => {
         searchCompanies.mockResolvedValue(companyCandidates);
         preflight.mockResolvedValue(resolvedCompany);
-        confirmAndStart.mockResolvedValue({
+        confirmCompany.mockResolvedValue({
             runId: "run-with-references",
             remainingAnalyses: 1,
         });
@@ -441,11 +447,13 @@ describe("ResearchComposer", () => {
 
         await searchAndSelectCompany("CCCS");
         fireEvent.click(
-            screen.getByRole("button", { name: /Confirm and start/i }),
+            screen.getByRole("button", {
+                name: /Confirm and propose framing/i,
+            }),
         );
 
         await waitFor(() =>
-            expect(confirmAndStart).toHaveBeenCalledWith(
+            expect(confirmCompany).toHaveBeenCalledWith(
                 expect.objectContaining({
                     manualSourcePreparationIds: [
                         "preparation-1",
@@ -459,7 +467,7 @@ describe("ResearchComposer", () => {
     it("keeps one prepared reference when different inputs resolve to the same canonical URL", async () => {
         searchCompanies.mockResolvedValue(companyCandidates);
         preflight.mockResolvedValue(resolvedCompany);
-        confirmAndStart.mockResolvedValue({
+        confirmCompany.mockResolvedValue({
             runId: "run-with-canonical-reference",
             remainingAnalyses: 1,
         });
@@ -511,10 +519,12 @@ describe("ResearchComposer", () => {
 
         await searchAndSelectCompany("CCCS");
         fireEvent.click(
-            screen.getByRole("button", { name: /Confirm and start/i }),
+            screen.getByRole("button", {
+                name: /Confirm and propose framing/i,
+            }),
         );
         await waitFor(() =>
-            expect(confirmAndStart).toHaveBeenCalledWith(
+            expect(confirmCompany).toHaveBeenCalledWith(
                 expect.objectContaining({
                     manualSourcePreparationIds: ["preparation-canonical-1"],
                 }),
@@ -532,7 +542,7 @@ describe("ResearchComposer", () => {
             title: "Expired report",
             expiresAt: Date.now() + 60_000,
         });
-        confirmAndStart.mockRejectedValue(
+        confirmCompany.mockRejectedValue(
             new ConvexError({
                 area: "manual_source_intake",
                 code: "preparation_expired",
@@ -554,7 +564,9 @@ describe("ResearchComposer", () => {
 
         await searchAndSelectCompany("CCCS");
         fireEvent.click(
-            screen.getByRole("button", { name: /Confirm and start/i }),
+            screen.getByRole("button", {
+                name: /Confirm and propose framing/i,
+            }),
         );
 
         expect(
@@ -571,7 +583,7 @@ describe("ResearchComposer", () => {
             visitorId: "visitor-1",
             role: "analyst",
         });
-        confirmAndStart.mockResolvedValue({
+        confirmCompany.mockResolvedValue({
             runId: "run-44",
             remainingAnalyses: 2,
         });
@@ -579,13 +591,15 @@ describe("ResearchComposer", () => {
 
         await searchAndSelectCompany("CCCS");
         fireEvent.click(
-            screen.getByRole("button", { name: /Confirm and start/i }),
+            screen.getByRole("button", {
+                name: /Confirm and propose framing/i,
+            }),
         );
 
         await waitFor(() =>
             expect(document.getElementById("invitation-code")).not.toBeNull(),
         );
-        expect(confirmAndStart).not.toHaveBeenCalled();
+        expect(confirmCompany).not.toHaveBeenCalled();
 
         const accessCodeForm = screen.getByRole("form", {
             name: /Workspace access/i,
@@ -600,7 +614,7 @@ describe("ResearchComposer", () => {
                 code: "4207",
             }),
         );
-        await waitFor(() => expect(confirmAndStart).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(confirmCompany).toHaveBeenCalledTimes(1));
         expect(navigate).toHaveBeenCalledWith({
             to: "/workspace/$runId",
             params: { runId: "run-44" },
@@ -641,7 +655,7 @@ describe("ResearchComposer", () => {
 });
 
 describe("StartAnalysisRoute", () => {
-    it("preserves the established dossier composition around live launch", () => {
+    it("renders the approved START entry with live inputs and a labelled illustrative workspace", () => {
         const Component = Route.options.component as ComponentType;
         renderWithInvitationAccess(<Component />);
 
@@ -649,10 +663,17 @@ describe("StartAnalysisRoute", () => {
             screen.getByRole("heading", { name: /Start a research dossier/i }),
         ).toBeTruthy();
         expect(screen.getByLabelText(/Research request/i)).toBeTruthy();
-        expect(screen.getByText("Evidence layers")).toBeTruthy();
-        expect(screen.getByText("SEC filings")).toBeTruthy();
-        expect(screen.getByText("Investor context")).toBeTruthy();
-        expect(screen.getByText("Source discovery")).toBeTruthy();
-        expect(screen.getAllByRole("switch")).toHaveLength(5);
+        expect(
+            screen.getByRole("region", { name: "Suggested research angles" }),
+        ).toBeTruthy();
+        expect(
+            screen.getByRole("button", {
+                name: /Open showcase: Who holds the photo-led claim workflow/,
+            }),
+        ).toBeTruthy();
+        expect(
+            screen.getByText(/illustrative workspace, not live research/),
+        ).toBeTruthy();
+        expect(screen.queryByText("Evidence layers")).toBeNull();
     });
 });

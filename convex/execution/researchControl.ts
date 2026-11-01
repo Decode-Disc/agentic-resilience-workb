@@ -1,11 +1,14 @@
 import { internal } from "@convex/_generated/api";
-import type { Doc } from "@convex/_generated/dataModel";
+import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
     internalMutation,
     type MutationCtx,
     mutation,
 } from "@convex/_generated/server";
+import { supportsResearchControl } from "@convex/domain/transitions";
 import { requireWorkspaceRun } from "@convex/runWorkspace";
+import { researchResumed, workflow } from "@convex/workflow";
+import type { WorkflowId } from "@convex-dev/workflow";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import {
@@ -32,33 +35,35 @@ async function recordControl(
     });
 }
 
+/** Settles an admitted analyst pause in the transaction that reaches a durable stopping point. */
+export async function applyRequestedResearchPause(
+    ctx: MutationCtx,
+    run: Doc<"researchRuns">,
+): Promise<Doc<"researchRuns">> {
+    if (!run.researchPauseRequested) return run;
+    await requireDossierAuthority(ctx, run._id);
+    if (run.startMode !== "framed" || !supportsResearchControl(run))
+        throw executionError("research_control_not_supported");
+    if (run.executionStatus !== "running")
+        throw executionError("human_prerequisite_required");
+    const patch = {
+        executionStatus: "paused" as const,
+        pauseReason: "analyst" as const,
+        researchPauseRequested: false,
+        executionGeneration: run.executionGeneration + 1,
+        updatedAt: Date.now(),
+    };
+    await ctx.db.patch(run._id, patch);
+    await recordControl(ctx, run, "research_paused");
+    return { ...run, ...patch };
+}
+
 export const pause = mutation({
     args: { runId: v.id("researchRuns"), expectedGeneration: v.number() },
     returns: v.number(),
     handler: async (ctx, args) => {
         await requireWorkspaceRun(ctx, args.runId);
-        const { run } = await requireDossierAuthority(ctx, args.runId);
-        if (run.agentExecutionVersion !== 3)
-            throw executionError("research_control_not_supported");
-        if (
-            run.executionStatus === "paused" &&
-            run.pauseReason === "analyst" &&
-            run.executionGeneration === args.expectedGeneration + 1
-        )
-            return run.executionGeneration;
-        if (
-            run.executionGeneration !== args.expectedGeneration ||
-            run.executionStatus !== "running"
-        )
-            throw executionError("stale_execution");
-        await ctx.db.patch(run._id, {
-            executionStatus: "paused",
-            pauseReason: "analyst",
-            executionGeneration: run.executionGeneration + 1,
-            updatedAt: Date.now(),
-        });
-        await recordControl(ctx, run, "research_paused");
-        return run.executionGeneration + 1;
+        return pauseResearch(ctx, args);
     },
 });
 
@@ -67,47 +72,7 @@ export const resume = mutation({
     returns: v.number(),
     handler: async (ctx, args) => {
         await requireWorkspaceRun(ctx, args.runId);
-        const { run, visitor } = await requireDossierAuthority(ctx, args.runId);
-        if (run.agentExecutionVersion !== 3)
-            throw executionError("research_control_not_supported");
-        if (
-            run.executionStatus === "running" &&
-            run.executionGeneration === args.expectedGeneration + 1
-        )
-            return run.executionGeneration;
-        if (
-            run.executionGeneration !== args.expectedGeneration ||
-            run.executionStatus !== "paused" ||
-            run.pauseReason !== "analyst"
-        )
-            throw executionError("human_prerequisite_required");
-        const active = await ctx.db
-            .query("researchRuns")
-            .withIndex("by_owner_and_execution_status", (q) =>
-                q
-                    .eq("ownerVisitorId", visitor._id)
-                    .eq("executionStatus", "running"),
-            )
-            .first();
-        if (active) throw executionError("execution_slot_unavailable");
-        const generation = run.executionGeneration + 1;
-        await ctx.db.patch(run._id, {
-            executionStatus: "running",
-            pauseReason: undefined,
-            executionGeneration: generation,
-            updatedAt: Date.now(),
-        });
-        await ctx.scheduler.runAfter(
-            0,
-            internal.execution.researchControl.resumeMissions,
-            {
-                runId: run._id,
-                generation,
-                paginationOpts: { numItems: 20, cursor: null },
-            },
-        );
-        await recordControl(ctx, run, "research_resumed");
-        return generation;
+        return resumeResearch(ctx, args);
     },
 });
 
@@ -174,3 +139,240 @@ export const resumeMissions = internalMutation({
         return null;
     },
 });
+
+/** Applies a requested pause only after the caller's admitted operations have settled. */
+export const checkpoint = internalMutation({
+    args: {
+        runId: v.id("researchRuns"),
+        preparationId: v.optional(v.id("sourceSelectionProposalRebuilds")),
+        workflowId: v.optional(v.string()),
+    },
+    returns: v.object({ waiting: v.boolean(), generation: v.number() }),
+    handler: async (ctx, args) => {
+        const { run } = await requireDossierAuthority(ctx, args.runId);
+        if (run.startMode !== "framed" || run.agentExecutionVersion !== 3)
+            throw executionError("research_control_not_supported");
+        const preparation = args.preparationId
+            ? await ctx.db.get(args.preparationId)
+            : null;
+        if (
+            args.preparationId &&
+            (!preparation ||
+                preparation.runId !== run._id ||
+                run.sourcePreparationId !== preparation._id)
+        )
+            throw executionError("stale_execution");
+        if (args.workflowId) {
+            if (preparation) {
+                if (
+                    preparation.workflowId &&
+                    preparation.workflowId !== args.workflowId
+                )
+                    throw executionError("stale_execution");
+                if (!preparation.workflowId)
+                    await ctx.db.patch(preparation._id, {
+                        workflowId: args.workflowId,
+                    });
+            } else if (run.workflowId !== args.workflowId)
+                throw executionError("stale_execution");
+        }
+        if (run.executionStatus === "paused" && run.pauseReason === "analyst")
+            return { waiting: true, generation: run.executionGeneration };
+        if (run.executionStatus !== "running")
+            throw executionError("human_prerequisite_required");
+        const settledRun = await applyRequestedResearchPause(ctx, run);
+        if (settledRun.executionStatus === "paused")
+            return {
+                waiting: true,
+                generation: settledRun.executionGeneration,
+            };
+        if (
+            preparation?.status === "started" &&
+            preparation.executionGeneration !== run.executionGeneration
+        )
+            await ctx.db.patch(preparation._id, {
+                executionGeneration: run.executionGeneration,
+            });
+        return { waiting: false, generation: run.executionGeneration };
+    },
+});
+
+/** Registers the durable wait before suspension, so an early Resume is retained by the Workflow component. */
+export async function awaitResearchControl(
+    step: import("@convex-dev/workflow").WorkflowCtx,
+    runId: import("@convex/_generated/dataModel").Id<"researchRuns">,
+    preparationId?: import("@convex/_generated/dataModel").Id<"sourceSelectionProposalRebuilds">,
+): Promise<number> {
+    let state = await step.runMutation(
+        internal.execution.researchControl.checkpoint,
+        {
+            runId,
+            preparationId,
+            workflowId: step.workflowId,
+        },
+    );
+    while (state.waiting) {
+        await step.awaitEvent(researchResumed);
+        state = await step.runMutation(
+            internal.execution.researchControl.checkpoint,
+            {
+                runId,
+                preparationId,
+                workflowId: step.workflowId,
+            },
+        );
+    }
+    return state.generation;
+}
+
+export async function pauseResearch(
+    ctx: MutationCtx,
+    args: { runId: Id<"researchRuns">; expectedGeneration: number },
+): Promise<number> {
+    const { run } = await requireDossierAuthority(ctx, args.runId);
+    if (!supportsResearchControl(run))
+        throw executionError("research_control_not_supported");
+    if (
+        run.executionStatus === "paused" &&
+        run.pauseReason === "analyst" &&
+        run.executionGeneration === args.expectedGeneration + 1
+    )
+        return run.executionGeneration;
+    if (
+        run.executionGeneration !== args.expectedGeneration ||
+        run.executionStatus !== "running"
+    )
+        throw executionError("stale_execution");
+    if (run.startMode === "framed") {
+        await ctx.db.patch(run._id, {
+            researchPauseRequested: true,
+            researchControlRevision: (run.researchControlRevision ?? 0) + 1,
+            updatedAt: Date.now(),
+        });
+        await recordControl(ctx, run, "research_pause_requested");
+        return run.executionGeneration;
+    }
+    await ctx.db.patch(run._id, {
+        executionStatus: "paused",
+        researchControlRevision: (run.researchControlRevision ?? 0) + 1,
+        pauseReason: "analyst",
+        executionGeneration: run.executionGeneration + 1,
+        updatedAt: Date.now(),
+    });
+    await recordControl(ctx, run, "research_paused");
+    return run.executionGeneration + 1;
+}
+
+export async function resumeResearch(
+    ctx: MutationCtx,
+    args: { runId: Id<"researchRuns">; expectedGeneration: number },
+): Promise<number> {
+    const { run, visitor } = await requireDossierAuthority(ctx, args.runId);
+    if (!supportsResearchControl(run))
+        throw executionError("research_control_not_supported");
+    if (
+        run.startMode === "framed" &&
+        run.researchPauseRequested &&
+        run.executionStatus === "running" &&
+        run.executionGeneration === args.expectedGeneration
+    ) {
+        await ctx.db.patch(run._id, {
+            researchPauseRequested: false,
+            researchControlRevision: (run.researchControlRevision ?? 0) + 1,
+            updatedAt: Date.now(),
+        });
+        await recordControl(ctx, run, "research_pause_cancelled");
+        return run.executionGeneration;
+    }
+    if (
+        run.executionStatus === "running" &&
+        run.executionGeneration === args.expectedGeneration + 1
+    )
+        return run.executionGeneration;
+    if (
+        run.executionGeneration !== args.expectedGeneration ||
+        run.executionStatus !== "paused" ||
+        run.pauseReason !== "analyst"
+    )
+        throw executionError("human_prerequisite_required");
+    if (
+        run.startMode === "framed" &&
+        run.lifecycleState === "awaiting_source_review"
+    ) {
+        const preparation = run.sourcePreparationId
+            ? await ctx.db.get(run.sourcePreparationId)
+            : null;
+        if (run.sourcePreparationId && !preparation)
+            throw executionError("stale_execution");
+        if (preparation?.status !== "started") {
+            const generation = run.executionGeneration + 1;
+            await ctx.db.patch(run._id, {
+                executionGeneration: generation,
+                researchControlRevision: (run.researchControlRevision ?? 0) + 1,
+                pauseReason: "source_review",
+                researchPauseRequested: false,
+                updatedAt: Date.now(),
+            });
+            await ctx.scheduler.runAfter(
+                0,
+                internal.workbench.processInstructions,
+                { runId: run._id },
+            );
+            await recordControl(ctx, run, "research_resumed");
+            return generation;
+        }
+    }
+    const active = await ctx.db
+        .query("researchRuns")
+        .withIndex("by_owner_and_execution_status", (q) =>
+            q
+                .eq("ownerVisitorId", visitor._id)
+                .eq("executionStatus", "running"),
+        )
+        .first();
+    if (active) throw executionError("execution_slot_unavailable");
+    const generation = run.executionGeneration + 1;
+    await ctx.db.patch(run._id, {
+        executionStatus: "running",
+        researchControlRevision: (run.researchControlRevision ?? 0) + 1,
+        pauseReason: undefined,
+        executionGeneration: generation,
+        updatedAt: Date.now(),
+    });
+    await ctx.scheduler.runAfter(
+        0,
+        internal.execution.researchControl.resumeMissions,
+        {
+            runId: run._id,
+            generation,
+            paginationOpts: { numItems: 20, cursor: null },
+        },
+    );
+    if (run.startMode === "framed") {
+        const preparation = run.sourcePreparationId
+            ? await ctx.db.get(run.sourcePreparationId)
+            : null;
+        const ids = new Set(
+            [
+                run.workflowId,
+                preparation?.status === "started"
+                    ? preparation.workflowId
+                    : undefined,
+            ].filter((id): id is string => !!id),
+        );
+        for (const workflowId of ids)
+            await workflow.sendEvent(ctx, {
+                ...researchResumed,
+                workflowId: workflowId as WorkflowId,
+                value: { generation },
+            });
+    }
+    if (run.startMode === "framed")
+        await ctx.scheduler.runAfter(
+            0,
+            internal.workbench.processInstructions,
+            { runId: run._id },
+        );
+    await recordControl(ctx, run, "research_resumed");
+    return generation;
+}

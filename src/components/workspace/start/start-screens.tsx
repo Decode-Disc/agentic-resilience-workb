@@ -8,7 +8,6 @@ import {
     PlusSignIcon,
 } from "@hugeicons/core-free-icons";
 import {
-    type ComponentProps,
     type ReactNode,
     type RefObject,
     useEffect,
@@ -46,6 +45,12 @@ import {
 import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
 import {
+    Empty,
+    EmptyDescription,
+    EmptyHeader,
+    EmptyTitle,
+} from "@/components/ui/empty";
+import {
     ResizableHandle,
     ResizablePanel,
     ResizablePanelGroup,
@@ -60,108 +65,9 @@ import {
 } from "@/components/ui/sheet";
 import { GlassPanel } from "@/components/workbench-ui/glass-panel";
 import { WorkbenchIcon } from "@/components/workbench-ui/glyphs";
-import { CompanyResolutionCard } from "@/components/workspace/company-resolution-card";
 import { useMediaQuery } from "@/hooks/use-responsive";
-import { StartDossierHeading } from "./start-dossier-heading";
 import styles from "./start-screens.module.css";
 
-/** Suggested angles are supplied by the caller, independently of company resolution. */
-export function StartAngleSuggestions({
-    angles,
-    onSelect,
-}: {
-    angles: readonly { id: string; label: string }[];
-    onSelect: (id: string) => void;
-}) {
-    return (
-        <section
-            className={styles.angles}
-            aria-label="Suggested research angles">
-            <span className={styles.label}>Try an angle</span>
-            {angles.map((angle) => (
-                <Button
-                    variant="ghost"
-                    key={angle.id}
-                    onClick={() => onSelect(angle.id)}>
-                    <WorkbenchIcon name="slashes" size={14} />
-                    {angle.label}
-                </Button>
-            ))}
-        </section>
-    );
-}
-/** A single showcase action with the reference's identity, compact heading and metric footer. */
-export function StartShowcaseCard({
-    title,
-    description,
-    metrics,
-    onOpen,
-    avatar,
-}: {
-    title: string;
-    description: string;
-    metrics: readonly { value: string | number; label: string }[];
-    onOpen: () => void;
-    avatar?: ReactNode;
-}) {
-    return (
-        <Button
-            variant="ghost"
-            className={styles.showcase}
-            onClick={onOpen}
-            aria-label={`Open showcase: ${title}`}>
-            <span className={styles.showcaseHeader}>
-                <span className={styles.curated}>Curated</span>
-                <span className={styles.label}>Showcase dossier</span>
-                <span className={styles.showcaseOpen}>
-                    Open showcase
-                    <WorkbenchIcon name="chevron" size={13} />
-                </span>
-            </span>
-            <span className={styles.showcaseIdentity}>
-                {avatar}
-                <span>
-                    <b>{title}</b>
-                    <span className={styles.description}>{description}</span>
-                </span>
-            </span>
-            <span className={styles.showcaseFooter}>
-                {metrics.map((metric) => (
-                    <span className={styles.stat} key={metric.label}>
-                        <b>{metric.value}</b>
-                        <span>{metric.label}</span>
-                    </span>
-                ))}
-                <span className={styles.integrity}>
-                    Illustrative analysis, clearly labelled
-                </span>
-            </span>
-        </Button>
-    );
-}
-/** The installed heading and composer form the entry surface; additional blocks remain composable. */
-export function StartEntryScreen({
-    composer,
-    suggestions,
-    showcase,
-    title = "Start a research dossier",
-}: {
-    composer: ReactNode;
-    suggestions?: ReactNode;
-    showcase?: ReactNode;
-    title?: string;
-}) {
-    return (
-        <section className={styles.entry} aria-label={title}>
-            <StartDossierHeading title={title} />
-            <div className={`${styles.composer} @container/research-composer`}>
-                {composer}
-            </div>
-            {suggestions}
-            {showcase}
-        </section>
-    );
-}
 export function StartRequestMessage({
     children,
     context,
@@ -488,75 +394,6 @@ export function StartResearchScreen({
         </section>
     );
 }
-/** Composes company confirmation and research context; the caller owns selection and launch. */
-export function CompanyMandatePanel({
-    company,
-    mandate,
-    coverage,
-    onChangeCompany,
-    onConfirm,
-    pending = false,
-    error,
-}: {
-    company: ComponentProps<typeof CompanyResolutionCard>["company"];
-    mandate: ReactNode;
-    coverage?: ReactNode;
-    onChangeCompany?: () => void;
-    onConfirm?: () => void;
-    pending?: boolean;
-    error?: string;
-}) {
-    return (
-        <section
-            className={styles.confirmation}
-            aria-label="Confirm company and mandate">
-            <div className={styles.confirmationIdentity}>
-                <CompanyResolutionCard company={company} />
-                {company.websiteUrl && (
-                    <div className={styles.confirmationWebsite}>
-                        <span>Website</span>
-                        <a
-                            href={company.websiteUrl}
-                            target="_blank"
-                            rel="noreferrer">
-                            {company.websiteUrl
-                                .replace(/^https?:\/\//, "")
-                                .replace(/\/$/, "")}
-                        </a>
-                    </div>
-                )}
-            </div>
-            {coverage}
-            <div className={styles.mandate}>
-                <span className={styles.label}>Mandate</span>
-                <div>{mandate}</div>
-            </div>
-            {error && <p role="alert">{error}</p>}
-            <div className={styles.actions}>
-                <Button
-                    variant="ghost"
-                    disabled={pending || !onChangeCompany}
-                    onClick={onChangeCompany}>
-                    <WorkbenchIcon name="back" size={14} />
-                    Back
-                </Button>
-                <Button
-                    variant="launch"
-                    disabled={pending || !onConfirm}
-                    onClick={onConfirm}>
-                    {pending
-                        ? "Preparing framing…"
-                        : "Confirm and propose framing"}
-                    <WorkbenchIcon name="chevron" size={14} />
-                </Button>
-            </div>
-            <p className={styles.confirmationNote}>
-                Website details help recognition only. The legal identity comes
-                from the SEC registration.
-            </p>
-        </section>
-    );
-}
 export interface StartFramingQuestion {
     shortLabel?: string;
     id: string;
@@ -668,9 +505,11 @@ export function FramingProposal({
     selectedQuestionId,
     onStart,
     pending = false,
+    startDisabled = false,
     error,
 }: {
     collapsible?: boolean;
+    startDisabled?: boolean;
     title?: string;
     introduction?: ReactNode;
     scope?: string;
@@ -747,73 +586,83 @@ export function FramingProposal({
                             </details>
                         </section>
                     )}
-                    <div className="chat-question-navigation">
-                        <fieldset
-                            ref={topicsRef}
-                            className="chat-question-topics"
-                            aria-label="Research questions">
-                            {questions.map((q) => (
+                    {current && (
+                        <div className="chat-question-navigation">
+                            <fieldset
+                                ref={topicsRef}
+                                className="chat-question-topics"
+                                aria-label="Research questions">
+                                {questions.map((q) => (
+                                    <Button
+                                        key={q.id}
+                                        variant="outline"
+                                        aria-pressed={q.id === current?.id}
+                                        disabled={busy}
+                                        onClick={() => setSelected(q.id)}>
+                                        <Icon iconNode={File01Icon} size={17} />
+                                        {q.shortLabel ?? q.label}
+                                    </Button>
+                                ))}
+                            </fieldset>
+                            <fieldset
+                                className="chat-question-pagination"
+                                aria-label="Question navigation">
                                 <Button
-                                    key={q.id}
                                     variant="outline"
-                                    aria-pressed={q.id === current?.id}
-                                    disabled={busy}
-                                    onClick={() => setSelected(q.id)}>
-                                    <Icon iconNode={File01Icon} size={17} />
-                                    {q.shortLabel ?? q.label}
+                                    size="icon"
+                                    aria-label="Previous research question"
+                                    disabled={
+                                        busy ||
+                                        !current ||
+                                        questions.indexOf(current) === 0
+                                    }
+                                    onClick={() =>
+                                        setSelected(
+                                            questions[
+                                                (current
+                                                    ? questions.indexOf(current)
+                                                    : 0) - 1
+                                            ]?.id,
+                                        )
+                                    }>
+                                    <Icon
+                                        iconNode={ArrowLeft01Icon}
+                                        size={17}
+                                    />
                                 </Button>
-                            ))}
-                        </fieldset>
-                        <fieldset
-                            className="chat-question-pagination"
-                            aria-label="Question navigation">
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                aria-label="Previous research question"
-                                disabled={
-                                    busy ||
-                                    !current ||
-                                    questions.indexOf(current) === 0
-                                }
-                                onClick={() =>
-                                    setSelected(
-                                        questions[
-                                            (current
-                                                ? questions.indexOf(current)
-                                                : 0) - 1
-                                        ]?.id,
-                                    )
-                                }>
-                                <Icon iconNode={ArrowLeft01Icon} size={17} />
-                            </Button>
-                            <span>
-                                {current ? questions.indexOf(current) + 1 : 0}{" "}
-                                of {questions.length}
-                            </span>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                aria-label="Next research question"
-                                disabled={
-                                    busy ||
-                                    !current ||
-                                    questions.indexOf(current) ===
-                                        questions.length - 1
-                                }
-                                onClick={() =>
-                                    setSelected(
-                                        questions[
-                                            (current
-                                                ? questions.indexOf(current)
-                                                : 0) + 1
-                                        ]?.id,
-                                    )
-                                }>
-                                <Icon iconNode={ArrowRight01Icon} size={17} />
-                            </Button>
-                        </fieldset>
-                    </div>
+                                <span>
+                                    {current
+                                        ? questions.indexOf(current) + 1
+                                        : 0}{" "}
+                                    of {questions.length}
+                                </span>
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    aria-label="Next research question"
+                                    disabled={
+                                        busy ||
+                                        !current ||
+                                        questions.indexOf(current) ===
+                                            questions.length - 1
+                                    }
+                                    onClick={() =>
+                                        setSelected(
+                                            questions[
+                                                (current
+                                                    ? questions.indexOf(current)
+                                                    : 0) + 1
+                                            ]?.id,
+                                        )
+                                    }>
+                                    <Icon
+                                        iconNode={ArrowRight01Icon}
+                                        size={17}
+                                    />
+                                </Button>
+                            </fieldset>
+                        </div>
+                    )}
                     {current ? (
                         <section
                             ref={summaryRef}
@@ -834,9 +683,20 @@ export function FramingProposal({
                             )}
                         </section>
                     ) : (
-                        <p>
-                            No questions yet. Add a research question to begin.
-                        </p>
+                        <Empty className="flex-none items-start gap-0 rounded-none px-3.5 py-3 text-left">
+                            <EmptyHeader className="max-w-none items-start gap-1">
+                                <EmptyTitle className="text-[13px]/[18px]">
+                                    No research questions yet
+                                </EmptyTitle>
+                                <EmptyDescription className="text-xs/relaxed">
+                                    {composer && onAddRequest
+                                        ? "Refine the framing below, or add a question."
+                                        : onAddRequest
+                                          ? "Add a question to complete the research program."
+                                          : "This program has no research questions."}
+                                </EmptyDescription>
+                            </EmptyHeader>
+                        </Empty>
                     )}
                     {error && <p role="alert">{error}</p>}
                 </>
@@ -845,7 +705,9 @@ export function FramingProposal({
     );
     const footer = !clarification &&
         (onStart || onEditRequest || onAddRequest) && (
-            <div className={styles.framingLaunch}>
+            <div
+                className={styles.framingLaunch}
+                data-empty-program={!current || undefined}>
                 <div hidden={actionActive} className="chat-question-actions">
                     {current && onEditRequest && (
                         <Button
@@ -870,7 +732,10 @@ export function FramingProposal({
                             disabled={busy}
                             onClick={onAddRequest}>
                             <Icon iconNode={PlusSignIcon} size={16} />
-                            <span className="hidden sm:inline">
+                            <span
+                                className={
+                                    current ? "hidden sm:inline" : undefined
+                                }>
                                 Add research question
                             </span>
                         </Button>
@@ -882,7 +747,10 @@ export function FramingProposal({
                         : "Research starts only when you choose."}
                 </p>
                 {onStart && (
-                    <Button variant="launch" disabled={busy} onClick={onStart}>
+                    <Button
+                        variant="launch"
+                        disabled={busy || startDisabled}
+                        onClick={onStart}>
                         Start research
                         <Icon iconNode={ArrowRight01Icon} size={17} />
                     </Button>
@@ -1004,3 +872,10 @@ export function StartSourcesHeader({
         </div>
     );
 }
+
+export {
+    CompanyMandatePanel,
+    StartAngleSuggestions,
+    StartEntryScreen,
+    StartShowcaseCard,
+} from "./start-entry-screens";

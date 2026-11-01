@@ -3,9 +3,24 @@ import type {
     AgentResult,
     AgentScope,
     AgentState,
+    OperationOutcome,
     OperationPin,
 } from "./agentDefinition";
 import { executionError } from "./errors";
+
+/** Both retained success formats contribute to the same mission progress. */
+export function operationProgressKeys(outcome: OperationOutcome): string[] {
+    return outcome.kind === "success"
+        ? [
+              ...("progressKeys" in outcome
+                  ? (outcome.progressKeys ?? [])
+                  : []),
+              ...("progressKey" in outcome && outcome.progressKey
+                  ? [outcome.progressKey]
+                  : []),
+          ]
+        : [];
+}
 
 /** An interrupted executor can resume the same mission; it is not a terminal business result. */
 export function isRecoverableInterruption(mission: Doc<"agentMissions">) {

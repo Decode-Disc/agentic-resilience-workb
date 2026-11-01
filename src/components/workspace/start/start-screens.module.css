@@ -657,10 +657,6 @@
     width: min(560px, 100%);
 }
 
-body:has(.framing),
-body:has(.research) {
-    overflow: hidden;
-}
 .framing {
     position: relative;
     display: flex;
@@ -1016,6 +1012,16 @@ body:has(.research) {
     .pendingAction [class~="chat-question-actions"] button {
         width: 32px;
         padding-inline: 0;
+    }
+    .pendingAction .framingLaunch[data-empty-program] {
+        flex-wrap: wrap;
+    }
+    .pendingAction
+        .framingLaunch[data-empty-program]
+        [class~="chat-question-actions"]
+        button {
+        width: auto;
+        padding-inline: 8px;
     }
     .pendingAction [data-composer-action] {
         --conversation-composer-focus-min-height: 28px;

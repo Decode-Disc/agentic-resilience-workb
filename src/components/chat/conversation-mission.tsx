@@ -1,8 +1,9 @@
 import { Loading03Icon, Task01Icon } from "@hugeicons/core-free-icons";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import {
     ConversationActivityGroup,
     type ConversationWorkItem,
+    workStateLabels,
 } from "@/components/chat/conversation-activity";
 import type { ConversationAgent } from "@/components/chat/conversation-agent";
 import Icon from "@/components/icon";
@@ -16,6 +17,8 @@ export type ConversationMissionSnapshot = {
     startedAt?: string;
     finishedAt?: string;
     operations: readonly ConversationWorkItem[];
+    summary?: string;
+    details?: ReactNode;
 };
 
 /** Shows ongoing agent work independently of response generation, folding only this mission at termination. */
@@ -50,12 +53,10 @@ export function ConversationMission({
         elapsed !== undefined && Number.isFinite(elapsed)
             ? `${elapsed}s`
             : undefined;
-    const count = `${mission.operations.length} ${mission.operations.length === 1 ? "operation" : "operations"}`;
-    const stateLabel = running
-        ? "Working"
-        : mission.state === "completed"
-          ? "Completed"
-          : "Interrupted";
+    const count =
+        mission.summary ??
+        `${mission.operations.length} ${mission.operations.length === 1 ? "operation" : "operations"}`;
+    const stateLabel = workStateLabels[mission.state];
     return (
         <section
             data-slot="conversation-mission"
@@ -74,6 +75,7 @@ export function ConversationMission({
                     .join(" · ")}
                 triggerLabel={`Inspect ${agent.name} mission: ${mission.title}`}
                 activities={mission.operations}
+                content={mission.details}
                 runningHeader={
                     <div className="chat-mission-heading">
                         <Icon iconNode={Task01Icon} size={17} />

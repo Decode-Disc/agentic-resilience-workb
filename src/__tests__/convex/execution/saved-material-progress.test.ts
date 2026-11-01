@@ -156,3 +156,60 @@ test.each([
         }),
     ).toMatchObject({ kind, code });
 });
+
+test("Workbench records the unit progress key of a successful contextual reading", async () => {
+    const { t, args, sourceId, userId } = await seedInspectedEvidence();
+    await t.run(async (ctx) => {
+        const framingId = await ctx.db.insert("framingRevisions", {
+            runId: args.runId,
+            revision: 1,
+            content: { scope: "Workflow platform", questions: [] },
+            contentHash: "fixture",
+            requestKey: "fixed",
+            origin: "analyst",
+            createdAt: Date.now(),
+        });
+        await ctx.db.patch(args.runId, {
+            startMode: "framed",
+            fixedFramingRevisionId: framingId,
+            currentFramingRevisionId: framingId,
+        });
+    });
+    const client = t.withIdentity({ subject: userId });
+    await client.mutation(api.execution.conversations.submit, {
+        runId: args.runId,
+        requestKey: "reading",
+        text: "Inspect the retained passage",
+        delivery: "queue",
+    });
+    const turn = await t.mutation(internal.execution.conversations.startTurn, {
+        runId: args.runId,
+        definitionId: "workbench_v1",
+        scope: { kind: "workbench_v1" },
+        simulation: false,
+    });
+    if (!turn) throw new Error("Expected Workbench turn");
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId: turn.missionId,
+        expectedGeneration: 1,
+        cause: "context-reading",
+        input: { kind: "read_in_context", sourceId, passageOrder: 0 },
+    });
+    const outcome = await t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 1,
+    });
+    expect(outcome).toMatchObject({
+        kind: "success",
+        progressKey: expect.any(String),
+    });
+    if (
+        outcome.kind !== "success" ||
+        !("progressKey" in outcome) ||
+        !outcome.progressKey
+    )
+        throw new Error("Expected successful reading");
+    expect(await t.run((ctx) => ctx.db.get(turn.missionId))).toMatchObject({
+        progressKeys: [outcome.progressKey],
+    });
+});

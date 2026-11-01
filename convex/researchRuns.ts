@@ -18,6 +18,7 @@ import {
     researchRunLifecycleValidator,
     workflowStepKeyValidator,
 } from "./domain/validators";
+import { applyRequestedResearchPause } from "./execution/researchControl";
 import { readWorkspace, requireWorkspaceRun } from "./runWorkspace";
 import schema from "./schema";
 
@@ -161,6 +162,13 @@ export const transition = internalMutation({
             args.executionStatus,
         );
 
+        const sourceReview =
+            args.lifecycleState === "awaiting_source_review" &&
+            args.executionStatus === "paused";
+        const settledRun = sourceReview
+            ? await applyRequestedResearchPause(ctx, run)
+            : run;
+
         const now = Date.now();
         const pauseReason =
             args.lifecycleState === "awaiting_evidence_sufficiency_review"
@@ -173,7 +181,10 @@ export const transition = internalMutation({
         await ctx.db.patch(args.runId, {
             lifecycleState: args.lifecycleState,
             executionStatus: args.executionStatus,
-            pauseReason,
+            pauseReason:
+                sourceReview && settledRun.pauseReason === "analyst"
+                    ? "analyst"
+                    : pauseReason,
             nextEventSequence: run.nextEventSequence + 1,
             updatedAt: now,
         });
@@ -300,6 +311,7 @@ async function projectRun(ctx: QueryCtx, run: Doc<"researchRuns">) {
             : null,
         lifecycleState: run.lifecycleState,
         executionStatus: run.executionStatus,
+        startMode: run.startMode,
         pauseReason: run.pauseReason,
         coveragePreset: run.coveragePreset,
         researchAngle: run.researchAngle,
@@ -330,6 +342,7 @@ export const getMine = query({
 });
 
 const runProjectionValidator = v.object({
+    startMode: v.optional(v.literal("framed")),
     runId: v.id("researchRuns"),
     company: v.union(companySnapshotValidator, v.null()),
     lifecycleState: researchRunLifecycleValidator,

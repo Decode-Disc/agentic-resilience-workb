@@ -10,10 +10,12 @@ import type {
 import {
     missionScope,
     missionState,
+    operationProgressKeys,
     operationReuseIdentity,
 } from "@convex/execution/missionData";
 import type { Infer } from "convex/values";
 import { validate } from "convex-helpers/validators";
+import { readResearchContext } from "./researchContext";
 import { executeSavedMaterialOperation } from "./savedMaterial";
 import {
     readInContextInputValidator,
@@ -38,10 +40,19 @@ export async function requireSavedMaterialScope(
     run?: Doc<"researchRuns">,
 ) {
     const scope = missionScope(mission);
-    if (scope.kind !== "saved_material_inspection_v1")
+    if (
+        scope.kind !== "saved_material_inspection_v1" &&
+        scope.kind !== "workbench_v1"
+    )
         throw executionError("operation_not_allowed");
     const owner = run ?? (await ctx.db.get(mission.runId));
-    const revision = await ctx.db.get(scope.corpusRevisionId);
+    const corpusRevisionId =
+        scope.kind === "workbench_v1"
+            ? owner?.activeCorpusRevisionId
+            : scope.corpusRevisionId;
+    const revision = corpusRevisionId
+        ? await ctx.db.get(corpusRevisionId)
+        : null;
     if (
         revision?.runId !== mission.runId ||
         revision.status !== "approved" ||
@@ -212,7 +223,11 @@ export const savedMaterialInspectionDefinition: AgentDefinition & {
             kind: "ready" as const,
             context: {
                 availableMaterials,
-                humanInstructions: { researchAngle: run.researchAngle ?? null },
+                humanInstructions: {
+                    researchAngle:
+                        (await readResearchContext(ctx, run)).researchAngle ??
+                        null,
+                },
                 decisions: {
                     approvedCorpusRevision: revision.revision,
                     approvedBy: revision.approvedByVisitorId ?? null,
@@ -240,8 +255,7 @@ export const savedMaterialInspectionDefinition: AgentDefinition & {
         const progressKeys = [
             ...new Set([
                 ...mission.progressKeys,
-                ...(outcome.progressKeys ?? []),
-                ...(outcome.progressKey ? [outcome.progressKey] : []),
+                ...operationProgressKeys(outcome),
             ]),
         ];
         if (progressKeys.length <= mission.progressKeys.length) return {};

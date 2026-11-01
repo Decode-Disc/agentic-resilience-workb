@@ -1,10 +1,12 @@
 import { conversationValidationSchemas } from "@convex/domain/conversationValidationContracts";
 import { validationSchemas } from "@convex/domain/executionValidationContracts";
 import { savedMaterialSchemas } from "@convex/domain/savedMaterialOperations";
+import { workbenchSchemas } from "@convex/domain/workbenchContracts";
 import { v } from "convex/values";
 
 // Pure schema registration stays independent of runtime bindings and generated function types.
 const registeredSchemas = [
+    workbenchSchemas,
     savedMaterialSchemas,
     validationSchemas,
     conversationValidationSchemas,

@@ -5,6 +5,7 @@ import { type ActionCtx, internalAction } from "@convex/_generated/server";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { resolveAgentGenerationBackend } from "@convex/integrations/agentBackends";
 import {
+    configuredMissionRoute,
     missionRoutes,
     SIMULATION_MODEL_ROUTE,
 } from "@convex/integrations/modelRouting";
@@ -152,7 +153,7 @@ export async function invokeControlledGeneration(
               provider: "simulation",
               authorizedForAgent: true as const,
           }
-        : missionRoutes[mission.definitionId];
+        : configuredMissionRoute(mission.definitionId, missionRoutes);
     if (!route)
         return retainReply({
             response: { kind: "blocked", code: "missing_authorized_route" },

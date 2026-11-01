@@ -162,14 +162,49 @@ async function authority(
         request.operationVersion !== operation.version
     )
         throw executionError("stale_execution");
-    const pin = await operation.pin(ctx, mission, request.input, runId);
+    const expectedPin = request.effect?.pin ?? retainedOperationPin(request);
+    const pin = await operation.pin(
+        ctx,
+        mission,
+        request.input,
+        runId,
+        request.effect?.pin,
+    );
     if (pin.kind !== "available") throw executionError(pin.code);
-    if (
-        stableStringify(pin.pin) !==
-        stableStringify(retainedOperationPin(request))
-    )
+    if (stableStringify(pin.pin) !== stableStringify(expectedPin))
         throw executionError("version_conflict");
     return { mission, operation, runId, admittedRequest };
+}
+
+/** Persists a native effect's receipt atomically with its domain write, without replacing its admission pin. */
+export async function retainOperationEffect(
+    ctx: MutationCtx,
+    request: Doc<"agentOperationRequests">,
+    pin: import("./agentDefinition").OperationPin,
+    valueJson: string,
+) {
+    const outcome = operationFor(
+        request.input,
+        request.missionId
+            ? ((await ctx.db.get(request.missionId)) ?? undefined)
+            : undefined,
+    ).validateOutcome(request, { kind: "success", valueJson });
+    if (
+        outcome.kind !== "success" ||
+        new TextEncoder().encode(outcome.valueJson).length >
+            MAX_OPERATION_RESULT_BYTES
+    )
+        throw executionError("operation_result_capacity");
+    const effect = { pin, outcome };
+    if (request.effect) {
+        if (stableStringify(request.effect) !== stableStringify(effect))
+            throw executionError("operation_result_conflict");
+        return;
+    }
+    if (request.status !== "running")
+        throw executionError("operation_not_dispatched");
+    await ctx.db.patch(request._id, { effect });
+    await recordEvent(ctx, request, "operation_effect_applied");
 }
 
 /** One retained logical request drives both system calls and deferred model tools. */
@@ -245,6 +280,8 @@ export async function persistOperationRequest(
     const turn = mission?.conversationTurnId
         ? await ctx.db.get(mission.conversationTurnId)
         : null;
+    if (turn && !turn.hasOperations)
+        await ctx.db.patch(turn._id, { hasOperations: true });
     const expectedGeneration = mission?.generation ?? args.expectedGeneration;
     if (expectedGeneration === undefined)
         throw executionError("stale_execution");
@@ -477,6 +514,12 @@ export const claim = internalMutation({
         } catch (error) {
             const code = executionFailureCode(error);
             if (!code) throw error;
+            // Known native effects still enter result observation; adoption below retains every authority fence.
+            if (request.effect && !request.outcome)
+                return {
+                    kind: "adopt" as const,
+                    outcome: request.effect.outcome,
+                };
             const outcome = { kind: "refused" as const, code };
             if (request.status === "pending")
                 await ctx.db.patch(request._id, {
@@ -498,6 +541,8 @@ export const claim = internalMutation({
             return request.status === "observed"
                 ? { kind: "adopt" as const, outcome: request.outcome }
                 : { kind: "outcome" as const, outcome: request.outcome };
+        if (request.effect && !request.outcome)
+            return { kind: "adopt" as const, outcome: request.effect.outcome };
         if (request.status === "waiting") {
             if (!request.waitReference)
                 throw executionError("wait_reference_unavailable");
@@ -624,6 +669,12 @@ export const recordResult = internalMutation({
             ? await ctx.db.get(request.missionId)
             : null;
         const operation = operationFor(request.input, mission ?? undefined);
+        if (
+            request.effect &&
+            stableStringify(request.effect.outcome) !==
+                stableStringify(args.outcome)
+        )
+            throw executionError("operation_result_conflict");
         let outcome = operation.validateOutcome(request, args.outcome);
         if (
             outcome.kind === "success" &&

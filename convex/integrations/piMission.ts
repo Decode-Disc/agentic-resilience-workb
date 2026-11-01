@@ -12,6 +12,7 @@ import {
     MAX_OBSERVABLE_OUTPUT_BYTES,
 } from "@convex/execution/executionProtocol";
 import { invokeControlledGeneration } from "@convex/execution/invokeAgentModel";
+import { configuredMissionRoute } from "@convex/integrations/modelRouting";
 import {
     BACKGROUND_CONTEXT,
     withAbortSignal,
@@ -90,7 +91,7 @@ export async function runPiMission(
         args,
     );
     const simulated = mission.provenance === "simulation";
-    const route = missionRoutes[mission.definitionId];
+    const route = configuredMissionRoute(mission.definitionId, missionRoutes);
     if (!simulated && (!route || !process.env.OPENROUTER_API_KEY?.trim()))
         throw executionError(
             route ? "missing_configuration" : "missing_authorized_route",

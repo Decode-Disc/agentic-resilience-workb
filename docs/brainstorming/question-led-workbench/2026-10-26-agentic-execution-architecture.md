@@ -6,6 +6,8 @@ Accepted on 2026-10-26 and refined on 2026-10-27 and 2026-10-29. This document p
 
 Status reviewed on 2026-10-30: Pi Durable is delivered for new mission loops, technical history and compaction, with a bounded inspection mission and simulated-provider verification. Historical Workflow executions and the analyst-facing conversation storage remain compatible. Workbench/START and the three research mission bindings remain undelivered; live model judgment and summary fidelity are not certified. See the [replacement verification](../../verification/2026-10-30-pi-durable-replacement.md) and [delivery roadmap](../../ROADMAP.md#phase-7--shared-execution-and-sources).
 
+Supersession note, 2026-11-01: START and Workbench now bind persistent framing, explicit launch, conversational controls and the installed documentary workflow. The configured Workbench model remains inactive pending separate qualification; the three research agents remain pending. Current scope and delivery belong to [TECH](../../../context/TECH.md#implementation-transition) and the [roadmap](../../ROADMAP.md#phase-6--framing-and-controlled-transition).
+
 The destination is an agent that can adapt its work through controlled business operations, preserve useful progress, and recover without making the analyst coordinate routine execution. This conception records execution choices without introducing another workflow engine or claiming that model reasoning is deterministic.
 
 ## Shared Harness Decision of 2026-10-27
