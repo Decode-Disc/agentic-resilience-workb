@@ -111,6 +111,7 @@ export async function projectMissionHistoryEvent(
     const metadata = { ...event };
     delete metadata.payload;
     delete metadata.historySourceSequence;
+    delete metadata.protectedDiagnostic;
     const part =
         event.kind === "invocation_request_recorded"
             ? "request"

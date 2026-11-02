@@ -1,5 +1,8 @@
 import { api, internal } from "@convex/_generated/api";
-import { getAgentDefinition } from "@convex/execution/agentCatalog";
+import {
+    getAgentDefinition,
+    registeredAgentDefinitions,
+} from "@convex/execution/agentCatalog";
 import schema from "@convex/schema";
 import agentTest from "@convex-dev/agent/test";
 import { convexTest } from "convex-test";
@@ -9,7 +12,11 @@ import { createAdmittedPreflight } from "@/__tests__/setup/research-launch";
 import type { seedWorkbench } from "@/__tests__/setup/workbench";
 
 const modules = import.meta.glob("/convex/**/*.ts");
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+});
 test("a committed framing effect is adopted as success", async () => {
     vi.useFakeTimers();
     const t = convexTest(schema, modules);
@@ -621,5 +628,224 @@ test("the version 2 framing operation preserves analyst authority independently 
     expect(await client.query(api.framing.get, { runId })).toMatchObject({
         revision: 2,
         content: { scope: "Analyst scope" },
+    });
+});
+
+test.each([
+    null,
+    "official_commercial_terms",
+] as const)("a documentary acknowledgement loss retains one exact receipt for %s", async (coverageRole) => {
+    const { t, client, runId, active } = await framedTurn(
+        "documentary-lost-ack",
+        true,
+    );
+    const messageId = await client.mutation(
+        api.execution.conversations.submit,
+        {
+            runId,
+            turnId: active.turnId,
+            delivery: "steer",
+            requestKey: "documentary",
+            text: "Inspect the public terms for switching restrictions.",
+        },
+    );
+    const operation = getAgentDefinition("workbench_v1", 1).operations
+        .transmit_source_request;
+    assert(operation?.effectKind === "atomic_effect");
+    const execute = operation.execute;
+    vi.spyOn(operation, "execute").mockImplementation((ctx, args) =>
+        execute(
+            {
+                ...ctx,
+                runMutation: async (reference, ...input) => {
+                    await ctx.runMutation(reference, ...input);
+                    throw new Error("acknowledgement lost");
+                },
+            },
+            args,
+        ),
+    );
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        cause: "lost-ack",
+        input: {
+            kind: "transmit_source_request",
+            messageId,
+            coverageRole,
+            interpretedNeed: "Switching terms.",
+        },
+    });
+    const result = await t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 1,
+    });
+    expect(result.kind).toBe("success");
+    expect(await t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
+        status: "completed",
+        effect: { outcome: result },
+        outcome: result,
+        adoptedAt: expect.any(Number),
+    });
+    expect(
+        await t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 1,
+        }),
+    ).toEqual(result);
+    expect(
+        await t.run((ctx) =>
+            ctx.db
+                .query("workbenchInstructions")
+                .withIndex("by_request", (q) => q.eq("requestId", requestId))
+                .collect(),
+        ),
+    ).toHaveLength(1);
+});
+
+test("documentary receipt recovery retains the commit and fences adoption after cancellation", async () => {
+    const { t, client, runId, active } = await framedTurn(
+        "documentary-cancelled",
+        true,
+    );
+    const messageId = await client.mutation(
+        api.execution.conversations.submit,
+        {
+            runId,
+            turnId: active.turnId,
+            delivery: "steer",
+            requestKey: "documentary",
+            text: "Inspect the public terms for switching restrictions.",
+        },
+    );
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        cause: "cancelled-after-commit",
+        input: {
+            kind: "transmit_source_request",
+            messageId,
+            coverageRole: null,
+            interpretedNeed: "Switching terms.",
+        },
+    });
+    await t.mutation(internal.execution.operations.claim, {
+        requestId,
+        expectedGeneration: 1,
+    });
+    const committed = await t.mutation(internal.workbench.performInstruction, {
+        requestId,
+        expectedGeneration: 1,
+    });
+    await t.run((ctx) =>
+        ctx.db.patch(active.missionId, { status: "cancelled" }),
+    );
+    expect(
+        await t.mutation(internal.execution.operations.settleDispatchFailure, {
+            requestId,
+            expectedGeneration: 1,
+            failure: {
+                category: "uncertain_effect",
+                code: "operation_outcome_unknown",
+            },
+        }),
+    ).toEqual({ kind: "refused", code: "mission_cancelled" });
+    const request = await t.run((ctx) => ctx.db.get(requestId));
+    expect(request).toMatchObject({
+        effect: { outcome: { kind: "success", valueJson: committed } },
+        outcome: { kind: "success", valueJson: committed },
+    });
+    expect(request?.adoptedAt).toBeUndefined();
+    expect(
+        await t.run((ctx) =>
+            ctx.db
+                .query("workbenchInstructions")
+                .withIndex("by_request", (q) => q.eq("requestId", requestId))
+                .collect(),
+        ),
+    ).toHaveLength(1);
+});
+
+test.each(
+    registeredAgentDefinitions().flatMap((definition) =>
+        Object.entries(definition.operations)
+            .filter(([, operation]) => operation.effectKind === "atomic_effect")
+            .map(([name, operation]) => ({
+                definition,
+                name,
+                operation,
+                label: `${definition.id}@${definition.version}/${name}`,
+            })),
+    ),
+)("$label cannot adopt a new success without its atomic receipt", async ({
+    definition,
+    name,
+    operation,
+}) => {
+    const { t, client, runId, active } = await framedTurn(
+        `receipt-${definition.version}-${name}`,
+        name !== "adjust_framing",
+    );
+    await t.run((ctx) =>
+        ctx.db.patch(active.missionId, {
+            definitionVersion: definition.version,
+        }),
+    );
+    const messageId = await client.mutation(
+        api.execution.conversations.submit,
+        {
+            runId,
+            turnId: active.turnId,
+            delivery: "steer",
+            requestKey: "authorized",
+            text:
+                name === "adjust_framing"
+                    ? "Refine the claims question."
+                    : name === "control_research"
+                      ? "Resume research"
+                      : "Inspect public commercial terms.",
+        },
+    );
+    const input: import("@convex/execution/agentDefinition").OperationInput =
+        name === "adjust_framing"
+            ? {
+                  kind: name,
+                  messageId,
+                  expectedRevision: 1,
+                  content: { scope: "Claims", questions: [] },
+              }
+            : name === "control_research"
+              ? { kind: name, messageId, action: "resume" }
+              : {
+                    kind: "transmit_source_request",
+                    messageId,
+                    coverageRole: null,
+                    interpretedNeed: "Commercial terms.",
+                };
+    vi.spyOn(operation, "execute").mockResolvedValue({
+        outcome: { kind: "success", valueJson: "{}" },
+    });
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        cause: "missing-receipt",
+        input,
+    });
+    expect(
+        await t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 1,
+        }),
+    ).toEqual({ kind: "refused", code: "operation_effect_receipt_missing" });
+    const request = await t.run((ctx) => ctx.db.get(requestId));
+    expect(request).toMatchObject({
+        outcome: { kind: "success", valueJson: "{}" },
+        adoptionRefusalCode: "operation_effect_receipt_missing",
+    });
+    expect(request?.adoptedAt).toBeUndefined();
+    expect(await t.run((ctx) => ctx.db.get(active.missionId))).toMatchObject({
+        status: "blocked",
+        blockCode: "operation_effect_receipt_missing",
+        progressKeys: [],
     });
 });

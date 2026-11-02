@@ -1,3 +1,4 @@
+import { NATIVE_PROFILE_CATALOG } from "@convex/integrations/modelRouting";
 import { api, internal } from "@convex/_generated/api";
 import { INITIAL_MODEL_CATALOG } from "@convex/integrations/modelRouting";
 import schema from "@convex/schema";
@@ -79,6 +80,7 @@ test("a prepared model can be enabled and assigned without a code-defined route"
                 cacheReadPrice: 0.01,
                 structuredOutputs: true,
             },
+            profileCatalog: NATIVE_PROFILE_CATALOG,
             profiles: [{ key: "profile-one", bytes: 1000 }],
         },
     );
@@ -135,6 +137,7 @@ test("a lost preparation acknowledgement can be replayed without duplicating its
             cacheReadPrice: 0.01,
             structuredOutputs: true,
         },
+        profileCatalog: NATIVE_PROFILE_CATALOG,
         profiles: [{ key: "replay-profile", bytes: 1000 }],
     };
     const first = await admin.mutation(
@@ -355,6 +358,7 @@ test("default initialization refuses a model that cannot satisfy structured agen
             cacheReadPrice: 0.03,
             structuredOutputs: false,
         },
+        profileCatalog: NATIVE_PROFILE_CATALOG,
         profiles: [{ key: "text-only", bytes: 1000 }],
     });
     await expect(
@@ -399,6 +403,7 @@ test("a deliberate new preparation supersedes an interrupted one and fences its 
             cacheReadPrice: 0.03,
             structuredOutputs: true,
         },
+        profileCatalog: NATIVE_PROFILE_CATALOG,
         profiles: [{ key: "supersession", bytes: 1000 }],
     };
     await expect(
@@ -441,6 +446,7 @@ test("a lost assignment acknowledgement replays its result even after catalogue 
             cacheReadPrice: 0.03,
             structuredOutputs: true,
         },
+        profileCatalog: NATIVE_PROFILE_CATALOG,
         profiles: [{ key: "assignment-profile", bytes: 1000 }],
     });
     const enabled = await admin.mutation(
@@ -501,6 +507,7 @@ test("a Workbench default must be eligible for dossier selection", async () => {
             cacheReadPrice: 0.03,
             structuredOutputs: true,
         },
+        profileCatalog: NATIVE_PROFILE_CATALOG,
         profiles: [{ key: "hidden-profile", bytes: 1000 }],
     });
     await admin.mutation(api.modelConfiguration.updateAvailability, {
@@ -586,6 +593,7 @@ test("repreparing a legacy entry keeps its identity and historical revision whil
         catalogId: first.catalogId,
         revision: first.revision,
         descriptor,
+        profileCatalog: NATIVE_PROFILE_CATALOG,
         profiles: [{ key: "legacy-profile", bytes: 1000 }],
     });
     const second = await admin.mutation(
@@ -602,6 +610,7 @@ test("repreparing a legacy entry keeps its identity and historical revision whil
         catalogId: second.catalogId,
         revision: second.revision,
         descriptor,
+        profileCatalog: NATIVE_PROFILE_CATALOG,
         profiles: [{ key: "openrouter-profile", bytes: 990 }],
     });
     expect(second.catalogId).toBe(first.catalogId);

@@ -1,17 +1,19 @@
 "use node";
 
+import type { Doc } from "./_generated/dataModel";
 import type { FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { type ActionCtx, action } from "./_generated/server";
 import {
     defaultReasoningEffort,
+    NATIVE_PROFILE_CATALOG,
     INITIAL_MODEL_CATALOG,
     MODEL_MAX_INPUT_PRICE_PER_MILLION,
     MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
 } from "./integrations/modelRouting";
 import { prepareNativeProfiles } from "./integrations/piModelProfiles";
-import { modelPrepared } from "./modelConfiguration";
+import { modelPrepared, revisionRoute } from "./modelConfiguration";
 import {
     modelPreparationInput,
     reasoningEffortValues,
@@ -172,6 +174,7 @@ async function prepareModel(
                 revision: pending.revision,
                 descriptor,
                 profiles,
+                profileCatalog: NATIVE_PROFILE_CATALOG,
             },
         );
     } catch (error) {
@@ -202,6 +205,48 @@ export const prepare = action({
     handler: prepareModel,
 });
 
+async function refreshRevision(
+    ctx: ActionCtx,
+    revision: Doc<"modelRevisions">,
+) {
+    const profiles = await prepareNativeProfiles(
+        revisionRoute(revision),
+        revision.descriptor,
+        AbortSignal.timeout(60000),
+    );
+    await ctx.runMutation(internal.modelConfiguration.retainRefreshedProfiles, {
+        revisionId: revision._id,
+        profileCatalog: NATIVE_PROFILE_CATALOG,
+        profiles,
+    });
+}
+
+/** Recalibrates one retained revision per call; the caller follows the bounded continuation to include old pins. */
+export const refreshProfiles = action({
+    args: {
+        catalogId: v.id("modelCatalog"),
+        cursor: v.optional(v.union(v.string(), v.null())),
+    },
+    returns: v.object({
+        isDone: v.boolean(),
+        continueCursor: v.union(v.string(), v.null()),
+    }),
+    handler: async (
+        ctx,
+        args,
+    ): Promise<{ isDone: boolean; continueCursor: string | null }> => {
+        const page = await ctx.runQuery(
+            internal.modelConfiguration.profileRevisions,
+            args,
+        );
+        for (const revision of page.page) await refreshRevision(ctx, revision);
+        return {
+            isDone: page.isDone,
+            continueCursor: page.isDone ? null : page.continueCursor,
+        };
+    },
+});
+
 /** Creates the approved defaults once; existing administrative choices are never overwritten. */
 export const initialize = action({
     args: {},
@@ -216,8 +261,16 @@ export const initialize = action({
                 model: model.model,
             });
             if (existing?.status === "preparing") return { ready: false };
-            if (existing?.status === "ready" && !modelPrepared(existing))
-                return { ready: false };
+            if (existing?.status === "ready" && !modelPrepared(existing)) {
+                const page = await ctx.runQuery(
+                    internal.modelConfiguration.profileRevisions,
+                    { catalogId: existing._id },
+                );
+                const revision = page.page[0];
+                if (!revision || revision._id !== existing.currentRevisionId)
+                    return { ready: false };
+                await refreshRevision(ctx, revision);
+            }
             const outcome =
                 existing?.status === "ready"
                     ? {

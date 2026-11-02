@@ -75,6 +75,20 @@ export const historyPageValidator = v.object({
     continueCursor: v.union(v.string(), v.null()),
 });
 
+/** Administration-only cause, excluded from model and analyst projections. */
+export const protectedDiagnosticValidator = v.object({
+    phase: v.union(
+        v.literal("before_callback"),
+        v.literal("read_callback"),
+        v.literal("effect_callback"),
+        v.literal("validate_outcome"),
+        v.literal("reduce_progress"),
+    ),
+    name: v.string(),
+    message: v.string(),
+    causeHash: v.string(),
+});
+
 export const dispatchFailureValidator = v.object({
     category: v.union(
         v.literal("authority"),
@@ -82,6 +96,7 @@ export const dispatchFailureValidator = v.object({
         v.literal("uncertain_effect"),
     ),
     code: v.string(),
+    diagnostic: v.optional(protectedDiagnosticValidator),
 });
 
 /** Bounded immutable journal content; absent historical detail is never reconstructed. */

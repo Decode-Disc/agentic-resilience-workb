@@ -684,9 +684,9 @@ export const performInstruction = internalMutation({
             !conversation
         )
             throw executionError("instruction_not_authorized");
+        if (request.effect?.outcome.kind === "success")
+            return request.effect.outcome.valueJson;
         if (input.kind === "control_research") {
-            if (request.effect?.outcome.kind === "success")
-                return request.effect.outcome.valueJson;
             const pin = request.pin;
             if (
                 pin?.kind !== "workbench_instruction" ||
@@ -728,16 +728,25 @@ export const performInstruction = internalMutation({
             );
             return valueJson;
         }
+        const pin = request.pin;
+        if (
+            pin?.kind !== "framing_revision" ||
+            pin.revisionId !== run.fixedFramingRevisionId
+        )
+            throw executionError("version_conflict");
         const existing = await ctx.db
             .query("workbenchInstructions")
             .withIndex("by_request", (q) => q.eq("requestId", request._id))
             .unique();
-        if (existing)
-            return JSON.stringify({
+        if (existing) {
+            const valueJson = JSON.stringify({
                 instructionId: existing._id,
                 status: existing.status,
                 outcome: existing.outcome,
             });
+            await retainOperationEffect(ctx, request, pin, valueJson);
+            return valueJson;
+        }
         if (
             !input.interpretedNeed.trim() ||
             input.interpretedNeed.length > 2000
@@ -777,7 +786,13 @@ export const performInstruction = internalMutation({
                 internal.workbench.processInstructions,
                 { runId: run._id },
             );
-        return JSON.stringify({ instructionId: id, status, outcome });
+        const valueJson = JSON.stringify({
+            instructionId: id,
+            status,
+            outcome,
+        });
+        await retainOperationEffect(ctx, request, pin, valueJson);
+        return valueJson;
     },
 });
 

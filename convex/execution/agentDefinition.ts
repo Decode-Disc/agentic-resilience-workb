@@ -150,7 +150,8 @@ export function modelOperationOutcome(
         ...("code" in outcome
             ? {
                   diagnostic:
-                      outcome.code === "operation_adoption_failed"
+                      outcome.code === "operation_adoption_failed" ||
+                      outcome.code === "operation_effect_receipt_missing"
                           ? "The observed result was retained, but could not be adopted. Do not repeat the operation or infer non-execution; inspect confirmed effects and wait for authorized recovery."
                           : outcome.code === "operation_outcome_unknown"
                             ? "The operation outcome is unconfirmed. Do not repeat it or claim success or non-execution. Inspect retained state and wait for authorized recovery."

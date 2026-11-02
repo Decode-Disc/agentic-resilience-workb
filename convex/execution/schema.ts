@@ -25,6 +25,7 @@ import {
 } from "./executionProtocol";
 import {
     historyReadReceiptValidator,
+    protectedDiagnosticValidator,
     retainedPayloadValidator,
 } from "./operationContracts";
 
@@ -319,6 +320,7 @@ export const executionTables = {
         .index("by_mission_and_status", ["missionId", "status"])
         .index("by_invocation", ["invocationId"]),
     agentExecutionEvents: defineTable({
+        protectedDiagnostic: v.optional(protectedDiagnosticValidator),
         invocationPayloadId: v.optional(v.id("agentInvocationPayloads")),
         payload: v.optional(retainedPayloadValidator),
         historySourceSequence: v.optional(v.number()),

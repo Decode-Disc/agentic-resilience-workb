@@ -7,6 +7,8 @@ import chordPackage from "@earendil-works/chord/package.json";
 import { PI_AI_VERSION } from "@earendil-works/pi-ai/utils/version";
 import durablePackage from "@earendil-works/pi-durable/package.json";
 import type { Infer } from "convex/values";
+import inputProfiles from "./piInputProfiles.json";
+
 export type ModelRoute = Readonly<{
     model: string;
     /** Only historical configurations carry an explicitly pinned upstream provider. */
@@ -17,6 +19,10 @@ export type ModelRoute = Readonly<{
 }>;
 /** Installed SDK identity invalidates prepared profiles without a manually maintained version mirror. */
 export const NATIVE_MODEL_SERIALIZER = `pi-ai@${PI_AI_VERSION}/pi-durable@${durablePackage.version}/chord@${chordPackage.version}:1`;
+/** Changes with the generated tool/instruction catalogue, independently of frozen model descriptors. */
+export const NATIVE_PROFILE_CATALOG = sha256Hex(
+    stableStringify(Object.keys(inputProfiles.profiles).sort()),
+);
 export function modelConfigurationKey(descriptor: object) {
     return sha256Hex(
         stableStringify({ serializer: NATIVE_MODEL_SERIALIZER, descriptor }),

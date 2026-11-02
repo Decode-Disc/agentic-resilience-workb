@@ -72,6 +72,12 @@ test("a pure read failure is retained as an incident without stranding the reque
         expect.objectContaining({
             requestId,
             code: "operation_execution_failed",
+            protectedDiagnostic: {
+                phase: "read_callback",
+                name: "Error",
+                message: "storage detail must stay private",
+                causeHash: expect.any(String),
+            },
         }),
     ]);
 });
@@ -298,6 +304,16 @@ test("unknown effect diagnostics never claim non-execution or authorize repetiti
         code: "operation_outcome_unknown",
     });
     expect(reply).toContain("unconfirmed");
+    expect(reply).toContain("Do not repeat");
+    expect(reply).not.toContain("not performed");
+});
+
+test("a missing atomic receipt forbids repeating a known callback success", () => {
+    const reply = modelOperationOutcome(getAgentDefinition("workbench_v1", 2), {
+        kind: "refused",
+        code: "operation_effect_receipt_missing",
+    });
+    expect(reply).toContain("observed result was retained");
     expect(reply).toContain("Do not repeat");
     expect(reply).not.toContain("not performed");
 });

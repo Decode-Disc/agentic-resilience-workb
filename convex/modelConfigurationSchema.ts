@@ -69,6 +69,7 @@ export const modelConfigurationTables = {
         currentRevisionId: v.optional(v.id("modelRevisions")),
         defaultsInitialized: v.optional(v.boolean()),
         preparedSerializer: v.optional(v.string()),
+        preparedProfileCatalog: v.optional(v.string()),
         preparationKey: v.string(),
         preparationHash: v.string(),
         lastUpdateKey: v.optional(v.string()),

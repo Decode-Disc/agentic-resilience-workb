@@ -1,3 +1,4 @@
+import { NATIVE_PROFILE_CATALOG } from "@convex/integrations/modelRouting";
 import { api, internal } from "@convex/_generated/api";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
@@ -279,6 +280,7 @@ test("a refreshed model cannot strand a response when the saved effort is no lon
         catalogId,
         revision: pending.revision,
         descriptor,
+        profileCatalog: NATIVE_PROFILE_CATALOG,
         profiles: await prepareNativeProfiles(route, descriptor),
     });
     await admin.mutation(api.modelConfiguration.updateAvailability, {

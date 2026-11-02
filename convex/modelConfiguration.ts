@@ -1,3 +1,4 @@
+import { paginationResultValidator } from "convex/server";
 import { type Infer, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -19,6 +20,7 @@ import {
     MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
     modelConfigurationKey,
     NATIVE_MODEL_SERIALIZER,
+    NATIVE_PROFILE_CATALOG,
 } from "./integrations/modelRouting";
 import {
     effectiveModelConfiguration,
@@ -73,7 +75,8 @@ const preparedModelView = v.object({
 export function modelPrepared(model: Doc<"modelCatalog">) {
     return (
         model.status === "ready" &&
-        model.preparedSerializer === NATIVE_MODEL_SERIALIZER
+        model.preparedSerializer === NATIVE_MODEL_SERIALIZER &&
+        model.preparedProfileCatalog === NATIVE_PROFILE_CATALOG
     );
 }
 
@@ -284,16 +287,91 @@ export const beginPreparation = internalMutation({
     },
 });
 
+/** Profile rows are additive and shared by immutable model revisions. */
+async function retainNativeProfiles(
+    ctx: MutationCtx,
+    profiles: Infer<typeof nativeProfile>[],
+) {
+    if (!profiles.length || profiles.length > 512)
+        throw executionError("model_not_compatible");
+    for (const profile of profiles) {
+        if (
+            !profile.key ||
+            !Number.isSafeInteger(profile.bytes) ||
+            profile.bytes < 1 ||
+            profile.bytes > 1000000
+        )
+            throw executionError("model_not_compatible");
+        const old = await ctx.db
+            .query("nativeInputProfiles")
+            .withIndex("by_key", (q) => q.eq("key", profile.key))
+            .unique();
+        if (old && old.bytes !== profile.bytes)
+            throw executionError("model_profile_conflict");
+        if (!old) await ctx.db.insert("nativeInputProfiles", profile);
+    }
+}
+
+/** Bounded offline refresh enumerates historical descriptors without changing their revisions. */
+export const profileRevisions = internalQuery({
+    args: {
+        catalogId: v.id("modelCatalog"),
+        cursor: v.optional(v.union(v.string(), v.null())),
+    },
+    returns: paginationResultValidator(schema.doc("modelRevisions")),
+    handler: async (ctx, args) => {
+        await requireAdmin(ctx);
+        if (!(await ctx.db.get(args.catalogId)))
+            throw executionError("model_unavailable");
+        return ctx.db
+            .query("modelRevisions")
+            .withIndex("by_catalog_and_revision", (q) =>
+                q.eq("catalogId", args.catalogId),
+            )
+            .order("desc")
+            .paginate({ numItems: 1, cursor: args.cursor ?? null });
+    },
+});
+export const retainRefreshedProfiles = internalMutation({
+    args: {
+        revisionId: v.id("modelRevisions"),
+        profileCatalog: v.string(),
+        profiles: v.array(nativeProfile),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        await requireAdmin(ctx);
+        if (args.profileCatalog !== NATIVE_PROFILE_CATALOG)
+            throw executionError("model_profile_version_conflict");
+        const revision = await ctx.db.get(args.revisionId);
+        const catalog = revision ? await ctx.db.get(revision.catalogId) : null;
+        if (!revision || !catalog) throw executionError("model_unavailable");
+        await retainNativeProfiles(ctx, args.profiles);
+        if (
+            catalog.currentRevisionId === revision._id &&
+            catalog.status === "ready"
+        )
+            await ctx.db.patch(catalog._id, {
+                preparedSerializer: NATIVE_MODEL_SERIALIZER,
+                preparedProfileCatalog: NATIVE_PROFILE_CATALOG,
+            });
+        return null;
+    },
+});
+
 export const finishPreparation = internalMutation({
     args: {
         catalogId: v.id("modelCatalog"),
         revision: v.number(),
         descriptor: modelDescriptor,
         profiles: v.array(nativeProfile),
+        profileCatalog: v.string(),
     },
     returns: preparationResult,
     handler: async (ctx, args) => {
         const admin = await requireAdmin(ctx);
+        if (args.profileCatalog !== NATIVE_PROFILE_CATALOG)
+            throw executionError("model_profile_version_conflict");
         const current = await ctx.db.get(args.catalogId);
         const preparationHash = sha256Hex(
             stableStringify({
@@ -331,27 +409,10 @@ export const finishPreparation = internalMutation({
                 (p) => !Number.isFinite(p) || p < 0,
             ) ||
             d.inputPrice > MODEL_MAX_INPUT_PRICE_PER_MILLION ||
-            d.outputPrice > MODEL_MAX_OUTPUT_PRICE_PER_MILLION ||
-            !args.profiles.length ||
-            args.profiles.length > 512
+            d.outputPrice > MODEL_MAX_OUTPUT_PRICE_PER_MILLION
         )
             throw executionError("model_not_compatible");
-        for (const profile of args.profiles) {
-            if (
-                !profile.key ||
-                !Number.isSafeInteger(profile.bytes) ||
-                profile.bytes < 1 ||
-                profile.bytes > 1000000
-            )
-                throw executionError("model_not_compatible");
-            const old = await ctx.db
-                .query("nativeInputProfiles")
-                .withIndex("by_key", (q) => q.eq("key", profile.key))
-                .unique();
-            if (old && old.bytes !== profile.bytes)
-                throw executionError("model_profile_conflict");
-            if (!old) await ctx.db.insert("nativeInputProfiles", profile);
-        }
+        await retainNativeProfiles(ctx, args.profiles);
         const revisionId = await ctx.db.insert("modelRevisions", {
             catalogId: current._id,
             revision: current.revision,
@@ -369,6 +430,7 @@ export const finishPreparation = internalMutation({
             currentRevisionId: revisionId,
             failure: undefined,
             preparedSerializer: NATIVE_MODEL_SERIALIZER,
+            preparedProfileCatalog: NATIVE_PROFILE_CATALOG,
         });
         await ctx.db.insert("auditEvents", {
             actor: { type: "visitor", visitorId: admin._id },

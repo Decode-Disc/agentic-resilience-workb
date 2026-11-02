@@ -1,0 +1,250 @@
+import { api, internal } from "@convex/_generated/api";
+import { buildMissionContext } from "@convex/execution/context";
+import { afterEach, assert, expect, test, vi } from "vitest";
+import { seedWorkbench } from "@/__tests__/setup/workbench";
+import { installModel } from "@/__tests__/setup/model-configuration";
+import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
+
+afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+});
+
+test.each([
+    false,
+    true,
+])("stored profiles refresh offline, including historical pins: %s", async (historical) => {
+    const base = await seedWorkbench();
+    vi.stubEnv("WORKBENCH_AGENT_ENABLED", "true");
+    await installModel(base.t, nativePiFixtureRoute);
+    const active = await base.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: base.runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: false,
+        },
+    );
+    assert(active);
+    const f = { ...base, ...active };
+    const state = await f.t.run(async (ctx) => {
+        const mission = await ctx.db.get(f.missionId);
+        assert(mission?.modelRevisionId);
+        const revision = await ctx.db.get(mission.modelRevisionId);
+        assert(revision);
+        const catalog = await ctx.db.get(revision.catalogId);
+        assert(catalog);
+        const { _id, _creationTime, ...fields } = catalog;
+        Reflect.deleteProperty(fields, "preparedProfileCatalog");
+        let latestRevision = revision;
+        if (historical) {
+            const {
+                _id: _revisionId,
+                _creationTime: _revisionTime,
+                ...revisionFields
+            } = revision;
+            const latestId = await ctx.db.insert("modelRevisions", {
+                ...revisionFields,
+                revision: revision.revision + 1,
+                descriptor: {
+                    ...revision.descriptor,
+                    maxTokens: revision.descriptor.maxTokens + 1,
+                },
+            });
+            const latest = await ctx.db.get(latestId);
+            assert(latest);
+            latestRevision = latest;
+            fields.currentRevisionId = latestId;
+            fields.revision = latest.revision;
+        }
+        await ctx.db.replace(_id, fields);
+        for (const profile of await ctx.db
+            .query("nativeInputProfiles")
+            .withIndex("by_key")
+            .take(512))
+            await ctx.db.delete(profile._id);
+        await ctx.db.insert("nativeInputProfiles", {
+            key: "retained-prior-toolset",
+            bytes: 1000,
+        });
+        const admin = await ctx.db
+            .query("invitations")
+            .withIndex("by_slot_key", (q) => q.eq("slotKey", "admin"))
+            .unique();
+        const visitor = admin?.claimedByVisitorId
+            ? await ctx.db.get(admin.claimedByVisitorId)
+            : null;
+        assert(visitor?.authUserId);
+        return {
+            revision,
+            latestRevision,
+            catalog: fields,
+            catalogId: _id,
+            adminId: visitor.authUserId,
+            settings: await ctx.db.query("agentModelSettings").collect(),
+            conversation: await ctx.db
+                .query("agentConversations")
+                .withIndex("by_run", (q) => q.eq("runId", f.runId))
+                .unique(),
+        };
+    });
+    const admin = f.t.withIdentity({ subject: state.adminId });
+    expect(
+        (await admin.query(api.modelConfiguration.list, {})).models.find(
+            (row) => row._id === state.catalogId,
+        )?.compatible,
+    ).toBe(false);
+    vi.stubGlobal("fetch", () => {
+        throw new Error("Profile refresh cannot use network");
+    });
+    const result = await admin.action(
+        api.modelConfigurationActions.refreshProfiles,
+        { catalogId: state.catalogId },
+    );
+    expect(result.isDone).toBe(!historical);
+    if (historical) {
+        assert(result.continueCursor);
+        await expect(
+            f.t.run((ctx) => buildMissionContext(ctx, f.missionId, 1)),
+        ).rejects.toThrow("model_input_profile_unavailable");
+        expect(
+            await admin.action(api.modelConfigurationActions.refreshProfiles, {
+                catalogId: state.catalogId,
+                cursor: result.continueCursor,
+            }),
+        ).toEqual({ isDone: true, continueCursor: null });
+    } else expect(result.continueCursor).toBeNull();
+    expect(
+        await f.t.run((ctx) => buildMissionContext(ctx, f.missionId, 1)),
+    ).toMatchObject({ kind: "ready" });
+    expect(await f.t.run((ctx) => ctx.db.get(state.revision._id))).toEqual(
+        state.revision,
+    );
+    expect(
+        await f.t.run((ctx) => ctx.db.get(state.latestRevision._id)),
+    ).toEqual(state.latestRevision);
+    expect(
+        await f.t.run((ctx) => ctx.db.query("agentModelSettings").collect()),
+    ).toEqual(state.settings);
+    expect(
+        await f.t.run((ctx) =>
+            ctx.db
+                .query("agentConversations")
+                .withIndex("by_run", (q) => q.eq("runId", f.runId))
+                .unique(),
+        ),
+    ).toEqual(state.conversation);
+    const after = (
+        await admin.query(api.modelConfiguration.list, {})
+    ).models.find((row) => row._id === state.catalogId);
+    assert(after);
+    expect(after).toMatchObject({
+        compatible: true,
+        revision: state.catalog.revision,
+        enabled: state.catalog.enabled,
+        workbenchSelectable: state.catalog.workbenchSelectable,
+        currentRevisionId: state.latestRevision._id,
+    });
+    expect(
+        await admin.action(api.modelConfigurationActions.refreshProfiles, {
+            catalogId: state.catalogId,
+        }),
+    ).toEqual(result);
+    await expect(
+        f.t.action(api.modelConfigurationActions.refreshProfiles, {
+            catalogId: state.catalogId,
+        }),
+    ).rejects.toThrow("Not authenticated");
+    await expect(
+        f.client.action(api.modelConfigurationActions.refreshProfiles, {
+            catalogId: state.catalogId,
+        }),
+    ).rejects.toThrow("Unauthorized");
+    await expect(
+        admin.mutation(internal.modelConfiguration.retainRefreshedProfiles, {
+            revisionId: state.revision._id,
+            profileCatalog: "previous-toolset",
+            profiles: [{ key: "stale-write", bytes: 100 }],
+        }),
+    ).rejects.toThrow("model_profile_version_conflict");
+    expect(
+        await f.t.run((ctx) =>
+            ctx.db
+                .query("nativeInputProfiles")
+                .withIndex("by_key", (q) => q.eq("key", "stale-write"))
+                .unique(),
+        ),
+    ).toBeNull();
+    expect(
+        await f.t.run((ctx) =>
+            ctx.db
+                .query("nativeInputProfiles")
+                .withIndex("by_key", (q) =>
+                    q.eq("key", "retained-prior-toolset"),
+                )
+                .unique(),
+        ),
+    ).toMatchObject({ bytes: 1000 });
+});
+
+test("initialization refreshes existing defaults offline and preserves administrative choices", async () => {
+    const f = await seedWorkbench();
+    const { INITIAL_MODEL_CATALOG } = await import(
+        "@convex/integrations/modelRouting"
+    );
+    vi.stubGlobal("fetch", () => {
+        throw new Error("Existing defaults cannot fetch provider metadata");
+    });
+    const first = await installModel(f.t, {
+        ...nativePiFixtureRoute,
+        model: INITIAL_MODEL_CATALOG[0].model,
+    });
+    const second = await installModel(f.t, {
+        ...nativePiFixtureRoute,
+        model: INITIAL_MODEL_CATALOG[1].model,
+    });
+    expect(
+        await first.admin.action(api.modelConfigurationActions.initialize, {}),
+    ).toEqual({ ready: true });
+    const state = await f.t.run(async (ctx) => {
+        const secondCatalog = await ctx.db.get(second.catalogId);
+        assert(secondCatalog);
+        await ctx.db.patch(second.catalogId, {
+            enabled: false,
+            workbenchSelectable: false,
+        });
+        const models = await ctx.db.query("modelCatalog").collect();
+        for (const model of models) {
+            const { _id, _creationTime, ...fields } = model;
+            Reflect.deleteProperty(fields, "preparedProfileCatalog");
+            await ctx.db.replace(_id, fields);
+        }
+        for (const profile of await ctx.db
+            .query("nativeInputProfiles")
+            .withIndex("by_key")
+            .take(512))
+            await ctx.db.delete(profile._id);
+        return {
+            models,
+            settings: await ctx.db.query("agentModelSettings").collect(),
+            revisions: await ctx.db.query("modelRevisions").collect(),
+        };
+    });
+    expect(
+        await first.admin.action(api.modelConfigurationActions.initialize, {}),
+    ).toEqual({ ready: true });
+    const after = await first.admin.query(api.modelConfiguration.list, {});
+    expect(after.models.every((model) => model.compatible)).toBe(true);
+    for (const model of state.models)
+        expect(after.models.find((row) => row._id === model._id)).toMatchObject(
+            model,
+        );
+    expect(
+        await f.t.run((ctx) => ctx.db.query("agentModelSettings").collect()),
+    ).toEqual(state.settings);
+    expect(
+        await f.t.run((ctx) => ctx.db.query("modelRevisions").collect()),
+    ).toEqual(state.revisions);
+});

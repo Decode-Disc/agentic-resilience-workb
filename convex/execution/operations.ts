@@ -24,7 +24,7 @@ import {
     requireRunAuthority,
 } from "./authority";
 import { requireInstructionVersion } from "./conversations";
-import { classifyDispatchFailure } from "./errors";
+import { classifyDispatchFailure, protectedDiagnostic } from "./errors";
 import {
     type AgentOperationDefinition,
     EXECUTION_WINDOW_MS,
@@ -81,7 +81,10 @@ async function recordEvent(
     kind: string,
     code?: string,
     admissionOutcome?: Infer<typeof operationRefusalValidator>,
-    options?: { historySource?: true },
+    options?: {
+        historySource?: true;
+        diagnostic?: Doc<"agentExecutionEvents">["protectedDiagnostic"];
+    },
 ) {
     const event = {
         kind,
@@ -89,6 +92,7 @@ async function recordEvent(
         invocationId: request.invocationId,
         requestId: request._id,
         code,
+        protectedDiagnostic: options?.diagnostic,
         admissionOutcome,
         messageId: request.sourceMessageId,
         interpretedNeed: request.interpretedNeed,
@@ -733,7 +737,12 @@ export const recordResult = internalMutation({
         )
             throw executionError("operation_result_conflict");
         let outcome = args.outcome;
+        const missingEffectReceipt =
+            operation.effectKind === "atomic_effect" &&
+            outcome.kind === "success" &&
+            !request.effect;
         let adoptionFailed = false;
+        let diagnostic: Doc<"agentExecutionEvents">["protectedDiagnostic"];
         if (outcome.kind === "success") {
             try {
                 const validated = operation.validateOutcome(request, outcome);
@@ -746,9 +755,10 @@ export const recordResult = internalMutation({
                 )
                     throw executionError("operation_contract_invalid");
                 outcome = validated;
-            } catch {
+            } catch (error) {
                 // Preserve the known observation; only pure domain callbacks are guarded here.
                 adoptionFailed = true;
+                diagnostic = protectedDiagnostic(error, "validate_outcome");
             }
         }
         if (
@@ -811,6 +821,9 @@ export const recordResult = internalMutation({
                 ctx,
                 { ...request, outcome },
                 "operation_observed",
+                undefined,
+                undefined,
+                { diagnostic },
             );
             if (request.waitEventId && !request.waitNotified) {
                 await workflow.sendEvent(ctx, {
@@ -863,7 +876,7 @@ export const recordResult = internalMutation({
                 keys: mission.progressKeys,
                 added: 0,
             };
-            if (!adoptionFailed) {
+            if (!adoptionFailed && !missingEffectReceipt) {
                 try {
                     const {
                         progressKeys: _keys,
@@ -897,15 +910,18 @@ export const recordResult = internalMutation({
                               ]
                             : [],
                     );
-                } catch {
+                } catch (error) {
                     adoptionFailed = true;
+                    diagnostic = protectedDiagnostic(error, "reduce_progress");
                 }
             }
-            const code = adoptionFailed
-                ? "operation_adoption_failed"
-                : accounting.kind === "blocked"
-                  ? accounting.code
-                  : progress.blockCode;
+            const code = missingEffectReceipt
+                ? "operation_effect_receipt_missing"
+                : adoptionFailed
+                  ? "operation_adoption_failed"
+                  : accounting.kind === "blocked"
+                    ? accounting.code
+                    : progress.blockCode;
             if (code) {
                 await ctx.db.patch(mission._id, {
                     status: "blocked",
@@ -920,8 +936,12 @@ export const recordResult = internalMutation({
                     { ...request, outcome },
                     "operation_adoption_failed",
                     code,
+                    undefined,
+                    { diagnostic },
                 );
-                return adoptionFailed ? { kind: "refused", code } : outcome;
+                return adoptionFailed || missingEffectReceipt
+                    ? { kind: "refused", code }
+                    : outcome;
             }
             if (accounting.kind !== "ready")
                 throw executionError("progress_contract_invalid");
@@ -938,18 +958,23 @@ export const recordResult = internalMutation({
                     ? { obligations: progress.obligations }
                     : {}),
             });
-        } else if (adoptionFailed) {
+        } else if (adoptionFailed || missingEffectReceipt) {
+            const code = missingEffectReceipt
+                ? "operation_effect_receipt_missing"
+                : "operation_adoption_failed";
             await ctx.db.patch(request._id, {
                 status: "completed",
-                adoptionRefusalCode: "operation_adoption_failed",
+                adoptionRefusalCode: code,
             });
             await recordEvent(
                 ctx,
                 { ...request, outcome },
                 "operation_adoption_failed",
-                "operation_adoption_failed",
+                code,
+                undefined,
+                { diagnostic },
             );
-            return { kind: "refused", code: "operation_adoption_failed" };
+            return { kind: "refused", code };
         }
         await ctx.db.patch(request._id, {
             status: "completed",
@@ -1100,6 +1125,19 @@ export const settleDispatchFailure = internalMutation({
         )
             throw executionError("request_unavailable");
         const retained = request.outcome ?? request.effect?.outcome;
+        if (
+            args.failure.diagnostic &&
+            request.status !== "completed" &&
+            request.status !== "unknown"
+        )
+            await recordEvent(
+                ctx,
+                request,
+                "operation_execution_incident",
+                args.failure.code,
+                undefined,
+                { diagnostic: args.failure.diagnostic },
+            );
         if (retained)
             return ctx.runMutation(internal.execution.operations.recordResult, {
                 requestId: args.requestId,
@@ -1114,7 +1152,7 @@ export const settleDispatchFailure = internalMutation({
             await markOperationUnknown(ctx, request);
             return { kind: "unavailable", code: "operation_outcome_unknown" };
         }
-        if (args.failure.category === "incident")
+        if (args.failure.category === "incident" && !args.failure.diagnostic)
             await recordEvent(
                 ctx,
                 request,

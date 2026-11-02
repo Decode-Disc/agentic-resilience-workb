@@ -1,6 +1,7 @@
 import { internal } from "@convex/_generated/api";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { recordMissionEvent } from "@convex/execution/authority";
+import { projectMissionHistoryEvent } from "@convex/execution/journal";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import {
     dispatchHistory,
@@ -141,14 +142,24 @@ test.each([
     assert(operation);
     if (phase === "validator")
         vi.spyOn(operation, "validateOutcome").mockImplementation(() => {
-            throw new Error("private validator detail");
+            throw new TypeError(
+                "private validator detail; Authorization: Bearer synthetic-secret-4382; api_key=synthetic-key-4123; " +
+                    JSON.stringify({ apiKey: "synthetic-json-1337" }) +
+                    " https://user:synthetic-url-pass@example.test/?token=synthetic-query " +
+                    "x".repeat(1000),
+            );
         });
     else
         vi.spyOn(
             conversationValidationDefinition,
             "progress",
         ).mockImplementation(() => {
-            throw new Error("private reducer detail");
+            throw new TypeError(
+                "private reducer detail; Authorization: Bearer synthetic-secret-4382; api_key=synthetic-key-4123; " +
+                    JSON.stringify({ apiKey: "synthetic-json-1337" }) +
+                    " https://user:synthetic-url-pass@example.test/?token=synthetic-query " +
+                    "x".repeat(1000),
+            );
         });
     expect(
         await f.t.mutation(internal.execution.operations.recordResult, {
@@ -167,6 +178,39 @@ test.each([
         blockCode: "operation_adoption_failed",
         progressKeys: [],
     });
+    const diagnostic = await f.t.run(async (ctx) => {
+        const event = await ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_mission_and_kind", (q) =>
+                q
+                    .eq("missionId", f.missionId)
+                    .eq("kind", "operation_adoption_failed"),
+            )
+            .unique();
+        assert(event);
+        return {
+            event,
+            projection: await projectMissionHistoryEvent(ctx, event),
+        };
+    });
+    expect(diagnostic.event).toMatchObject({
+        protectedDiagnostic: {
+            phase:
+                phase === "validator" ? "validate_outcome" : "reduce_progress",
+            name: "TypeError",
+            message: expect.stringContaining(`private ${phase} detail`),
+            causeHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        },
+    });
+    const detail = JSON.stringify(diagnostic.event.protectedDiagnostic);
+    expect(detail.length).toBeLessThan(900);
+    expect(detail).not.toContain("synthetic-secret-4382");
+    expect(detail).not.toContain("synthetic-key-4123");
+    expect(detail).not.toContain("synthetic-json-1337");
+    expect(detail).not.toContain("synthetic-url-pass");
+    expect(detail).not.toContain("synthetic-query");
+    expect(diagnostic.projection.json).not.toContain("protectedDiagnostic");
+    expect(diagnostic.projection.json).not.toContain(`private ${phase} detail`);
 });
 
 test("new draft observations cannot renew a restoration window, while material progress can", async () => {
@@ -217,4 +261,53 @@ test("new draft observations cannot renew a restoration window, while material p
     expect(
         (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys.length,
     ).toBeGreaterThan(keys.length);
+});
+
+test("outcome-validation diagnostics survive an authority refusal after observation", async () => {
+    const f = await seedHistoryMission();
+    const operation = getAgentDefinition("conversation_validation_v1", 1)
+        .operations.consult_run_state;
+    assert(operation);
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 1,
+            cause: "late-validation",
+            input: { kind: "consult_run_state" },
+        },
+    );
+    await f.t.mutation(internal.execution.operations.claim, {
+        requestId,
+        expectedGeneration: 1,
+    });
+    vi.spyOn(operation, "validateOutcome").mockImplementation(() => {
+        throw new TypeError("Unexpected retained-shape mismatch");
+    });
+    await f.t.run((ctx) => ctx.db.patch(f.missionId, { status: "cancelled" }));
+    expect(
+        await f.t.mutation(internal.execution.operations.recordResult, {
+            requestId,
+            expectedGeneration: 1,
+            outcome: { kind: "success", valueJson: "{}" },
+        }),
+    ).toEqual({ kind: "refused", code: "mission_cancelled" });
+    const observed = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_mission_and_kind", (q) =>
+                q.eq("missionId", f.missionId).eq("kind", "operation_observed"),
+            )
+            .unique(),
+    );
+    expect(observed).toMatchObject({
+        protectedDiagnostic: {
+            phase: "validate_outcome",
+            name: "TypeError",
+            message: "Unexpected retained-shape mismatch",
+        },
+    });
+    expect(await f.t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
+        outcome: { kind: "success", valueJson: "{}" },
+    });
 });

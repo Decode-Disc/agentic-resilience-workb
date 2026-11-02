@@ -1,3 +1,4 @@
+import { NATIVE_PROFILE_CATALOG } from "@convex/integrations/modelRouting";
 import { api, internal } from "@convex/_generated/api";
 import type { ModelRoute } from "@convex/integrations/modelRouting";
 import { prepareNativeProfiles } from "@convex/integrations/piModelProfiles";
@@ -78,6 +79,7 @@ export async function installModel(
             catalogId: pending.catalogId,
             revision: pending.revision,
             descriptor,
+            profileCatalog: NATIVE_PROFILE_CATALOG,
             profiles: await profiles,
         },
     );

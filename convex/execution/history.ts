@@ -394,17 +394,18 @@ export async function readHistoryPage(
         const events =
             position.sequence > frontier.sequence
                 ? []
-                : await ctx.db
+                : ctx.db
                       .query("agentExecutionEvents")
                       .withIndex("by_mission_and_history_source", (q) =>
                           q
                               .eq("missionId", mission._id)
                               .gte("historySourceSequence", position.sequence)
                               .lte("historySourceSequence", frontier.sequence),
-                      )
-                      .take(HISTORY_PAGE_SIZE);
+                      );
         let offset = position.offset;
-        for (const event of events) {
+        let sourcesRead = 0;
+        for await (const event of events) {
+            sourcesRead++;
             if (
                 event.sequence === undefined ||
                 event.sequence !== event.historySourceSequence ||
@@ -465,10 +466,14 @@ export async function readHistoryPage(
                 ),
             );
             next = continuation;
-            if (chunk.end < source.json.length) break;
+            if (
+                chunk.end < source.json.length ||
+                sourcesRead >= HISTORY_PAGE_SIZE
+            )
+                break;
             offset = 0;
         }
-        if (!events.length && position.sequence <= frontier.sequence)
+        if (!sourcesRead && position.sequence <= frontier.sequence)
             throw executionError("mission_history_unavailable");
     } else if (
         frontier.source === "conversation" &&

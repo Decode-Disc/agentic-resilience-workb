@@ -211,6 +211,7 @@ export async function recordMissionEvent(
         historySource?: "material" | "observation";
         invocationPayloadId?: Id<"agentInvocationPayloads">;
         observation?: unknown;
+        protectedDiagnostic?: Doc<"agentExecutionEvents">["protectedDiagnostic"];
     },
 ) {
     const current = await ctx.db.get(mission._id);
