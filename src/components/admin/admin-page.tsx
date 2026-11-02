@@ -9,6 +9,10 @@ import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { AdminDossierBrowser } from "@/components/admin/admin-dossier-browser";
+import {
+    AdminAgentModels,
+    AdminModels,
+} from "@/components/admin/admin-model-configuration";
 import { AdminProviderActivity } from "@/components/admin/admin-provider-activity";
 import { AdminProviderCallInspection } from "@/components/admin/admin-provider-call-inspection";
 import { AdminReservations } from "@/components/admin/admin-reservations";
@@ -39,6 +43,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
 const sections = [
+    { value: "models", label: "Models" },
+    { value: "agent-models", label: "Agent models" },
     { value: "dossiers", label: "Dossiers" },
     { value: "reservations", label: "Reservations" },
     { value: "provider-activity", label: "Provider activity" },
@@ -172,6 +178,12 @@ export function AdminPage() {
                             </TabsTrigger>
                         ))}
                     </TabsList>
+                    <TabsContent value="models">
+                        <AdminModels />
+                    </TabsContent>
+                    <TabsContent value="agent-models">
+                        <AdminAgentModels />
+                    </TabsContent>
                     <TabsContent value="dossiers">
                         <AdminDossierBrowser onInspectRun={setInspectRunId} />
                     </TabsContent>

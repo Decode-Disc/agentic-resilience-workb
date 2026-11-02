@@ -1,16 +1,23 @@
 import { api, internal } from "@convex/_generated/api";
 import { upsertSourceReviewItem } from "@convex/domain/sourceReviewProjection";
+import type { ModelRoute } from "@convex/integrations/modelRouting";
 import { assert, vi } from "vitest";
+import { installModel } from "./model-configuration";
 import { seedInspectedEvidence } from "./source-preparation";
 
 /** Approved captures and queued messages for exercising real Workbench context admission. */
 export async function seedWorkbenchMaterials(
     sourceCount: number,
     messageCount: number,
+    route?: ModelRoute,
 ) {
     vi.useFakeTimers();
     const fixture = await seedInspectedEvidence();
     const { t, runId, corpusRevisionId, sourceId, captureId, userId } = fixture;
+    if (route) {
+        vi.stubEnv("WORKBENCH_AGENT_ENABLED", "true");
+        await installModel(t, route);
+    }
     await t.run(async (ctx) => {
         await ctx.db.patch(runId, {
             startMode: "framed",

@@ -33,6 +33,12 @@ import {
     resumeResearch,
 } from "@convex/execution/researchControl";
 import { readConversationMessages } from "@convex/integrations/agentStorage";
+import {
+    modelPrepared,
+    requireReasoningEffort,
+    resolveAgentModel,
+} from "@convex/modelConfiguration";
+import { reasoningEffort } from "@convex/modelConfigurationSchema";
 import { sourceDossierCandidateLimit } from "@convex/resourceLimits";
 import { requireWorkspaceRun } from "@convex/runWorkspace";
 import schema from "@convex/schema";
@@ -48,6 +54,118 @@ const commandResult = v.object({
     confirmationMessageId: v.id("agentMessageDeliveries"),
     outcome: workbenchCommandOutcome,
     text: v.string(),
+});
+
+/** Exposes only analyst-relevant catalogue choices, independently of provider credentials. */
+export const models = query({
+    args: { runId: v.id("researchRuns") },
+    returns: v.object({
+        selectedId: v.union(v.id("modelCatalog"), v.null()),
+        label: v.string(),
+        available: v.boolean(),
+        effort: v.union(reasoningEffort, v.null()),
+        effortChoices: v.array(reasoningEffort),
+        revision: v.number(),
+        choices: v.array(
+            v.object({ id: v.id("modelCatalog"), label: v.string() }),
+        ),
+    }),
+    handler: async (ctx, args) => {
+        await requireWorkspaceRun(ctx, args.runId);
+        const conversation = await ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", args.runId))
+            .unique();
+        const setting = await ctx.db
+            .query("agentModelSettings")
+            .withIndex("by_agent", (q) => q.eq("agent", "workbench"))
+            .unique();
+        const selectedId =
+            conversation?.modelCatalogId ?? setting?.catalogId ?? null;
+        const selected = selectedId ? await ctx.db.get(selectedId) : null;
+        const configuration = selected?.currentRevisionId
+            ? await ctx.db.get(selected.currentRevisionId)
+            : null;
+        const choices = await ctx.db
+            .query("modelCatalog")
+            .withIndex("by_enabled_and_workbench_selectable", (q) =>
+                q.eq("enabled", true).eq("workbenchSelectable", true),
+            )
+            .take(100);
+        return {
+            selectedId,
+            label: selected?.label ?? "Choose model",
+            available:
+                !!selected?.enabled &&
+                modelPrepared(selected) &&
+                selected.workbenchSelectable,
+            effort:
+                conversation?.reasoningEffort ??
+                configuration?.reasoningEffort ??
+                null,
+            effortChoices: configuration?.descriptor.reasoningEfforts ?? [],
+            revision: conversation?.modelSelectionRevision ?? 0,
+            choices: choices
+                .filter(modelPrepared)
+                .map((m) => ({ id: m._id, label: m.label })),
+        };
+    },
+});
+
+export const setModel = mutation({
+    args: {
+        runId: v.id("researchRuns"),
+        catalogId: v.id("modelCatalog"),
+        reasoningEffort: v.optional(reasoningEffort),
+        expectedRevision: v.number(),
+        requestKey: v.string(),
+    },
+    returns: v.object({ revision: v.number() }),
+    handler: async (ctx, args) => {
+        await requireWorkspaceRun(ctx, args.runId);
+        await requireDossierAuthority(ctx, args.runId);
+        requireConversationRequestKey(args.requestKey);
+        const conversation = await ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", args.runId))
+            .unique();
+        if (!conversation) throw executionError("conversation_unavailable");
+        const hash = sha256Hex(
+            stableStringify({
+                catalogId: args.catalogId,
+                expectedRevision: args.expectedRevision,
+                ...(args.reasoningEffort
+                    ? { reasoningEffort: args.reasoningEffort }
+                    : {}),
+            }),
+        );
+        if (conversation.modelSelectionKey === args.requestKey) {
+            if (conversation.modelSelectionHash !== hash)
+                throw executionError("message_identity_conflict");
+            return { revision: conversation.modelSelectionRevision ?? 0 };
+        }
+        if (
+            (conversation.modelSelectionRevision ?? 0) !== args.expectedRevision
+        )
+            throw executionError("model_configuration_conflict");
+        const model = await resolveAgentModel(ctx, "workbench", args.catalogId);
+        const effort =
+            args.reasoningEffort ??
+            (conversation.modelCatalogId === args.catalogId
+                ? conversation.reasoningEffort
+                : undefined) ??
+            model.reasoningEffort;
+        requireReasoningEffort(model, effort);
+        const revision = args.expectedRevision + 1;
+        await ctx.db.patch(conversation._id, {
+            modelCatalogId: args.catalogId,
+            reasoningEffort: effort,
+            modelSelectionRevision: revision,
+            modelSelectionKey: args.requestKey,
+            modelSelectionHash: hash,
+        });
+        return { revision };
+    },
 });
 
 /** Explicit controls share button authorization/effects; free-text submission is unchanged. */

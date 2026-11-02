@@ -1,0 +1,13 @@
+
+> agentic-resilience-workbench@ test /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> TMPDIR=/tmp TEMP=/tmp TMP=/tmp vitest run src/__tests__/convex/admin/model-configuration.test.ts --environment=node --maxWorkers=1 --testTimeout=30000
+
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+
+ Test Files  1 passed (1)
+      Tests  13 passed (13)
+   Start at  23:06:58
+   Duration  5.88s (transform 1.74s, setup 281ms, import 1.88s, tests 3.34s, environment 0ms)
+

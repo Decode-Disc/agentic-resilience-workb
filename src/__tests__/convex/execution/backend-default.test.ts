@@ -1,18 +1,9 @@
 import { internal } from "@convex/_generated/api";
 import agentTest from "@convex-dev/agent/test";
 import { afterEach, expect, test, vi } from "vitest";
+import { installModel } from "@/__tests__/setup/model-configuration";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
-vi.mock("@convex/integrations/modelRouting", async (original) => ({
-    ...(await original<typeof import("@convex/integrations/modelRouting")>()),
-    missionRoutes: {
-        saved_material_inspection_v1: {
-            model: "test/agent",
-            provider: "test",
-            authorizedForAgent: true,
-        },
-    },
-}));
 afterEach(() => {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
@@ -50,6 +41,11 @@ for (const legacy of [false, true]) {
         );
         vi.stubGlobal("fetch", network);
         const { t, args } = await seedInspectedEvidence();
+        await installModel(
+            t,
+            { model: "test/agent", provider: "test" },
+            "saved_material_inspection",
+        );
         agentTest.register(t);
         const missionId = await t.mutation(internal.execution.missions.start, {
             generationBackend: { id: "convex-agent", version: 2 },

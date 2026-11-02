@@ -13,12 +13,13 @@ import schema from "@convex/schema";
 import agentTest from "@convex-dev/agent/test";
 import { defineSchema } from "convex/server";
 import { convexTest } from "convex-test";
+import { installModel } from "./model-configuration";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 
 /** Creates owned public candidates without corpus approval or analytical artifacts. */
 export async function seedSourcePreparation(
-    options: { legacyRunPurposes?: boolean } = {},
+    options: { legacyRunPurposes?: boolean; models?: boolean } = {},
 ) {
     const t = convexTest(
         options.legacyRunPurposes
@@ -107,6 +108,16 @@ export async function seedSourcePreparation(
             sourceId,
         };
     });
+    if (options.models)
+        await installModel(
+            t,
+            {
+                model: "z-ai/glm-5.3-flash",
+                provider: "open-inference/fp4",
+                reasoningEffort: "low",
+            },
+            "sources",
+        );
     return { t, ...fixture };
 }
 

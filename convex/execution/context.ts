@@ -3,11 +3,8 @@ import { internalQuery, type QueryCtx } from "@convex/_generated/server";
 import { stableStringify } from "@convex/domain/sourcePassages";
 import { readConversationMessages } from "@convex/integrations/agentStorage";
 import { agentInputByteLength } from "@convex/integrations/modelInput";
-import {
-    configuredMissionRoute,
-    missionRoutes,
-    SIMULATION_MODEL_ROUTE,
-} from "@convex/integrations/modelRouting";
+import { SIMULATION_MODEL_ROUTE } from "@convex/integrations/modelRouting";
+import { missionModel, revisionRoute } from "@convex/modelConfiguration";
 import { v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
@@ -337,23 +334,32 @@ export async function buildMissionContext(
     assembled.definition.operationNames = Object.keys(operations);
     assembled.constraints.operations = Object.keys(operations);
     const inputJson = JSON.stringify(assembled);
+    const effectiveModel = await missionModel(ctx, mission);
     if (
-        (await agentInputByteLength({
-            instructions: definition.instructions,
-            prompt: inputJson,
-            operations,
-            nativeConversation: definition.nativeConversation,
-            definitionVersion: definition.version,
-            nativeRoute:
-                mission.executionRuntime === "pi-durable"
-                    ? mission.provenance === "simulation"
-                        ? SIMULATION_MODEL_ROUTE
-                        : (configuredMissionRoute(
-                              mission.definitionId,
-                              missionRoutes,
-                          ) ?? SIMULATION_MODEL_ROUTE)
-                    : undefined,
-        })) > MAX_CONTEXT_BYTES
+        (await agentInputByteLength(
+            {
+                instructions: definition.instructions,
+                prompt: inputJson,
+                operations,
+                nativeConversation: definition.nativeConversation,
+                definitionVersion: definition.version,
+                nativeRoute:
+                    mission.executionRuntime === "pi-durable"
+                        ? mission.provenance === "simulation"
+                            ? SIMULATION_MODEL_ROUTE
+                            : effectiveModel
+                              ? revisionRoute(effectiveModel)
+                              : SIMULATION_MODEL_ROUTE
+                        : undefined,
+            },
+            async (key) =>
+                (
+                    await ctx.db
+                        .query("nativeInputProfiles")
+                        .withIndex("by_key", (q) => q.eq("key", key))
+                        .unique()
+                )?.bytes,
+        )) > MAX_CONTEXT_BYTES
     )
         return { kind: "blocked" as const, code: "context_capacity" };
     return { kind: "ready" as const, inputJson };

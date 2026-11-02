@@ -1,0 +1,59 @@
+{
+  "id": "z-ai/glm-5.3-flash",
+  "reasoning": {
+    "mandatory": true,
+    "default_enabled": true,
+    "supported_efforts": [
+      "max",
+      "high",
+      "low"
+    ],
+    "default_effort": "max"
+  },
+  "supported": [
+    "frequency_penalty",
+    "include_reasoning",
+    "logit_bias",
+    "logprobs",
+    "max_tokens",
+    "min_p",
+    "parallel_tool_calls",
+    "presence_penalty",
+    "reasoning",
+    "reasoning_effort",
+    "repetition_penalty",
+    "response_format",
+    "seed",
+    "stop",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_k",
+    "top_logprobs",
+    "top_p"
+  ],
+  "endpoint": {
+    "tag": "open-inference/fp4",
+    "parameters": [
+      "reasoning",
+      "include_reasoning",
+      "temperature",
+      "max_tokens",
+      "stop",
+      "seed",
+      "response_format",
+      "structured_outputs",
+      "top_p",
+      "frequency_penalty",
+      "presence_penalty",
+      "top_k",
+      "min_p",
+      "logit_bias",
+      "repetition_penalty",
+      "tools",
+      "tool_choice",
+      "reasoning_effort"
+    ]
+  }
+}

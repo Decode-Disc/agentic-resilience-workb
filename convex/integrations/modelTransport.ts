@@ -138,7 +138,7 @@ export function readReportedCost(value: unknown): number | undefined {
         : undefined;
 }
 
-type InvocationRoute = Readonly<{ model: string; provider: string }>;
+type InvocationRoute = ModelRoute;
 
 type AttemptFailure = AttemptReceipt & {
     status: "failed";
@@ -259,7 +259,11 @@ function createRoutedModel(
 ) {
     const settings = routedModelSettings(route);
     return wrapLanguageModel({
-        model: provider.chat(route.model, settings),
+        model: provider.chat(route.model, {
+            provider: settings.provider,
+            usage: settings.usage,
+            extraBody: { reasoning: settings.reasoning },
+        }),
         middleware: {
             wrapGenerate: async ({ params, doGenerate }) => {
                 if (state.turn && state.dispatched)

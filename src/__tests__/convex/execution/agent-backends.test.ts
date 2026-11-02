@@ -6,6 +6,7 @@ import agentTest from "@convex-dev/agent/test";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
+import { installModel } from "@/__tests__/setup/model-configuration";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
 const registeredModelAction = invoke as typeof invoke & {
@@ -17,16 +18,6 @@ const registeredModelAction = invoke as typeof invoke & {
     >;
 };
 
-vi.mock("@convex/integrations/modelRouting", async (original) => ({
-    ...(await original<typeof import("@convex/integrations/modelRouting")>()),
-    missionRoutes: {
-        saved_material_inspection_v1: {
-            model: "test/agent",
-            provider: "test",
-            authorizedForAgent: true,
-        },
-    },
-}));
 afterEach(() => {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
@@ -184,6 +175,11 @@ test("the Convex Agent backend retains the same common reply and its observable 
     );
     vi.stubGlobal("fetch", fetch);
     const { t, args } = await seedInspectedEvidence();
+    await installModel(
+        t,
+        { model: "test/agent", provider: "test" },
+        "saved_material_inspection",
+    );
     agentTest.register(t);
     const missionId = await t.mutation(internal.execution.missions.start, {
         runId: args.runId,
@@ -264,6 +260,11 @@ test("interruption after Agent message storage keeps the common result and resum
     );
     vi.stubGlobal("fetch", fetch);
     const { t, args } = await seedInspectedEvidence();
+    await installModel(
+        t,
+        { model: "test/agent", provider: "test" },
+        "saved_material_inspection",
+    );
     agentTest.register(t);
     const missionId = await t.mutation(internal.execution.missions.start, {
         runId: args.runId,
@@ -364,49 +365,48 @@ test("interruption after Agent message storage keeps the common result and resum
 });
 
 test("new invocations pin the default generation backend without changing mission identity", async () => {
-    const routing = await import("@convex/integrations/modelRouting");
     const { nativePiFixtureRoute } = await import(
         "@/__tests__/setup/pi-native"
     );
-    const previous = routing.missionRoutes.saved_material_inspection_v1;
-    routing.missionRoutes.saved_material_inspection_v1 = nativePiFixtureRoute;
-    try {
-        const { t, args } = await seedInspectedEvidence();
-        const missionId = await t.mutation(internal.execution.missions.start, {
-            runId: args.runId,
-            corpusRevisionId: args.corpusRevisionId,
-            definitionId: "saved_material_inspection_v1",
-            requestKey: "backend-default",
-            expectedGeneration: args.executionGeneration,
-        });
-        const begun = await t.mutation(internal.execution.invocations.begin, {
+    const { t, args } = await seedInspectedEvidence();
+    await installModel(t, nativePiFixtureRoute, "saved_material_inspection");
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "backend-default",
+        expectedGeneration: args.executionGeneration,
+    });
+    const begun = await t.mutation(internal.execution.invocations.begin, {
+        missionId,
+        expectedGeneration: args.executionGeneration,
+        taskKey: "turn",
+        provenance: "live",
+    });
+    if (begun.kind !== "ready") throw new Error("Expected invocation");
+    const invocation = await t.run((ctx) => ctx.db.get(begun.invocationId));
+    expect(invocation).toMatchObject({
+        generationBackend: { id: "pi-durable", version: 1 },
+    });
+    expect(
+        await t.mutation(internal.execution.invocations.begin, {
             missionId,
             expectedGeneration: args.executionGeneration,
             taskKey: "turn",
             provenance: "live",
-        });
-        if (begun.kind !== "ready") throw new Error("Expected invocation");
-        const invocation = await t.run((ctx) => ctx.db.get(begun.invocationId));
-        expect(invocation).toMatchObject({
-            generationBackend: { id: "pi-durable", version: 1 },
-        });
-        expect(
-            await t.mutation(internal.execution.invocations.begin, {
-                missionId,
-                expectedGeneration: args.executionGeneration,
-                taskKey: "turn",
-                provenance: "live",
-            }),
-        ).toEqual(begun);
-    } finally {
-        routing.missionRoutes.saved_material_inspection_v1 = previous;
-    }
+        }),
+    ).toEqual(begun);
 });
 
 async function liveBackendTurn(backend: { id: string; version: number }) {
     vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
     const fixture = await seedInspectedEvidence();
     const { t, args } = fixture;
+    await installModel(
+        t,
+        { model: "test/agent", provider: "test" },
+        "saved_material_inspection",
+    );
     agentTest.register(t);
     const missionId = await t.mutation(internal.execution.missions.start, {
         runId: args.runId,

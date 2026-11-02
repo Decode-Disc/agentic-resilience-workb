@@ -29,6 +29,41 @@ import { Toaster } from "@/components/ui/sonner";
 
 const adminVisitor = { role: "admin", status: "active" };
 
+test("administration exposes model setup separately from per-agent assignments", async () => {
+    const initialize = vi.fn().mockResolvedValue({ ready: true });
+    convexReactHarness.query(api.modelConfiguration.list).returns({
+        models: [],
+        assignments: [],
+        agents: [
+            { agent: "workbench", label: "Workbench", implemented: true },
+            {
+                agent: "investigation",
+                label: "Investigation",
+                implemented: false,
+            },
+        ],
+    });
+    convexReactHarness
+        .action(api.modelConfigurationActions.initialize)
+        .uses(initialize);
+    convexReactHarness
+        .action(api.modelConfigurationActions.prepare)
+        .uses(vi.fn());
+    convexReactHarness
+        .mutation(api.modelConfiguration.updateAvailability)
+        .uses(vi.fn());
+    convexReactHarness.mutation(api.modelConfiguration.assign).uses(vi.fn());
+    render(<AdminPage />);
+    fireEvent.click(await screen.findByRole("tab", { name: /^Models$/ }));
+    expect(await screen.findByText("No models configured")).toBeTruthy();
+    fireEvent.click(
+        screen.getByRole("button", { name: "Set up default models" }),
+    );
+    await waitFor(() => expect(initialize).toHaveBeenCalledWith({}));
+    fireEvent.click(screen.getByRole("tab", { name: /^Agent models$/ }));
+    expect(await screen.findByText("Not connected yet")).toBeTruthy();
+});
+
 const researchRun = {
     runId: "run-research",
     companyLegalName: "ServiceNow, Inc.",

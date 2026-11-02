@@ -36,6 +36,9 @@ export type AgentDefinition = {
     authority: string;
     executionScope?: "research" | "conversation";
     nativeConversation?: true;
+    nativeToolSets?(
+        operations: AgentDefinition["operations"],
+    ): AgentGenerationInput["operations"][];
     textCompletion?(text: string): AgentCompletion;
     modelOperation?(
         name: string,

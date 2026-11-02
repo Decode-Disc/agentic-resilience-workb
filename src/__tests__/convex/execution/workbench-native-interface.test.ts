@@ -1,23 +1,10 @@
 import { api } from "@convex/_generated/api";
 import { runPiMission } from "@convex/integrations/piMission";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 import { seedWorkbenchMaterials } from "@/__tests__/setup/workbench-materials";
 
-vi.mock("@convex/integrations/modelRouting", async (original) => {
-    const source =
-        await original<typeof import("@convex/integrations/modelRouting")>();
-    const { nativePiFixtureRoute } = await import(
-        "@/__tests__/setup/pi-native"
-    );
-    return {
-        ...source,
-        missionRoutes: {
-            ...source.missionRoutes,
-            workbench_v1: nativePiFixtureRoute,
-        },
-    };
-});
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
@@ -37,7 +24,10 @@ function reply(text: string) {
 }
 
 test("a direct analyst edit survives stale output and a fresh conflicting tool proposal in the same native conversation", async () => {
-    const { t, client, runId } = await seedWorkbench();
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+    );
     const payloads: string[] = [];
     vi.stubEnv("OPENROUTER_API_KEY", "local-fixture-only");
     vi.stubGlobal(
@@ -142,7 +132,10 @@ test("new Workbench publishes native prose and the next response receives the or
             );
         }),
     );
-    const { t, client, runId } = await seedWorkbench();
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+    );
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     const messages = () =>
         client.query(api.execution.conversations.listMessages, {
@@ -195,7 +188,10 @@ test.each([
             );
         }),
     );
-    const { t, client, runId } = await seedWorkbench();
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+    );
     const original = await t.run((ctx) =>
         ctx.db
             .query("agentMessageDeliveries")
@@ -254,7 +250,11 @@ function toolReply(name: string, input: object | string | undefined) {
 }
 
 test("an unavailable passage gives a recovery instruction and a searched passage can then be read", async () => {
-    const { t, sourceId, start } = await seedWorkbenchMaterials(1, 1);
+    const { t, sourceId, start } = await seedWorkbenchMaterials(
+        1,
+        1,
+        nativePiFixtureRoute,
+    );
     const active = await start();
     assert(active);
     vi.stubEnv("OPENROUTER_API_KEY", "local-fixture-only");
@@ -353,7 +353,10 @@ test("native tools omit mechanical revisions, persist canonical arguments and re
                 : reply("The research program is saved.");
         }),
     );
-    const { t, client, runId } = await seedWorkbench();
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+    );
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     expect((await client.query(api.framing.get, { runId }))?.content).toEqual(
         content,
@@ -418,7 +421,10 @@ test("a native steer during generation prevents stale publication while queued t
             );
         }),
     );
-    const { t, client, runId } = await seedWorkbench();
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+    );
     const running = t.finishAllScheduledFunctions(
         () => vi.advanceTimersByTime(10),
         500,
@@ -486,7 +492,10 @@ test("stopping a native response settles its cancelled tasks and reuses the conv
             return reply("The requested continuation is ready.");
         }),
     );
-    const { t, client, runId } = await seedWorkbench();
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+    );
     const running = t.finishAllScheduledFunctions(
         () => vi.advanceTimersByTime(10),
         500,
@@ -538,7 +547,10 @@ test("unversioned Workbench conversations retain strict JSON completions and the
             reply('{"kind":"complete","text":"Legacy response."}'),
         ),
     );
-    const { t, client, runId } = await seedWorkbench();
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+    );
     await t.run(async (ctx) => {
         const conversation = await ctx.db
             .query("agentConversations")
@@ -604,7 +616,10 @@ test("successive steers retain their native submission identity across instructi
             );
         }),
     );
-    const { t, client, runId } = await seedWorkbench();
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+    );
     const running = t.finishAllScheduledFunctions(
         () => vi.advanceTimersByTime(10),
         500,
@@ -686,7 +701,10 @@ test("rejected framing receipts survive native handover and a later preservation
             );
         }),
     );
-    const { t, client, runId } = await seedWorkbench();
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+    );
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     const messages = () =>
         client.query(api.execution.conversations.listMessages, {
@@ -766,7 +784,10 @@ test("an invalid history cursor gives exact recovery guidance and permits readin
             throw new Error("Unexpected history recovery loop");
         }),
     );
-    const { t, client, runId } = await seedWorkbench();
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+    );
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     const history = await client.query(
         api.execution.conversations.listMessages,
@@ -846,7 +867,10 @@ test.each([
     });
     vi.stubEnv("OPENROUTER_API_KEY", "local-fixture-only");
     vi.stubGlobal("fetch", network);
-    const { t, client, runId } = await seedWorkbench();
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+    );
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     const requests = await t.run((ctx) =>
         ctx.db.query("agentOperationRequests").collect(),
@@ -905,7 +929,10 @@ test("missing native argument evidence blocks generation and a fresh analyst req
     });
     vi.stubEnv("OPENROUTER_API_KEY", "local-fixture-only");
     vi.stubGlobal("fetch", network);
-    const { t, client, runId } = await seedWorkbench();
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+    );
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     expect(
         await t.run((ctx) => ctx.db.query("agentMissions").collect()),
@@ -971,7 +998,10 @@ test("a corrected native framing operation succeeds after malformed original JSO
     });
     vi.stubEnv("OPENROUTER_API_KEY", "local-fixture-only");
     vi.stubGlobal("fetch", network);
-    const { t, client, runId } = await seedWorkbench();
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+    );
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     expect(await client.query(api.framing.get, { runId })).toMatchObject({
         revision: 2,
@@ -1014,7 +1044,10 @@ test("a corrected native framing operation succeeds after malformed original JSO
 }, 30000);
 
 test("a slash command's exact receipt enters the next native request once, without its own generation", async () => {
-    const { t, client, runId } = await seedWorkbench();
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+    );
     const payloads: Array<{
         messages: Array<{ role: string; content: unknown }>;
     }> = [];
@@ -1067,7 +1100,10 @@ test("a slash command's exact receipt enters the next native request once, witho
 });
 
 test("a command received during a tool reply does not deadlock the native response or trigger another generation", async () => {
-    const { t, client, runId } = await seedWorkbench();
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+    );
     let calls = 0;
     vi.stubEnv("OPENROUTER_API_KEY", "local-fixture-only");
     vi.stubGlobal(
@@ -1108,7 +1144,10 @@ test("a command received during a tool reply does not deadlock the native respon
 }, 5000);
 
 test("terminal recovery preserves a code-owned receipt instead of rewriting it as the previous model answer", async () => {
-    const { t, client, runId } = await seedWorkbench();
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+    );
     const payloads: Array<{
         messages: Array<{ role: string; content: unknown }>;
     }> = [];

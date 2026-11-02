@@ -1,9 +1,26 @@
-import type { AgentScope } from "@convex/execution/agentDefinition";
+import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import type {
+    modelDescriptor,
+    reasoningEffort,
+} from "@convex/modelConfigurationSchema";
+import chordPackage from "@earendil-works/chord/package.json";
+import { PI_AI_VERSION } from "@earendil-works/pi-ai/utils/version";
+import durablePackage from "@earendil-works/pi-durable/package.json";
+import type { Infer } from "convex/values";
 export type ModelRoute = Readonly<{
     model: string;
     provider: string;
-    reasoningEffort?: "low";
+    reasoningEffort?: Infer<typeof reasoningEffort>;
+    reasoningEnabled?: boolean;
+    profileKey?: string;
 }>;
+/** Installed SDK identity invalidates prepared profiles without a manually maintained version mirror. */
+export const NATIVE_MODEL_SERIALIZER = `pi-ai@${PI_AI_VERSION}/pi-durable@${durablePackage.version}/chord@${chordPackage.version}:1`;
+export function modelConfigurationKey(descriptor: object) {
+    return sha256Hex(
+        stableStringify({ serializer: NATIVE_MODEL_SERIALIZER, descriptor }),
+    );
+}
 export const SIMULATION_MODEL_ROUTE: ModelRoute = {
     model: "simulation/controlled",
     provider: "simulation",
@@ -12,18 +29,37 @@ export const MODEL_MAX_OUTPUT_TOKENS = 6144;
 export const MODEL_ATTEMPT_TIMEOUT_MS = 60_000;
 export const MODEL_MAX_INPUT_PRICE_PER_MILLION = 0.15;
 export const MODEL_MAX_OUTPUT_PRICE_PER_MILLION = 0.6;
-/** Candidate configuration is calibrated without enabling provider calls. */
-export const WORKBENCH_MODEL_ROUTE: ModelRoute & { authorizedForAgent: true } =
+export const INITIAL_MODEL_CATALOG = [
     {
         model: "z-ai/glm-5.3-flash",
         provider: "open-inference/fp4",
+        label: "GLM-5.3-Flash",
+    },
+    {
+        model: "deepseek/deepseek-v4.1-flash-1017",
+        provider: "open-inference/fp4",
+        label: "DeepSeek V4.1 Flash 1017",
+    },
+] as const;
+/** Candidate configuration is calibrated without enabling provider calls. */
+export const WORKBENCH_MODEL_ROUTE: ModelRoute & { authorizedForAgent: true } =
+    {
+        model: INITIAL_MODEL_CATALOG[0].model,
+        provider: INITIAL_MODEL_CATALOG[0].provider,
         reasoningEffort: "low",
         authorizedForAgent: true,
     };
-/** Activation remains explicit and server-owned; absent configuration dispatches no paid call. */
-export const missionRoutes: Partial<
-    Record<AgentScope["kind"], ModelRoute & { authorizedForAgent: true }>
-> = {};
+
+/** Preserve the existing economical default when the provider explicitly supports it. */
+export function defaultReasoningEffort(
+    descriptor: Infer<typeof modelDescriptor>,
+) {
+    if (!descriptor.reasoning) return undefined;
+    if (descriptor.reasoningEfforts === undefined) return "low" as const;
+    return descriptor.reasoningEfforts.includes("low")
+        ? ("low" as const)
+        : descriptor.reasoningDefault;
+}
 
 export function routedModelSettings(route: ModelRoute) {
     return {
@@ -37,22 +73,14 @@ export function routedModelSettings(route: ModelRoute) {
             },
         },
         reasoning: route.reasoningEffort
-            ? { enabled: true, effort: route.reasoningEffort, exclude: true }
-            : { enabled: false, effort: "none" as const, exclude: true },
+            ? {
+                  enabled: route.reasoningEffort !== "none",
+                  effort: route.reasoningEffort,
+                  exclude: true,
+              }
+            : route.reasoningEnabled
+              ? { enabled: true, exclude: true }
+              : { enabled: false, effort: "none" as const, exclude: true },
         usage: { include: true },
     };
-}
-
-/** Schema evaluation cannot read environment variables; activation is resolved only at execution time. */
-export function configuredMissionRoute(
-    kind: AgentScope["kind"],
-    routes: typeof missionRoutes = missionRoutes,
-) {
-    return (
-        routes[kind] ??
-        (kind === "workbench_v1" &&
-        process.env.WORKBENCH_AGENT_ENABLED === "true"
-            ? WORKBENCH_MODEL_ROUTE
-            : undefined)
-    );
 }

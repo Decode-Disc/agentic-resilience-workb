@@ -15,7 +15,7 @@ test("source preparation retains an unavailable capture without starting qualifi
     const request = vi.fn<typeof fetch>();
     vi.stubGlobal("fetch", request);
     const { t, runId, corpusRevisionId, sourceId } =
-        await seedSourcePreparation();
+        await seedSourcePreparation({ models: true });
     const preparationId = await t.mutation(
         internal.sourcePreparation.claimForDiscovery,
         { runId, corpusRevisionId, expectedExecutionGeneration: 3 },

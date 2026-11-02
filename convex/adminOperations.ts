@@ -1,12 +1,11 @@
 import { hasKnownNonDispatch } from "@convex/execution/journal";
-import { getAuthUserId } from "@convex-dev/auth/server";
 import type { WorkflowId } from "@convex-dev/workflow";
 import {
     paginationOptsValidator,
     paginationResultValidator,
 } from "convex/server";
 import { v } from "convex/values";
-import type { MutationCtx, QueryCtx } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
 import {
     env,
     internalMutation,
@@ -14,6 +13,7 @@ import {
     mutation,
     query,
 } from "./_generated/server";
+import { requireAdmin } from "./administrationAuthority";
 import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
 import {
     ASSESSMENT_DIMENSION_KEYS,
@@ -67,23 +67,6 @@ const runOverviewValidator = v.object({
         }),
     ),
 });
-
-async function requireAdmin(ctx: QueryCtx | MutationCtx) {
-    const authUserId = await getAuthUserId(ctx);
-    if (!authUserId) {
-        throw new Error("Not authenticated");
-    }
-    const visitor = await ctx.db
-        .query("visitors")
-        .withIndex("by_auth_user_id", (builder) =>
-            builder.eq("authUserId", authUserId),
-        )
-        .unique();
-    if (visitor?.status !== "active" || visitor.role !== "admin") {
-        throw new Error("Unauthorized");
-    }
-    return visitor;
-}
 
 export const get = query({
     args: {},

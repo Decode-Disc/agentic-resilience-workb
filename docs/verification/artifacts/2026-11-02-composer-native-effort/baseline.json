@@ -1,0 +1,18 @@
+[
+  {
+    "path": "src/components/chat/workbench-conversation.tsx",
+    "unchangedFromPreviousBrowserRun": true
+  },
+  {
+    "path": "src/components/chat/conversation-model-controls.tsx",
+    "unchangedFromPreviousBrowserRun": true
+  },
+  {
+    "path": "src/components/chat/workbench-conversation.css",
+    "unchangedFromPreviousBrowserRun": true
+  },
+  {
+    "path": "src/components/workspace/start/connected-start-workspace.tsx",
+    "unchangedFromPreviousBrowserRun": true
+  }
+]

@@ -50,7 +50,7 @@ async function createAdmin(t: ReturnType<typeof convexTest>) {
             status: "claimed",
             createdAt: 1,
         });
-        await ctx.db.insert("visitors", {
+        const visitorId = await ctx.db.insert("visitors", {
             authUserId: userId,
             invitationId,
             role: "admin",
@@ -58,6 +58,7 @@ async function createAdmin(t: ReturnType<typeof convexTest>) {
             analysesReserved: 0,
             admittedAt: 1,
         });
+        await ctx.db.patch(invitationId, { claimedByVisitorId: visitorId });
         return { userId };
     });
 }

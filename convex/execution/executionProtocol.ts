@@ -1,5 +1,6 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { ActionCtx, QueryCtx } from "@convex/_generated/server";
+import type { ModelRoute } from "@convex/integrations/modelRouting";
 import {
     type Infer,
     type PropertyValidators,
@@ -95,12 +96,8 @@ export type ModelAttemptReceipt = {
     retryAfterAt?: number;
     outputDiagnostic?: Doc<"providerCalls">["diagnostic"];
 };
-export type AgentModelRoute = Readonly<{
-    reasoningEffort?: "low";
-    model: string;
-    provider: string;
-    authorizedForAgent: true;
-}>;
+export type AgentModelRoute = ModelRoute &
+    Readonly<{ authorizedForAgent: true }>;
 export type AgentGenerationInput = {
     route?: AgentModelRoute;
     instructions: string;

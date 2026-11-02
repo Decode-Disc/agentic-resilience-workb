@@ -1,20 +1,10 @@
 import { api, internal } from "@convex/_generated/api";
+import type { ModelRoute } from "@convex/integrations/modelRouting";
 import { afterEach, expect, test, vi } from "vitest";
+import { installModel } from "@/__tests__/setup/model-configuration";
+import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
-vi.mock("@convex/integrations/modelRouting", async (original) => {
-    const source =
-        await original<typeof import("@convex/integrations/modelRouting")>();
-    const { nativePiFixtureRoute } = await import(
-        "@/__tests__/setup/pi-native"
-    );
-    return {
-        ...source,
-        missionRoutes: {
-            saved_material_inspection_v1: nativePiFixtureRoute,
-        },
-    };
-});
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
@@ -78,10 +68,55 @@ test("native receipts distinguish requested identity from resolved model, upstre
     expect(network).toHaveBeenCalledOnce();
 }, 30000);
 
-async function fixture() {
+test.each([
+    "low",
+    "high",
+    "max",
+    "none",
+] as const)("native Pi dispatch preserves the pinned %s effort in its HTTP request", async (reasoningEffort) => {
+    let captureId: string;
+    let body: Record<string, unknown> | undefined;
+    const network = vi.fn<typeof fetch>(async (_url, init) => {
+        body = JSON.parse(String(init?.body));
+        return reply({ kind: "complete", captureIds: [captureId] });
+    });
+    vi.stubGlobal("fetch", network);
+    const f = await fixture(reasoningEffort);
+    captureId = f.captureId;
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    expect(body).toMatchObject({
+        reasoning: {
+            enabled: reasoningEffort !== "none",
+            effort: reasoningEffort,
+            exclude: true,
+        },
+        max_completion_tokens: 6144,
+    });
+    expect(await f.t.run((ctx) => ctx.db.get(f.missionId))).toMatchObject({
+        status: "completed",
+        reasoningEffort,
+    });
+    expect(network).toHaveBeenCalledOnce();
+}, 30000);
+
+async function fixture(reasoningEffort?: ModelRoute["reasoningEffort"]) {
     vi.useFakeTimers();
     vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
     const f = await seedInspectedEvidence();
+    await installModel(
+        f.t,
+        { ...nativePiFixtureRoute, reasoningEffort },
+        "saved_material_inspection",
+        reasoningEffort
+            ? {
+                  reasoningEfforts: [reasoningEffort],
+                  reasoningDefault: reasoningEffort,
+              }
+            : {},
+    );
     const missionId = await f.t.mutation(internal.execution.missions.start, {
         runId: f.args.runId,
         corpusRevisionId: f.args.corpusRevisionId,

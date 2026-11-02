@@ -1,0 +1,10 @@
+
+> agentic-resilience-workbench@ docs:check /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> node --experimental-strip-types scripts/check-documentation.ts
+
+AGENTS.md: 4540 words
+DESIGN.md: 6557 words
+PRODUCT.md: 4574 words
+context/TECH.md: 14655 words (WARNING: advisory limit 6000)
+docs/ROADMAP.md: 5115 words
+Documentation: 102 Markdown files, 638 local links, 0 errors.

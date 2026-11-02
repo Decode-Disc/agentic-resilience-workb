@@ -61,6 +61,7 @@ import {
     workflowStepStateValidator,
 } from "./domain/validators";
 import { executionTables } from "./execution/schema";
+import { modelConfigurationTables } from "./modelConfigurationSchema";
 import { SOURCE_EMBEDDING_DIMENSIONS } from "./resourceLimits";
 import { preparationStudyEnvelopeValidator } from "./sourcePreparationStudyPolicy";
 
@@ -77,6 +78,7 @@ const sourceDiscoveryQueriesValidator = v.array(
 export default defineSchema({
     ...authTables,
     ...executionTables,
+    ...modelConfigurationTables,
     invitations: defineTable({
         slotKey: v.string(),
         role: visitorRoleValidator,
@@ -528,6 +530,7 @@ export default defineSchema({
         "version",
     ]),
     sourceSelectionProposalRebuilds: defineTable({
+        modelRevisionId: v.optional(v.id("modelRevisions")),
         executionPlanVersion: v.optional(
             sourcePreparationExecutionPlanValidator,
         ),

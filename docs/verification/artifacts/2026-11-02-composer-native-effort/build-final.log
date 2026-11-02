@@ -1,0 +1,146 @@
+
+> agentic-resilience-workbench@ build /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> vite build
+
+vite v8.1.4 building client environment for production...
+[2Ktransforming...✓ 10256 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/client/assets/logo-bgwhite-Dtrl3Yzc.png                        7.24 kB
+dist/client/assets/geist-cyrillic-ext-wght-normal-DjL33-gN.woff2    7.42 kB
+dist/client/assets/geist-vietnamese-wght-normal-6IgcOCM7.woff2      8.00 kB
+dist/client/assets/geist-cyrillic-wght-normal-BEAKL7Jp.woff2       15.08 kB
+dist/client/assets/geist-latin-ext-wght-normal-DC-KSUi6.woff2      16.51 kB
+dist/client/assets/geist-latin-wght-normal-BgDaEnEv.woff2          29.40 kB
+dist/client/assets/geist-mono-400-BV1xlXkC.ttf                     71.16 kB
+dist/client/assets/geist-mono-500-fJalXf8A.ttf                     71.21 kB
+dist/client/assets/root-BAsO_xpr.css                                3.51 kB │ gzip:   1.13 kB
+dist/client/assets/routes-Thz-5AkD.css                             10.64 kB │ gzip:   2.62 kB
+dist/client/assets/start-entry-screens-B49ygKZ1.css                21.55 kB │ gzip:   4.27 kB
+dist/client/assets/_runId-Cy6TRdFb.css                             25.79 kB │ gzip:   5.06 kB
+dist/client/assets/styles-BgwEANe-.css                            350.66 kB │ gzip:  50.74 kB
+dist/client/assets/access-destination-D0wrBZ6E.js                   0.08 kB │ gzip:   0.09 kB
+dist/client/assets/Tick02Icon-BZZvPScA.js                           0.15 kB │ gzip:   0.14 kB
+dist/client/assets/ArrowDown01Icon-DDfnNeUj.js                      0.19 kB │ gzip:   0.15 kB
+dist/client/assets/ChevronDownIcon-DDfnNeUj.js                      0.19 kB │ gzip:   0.15 kB
+dist/client/assets/useRouter-D28NhJv0.js                            0.19 kB │ gzip:   0.16 kB
+dist/client/assets/use-reduced-motion-CH0ybbSt.js                   0.25 kB │ gzip:   0.19 kB
+dist/client/assets/Add01Icon-CdIdvCVr.js                            0.29 kB │ gzip:   0.16 kB
+dist/client/assets/route-8WhGHCkS.js                                0.31 kB │ gzip:   0.23 kB
+dist/client/assets/CheckmarkCircle02Icon-ew8N-Nqv.js                0.32 kB │ gzip:   0.19 kB
+dist/client/assets/_runId-BdrzyZCr.js                               0.38 kB │ gzip:   0.30 kB
+dist/client/assets/ui-layers-CVxY_-VX.js                            0.39 kB │ gzip:   0.30 kB
+dist/client/assets/use-anonymous-session-D-B4BEFQ.js                0.65 kB │ gzip:   0.41 kB
+dist/client/assets/matchContext-BxjF2V1Q.js                         0.71 kB │ gzip:   0.42 kB
+dist/client/assets/rolldown-runtime-BUR9erT_.js                     0.75 kB │ gzip:   0.44 kB
+dist/client/assets/skeleton-BLQjBzqX.js                             0.92 kB │ gzip:   0.49 kB
+dist/client/assets/FileSearchIcon-aHfVI2fY.js                       0.94 kB │ gzip:   0.47 kB
+dist/client/assets/dist-CuEa68Jb.js                                 1.03 kB │ gzip:   0.57 kB
+dist/client/assets/disclosure-motion-D16cnQ9z.js                    1.25 kB │ gzip:   0.72 kB
+dist/client/assets/use-workspace-dossiers-D0f5z2dp.js               1.28 kB │ gzip:   0.77 kB
+dist/client/assets/createLucideIcon-D9GFYlNp.js                     1.43 kB │ gzip:   0.80 kB
+dist/client/assets/empty-ckZQatdX.js                                1.55 kB │ gzip:   0.61 kB
+dist/client/assets/route-CDI0uaPX.js                                1.63 kB │ gzip:   0.82 kB
+dist/client/assets/prototype-data-B8qrIJrD.js                       1.93 kB │ gzip:   0.88 kB
+dist/client/assets/workbench-viewport-DbQabVmd.js                   2.01 kB │ gzip:   1.01 kB
+dist/client/assets/load-error-alert-oyrFisPA.js                     2.30 kB │ gzip:   0.93 kB
+dist/client/assets/dist-BCPXBJso.js                                 2.92 kB │ gzip:   1.35 kB
+dist/client/assets/sheet-C5AxhwTf.js                                3.12 kB │ gzip:   0.99 kB
+dist/client/assets/use_paginated_query-Cx_5EJRo.js                  3.22 kB │ gzip:   1.41 kB
+dist/client/assets/company-favicon-avatar-Bt1gVcJT.js               3.60 kB │ gzip:   1.59 kB
+dist/client/assets/textarea-BaufMnl6.js                             3.86 kB │ gzip:   1.28 kB
+dist/client/assets/root-CGXGo-oZ.js                                 4.37 kB │ gzip:   1.30 kB
+dist/client/assets/link-VQvb45Hw.js                                 4.43 kB │ gzip:   2.18 kB
+dist/client/assets/dropdown-menu-C0_JvTiY.js                        4.99 kB │ gzip:   1.37 kB
+dist/client/assets/prototype.source-review-BJaPpEK7.js              5.66 kB │ gzip:   1.94 kB
+dist/client/assets/start-entry-screens-gLzLwWGq.js                  6.21 kB │ gzip:   2.06 kB
+dist/client/assets/badge-CFBqbOBe.js                                6.39 kB │ gzip:   2.72 kB
+dist/client/assets/popover-CEATnIvb.js                              7.27 kB │ gzip:   2.63 kB
+dist/client/assets/select-D6nc_NTz.js                               8.57 kB │ gzip:   2.85 kB
+dist/client/assets/dossiers-OczPk7CP.js                            12.95 kB │ gzip:   4.46 kB
+dist/client/assets/useStore-CBwR3pEq.js                            17.62 kB │ gzip:   6.37 kB
+dist/client/assets/separator-B8U1dpXw.js                           19.35 kB │ gzip:   4.54 kB
+dist/client/assets/add-source-dialog-Cy6rD5mg.js                   19.68 kB │ gzip:   6.51 kB
+dist/client/assets/prototype.workspace-DF9kBds-.js                 24.51 kB │ gzip:   6.69 kB
+dist/client/assets/dist-DUSXlJXW.js                                27.71 kB │ gzip:   8.14 kB
+dist/client/assets/button-ChkrA2hb.js                              30.71 kB │ gzip:   9.90 kB
+dist/client/assets/resizable-OJZ07Ojz.js                           37.38 kB │ gzip:  12.20 kB
+dist/client/assets/start-DqSep4vQ.js                               38.52 kB │ gzip:  14.08 kB
+dist/client/assets/routes-COf_IS_r.js                              43.86 kB │ gzip:  15.77 kB
+dist/client/assets/Match-DYPCExdY.js                               48.73 kB │ gzip:  15.83 kB
+dist/client/assets/admin-Bc_9kNih.js                               50.80 kB │ gzip:  13.10 kB
+dist/client/assets/workbench-shell-BrX2HR3V.js                     53.53 kB │ gzip:  18.16 kB
+dist/client/assets/react-Dhakx7dI.js                              122.54 kB │ gzip:  40.02 kB
+dist/client/assets/source-proposal-review-DA5HQ0n6.js             176.33 kB │ gzip:  50.65 kB
+dist/client/assets/react-vendor-D5SnqU9i.js                       189.80 kB │ gzip:  59.72 kB
+dist/client/assets/base-ui-ByDrr2XH.js                            286.73 kB │ gzip:  92.32 kB
+dist/client/assets/index-Bt8bm1Ke.js                              295.02 kB │ gzip:  87.00 kB
+dist/client/assets/_runId-Cd2U8Cf5.js                             641.85 kB │ gzip: 188.64 kB
+
+✓ built in 6.14s
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+vite v8.1.4 building ssr environment for production...
+[2Ktransforming...✓ 307 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/server/assets/product-kOrxdb8U.js                       0.19 kB │ gzip:  0.14 kB
+dist/server/assets/empty-plugin-adapters-YdH6Vqte.js         0.28 kB │ gzip:  0.18 kB
+dist/server/assets/start-BtQeeWto.js                         0.28 kB │ gzip:  0.21 kB
+dist/server/assets/access-destination-DMgbySgG.js            0.30 kB │ gzip:  0.20 kB
+dist/server/assets/route-neL-oq0I.js                         0.48 kB │ gzip:  0.30 kB
+dist/server/assets/label-DPn0p9yX.js                         0.52 kB │ gzip:  0.34 kB
+dist/server/assets/workbench-viewport-DbjH4Boh.js            0.58 kB │ gzip:  0.31 kB
+dist/server/assets/_runId-Dnvv-Hvz.js                        0.59 kB │ gzip:  0.39 kB
+dist/server/assets/separator-KJmEGbT7.js                     0.60 kB │ gzip:  0.33 kB
+dist/server/assets/prototype.workspace-0jaBD8nd.js           0.64 kB │ gzip:  0.37 kB
+dist/server/assets/use-workspace-dossiers-D0xZ4F8A.js        0.73 kB │ gzip:  0.42 kB
+dist/server/assets/ui-layers-B5_qMD0a.js                     0.89 kB │ gzip:  0.53 kB
+dist/server/assets/icon-B3eCm07t.js                          1.38 kB │ gzip:  0.59 kB
+dist/server/assets/use-anonymous-session-C0xmKPze.js         1.39 kB │ gzip:  0.57 kB
+dist/server/assets/skeleton-CdzPoJXM.js                      1.41 kB │ gzip:  0.65 kB
+dist/server/assets/use-responsive-BlirRfVi.js                1.64 kB │ gzip:  0.65 kB
+dist/server/assets/disclosure-motion-C5Aja4kN.js             2.06 kB │ gzip:  0.88 kB
+dist/server/assets/empty-B-mCH5J3.js                         2.13 kB │ gzip:  0.74 kB
+dist/server/assets/prototype-data-CZxOcjCQ.js                2.38 kB │ gzip:  0.98 kB
+dist/server/assets/badge-BEqF3OHw.js                         2.69 kB │ gzip:  1.02 kB
+dist/server/assets/route-Dx6SccxO.js                         3.18 kB │ gzip:  1.20 kB
+dist/server/assets/button-fSlXueeO.js                        3.44 kB │ gzip:  1.24 kB
+dist/server/assets/load-error-alert-BMw_QyeV.js              3.46 kB │ gzip:  1.17 kB
+dist/server/assets/sheet-zdEqjUxm.js                         4.20 kB │ gzip:  1.14 kB
+dist/server/assets/_runId-BKF-iQ7J.js                        4.37 kB │ gzip:  1.50 kB
+dist/server/assets/textarea-Cs4tKkQR.js                      5.21 kB │ gzip:  1.44 kB
+dist/server/assets/company-favicon-avatar-COTKAqB_.js        5.77 kB │ gzip:  2.30 kB
+dist/server/assets/root-CL0umtT5.js                          6.16 kB │ gzip:  1.64 kB
+dist/server/assets/dropdown-menu-Bw4bNeXU.js                 6.41 kB │ gzip:  1.49 kB
+dist/server/assets/_tanstack-start-manifest_v-BaOA3CJb.js    6.56 kB │ gzip:  1.49 kB
+dist/server/assets/resizable-B6AvBySe.js                     7.29 kB │ gzip:  2.16 kB
+dist/server/assets/prototype.source-review-CXXqVdg3.js       7.67 kB │ gzip:  2.29 kB
+dist/server/assets/invitation-access-context-2yzYZCys.js     7.77 kB │ gzip:  2.61 kB
+dist/server/assets/select-BNYs0vAJ.js                        9.82 kB │ gzip:  2.65 kB
+dist/server/assets/start-entry-screens-Dlo_36Pz.js          10.00 kB │ gzip:  2.77 kB
+dist/server/assets/drawer-DQ3dppGa.js                       10.05 kB │ gzip:  2.60 kB
+dist/server/assets/router-DzlqfRnp.js                       10.35 kB │ gzip:  3.44 kB
+dist/server/assets/popover-BciLpLEX.js                      10.68 kB │ gzip:  2.91 kB
+dist/server/assets/add-source-dialog-D70nqz_6.js            24.07 kB │ gzip:  6.60 kB
+dist/server/assets/workbench-shell-D0HJzFfn.js              24.53 kB │ gzip:  6.32 kB
+dist/server/assets/dossiers-obXQnCM_.js                     25.03 kB │ gzip:  7.28 kB
+dist/server/assets/prototype.workspace-Kiad-Rmu.js          35.14 kB │ gzip:  7.46 kB
+dist/server/assets/start-C-WEPx6Y.js                        44.25 kB │ gzip: 11.87 kB
+dist/server/assets/research-copy-CG9q1lS1.js                49.33 kB │ gzip: 13.60 kB
+dist/server/assets/routes-BHRIUncl.js                       60.43 kB │ gzip: 17.71 kB
+dist/server/assets/admin-BlmCUOzS.js                        78.37 kB │ gzip: 16.06 kB
+dist/server/server.js                                      171.96 kB │ gzip: 43.00 kB
+dist/server/assets/_runId-Dvv1GM6R.js                      183.34 kB │ gzip: 42.94 kB
+dist/server/assets/source-proposal-review-_hbXqZv_.js      199.81 kB │ gzip: 44.16 kB
+
+[33m[PLUGIN_TIMINGS] [0mYour build spent significant time in plugins. Here is a breakdown:
+  - tanstack-start-core:import-protection (88%)
+  - vite:css-post (4%)
+  - tanstack-start-core:import-protection-transform-cache (4%)
+See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+
+✓ built in 3.74s

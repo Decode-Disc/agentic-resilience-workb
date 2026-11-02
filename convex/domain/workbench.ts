@@ -418,6 +418,43 @@ export const workbenchDefinition: AgentDefinition & { id: "workbench_v1" } = {
     },
 };
 
+function nativeWorkbenchOperation(
+    name: string,
+    operation: Pick<AgentOperationDefinition, "description" | "inputValidator">,
+    single: boolean,
+    action?: "pause" | "resume",
+) {
+    if (name === "adjust_framing")
+        return {
+            ...operation,
+            description: operation.description.replace(
+                "Supply the currently observed revision; stale edits are refused.",
+                "The harness binds the observed revision; stale edits are refused.",
+            ),
+            inputValidator: single
+                ? nativeAdjustFramingInput.omit("expectedRevision", "messageId")
+                : nativeAdjustFramingInput.omit("expectedRevision"),
+        };
+    if (name === "control_research") {
+        const validator = action
+            ? controlResearchInput.extend({ action: v.literal(action) })
+            : controlResearchInput;
+        return {
+            ...operation,
+            inputValidator: single ? validator.omit("messageId") : validator,
+        };
+    }
+    if (name === "transmit_source_request" && single)
+        return {
+            ...operation,
+            inputValidator: operation.inputValidator.omit("messageId"),
+        };
+    return {
+        description: operation.description,
+        inputValidator: operation.inputValidator,
+    };
+}
+
 /** The conversation contract is pinned at creation; historical missions retain version 1. */
 export const nativeWorkbenchDefinition: AgentDefinition & {
     id: "workbench_v1";
@@ -425,6 +462,44 @@ export const nativeWorkbenchDefinition: AgentDefinition & {
     ...workbenchDefinition,
     version: 2,
     nativeConversation: true,
+    nativeToolSets(operations) {
+        const sets = [];
+        // Enumerate the closed schema variants, independently of any dossier's private context.
+        for (const single of [false, true])
+            for (const action of [undefined, "pause", "resume"] as const)
+                for (let mask = 0; mask < 16; mask++)
+                    sets.push(
+                        Object.fromEntries(
+                            Object.entries(operations).flatMap(
+                                ([name, operation]) => {
+                                    if (
+                                        (name === "adjust_framing" &&
+                                            !(mask & 1)) ||
+                                        (name === "control_research" &&
+                                            !(mask & 2)) ||
+                                        (name === "transmit_source_request" &&
+                                            !(mask & 4)) ||
+                                        (name in savedMaterialOperations &&
+                                            !(mask & 8))
+                                    )
+                                        return [];
+                                    return [
+                                        [
+                                            name,
+                                            nativeWorkbenchOperation(
+                                                name,
+                                                operation,
+                                                single,
+                                                action,
+                                            ),
+                                        ],
+                                    ];
+                                },
+                            ),
+                        ),
+                    );
+        return sets;
+    },
     operations: {
         ...workbenchDefinition.operations,
         adjust_framing: {
@@ -620,21 +695,6 @@ export const nativeWorkbenchDefinition: AgentDefinition & {
             )
                 return null;
         }
-        if (name === "adjust_framing")
-            return {
-                ...operation,
-                description: operation.description.replace(
-                    "Supply the currently observed revision; stale edits are refused.",
-                    "The harness binds the observed revision; stale edits are refused.",
-                ),
-                inputValidator:
-                    snapshot?.conversationInstructions?.messages.length === 1
-                        ? nativeAdjustFramingInput.omit(
-                              "expectedRevision",
-                              "messageId",
-                          )
-                        : nativeAdjustFramingInput.omit("expectedRevision"),
-            };
         if (name === "control_research" && snapshot) {
             const actions = new Set(
                 snapshot.conversationInstructions?.messages
@@ -642,26 +702,14 @@ export const nativeWorkbenchDefinition: AgentDefinition & {
                     .filter((action) => action !== undefined),
             );
             const action = actions.size === 1 ? [...actions][0] : undefined;
-            const validator = action
-                ? controlResearchInput.extend({ action: v.literal(action) })
-                : controlResearchInput;
-            return {
-                ...operation,
-                inputValidator:
-                    snapshot.conversationInstructions?.messages.length === 1
-                        ? validator.omit("messageId")
-                        : validator,
-            };
+            return nativeWorkbenchOperation(
+                name,
+                operation,
+                messages.length === 1,
+                action,
+            );
         }
-        if (
-            name === "transmit_source_request" &&
-            snapshot?.conversationInstructions?.messages.length === 1
-        )
-            return {
-                ...operation,
-                inputValidator: operation.inputValidator.omit("messageId"),
-            };
-        return operation;
+        return nativeWorkbenchOperation(name, operation, messages.length === 1);
     },
     normalizeOperationInput(name, input, value) {
         const snapshot = value as WorkbenchModelSnapshot;

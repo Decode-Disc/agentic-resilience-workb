@@ -175,7 +175,7 @@ async function capturedWorkflowCandidate(
         category: string;
     },
 ) {
-    const fixture = await seedSourcePreparation();
+    const fixture = await seedSourcePreparation({ models: true });
     const { t, runId, corpusRevisionId, sourceId } = fixture;
     workflowTest.register(t);
     await t.mutation(internal.researchPlanning.createForRun, {
@@ -958,7 +958,9 @@ test("missing model configuration stops before acquisition and preserves an unap
         throw new Error("Unexpected external request");
     });
     vi.stubGlobal("fetch", request);
-    const { t, runId, corpusRevisionId } = await seedSourcePreparation();
+    const { t, runId, corpusRevisionId } = await seedSourcePreparation({
+        models: true,
+    });
     workflowTest.register(t);
     await t.mutation(internal.researchPlanning.createForRun, {
         runId,

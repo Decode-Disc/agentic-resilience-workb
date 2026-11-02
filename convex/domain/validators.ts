@@ -140,6 +140,7 @@ export const auditEventActionValidator = v.union(
     v.literal("corpus_revision_approved"),
     v.literal("new_corpus_revision"),
     v.literal("paid_work_toggled"),
+    v.literal("model_configuration_changed"),
 );
 
 export const runPauseReasonValidator = v.union(

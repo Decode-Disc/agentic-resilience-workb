@@ -10,6 +10,7 @@
 
 import type * as admin from "../admin.js";
 import type * as adminOperations from "../adminOperations.js";
+import type * as administrationAuthority from "../administrationAuthority.js";
 import type * as audit from "../audit.js";
 import type * as auth from "../auth.js";
 import type * as browserPreview from "../browserPreview.js";
@@ -118,6 +119,7 @@ import type * as integrations_modelInput from "../integrations/modelInput.js";
 import type * as integrations_modelRouting from "../integrations/modelRouting.js";
 import type * as integrations_modelTransport from "../integrations/modelTransport.js";
 import type * as integrations_piMission from "../integrations/piMission.js";
+import type * as integrations_piModelProfiles from "../integrations/piModelProfiles.js";
 import type * as integrations_piNativeInput from "../integrations/piNativeInput.js";
 import type * as integrations_piStorage from "../integrations/piStorage.js";
 import type * as integrations_piToolArguments from "../integrations/piToolArguments.js";
@@ -131,6 +133,9 @@ import type * as integrations_sourceQualification from "../integrations/sourceQu
 import type * as integrations_sourceQualificationConfig from "../integrations/sourceQualificationConfig.js";
 import type * as integrations_websiteResolver from "../integrations/websiteResolver.js";
 import type * as invitations from "../invitations.js";
+import type * as modelConfiguration from "../modelConfiguration.js";
+import type * as modelConfigurationActions from "../modelConfigurationActions.js";
+import type * as modelConfigurationSchema from "../modelConfigurationSchema.js";
 import type * as policyEvaluations from "../policyEvaluations.js";
 import type * as providerCalls from "../providerCalls.js";
 import type * as rateLimiter from "../rateLimiter.js";
@@ -170,6 +175,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   adminOperations: typeof adminOperations;
+  administrationAuthority: typeof administrationAuthority;
   audit: typeof audit;
   auth: typeof auth;
   browserPreview: typeof browserPreview;
@@ -278,6 +284,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/modelRouting": typeof integrations_modelRouting;
   "integrations/modelTransport": typeof integrations_modelTransport;
   "integrations/piMission": typeof integrations_piMission;
+  "integrations/piModelProfiles": typeof integrations_piModelProfiles;
   "integrations/piNativeInput": typeof integrations_piNativeInput;
   "integrations/piStorage": typeof integrations_piStorage;
   "integrations/piToolArguments": typeof integrations_piToolArguments;
@@ -291,6 +298,9 @@ declare const fullApi: ApiFromModules<{
   "integrations/sourceQualificationConfig": typeof integrations_sourceQualificationConfig;
   "integrations/websiteResolver": typeof integrations_websiteResolver;
   invitations: typeof invitations;
+  modelConfiguration: typeof modelConfiguration;
+  modelConfigurationActions: typeof modelConfigurationActions;
+  modelConfigurationSchema: typeof modelConfigurationSchema;
   policyEvaluations: typeof policyEvaluations;
   providerCalls: typeof providerCalls;
   rateLimiter: typeof rateLimiter;

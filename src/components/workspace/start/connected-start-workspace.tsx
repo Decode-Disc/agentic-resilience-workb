@@ -6,10 +6,12 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
-import type { FunctionReturnType } from "convex/server";
+import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ConversationHistory } from "@/components/chat/conversation-history";
 import type { ConversationMissionSnapshot } from "@/components/chat/conversation-mission";
+import { WorkbenchModelSelector } from "@/components/chat/conversation-model-controls";
+import type { ResearchControlCommand } from "@/components/chat/conversation-slash-commands";
 import {
     ConversationComposer,
     ConversationContext,
@@ -143,6 +145,22 @@ function StartWorkspaceContent({
     const navigate = useNavigate();
     const { isMobile } = useResponsive();
     const state = useQuery(api.execution.conversations.get, { runId });
+    const modelChoices = useQuery(api.workbench.models, { runId });
+    const selectModel = useMutation(api.workbench.setModel);
+    const executeResearchCommand = useMutation(api.workbench.command);
+    const [modelPickerOpen, setModelPickerOpen] = useState(false);
+    const [modelPending, setModelPending] = useState(false);
+    const commandDelivery = useRef<{
+        command: ResearchControlCommand;
+        generation: number;
+        key: string;
+    } | null>(null);
+    const modelDelivery = useRef<{
+        id: Id<"modelCatalog">;
+        effort?: FunctionArgs<typeof api.workbench.setModel>["reasoningEffort"];
+        revision: number;
+        key: string;
+    } | null>(null);
     const history = usePaginatedQuery(
         api.workbench.history,
         { runId },
@@ -178,6 +196,60 @@ function StartWorkspaceContent({
                 "That action could not be completed. Your saved work is unchanged. Try again.",
             ),
         );
+    };
+    const onCommand = async (command: ResearchControlCommand) => {
+        if (commandDelivery.current?.command !== command)
+            commandDelivery.current = {
+                command,
+                generation: run.executionGeneration,
+                key: crypto.randomUUID(),
+            };
+        const delivery = commandDelivery.current;
+        await executeResearchCommand({
+            runId,
+            command,
+            expectedGeneration: delivery.generation,
+            requestKey: delivery.key,
+        });
+        commandDelivery.current = null;
+    };
+    const onSelectModel = async (
+        id: Id<"modelCatalog">,
+        effort?: FunctionArgs<typeof api.workbench.setModel>["reasoningEffort"],
+    ) => {
+        if (!modelChoices || modelPending) return;
+        if (
+            modelDelivery.current?.id !== id ||
+            modelDelivery.current?.effort !== effort
+        )
+            modelDelivery.current = {
+                id,
+                effort,
+                revision: modelChoices.revision,
+                key: crypto.randomUUID(),
+            };
+        const delivery = modelDelivery.current;
+        setModelPending(true);
+        setError(null);
+        try {
+            await selectModel({
+                runId,
+                catalogId: id,
+                ...(delivery.effort
+                    ? { reasoningEffort: delivery.effort }
+                    : {}),
+                expectedRevision: delivery.revision,
+                requestKey: delivery.key,
+            });
+            modelDelivery.current = null;
+            setModelPickerOpen(false);
+        } catch {
+            setError(
+                "The model settings could not be confirmed. Check the selection and try again.",
+            );
+        } finally {
+            setModelPending(false);
+        }
     };
     const send = async (text: string, mode: "queue" | "steer" = "queue") => {
         setError(null);
@@ -554,6 +626,22 @@ function StartWorkspaceContent({
     const composer = (
         <ConversationComposer
             inputRef={inputRef}
+            onCommand={!edit ? onCommand : undefined}
+            onOpenModels={() => setModelPickerOpen(true)}
+            controlsOpen={modelPickerOpen}
+            modelSelector={
+                !edit ? (
+                    <WorkbenchModelSelector
+                        snapshot={modelChoices}
+                        open={modelPickerOpen}
+                        onOpenChange={setModelPickerOpen}
+                        pending={modelPending}
+                        onSelect={(id, effort) =>
+                            void onSelectModel(id, effort)
+                        }
+                    />
+                ) : undefined
+            }
             label={
                 edit
                     ? edit.kind === "scope"
@@ -581,7 +669,7 @@ function StartWorkspaceContent({
                       }
                     : undefined
             }
-            pending={conversation.sending || saving}
+            pending={conversation.sending || saving || modelPending}
             failed={conversation.failed}
             compact={launched && !inspecting}
             onResumeQueue={

@@ -5,15 +5,17 @@ import { agentToolSchemas } from "@convex/execution/agentDefinition";
 import { buildMissionContext } from "@convex/execution/context";
 import { conversationInstructions } from "@convex/execution/conversations";
 import { agentToolSetKey } from "@convex/integrations/modelInput";
+import type { ModelRoute } from "@convex/integrations/modelRouting";
 import schema from "@convex/schema";
 import agentTest from "@convex-dev/agent/test";
 import { convexTest } from "convex-test";
 import { assert, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
+import { installModel } from "./model-configuration";
 import { createAdmittedPreflight } from "./research-launch";
 
 /** A real admitted framing dossier, with scheduled execution controlled by each test. */
-export async function seedWorkbench(local = false) {
+export async function seedWorkbench(local = false, route?: ModelRoute) {
     vi.useFakeTimers();
     const t = convexTest(schema, import.meta.glob("/convex/**/*.ts"));
     agentTest.register(t);
@@ -50,6 +52,10 @@ export async function seedWorkbench(local = false) {
                 browserTestContextId: contextId,
             }),
         );
+    }
+    if (route) {
+        vi.stubEnv("WORKBENCH_AGENT_ENABLED", "true");
+        await installModel(t, route);
     }
     return { t, client, runId };
 }

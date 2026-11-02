@@ -4,6 +4,7 @@ import {
     workbenchCommand,
     workbenchCommandOutcome,
 } from "@convex/domain/workbenchContracts";
+import { reasoningEffort } from "@convex/modelConfigurationSchema";
 import { defineTable } from "convex/server";
 import { v } from "convex/values";
 import {
@@ -23,6 +24,8 @@ import {
 } from "./executionProtocol";
 
 const missionFields = {
+    modelRevisionId: v.optional(v.id("modelRevisions")),
+    reasoningEffort: v.optional(reasoningEffort),
     piActiveWriter: v.optional(v.string()),
     piRebinding: v.optional(v.boolean()),
     executionRuntime: v.optional(v.literal("pi-durable")),
@@ -92,6 +95,11 @@ export const executionTables = {
         .index("by_session_and_sequence", ["sessionId", "sequence"])
         .index("by_session_and_key", ["sessionId", "key"]),
     agentConversations: defineTable({
+        modelCatalogId: v.optional(v.id("modelCatalog")),
+        reasoningEffort: v.optional(reasoningEffort),
+        modelSelectionRevision: v.optional(v.number()),
+        modelSelectionKey: v.optional(v.string()),
+        modelSelectionHash: v.optional(v.string()),
         definitionId: v.optional(agentDefinitionIdValidator),
         definitionVersion: v.optional(agentDefinitionVersionValidator),
         queuePaused: v.optional(v.boolean()),

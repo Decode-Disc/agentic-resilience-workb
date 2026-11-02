@@ -636,6 +636,8 @@ export const inspectWorkbench = internalQuery({
     args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
     returns: v.object({
         providerCallCount: v.number(),
+        missionCount: v.number(),
+        invocationCount: v.number(),
         allMissionsSimulated: v.boolean(),
         queuedCount: v.number(),
         phase: v.string(),
@@ -655,6 +657,12 @@ export const inspectWorkbench = internalQuery({
             .query("providerCalls")
             .withIndex("by_run", (q) => q.eq("runId", run._id))
             .take(1);
+        const invocations = await ctx.db
+            .query("agentInvocations")
+            .withIndex("by_run_and_task_key", (q) => q.eq("runId", run._id))
+            .take(101);
+        if (invocations.length > 100)
+            throw new Error("Fixture inspection capacity exceeded");
         const conversation = await ctx.db
             .query("agentConversations")
             .withIndex("by_run", (q) => q.eq("runId", run._id))
@@ -675,6 +683,8 @@ export const inspectWorkbench = internalQuery({
                 session.settledSequence === session.sequence &&
                 session.leaseUntil <= Date.now(),
             providerCallCount: calls.length,
+            missionCount: missions.length,
+            invocationCount: invocations.length,
             allMissionsSimulated:
                 missions.length > 0 &&
                 missions.every((m) => m.provenance === "simulation"),

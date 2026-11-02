@@ -11,12 +11,11 @@ import {
 import { executionError, executionFailureCode } from "@convex/execution/errors";
 import {
     type AgentGenerationBackend,
-    type AgentOperationDefinition,
     MAX_CONTEXT_BYTES,
     MAX_OBSERVABLE_OUTPUT_BYTES,
 } from "@convex/execution/executionProtocol";
 import { invokeControlledGeneration } from "@convex/execution/invokeAgentModel";
-import { configuredMissionRoute } from "@convex/integrations/modelRouting";
+import { revisionRoute } from "@convex/modelConfiguration";
 import { PI_LEASE_RENEW_INTERVAL_MS } from "@convex/resourceLimits";
 import {
     BACKGROUND_CONTEXT,
@@ -34,7 +33,6 @@ import {
     type Provider,
     type SimpleStreamOptions,
     type TranscriptContext,
-    Type,
 } from "@earendil-works/pi-ai";
 import { openrouterProvider } from "@earendil-works/pi-ai/providers/openrouter";
 import {
@@ -49,44 +47,29 @@ import {
     hook,
     type Wake,
 } from "@earendil-works/pi-durable";
-import { asSchema } from "ai";
 import {
     PI_MISSION_EXTENSION,
     PI_MISSION_INPUT,
     piMissionMessages,
+    piToolMetadata,
     preparePiModelPayload,
     preparePiSimulationRequest,
 } from "./modelInput";
 import {
     MODEL_ATTEMPT_TIMEOUT_MS,
     MODEL_MAX_OUTPUT_TOKENS,
-    missionRoutes,
 } from "./modelRouting";
 import {
-    agentOperationInputSchema,
     createBoundedModelFetch,
     generationObservation,
     readReportedCost,
 } from "./modelTransport";
+import { configuredNativeModel } from "./piModelProfiles";
 import { createNativeInputDelivery } from "./piNativeInput";
 import { openMissionPiStorage } from "./piStorage";
 import { createPiToolArgumentsCapture } from "./piToolArguments";
 
-/** Canonical schemas and Pi replay policy also own offline native-input calibration. */
-export async function piToolMetadata(
-    name: string,
-    operation: Pick<AgentOperationDefinition, "description" | "inputValidator">,
-) {
-    return {
-        name,
-        description: operation.description,
-        replay: "safe" as const,
-        executionMode: "sequential" as const,
-        parameters: Type.Unsafe<Record<string, unknown>>(
-            await asSchema(agentOperationInputSchema(operation)).jsonSchema,
-        ),
-    };
-}
+export { piToolMetadata } from "./modelInput";
 
 /** Pi owns generation/tool scheduling. Application callbacks retain admission, effects and adoption. */
 export async function runPiMission(
@@ -99,7 +82,11 @@ export async function runPiMission(
         args,
     );
     const simulated = mission.provenance === "simulation";
-    const route = configuredMissionRoute(mission.definitionId, missionRoutes);
+    const configuredModel = await ctx.runQuery(
+        internal.modelConfiguration.forMission,
+        { missionId: mission._id },
+    );
+    const route = configuredModel ? revisionRoute(configuredModel) : undefined;
     const terminal = ["completed", "cancelled"].includes(mission.status);
     if (
         !terminal &&
@@ -131,7 +118,22 @@ export async function runPiMission(
             },
         ],
     });
-    const base = simulated ? faux.provider : openrouterProvider();
+    const upstream = openrouterProvider();
+    const nativeModel = configuredModel
+        ? configuredNativeModel(
+              configuredModel.model,
+              configuredModel.descriptor,
+          )
+        : undefined;
+    const base = simulated
+        ? faux.provider
+        : nativeModel
+          ? {
+                ...upstream,
+                getModels: () => [nativeModel],
+                getAllModels: () => [nativeModel],
+            }
+          : upstream;
     const model = simulated
         ? faux.getModel()
         : (base.getModels().find((m) => m.id === route?.model) ??

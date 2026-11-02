@@ -1,0 +1,531 @@
+import { api, internal } from "@convex/_generated/api";
+import schema from "@convex/schema";
+import { convexTest } from "convex-test";
+import { afterEach, expect, test, vi } from "vitest";
+
+afterEach(() => vi.unstubAllGlobals());
+
+async function setup() {
+    const t = convexTest(schema, import.meta.glob("/convex/**/*.ts"));
+    const userId = await t.run(async (ctx) => {
+        const userId = await ctx.db.insert("users", { isAnonymous: true });
+        const invitationId = await ctx.db.insert("invitations", {
+            slotKey: "admin",
+            role: "admin",
+            codeDigest: "model-admin",
+            status: "claimed",
+            createdAt: 1,
+        });
+        const visitorId = await ctx.db.insert("visitors", {
+            authUserId: userId,
+            invitationId,
+            role: "admin",
+            status: "active",
+            analysesReserved: 0,
+            admittedAt: 1,
+        });
+        await ctx.db.patch(invitationId, { claimedByVisitorId: visitorId });
+        return userId;
+    });
+    return { t, admin: t.withIdentity({ subject: userId }) };
+}
+
+test("only an admitted administrator can inspect the model catalogue", async () => {
+    const { t, admin } = await setup();
+    await expect(t.query(api.modelConfiguration.list, {})).rejects.toThrow(
+        "Not authenticated",
+    );
+    expect(await admin.query(api.modelConfiguration.list, {})).toMatchObject({
+        models: [],
+        assignments: [],
+    });
+});
+
+test("revoking the administrator invitation prevents catalogue access", async () => {
+    const { t, admin } = await setup();
+    await t.run(async (ctx) => {
+        const invitation = await ctx.db.query("invitations").first();
+        if (!invitation) throw new Error("Missing admitted administrator");
+        await ctx.db.patch(invitation._id, { status: "revoked" });
+    });
+    await expect(admin.query(api.modelConfiguration.list, {})).rejects.toThrow(
+        "Unauthorized",
+    );
+});
+
+test("a prepared model can be enabled and assigned without a code-defined route", async () => {
+    const { t, admin } = await setup();
+    const added = await admin.mutation(
+        internal.modelConfiguration.beginPreparation,
+        {
+            model: "example/administrable-model",
+            provider: "example-provider",
+            label: "Administrable model",
+            requestKey: "prepare-one",
+        },
+    );
+    const saved = await admin.mutation(
+        internal.modelConfiguration.finishPreparation,
+        {
+            catalogId: added.catalogId,
+            revision: added.revision,
+            descriptor: {
+                contextWindow: 131072,
+                maxTokens: 8192,
+                reasoning: true,
+                inputPrice: 0.03,
+                outputPrice: 0.1,
+                cacheReadPrice: 0.01,
+                structuredOutputs: true,
+            },
+            profiles: [{ key: "profile-one", bytes: 1000 }],
+        },
+    );
+    await admin.mutation(api.modelConfiguration.updateAvailability, {
+        catalogId: added.catalogId,
+        expectedRevision: saved.revision,
+        enabled: true,
+        workbenchSelectable: true,
+        requestKey: "enable-one",
+    });
+    await admin.mutation(api.modelConfiguration.assign, {
+        agent: "workbench",
+        catalogId: added.catalogId,
+        expectedRevision: 0,
+        requestKey: "assign-one",
+    });
+    const config = await admin.query(api.modelConfiguration.list, {});
+    expect(config.models).toMatchObject([
+        {
+            model: "example/administrable-model",
+            enabled: true,
+            workbenchSelectable: true,
+            status: "ready",
+        },
+    ]);
+    expect(config.assignments).toMatchObject([
+        { agent: "workbench", catalogId: added.catalogId },
+    ]);
+    expect(
+        await t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([]);
+});
+
+test("a lost preparation acknowledgement can be replayed without duplicating its revision", async () => {
+    const { t, admin } = await setup();
+    const added = await admin.mutation(
+        internal.modelConfiguration.beginPreparation,
+        {
+            model: "example/replay",
+            provider: "example-provider",
+            label: "Replay",
+            requestKey: "prepare-replay",
+        },
+    );
+    const input = {
+        catalogId: added.catalogId,
+        revision: added.revision,
+        descriptor: {
+            contextWindow: 131072,
+            maxTokens: 8192,
+            reasoning: true,
+            inputPrice: 0.03,
+            outputPrice: 0.1,
+            cacheReadPrice: 0.01,
+            structuredOutputs: true,
+        },
+        profiles: [{ key: "replay-profile", bytes: 1000 }],
+    };
+    const first = await admin.mutation(
+        internal.modelConfiguration.finishPreparation,
+        input,
+    );
+    expect(
+        await admin.mutation(
+            internal.modelConfiguration.finishPreparation,
+            input,
+        ),
+    ).toEqual(first);
+    expect(
+        await t.run((ctx) => ctx.db.query("modelRevisions").collect()),
+    ).toHaveLength(1);
+});
+
+test("administrative import prepares a model absent from Pi's bundled catalogue without inference", async () => {
+    const { t, admin } = await setup();
+    const model = "example/new-runtime-model";
+    const fetch = vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "https://openrouter.ai/api/v1/models")
+            return Response.json({
+                data: [
+                    {
+                        id: model,
+                        reasoning: {
+                            supported_efforts: ["max", "high", "low"],
+                            default_effort: "max",
+                            mandatory: true,
+                        },
+                        context_length: 131072,
+                        top_provider: { max_completion_tokens: 8192 },
+                        supported_parameters: [
+                            "tools",
+                            "reasoning",
+                            "structured_outputs",
+                        ],
+                    },
+                ],
+            });
+        if (url === `https://openrouter.ai/api/v1/models/${model}/endpoints`)
+            return Response.json({
+                data: {
+                    endpoints: [
+                        {
+                            tag: "example-provider",
+                            status: 0,
+                            context_length: 131072,
+                            max_completion_tokens: 8192,
+                            supported_parameters: [
+                                "tools",
+                                "max_tokens",
+                                "reasoning",
+                                "structured_outputs",
+                            ],
+                            pricing: {
+                                prompt: "0.00000003",
+                                completion: "0.0000001",
+                                input_cache_read: "0.00000001",
+                            },
+                        },
+                    ],
+                },
+            });
+        throw new Error(
+            "Inference and unapproved metadata requests are forbidden",
+        );
+    });
+    vi.stubGlobal("fetch", fetch);
+    const prepared = await admin.action(api.modelConfigurationActions.prepare, {
+        model,
+        provider: "example-provider",
+        label: "Runtime model",
+        requestKey: "runtime-import",
+    });
+    expect(prepared.ready).toBe(true);
+    const config = await admin.query(api.modelConfiguration.list, {});
+    expect(config.models).toMatchObject([
+        { model, enabled: false, status: "ready" },
+    ]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(
+        await t.run((ctx) => ctx.db.query("modelRevisions").first()),
+    ).toMatchObject({
+        descriptor: {
+            reasoningEfforts: ["low", "high", "max"],
+            reasoningMandatory: true,
+        },
+        reasoningEffort: "low",
+    });
+});
+
+test("unauthenticated model preparation performs no metadata I/O or writes", async () => {
+    const { t } = await setup();
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    await expect(
+        t.action(api.modelConfigurationActions.prepare, {
+            model: "example/model",
+            provider: "test",
+            label: "Model",
+            requestKey: "unauthenticated",
+        }),
+    ).rejects.toThrow("Not authenticated");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(
+        await t.run((ctx) => ctx.db.query("modelCatalog").collect()),
+    ).toEqual([]);
+});
+
+test("a failed metadata request is retained and replayed without repeating I/O", async () => {
+    const { admin } = await setup();
+    const fetch = vi.fn(
+        async () => new Response("Unavailable", { status: 503 }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const input = {
+        model: "example/failed",
+        provider: "test",
+        label: "Failed import",
+        requestKey: "failed-import",
+    };
+    const first = await admin.action(
+        api.modelConfigurationActions.prepare,
+        input,
+    );
+    expect(first.ready).toBe(false);
+    expect(
+        await admin.action(api.modelConfigurationActions.prepare, input),
+    ).toEqual(first);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(
+        (await admin.query(api.modelConfiguration.list, {})).models,
+    ).toMatchObject([
+        { enabled: false, status: "failed", failure: "catalog_unavailable" },
+    ]);
+});
+
+test("availability cannot invalidate an in-progress preparation", async () => {
+    const { admin } = await setup();
+    const pending = await admin.mutation(
+        internal.modelConfiguration.beginPreparation,
+        {
+            model: "example/pending",
+            provider: "test",
+            label: "Pending",
+            requestKey: "pending",
+        },
+    );
+    await expect(
+        admin.mutation(api.modelConfiguration.updateAvailability, {
+            catalogId: pending.catalogId,
+            expectedRevision: pending.revision,
+            enabled: false,
+            workbenchSelectable: false,
+            requestKey: "disable-pending",
+        }),
+    ).rejects.toThrow("model_preparation_pending");
+    expect(
+        (await admin.query(api.modelConfiguration.list, {})).models[0],
+    ).toMatchObject({ revision: pending.revision, status: "preparing" });
+});
+
+test("missing endpoint prices cannot be accepted as free inference", async () => {
+    const { admin } = await setup();
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: string | URL | Request) =>
+            String(input).endsWith("/endpoints")
+                ? Response.json({
+                      data: {
+                          endpoints: [
+                              {
+                                  tag: "test",
+                                  status: 0,
+                                  context_length: 131072,
+                                  max_completion_tokens: 8192,
+                                  supported_parameters: ["tools", "max_tokens"],
+                                  pricing: { prompt: null, completion: null },
+                              },
+                          ],
+                      },
+                  })
+                : Response.json({ data: [{ id: "example/no-price" }] }),
+        ),
+    );
+    expect(
+        await admin.action(api.modelConfigurationActions.prepare, {
+            model: "example/no-price",
+            provider: "test",
+            label: "Missing prices",
+            requestKey: "no-price",
+        }),
+    ).toMatchObject({ ready: false });
+    expect(
+        (await admin.query(api.modelConfiguration.list, {})).models[0],
+    ).toMatchObject({
+        enabled: false,
+        status: "failed",
+        failure: "model_not_compatible",
+    });
+});
+
+test("default initialization refuses a model that cannot satisfy structured agent contracts", async () => {
+    const { admin } = await setup();
+    const pending = await admin.mutation(
+        internal.modelConfiguration.beginPreparation,
+        {
+            model: "example/text-only",
+            provider: "test",
+            label: "Text only",
+            requestKey: "text-only",
+        },
+    );
+    await admin.mutation(internal.modelConfiguration.finishPreparation, {
+        catalogId: pending.catalogId,
+        revision: pending.revision,
+        descriptor: {
+            contextWindow: 131072,
+            maxTokens: 8192,
+            reasoning: false,
+            inputPrice: 0.03,
+            outputPrice: 0.1,
+            cacheReadPrice: 0.03,
+            structuredOutputs: false,
+        },
+        profiles: [{ key: "text-only", bytes: 1000 }],
+    });
+    await expect(
+        admin.mutation(internal.modelConfiguration.initializePrepared, {
+            catalogId: pending.catalogId,
+            primary: true,
+        }),
+    ).rejects.toThrow("model_not_compatible");
+    expect(
+        (await admin.query(api.modelConfiguration.list, {})).assignments,
+    ).toEqual([]);
+});
+
+test("a deliberate new preparation supersedes an interrupted one and fences its late result", async () => {
+    const { admin } = await setup();
+    const input = {
+        model: "example/superseded",
+        provider: "test",
+        label: "Original",
+        requestKey: "original",
+    };
+    const first = await admin.mutation(
+        internal.modelConfiguration.beginPreparation,
+        input,
+    );
+    const second = await admin.mutation(
+        internal.modelConfiguration.beginPreparation,
+        {
+            ...input,
+            label: "Replacement",
+            requestKey: "replacement",
+            expectedRevision: first.revision,
+        },
+    );
+    const result = {
+        descriptor: {
+            contextWindow: 131072,
+            maxTokens: 8192,
+            reasoning: false,
+            inputPrice: 0.03,
+            outputPrice: 0.1,
+            cacheReadPrice: 0.03,
+            structuredOutputs: true,
+        },
+        profiles: [{ key: "supersession", bytes: 1000 }],
+    };
+    await expect(
+        admin.mutation(internal.modelConfiguration.finishPreparation, {
+            catalogId: first.catalogId,
+            revision: first.revision,
+            ...result,
+        }),
+    ).rejects.toThrow("model_configuration_conflict");
+    await admin.mutation(internal.modelConfiguration.finishPreparation, {
+        catalogId: second.catalogId,
+        revision: second.revision,
+        ...result,
+    });
+    expect(
+        (await admin.query(api.modelConfiguration.list, {})).models[0],
+    ).toMatchObject({ label: "Replacement", status: "ready", enabled: false });
+});
+
+test("a lost assignment acknowledgement replays its result even after catalogue disablement", async () => {
+    const { admin } = await setup();
+    const prepared = await admin.mutation(
+        internal.modelConfiguration.beginPreparation,
+        {
+            model: "example/assignment-replay",
+            provider: "test",
+            label: "Replay",
+            requestKey: "assignment-prepare",
+        },
+    );
+    await admin.mutation(internal.modelConfiguration.finishPreparation, {
+        catalogId: prepared.catalogId,
+        revision: prepared.revision,
+        descriptor: {
+            contextWindow: 131072,
+            maxTokens: 8192,
+            reasoning: false,
+            inputPrice: 0.03,
+            outputPrice: 0.1,
+            cacheReadPrice: 0.03,
+            structuredOutputs: true,
+        },
+        profiles: [{ key: "assignment-profile", bytes: 1000 }],
+    });
+    const enabled = await admin.mutation(
+        api.modelConfiguration.updateAvailability,
+        {
+            catalogId: prepared.catalogId,
+            expectedRevision: prepared.revision,
+            enabled: true,
+            workbenchSelectable: true,
+            requestKey: "assignment-enable",
+        },
+    );
+    const assignment = {
+        agent: "workbench" as const,
+        catalogId: prepared.catalogId,
+        expectedRevision: 0,
+        requestKey: "assignment-save",
+    };
+    const saved = await admin.mutation(
+        api.modelConfiguration.assign,
+        assignment,
+    );
+    await admin.mutation(api.modelConfiguration.updateAvailability, {
+        catalogId: prepared.catalogId,
+        expectedRevision: enabled.revision,
+        enabled: false,
+        workbenchSelectable: false,
+        requestKey: "assignment-disable",
+    });
+    expect(
+        await admin.mutation(api.modelConfiguration.assign, assignment),
+    ).toEqual(saved);
+    expect(
+        (await admin.query(api.modelConfiguration.list, {})).models[0]?.enabled,
+    ).toBe(false);
+});
+
+test("a Workbench default must be eligible for dossier selection", async () => {
+    const { admin } = await setup();
+    const prepared = await admin.mutation(
+        internal.modelConfiguration.beginPreparation,
+        {
+            model: "example/hidden-default",
+            provider: "test",
+            label: "Hidden",
+            requestKey: "hidden-prepare",
+        },
+    );
+    await admin.mutation(internal.modelConfiguration.finishPreparation, {
+        catalogId: prepared.catalogId,
+        revision: prepared.revision,
+        descriptor: {
+            contextWindow: 131072,
+            maxTokens: 8192,
+            reasoning: false,
+            inputPrice: 0.03,
+            outputPrice: 0.1,
+            cacheReadPrice: 0.03,
+            structuredOutputs: true,
+        },
+        profiles: [{ key: "hidden-profile", bytes: 1000 }],
+    });
+    await admin.mutation(api.modelConfiguration.updateAvailability, {
+        catalogId: prepared.catalogId,
+        expectedRevision: prepared.revision,
+        enabled: true,
+        workbenchSelectable: false,
+        requestKey: "hidden-enable",
+    });
+    await expect(
+        admin.mutation(api.modelConfiguration.assign, {
+            agent: "workbench",
+            catalogId: prepared.catalogId,
+            expectedRevision: 0,
+            requestKey: "hidden-default",
+        }),
+    ).rejects.toThrow("model_unavailable");
+    expect(
+        (await admin.query(api.modelConfiguration.list, {})).assignments,
+    ).toEqual([]);
+});

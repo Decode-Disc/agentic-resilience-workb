@@ -1,0 +1,54 @@
+
+> agentic-resilience-workbench@ test /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> TMPDIR=/tmp TEMP=/tmp TMP=/tmp vitest run src/__tests__/convex/execution/workbench-model-selection.test.ts --environment=node --maxWorkers=1 --testTimeout=30000 -t 'effort is persisted'
+
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+ ❯ src/__tests__/convex/execution/workbench-model-selection.test.ts (4 tests | 1 failed | 3 skipped) 2081ms
+   × effort is persisted per dossier and pinned independently for each response 2077ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/convex/execution/workbench-model-selection.test.ts > effort is persisted per dossier and pinned independently for each response
+AssertionError: expected { available: true, …(4) } to match object { effort: 'low', …(1) }
+(5 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "effort": "low",
+-   "effortChoices": [
+-     "low",
+-     "high",
+-     "max",
++   "available": true,
++   "choices": [
++     {
++       "id": "00000000000000010018modelCatalog",
++       "label": "example/effort",
++     },
+    ],
++   "label": "example/effort",
++   "revision": 0,
++   "selectedId": "00000000000000010018modelCatalog",
+  }
+
+ ❯ src/__tests__/convex/execution/workbench-model-selection.test.ts:144:20
+    142|     const first=await t.mutation(internal.execution.conversations.star…
+    143|     const before=await client.query(api.workbench.models,{runId});
+    144|     expect(before).toMatchObject({effort:"low",effortChoices:["low","h…
+       |                    ^
+    145|     const selection={runId,catalogId,reasoningEffort:"high" as const,e…
+    146|     const changed=await client.mutation(api.workbench.setModel,selecti…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 skipped (4)
+   Start at  08:18:58
+   Duration  5.27s (transform 2.26s, setup 213ms, import 2.77s, tests 2.08s, environment 0ms)
+
+ ELIFECYCLE  Test failed. See above for more details.

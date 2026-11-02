@@ -4,6 +4,8 @@ import type { WorkflowId } from "@convex-dev/workflow";
 import type { FunctionReturnType } from "convex/server";
 import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
+import { installModel } from "@/__tests__/setup/model-configuration";
+import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
 afterEach(() => vi.useRealTimers());
@@ -15,6 +17,7 @@ test.each([
 ] as const)("%s refuses a response first observed without authority after same-generation readmission", async (entry) => {
     vi.useFakeTimers();
     const { t, args } = await seedInspectedEvidence();
+    await installModel(t, nativePiFixtureRoute, "saved_material_inspection");
     workflowTest.register(t);
     const missionId = await t.mutation(internal.execution.missions.start, {
         runId: args.runId,
@@ -245,6 +248,7 @@ test("a reused earlier request supplies its awaited result after newer requests"
 
 test("a recreated invocation receives retained notes, human instructions and obligations automatically", async () => {
     const { t, args } = await seedInspectedEvidence();
+    await installModel(t, nativePiFixtureRoute, "saved_material_inspection");
     await t.run((ctx) =>
         ctx.db.patch(args.runId, {
             researchAngle: "Compare operational control and distribution.",
@@ -294,6 +298,7 @@ test("a recreated invocation receives retained notes, human instructions and obl
 
 test("required context over capacity blocks without discarding notes or obligations", async () => {
     const { t, args } = await seedInspectedEvidence();
+    await installModel(t, nativePiFixtureRoute, "saved_material_inspection");
     const missionId = await t.mutation(internal.execution.missions.start, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
@@ -373,6 +378,7 @@ test("a returned batch is persisted before dispatch and cannot complete with unf
 
 test("late cancelled output is retained but cannot create requests or advance the mission", async () => {
     const { t, args } = await seedInspectedEvidence();
+    await installModel(t, nativePiFixtureRoute, "saved_material_inspection");
     const missionId = await t.mutation(internal.execution.missions.start, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
@@ -507,6 +513,7 @@ test.each([
 ])("an observed paid response is adopted after a crash in generation %s without dispatching a second provider call", async (recoveredGeneration) => {
     vi.useFakeTimers();
     const { t, args } = await seedInspectedEvidence();
+    await installModel(t, nativePiFixtureRoute, "saved_material_inspection");
     const missionId = await t.mutation(internal.execution.missions.start, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
@@ -621,6 +628,7 @@ test.each([
 
 test("exact history pagination reconstructs large observable records without gaps", async () => {
     const { t, args } = await seedInspectedEvidence();
+    await installModel(t, nativePiFixtureRoute, "saved_material_inspection");
     const missionId = await t.mutation(internal.execution.missions.start, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
@@ -693,6 +701,7 @@ test.each([
     "duplicate",
 ])("malformed tool correlation %s blocks explicitly and retains the response", async (correlation) => {
     const { t, args } = await seedInspectedEvidence();
+    await installModel(t, nativePiFixtureRoute, "saved_material_inspection");
     const missionId = await t.mutation(internal.execution.missions.start, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
@@ -736,6 +745,7 @@ test.each([
 
 test("the fresh context automatically carries the previous observable assistant reply", async () => {
     const { t, args } = await seedInspectedEvidence();
+    await installModel(t, nativePiFixtureRoute, "saved_material_inspection");
     const missionId = await t.mutation(internal.execution.missions.start, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,

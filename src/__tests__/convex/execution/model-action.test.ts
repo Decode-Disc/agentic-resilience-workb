@@ -7,6 +7,7 @@ import type { WorkflowId } from "@convex-dev/workflow";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
+import { installModel } from "@/__tests__/setup/model-configuration";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
 vi.mock("@convex/integrations/modelTransport", async (importOriginal) => ({
@@ -14,18 +15,6 @@ vi.mock("@convex/integrations/modelTransport", async (importOriginal) => ({
         typeof import("@convex/integrations/modelTransport")
     >()),
     invokeDeferredAgentTurn: vi.fn(),
-}));
-vi.mock("@convex/integrations/modelRouting", async (importOriginal) => ({
-    ...(await importOriginal<
-        typeof import("@convex/integrations/modelRouting")
-    >()),
-    missionRoutes: {
-        saved_material_inspection_v1: {
-            model: "test/inspection",
-            provider: "test-provider",
-            authorizedForAgent: true,
-        },
-    },
 }));
 afterEach(() => {
     vi.useRealTimers();
@@ -36,6 +25,11 @@ afterEach(() => {
 async function liveInvocationFixture(requestKey: string) {
     const fixture = await seedInspectedEvidence();
     const { t, args } = fixture;
+    await installModel(
+        t,
+        { model: "test/inspection", provider: "test-provider" },
+        "saved_material_inspection",
+    );
     const missionId = await t.mutation(internal.execution.missions.start, {
         generationBackend: { id: "convex-agent", version: 2 },
         runId: args.runId,

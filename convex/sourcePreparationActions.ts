@@ -34,6 +34,7 @@ import {
     SOURCE_RETRIEVAL_VERSION,
     sourceComparisonQuery,
 } from "@convex/domain/sourceRetrievalPolicy";
+import { executionFailureCode } from "@convex/execution/errors";
 import type { SourceDocumentRetrievalInput } from "@convex/integrations/approvedSourceRetrieval";
 import {
     createExaContentsAdapter,
@@ -52,10 +53,8 @@ import {
     qualifySourceDocument,
     type SourceComparisonAttemptResult,
 } from "@convex/integrations/sourceQualification";
-import {
-    type SourceQualificationRoute,
-    sourceQualificationRoutes,
-} from "@convex/integrations/sourceQualificationConfig";
+import type { SourceQualificationRoute } from "@convex/integrations/sourceQualificationConfig";
+import { revisionRoute } from "@convex/modelConfiguration";
 import type { FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -86,7 +85,7 @@ type PreparationModelReceipt = {
     usage: unknown;
 };
 
-/** Owns dispatch admission, routes, finite automatic fallback and receipts for both real model tasks. */
+/** Owns dispatch admission, pinned routing, bounded technical retry and receipts for both model tasks. */
 async function executePreparationModel<
     Result extends QualificationAttemptResult | SourceComparisonAttemptResult,
 >(
@@ -138,9 +137,30 @@ async function executePreparationModel<
                 receipt,
             };
         firstAttempt ??= plan.attempt;
-        const automaticFallback = firstAttempt === 1 && plan.attempt === 2;
-        const route = sourceQualificationRoutes[automaticFallback ? 1 : 0];
         await input.validate?.();
+        let configured: Doc<"modelRevisions">;
+        try {
+            configured = await ctx.runMutation(
+                internal.modelConfiguration.forPreparation,
+                {
+                    preparationId: preparation._id,
+                    expectedGeneration: preparation.executionGeneration,
+                },
+            );
+        } catch (error) {
+            const code =
+                preparationFailureCode(error) ?? executionFailureCode(error);
+            if (code === "stale_execution")
+                return { reasonCode: code, providerCallId, receipt };
+            if (code === "model_unavailable" || code === "model_not_compatible")
+                return {
+                    reasonCode: "missing_configuration",
+                    providerCallId,
+                    receipt,
+                };
+            throw error;
+        }
+        const route = revisionRoute(configured);
         const attempt = {
             inputHash: input.inputHash,
             runId: preparation.runId,

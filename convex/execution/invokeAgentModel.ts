@@ -4,15 +4,12 @@ import { internal } from "@convex/_generated/api";
 import { type ActionCtx, internalAction } from "@convex/_generated/server";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { resolveAgentGenerationBackend } from "@convex/integrations/agentBackends";
-import {
-    configuredMissionRoute,
-    missionRoutes,
-    SIMULATION_MODEL_ROUTE,
-} from "@convex/integrations/modelRouting";
+import { SIMULATION_MODEL_ROUTE } from "@convex/integrations/modelRouting";
 import {
     agentInputByteLength,
     rejectedOutputDiagnostic,
 } from "@convex/integrations/modelTransport";
+import { revisionRoute } from "@convex/modelConfiguration";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
@@ -150,13 +147,20 @@ export async function invokeControlledGeneration(
                 code: "generation_backend_unknown",
             },
         });
+    const configuredModel = simulated
+        ? null
+        : await ctx.runQuery(internal.modelConfiguration.forMission, {
+              missionId: mission._id,
+          });
     const route = simulated
         ? {
               model: "simulation/controlled-turn",
               provider: "simulation",
               authorizedForAgent: true as const,
           }
-        : configuredMissionRoute(mission.definitionId, missionRoutes);
+        : configuredModel
+          ? revisionRoute(configuredModel)
+          : undefined;
     if (!route)
         return retainReply({
             response: { kind: "blocked", code: "missing_authorized_route" },
@@ -174,19 +178,25 @@ export async function invokeControlledGeneration(
         JSON.parse(invocation.inputJson),
     );
     if (
-        (await agentInputByteLength({
-            instructions: definition.instructions,
-            prompt: invocation.inputJson,
-            operations: tools,
-            nativeConversation: definition.nativeConversation,
-            definitionVersion: definition.version,
-            nativeRoute:
-                mission.executionRuntime === "pi-durable"
-                    ? simulated
-                        ? SIMULATION_MODEL_ROUTE
-                        : route
-                    : undefined,
-        })) > MAX_CONTEXT_BYTES
+        (await agentInputByteLength(
+            {
+                instructions: definition.instructions,
+                prompt: invocation.inputJson,
+                operations: tools,
+                nativeConversation: definition.nativeConversation,
+                definitionVersion: definition.version,
+                nativeRoute:
+                    mission.executionRuntime === "pi-durable"
+                        ? simulated
+                            ? SIMULATION_MODEL_ROUTE
+                            : route
+                        : undefined,
+            },
+            async (key) =>
+                (await ctx.runQuery(internal.modelConfiguration.profile, {
+                    key,
+                })) ?? undefined,
+        )) > MAX_CONTEXT_BYTES
     )
         return retainReply({
             response: { kind: "blocked", code: "context_capacity" },

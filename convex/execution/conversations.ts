@@ -14,6 +14,7 @@ import {
     readConversationMessages,
     saveConversationMessage,
 } from "@convex/integrations/agentStorage";
+import { modelPrepared } from "@convex/modelConfiguration";
 import {
     localBrowserFixturesEnabled,
     requireWorkspaceRun,
@@ -203,7 +204,28 @@ export async function submitAuthorizedMessage(
     let conversation = await conversationForRun(ctx, args.runId);
     if (!conversation) {
         const storageRef = await createConversationStorage(ctx, visitor._id);
+        const setting = await ctx.db
+            .query("agentModelSettings")
+            .withIndex("by_agent", (q) => q.eq("agent", "workbench"))
+            .unique();
+        const defaultModel = setting
+            ? await ctx.db.get(setting.catalogId)
+            : null;
+        const defaultConfiguration = defaultModel?.currentRevisionId
+            ? await ctx.db.get(defaultModel.currentRevisionId)
+            : null;
         const id = await ctx.db.insert("agentConversations", {
+            ...(defaultModel?.enabled && modelPrepared(defaultModel)
+                ? {
+                      modelCatalogId: defaultModel._id,
+                      ...(defaultConfiguration?.reasoningEffort
+                          ? {
+                                reasoningEffort:
+                                    defaultConfiguration.reasoningEffort,
+                            }
+                          : {}),
+                  }
+                : {}),
             ...((await ctx.db.get(args.runId))?.startMode === "framed"
                 ? {
                       definitionId: "workbench_v1" as const,

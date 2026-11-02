@@ -1,0 +1,10 @@
+{
+  "publication": {
+    "hasActiveWorkers": false,
+    "held": false
+  },
+  "environment": {
+    "fixtureFlagPresent": false,
+    "workbenchAgentEnabled": false
+  }
+}

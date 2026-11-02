@@ -7,7 +7,7 @@ export {
     MODEL_MAX_OUTPUT_TOKENS as QUALIFICATION_MAX_OUTPUT_TOKENS,
 } from "./modelRouting";
 
-/** Provider identifiers stay in transport configuration, outside domain records and workflows. */
+/** Historical evaluation candidates; live qualification and comparison use the administratively pinned Sources model. */
 export const sourceQualificationRoutes = [
     { model: "deepseek/deepseek-v4.1-flash", provider: "relace" },
     { model: "deepseek/deepseek-v4.1-flash-1017", provider: "relace" },

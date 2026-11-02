@@ -1,7 +1,7 @@
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { executionError } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
-import type { TranscriptContext } from "@earendil-works/pi-ai";
+import { type TranscriptContext, Type } from "@earendil-works/pi-ai";
 import { asSchema, type JSONSchema7, jsonSchema, type ToolSet, tool } from "ai";
 import { convexToZod } from "convex-helpers/server/zod4";
 import { z } from "zod";
@@ -16,6 +16,22 @@ import inputProfiles from "./piInputProfiles.json";
 export const PI_MISSION_EXTENSION = "workbench";
 export const PI_MISSION_INPUT =
     "Continue the authorized mission using its current required state. Return its domain completion JSON when its work is complete.";
+
+/** Native execution and offline calibration use the same tool metadata. */
+export async function piToolMetadata(
+    name: string,
+    operation: Pick<AgentOperationDefinition, "description" | "inputValidator">,
+) {
+    return {
+        name,
+        description: operation.description,
+        replay: "safe" as const,
+        executionMode: "sequential" as const,
+        parameters: Type.Unsafe<Record<string, unknown>>(
+            await asSchema(agentOperationInputSchema(operation)).jsonSchema,
+        ),
+    };
+}
 
 /** Pins the effective model tool declarations independently of object-key order and SDK metadata. */
 export function modelToolSetKey(
@@ -247,6 +263,9 @@ export async function piInputProfileKey(args: AgentInput): Promise<string> {
                       provider: args.nativeRoute.provider,
                   }
                 : undefined,
+            ...(args.nativeRoute?.profileKey
+                ? { configuration: args.nativeRoute.profileKey }
+                : {}),
             settings: args.nativeRoute
                 ? routedModelSettings(args.nativeRoute)
                 : null,
@@ -283,10 +302,16 @@ async function serializedTools(operations: AgentInput["operations"]) {
 }
 
 /** Native profiles count the exact fixed envelope plus the once-escaped required JSON; other engines keep their canonical input. */
-export async function agentInputByteLength(args: AgentInput): Promise<number> {
+export async function agentInputByteLength(
+    args: AgentInput,
+    lookupProfile?: (key: string) => Promise<number | undefined>,
+): Promise<number> {
     if (args.nativeRoute) {
         const profiles: Record<string, number> = inputProfiles.profiles;
-        const overhead = profiles[await piInputProfileKey(args)];
+        const key = await piInputProfileKey(args);
+        const overhead = args.nativeRoute.profileKey
+            ? await lookupProfile?.(key)
+            : profiles[key];
         if (overhead === undefined)
             throw executionError("model_input_profile_unavailable");
         return (

@@ -13,6 +13,7 @@ import {
     assertPreparationExecutionFence,
 } from "@convex/domain/sourcePreparationAuthority";
 import { agentToolSetKey } from "@convex/integrations/modelInput";
+import { pinMissionModel } from "@convex/modelConfiguration";
 import { providerAttemptValidator } from "@convex/providerCalls";
 import schema from "@convex/schema";
 import { type Infer, v } from "convex/values";
@@ -315,6 +316,7 @@ export const begin = internalMutation({
             : null;
         if (!args.purpose && previousInvocation?.status === "started")
             return { kind: "blocked" as const, code: "invocation_pending" };
+        if (args.provenance === "live") await pinMissionModel(ctx, mission);
         const context = await buildMissionContext(
             ctx,
             mission._id,

@@ -1,7 +1,6 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-
 import { mutation } from "./_generated/server";
+import { requireAdmin } from "./administrationAuthority";
 import { cancelRunExecution } from "./domain/runCancellation";
 import { withdrawableRun } from "./domain/runWithdrawal";
 
@@ -13,19 +12,7 @@ export const restoreQuota = mutation({
         if (reason.length < 12 || reason.length > 500) {
             throw new Error("Quota restoration requires a specific reason");
         }
-        const authUserId = await getAuthUserId(ctx);
-        if (!authUserId) {
-            throw new Error("Not authenticated");
-        }
-        const admin = await ctx.db
-            .query("visitors")
-            .withIndex("by_auth_user_id", (query) =>
-                query.eq("authUserId", authUserId),
-            )
-            .unique();
-        if (admin?.status !== "active" || admin.role !== "admin") {
-            throw new Error("Unauthorized");
-        }
+        const admin = await requireAdmin(ctx);
 
         const run = await ctx.db.get(args.runId);
         if (!run?.ownerVisitorId || !run.reservationStatus) {
@@ -75,19 +62,7 @@ export const withdrawDossier = mutation({
         if (reason.length < 12 || reason.length > 500) {
             throw new Error("Dossier withdrawal requires a specific reason");
         }
-        const authUserId = await getAuthUserId(ctx);
-        if (!authUserId) {
-            throw new Error("Not authenticated");
-        }
-        const admin = await ctx.db
-            .query("visitors")
-            .withIndex("by_auth_user_id", (query) =>
-                query.eq("authUserId", authUserId),
-            )
-            .unique();
-        if (admin?.status !== "active" || admin.role !== "admin") {
-            throw new Error("Unauthorized");
-        }
+        const admin = await requireAdmin(ctx);
         const run = await ctx.db.get(args.runId);
         if (!run) {
             throw new Error("Research run not found");

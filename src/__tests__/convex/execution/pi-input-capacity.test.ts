@@ -43,21 +43,6 @@ import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 
-vi.mock("@convex/integrations/modelRouting", async (original) => {
-    const source =
-        await original<typeof import("@convex/integrations/modelRouting")>();
-    const { nativePiFixtureRoute } = await import(
-        "@/__tests__/setup/pi-native"
-    );
-    return {
-        ...source,
-        missionRoutes: {
-            ...source.missionRoutes,
-            conversation_validation_v1: nativePiFixtureRoute,
-        },
-    };
-});
-
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
@@ -231,9 +216,6 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
     );
     const profiles: Record<string, number> = {};
     const samples = [];
-    const productionRouting = await vi.importActual<
-        typeof import("@convex/integrations/modelRouting")
-    >("@convex/integrations/modelRouting");
     for (const [id, version] of agentDefinitionIdValidator.members.flatMap<
         [AgentDefinition["id"], number]
     >((member) =>
@@ -312,9 +294,6 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
                 SIMULATION_MODEL_ROUTE,
                 nativePiFixtureRoute,
                 ...(id === "workbench_v1" ? [WORKBENCH_MODEL_ROUTE] : []),
-                ...(productionRouting.missionRoutes[id]
-                    ? [productionRouting.missionRoutes[id]]
-                    : []),
             ];
             for (const route of routes) {
                 if (!route) continue;

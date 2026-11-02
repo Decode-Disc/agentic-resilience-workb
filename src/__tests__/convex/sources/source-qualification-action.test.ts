@@ -12,6 +12,7 @@ import {
     getFunctionName,
 } from "convex/server";
 import { afterEach, expect, test, vi } from "vitest";
+import { installModel } from "@/__tests__/setup/model-configuration";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
 
 afterEach(() => {
@@ -73,7 +74,7 @@ const success = () =>
 async function capturedCandidate(
     text = "ServiceNow provides workflow software.",
 ) {
-    const fixture = await seedSourcePreparation();
+    const fixture = await seedSourcePreparation({ models: true });
     const { t, runId, corpusRevisionId, sourceId } = fixture;
     const preparationId = await t.mutation(
         internal.sourcePreparation.claimForDiscovery,
@@ -199,7 +200,28 @@ test("reads credentials from the current Node invocation after environment repla
     ).toHaveLength(1);
 });
 
-test("uses at most one technical fallback and records both attempts", async () => {
+test("qualification uses the administratively assigned Sources model", async () => {
+    const { t, preparationId, sourceCaptureId } = await capturedCandidate();
+    await installModel(
+        t,
+        { model: "example/documentary-model", provider: "test-provider" },
+        "sources",
+    );
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    const request = vi.fn<typeof fetch>(async () => success());
+    vi.stubGlobal("fetch", request);
+    expect(
+        await t.action(internal.sourcePreparationActions.qualifySource, {
+            preparationId,
+            sourceCaptureId,
+        }),
+    ).toMatchObject({ status: "qualified" });
+    expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body)).model).toBe(
+        "example/documentary-model",
+    );
+});
+
+test("retries at most once with the same assigned model and records both attempts", async () => {
     const { t, preparationId, sourceCaptureId } = await capturedCandidate();
     vi.stubEnv("OPENROUTER_API_KEY", "test-key");
     const request = vi
@@ -219,7 +241,7 @@ test("uses at most one technical fallback and records both attempts", async () =
     ).toMatchObject({ status: "qualified" });
     expect(request).toHaveBeenCalledTimes(2);
     expect(JSON.parse(String(request.mock.calls[1]?.[1]?.body)).model).toBe(
-        "deepseek/deepseek-v4.1-flash-1017",
+        "z-ai/glm-5.3-flash",
     );
     expect(
         await t.run((ctx) => ctx.db.query("providerCalls").take(3)),

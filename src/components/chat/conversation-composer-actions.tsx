@@ -33,9 +33,11 @@ import {
 export function ConversationComposerActions({
     actionLabel,
     onResumeQueue,
+    onSendCommand,
 }: {
     actionLabel?: string;
     onResumeQueue?: () => void;
+    onSendCommand?: () => boolean;
 }) {
     const aui = useAui();
     const running = useAuiState((s) => s.thread.isRunning);
@@ -62,6 +64,7 @@ export function ConversationComposerActions({
     const resume = !running && !text.trim() && onResumeQueue;
     const dispatch = (steer: boolean) => {
         setOptionsOpen(false);
+        if (onSendCommand?.()) return;
         aui.composer().send({ steer });
     };
     const label = stop

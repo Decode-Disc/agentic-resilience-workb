@@ -2,6 +2,7 @@ import { internal } from "@convex/_generated/api";
 import { internalMutation, internalQuery } from "@convex/_generated/server";
 import { stableStringify } from "@convex/domain/sourcePassages";
 import { readPreparationLimits } from "@convex/domain/sourcePreparationAuthority";
+import { pinMissionModel } from "@convex/modelConfiguration";
 import { localBrowserFixturesEnabled } from "@convex/runWorkspace";
 import { workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
@@ -359,6 +360,7 @@ export const resume = internalMutation({
             (!localBrowserFixturesEnabled() || run.purpose !== "browser_test")
         )
             throw executionError("simulation_not_authorized");
+        if (!args.simulation) await pinMissionModel(ctx, mission);
         if (mission.executionRuntime === "pi-durable") {
             if (
                 mission.generationBackend?.id !== "pi-durable" ||

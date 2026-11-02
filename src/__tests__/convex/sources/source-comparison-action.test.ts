@@ -29,7 +29,7 @@ afterEach(() => {
 
 test("stores a local not-run result when no comparable primary passage exists", async () => {
     const { t, runId, corpusRevisionId, sourceId } =
-        await seedSourcePreparation();
+        await seedSourcePreparation({ models: true });
     const preparationId = await t.mutation(
         internal.sourcePreparation.claimForDiscovery,
         { runId, corpusRevisionId, expectedExecutionGeneration: 3 },
@@ -144,7 +144,7 @@ test("stores a local not-run result when no comparable primary passage exists", 
 async function capturedComparison(
     primaryText = "The company competes in enterprise workflow software. Competitors may bundle workflow products into broader subscriptions, which can affect how customers evaluate separate applications and platform pricing.",
 ) {
-    const fixture = await seedSourcePreparation();
+    const fixture = await seedSourcePreparation({ models: true });
     const { t, runId, corpusRevisionId, sourceId } = fixture;
     const preparationId = await t.mutation(
         internal.sourcePreparation.claimForDiscovery,

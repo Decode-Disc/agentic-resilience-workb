@@ -1,0 +1,12 @@
+{
+  "backend": "local-aboul_panga-dd_proto",
+  "port": 3210,
+  "publication": {
+    "hasActiveWorkers": false,
+    "held": false
+  },
+  "fixtureFlagPresent": false,
+  "fixtureEnabled": false,
+  "workbenchFlagPresent": false,
+  "workbenchEnabled": false
+}
