@@ -35,12 +35,19 @@ import {
     validateOperationExecutionResult,
 } from "./executionProtocol";
 import {
+    operationEventObservation,
+    retainOperationEventPayload,
+} from "./journal";
+import {
     domainDataPatch,
     operationIdentityScope,
     operationProgressKeys,
     retainedOperationPin,
 } from "./missionData";
-import { dispatchFailureValidator } from "./operationContracts";
+import {
+    dispatchFailureValidator,
+    isCommonConsultation,
+} from "./operationContracts";
 import { schedulePiMission } from "./piControl";
 
 type Outcome = Infer<typeof operationOutcomeValidator>;
@@ -67,6 +74,7 @@ async function recordEvent(
     kind: string,
     code?: string,
     admissionOutcome?: Infer<typeof operationRefusalValidator>,
+    options?: { historySource?: true },
 ) {
     const event = {
         kind,
@@ -87,14 +95,31 @@ async function recordEvent(
     const mission = request.missionId
         ? await ctx.db.get(request.missionId)
         : null;
-    if (mission) return recordMissionEvent(ctx, mission, event);
+    const historySource =
+        !isCommonConsultation(request.input.kind) &&
+        (kind === "operation_effect_applied" ||
+            options?.historySource === true);
+    let eventId: Id<"agentExecutionEvents">;
+    if (mission)
+        eventId = await recordMissionEvent(ctx, mission, {
+            ...event,
+            historySource: historySource ? true : undefined,
+        });
     else if (request.runId)
-        return ctx.db.insert("agentExecutionEvents", {
+        eventId = await ctx.db.insert("agentExecutionEvents", {
             ...event,
             runId: request.runId,
             occurredAt: Date.now(),
         });
-    throw executionError("request_unavailable");
+    else throw executionError("request_unavailable");
+    const observation = operationEventObservation(
+        request,
+        kind,
+        admissionOutcome,
+    );
+    if (observation !== undefined)
+        await retainOperationEventPayload(ctx, eventId, observation);
+    return eventId;
 }
 
 async function requestAtAdmission(
@@ -208,7 +233,7 @@ export async function retainOperationEffect(
     if (request.status !== "running")
         throw executionError("operation_not_dispatched");
     await ctx.db.patch(request._id, { effect });
-    await recordEvent(ctx, request, "operation_effect_applied");
+    await recordEvent(ctx, { ...request, effect }, "operation_effect_applied");
 }
 
 /** One retained logical request drives both system calls and deferred model tools. */
@@ -715,7 +740,11 @@ export const recordResult = internalMutation({
                 status: "observed",
                 completedAt: Date.now(),
             });
-            await recordEvent(ctx, request, "operation_observed");
+            await recordEvent(
+                ctx,
+                { ...request, outcome },
+                "operation_observed",
+            );
             if (request.waitEventId && !request.waitNotified) {
                 await workflow.sendEvent(ctx, {
                     id: request.waitEventId as EventId,
@@ -755,6 +784,7 @@ export const recordResult = internalMutation({
             );
             return { kind: "refused", code };
         }
+        let advancedDomainProgress = false;
         if (mission) {
             const definition = getAgentDefinition(
                 mission.definitionId,
@@ -785,6 +815,10 @@ export const recordResult = internalMutation({
                 })
             )
                 throw executionError("mission_state_invalid");
+            advancedDomainProgress =
+                !isCommonConsultation(request.input.kind) &&
+                (progress.progressKeys?.length ?? 0) >
+                    mission.progressKeys.length;
             await ctx.db.patch(mission._id, {
                 ...domainDataPatch(
                     mission,
@@ -811,9 +845,12 @@ export const recordResult = internalMutation({
             {
                 ...(await requestAtAdmission(ctx, request)),
                 expectedGeneration: args.expectedGeneration,
+                outcome,
             },
             "operation_completed",
             outcome.kind === "success" ? undefined : outcome.code,
+            undefined,
+            { historySource: advancedDomainProgress ? true : undefined },
         );
         if (
             mission?.executionRuntime === "pi-durable" &&

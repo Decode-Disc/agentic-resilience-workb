@@ -51,3 +51,24 @@ export const dispatchFailureValidator = v.object({
     ),
     code: v.string(),
 });
+
+/** Bounded immutable journal content; absent historical detail is never reconstructed. */
+export const retainedPayloadValidator = v.object({
+    version: v.literal(1),
+    state: v.union(v.literal("complete"), v.literal("incomplete")),
+    json: v.optional(v.string()),
+    contentHash: v.optional(v.string()),
+    sizeBytes: v.number(),
+    code: v.optional(v.string()),
+});
+
+const COMMON_CONSULTATIONS: ReadonlySet<string> = new Set([
+    "consult_conversation",
+    "consult_mission_state",
+    "consult_run_state",
+]);
+
+/** Consultation audit entries cannot manufacture new retained source material. */
+export function isCommonConsultation(kind: string): boolean {
+    return COMMON_CONSULTATIONS.has(kind);
+}

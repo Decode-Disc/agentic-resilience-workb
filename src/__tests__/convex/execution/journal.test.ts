@@ -1,12 +1,284 @@
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { sha256Hex } from "@convex/domain/sourcePassages";
+import { recordMissionEvent } from "@convex/execution/authority";
+import {
+    projectMissionHistoryEvent,
+    retainInvocationPayload,
+    retainOperationEventPayload,
+} from "@convex/execution/journal";
 import { makeFunctionReference } from "convex/server";
-import { expect, test } from "vitest";
+import { afterEach, assert, expect, test, vi } from "vitest";
+import { seedHistoryMission } from "@/__tests__/setup/execution-history";
 import {
     seedInspectedEvidence,
     seedSourcePreparation,
 } from "@/__tests__/setup/source-preparation";
+
+afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
+});
+
+test("older_event_never_acquires_a_later_reply", async () => {
+    const f = await seedHistoryMission();
+    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        taskKey: "immutable-parts",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready");
+    await f.t.run(async (ctx) => {
+        const invocation = await ctx.db.get(begun.invocationId);
+        assert(invocation);
+        await retainInvocationPayload(
+            ctx,
+            invocation,
+            "request",
+            JSON.stringify({ prompt: "Exact original request" }),
+        );
+    });
+    const event = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_mission_and_kind", (q) =>
+                q
+                    .eq("missionId", f.missionId)
+                    .eq("kind", "invocation_request_recorded"),
+            )
+            .unique(),
+    );
+    assert(event);
+    const before = await f.t.run((ctx) =>
+        projectMissionHistoryEvent(ctx, event),
+    );
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(begun.invocationId, {
+            outputJson: "Later reply",
+            status: "returned",
+        });
+        const invocation = await ctx.db.get(begun.invocationId);
+        assert(invocation);
+        await retainInvocationPayload(
+            ctx,
+            invocation,
+            "reply",
+            JSON.stringify({ text: "Later reply" }),
+        );
+    });
+    expect(
+        await f.t.run((ctx) => projectMissionHistoryEvent(ctx, event)),
+    ).toEqual(before);
+    expect(before.json).toContain("Exact original request");
+    expect(before.json).not.toContain("Later reply");
+});
+
+test("terminal metadata cannot acquire a reply retained after its event", async () => {
+    const f = await seedHistoryMission();
+    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        taskKey: "terminal-metadata",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready");
+    const event = await f.t.run(async (ctx) => {
+        const mission = await ctx.db.get(f.missionId);
+        assert(mission);
+        return ctx.db.get(
+            await recordMissionEvent(ctx, mission, {
+                kind: "mission_completed",
+                cause: "earlier-terminal-metadata",
+                invocationId: begun.invocationId,
+            }),
+        );
+    });
+    assert(event);
+    const before = await f.t.run((ctx) =>
+        projectMissionHistoryEvent(ctx, event),
+    );
+    await f.t.run(async (ctx) => {
+        const invocation = await ctx.db.get(begun.invocationId);
+        assert(invocation);
+        await retainInvocationPayload(
+            ctx,
+            invocation,
+            "reply",
+            JSON.stringify({ text: "Reply retained afterwards" }),
+        );
+    });
+    expect(
+        await f.t.run((ctx) => projectMissionHistoryEvent(ctx, event)),
+    ).toEqual(before);
+});
+
+test("a recorded invocation part without its immutable payload is an integrity failure", async () => {
+    const f = await seedHistoryMission();
+    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        taskKey: "missing-recorded-part",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready");
+    const event = await f.t.run(async (ctx) => {
+        const mission = await ctx.db.get(f.missionId);
+        assert(mission);
+        return ctx.db.get(
+            await recordMissionEvent(ctx, mission, {
+                kind: "invocation_request_recorded",
+                cause: "inconsistent-record",
+                invocationId: begun.invocationId,
+            }),
+        );
+    });
+    assert(event);
+    await expect(
+        f.t.run((ctx) => projectMissionHistoryEvent(ctx, event)),
+    ).rejects.toThrow("journal_payload_unavailable");
+});
+
+test("operation observations are canonical immutable snapshots with explicit capacity gaps", async () => {
+    const f = await seedHistoryMission();
+    const eventId = await f.t.run(async (ctx) => {
+        const mission = await ctx.db.get(f.missionId);
+        assert(mission);
+        return recordMissionEvent(ctx, mission, {
+            kind: "operation_observed",
+            cause: "immutable-observation",
+        });
+    });
+    await f.t.run((ctx) =>
+        retainOperationEventPayload(ctx, eventId, { b: 2, a: 1 }),
+    );
+    await f.t.run((ctx) =>
+        retainOperationEventPayload(ctx, eventId, { a: 1, b: 2 }),
+    );
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(eventId)))?.payload,
+    ).toMatchObject({ state: "complete", json: '{"a":1,"b":2}' });
+    await expect(
+        f.t.run((ctx) => retainOperationEventPayload(ctx, eventId, { a: 3 })),
+    ).rejects.toThrow("journal_payload_conflict");
+    const largeId = await f.t.run(async (ctx) => {
+        const mission = await ctx.db.get(f.missionId);
+        assert(mission);
+        return recordMissionEvent(ctx, mission, {
+            kind: "operation_observed",
+            cause: "oversized-observation",
+        });
+    });
+    await f.t.run((ctx) =>
+        retainOperationEventPayload(ctx, largeId, {
+            text: "a".repeat(513 * 1024),
+        }),
+    );
+    const large = await f.t.run((ctx) => ctx.db.get(largeId));
+    expect(large?.payload).toMatchObject({
+        state: "incomplete",
+        code: "journal_operation_capacity",
+    });
+    expect(large?.payload?.json).toBeUndefined();
+    expect(large?.payload?.sizeBytes).toBeGreaterThan(512 * 1024);
+});
+
+test("retained history indexing is bounded, idempotent and preserves a frozen pre-upgrade cutoff", async () => {
+    const f = await seedHistoryMission();
+    const { original, throughSequence } = await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.missionId, { historyProjection: undefined });
+        for (let i = 0; i < 25; i++) {
+            const mission = await ctx.db.get(f.missionId);
+            assert(mission);
+            await recordMissionEvent(ctx, mission, {
+                kind: "legacy_record",
+                cause: `legacy:${i}`,
+                interpretedNeed: `Original retained detail ${i}`,
+            });
+        }
+        const rows = await ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_mission_and_sequence", (q) =>
+                q.eq("missionId", f.missionId),
+            )
+            .take(100);
+        for (const row of rows)
+            await ctx.db.patch(row._id, { historySourceSequence: undefined });
+        const original = await ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_mission_and_sequence", (q) =>
+                q.eq("missionId", f.missionId),
+            )
+            .take(100);
+        const mission = await ctx.db.get(f.missionId);
+        assert(mission);
+        return { original, throughSequence: mission.nextEventSequence - 1 };
+    });
+    const args = {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        throughSequence,
+    };
+    const first = await f.t.mutation(
+        internal.execution.journal.indexRetainedHistory,
+        args,
+    );
+    expect(first.done).toBe(false);
+    assert(first.cursor);
+    const indexed = () =>
+        f.t.run((ctx) =>
+            ctx.db
+                .query("agentExecutionEvents")
+                .withIndex("by_mission_and_history_source", (q) =>
+                    q
+                        .eq("missionId", f.missionId)
+                        .gt("historySourceSequence", 0),
+                )
+                .take(100),
+        );
+    expect(await indexed()).toHaveLength(20);
+    expect(
+        await f.t.mutation(
+            internal.execution.journal.indexRetainedHistory,
+            args,
+        ),
+    ).toEqual(first);
+    expect(await indexed()).toHaveLength(20);
+    const concurrentId = await f.t.run(async (ctx) => {
+        const mission = await ctx.db.get(f.missionId);
+        assert(mission);
+        return recordMissionEvent(ctx, mission, {
+            kind: "invocation_started",
+            cause: "concurrent-technical-record",
+        });
+    });
+    expect(
+        await f.t.mutation(internal.execution.journal.indexRetainedHistory, {
+            ...args,
+            cursor: first.cursor,
+        }),
+    ).toEqual({ done: true, cursor: null });
+    expect(
+        await f.t.mutation(
+            internal.execution.journal.indexRetainedHistory,
+            args,
+        ),
+    ).toEqual({ done: true, cursor: null });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(concurrentId)))
+            ?.historySourceSequence,
+    ).toBeUndefined();
+    for (const before of original) {
+        const after = await f.t.run((ctx) => ctx.db.get(before._id));
+        assert(after);
+        expect(after.historySourceSequence).toBe(before.sequence);
+        delete after.historySourceSequence;
+        expect(after).toEqual(before);
+    }
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.historyProjection,
+    ).toMatchObject({ ready: true, throughSequence });
+});
 
 test("new invocations identify their journal version without expanding continuation context", async () => {
     const { t, args } = await seedInspectedEvidence();

@@ -25,6 +25,7 @@ import {
     EXECUTION_WINDOW_MS,
     HISTORY_PAGE_SIZE,
 } from "./executionProtocol";
+import { projectMissionHistoryEvent } from "./journal";
 import { isRecoverableInterruption, missionScope } from "./missionData";
 import { cancelPiWake, schedulePiMission } from "./piControl";
 
@@ -176,6 +177,12 @@ export const start = internalMutation({
             progressKeys: [],
             workingNotes: "",
             nextEventSequence: 1,
+            historyProjection: {
+                version: 1,
+                throughSequence: 0,
+                cursor: null,
+                ready: true,
+            },
             createdAt: now,
             updatedAt: now,
         });
@@ -467,13 +474,10 @@ export const history = internalQuery({
         for (const event of events) {
             if (event.sequence === undefined)
                 throw executionError("mission_history_invalid");
-            const invocation = event.invocationId
-                ? await ctx.db.get(event.invocationId)
-                : null;
-            const request = event.requestId
-                ? await ctx.db.get(event.requestId)
-                : null;
-            const payload = JSON.stringify({ event, invocation, request });
+            const { json: payload } = await projectMissionHistoryEvent(
+                ctx,
+                event,
+            );
             if (offset >= payload.length && offset !== 0)
                 throw executionError("history_cursor_invalid");
             let end = Math.min(payload.length, offset + 4000);

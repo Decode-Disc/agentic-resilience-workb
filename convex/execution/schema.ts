@@ -23,8 +23,17 @@ import {
     operationRefusalValidator,
     requestInputValidator,
 } from "./executionProtocol";
+import { retainedPayloadValidator } from "./operationContracts";
 
 const missionFields = {
+    historyProjection: v.optional(
+        v.object({
+            version: v.literal(1),
+            throughSequence: v.number(),
+            cursor: v.union(v.string(), v.null()),
+            ready: v.boolean(),
+        }),
+    ),
     modelRevisionId: v.optional(v.id("modelRevisions")),
     reasoningEffort: v.optional(reasoningEffort),
     piActiveWriter: v.optional(v.string()),
@@ -183,13 +192,8 @@ export const executionTables = {
     agentInvocationPayloads: defineTable({
         invocationId: v.id("agentInvocations"),
         runId: v.id("researchRuns"),
-        version: v.literal(1),
+        ...retainedPayloadValidator.fields,
         part: v.union(v.literal("request"), v.literal("reply")),
-        state: v.union(v.literal("complete"), v.literal("incomplete")),
-        json: v.optional(v.string()),
-        contentHash: v.optional(v.string()),
-        sizeBytes: v.number(),
-        code: v.optional(v.string()),
         createdAt: v.number(),
     }).index("by_invocation_and_part", ["invocationId", "part"]),
     agentMissions: defineTable(
@@ -302,6 +306,8 @@ export const executionTables = {
         .index("by_mission_and_status", ["missionId", "status"])
         .index("by_invocation", ["invocationId"]),
     agentExecutionEvents: defineTable({
+        payload: v.optional(retainedPayloadValidator),
+        historySourceSequence: v.optional(v.number()),
         actor: v.optional(
             v.union(
                 v.object({ type: v.literal("system") }),
@@ -333,6 +339,10 @@ export const executionTables = {
         messageId: v.optional(v.id("agentMessageDeliveries")),
     })
         .index("by_mission_and_sequence", ["missionId", "sequence"])
+        .index("by_mission_and_history_source", [
+            "missionId",
+            "historySourceSequence",
+        ])
         .index("by_mission_and_kind", ["missionId", "kind"])
         .index("by_invocation_and_kind", ["invocationId", "kind"])
         .index("by_run", ["runId"]),

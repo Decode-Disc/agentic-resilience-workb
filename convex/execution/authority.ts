@@ -207,12 +207,19 @@ export async function recordMissionEvent(
         interpretedNeed?: string;
         generation?: number;
         instructionVersion?: number;
+        historySource?: true;
     },
 ) {
     const current = await ctx.db.get(mission._id);
     if (!current) throw executionError("mission_unavailable");
+    const { historySource, ...details } = event;
     const eventId = await ctx.db.insert("agentExecutionEvents", {
-        ...event,
+        ...details,
+        historySourceSequence:
+            historySource ||
+            ["mission_started", "mission_completed"].includes(event.kind)
+                ? current.nextEventSequence
+                : undefined,
         actor:
             event.actor ??
             (event.invocationId

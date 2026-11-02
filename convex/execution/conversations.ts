@@ -36,7 +36,11 @@ import {
     agentDefinitionIdValidator,
     agentScopeValidator,
 } from "./agentSchemas";
-import { requireDossierAuthority, requireMissionAuthority } from "./authority";
+import {
+    recordMissionEvent,
+    requireDossierAuthority,
+    requireMissionAuthority,
+} from "./authority";
 import { executionError, executionFailureCode } from "./errors";
 import {
     HISTORY_PAGE_SIZE,
@@ -61,7 +65,10 @@ async function event(
     actor?: Doc<"agentExecutionEvents">["actor"],
 ) {
     const run = await ctx.db.get(runId);
-    await ctx.db.insert("agentExecutionEvents", {
+    const details: Omit<
+        Doc<"agentExecutionEvents">,
+        "_id" | "_creationTime"
+    > = {
         actor:
             actor ??
             ([
@@ -80,7 +87,21 @@ async function event(
         conversationTurnId: turnId,
         messageId,
         occurredAt: Date.now(),
-    });
+    };
+    if (kind === "turn_steered" && turnId) {
+        const turn = await ctx.db.get(turnId);
+        const mission = turn?.missionId
+            ? await ctx.db.get(turn.missionId)
+            : null;
+        if (mission) {
+            await recordMissionEvent(ctx, mission, {
+                ...details,
+                historySource: true,
+            });
+            return;
+        }
+    }
+    await ctx.db.insert("agentExecutionEvents", details);
 }
 
 /** Request identities are shared by ordinary messages and explicit control exchanges. */
