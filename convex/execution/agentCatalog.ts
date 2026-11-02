@@ -45,7 +45,10 @@ export function assertOperationContract(
         throw executionError("operation_contract_invalid");
 }
 
-function bindAgentDefinition(definition: AgentDefinition): AgentDefinition {
+/** Apply the same closed contract when validating or resolving a registered definition. */
+export function bindAgentDefinition(
+    definition: AgentDefinition,
+): AgentDefinition {
     if (
         (definition.nativeConversation &&
             definition.executionScope !== "conversation") ||

@@ -35,7 +35,7 @@
         "test:watch": "TMPDIR=/tmp TEMP=/tmp TMP=/tmp vitest",
         "test:e2e": "node --experimental-strip-types scripts/local-dev.ts test:e2e",
         "typecheck": "tsc --noEmit && tsc --noEmit -p convex/tsconfig.json",
-        "lint": "biome lint . && node --experimental-strip-types scripts/check-imports.ts",
+        "lint": "biome lint . && node --experimental-strip-types scripts/check-imports.ts && node --experimental-strip-types scripts/check-execution-boundaries.ts",
         "format": "biome format --write .",
         "format:check": "biome format .",
         "check": "pnpm docs:check && pnpm design:check && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build",
