@@ -59,6 +59,8 @@ export type AgentDefinition = {
     operationDiagnostic?(code: string): string;
     conversationReply?(result: AgentResult): string;
     instructions: string;
+    /** Domain distinctions the native summarizer must preserve across compaction. */
+    compactionInstructions?: string;
     scopeValidator: Validator<AgentScope, "required", string>;
     stateValidator: Validator<AgentState, "required", string>;
     resultValidator: Validator<AgentResult, "required", string>;

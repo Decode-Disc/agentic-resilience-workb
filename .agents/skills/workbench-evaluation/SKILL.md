@@ -1,6 +1,6 @@
 ---
 name: workbench-evaluation
-description: Evaluate model-assisted work, evidence preparation and analytical outputs in the Agentic Resilience Workbench to inform decisions about usefulness, cost and limitations. Use to interpret recorded results, diagnose evidence or reasoning failures, or prepare bounded comparisons; distinguish available runners from planned evaluation needs and preserve retained evidence.
+description: Evaluate Workbench harness reliability, model usefulness and actual workflow outcomes separately. Use to interpret qualifications, diagnose failures or prepare bounded model and evidence comparisons, including paid browser qualification when authorized. Preserve recorded evidence and distinguish implemented runners from planned evaluation needs.
 ---
 
 # Workbench Evaluation
@@ -9,11 +9,11 @@ Help decide which approach produces useful evidence or a defensible analytical r
 
 ## When to Use
 
-Use when comparing model candidates, retrieval methods, source-selection policies or analytical approaches, interpreting their recorded results, or diagnosing where useful evidence or reasoning failed. This includes planning evaluation of appraisals and synthesis without assuming those stages or their runners are implemented. The skill can be selected automatically for those tasks or invoked as `$workbench-evaluation`.
+Use when qualifying the agent harness or a model-backed application path, comparing model candidates, retrieval methods, source-selection policies or analytical approaches, interpreting their recorded results, or diagnosing where useful evidence or reasoning failed. This includes planning evaluation of appraisals and synthesis without assuming those stages or their runners are implemented. The skill can be selected automatically for those tasks or invoked as `$workbench-evaluation`.
 
 ## When Not to Use
 
-Ordinary unit tests, UI checks, security audits and performance investigations use their dedicated workflows.
+Standalone unit tests, visual-only UI checks, security audits and performance investigations use their dedicated workflows. For an authorized model-backed browser qualification, use the browser workflow to exercise the application and this skill to judge the outcomes.
 
 Respect the requested mode. Inspection and planning remain read-only: propose the selection or use the archive preview instead of writing a snapshot. An authorized evaluation can retain its results within its agreed scope.
 
@@ -26,6 +26,7 @@ An unclear result does not always require another experiment. Select the smalles
 | Interpret recorded results | Reconstruct the conditions and explain what the saved observations establish. Stop with a supported interpretation and visible unknowns; do not launch a new comparison merely because the record is incomplete. |
 | Diagnose lost evidence | Follow the affected source or passage through the saved capture, selection, prepared input and accessible downstream material. Locate the first demonstrated loss, or identify the missing observation that prevents localization. Keep the diagnosis narrow unless evidence justifies expanding it. |
 | Examine an analytical result | Trace the disputed assertion, question-specific use, appraisal or synthesis relationship to its inputs, reasoning and controls. Distinguish a reasoning error from missing evidence, an unfinished check or a pending human decision. |
+| Qualify the harness or application path | Separate execution integrity from answer quality. Trace the request, operation result, persisted state, published reply and continuation; identify which of those boundaries the exercised path actually covers. |
 | Compare approaches | Define the decision and common conditions, then prepare the smallest informative comparison. Execute only within its authorization and stop at the agreed decision or evidence boundary. |
 
 If the goal is ambiguous, inspect the product context and existing results first, then ask one focused question about the unresolved decision. Do not turn a request for better analyst results into a model benchmark by default. Interpretations and diagnoses use the relevant framing and interpretation steps below; preparation and execution apply only when a new measurement is needed and authorized.
@@ -44,6 +45,22 @@ Use small deterministic fixtures to isolate policy rules. For analytical regress
 
 Match semantic evaluation to the submitted object and intended use. Useful source preparation does not establish correct assertion use, a defensible appraisal or supported synthesis relationships. For those outputs, inspect the argument and its objections, unknowns, permitted evidence and revisions; check diagram-to-note coherence where applicable. Separate human adoption from automated control outcomes. Use the current product requirements to select relevant cases rather than inferring analytical quality from retrieval scores.
 
+## Separate Harness Reliability from Model Quality
+
+A weak model can expose defects that a stronger model avoids by chance. Judge the system's handling of an imperfect response separately from the response's economic usefulness, so model selection cannot hide a broken execution boundary.
+
+| Dimension | Evidence to examine |
+| --- | --- |
+| Harness and application integrity | Authorization, actual state transitions, truthful published status, bounded completion, recovery after refusal or concurrent edits, retained messages and native conversation continuity. |
+| Model task quality | Economic specificity, preservation of the requested meaning, useful clarification, evidence use, supported inference and readable analyst-facing language. |
+| Exercised path | Deterministic fixture, real inference with isolated persistence, or protected browser through the actual application. Name the runtime and simulated boundaries; none automatically certifies another. |
+
+Use the user's selected inexpensive stress model for repeated harness checks while mechanical defects remain. A poor analytical answer can coexist with a passing harness case; a convincing answer cannot excuse lost instructions, false status or a stuck response. Qualify the intended stronger candidate after the relevant harness corrections, unless the user requests a separate bounded model investigation. Keep stress and quality candidates explicit, verify their exact provider/model identities before dispatch, and never substitute a cheaper or similarly named model silently. These roles are evaluation choices, not permanent production defaults.
+
+For each failure, locate the first demonstrated divergence using the original request, prepared input, raw model/tool output, operation receipt, persisted state and published message. Attribute it to the model, harness, provider/runtime, or a demonstrated interaction; keep the cause unresolved when observations cannot distinguish them. A model's invalid call is a model error; failure to refuse it safely or continue the dialogue can also be a harness error. A blocked state change does not make a contradictory published success claim acceptable. Do not diagnose a timeout from elapsed time alone.
+
+Assess analyst attribution against the actual request and its granted scope. An authorized refinement may add explanatory wording; ambiguity alone does not prove invented analyst intent or justify another guard. Distinguish a useful elaboration from an unsupported fact, changed meaning or unauthorized action.
+
 ## Define When to Stop
 
 More measurements are useful only when they can change the decision. Before preparing a new batch, identify the observation that would justify choosing an approach, retaining the current one, or concluding that the available evidence is insufficient. This keeps the study tied to analyst usefulness rather than continued score improvement.
@@ -60,6 +77,12 @@ Start with offline preparation, replay or scoring through an existing runner tha
 
 Before any paid inference or retrieval, require explicit authorization covering the exact lot, routes, maximum attempts and cost ceiling. Invocation of this skill does not supply that authorization. Respect existing runner gates; archived authorizations are historical records. Unknown external outcomes must not trigger blind retries. Do not alter provider configuration or run a live command merely to replace missing evidence.
 
+When qualifying corrections, first run the deterministic regressions and relevant runtime checks; put the authorized paid batch at the end on the identified final code. A further correction produces a distinct code stage and result set. Retain the first failure instead of pooling earlier and later attempts into one success rate. Prefer the cheapest check that can resolve the defect over another paid loop.
+
+For protected browser qualification, follow real admission, persisted operations, visible replies and reconnection on the target runtime. An isolated Convex experiment is evidence for its exercised boundary, not the deployed browser journey. Select relevant adversarial cases from observed failures: refused controls must preserve dialogue and documentary requests, concurrent edits must survive recovery, failed passage reads must permit recovery, and later exchanges must retain the native conversation. Verify the observable outcome, not merely the presence of a reply.
+
+Measure calls, latency and charges by entry point. Explicit buttons and typed slash commands should be checked against their implemented deterministic contract, including zero model invocation for the control itself; resumed research may incur its own authorized work. Ordinary text can require model interpretation: do not propose keyword recognition to avoid that call. An unwired composer API cannot qualify a browser slash interaction. Keep provider latency separate from host waiting and application overhead when measurements permit attribution.
+
 ## Interpret the Results
 
 Separate source inclusion, exact-span retention, equivalent useful evidence, quotation validity, factual support and downstream analytical correctness. A JSON-valid response is not necessarily correct. A missing expected span does not prove useful evidence is absent, and a favorable match count does not establish workflow completion.
@@ -67,6 +90,8 @@ Separate source inclusion, exact-span retention, equivalent useful evidence, quo
 For each apparent miss, inspect equivalent evidence and whether later processing can actually reach it. Record source inclusion, displayed qualification and downstream correctness separately. Observed captures and investigator-reviewed replays do not establish fresh-discovery or unfamiliar-company robustness; design a separate check before making those claims.
 
 Report unavailable, not-run, invalid, wrong and inconclusive results separately. Show meaningful errors and investigator disagreements alongside successful cases. Keep estimates, provider-reported charges and unknown-charge reservations distinct. Compare useful quality, latency and available cost without assuming a winner. Preserve failed attempts and original scores; corrected references or changed inputs create a separate version rather than rewriting history.
+
+Count attempted scenarios, completed responses, correct persisted effects and useful task outcomes separately. For each material case, compare the expected behavior with the observed state and published answer, then state the harness verdict, model-quality verdict and unresolved cause. Report real call count, elapsed time and reconciled charges for the identified code stage. A published answer is not necessarily a business success. A qualification conclusion must say whether the harness can continue to the intended model check, whether analytical usefulness remains insufficient, and which specific failures still prevent acceptance; a clean transport or schema result alone supports neither activation nor completion.
 
 ## Archive Retained Evidence
 

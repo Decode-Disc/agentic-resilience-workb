@@ -548,7 +548,17 @@ export async function runPiMission(
                         return result;
                     };
                     const expandedMessages = auxiliary
-                        ? transcript.messages
+                        ? definition.compactionInstructions
+                            ? [
+                                  {
+                                      role: "system" as const,
+                                      content:
+                                          definition.compactionInstructions,
+                                      timestamp: Date.now(),
+                                  },
+                                  ...transcript.messages,
+                              ]
+                            : transcript.messages
                         : piMissionMessages(
                               input.instructions,
                               input.prompt,

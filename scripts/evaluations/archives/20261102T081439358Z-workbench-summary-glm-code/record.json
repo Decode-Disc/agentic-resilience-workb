@@ -1,0 +1,1511 @@
+{
+    "schemaVersion": 1,
+    "id": "20261102T081439358Z-workbench-summary-glm-code",
+    "createdAt": "2026-11-02T08:14:39.358Z",
+    "git": {
+        "head": "a7a8737ce0ade64a6d53f76bebe6c03b1b8483cd",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex",
+            "archivePath": "repository/convex"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/setup",
+            "archivePath": "repository/src/__tests__/setup"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/workflows",
+            "archivePath": "repository/src/__tests__/convex/workflows"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/package.json",
+            "archivePath": "repository/package.json"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/pnpm-lock.yaml",
+            "archivePath": "repository/pnpm-lock.yaml"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/vitest.config.ts",
+            "archivePath": "repository/vitest.config.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/tsconfig.json",
+            "archivePath": "repository/tsconfig.json"
+        },
+        {
+            "origin": "/tmp/workbench-summary-qualification-20261102",
+            "archivePath": "external/qualification"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/qualification/cases.json",
+            "bytes": 5332,
+            "sha256": "039ba50e43cdb9fa83dc5532c7807f1e7f3da7b6b25b898e502361f94a37cde4"
+        },
+        {
+            "path": "external/qualification/code-fingerprints.json",
+            "bytes": 19467,
+            "sha256": "3c025d3f479fdf87e99e2534adca96cb667162d8af5ba0f43a22351b19df1cce"
+        },
+        {
+            "path": "external/qualification/deterministic.log",
+            "bytes": 662,
+            "sha256": "d6738bfce33bd0cd6b0b89d3ec9c79225132bd1a0720b0abc376ed7da1bfec42"
+        },
+        {
+            "path": "external/qualification/dry-v2.log",
+            "bytes": 507,
+            "sha256": "b63293750ca1c5f760fa1b3713d6bc0c0c168ba40d066927719ecf097bf19585"
+        },
+        {
+            "path": "external/qualification/dry-v2/authorship-and-switching-after-compaction.json",
+            "bytes": 95412,
+            "sha256": "6bfab8b28ca7b9763da6502292f0bb34b242aac75d294902f047e3263f49bd8f"
+        },
+        {
+            "path": "external/qualification/dry-v2/authorship-and-switching-final.json",
+            "bytes": 112271,
+            "sha256": "4bb83de5da86ed28e5b4ce24aaedaafb37098f311b01e319ddc8bb7a81d968f5"
+        },
+        {
+            "path": "external/qualification/dry-v2/authorship-and-switching-model.json",
+            "bytes": 443,
+            "sha256": "8a1b8f57d543fe0511fddcadf3723a2c7b4024526be524190e2223ca8c5da62e"
+        },
+        {
+            "path": "external/qualification/dry-v2/latest-scope-and-negation-after-compaction.json",
+            "bytes": 95219,
+            "sha256": "b545882da92760b09da5eebc54333facb01b00aa9ab33e17e34f797936c36faa"
+        },
+        {
+            "path": "external/qualification/dry-v2/latest-scope-and-negation-final.json",
+            "bytes": 112004,
+            "sha256": "73fde8ec3171052029f8745acb295ad1435f8c0f747b456996fe5ad9f5244bba"
+        },
+        {
+            "path": "external/qualification/dry-v2/latest-scope-and-negation-model.json",
+            "bytes": 443,
+            "sha256": "8a1b8f57d543fe0511fddcadf3723a2c7b4024526be524190e2223ca8c5da62e"
+        },
+        {
+            "path": "external/qualification/dry-v2/ledger.jsonl",
+            "bytes": 2754,
+            "sha256": "83f85344d3cf4cebcf6d1e948b9082bd59ae307b7a1c89bf5ec3052b819b5f99"
+        },
+        {
+            "path": "external/qualification/dry-v2/progress.json",
+            "bytes": 1266,
+            "sha256": "e864b57f5a39e54c04e41ab3630b54c0bc64fdc20900de8ed7107be3b22a8a01"
+        },
+        {
+            "path": "external/qualification/dry-v2/request-1.json",
+            "bytes": 15355,
+            "sha256": "011574d1bd87a135cd01a0abe91f92dd8803e50f7e08d1515f59b2055f4233ce"
+        },
+        {
+            "path": "external/qualification/dry-v2/request-2.json",
+            "bytes": 46712,
+            "sha256": "b78a55727378be550647c76d5fb189abab3f3a235f50253c028436435744af5f"
+        },
+        {
+            "path": "external/qualification/dry-v2/request-3.json",
+            "bytes": 47090,
+            "sha256": "4e7a829379451e56a3547587a5f447bc0f1a679ec7e49e11044d1974e9502fe7"
+        },
+        {
+            "path": "external/qualification/dry-v2/request-4.json",
+            "bytes": 15156,
+            "sha256": "60f3a7ff8e1b062def91419358b61f1d592dfd9f4140018a77c6af4dcfb098f5"
+        },
+        {
+            "path": "external/qualification/dry-v2/request-5.json",
+            "bytes": 46715,
+            "sha256": "9cd58d31512c7a3917ebf111909c9fde0a18747fbd0f1fe89c0979928fce8e06"
+        },
+        {
+            "path": "external/qualification/dry-v2/request-6.json",
+            "bytes": 47052,
+            "sha256": "e699eef5ba1edd3a5411229df23fcc9e130397ac8a4cdcac79a77f739f665aa1"
+        },
+        {
+            "path": "external/qualification/dry-v2/request-7.json",
+            "bytes": 15144,
+            "sha256": "3f208328713095024835706e7c61153044826efffb3f5e1291227af5f92f3a54"
+        },
+        {
+            "path": "external/qualification/dry-v2/request-8.json",
+            "bytes": 46615,
+            "sha256": "276e154853191f099609013df657008d8118aa964f81af07daa9e42fb4e615dd"
+        },
+        {
+            "path": "external/qualification/dry-v2/request-9.json",
+            "bytes": 47029,
+            "sha256": "5b48d2b768ec06aa1e454833f223c186f8ad8407f9e46160d00e69709c002a61"
+        },
+        {
+            "path": "external/qualification/dry-v2/response-1.txt",
+            "bytes": 373,
+            "sha256": "936b8088056a463407bbc97e41e7d8081e4ba038e932bc43fdf6edd9e7ba70ef"
+        },
+        {
+            "path": "external/qualification/dry-v2/response-2.txt",
+            "bytes": 379,
+            "sha256": "5a8288ed192e1793a906450e2259cdccf3db3e9eabe0906819153af3fe6627b9"
+        },
+        {
+            "path": "external/qualification/dry-v2/response-3.txt",
+            "bytes": 379,
+            "sha256": "86ae1a3f2aea1cdd4ae388f9495ff7cfbbbf7a938e5017ca7e1dd63db4a40aed"
+        },
+        {
+            "path": "external/qualification/dry-v2/response-4.txt",
+            "bytes": 373,
+            "sha256": "1ed6b9db4debc5df3130281af219a305d7fa181891ec2a03bc6af2c76344af91"
+        },
+        {
+            "path": "external/qualification/dry-v2/response-5.txt",
+            "bytes": 379,
+            "sha256": "f0054a50145cf7b977358e36a7f4384e1d320cd952ab01cc2c8abcc18e896ac8"
+        },
+        {
+            "path": "external/qualification/dry-v2/response-6.txt",
+            "bytes": 379,
+            "sha256": "ca5769c97404bae770745c56771df2a0269d2315a39f68efce22516a723a9e84"
+        },
+        {
+            "path": "external/qualification/dry-v2/response-7.txt",
+            "bytes": 373,
+            "sha256": "fd6242b5feddd528af17c4f494ad0aa9d7efdef463ad47b0191f7c99a4e18e14"
+        },
+        {
+            "path": "external/qualification/dry-v2/response-8.txt",
+            "bytes": 379,
+            "sha256": "c9c7db6b97ad5dd17e43ace23d39124ab3710d6ad3d6e9022b735f64490a4445"
+        },
+        {
+            "path": "external/qualification/dry-v2/response-9.txt",
+            "bytes": 379,
+            "sha256": "2d8c4ac4d3ce1c942b110daccdb1472653ca8387b260937fa5fb0c37003dceac"
+        },
+        {
+            "path": "external/qualification/dry-v2/saved-effect-and-pending-appendix-after-compaction.json",
+            "bytes": 95144,
+            "sha256": "a0a6cf62eea3f07c9ee6f91136063bf3c976213384218c122ddd11ca966b7cc4"
+        },
+        {
+            "path": "external/qualification/dry-v2/saved-effect-and-pending-appendix-final.json",
+            "bytes": 111922,
+            "sha256": "2eb3b8f71888b7cc648557e7c50ecbc44084c5f51ae793d4510460df8a1b961a"
+        },
+        {
+            "path": "external/qualification/dry-v2/saved-effect-and-pending-appendix-model.json",
+            "bytes": 443,
+            "sha256": "8a1b8f57d543fe0511fddcadf3723a2c7b4024526be524190e2223ca8c5da62e"
+        },
+        {
+            "path": "external/qualification/dry-v2/summary.json",
+            "bytes": 1324,
+            "sha256": "cc55f686a15dee67538df69f7a58ec6b7499fa2da6d81a5e58d3fbffd52fdc16"
+        },
+        {
+            "path": "external/qualification/dry-v3.log",
+            "bytes": 507,
+            "sha256": "56162d399770a666992b7cfdd76b64dcc36abf140fdafd69fe083d33551c24e9"
+        },
+        {
+            "path": "external/qualification/dry-v3/authorship-and-switching-after-compaction.json",
+            "bytes": 95412,
+            "sha256": "c525df96f880451e66ae83094b8d8cde9281381fd63b0a97aa7b445621cb0225"
+        },
+        {
+            "path": "external/qualification/dry-v3/authorship-and-switching-final.json",
+            "bytes": 112271,
+            "sha256": "617769587690b623b087533c760c2aae3955c6fe91ee359320dcbead8fd6a9fb"
+        },
+        {
+            "path": "external/qualification/dry-v3/authorship-and-switching-model.json",
+            "bytes": 443,
+            "sha256": "8a1b8f57d543fe0511fddcadf3723a2c7b4024526be524190e2223ca8c5da62e"
+        },
+        {
+            "path": "external/qualification/dry-v3/latest-scope-and-negation-after-compaction.json",
+            "bytes": 95219,
+            "sha256": "919e028b3bc46a4a4d0c2ef08fbbac51e95c87a2f0e0723f73d093048ec61919"
+        },
+        {
+            "path": "external/qualification/dry-v3/latest-scope-and-negation-final.json",
+            "bytes": 112004,
+            "sha256": "9ad7bb4511df8e4cc177d3da2010e7328ee2c61033d0b846f71dfff588794ec7"
+        },
+        {
+            "path": "external/qualification/dry-v3/latest-scope-and-negation-model.json",
+            "bytes": 443,
+            "sha256": "8a1b8f57d543fe0511fddcadf3723a2c7b4024526be524190e2223ca8c5da62e"
+        },
+        {
+            "path": "external/qualification/dry-v3/ledger.jsonl",
+            "bytes": 2754,
+            "sha256": "83f85344d3cf4cebcf6d1e948b9082bd59ae307b7a1c89bf5ec3052b819b5f99"
+        },
+        {
+            "path": "external/qualification/dry-v3/progress.json",
+            "bytes": 1266,
+            "sha256": "e864b57f5a39e54c04e41ab3630b54c0bc64fdc20900de8ed7107be3b22a8a01"
+        },
+        {
+            "path": "external/qualification/dry-v3/request-1.json",
+            "bytes": 15355,
+            "sha256": "011574d1bd87a135cd01a0abe91f92dd8803e50f7e08d1515f59b2055f4233ce"
+        },
+        {
+            "path": "external/qualification/dry-v3/request-2.json",
+            "bytes": 46712,
+            "sha256": "c7d9f728d502440cb24c237b2ebc4edff485201089ef20418fc48d709080abd1"
+        },
+        {
+            "path": "external/qualification/dry-v3/request-3.json",
+            "bytes": 47090,
+            "sha256": "332e6e6ec43c20f61a877da4c9aa62b95261a713ae8ba983fab82e1884854f54"
+        },
+        {
+            "path": "external/qualification/dry-v3/request-4.json",
+            "bytes": 15156,
+            "sha256": "60f3a7ff8e1b062def91419358b61f1d592dfd9f4140018a77c6af4dcfb098f5"
+        },
+        {
+            "path": "external/qualification/dry-v3/request-5.json",
+            "bytes": 46715,
+            "sha256": "78504a8e5d9d958986f0f8d4d78e0094fb75e8229cad391927337a028ee03bc8"
+        },
+        {
+            "path": "external/qualification/dry-v3/request-6.json",
+            "bytes": 47052,
+            "sha256": "36cdc07f0470cafbd3802d0436358cd19555a377a2c9a76c73036f73d828033e"
+        },
+        {
+            "path": "external/qualification/dry-v3/request-7.json",
+            "bytes": 15144,
+            "sha256": "3f208328713095024835706e7c61153044826efffb3f5e1291227af5f92f3a54"
+        },
+        {
+            "path": "external/qualification/dry-v3/request-8.json",
+            "bytes": 46615,
+            "sha256": "7d5ec3c9fd318324ba5e47e44e11968af2f517ff22af9dbb1ef356853aaf3376"
+        },
+        {
+            "path": "external/qualification/dry-v3/request-9.json",
+            "bytes": 47029,
+            "sha256": "bb3cf7701474a3664cf9de110524b23040ea21ecfe05a8cfc1494c114a6098d7"
+        },
+        {
+            "path": "external/qualification/dry-v3/response-1.txt",
+            "bytes": 373,
+            "sha256": "936b8088056a463407bbc97e41e7d8081e4ba038e932bc43fdf6edd9e7ba70ef"
+        },
+        {
+            "path": "external/qualification/dry-v3/response-2.txt",
+            "bytes": 379,
+            "sha256": "5a8288ed192e1793a906450e2259cdccf3db3e9eabe0906819153af3fe6627b9"
+        },
+        {
+            "path": "external/qualification/dry-v3/response-3.txt",
+            "bytes": 379,
+            "sha256": "86ae1a3f2aea1cdd4ae388f9495ff7cfbbbf7a938e5017ca7e1dd63db4a40aed"
+        },
+        {
+            "path": "external/qualification/dry-v3/response-4.txt",
+            "bytes": 373,
+            "sha256": "1ed6b9db4debc5df3130281af219a305d7fa181891ec2a03bc6af2c76344af91"
+        },
+        {
+            "path": "external/qualification/dry-v3/response-5.txt",
+            "bytes": 379,
+            "sha256": "f0054a50145cf7b977358e36a7f4384e1d320cd952ab01cc2c8abcc18e896ac8"
+        },
+        {
+            "path": "external/qualification/dry-v3/response-6.txt",
+            "bytes": 379,
+            "sha256": "ca5769c97404bae770745c56771df2a0269d2315a39f68efce22516a723a9e84"
+        },
+        {
+            "path": "external/qualification/dry-v3/response-7.txt",
+            "bytes": 373,
+            "sha256": "fd6242b5feddd528af17c4f494ad0aa9d7efdef463ad47b0191f7c99a4e18e14"
+        },
+        {
+            "path": "external/qualification/dry-v3/response-8.txt",
+            "bytes": 379,
+            "sha256": "c9c7db6b97ad5dd17e43ace23d39124ab3710d6ad3d6e9022b735f64490a4445"
+        },
+        {
+            "path": "external/qualification/dry-v3/response-9.txt",
+            "bytes": 379,
+            "sha256": "2d8c4ac4d3ce1c942b110daccdb1472653ca8387b260937fa5fb0c37003dceac"
+        },
+        {
+            "path": "external/qualification/dry-v3/saved-effect-and-pending-appendix-after-compaction.json",
+            "bytes": 95144,
+            "sha256": "8ac74ff16723a5fb7b0ab3cef9ef95fb6be589f41879cd65c7eb551b1aefebcb"
+        },
+        {
+            "path": "external/qualification/dry-v3/saved-effect-and-pending-appendix-final.json",
+            "bytes": 111922,
+            "sha256": "48740891eadeede38188865a346d42c497ea5d35852b3fced6de1c31ab408d24"
+        },
+        {
+            "path": "external/qualification/dry-v3/saved-effect-and-pending-appendix-model.json",
+            "bytes": 443,
+            "sha256": "8a1b8f57d543fe0511fddcadf3723a2c7b4024526be524190e2223ca8c5da62e"
+        },
+        {
+            "path": "external/qualification/dry-v3/summary.json",
+            "bytes": 1324,
+            "sha256": "cc55f686a15dee67538df69f7a58ec6b7499fa2da6d81a5e58d3fbffd52fdc16"
+        },
+        {
+            "path": "external/qualification/dry.log",
+            "bytes": 2021,
+            "sha256": "5a736d6a83231692fd2e2e607ed3298b56e29604026507eb1e445cf6fd4d63e2"
+        },
+        {
+            "path": "external/qualification/dry/authorship-and-switching-after-compaction.json",
+            "bytes": 85256,
+            "sha256": "bfdbf459105dac55a7148d15d0c033e35886af1a1a8e658fc8c6222c12721efb"
+        },
+        {
+            "path": "external/qualification/dry/authorship-and-switching-model.json",
+            "bytes": 443,
+            "sha256": "8a1b8f57d543fe0511fddcadf3723a2c7b4024526be524190e2223ca8c5da62e"
+        },
+        {
+            "path": "external/qualification/dry/latest-scope-and-negation-after-compaction.json",
+            "bytes": 85060,
+            "sha256": "7169e474c2deaadcff823af1fc3ce2e1c6307f872b17368c6ddb00b3efd0f113"
+        },
+        {
+            "path": "external/qualification/dry/latest-scope-and-negation-model.json",
+            "bytes": 443,
+            "sha256": "8a1b8f57d543fe0511fddcadf3723a2c7b4024526be524190e2223ca8c5da62e"
+        },
+        {
+            "path": "external/qualification/dry/ledger.jsonl",
+            "bytes": 935,
+            "sha256": "48b55d2e9365abab4d9cc29c62ef4098ba35ce863c6301d7ddd6d20731f9dc4e"
+        },
+        {
+            "path": "external/qualification/dry/request-1.json",
+            "bytes": 60059,
+            "sha256": "9c31476b854c0648cbe21b23cfbf2441740368a449be8e617310be3e300456b7"
+        },
+        {
+            "path": "external/qualification/dry/request-2.json",
+            "bytes": 59850,
+            "sha256": "77e9701f5be3ae5ef10c09ef74de927304ce0b778193ce3698576c40dee7a158"
+        },
+        {
+            "path": "external/qualification/dry/request-3.json",
+            "bytes": 59752,
+            "sha256": "6480edb73c8d837c8437f5ecfd357e228540fbf840b2531f56596f71964357a8"
+        },
+        {
+            "path": "external/qualification/dry/response-1.txt",
+            "bytes": 379,
+            "sha256": "63adcdbd81822ea590466de6e563687f2bd9c6794687dbb52860f34876d8e3ea"
+        },
+        {
+            "path": "external/qualification/dry/response-2.txt",
+            "bytes": 379,
+            "sha256": "5a8288ed192e1793a906450e2259cdccf3db3e9eabe0906819153af3fe6627b9"
+        },
+        {
+            "path": "external/qualification/dry/response-3.txt",
+            "bytes": 379,
+            "sha256": "86ae1a3f2aea1cdd4ae388f9495ff7cfbbbf7a938e5017ca7e1dd63db4a40aed"
+        },
+        {
+            "path": "external/qualification/dry/saved-effect-and-pending-appendix-after-compaction.json",
+            "bytes": 85034,
+            "sha256": "78e17c74446db1c5df9d18ad8690f965b870e986ba3ac9eefe5803793cb9f013"
+        },
+        {
+            "path": "external/qualification/dry/saved-effect-and-pending-appendix-model.json",
+            "bytes": 443,
+            "sha256": "8a1b8f57d543fe0511fddcadf3723a2c7b4024526be524190e2223ca8c5da62e"
+        },
+        {
+            "path": "external/qualification/dry/summary.json",
+            "bytes": 119,
+            "sha256": "f96d763adf0f989b5bab5d5400c4816f70b50be4f776105feb380850a19058a9"
+        },
+        {
+            "path": "external/qualification/endpoints.json",
+            "bytes": 65512,
+            "sha256": "522f75e9f8c9183b38cd34c01d3fe0f09526eb7066d81933c745c511d980c9d0"
+        },
+        {
+            "path": "external/qualification/models.json",
+            "bytes": 3656,
+            "sha256": "1a0f3572810fb7cd8ebc877b84862d63fd05f6ae9d8fc5e5ec18e3f431449819"
+        },
+        {
+            "path": "external/qualification/preflight-summary-boundary.json",
+            "bytes": 875,
+            "sha256": "2abab79b1ecefc417700f4f2e180a0eebc083f2f5d55214748bd0f27d1e33217"
+        },
+        {
+            "path": "external/qualification/protocol.json",
+            "bytes": 2110,
+            "sha256": "408dff28276bc284dc062b446673495b9007c9a7dc30f877eac9f994892966db"
+        },
+        {
+            "path": "external/qualification/qualification.config.ts",
+            "bytes": 1441,
+            "sha256": "00ef51334c67d293f1350b708a20fc868e101f388bbda2560e349b10984f6106"
+        },
+        {
+            "path": "external/qualification/qualification.test.ts",
+            "bytes": 16375,
+            "sha256": "0d314dd5e8130940e5405f0b6cfa3188e08827b22d2c639f7de1b9e9b2640430"
+        },
+        {
+            "path": "external/qualification/runner-types-final.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "path": "external/qualification/runner-types-resolved.log",
+            "bytes": 1310,
+            "sha256": "5120bfd14019cf1953a0f8d0491f4840aaa8b363aaed210e16fb160d04145991"
+        },
+        {
+            "path": "external/qualification/runner-types.log",
+            "bytes": 529,
+            "sha256": "97a7f8719fc0bde2e4a74ba0c81139d32e3d2190a5facc75c3c23ca2e71ff9e9"
+        },
+        {
+            "path": "external/qualification/tsconfig.json",
+            "bytes": 390,
+            "sha256": "0f4a12a75d39bf1ebb8ac18c8f64d3b6010c1d042a052585df35262741226eaf"
+        },
+        {
+            "path": "repository/convex/_generated/ai/ai-files.state.json",
+            "bytes": 334,
+            "sha256": "6704329381b253d604055eeb0bbb91d5c69bc5d188f09ef0d319c8c60fea9f4f"
+        },
+        {
+            "path": "repository/convex/_generated/ai/guidelines.md",
+            "bytes": 18004,
+            "sha256": "b6b776e9d4dacfe8da23a58c9d11ab9cc9c505891c8f6b9fa9cdc69e4266ac37"
+        },
+        {
+            "path": "repository/convex/_generated/api.d.ts",
+            "bytes": 22007,
+            "sha256": "55312872d48a144d8716c95b5ac64d8bcfb2fe0fd594017a0f07718166507595"
+        },
+        {
+            "path": "repository/convex/_generated/api.js",
+            "bytes": 480,
+            "sha256": "f513058549831e85376f8d19cafaf2a4a770b6eb1b859fb371141f2c9dec0d70"
+        },
+        {
+            "path": "repository/convex/_generated/dataModel.d.ts",
+            "bytes": 1736,
+            "sha256": "db177073d16a4393c7a96bcdc3a2a904e88c2432d54d138ca7715cc431982c17"
+        },
+        {
+            "path": "repository/convex/_generated/server.d.ts",
+            "bytes": 6772,
+            "sha256": "256d763d9eab8bfba921174d18d20454fd6de044b4fd69d1c49139d1dc79d1d2"
+        },
+        {
+            "path": "repository/convex/_generated/server.js",
+            "bytes": 3872,
+            "sha256": "0cdd1d842b9458d8a6f2444c35eb9929312316a384ca76a4b1d964bedde8a6f2"
+        },
+        {
+            "path": "repository/convex/admin.ts",
+            "bytes": 3835,
+            "sha256": "3428c4ffcaa2ddba93841592157ffdecd862288e8af67dfa9e6f883e88bc32f6"
+        },
+        {
+            "path": "repository/convex/administrationAuthority.ts",
+            "bytes": 885,
+            "sha256": "f98daacb4169d4c2fbd2818a6b6b96076844dab9de3ffb042949770e090e4a7f"
+        },
+        {
+            "path": "repository/convex/adminOperations.ts",
+            "bytes": 34623,
+            "sha256": "2425a59dd30e9b56ebfc1c872117ff5021e30b2c19b6094dcb2476e91aa8296e"
+        },
+        {
+            "path": "repository/convex/audit.ts",
+            "bytes": 1014,
+            "sha256": "4ecd325e8cc3fc0f1570462e51fc19eb1c1297c7a50a42cb3a3fd0b4e261c399"
+        },
+        {
+            "path": "repository/convex/auth.config.ts",
+            "bytes": 151,
+            "sha256": "9f733fef6c753526cf58933194937909f7be2c64d131a2d8ccc355c932180371"
+        },
+        {
+            "path": "repository/convex/auth.ts",
+            "bytes": 231,
+            "sha256": "3d330ae4fdcf7341e910125b3d53c0f547facdccb08abb845b99888c40d18d5c"
+        },
+        {
+            "path": "repository/convex/browserPreview.ts",
+            "bytes": 6378,
+            "sha256": "a18a3472e3467e84883d95dce0bbf1a0f37634d57977c0a0c8e0b57494d44b5b"
+        },
+        {
+            "path": "repository/convex/browserPreviewInternals.ts",
+            "bytes": 5979,
+            "sha256": "7a7345980a74b68f472e7a9d1c17151074bdf446df03395db4ac78d940e611e8"
+        },
+        {
+            "path": "repository/convex/claimGeneration.ts",
+            "bytes": 44147,
+            "sha256": "f5b81ac72ca566c3f4b0d460fa106361ffed84669744a9d950c0985e8cd218ad"
+        },
+        {
+            "path": "repository/convex/companyCoverImage.ts",
+            "bytes": 3908,
+            "sha256": "f8871c6f7fbc4ab41158a7f4cff219e53b40e76bf1efcb50f11d0e34fadd4302"
+        },
+        {
+            "path": "repository/convex/companyResolution.ts",
+            "bytes": 35825,
+            "sha256": "5e11ff87ea9d7d9521b42428629e1d6c92a007367305bbbb084965ed9458283f"
+        },
+        {
+            "path": "repository/convex/convex.config.ts",
+            "bytes": 1207,
+            "sha256": "775733c50fcb9fbb031437dcb38ba07d1c952da2e676d84163b4ffca9d316d06"
+        },
+        {
+            "path": "repository/convex/domain/claimCanonicalization.ts",
+            "bytes": 3855,
+            "sha256": "5c8eb1942d60fff2ed7bb7149732a61116125809a5de2188401c45ee0d64c75a"
+        },
+        {
+            "path": "repository/convex/domain/claims.ts",
+            "bytes": 1215,
+            "sha256": "9ec3cca5ccc246b5d96fc3c878fde098b6ed22c7e6e592e5e98e0a8fe1c412bb"
+        },
+        {
+            "path": "repository/convex/domain/claimValidation.ts",
+            "bytes": 7218,
+            "sha256": "72b223519c66b137ef316d21a6360b8a6455e075cc410a079b901bdff8e05ddc"
+        },
+        {
+            "path": "repository/convex/domain/companyMetadata.ts",
+            "bytes": 1438,
+            "sha256": "eeb3daeb5a8bb1f9beda73ce7365763c65e7f0241d526b80098d78e00ae552b7"
+        },
+        {
+            "path": "repository/convex/domain/conversationValidation.ts",
+            "bytes": 7621,
+            "sha256": "2156ee78972ffb7b01556a3e3a3d68f493eb3fc871417329c438c6211c50a8b5"
+        },
+        {
+            "path": "repository/convex/domain/conversationValidationContracts.ts",
+            "bytes": 1072,
+            "sha256": "0b26d94812e28a16a805be158bb5d229f2cc71a49a961dc547d2e011d2a1f313"
+        },
+        {
+            "path": "repository/convex/domain/coverImageUrl.ts",
+            "bytes": 1687,
+            "sha256": "271678c312fb93238c7b1f4f547230ca13da0c438d98e474aa46e417f7adc048"
+        },
+        {
+            "path": "repository/convex/domain/evidenceArtifacts.ts",
+            "bytes": 963,
+            "sha256": "6c36885cfaabc1e0909be15d0f1b530d269d97874cce6aeec06cbbb55b0e4b9a"
+        },
+        {
+            "path": "repository/convex/domain/evidenceAuthority.ts",
+            "bytes": 5979,
+            "sha256": "34ddc44f3c917679b824ac3155f38caac4a43769ff8103cbc97c34616fd8aba2"
+        },
+        {
+            "path": "repository/convex/domain/evidenceAvailabilityPolicy.ts",
+            "bytes": 1322,
+            "sha256": "810691ce66a064951f2703d5650406d86631963226986b1001c2ae301f7b0d61"
+        },
+        {
+            "path": "repository/convex/domain/evidenceFailure.ts",
+            "bytes": 2143,
+            "sha256": "ab076a823da9c324b5a3587535d13567512a5d7e0d193d39542fae165d713517"
+        },
+        {
+            "path": "repository/convex/domain/evidenceFanout.ts",
+            "bytes": 3147,
+            "sha256": "118d80ed8221e92c93607b62a862bbfcf3305d7177e460767986539c31fd02f7"
+        },
+        {
+            "path": "repository/convex/domain/evidenceLimits.ts",
+            "bytes": 1342,
+            "sha256": "cf12a2a7c083e7577dd7c2686e6a064a512f927c95bb9c3639b6489974300bb3"
+        },
+        {
+            "path": "repository/convex/domain/evidencePolicy.ts",
+            "bytes": 11598,
+            "sha256": "a884bb4f303c4cdcf98c6132710458e110e4190904b17b0978e74c355db5c7cf"
+        },
+        {
+            "path": "repository/convex/domain/executionClaim.ts",
+            "bytes": 6959,
+            "sha256": "1346fdac948934b714e407b18e85e1fec6c5a760223c1261a3cb3a3497a1ccef"
+        },
+        {
+            "path": "repository/convex/domain/executionValidationAgent.ts",
+            "bytes": 9760,
+            "sha256": "e81598a2019133696c3092fa9429189a6ac6a265193a67757699bf8d0e65e5eb"
+        },
+        {
+            "path": "repository/convex/domain/executionValidationContracts.ts",
+            "bytes": 1531,
+            "sha256": "386a5e68a6a92f69520c7b974b0e9e9fd148967963e2337deeb12ceb9ff6accc"
+        },
+        {
+            "path": "repository/convex/domain/framingContracts.ts",
+            "bytes": 315,
+            "sha256": "e87ea35e584bad9dd3d87fcbfc302d11cd4c041de75b8baf847594254841305b"
+        },
+        {
+            "path": "repository/convex/domain/framingEditAuthority.ts",
+            "bytes": 4948,
+            "sha256": "2f45b864867fd03b2da32d7c960c9ab5d7980b40cc26f6b73133b999eb33f487"
+        },
+        {
+            "path": "repository/convex/domain/invitationCodes.ts",
+            "bytes": 486,
+            "sha256": "6c5bc2d4ee8aeecd863e26f628c5e20ec216a04cb1bdb7572d8377b92f98f383"
+        },
+        {
+            "path": "repository/convex/domain/manualSourceIntake.ts",
+            "bytes": 3960,
+            "sha256": "314d64fe1281e5484053c784bc4393ae99ae273dda4cf60f95210b5433199eed"
+        },
+        {
+            "path": "repository/convex/domain/previewCache.ts",
+            "bytes": 965,
+            "sha256": "6ac51711acf63e38a4fcb9c83e4771ff1ab6820878b395f2ed6030783334d0ce"
+        },
+        {
+            "path": "repository/convex/domain/providerAvailability.ts",
+            "bytes": 569,
+            "sha256": "0c1ca891f984961992fb2e8279df4038e9f0b41224da75540396261478035e43"
+        },
+        {
+            "path": "repository/convex/domain/publicSourceUrl.ts",
+            "bytes": 4915,
+            "sha256": "5fdef79a131f0ad048476ccaa464e996a013eb083a6a53f819c21a42fae32a7c"
+        },
+        {
+            "path": "repository/convex/domain/researchContext.ts",
+            "bytes": 1102,
+            "sha256": "37d6b93a747994e978f84f81d5f73c52a90f955879226396882edf6ae2f62751"
+        },
+        {
+            "path": "repository/convex/domain/researchPlan.ts",
+            "bytes": 6215,
+            "sha256": "b055d55f3eaea9d82736b0f50ec2323d1cf97968d9f47a18b5388e41c99e3bc3"
+        },
+        {
+            "path": "repository/convex/domain/runCancellation.ts",
+            "bytes": 2457,
+            "sha256": "fd7d4ddccf7a30f1a0695a0e5baa923f3a0cc876b8cb2e33cd57ac16bc9314f7"
+        },
+        {
+            "path": "repository/convex/domain/runPurpose.ts",
+            "bytes": 1491,
+            "sha256": "62f38ad6b6bc4158e407414a8f6dabc94439a8154668c654f014a9bc7ab4f74e"
+        },
+        {
+            "path": "repository/convex/domain/runWithdrawal.ts",
+            "bytes": 493,
+            "sha256": "43fa5cd006dd2d92a4685148031a6857c2d4af8342f5d1bd195fdaa1b6175436"
+        },
+        {
+            "path": "repository/convex/domain/savedMaterial.ts",
+            "bytes": 7929,
+            "sha256": "69bbbaafefe8e35ed71e7cb0c5960d3d84ffa09c51bf79b0ece4d084ca3560d8"
+        },
+        {
+            "path": "repository/convex/domain/savedMaterialInspection.ts",
+            "bytes": 13957,
+            "sha256": "caf8d626d144455c0a2b3bd0a449c7c426ba1236d7f4d74c63fd4b60a296a926"
+        },
+        {
+            "path": "repository/convex/domain/savedMaterialOperations.ts",
+            "bytes": 2660,
+            "sha256": "72e3c52ac7339f5ea05830a60e01308f158c0e004c0bbb308257435534430578"
+        },
+        {
+            "path": "repository/convex/domain/savedMaterialSimulation.ts",
+            "bytes": 2935,
+            "sha256": "afefc14640ee74cf7256d52a95f09d00c5065e4167599ab2564a4899c6db44d8"
+        },
+        {
+            "path": "repository/convex/domain/showcaseManifest.ts",
+            "bytes": 7344,
+            "sha256": "c3250e898cf690d9e2272407ccf6f0276f36986db50780f5a172e13fd1b1aa9f"
+        },
+        {
+            "path": "repository/convex/domain/sourceCandidateCapacity.ts",
+            "bytes": 1654,
+            "sha256": "7fecfff7ff4cdbe9c7a615bc4608bdec4ca7c7c37c2847d92540e598d79a76ab"
+        },
+        {
+            "path": "repository/convex/domain/sourceComparison.ts",
+            "bytes": 68330,
+            "sha256": "2b71b524c732447fef0438cc8e2dafd3602277de2a5b61298221963e89d2345f"
+        },
+        {
+            "path": "repository/convex/domain/sourceComparisonContext.ts",
+            "bytes": 10718,
+            "sha256": "97b946bf663ef1c76297a056ec6672360ed7cc95e22a370b26c64748ad7da5fa"
+        },
+        {
+            "path": "repository/convex/domain/sourceDiscoveryRecovery.ts",
+            "bytes": 7738,
+            "sha256": "f6ab252ad9f01f060f20b12dc3557c13e864740581e6dc5f083604492c224bd7"
+        },
+        {
+            "path": "repository/convex/domain/sourcePassages.ts",
+            "bytes": 31553,
+            "sha256": "8aef0c682bd1a8c13d079d4a750fde9e41d50f493e12c4f8ec5008b58814ea95"
+        },
+        {
+            "path": "repository/convex/domain/sourcePreparationAuthority.ts",
+            "bytes": 19897,
+            "sha256": "e65fd6429b952356d1c038e928c8e6e3a89aa2af9ada78a73e049f53385142b5"
+        },
+        {
+            "path": "repository/convex/domain/sourcePreparationReview.ts",
+            "bytes": 21416,
+            "sha256": "3c7badabaab49d44dcc373b919f7dd3568919430ab059cd397211ac70f490ac7"
+        },
+        {
+            "path": "repository/convex/domain/sourceQualification.ts",
+            "bytes": 32320,
+            "sha256": "51c6fd2be7ca9445f1c4e8721f8854bbe32c2b4e24379225cacdeda6000bcbde"
+        },
+        {
+            "path": "repository/convex/domain/sourceRetrievalPolicy.ts",
+            "bytes": 6488,
+            "sha256": "1ab622308c069cf339ee6fef27a774ea16a65e02813819f0196f294afdece302"
+        },
+        {
+            "path": "repository/convex/domain/sourceReviewProjection.ts",
+            "bytes": 1380,
+            "sha256": "f94ec0aeccea4c1b84b5510ce58568bf310c7bb9a5543927a2c287fdca3dbcc5"
+        },
+        {
+            "path": "repository/convex/domain/sourceReviewReads.ts",
+            "bytes": 6490,
+            "sha256": "549a10e527b9d29b26cd59776c2795957628e37f93c44928225f5dbac6264d6f"
+        },
+        {
+            "path": "repository/convex/domain/sourceSelectionPolicy.ts",
+            "bytes": 84537,
+            "sha256": "fd32d89eeaf232c07ba564a6ade62cce332200e488ffecf7dc3a9b175e91df31"
+        },
+        {
+            "path": "repository/convex/domain/sourceUsage.ts",
+            "bytes": 25971,
+            "sha256": "8cb513e85065b9eb2f3f5dfd722f0e03df9c7e43914b6b47a08ebfdce71c724c"
+        },
+        {
+            "path": "repository/convex/domain/transitions.ts",
+            "bytes": 3241,
+            "sha256": "1c8036bfedeb78a2bdda107a08508c8b0d1c323d0bf376c286f12fe6feeb32d3"
+        },
+        {
+            "path": "repository/convex/domain/validators.ts",
+            "bytes": 4992,
+            "sha256": "edfeaeaf813ef9c51e590a565f3a6c0673d49597893c88b68f60cc107e05c7c4"
+        },
+        {
+            "path": "repository/convex/domain/workbench.ts",
+            "bytes": 37310,
+            "sha256": "22c4f63845fe1ddf93c878a8fb2093c191bd6380622c30dc5e7779f8e914a237"
+        },
+        {
+            "path": "repository/convex/domain/workbenchContracts.ts",
+            "bytes": 5021,
+            "sha256": "bf4d97a405677a4e821600136042231064abad5f515ae8cbd26e2d20e948b756"
+        },
+        {
+            "path": "repository/convex/e2eFixtures.ts",
+            "bytes": 116089,
+            "sha256": "c2bf9a023dd7d59e1ebc761bc734167a4c2e0f575cedbb086348ac66d87fbcea"
+        },
+        {
+            "path": "repository/convex/evidenceActions.ts",
+            "bytes": 36146,
+            "sha256": "7dc6e7932e60d5d5f52183499a86b674e24c63e9b0f81a4693d9ac3a15599170"
+        },
+        {
+            "path": "repository/convex/evidenceArtifacts.ts",
+            "bytes": 45058,
+            "sha256": "561cd81674f36e4038f41d9a55ee6a83711a0082a19eb26a00cc8a677bc3b260"
+        },
+        {
+            "path": "repository/convex/evidenceExecution.ts",
+            "bytes": 20990,
+            "sha256": "be14b2a6bdc08ce91c67a219d0887bf160108f03f079c3aeeec8a8dc58b7dd05"
+        },
+        {
+            "path": "repository/convex/evidenceMatrix.ts",
+            "bytes": 27256,
+            "sha256": "099c1539adad82e9ff605e277c609be2d635d4419c3c24384b6cb379609eae80"
+        },
+        {
+            "path": "repository/convex/evidenceSufficiency.ts",
+            "bytes": 8414,
+            "sha256": "9e52494ecfe02ca638f16c0f0584021fdf3f0bf5bda2fc7f101cc212ec7a1a66"
+        },
+        {
+            "path": "repository/convex/evidenceWorkflow.ts",
+            "bytes": 19298,
+            "sha256": "c7b2a09a58eea1a6bcfc5fbe0f44e2ac1add12130eba8bda33eeb5135604bc02"
+        },
+        {
+            "path": "repository/convex/exaDiscoveryActions.ts",
+            "bytes": 12217,
+            "sha256": "39d5874cc9ea54a09ce1b2b27b15c7577dcb92cf6257db01a5c5a012ef361918"
+        },
+        {
+            "path": "repository/convex/execution/agentCatalog.ts",
+            "bytes": 2367,
+            "sha256": "3c62b6c53468f80a502c3cad9ccb1fcdb6e6d2b8aba0921a7ae50af1aaedcf29"
+        },
+        {
+            "path": "repository/convex/execution/agentDefinition.ts",
+            "bytes": 5669,
+            "sha256": "1701f5a42ef597feea8568961eeaa3bf798519bd9d807f9c8ade5813d81b88c5"
+        },
+        {
+            "path": "repository/convex/execution/agentSchemas.ts",
+            "bytes": 2277,
+            "sha256": "359271ec1fdbe009b87620d5790ea736dbfb6bb2220c6d4b7c95945d8f1b278f"
+        },
+        {
+            "path": "repository/convex/execution/authority.ts",
+            "bytes": 9238,
+            "sha256": "f94f4fa49f72028803f9f0bf3eac55813330f14f5e92e07c692a47fde99a340f"
+        },
+        {
+            "path": "repository/convex/execution/cancellation.ts",
+            "bytes": 6674,
+            "sha256": "a8af827922186c4d3c398475eb2186d95f6c721f2fd9daa931a185b07c2cfa02"
+        },
+        {
+            "path": "repository/convex/execution/commonOperations.ts",
+            "bytes": 4593,
+            "sha256": "13ca3fae706ab4b9fc6d520a679d7e9363807d80126eb1d43356390ace9fea76"
+        },
+        {
+            "path": "repository/convex/execution/context.ts",
+            "bytes": 14643,
+            "sha256": "e8decbad7d5917c5cf071137807cead4317b6d971e68a4963adfcc5b24e7e4bc"
+        },
+        {
+            "path": "repository/convex/execution/conversations.ts",
+            "bytes": 41115,
+            "sha256": "72416fab4fca989d8229f5d047e69f70700de50d59aca253e3aa316f63d65a6f"
+        },
+        {
+            "path": "repository/convex/execution/errors.ts",
+            "bytes": 470,
+            "sha256": "b91436646041709ca7a533795593960aa2503ad3058b5aef3484e5e7b95f8819"
+        },
+        {
+            "path": "repository/convex/execution/executionProtocol.ts",
+            "bytes": 7230,
+            "sha256": "54c81a5482959c1f5ab8bc479bdedecd33cfdf9af3bb59a77f0915d626201fc7"
+        },
+        {
+            "path": "repository/convex/execution/fixtures.ts",
+            "bytes": 27172,
+            "sha256": "1c718a424b71d7a18b97a23e0e54b1ca7edf50f734a07133d35e60e8d779e67e"
+        },
+        {
+            "path": "repository/convex/execution/handoffs.ts",
+            "bytes": 6924,
+            "sha256": "d1e11301d8a14a58125fc17fcee899ed932b632737abe2a65823c362389fc9b3"
+        },
+        {
+            "path": "repository/convex/execution/invocationLifecycle.ts",
+            "bytes": 37878,
+            "sha256": "c6a8f5da4376f7df4a820a9bcbeb5052f5500bcbb4adac662251cde90da5eeb4"
+        },
+        {
+            "path": "repository/convex/execution/invocations.ts",
+            "bytes": 272,
+            "sha256": "4d88eaacfdfe5f3e1a2fc26ceed83536fdcd0474805d11926ea781e11aadd7e6"
+        },
+        {
+            "path": "repository/convex/execution/invokeAgentModel.ts",
+            "bytes": 17480,
+            "sha256": "ea9fa23090dd87348bfe8837af4846a1b75e05c93abb56d9a644bd8a785e39d1"
+        },
+        {
+            "path": "repository/convex/execution/journal.ts",
+            "bytes": 2710,
+            "sha256": "4e730e56fbc73b6914090f7cb80c0749931177c2dacaaa0d8cce84f525a5ec73"
+        },
+        {
+            "path": "repository/convex/execution/missionData.ts",
+            "bytes": 4774,
+            "sha256": "65775dbd54e63aa8fecde4b9876253c8809d12381e7eb419a0c6022806957c7d"
+        },
+        {
+            "path": "repository/convex/execution/missionHistory.ts",
+            "bytes": 4121,
+            "sha256": "a8ac7fe3d7fb6d6881b145cde42718a635a0e35375539a0c228dc80dd8d8de9f"
+        },
+        {
+            "path": "repository/convex/execution/missions.ts",
+            "bytes": 20840,
+            "sha256": "8fb532c1cddf567ff6718459327d13de419641e6931ab9df063a493630c2cd28"
+        },
+        {
+            "path": "repository/convex/execution/missionWorkflow.ts",
+            "bytes": 13006,
+            "sha256": "70b258a29851192228bb640d3c6dcf0367cf9c4643b8717c5960ebe79a1b30be"
+        },
+        {
+            "path": "repository/convex/execution/modelActions.ts",
+            "bytes": 117,
+            "sha256": "ac1835758859b3edbdfcdf9c00caef3f578ffdddd6f141b6339a29dcb0d6e827"
+        },
+        {
+            "path": "repository/convex/execution/operations.ts",
+            "bytes": 33081,
+            "sha256": "ccd115901b36adaa7a1fde2259f332c8681fc3cc84d531a261c1067225bbcbad"
+        },
+        {
+            "path": "repository/convex/execution/piControl.ts",
+            "bytes": 24268,
+            "sha256": "58987a608b16b243bd2453f1bc3f62023276b10259a6a86e7f4bb281bc919816"
+        },
+        {
+            "path": "repository/convex/execution/piStore.ts",
+            "bytes": 14733,
+            "sha256": "118d0e7c64e132b8dd1ef585edb6d0cf66452b55d0ab135fe007a2ebcf0b49be"
+        },
+        {
+            "path": "repository/convex/execution/piWorker.ts",
+            "bytes": 1476,
+            "sha256": "7d2e125026ad4a6e04e0f42089c6e287ad50eb9ad78d222e5a2bbcc44af2717e"
+        },
+        {
+            "path": "repository/convex/execution/researchControl.ts",
+            "bytes": 16266,
+            "sha256": "af2203424241bee2ff39d15e65502b207d6aebc7e20197566687e5edb56d2a7b"
+        },
+        {
+            "path": "repository/convex/execution/schema.ts",
+            "bytes": 13882,
+            "sha256": "cdfac8b626b0178b233dae3c7e63e97149975008a9e5a4d8ac035a5543c8032a"
+        },
+        {
+            "path": "repository/convex/execution/simulation.ts",
+            "bytes": 3727,
+            "sha256": "b578c186d388fc5369648cd385cc50d12069ff8fa781a6aa0e25e068d21fa243"
+        },
+        {
+            "path": "repository/convex/fixtureManifestStore.ts",
+            "bytes": 6203,
+            "sha256": "b36255d994247545d39841eb41c993a1a5a023790d1b82f0e50fe3770387c9b8"
+        },
+        {
+            "path": "repository/convex/fixtures/cccShowcase.ts",
+            "bytes": 5615,
+            "sha256": "312442a2b0dc8764ed061b52c6966c2f2294c418d21b205ed6cb6ff043e4b768"
+        },
+        {
+            "path": "repository/convex/framing.ts",
+            "bytes": 12974,
+            "sha256": "077f58ca23bf2c2526aab29eaf438d7a2ab9eb652ab69f737ba81fcd11fa6cfe"
+        },
+        {
+            "path": "repository/convex/http.ts",
+            "bytes": 153,
+            "sha256": "7694f7c76d47610b8040675ef1a4451b5c0debb3f162abb49ca0650710c6c997"
+        },
+        {
+            "path": "repository/convex/integrations/agentBackends.ts",
+            "bytes": 3642,
+            "sha256": "c0bc609231a1d733524e30fbabfcc1942a781ff85ec11ea4a7c9e6fcafd46b3a"
+        },
+        {
+            "path": "repository/convex/integrations/agentStorage.ts",
+            "bytes": 3311,
+            "sha256": "630ec2d1aa951dabaf390800bfc0ae154942599d28451007f7509cbc404569f1"
+        },
+        {
+            "path": "repository/convex/integrations/approvedSourceRetrieval.ts",
+            "bytes": 1132,
+            "sha256": "0536ed9cf2eb1c7b2bffab288dfb6d81dcfdbf57bb9cd0410091f1cf7656831f"
+        },
+        {
+            "path": "repository/convex/integrations/evidenceNormalization.ts",
+            "bytes": 9303,
+            "sha256": "91c1152c5ffde7fbd6b094820575267c634d00031c8d2f4e97031142accf0eb0"
+        },
+        {
+            "path": "repository/convex/integrations/exa.ts",
+            "bytes": 21294,
+            "sha256": "3c15973694405e83efa1198af97b47c5fc9221b98285d0881a1d278596381ca6"
+        },
+        {
+            "path": "repository/convex/integrations/exaContentsClient.ts",
+            "bytes": 3364,
+            "sha256": "6152ff8ac35f47fe55f5bba5fdab302b5ab5b1874f60eb4b016b744375a5133a"
+        },
+        {
+            "path": "repository/convex/integrations/exaEvidence.ts",
+            "bytes": 2736,
+            "sha256": "f5a18532da3f163b2b261f7c3cbd7241647e14686ad4190966db7ee773ee4105"
+        },
+        {
+            "path": "repository/convex/integrations/modelInput.ts",
+            "bytes": 11779,
+            "sha256": "1f99edddaaae330f75f23703024640dd013aef48184aebea4ab7cb45d4e7666d"
+        },
+        {
+            "path": "repository/convex/integrations/modelRouting.ts",
+            "bytes": 3225,
+            "sha256": "bc1b1e1f5c5e2b7926011e1c69f6bb8440fac3cf2e196ab82d14e93f0709ea13"
+        },
+        {
+            "path": "repository/convex/integrations/modelTransport.ts",
+            "bytes": 25639,
+            "sha256": "38ebe3a7fdabcfd24ea87057e8b28d23db2a57e9c7e6e041ddae252e470cf467"
+        },
+        {
+            "path": "repository/convex/integrations/piInputProfiles.json",
+            "bytes": 9629,
+            "sha256": "82d139062a693f2ecbee4e5800474d4589e6c0a37aecf17517ab14f2a72aa83a"
+        },
+        {
+            "path": "repository/convex/integrations/piMission.ts",
+            "bytes": 49395,
+            "sha256": "d75f7a3f23e4b8a181b0d43d9177d3a70ad884800de5ddea0a7f958e22186351"
+        },
+        {
+            "path": "repository/convex/integrations/piModelProfiles.ts",
+            "bytes": 8490,
+            "sha256": "4b85ddcef4b12e2f0b7df6dc9eed2c63c9fdbbfbce443904947a5d42f93ffaaa"
+        },
+        {
+            "path": "repository/convex/integrations/piNativeInput.ts",
+            "bytes": 7543,
+            "sha256": "9b7f8fc29f3ae6c5b6c10caeff2be459ea9af98c9cebeb044309e60290e51f07"
+        },
+        {
+            "path": "repository/convex/integrations/piStorage.ts",
+            "bytes": 7347,
+            "sha256": "1dca0ac3bd0e90532acdd87ea606afb0e927b503e192d97dfd83eb211888bdf3"
+        },
+        {
+            "path": "repository/convex/integrations/piToolArguments.ts",
+            "bytes": 5170,
+            "sha256": "a2d115aaf56e449486c1245b45ca0863fc1538b2f50441dc0a03542ed109e8ee"
+        },
+        {
+            "path": "repository/convex/integrations/publicPdfEvidence.ts",
+            "bytes": 17730,
+            "sha256": "9214afea99f144c95b46b226a6ac269b89a464a5e48e1b8e33958c2bcfabf1f5"
+        },
+        {
+            "path": "repository/convex/integrations/sec.ts",
+            "bytes": 28016,
+            "sha256": "c09c9b15df30f5758aca342c894c3aaf5c87ebf4bf8456241668d12ff02e5fbe"
+        },
+        {
+            "path": "repository/convex/integrations/secEvidence.ts",
+            "bytes": 4403,
+            "sha256": "9a99d71c6bbb1ed97cb4a13c983bc0d2fd05471cdabe6025eaafff5e75ba31f9"
+        },
+        {
+            "path": "repository/convex/integrations/showcaseClaimAdapter.ts",
+            "bytes": 7204,
+            "sha256": "2fbe50dff24affcaddc0328315f84369a247ebeb02c0dd54a7e47f37f86f4883"
+        },
+        {
+            "path": "repository/convex/integrations/showcaseVerifierAdapter.ts",
+            "bytes": 7516,
+            "sha256": "fe51fe7f27396c3c97652d66f12ffafafa37c3a906d80a324d562dbc04e92b6c"
+        },
+        {
+            "path": "repository/convex/integrations/sourceEmbeddings.ts",
+            "bytes": 5414,
+            "sha256": "4f2f9440f4d653038802ad7d700d1cde28bf35bc5e746d912c14cc8a467da9f0"
+        },
+        {
+            "path": "repository/convex/integrations/sourceQualification.ts",
+            "bytes": 4647,
+            "sha256": "cad26eac8e7366cb46ec55daa1bf9ed997478a2dd52f1876c433ad455f2e8de0"
+        },
+        {
+            "path": "repository/convex/integrations/sourceQualificationConfig.ts",
+            "bytes": 802,
+            "sha256": "d4518fbb5c6985d7c84ed170ded2d661c85233dc884006af46d56f9e584994d6"
+        },
+        {
+            "path": "repository/convex/integrations/websiteResolver.ts",
+            "bytes": 7318,
+            "sha256": "7e6843c5e1955154995fdc27e306eef06ef78a4a6e39b00ed7474a73f9a6249d"
+        },
+        {
+            "path": "repository/convex/invitations.ts",
+            "bytes": 15421,
+            "sha256": "2b658794619d42b4aa5f99fedf1da4b09453e5d12dd0769c3a90cac27b84bd07"
+        },
+        {
+            "path": "repository/convex/modelConfiguration.ts",
+            "bytes": 24525,
+            "sha256": "0e0a71b2881281da7ff22f9a0193c1973f4997407ccc2e941c55609a58d182e6"
+        },
+        {
+            "path": "repository/convex/modelConfigurationActions.ts",
+            "bytes": 10130,
+            "sha256": "8f6ee4067af75b4ad36ab655e025e0a2ea9edaafc0a71ab08cc56a80511993a2"
+        },
+        {
+            "path": "repository/convex/modelConfigurationSchema.ts",
+            "bytes": 3013,
+            "sha256": "6b7325f916206fc4337195d936b1f53f2e6196c053cedd9efe1688128782e88e"
+        },
+        {
+            "path": "repository/convex/policyEvaluations.ts",
+            "bytes": 41606,
+            "sha256": "e84ddb489cdee605370e48e131f2fcdedfb8dccffcb34d4c813067e3e0f1a19b"
+        },
+        {
+            "path": "repository/convex/providerCalls.ts",
+            "bytes": 38377,
+            "sha256": "3ac26cf2fb5d911f6a6e13fe7933bf4cc76a7676abbb7df103c8fd7f3f758c8c"
+        },
+        {
+            "path": "repository/convex/rateLimiter.ts",
+            "bytes": 1033,
+            "sha256": "3f6a3d66992a5e26aebd7d47ff57914159c96a407a041b8fbb8aef5b85f27b3b"
+        },
+        {
+            "path": "repository/convex/researchLaunch.ts",
+            "bytes": 12609,
+            "sha256": "948be1541027fc343e29526518dfc7a628054466a898d743c1fbb3a0ec9b9988"
+        },
+        {
+            "path": "repository/convex/researchPlanning.ts",
+            "bytes": 6770,
+            "sha256": "c9ce7fc3e304da9a22ecb93dbd1f312c4f43446ff6cfb036eaaed88bb2d011af"
+        },
+        {
+            "path": "repository/convex/researchRuns.ts",
+            "bytes": 13809,
+            "sha256": "0bc26c0950cb42fa776f95f632b51d4eed06452f02e48cba54fb119e6ec8069d"
+        },
+        {
+            "path": "repository/convex/researchWorkflow.ts",
+            "bytes": 9686,
+            "sha256": "597236a092680509be54d2c478f0d801dfcee3d34dc15a034767ec1d78b30b7e"
+        },
+        {
+            "path": "repository/convex/resourceLimits.ts",
+            "bytes": 6815,
+            "sha256": "7949cdba4f9bd74191774721d5c6bc2584c558ba7e2ce3a61413fd5d713f12a0"
+        },
+        {
+            "path": "repository/convex/retrievalEvaluation.ts",
+            "bytes": 25220,
+            "sha256": "34dc61852f3ade27739fb47fc1cb1f3c784765fbd85b1854c22edaffca910b8b"
+        },
+        {
+            "path": "repository/convex/runWorkspace.ts",
+            "bytes": 11426,
+            "sha256": "b52a19d1767f126a56a8be8b5400218f0f2dbb8ca89a2dbeacbc4c67b03673b5"
+        },
+        {
+            "path": "repository/convex/schema.ts",
+            "bytes": 54244,
+            "sha256": "c806d72103c2073f263c72f555ae76167050dd097f890d82385c2dd9b28ea255"
+        },
+        {
+            "path": "repository/convex/sourceActions.ts",
+            "bytes": 27855,
+            "sha256": "81efda7fba8f2cfa18a32ce7b269abd7259811e00781148366a534399fcd3c00"
+        },
+        {
+            "path": "repository/convex/sourceCaptures.ts",
+            "bytes": 15767,
+            "sha256": "d0de38184c1f348d9805a5a21855025c085206211fee2d947c3247980899d916"
+        },
+        {
+            "path": "repository/convex/sourceDiscovery.ts",
+            "bytes": 12315,
+            "sha256": "3516171c00467011c344938ca1423b10e9c2335f8d9c2487b2c4580ba14a37eb"
+        },
+        {
+            "path": "repository/convex/sourceDiscoveryActions.ts",
+            "bytes": 6736,
+            "sha256": "dbd0907d8aa8a6fd590ce5bdcfe9b9c7124758ceb933f2c4c6aefc5a927cec61"
+        },
+        {
+            "path": "repository/convex/sourceIntake.ts",
+            "bytes": 5298,
+            "sha256": "7e6ea21c93768f5699862cf5612d79174980b12e659af7348073608057aa761c"
+        },
+        {
+            "path": "repository/convex/sourcePreparation.ts",
+            "bytes": 96665,
+            "sha256": "64a9587ae62d41e54dbc462fd0efebfc25b7aa4a2909820813f30146579108bd"
+        },
+        {
+            "path": "repository/convex/sourcePreparationActions.ts",
+            "bytes": 73629,
+            "sha256": "e28d3ca007e222fe7a3849c5156127fbb2d5db82ad57ced83c8ac0b90829fffe"
+        },
+        {
+            "path": "repository/convex/sourcePreparationEvaluation.ts",
+            "bytes": 23500,
+            "sha256": "51c2589ce5db442c3f8d0a8b4b45348a50e43e022c678783b1abce34d83fa754"
+        },
+        {
+            "path": "repository/convex/sourcePreparationStudyPolicy.ts",
+            "bytes": 3390,
+            "sha256": "e6d88b3dea88c03b52099fdd66eb998f4883cbab04b3beecdb2cc7a301a748bc"
+        },
+        {
+            "path": "repository/convex/sourcePreparationWorkflow.ts",
+            "bytes": 12879,
+            "sha256": "1dfa8abe0e8ba3c1fef3d4bacfb409eaaf6e7d972268c6341daaa6c8da53a3ce"
+        },
+        {
+            "path": "repository/convex/sourceRetrieval.ts",
+            "bytes": 34340,
+            "sha256": "d17f4583232805c8cc12a7f7d445666a5ab5148083aa2c5ddb46a7e571dc09ad"
+        },
+        {
+            "path": "repository/convex/sourceRetrievalActions.ts",
+            "bytes": 32242,
+            "sha256": "0924a0bfb67fc9536b6ab4bec5ff9bb5ab8b156dc806f0cca106a2c29c0a1b50"
+        },
+        {
+            "path": "repository/convex/sources.ts",
+            "bytes": 28988,
+            "sha256": "19495523657996bacc5cb03e1f40a2106d353d7c23d7a004fe742fe6dc8b16b2"
+        },
+        {
+            "path": "repository/convex/sourceSelectionProposalActions.ts",
+            "bytes": 26481,
+            "sha256": "32d234bcef555c6299fdf6cdac53df45de03699e6254e1781b0eeefd89668492"
+        },
+        {
+            "path": "repository/convex/sourceSelectionProposals.ts",
+            "bytes": 94178,
+            "sha256": "721f7c8fcc10aec751ea7fbe6cd0647a1439074998bca73d2d6f8fc5ce3e1799"
+        },
+        {
+            "path": "repository/convex/tsconfig.json",
+            "bytes": 545,
+            "sha256": "801f484f1b80fcf3e9ccf69bf66c065df4b137cf4b56c617c8ba7abb17b4161c"
+        },
+        {
+            "path": "repository/convex/visitors.ts",
+            "bytes": 858,
+            "sha256": "04589052d65f3f7b1021c631dc55eeee75f6f01db24b6eeec84f38195f2b8ba9"
+        },
+        {
+            "path": "repository/convex/workbench.ts",
+            "bytes": 35588,
+            "sha256": "3d6748e24a4ef4b1aac1cfe64c0a54c4bdef091227d8a87c66253de706b11d99"
+        },
+        {
+            "path": "repository/convex/workflow.ts",
+            "bytes": 1938,
+            "sha256": "942d91cb05b3dbd9bd33269ab6143b6144c3a5120caefe1066fe4b3546d47df2"
+        },
+        {
+            "path": "repository/convex/workflowControls.ts",
+            "bytes": 8106,
+            "sha256": "c51dd02dd37e77154faf031e16db8508a1907741026afc208904bda09d069d35"
+        },
+        {
+            "path": "repository/package.json",
+            "bytes": 5516,
+            "sha256": "e68fafc73f7049d590bb55db393597960cf34f964145576ce9757fa8b755a0f0"
+        },
+        {
+            "path": "repository/pnpm-lock.yaml",
+            "bytes": 395998,
+            "sha256": "686bab18db48a264603de39b6dd4df0eaa77fa18956112b7902051a39e13b128"
+        },
+        {
+            "path": "repository/src/__tests__/convex/workflows/durable-workflow.test.ts",
+            "bytes": 4434,
+            "sha256": "e7457729753a46a96a283ead6e60a61afbbeced87799381c9359ae4a2896fc32"
+        },
+        {
+            "path": "repository/src/__tests__/convex/workflows/evidence-sufficiency.test.ts",
+            "bytes": 6900,
+            "sha256": "3bf01ca729cecb5bbae21fb83b446cfc0bc19e9aae4ca1c254d5a1c39d1f53af"
+        },
+        {
+            "path": "repository/src/__tests__/convex/workflows/framed-control-authority.test.ts",
+            "bytes": 2108,
+            "sha256": "65ae588e49b7942f919b2f6a132ccdfb452006c49d24c7c1223cee1fb249e6f6"
+        },
+        {
+            "path": "repository/src/__tests__/convex/workflows/framed-control-phases.test.ts",
+            "bytes": 1093,
+            "sha256": "77ed607c95e884046cf85049bdfc719426f6782b99e100f72e9f339311880b23"
+        },
+        {
+            "path": "repository/src/__tests__/convex/workflows/framed-research-control.test.ts",
+            "bytes": 5268,
+            "sha256": "507cc1b1bec38fa11975d42957a73c715188141cceccb942bd5a62c49fed2062"
+        },
+        {
+            "path": "repository/src/__tests__/convex/workflows/phase-4-workflow.test.ts",
+            "bytes": 18234,
+            "sha256": "4b2c41ae1fb20b333e5555c0ebba5842fdd4100a987d7584b5b46d83dfaa9a58"
+        },
+        {
+            "path": "repository/src/__tests__/convex/workflows/phase-5-workflow.test.ts",
+            "bytes": 29896,
+            "sha256": "2fd9d32c16f9f194225a69c5fb7ca296e0634531ce2b55f2df2c003daef6e669"
+        },
+        {
+            "path": "repository/src/__tests__/convex/workflows/source-preparation-concurrency.test.ts",
+            "bytes": 4076,
+            "sha256": "9ecfbdeb7272803194902e16e5843706bd9b18c2d3958eaa506e22d806426073"
+        },
+        {
+            "path": "repository/src/__tests__/convex/workflows/source-preparation-final-pass.test.ts",
+            "bytes": 11632,
+            "sha256": "3762586700626c07774d6252d564f925f81b3d8276aa412f49093070d02c9cba"
+        },
+        {
+            "path": "repository/src/__tests__/convex/workflows/source-preparation-start.test.ts",
+            "bytes": 49421,
+            "sha256": "902a87d2a87cae73aaba6e025c36a016c16e98c7bf3b1c55dfd4dfd29fc8980d"
+        },
+        {
+            "path": "repository/src/__tests__/convex/workflows/source-preparation-study.test.ts",
+            "bytes": 18770,
+            "sha256": "1991fc5963980523f15708b5aa64cf922de96732a281b91eb0c56a74eab6876e"
+        },
+        {
+            "path": "repository/src/__tests__/convex/workflows/source-preparation-workflow.test.ts",
+            "bytes": 50048,
+            "sha256": "f67c1f93c856a0be7fb619fe88a1da6a48adcef5f0979489f84e322d38ae761a"
+        },
+        {
+            "path": "repository/src/__tests__/convex/workflows/workbench-documentary-recovery.test.ts",
+            "bytes": 6154,
+            "sha256": "d2ef545c4ff5abe669327d2a03f1caac5a2e3d6d9c1254e6fe7efbe50c153c8e"
+        },
+        {
+            "path": "repository/src/__tests__/convex/workflows/workbench-review-boundaries.test.ts",
+            "bytes": 6475,
+            "sha256": "350b69d5621b423de7947a003132ad17e91a3d0568b530503f974277ba7e3c9a"
+        },
+        {
+            "path": "repository/src/__tests__/convex/workflows/workflow-test-register.d.ts",
+            "bytes": 120,
+            "sha256": "35a0e7454b04000a7afb2179f269ba1759c6758cafb97048fce967610db45de0"
+        },
+        {
+            "path": "repository/src/__tests__/convex/workflows/workflow-test-register.js",
+            "bytes": 53,
+            "sha256": "827992ec85f90400e4c05c15ac47e68e92b156536ca724c35513ccedf7f30d32"
+        },
+        {
+            "path": "repository/src/__tests__/setup/agent-harness.ts",
+            "bytes": 1302,
+            "sha256": "9344fc5534337cafe28aa6115a150b22338e2bc9ef7e308a6ce6867780b80118"
+        },
+        {
+            "path": "repository/src/__tests__/setup/cleanup.ts",
+            "bytes": 2302,
+            "sha256": "ba090c8e7149cbb82ef3bba886e2dfd0819d8db13f50b00486083a21eac4e0f6"
+        },
+        {
+            "path": "repository/src/__tests__/setup/convex-publication.ts",
+            "bytes": 1246,
+            "sha256": "4d706b96236bda60548bbba3f00e7052ec15fe1c17dc9cf0c71e72b974fd8aa3"
+        },
+        {
+            "path": "repository/src/__tests__/setup/convex-storage.ts",
+            "bytes": 1302,
+            "sha256": "16deda6bef18530287239b980a762419ffaa645640ad6ca9be613d52ff8432d1"
+        },
+        {
+            "path": "repository/src/__tests__/setup/model-configuration.ts",
+            "bytes": 3741,
+            "sha256": "6a7f3d0e62cd1c8e2cf4a1087829757f3bd2317cfef2b0bc1eecffa82a32a1c8"
+        },
+        {
+            "path": "repository/src/__tests__/setup/pi-mission.ts",
+            "bytes": 3993,
+            "sha256": "68bcee78b7a8a35fb9225874509b438cda89c74030c72fec5b2ae7be36bd62e5"
+        },
+        {
+            "path": "repository/src/__tests__/setup/pi-native.ts",
+            "bytes": 515,
+            "sha256": "8f47754dd4a78d4e7f1d6faa56e431021aaaba0d9587de1eef121282ae9c1669"
+        },
+        {
+            "path": "repository/src/__tests__/setup/research-launch.ts",
+            "bytes": 1602,
+            "sha256": "7f2191472cb1313523bb72b20db89e84269851a0df1c815747d73c7451ca6c21"
+        },
+        {
+            "path": "repository/src/__tests__/setup/source-preparation.ts",
+            "bytes": 17016,
+            "sha256": "8a8f58b39821f804f20acc156c0f1884dbef42f51e986681be911733746cd492"
+        },
+        {
+            "path": "repository/src/__tests__/setup/workbench-materials.ts",
+            "bytes": 3905,
+            "sha256": "279728c524b691cbde5cc5d8ed21efe9ef6cb9c51373e6cf2c9345feb3442d66"
+        },
+        {
+            "path": "repository/src/__tests__/setup/workbench.ts",
+            "bytes": 3694,
+            "sha256": "9a7e230191835c811f2d123316e65c5d84edf546b9a95c7bfaf504626bf19a5d"
+        },
+        {
+            "path": "repository/src/__tests__/setup/workspace-dossiers.ts",
+            "bytes": 1002,
+            "sha256": "c9b86268bb25b55c5d6a1ba30f3b03a69ac17711b7fe4ad30360cdcf753213a8"
+        },
+        {
+            "path": "repository/tsconfig.json",
+            "bytes": 1333,
+            "sha256": "dabe2b26441ffff6b4a7b223df49a74692b532d1fc1574f384041547174ad134"
+        },
+        {
+            "path": "repository/vitest.config.ts",
+            "bytes": 401,
+            "sha256": "66273f176fe11c3f11370068ff8e222c9f60c76f4d4cada01bf42ffe2975c2ce"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261102T081439358Z-workbench-summary-glm-code.tar.gz",
+        "bytes": 840070,
+        "sha256": "1d8adae0c1cd8506d5e73ba0aa7a73bdc378ec149122bbeb475b463c0eba9fda"
+    },
+    "verification": "restored_and_verified"
+}

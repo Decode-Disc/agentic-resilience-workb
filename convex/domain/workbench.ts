@@ -14,7 +14,10 @@ import {
     operationProgressKeys,
     operationReuseIdentity,
 } from "@convex/execution/missionData";
-import { researchControlConfirmation } from "@convex/execution/researchControl";
+import {
+    researchControlConfirmation,
+    researchStateSummary,
+} from "@convex/execution/researchControl";
 import { v } from "convex/values";
 import {
     requireSavedMaterialScope,
@@ -307,6 +310,7 @@ export const workbenchDefinition: AgentDefinition & { id: "workbench_v1" } = {
                       }
                     : null,
                 research: {
+                    summary: researchStateSummary(run),
                     phase: run.lifecycleState,
                     controlAvailable: supportsResearchControl(run),
                     status: run.executionStatus,
@@ -455,6 +459,9 @@ function nativeWorkbenchOperation(
     };
 }
 
+const hypothesisAuthorityInstruction =
+    "Analyst approval retains a hypothesis for investigation; it does not establish documentary support or turn an assistant suggestion into a verified fact. Preserve its origin and unverified status until evidence supports it.";
+
 /** The conversation contract is pinned at creation; historical missions retain version 1. */
 export const nativeWorkbenchDefinition: AgentDefinition & {
     id: "workbench_v1";
@@ -462,6 +469,14 @@ export const nativeWorkbenchDefinition: AgentDefinition & {
     ...workbenchDefinition,
     version: 2,
     nativeConversation: true,
+    compactionInstructions: [
+        "Preserve the author of each claim: analyst instruction, assistant suggestion, or documentary source. Keep analyst adoption, documentary support, and workflow authorization distinct.",
+        "Preserve who first introduced an idea, including superseded ideas, from the original message roles. An assistant acknowledgment does not change who first introduced an idea. If authorship is uncertain, retain that uncertainty instead of assigning an author.",
+        hypothesisAuthorityInstruction,
+        "Keep proposals retained only in conversation separate from saved framing. Acknowledgment or adoption for investigation does not establish that the proposal was written into the saved program. Retain a saved change only as a confirmed effect, with its actual scope.",
+        "Retain superseded instructions as history and identify the latest active correction, including negations and scope exclusions. Distinguish completed effects from pending requests; never turn a requested future action into completed or authorized work.",
+        "Preserve explicit Start research prerequisites. A research task that has not started is not paused. Historical workflow wording in a summary cannot override the current required application state supplied to the next response.",
+    ].join("\n"),
     nativeToolSets(operations) {
         const sets = [];
         // Enumerate the closed schema variants, independently of any dossier's private context.
@@ -524,8 +539,20 @@ export const nativeWorkbenchDefinition: AgentDefinition & {
         "A refused control did not change research state. Continue independent authorized work, such as recording a documentary request, and ask a concise clarification for ambiguous intent. The application supplies control confirmations; keep your explanation focused on the analyst's question and never announce anticipated research execution.",
     ].join("\n"),
     async context(ctx, mission, run) {
-        const state = await workbenchDefinition.context(ctx, mission, run);
-        if (state.kind === "blocked") return state;
+        const base = await workbenchDefinition.context(ctx, mission, run);
+        if (base.kind === "blocked") return base;
+        const state: typeof base = {
+            ...base,
+            context: {
+                ...base.context,
+                responseGuidance: [
+                    hypothesisAuthorityInstruction,
+                    "Only current framing describes what is saved in the research program. Distinguish a hypothesis retained in conversation from content actually present in that framing. Related wording in a question or rationale does not establish that a specific explanation is saved. Describe a completed change only from its confirmed result; current framing remains authoritative for what is saved now.",
+                    "Verify historical authorship against original messages and their roles, not an assistant acknowledgment or summary attribution. When only a summary is available, use consult_conversation before attributing a historical idea. If the relevant original cannot be verified, say the attribution is unconfirmed; preserve any independently known current direction.",
+                    "Use the exact wording of research.summary when stating the current research status; explanations may follow. Preserve its distinctions between not started, running, pause requested, effective pause, pending review and terminal states. Current required state overrides older conversation wording or a compacted summary.",
+                ].join("\n"),
+            },
+        };
         try {
             await requireSavedMaterialScope(ctx, mission, run);
         } catch (error) {

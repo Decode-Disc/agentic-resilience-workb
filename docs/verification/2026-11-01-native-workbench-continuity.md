@@ -1,5 +1,9 @@
 # Native Workbench conversation continuity
 
+Composer-style correction, 2026-11-02: the prompt-input restyling described in the earlier composer increment was reverted at the user's request. Current composition belongs to the [technical contract](../../context/TECH.md#administrative-model-configuration); model/effort controls and native slash suggestions remain. Earlier captures retain the superseded visual stage rather than defining the current composer.
+
+Summary-fidelity follow-up, 2026-11-02: the [bounded real GLM qualification](2026-11-02-workbench-summary-fidelity-qualification.md) preserves the critical distinctions in three controlled histories through native compaction and six later replies. Its isolated persistence, injected context counter, wording warnings and preceding unknown-cost evaluator failure remain explicit; it does not qualify deployed-browser compression or the complete research workflow. Earlier raw evidence below is unchanged.
+
 Latest follow-up, 2026-11-01: the [message-authority repair and final paid cases](2026-11-01-workbench-message-authority-requalification.md) supersede current-status readings of analyst-field precedence and documentary registration below. Their targeted corrections pass; read-only compliance, framing usefulness and local browser execution remain unaccepted. Original observations and raw evidence are preserved.
 
 Date: 2026-11-01. This record verifies the implementation for newly created Workbench conversations. The [technical contract](../../context/TECH.md#accepted-native-conversation-and-model-interface) owns current behavior; the [retained conception](../brainstorming/question-led-workbench/2026-10-26-agentic-execution-architecture.md#native-conversation-and-harness-refinement-of-2026-11-01) records the accepted choices. Live model usefulness and summary fidelity remain separate qualification work.

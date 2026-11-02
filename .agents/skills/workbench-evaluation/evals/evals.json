@@ -134,6 +134,67 @@
         "Keeps early framing proposals separate from established company facts and explicit research-start authority.",
         "Defines comparable bounded inputs and useful outcomes, identifies unsupported runner scope, and preserves the read-only, provider and threshold boundaries."
       ]
+    },
+    {
+      "id": 9,
+      "name": "cheap-stress-model-versus-task-quality",
+      "prompt": "Interpret this recorded batch without calls or edits: eleven Nemo scenarios, eight published answers, two blocked cases and one unfinished case. One answer says research started although the dossier stayed in framing. Another answer is economically generic but correctly preserves the data and completes. Keep Nemo for harness corrections before qualifying the intended candidate, glm-5.3-flash. What can we conclude and what is the smallest next step?",
+      "expected_output": "An evidence-bounded interpretation separating published replies, actual business outcomes, harness integrity and economic answer quality; preserves the selected stress and quality model roles.",
+      "files": [
+        "../../../docs/verification/2026-11-01-workbench-nemo-requalification.md"
+      ],
+      "expectations": [
+        "Does not report eight business successes from eight published responses, or infer the cause of the unfinished case without execution evidence.",
+        "Treats the false published start as a system/publication failure even though the server refused the underlying action.",
+        "Can classify the safely completed generic response as mechanically successful but analytically insufficient rather than requiring a better model to repair the harness.",
+        "Retains Nemo for the requested stress work and glm-5.3-flash as the intended later candidate; does not substitute a model or claim its current route identity is verified.",
+        "Recommends the smallest harness diagnosis or regression before another paid qualification and performs no provider call."
+      ]
+    },
+    {
+      "id": 10,
+      "name": "ambiguous-elaboration-and-unresolved-timeout",
+      "prompt": "Read-only judgment: the analyst asked to refine the switching question. The answer retained the scope and added a parenthetical explanation of switching. A reviewer calls this invented analyst intent, but there is no evidence that it changed the requested meaning or granted authority. Separately a concurrent-edit scenario has no answer after 190 seconds, with no worker trace. Should we add an attribution guard and blame the timeout on the model?",
+      "expected_output": "A causal assessment distinguishing authorized elaboration from unsupported attribution and observed non-completion from a proven timeout cause.",
+      "files": [],
+      "expectations": [
+        "Does not treat the explanatory parenthesis alone as a demonstrated authority defect or prescribe an additional guard without a semantic or scope divergence.",
+        "Keeps the concurrent-edit cause unresolved and identifies the missing lifecycle evidence rather than blaming the model or inventing a deadlock.",
+        "Uses separate supported verdicts for the ambiguous wording and incomplete execution; does not modify code or launch calls."
+      ]
+    },
+    {
+      "id": 11,
+      "name": "paid-browser-qualification-after-corrections",
+      "prompt": "Plan browser qualification after the harness corrections. I want glm-5.3-flash, not a substitute Nemo model. The only available result is real inference with isolated Convex persistence; final regressions have not passed and no cost ceiling or maximum attempt count is agreed. Planning only: state what the proposed checks could establish.",
+      "expected_output": "A bounded staged proposal that keeps final deterministic validation before paid protected-browser work, preserves exact model choice and makes missing execution authorization explicit.",
+      "files": [
+        "../../../context/TECH.md",
+        "../../../docs/ROADMAP.md"
+      ],
+      "expectations": [
+        "Does not treat isolated Convex persistence with a real model as qualification of the actual protected browser or deployed application.",
+        "Places the paid batch after the relevant deterministic regressions on identified final code and keeps changed code stages/results separate.",
+        "Preserves the requested model, requires live exact route verification before dispatch and does not silently substitute a cheaper candidate.",
+        "Identifies the missing attempt and cost bounds without calling providers, activating a route or requesting pasted secrets.",
+        "Includes relevant real admission, persisted effects, visible responses and reconnection with separately stated simulated and untested boundaries."
+      ]
+    },
+    {
+      "id": 12,
+      "name": "explicit-control-cost-and-unwired-composer",
+      "prompt": "The backend /pause and /resume API retains a deterministic receipt without a model invocation. The composer is deliberately not connected yet. Ordinary text such as “pause, then explain the current evidence” still goes through the model. How should we qualify control costs now, and can we call the browser slash journey complete? Analysis only, no edits or calls.",
+      "expected_output": "An entry-point-specific qualification proposal preserving typed controls, model-mediated natural language and the visible composer delivery gap.",
+      "files": [
+        "../../../convex/workbench.ts",
+        "../../../docs/ROADMAP.md"
+      ],
+      "expectations": [
+        "Checks zero model invocation for the explicit control itself through the implemented API and its actual persisted receipt rather than inferring it from confirmation copy.",
+        "Separates any resumed research calls from the command cost and latency, without promising that resume makes all downstream work free.",
+        "Does not replace natural-language interpretation with keyword detection or misclassify the mixed text as a pure command.",
+        "Reports the browser slash interaction as unqualified while the composer remains unwired and keeps implementation outside this analysis request."
+      ]
     }
   ]
 }

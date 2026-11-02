@@ -377,14 +377,22 @@ export async function resumeResearch(
     return generation;
 }
 
-/** Confirms only persisted research state and an observed control effect. */
-export function researchControlConfirmation(
-    action: "start" | "pause" | "resume",
-    executed: boolean,
-    run: Doc<"researchRuns">,
+/** Canonical wording for observed research state, independent of any requested action. */
+export function researchStateSummary(
+    run: Pick<
+        Doc<"researchRuns">,
+        | "lifecycleState"
+        | "executionStatus"
+        | "pauseReason"
+        | "researchPauseRequested"
+    >,
 ): string {
-    if (run.lifecycleState === "framing")
-        return "Research has not started. Review the research program and choose Start research when ready.";
+    if (run.lifecycleState === "framing") return "Research has not started.";
+    if (run.executionStatus === "completed") return "Research is complete.";
+    if (run.executionStatus === "cancelled")
+        return "Research has been cancelled.";
+    if (run.executionStatus === "failed")
+        return "Research has stopped because a problem needs attention.";
     if (
         run.pauseReason === "source_review" ||
         (run.lifecycleState === "awaiting_source_review" &&
@@ -393,6 +401,30 @@ export function researchControlConfirmation(
         return "Research is waiting for source review. Review the proposed sources to continue.";
     if (run.pauseReason && run.pauseReason !== "analyst")
         return "Research is waiting for an analyst decision. Complete the pending review to continue.";
+    if (run.executionStatus === "paused") return "Research is paused.";
+    if (run.executionStatus === "running")
+        return run.researchPauseRequested
+            ? "Pause requested. Research will pause after the work already in progress finishes."
+            : "Research is running.";
+    return "Research is not running.";
+}
+
+/** Confirms only persisted research state and an observed control effect. */
+export function researchControlConfirmation(
+    action: "start" | "pause" | "resume",
+    executed: boolean,
+    run: Doc<"researchRuns">,
+): string {
+    if (run.lifecycleState === "framing")
+        return `${researchStateSummary(run)} Review the research program and choose Start research when ready.`;
+    if (
+        run.pauseReason === "source_review" ||
+        (run.lifecycleState === "awaiting_source_review" &&
+            run.executionStatus !== "running")
+    )
+        return researchStateSummary(run);
+    if (run.pauseReason && run.pauseReason !== "analyst")
+        return researchStateSummary(run);
     if (action === "start")
         return run.executionStatus === "running"
             ? "Research has already started. Inspect the current research progress."
@@ -403,14 +435,14 @@ export function researchControlConfirmation(
         run.executionStatus === "running" &&
         run.researchPauseRequested
     )
-        return "Pause requested. Research will pause after the work already in progress finishes.";
+        return researchStateSummary(run);
     if (
         action === "pause" &&
         executed &&
         run.executionStatus === "paused" &&
         run.pauseReason === "analyst"
     )
-        return "Research is paused.";
+        return researchStateSummary(run);
     if (
         action === "resume" &&
         executed &&

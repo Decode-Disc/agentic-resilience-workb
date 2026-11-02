@@ -831,7 +831,10 @@ test("an invalid history cursor gives exact recovery guidance and permits readin
                 kind: "success",
                 value: expect.objectContaining({
                     entries: expect.arrayContaining([
-                        expect.objectContaining({ content: original.text }),
+                        expect.objectContaining({
+                            role: "user",
+                            content: original.text,
+                        }),
                     ]),
                 }),
             }),

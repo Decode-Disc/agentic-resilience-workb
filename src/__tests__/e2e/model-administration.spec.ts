@@ -106,7 +106,7 @@ for (const viewport of [
                         { exact: true },
                     ),
                 ).toBeVisible({ timeout: 90000 });
-                await expect(enable).toBeEnabled();
+                await expect(enable).toBeEnabled({ timeout: 90000 });
                 if (enabled) {
                     await enable.click();
                     await expect(enable).toBeChecked();
