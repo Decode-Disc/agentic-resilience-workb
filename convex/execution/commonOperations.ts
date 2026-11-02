@@ -11,7 +11,11 @@ import { operationReuseIdentity } from "./missionData";
 import { consultMissionState } from "./missionHistory";
 
 /** Read policies and execution are the same for native callers and generated tools. */
-export const consultMissionStateOperation: AgentOperationDefinition = {
+export const consultMissionStateOperation: Extract<
+    AgentOperationDefinition,
+    { effectKind: "read" }
+> = {
+    effectKind: "read",
     version: 1,
     description:
         "Read only the current mission state and its bounded observable work history. For earlier analyst exchanges use consult_conversation. Omit cursor on the first read; on later pages copy only continueCursor returned by this operation, never a mission, turn or conversation ID.",
@@ -29,18 +33,24 @@ export const consultMissionStateOperation: AgentOperationDefinition = {
     },
     async execute(ctx, args) {
         if (!args.missionId || args.input.kind !== "consult_mission_state")
-            return { kind: "refused", code: "mission_required" };
-        return consultMissionState(ctx, {
-            missionId: args.missionId,
-            expectedGeneration: args.expectedGeneration,
-            cursor: args.input.cursor,
-        });
+            return { outcome: { kind: "refused", code: "mission_required" } };
+        return {
+            outcome: await consultMissionState(ctx, {
+                missionId: args.missionId,
+                expectedGeneration: args.expectedGeneration,
+                cursor: args.input.cursor,
+            }),
+        };
     },
     validateOutcome(_request, outcome) {
         return outcome;
     },
 };
-export const consultRunStateOperation: AgentOperationDefinition = {
+export const consultRunStateOperation: Extract<
+    AgentOperationDefinition,
+    { effectKind: "read" }
+> = {
+    effectKind: "read",
     nativeAuthority: "dossier",
     version: 1,
     description:
@@ -68,7 +78,8 @@ export const consultRunStateOperation: AgentOperationDefinition = {
             : { kind: "unavailable", code: "not_authorized" };
     },
     async execute(ctx, args) {
-        if (!args.runId) return { kind: "refused", code: "not_authorized" };
+        if (!args.runId)
+            return { outcome: { kind: "refused", code: "not_authorized" } };
         const value = await ctx.runQuery(
             internal.execution.operations.readRunState,
             {
@@ -77,21 +88,26 @@ export const consultRunStateOperation: AgentOperationDefinition = {
                 missionId: args.missionId,
             },
         );
-        return { kind: "success", valueJson: JSON.stringify(value) };
+        return {
+            outcome: { kind: "success", valueJson: JSON.stringify(value) },
+        };
     },
     validateOutcome(_request, outcome) {
         return outcome;
     },
 };
 
-const consultConversation: AgentOperationDefinition = {
+const consultConversation: Extract<
+    AgentOperationDefinition,
+    { effectKind: "read" }
+> = {
     ...consultMissionStateOperation,
     description:
         "Read exact prior processed conversation messages in bounded fragments; queued instructions are excluded. Omit cursor on the first read; on later pages copy only continueCursor returned by this operation, never a mission, turn or conversation ID.",
     inputValidator: consultConversationInputValidator,
     async execute(ctx, args) {
         if (!args.missionId || args.input.kind !== "consult_conversation")
-            return { kind: "refused", code: "mission_required" };
+            return { outcome: { kind: "refused", code: "mission_required" } };
         try {
             const valueJson = await ctx.runQuery(
                 internal.execution.conversations.historyForMission,
@@ -110,23 +126,27 @@ const consultConversation: AgentOperationDefinition = {
             )
                 throw executionError("conversation_message_unavailable");
             return {
-                kind: "success",
-                valueJson,
-                ...(page.entries.length
-                    ? {
-                          progressKey: sha256Hex(
-                              stableStringify({
-                                  kind: "conversation_history",
-                                  entries: page.entries,
-                              }),
-                          ),
-                      }
-                    : {}),
+                outcome: {
+                    kind: "success",
+                    valueJson,
+                    ...(page.entries.length
+                        ? {
+                              progressKey: sha256Hex(
+                                  stableStringify({
+                                      kind: "conversation_history",
+                                      entries: page.entries,
+                                  }),
+                              ),
+                          }
+                        : {}),
+                },
             };
         } catch (error) {
             if (executionFailureCode(error) !== "history_cursor_invalid")
                 throw error;
-            return { kind: "refused", code: "history_cursor_invalid" };
+            return {
+                outcome: { kind: "refused", code: "history_cursor_invalid" },
+            };
         }
     },
 };

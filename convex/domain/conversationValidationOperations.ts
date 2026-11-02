@@ -40,6 +40,7 @@ export const conversationValidationOperations: Record<
     AgentOperationDefinition
 > = {
     request_fixture_validation: {
+        effectKind: "delegation",
         identity: operationReuseIdentity,
         version: 1,
         description: "Request one bounded local validation mission.",
@@ -69,16 +70,22 @@ export const conversationValidationOperations: Record<
         },
         async execute(ctx, args) {
             if (!args.requestId) throw executionError("request_unavailable");
-            return ctx.runMutation(internal.execution.handoffs.startChild, {
-                requestId: args.requestId,
-                expectedGeneration: args.expectedGeneration,
-            });
+            return {
+                outcome: await ctx.runMutation(
+                    internal.execution.handoffs.startChild,
+                    {
+                        requestId: args.requestId,
+                        expectedGeneration: args.expectedGeneration,
+                    },
+                ),
+            };
         },
         validateOutcome(_request, outcome) {
             return outcome;
         },
     },
     wait_fixture_result: {
+        effectKind: "durable_effect",
         nativeAuthority: "dossier",
         identity: operationReuseIdentity,
         version: 1,
@@ -99,7 +106,7 @@ export const conversationValidationOperations: Record<
         },
         async execute(_ctx, args) {
             if (!args.requestId) throw executionError("request_unavailable");
-            return { kind: "waiting", reference: args.requestId };
+            return { outcome: { kind: "waiting", reference: args.requestId } };
         },
         validateOutcome(request, outcome) {
             if (outcome.kind !== "success") return outcome;

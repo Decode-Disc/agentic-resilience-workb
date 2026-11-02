@@ -9,9 +9,10 @@ import {
     validationOperationSuccessValidator,
 } from "./executionValidationContracts";
 export const validationOperationBehavior: Pick<
-    AgentOperationDefinition,
-    "pin" | "execute" | "validateOutcome" | "identity"
+    Extract<AgentOperationDefinition, { effectKind: "read" }>,
+    "effectKind" | "pin" | "execute" | "validateOutcome" | "identity"
 > = {
+    effectKind: "read",
     identity: operationReuseIdentity,
     async pin(_ctx, mission, input) {
         if (!mission) return { kind: "unavailable", code: "mission_required" };
@@ -34,7 +35,7 @@ export const validationOperationBehavior: Pick<
     },
     async execute(ctx, args) {
         if (!args.missionId)
-            return { kind: "refused", code: "mission_required" };
+            return { outcome: { kind: "refused", code: "mission_required" } };
         // Dispatch has already claimed the authorized request; read immutable scope again at the boundary.
         const { internal } = await import("@convex/_generated/api");
         const context = await ctx.runQuery(internal.execution.context.build, {
@@ -42,7 +43,7 @@ export const validationOperationBehavior: Pick<
             expectedGeneration: args.expectedGeneration,
         });
         if (context.kind !== "ready")
-            return { kind: "unavailable", code: context.code };
+            return { outcome: { kind: "unavailable", code: context.code } };
         const input: unknown = JSON.parse(context.inputJson);
         if (
             args.input.kind !== "check_fixture_value" ||
@@ -51,14 +52,20 @@ export const validationOperationBehavior: Pick<
             !("validationValues" in input) ||
             !Array.isArray(input.validationValues)
         )
-            return { kind: "refused", code: "validation_index_invalid" };
+            return {
+                outcome: { kind: "refused", code: "validation_index_invalid" },
+            };
         const value: unknown = input.validationValues[args.input.index];
         if (typeof value !== "number")
-            return { kind: "refused", code: "validation_index_invalid" };
+            return {
+                outcome: { kind: "refused", code: "validation_index_invalid" },
+            };
         return {
-            kind: "success",
-            valueJson: JSON.stringify({ index: args.input.index, value }),
-            progressKey: `checked:${args.input.index}`,
+            outcome: {
+                kind: "success",
+                valueJson: JSON.stringify({ index: args.input.index, value }),
+                progressKey: `checked:${args.input.index}`,
+            },
         };
     },
     validateOutcome(request, outcome) {

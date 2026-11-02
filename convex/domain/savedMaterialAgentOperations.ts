@@ -12,20 +12,25 @@ import {
     searchAvailableMaterialInputValidator,
 } from "./savedMaterialOperations";
 export const savedMaterialOperationBehavior: Pick<
-    AgentOperationDefinition,
-    "pin" | "execute" | "validateOutcome" | "identity"
+    Extract<AgentOperationDefinition, { effectKind: "durable_effect" }>,
+    "effectKind" | "pin" | "execute" | "validateOutcome" | "identity"
 > = {
+    effectKind: "durable_effect",
     identity: operationReuseIdentity,
     async execute(ctx, args) {
         if (!args.missionId)
-            return { kind: "refused", code: "mission_required" };
+            return { outcome: { kind: "refused", code: "mission_required" } };
         if (!validate(savedMaterialOperationValidator, args.input))
-            return { kind: "refused", code: "operation_not_allowed" };
-        return executeSavedMaterialOperation(ctx, {
-            ...args,
-            missionId: args.missionId,
-            input: args.input,
-        });
+            return {
+                outcome: { kind: "refused", code: "operation_not_allowed" },
+            };
+        return {
+            outcome: await executeSavedMaterialOperation(ctx, {
+                ...args,
+                missionId: args.missionId,
+                input: args.input,
+            }),
+        };
     },
     validateOutcome(request, outcome) {
         const expected =

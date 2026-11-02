@@ -31,6 +31,7 @@ import {
     operationOutcomeValidator,
     type operationRefusalValidator,
     type requestInputValidator,
+    validateOperationExecutionResult,
 } from "./executionProtocol";
 import {
     domainDataPatch,
@@ -850,12 +851,20 @@ export const dispatch = internalAction({
               )
             : undefined;
         const operation = operationFor(claimed.input, mission ?? undefined);
-        const outcome = await operation.execute(ctx, {
+        const executeArgs = {
             ...args,
             missionId: claimed.missionId,
             runId: claimed.runId,
             input: claimed.input,
-        });
+        };
+        const result =
+            operation.effectKind === "read"
+                ? await operation.execute(
+                      { runQuery: ctx.runQuery.bind(ctx) },
+                      executeArgs,
+                  )
+                : await operation.execute(ctx, executeArgs);
+        const { outcome } = validateOperationExecutionResult(operation, result);
         return ctx.runMutation(internal.execution.operations.recordResult, {
             ...args,
             outcome,

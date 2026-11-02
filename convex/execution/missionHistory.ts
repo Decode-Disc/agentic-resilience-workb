@@ -3,9 +3,9 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
 import { validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
-import type { OperationOutcome } from "./agentDefinition";
 import { agentDefinitionIdValidator } from "./agentSchemas";
 import { executionFailureCode } from "./errors";
+import type { SettledOperationOutcome } from "./executionProtocol";
 
 const MAX_HISTORY_RESULT_BYTES = 48 * 1024;
 type MissionOperationArgs = {
@@ -15,7 +15,7 @@ type MissionOperationArgs = {
 function isRecord(value: unknown): value is Record<string, unknown> {
     return !!value && typeof value === "object" && !Array.isArray(value);
 }
-function successOutcome(value: unknown): OperationOutcome {
+function successOutcome(value: unknown): SettledOperationOutcome {
     return { kind: "success", valueJson: JSON.stringify(value) };
 }
 function selectHistoryPage(
@@ -53,9 +53,9 @@ function selectHistoryPage(
 }
 
 export async function consultMissionState(
-    ctx: ActionCtx,
+    ctx: Pick<ActionCtx, "runQuery">,
     args: MissionOperationArgs & { cursor?: string },
-): Promise<OperationOutcome> {
+): Promise<SettledOperationOutcome> {
     try {
         const mission = {
             missionId: args.missionId,

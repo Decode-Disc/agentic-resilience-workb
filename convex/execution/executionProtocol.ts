@@ -7,11 +7,17 @@ import {
     type VObject,
     v,
 } from "convex/values";
+import { validate } from "convex-helpers/validators";
 import {
     agentCompletionValidator,
     agentOperationSuccessValidator,
     operationInputValidator,
 } from "./agentSchemas";
+import { executionError } from "./errors";
+import {
+    commonOperationSuccessValidator,
+    historyReadReceiptValidator,
+} from "./operationContracts";
 
 export {
     agentDefinitionIdValidator,
@@ -24,7 +30,7 @@ export const executionScopeValidator = v.union(
     v.literal("conversation"),
 );
 export type ExecutionScope = Infer<typeof executionScopeValidator>;
-export type AgentOperationDefinition = {
+type AgentOperationContract = {
     identity(context: {
         mission?: Doc<"agentMissions">;
         runId: Id<"researchRuns">;
@@ -33,11 +39,6 @@ export type AgentOperationDefinition = {
         pin?: import("./agentDefinition").OperationPin;
     }): unknown;
     nativeAuthority?: "dossier" | "research";
-    childMission?(request: Doc<"agentOperationRequests">): {
-        definitionId: Doc<"agentMissions">["definitionId"];
-        scope: import("./agentDefinition").AgentScope;
-        maxRequests: number;
-    };
     pin(
         ctx: QueryCtx,
         mission: Doc<"agentMissions"> | undefined,
@@ -48,16 +49,6 @@ export type AgentOperationDefinition = {
         | { kind: "available"; pin: import("./agentDefinition").OperationPin }
         | { kind: "unavailable"; code: string }
     >;
-    execute(
-        ctx: ActionCtx,
-        args: {
-            missionId?: Id<"agentMissions">;
-            runId?: Id<"researchRuns">;
-            requestId?: Id<"agentOperationRequests">;
-            expectedGeneration: number;
-            input: Infer<typeof requestInputValidator>;
-        },
-    ): Promise<Infer<typeof operationOutcomeValidator>>;
     validateOutcome(
         request: Doc<"agentOperationRequests">,
         outcome: Infer<typeof operationOutcomeValidator>,
@@ -66,6 +57,60 @@ export type AgentOperationDefinition = {
     description: string;
     inputValidator: VObject<Record<string, unknown>, PropertyValidators>;
 };
+
+export type SettledOperationOutcome = Exclude<
+    Infer<typeof operationOutcomeValidator>,
+    { kind: "waiting" }
+>;
+export type OperationExecutionResult = {
+    outcome: Infer<typeof operationOutcomeValidator>;
+    historyRead?: import("./operationContracts").HistoryReadReceipt;
+};
+export type OperationExecuteArgs = {
+    missionId?: Id<"agentMissions">;
+    runId?: Id<"researchRuns">;
+    requestId?: Id<"agentOperationRequests">;
+    expectedGeneration: number;
+    input: Infer<typeof requestInputValidator>;
+};
+type EffectExecutor = (
+    ctx: ActionCtx,
+    args: OperationExecuteArgs,
+) => Promise<OperationExecutionResult>;
+/** Effect classification controls capabilities and the settlement policy for every binding. */
+export type AgentOperationDefinition = AgentOperationContract &
+    (
+        | {
+              effectKind: "read";
+              childMission?: never;
+              execute(
+                  ctx: Pick<ActionCtx, "runQuery">,
+                  args: OperationExecuteArgs,
+              ): Promise<{
+                  outcome: SettledOperationOutcome;
+                  historyRead?: import("./operationContracts").HistoryReadReceipt;
+              }>;
+          }
+        | {
+              effectKind: "atomic_effect";
+              childMission?: never;
+              execute: EffectExecutor;
+          }
+        | {
+              effectKind: "durable_effect";
+              childMission?: never;
+              execute: EffectExecutor;
+          }
+        | {
+              effectKind: "delegation";
+              execute: EffectExecutor;
+              childMission(request: Doc<"agentOperationRequests">): {
+                  definitionId: Doc<"agentMissions">["definitionId"];
+                  scope: import("./agentDefinition").AgentScope;
+                  maxRequests: number;
+              };
+          }
+    );
 
 export const agentBackendValidator = v.object({
     id: v.string(),
@@ -221,9 +266,28 @@ export const operationRefusalValidator = v.union(
 
 export const operationOutcomeValidator = v.union(
     v.object({ kind: v.literal("waiting"), reference: v.string() }),
+    commonOperationSuccessValidator,
     agentOperationSuccessValidator,
     operationRefusalValidator,
 );
+
+export const operationExecutionResultValidator = v.object({
+    outcome: operationOutcomeValidator,
+    historyRead: v.optional(historyReadReceiptValidator),
+});
+
+/** Runtime peers must obey the same result contract as typed operation callbacks. */
+export function validateOperationExecutionResult(
+    operation: AgentOperationDefinition,
+    result: unknown,
+): OperationExecutionResult {
+    if (
+        !validate(operationExecutionResultValidator, result) ||
+        (operation.effectKind === "read" && result.outcome.kind === "waiting")
+    )
+        throw executionError("operation_contract_invalid");
+    return result;
+}
 
 export const missionStatusValidator = v.union(
     v.literal("ready"),

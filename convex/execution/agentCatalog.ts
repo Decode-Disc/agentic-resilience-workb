@@ -23,6 +23,28 @@ const registeredDefinitions = [
     nativeWorkbenchDefinition,
 ];
 
+/** Reject incomplete or contradictory declarations before any callback is dispatched. */
+export function assertOperationContract(
+    name: string,
+    operation: AgentOperationDefinition,
+): void {
+    if (
+        !name ||
+        !["read", "atomic_effect", "durable_effect", "delegation"].includes(
+            operation.effectKind,
+        ) ||
+        typeof operation.execute !== "function" ||
+        typeof operation.pin !== "function" ||
+        typeof operation.identity !== "function" ||
+        typeof operation.validateOutcome !== "function" ||
+        !Number.isSafeInteger(operation.version) ||
+        operation.version < 1 ||
+        (operation.effectKind === "delegation") !==
+            (typeof operation.childMission === "function")
+    )
+        throw executionError("operation_contract_invalid");
+}
+
 function bindAgentDefinition(definition: AgentDefinition): AgentDefinition {
     if (
         (definition.nativeConversation &&
@@ -31,6 +53,13 @@ function bindAgentDefinition(definition: AgentDefinition): AgentDefinition {
             !definition.conversationReply)
     )
         throw executionError("definition_contract_invalid");
+    for (const [name, operation] of Object.entries(definition.operations)) {
+        assertOperationContract(name, operation);
+        if (name in commonOperations)
+            throw executionError("operation_definition_conflict");
+    }
+    for (const [name, operation] of Object.entries(commonOperations))
+        assertOperationContract(name, operation);
     return {
         ...definition,
         operations: { ...definition.operations, ...commonOperations },
@@ -47,6 +76,7 @@ const operations = new Map<string, AgentOperationDefinition>(
 );
 for (const definition of Object.values(definitions)) {
     for (const [name, operation] of Object.entries(definition.operations)) {
+        assertOperationContract(name, operation);
         const existing = operations.get(name);
         if (existing && existing !== operation)
             throw executionError("operation_definition_conflict");

@@ -19,7 +19,7 @@ test("registered operation versions and native schema distinctions survive reloc
                 name,
                 version: op.version,
                 description: op.description,
-                input: op.inputValidator.json,
+                input: Reflect.get(op.inputValidator, "json"),
             }))
             .sort((a, b) => a.name.localeCompare(b.name)),
     }));

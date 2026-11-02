@@ -458,7 +458,9 @@ test("an edit between claim and framing effect returns a refusal without overwri
                 input,
             }),
         ),
-    ).toMatchObject({ kind: "refused", code: "stale_instructions" });
+    ).toMatchObject({
+        outcome: { kind: "refused", code: "stale_instructions" },
+    });
     expect(await client.query(api.framing.get, { runId })).toMatchObject({
         revision: 2,
         content: { scope: "Latest analyst scope" },

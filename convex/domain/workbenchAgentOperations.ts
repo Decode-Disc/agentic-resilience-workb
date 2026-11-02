@@ -36,7 +36,11 @@ function recoverableWorkbenchRefusal(
         : undefined;
 }
 
-const adjustFraming: AgentOperationDefinition = {
+const adjustFraming: Extract<
+    AgentOperationDefinition,
+    { effectKind: "atomic_effect" }
+> = {
+    effectKind: "atomic_effect",
     version: 1,
     description:
         "Update the proposed activity and research questions before Start research. Read and preserve explicit analyst adjustments. Supply the currently observed revision; stale edits are refused.",
@@ -62,7 +66,9 @@ const adjustFraming: AgentOperationDefinition = {
     },
     async execute(ctx, args) {
         if (!args.requestId)
-            return { kind: "refused", code: "request_unavailable" };
+            return {
+                outcome: { kind: "refused", code: "request_unavailable" },
+            };
         try {
             const revision = await ctx.runMutation(
                 internal.framing.applyFromWorkbench,
@@ -71,10 +77,15 @@ const adjustFraming: AgentOperationDefinition = {
                     expectedGeneration: args.expectedGeneration,
                 },
             );
-            return { kind: "success", valueJson: JSON.stringify({ revision }) };
+            return {
+                outcome: {
+                    kind: "success",
+                    valueJson: JSON.stringify({ revision }),
+                },
+            };
         } catch (error) {
             const refusal = recoverableWorkbenchRefusal(error);
-            if (refusal) return refusal;
+            if (refusal) return { outcome: refusal };
             throw error;
         }
     },
@@ -84,9 +95,10 @@ const adjustFraming: AgentOperationDefinition = {
 };
 
 const instructionBehavior: Pick<
-    AgentOperationDefinition,
-    "identity" | "pin" | "execute" | "validateOutcome"
+    Extract<AgentOperationDefinition, { effectKind: "atomic_effect" }>,
+    "effectKind" | "identity" | "pin" | "execute" | "validateOutcome"
 > = {
+    effectKind: "atomic_effect",
     identity: operationReuseIdentity,
     async pin(ctx, mission, input, _runId, effectPin) {
         if (
@@ -140,7 +152,9 @@ const instructionBehavior: Pick<
     },
     async execute(ctx, args) {
         if (!args.requestId)
-            return { kind: "refused", code: "request_unavailable" };
+            return {
+                outcome: { kind: "refused", code: "request_unavailable" },
+            };
         try {
             const value = await ctx.runMutation(
                 internal.workbench.performInstruction,
@@ -149,10 +163,10 @@ const instructionBehavior: Pick<
                     expectedGeneration: args.expectedGeneration,
                 },
             );
-            return { kind: "success", valueJson: value };
+            return { outcome: { kind: "success", valueJson: value } };
         } catch (error) {
             const refusal = recoverableWorkbenchRefusal(error);
-            if (refusal) return refusal;
+            if (refusal) return { outcome: refusal };
             throw error;
         }
     },
