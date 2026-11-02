@@ -488,7 +488,7 @@ export function SmoothDropdwon({
                 isPortalled && isOpen
                     ? "fixed cursor-pointer overflow-hidden border border-border bg-popover shadow-lg"
                     : menuPositionClass,
-                isPortalled && isOpen && uiLayerClasses.modal,
+                isPortalled && isOpen && uiLayerClasses.popup,
                 isPortalled && isOpen && menuOriginClass,
             )}
             style={isPortalled && isOpen ? portalStyle : undefined}

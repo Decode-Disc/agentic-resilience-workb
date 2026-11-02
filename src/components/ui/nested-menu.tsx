@@ -3,6 +3,7 @@
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { uiLayerClasses } from "@/lib/ui-layers";
 import { cn } from "@/lib/utils";
 
 // ============================================================================
@@ -148,7 +149,8 @@ export function NestedMenuTooltip({
                     align="start"
                     sideOffset={10}
                     className={cn(
-                        "z-50 min-w-[180px] overflow-hidden rounded-lg bg-popover p-1 text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95",
+                        "min-w-[180px] overflow-hidden rounded-lg bg-popover p-1 text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95",
+                        uiLayerClasses.popup,
                         "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
                         className,
                     )}
@@ -430,7 +432,8 @@ export function NestedMenu({
                         align={align}
                         sideOffset={sideOffset}
                         className={cn(
-                            "z-50 min-w-[200px] overflow-hidden rounded-xl px-2 py-1 bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95",
+                            "min-w-[200px] overflow-hidden rounded-xl px-2 py-1 bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95",
+                            uiLayerClasses.popup,
                             "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
                             className,
                         )}

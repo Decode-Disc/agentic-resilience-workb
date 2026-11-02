@@ -1,21 +1,30 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-const { signIn, useAuthActions, useConvexAuth } = vi.hoisted(() => ({
-    signIn: vi.fn(),
-    useAuthActions: vi.fn(),
-    useConvexAuth: vi.fn(),
-}));
+const { signIn, useAuthActions, useConvexAuth, serverAuth } = vi.hoisted(
+    () => ({
+        serverAuth: vi.fn(),
+        signIn: vi.fn(),
+        useAuthActions: vi.fn(),
+        useConvexAuth: vi.fn(),
+    }),
+);
 
 vi.mock(import("@convex-dev/auth/react"), () => ({
     useAuthActions,
     useConvexAuth,
 }));
 
+vi.mock("convex/react", () => ({ useConvexAuth: serverAuth }));
+
 import { useAnonymousSession } from "@/hooks/use-anonymous-session";
 
 describe("useAnonymousSession", () => {
     beforeEach(() => {
+        serverAuth.mockReturnValue({
+            isLoading: false,
+            isAuthenticated: false,
+        });
         signIn.mockReset();
         useAuthActions.mockReset();
         useConvexAuth.mockReset();
@@ -24,6 +33,21 @@ describe("useAnonymousSession", () => {
 
     afterEach(() => {
         vi.restoreAllMocks();
+    });
+
+    test("waits for server authentication without signing in over an existing token", () => {
+        useConvexAuth.mockReturnValue({
+            isLoading: false,
+            isAuthenticated: true,
+        });
+        serverAuth.mockReturnValue({ isLoading: true, isAuthenticated: false });
+        const { result, rerender } = renderHook(() => useAnonymousSession());
+        expect(result.current.isSessionReady).toBe(false);
+        expect(result.current.isSessionLoading).toBe(true);
+        expect(signIn).not.toHaveBeenCalled();
+        serverAuth.mockReturnValue({ isLoading: false, isAuthenticated: true });
+        rerender();
+        expect(result.current.isSessionReady).toBe(true);
     });
 
     test("starts an anonymous session when workspace auth is empty", async () => {

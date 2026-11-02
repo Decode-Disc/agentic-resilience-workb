@@ -13,6 +13,7 @@ import {
     InputGroupButton,
     InputGroupInput,
 } from "@/components/ui/input-group";
+import { uiLayerClasses } from "@/lib/ui-layers";
 import { cn } from "@/lib/utils";
 
 const Combobox = ComboboxPrimitive.Root;
@@ -113,7 +114,7 @@ function ComboboxContent({
                 align={align}
                 alignOffset={alignOffset}
                 anchor={anchor}
-                className="isolate z-50">
+                className={cn("isolate", uiLayerClasses.popup)}>
                 <ComboboxPrimitive.Popup
                     data-slot="combobox-content"
                     data-chips={!!anchor}

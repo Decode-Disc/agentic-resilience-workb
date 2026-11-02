@@ -6,7 +6,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
 import Icon from "@/components/icon";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
@@ -658,10 +659,23 @@ function ResearchCompanyConfirmation({
         api.visitors.current,
         isSessionReady ? {} : "skip",
     );
-    const { openInvitationDrawer } = useInvitationAccess();
+    const { openInvitationDrawer, resolveInvitationDrawer, isOpen } =
+        useInvitationAccess();
+    useEffect(() => {
+        if (isOpen && visitor?.status === "active") {
+            void resolveInvitationDrawer(
+                { visitorId: visitor._id, role: visitor.role },
+                "session",
+            ).catch(() => {
+                toast.error(
+                    "Access is available, but we couldn’t continue. Try again.",
+                );
+            });
+        }
+    }, [visitor, isOpen, resolveInvitationDrawer]);
 
     const launch = () => {
-        if (isLaunching) {
+        if (isLaunching || !isSessionReady || visitor === undefined) {
             return;
         }
         if (visitor?.status !== "active") {
@@ -680,6 +694,7 @@ function ResearchCompanyConfirmation({
             company={company}
             coverage={coverage}
             pending={isLaunching}
+            checkingAccess={!isSessionReady || visitor === undefined}
             error={error}
             onChangeCompany={onBack}
             onConfirm={launch}

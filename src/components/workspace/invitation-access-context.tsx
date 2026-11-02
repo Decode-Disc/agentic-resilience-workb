@@ -9,6 +9,7 @@ import {
     useCallback,
     useContext,
     useMemo,
+    useRef,
     useState,
 } from "react";
 
@@ -19,11 +20,16 @@ type Admission = FunctionReturnType<typeof api.invitations.claim>;
 export interface OpenInvitationDrawerOptions {
     onSuccess?: (admission: Admission) => void | Promise<void>;
     onCancel?: () => void;
+    onSessionRestored?: (admission: Admission) => void | Promise<void>;
 }
 
 export interface InvitationAccessContextValue {
     openInvitationDrawer: (options?: OpenInvitationDrawerOptions) => void;
     closeInvitationDrawer: () => void;
+    resolveInvitationDrawer: (
+        admission: Admission,
+        source?: "claim" | "session",
+    ) => Promise<void>;
     isOpen: boolean;
 }
 
@@ -47,35 +53,63 @@ export function InvitationAccessProvider({
     children: ReactNode;
 }) {
     const [isOpen, setIsOpen] = useState(false);
-    const [callbacks, setCallbacks] = useState<OpenInvitationDrawerOptions>({});
+    const request = useRef<{
+        options: OpenInvitationDrawerOptions;
+        resolving: boolean;
+    } | null>(null);
 
     const closeInvitationDrawer = useCallback(() => {
         setIsOpen(false);
-        callbacks.onCancel?.();
-    }, [callbacks]);
+        const current = request.current;
+        request.current = null;
+        current?.options.onCancel?.();
+    }, []);
 
     const openInvitationDrawer = useCallback(
         (options?: OpenInvitationDrawerOptions) => {
-            setCallbacks(options ?? {});
+            request.current = { options: options ?? {}, resolving: false };
             setIsOpen(true);
         },
         [],
     );
 
-    const handleAdmitted = async (admission: Admission) => {
-        if (callbacks.onSuccess) {
-            await callbacks.onSuccess(admission);
-        }
-        setIsOpen(false);
-    };
+    const resolveInvitationDrawer = useCallback(
+        async (admission: Admission, source: "claim" | "session" = "claim") => {
+            const current = request.current;
+            if (!current || current.resolving) return;
+            current.resolving = true;
+            try {
+                const continuation =
+                    source === "session"
+                        ? (current.options.onSessionRestored ??
+                          current.options.onSuccess)
+                        : current.options.onSuccess;
+                await continuation?.(admission);
+                if (request.current === current) {
+                    request.current = null;
+                    setIsOpen(false);
+                }
+            } catch (error) {
+                current.resolving = false;
+                throw error;
+            }
+        },
+        [],
+    );
 
     const contextValue = useMemo<InvitationAccessContextValue>(
         () => ({
             openInvitationDrawer,
             closeInvitationDrawer,
+            resolveInvitationDrawer,
             isOpen,
         }),
-        [openInvitationDrawer, closeInvitationDrawer, isOpen],
+        [
+            openInvitationDrawer,
+            closeInvitationDrawer,
+            resolveInvitationDrawer,
+            isOpen,
+        ],
     );
 
     return (
@@ -90,7 +124,7 @@ export function InvitationAccessProvider({
                         setIsOpen(true);
                     }
                 }}
-                onAdmitted={handleAdmitted}
+                onAdmitted={(admission) => resolveInvitationDrawer(admission)}
             />
         </InvitationAccessContext.Provider>
     );

@@ -1,6 +1,10 @@
 "use client";
 
-import { useAuthActions, useConvexAuth } from "@convex-dev/auth/react";
+import {
+    useAuthActions,
+    useConvexAuth as useTokenAuth,
+} from "@convex-dev/auth/react";
+import { useConvexAuth } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 
 function sessionErrorMessage() {
@@ -10,7 +14,8 @@ function sessionErrorMessage() {
 /** Ensures public workspace routes have a server-recognized anonymous identity. */
 export function useAnonymousSession() {
     const { signIn } = useAuthActions();
-    const { isLoading, isAuthenticated } = useConvexAuth();
+    const { isLoading, isAuthenticated } = useTokenAuth();
+    const serverAuth = useConvexAuth();
     const attemptedSignIn = useRef(false);
     const [isSigningIn, setIsSigningIn] = useState(false);
     const [sessionError, setSessionError] = useState<string | null>(null);
@@ -48,8 +53,8 @@ export function useAnonymousSession() {
     };
 
     return {
-        isSessionLoading: isLoading || isSigningIn,
-        isSessionReady: isAuthenticated,
+        isSessionLoading: isLoading || isSigningIn || serverAuth.isLoading,
+        isSessionReady: serverAuth.isAuthenticated,
         sessionError,
         retrySession,
     };

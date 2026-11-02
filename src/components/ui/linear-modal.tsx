@@ -21,6 +21,7 @@ import {
     useState,
 } from "react";
 import Icon from "@/components/icon";
+import { uiLayerClasses } from "@/lib/ui-layers";
 import { cn } from "@/lib/utils";
 
 const MotionTrigger = motion.create(DialogPrimitive.Trigger);
@@ -136,7 +137,11 @@ function DialogContainer({
                 {open && (
                     <motion.div
                         key={id}
-                        className={cn("fixed inset-0 z-50", className)}
+                        className={cn(
+                            "fixed inset-0",
+                            uiLayerClasses.modal,
+                            className,
+                        )}
                         style={style}>
                         <DialogPrimitive.Backdrop
                             className={cn(

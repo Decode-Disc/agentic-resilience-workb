@@ -10,7 +10,6 @@ import {
 } from "@hugeicons/core-free-icons";
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
-
 import Icon from "@/components/icon";
 import { AppLogo } from "@/components/logo-icon";
 import {
@@ -40,6 +39,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { PRODUCT_NAME, PRODUCT_SHORT_NAME } from "@/config/product";
+import { uiLayerClasses } from "@/lib/ui-layers";
 import { cn } from "@/lib/utils";
 import { EvidenceMatrixIllustration } from "./evidence-matrix-illustration";
 
@@ -155,7 +155,7 @@ function NavigationPanel({
 
 function LandingHeader() {
   return (
-    <header className="fixed top-4 left-1/2 z-50 w-[min(calc(100%-1.5rem),64rem)] -translate-x-1/2">
+    <header className={cn("fixed top-4 left-1/2 w-[min(calc(100%-1.5rem),64rem)] -translate-x-1/2", uiLayerClasses.workbenchShellHeader)}>
       <div className="flex h-14 items-center justify-between gap-4 rounded-full border border-border/70 bg-card/30 px-3 shadow-floating backdrop-blur-xl sm:px-4">
         <div className="flex min-w-0 items-center gap-2.5">
           <AppLogo />

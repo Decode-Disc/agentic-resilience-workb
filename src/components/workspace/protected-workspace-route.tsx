@@ -4,6 +4,7 @@ import { api } from "@convex/_generated/api";
 import { Outlet, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { LoadErrorAlert } from "@/components/ui/load-error-alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,9 +34,21 @@ function ProtectedWorkspaceContent() {
     const navigate = useNavigate();
     const visitor = useQuery(api.visitors.current, {});
     const [admissionPending, setAdmissionPending] = useState(false);
-    const { openInvitationDrawer, isOpen } = useInvitationAccess();
+    const { openInvitationDrawer, resolveInvitationDrawer, isOpen } =
+        useInvitationAccess();
 
     useEffect(() => {
+        if (visitor?.status === "active" && isOpen) {
+            void resolveInvitationDrawer(
+                { visitorId: visitor._id, role: visitor.role },
+                "session",
+            ).catch(() => {
+                toast.error(
+                    "Access is available, but we couldn’t continue. Try again.",
+                );
+            });
+            return;
+        }
         if (
             visitor !== undefined &&
             visitor?.status !== "active" &&
@@ -43,6 +56,7 @@ function ProtectedWorkspaceContent() {
             !isOpen
         ) {
             openInvitationDrawer({
+                onSessionRestored: () => setAdmissionPending(true),
                 onSuccess: ({ role }) => {
                     setAdmissionPending(true);
                     void navigate({
@@ -54,7 +68,14 @@ function ProtectedWorkspaceContent() {
                 },
             });
         }
-    }, [visitor, admissionPending, isOpen, openInvitationDrawer, navigate]);
+    }, [
+        visitor,
+        admissionPending,
+        isOpen,
+        openInvitationDrawer,
+        resolveInvitationDrawer,
+        navigate,
+    ]);
 
     if (
         visitor === undefined ||

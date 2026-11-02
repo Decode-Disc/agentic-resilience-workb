@@ -829,6 +829,7 @@ export function ConversationContext({
                 <Icon iconNode={Task01Icon} size={19} />
             </PopoverTrigger>
             <PopoverContent
+                layer="context"
                 side="bottom"
                 align="end"
                 sideOffset={10}

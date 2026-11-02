@@ -45,6 +45,7 @@ import {
     useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { uiLayerOrder } from "@/lib/ui-layers";
 
 import { cn } from "@/lib/utils";
 
@@ -792,8 +793,9 @@ function KanbanOverlay({ children, className, ...props }: KanbanOverlayProps) {
         <DragOverlay
             dropAnimation={dropAnimationConfig}
             modifiers={modifiers}
-            className={cn("z-50", activeId && "cursor-grabbing", className)}
-            {...props}>
+            className={cn(activeId && "cursor-grabbing", className)}
+            {...props}
+            zIndex={uiLayerOrder.popup}>
             <IsOverlayContext.Provider value={true}>
                 {content}
             </IsOverlayContext.Provider>

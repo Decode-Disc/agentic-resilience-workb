@@ -40,6 +40,7 @@ import {
     readerContributions,
     readerPages,
 } from "./fixture-data";
+import { OverlayLayersExample } from "./overlay-layers-example";
 
 function notify(message: string) {
     window.dispatchEvent(
@@ -1385,6 +1386,7 @@ function WorkspaceNavigationExample() {
     );
 }
 export const examples = {
+    OverlayLayers: OverlayLayersExample,
     Chip: ChipExample,
     GlassPanel: GlassPanelExample,
     Cover: CoverExample,

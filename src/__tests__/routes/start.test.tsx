@@ -83,7 +83,7 @@ async function searchAndSelectCompany(query = "CCC") {
     });
     fireEvent.click(candidate);
     fireEvent.click(await screen.findByRole("button", { name: /^Continue$/i }));
-    await screen.findByRole("button", { name: /Confirm and propose framing/i });
+    await screen.findByRole("region", { name: "Confirm company and mandate" });
 }
 
 describe("ResearchComposer", () => {
@@ -573,6 +573,21 @@ describe("ResearchComposer", () => {
             await screen.findByText(/add this source again before starting/i),
         ).toBeTruthy();
         expect(screen.queryByText(/manual_source_intake|CONVEX/i)).toBeNull();
+    });
+
+    it("waits for visitor access before accepting confirmation", async () => {
+        const visitor = convexReactHarness.query(api.visitors.current);
+        visitor.returns(undefined);
+        searchCompanies.mockResolvedValue(companyCandidates);
+        preflight.mockResolvedValue(resolvedCompany);
+        renderWithInvitationAccess(<ResearchComposer />);
+        await searchAndSelectCompany("CCCS");
+        const confirm = screen.getByRole("button", {
+            name: "Checking access…",
+        });
+        expect(confirm.hasAttribute("disabled")).toBe(true);
+        fireEvent.click(confirm);
+        expect(document.getElementById("invitation-code")).toBeNull();
     });
 
     it("asks for an access code only when an anonymous visitor confirms launch", async () => {

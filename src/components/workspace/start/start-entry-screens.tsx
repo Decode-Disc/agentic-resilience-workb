@@ -109,6 +109,7 @@ export function CompanyMandatePanel({
     onChangeCompany,
     onConfirm,
     pending = false,
+    checkingAccess = false,
     error,
 }: {
     company: ComponentProps<typeof CompanyResolutionCard>["company"];
@@ -117,6 +118,7 @@ export function CompanyMandatePanel({
     onChangeCompany?: () => void;
     onConfirm?: () => void;
     pending?: boolean;
+    checkingAccess?: boolean;
     error?: string;
 }) {
     return (
@@ -155,11 +157,13 @@ export function CompanyMandatePanel({
                 </Button>
                 <Button
                     variant="launch"
-                    disabled={pending || !onConfirm}
+                    disabled={pending || checkingAccess || !onConfirm}
                     onClick={onConfirm}>
-                    {pending
-                        ? "Preparing framing…"
-                        : "Confirm and propose framing"}
+                    {checkingAccess
+                        ? "Checking access…"
+                        : pending
+                          ? "Preparing framing…"
+                          : "Confirm and propose framing"}
                     <WorkbenchIcon name="chevron" size={14} />
                 </Button>
             </div>

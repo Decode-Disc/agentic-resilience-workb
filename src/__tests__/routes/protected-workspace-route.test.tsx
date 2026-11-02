@@ -68,6 +68,38 @@ describe("ProtectedWorkspaceRoute", () => {
         expect(document.getElementById("invitation-code")).not.toBeNull();
     });
 
+    test("resolves a stale admission when the visitor becomes active without cancelling navigation", async () => {
+        const visitor = convexReactHarness.query(api.visitors.current);
+        visitor.returns(null);
+        const { rerender } = render(
+            <InvitationAccessProvider>
+                <ProtectedWorkspaceRoute />
+            </InvitationAccessProvider>,
+        );
+        expect(
+            screen.getByRole("form", { name: "Workspace access" }),
+        ).toBeTruthy();
+        visitor.returns({
+            _id: "visitor-analyst",
+            role: "analyst",
+            status: "active",
+        } as never);
+        rerender(
+            <InvitationAccessProvider>
+                <ProtectedWorkspaceRoute />
+            </InvitationAccessProvider>,
+        );
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("form", { name: "Workspace access" }),
+            ).toBeNull(),
+        );
+        expect(screen.getByText("Protected route content")).toBeTruthy();
+        expect(navigate).not.toHaveBeenCalledWith({ to: "/workspace/start" });
+        expect(navigate).not.toHaveBeenCalled();
+        expect(claimInvitation).not.toHaveBeenCalled();
+    });
+
     test("renders protected content for an active visitor", () => {
         convexReactHarness
             .query(api.visitors.current)
