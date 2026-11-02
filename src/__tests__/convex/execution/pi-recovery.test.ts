@@ -376,3 +376,103 @@ test("replaying a worker closure does not consume another native settlement atte
     });
     expect(await t.run((ctx) => ctx.db.get(turn.missionId))).toEqual(first);
 });
+
+test("an acknowledged read receipt survives an expired Pi writer and replays exact retained bytes", async () => {
+    const f = await seedPiMission();
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            cause: "receipt-reopen",
+            input: { kind: "consult_mission_state" },
+        },
+    );
+    const original = await f.t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 4,
+    });
+    assert(original.kind === "success");
+    const before = await f.t.run((ctx) => ctx.db.get(requestId));
+    assert(before?.historyRead);
+    // The first host disappears without closing; replacement acquires a later epoch after expiry.
+    await f.t.action((ctx) =>
+        openMissionPiStorage(
+            ctx,
+            f.missionId,
+            4,
+            "crashed-reader",
+            BACKGROUND_CONTEXT,
+        ).then(() => null),
+    );
+    vi.advanceTimersByTime(91_000);
+    await f.t.action(async (ctx) => {
+        const reopened = await openMissionPiStorage(
+            ctx,
+            f.missionId,
+            4,
+            "reopened-reader",
+            BACKGROUND_CONTEXT,
+        );
+        await reopened.close(BACKGROUND_CONTEXT);
+    });
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 4,
+        }),
+    ).toEqual(original);
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(requestId)))?.historyRead,
+    ).toEqual(before.historyRead);
+    expect(
+        await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([]);
+});
+
+test("a retained continuation is refused after a new execution generation", async () => {
+    const f = await seedPiMission();
+    const { recordMissionEvent } = await import("@convex/execution/authority");
+    await f.t.run(async (ctx) => {
+        const mission = await ctx.db.get(f.missionId);
+        assert(mission);
+        await recordMissionEvent(ctx, mission, {
+            kind: "retained_evidence",
+            cause: "generation",
+            historySource: "material",
+            observation: { text: "Original evidence. ".repeat(600) },
+        });
+    });
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            cause: "before-rebind",
+            input: { kind: "consult_mission_state" },
+        },
+    );
+    const first = await f.t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 4,
+    });
+    assert(first.kind === "success");
+    const cursor = JSON.parse(first.valueJson).history.continueCursor;
+    assert(typeof cursor === "string");
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.runId, { executionGeneration: 5 });
+        await ctx.db.patch(f.missionId, { generation: 5 });
+    });
+    const next = await f.t.mutation(internal.execution.operations.enqueue, {
+        missionId: f.missionId,
+        expectedGeneration: 5,
+        cause: "after-rebind",
+        input: { kind: "consult_mission_state", cursor },
+    });
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: next,
+            expectedGeneration: 5,
+        }),
+    ).toEqual({ kind: "refused", code: "history_cursor_invalid" });
+});

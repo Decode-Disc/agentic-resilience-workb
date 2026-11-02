@@ -24,7 +24,7 @@ export const historyPositionValidator = v.union(
     }),
     v.object({
         source: v.literal("conversation"),
-        afterMessageId: v.union(v.id("agentMessageDeliveries"), v.null()),
+        cursor: v.union(v.string(), v.null()),
         offset: v.number(),
     }),
 );

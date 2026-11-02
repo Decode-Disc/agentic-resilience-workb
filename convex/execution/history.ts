@@ -101,7 +101,7 @@ export const pinHistoryRead: AgentOperationDefinition["pin"] = async (
                     .gt("historySourceSequence", 0)
                     .lte(
                         "historySourceSequence",
-                        mission.historyProjection!.snapshot?.throughSequence ??
+                        mission.historyProjection?.snapshot?.throughSequence ??
                             mission.nextEventSequence - 1,
                     ),
             )
@@ -152,7 +152,7 @@ async function resolvePosition(
                     ? { source: "mission", sequence: 1, offset: 0 }
                     : {
                           source: "conversation",
-                          afterMessageId: null,
+                          cursor: null,
                           offset: 0,
                       },
         };
@@ -164,8 +164,7 @@ async function resolvePosition(
     );
     const previous = id ? await ctx.db.get(id) : null;
     if (
-        !previous ||
-        previous.status !== "completed" ||
+        previous?.status !== "completed" ||
         previous.outcome?.kind !== "success" ||
         previous.adoptedAt === undefined ||
         previous.operationVersion < 2 ||
@@ -184,6 +183,12 @@ async function resolvePosition(
         receipt.missionId !== previous.missionId
     )
         throw executionError("history_receipt_invalid");
+    verifyHistoryReadReceipt(
+        previous,
+        receipt,
+        receipt.generation,
+        previous.outcome.valueJson,
+    );
     if (
         receipt.generation !== generation ||
         receipt.instructionVersion !== request.instructionVersion ||
@@ -234,9 +239,11 @@ async function conversationFragment(
     position: Extract<Position, { source: "conversation" }>,
 ) {
     if (!frontier.throughMessageId) return null;
+    const runId = request.runId;
+    if (!runId) throw executionError("history_receipt_invalid");
     const conversation = await ctx.db
         .query("agentConversations")
-        .withIndex("by_run", (q) => q.eq("runId", request.runId!))
+        .withIndex("by_run", (q) => q.eq("runId", runId))
         .unique();
     if (
         !conversation ||
@@ -244,41 +251,32 @@ async function conversationFragment(
         frontier.publicationRevision < 0
     )
         throw executionError("history_receipt_invalid");
-    const anchor = position.afterMessageId
-        ? await ctx.db.get(position.afterMessageId)
-        : null;
-    if (
-        position.afterMessageId &&
-        (!anchor ||
-            anchor.runId !== request.runId ||
-            anchor.status !== "processed")
-    )
-        throw executionError("history_receipt_invalid");
-    const rows = await ctx.db
+    const page = await ctx.db
         .query("agentMessageDeliveries")
         .withIndex("by_run_and_status", (q) =>
             q
-                .eq("runId", request.runId!)
+                .eq("runId", runId)
                 .eq("status", "processed")
-                .gte("_creationTime", anchor?._creationTime ?? 0)
                 .lte("_creationTime", frontier.throughCreationTime),
         )
-        .take(MAX_CONVERSATION_SCAN + 1);
-    const anchorIndex = anchor
-        ? rows.findIndex((row) => row._id === anchor._id)
-        : -1;
-    if (anchor && anchorIndex < 0)
-        throw executionError("history_receipt_invalid");
-    const candidates = rows.slice(
-        anchorIndex + (position.offset > 0 ? 0 : 1),
-        MAX_CONVERSATION_SCAN,
-    );
-    const message = candidates.find(
-        (row) => (row.publicationRevision ?? 0) <= frontier.publicationRevision,
-    );
+        .filter((q) =>
+            q.or(
+                q.eq(q.field("publicationRevision"), undefined),
+                q.lte(
+                    q.field("publicationRevision"),
+                    frontier.publicationRevision,
+                ),
+            ),
+        )
+        .paginate({
+            numItems: 1,
+            cursor: position.cursor,
+            maximumRowsRead: MAX_CONVERSATION_SCAN,
+            maximumBytesRead: 512 * 1024,
+        });
+    const message = page.page[0];
     if (!message) {
-        if (rows.length > MAX_CONVERSATION_SCAN)
-            return { capacity: true as const };
+        if (!page.isDone) return { capacity: true as const };
         throw executionError("conversation_message_unavailable");
     }
     if (message.conversationId !== conversation._id)
@@ -294,14 +292,14 @@ async function conversationFragment(
         chunk.end < text.length
             ? {
                   source: "conversation",
-                  afterMessageId: message._id,
+                  cursor: position.cursor,
                   offset: chunk.end,
               }
             : message._id === frontier.throughMessageId
               ? null
               : {
                     source: "conversation",
-                    afterMessageId: message._id,
+                    cursor: page.continueCursor,
                     offset: 0,
                 };
     const entry = {

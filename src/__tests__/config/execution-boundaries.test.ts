@@ -16,6 +16,8 @@ test("the real architecture checker rejects aliases, protected writes and privat
             'import { recordResult as write } from "@convex/execution/operations"; export const x = write;',
         generated:
             'import { internal as executor } from "@convex/_generated/api"; const op = executor.execution.operations; const write = op.recordResult; export const x = write;',
+        shadowed:
+            'import { internal as api } from "@convex/_generated/api"; export function bad() { const target = api.execution.operations; return target.recordResult; } export function ordinary() { const target = { recordResult: "ordinary" }; return target.recordResult; }',
         namespace:
             'import * as executor from "@convex/execution/operations"; export const x = executor["recordResult"];',
         accounting:

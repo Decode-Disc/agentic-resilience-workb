@@ -95,6 +95,21 @@ export function checkExecutionBoundaries(
             const source = project?.program.getSourceFile(path);
             if (!source || !project) throw new Error(`Cannot parse ${path}`);
             const file = relative(root, path).replaceAll("\\", "/");
+            const identifiers: ts.Identifier[] = [];
+            const collectIdentifiers = (node: ts.Node) => {
+                if (ts.isIdentifier(node)) identifiers.push(node);
+                node.forEachChild(collectIdentifiers);
+            };
+            collectIdentifiers(source);
+            const symbols = project.checker.getSymbolAtLocation(identifiers);
+            const identities = new Map(
+                identifiers.map((node, index) => [
+                    node,
+                    symbols[index]?.id.toString() ?? node.text,
+                ]),
+            );
+            const identity = (node: ts.Identifier) =>
+                identities.get(node) ?? node.text;
             const aliases = new Map<string, string>();
             const values = new Map<string, ts.Node>();
             const report = (node: ts.Node, rule: string, message: string) =>
@@ -137,12 +152,12 @@ export function checkExecutionBoundaries(
                         const name = (element.propertyName ?? element.name)
                             .text;
                         aliases.set(
-                            element.name.text,
+                            identity(element.name),
                             module === "generated" ? name : `${module}.${name}`,
                         );
                     }
                 else if (bindings && ts.isNamespaceImport(bindings))
-                    aliases.set(bindings.name.text, module);
+                    aliases.set(identity(bindings.name), module);
             }
             const chain = (
                 input: ts.Node,
@@ -150,10 +165,11 @@ export function checkExecutionBoundaries(
             ): string | undefined => {
                 const node = unwrap(input);
                 if (ts.isIdentifier(node)) {
-                    if (seen.has(node.text)) return undefined;
-                    seen.add(node.text);
-                    if (aliases.has(node.text)) return aliases.get(node.text);
-                    const value = values.get(node.text);
+                    if (seen.has(identity(node))) return undefined;
+                    seen.add(identity(node));
+                    if (aliases.has(identity(node)))
+                        return aliases.get(identity(node));
+                    const value = values.get(identity(node));
                     return value ? chain(value, seen) : node.text;
                 }
                 if (ts.isPropertyAccessExpression(node)) {
@@ -178,11 +194,11 @@ export function checkExecutionBoundaries(
                 node = unwrap(node);
                 if (
                     ts.isIdentifier(node) &&
-                    values.has(node.text) &&
-                    !seen.has(node.text)
+                    values.has(identity(node)) &&
+                    !seen.has(identity(node))
                 ) {
-                    seen.add(node.text);
-                    const value = values.get(node.text);
+                    seen.add(identity(node));
+                    const value = values.get(identity(node));
                     if (value) return resolveValue(value, seen);
                 }
                 return node;
@@ -190,7 +206,7 @@ export function checkExecutionBoundaries(
             const register = (node: ts.Node) => {
                 if (ts.isVariableDeclaration(node) && node.initializer) {
                     if (ts.isIdentifier(node.name))
-                        values.set(node.name.text, node.initializer);
+                        values.set(identity(node.name), node.initializer);
                     else if (ts.isObjectBindingPattern(node.name))
                         for (const binding of node.name.elements) {
                             if (binding.name && ts.isIdentifier(binding.name)) {
@@ -200,7 +216,7 @@ export function checkExecutionBoundaries(
                                 ).getText(source);
                                 if (base)
                                     aliases.set(
-                                        binding.name.text,
+                                        identity(binding.name),
                                         `${base}.${key}`,
                                     );
                             }

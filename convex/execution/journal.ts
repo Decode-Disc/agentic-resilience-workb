@@ -117,13 +117,14 @@ export async function projectMissionHistoryEvent(
             : event.kind === "invocation_reply_recorded"
               ? "reply"
               : undefined;
+    const invocationId = event.invocationId;
     const invocationPayload = event.invocationPayloadId
         ? await ctx.db.get(event.invocationPayloadId)
-        : part && event.invocationId
+        : part && invocationId
           ? await ctx.db
                 .query("agentInvocationPayloads")
                 .withIndex("by_invocation_and_part", (q) =>
-                    q.eq("invocationId", event.invocationId!).eq("part", part),
+                    q.eq("invocationId", invocationId).eq("part", part),
                 )
                 .unique()
           : null;

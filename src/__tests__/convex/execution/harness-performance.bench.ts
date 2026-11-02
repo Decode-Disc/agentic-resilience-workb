@@ -244,3 +244,111 @@ test("measure replay CPU, retained heap and actual adapter RPC policy", async ()
         });
     }
 });
+
+test("measure issued history pages and retained reuse without provider calls", async () => {
+    const { dispatchHistory, seedHistoryMission } = await import(
+        "@/__tests__/setup/execution-history"
+    );
+    const { internal } = await import("@convex/_generated/api");
+    vi.useRealTimers();
+    vi.stubGlobal("fetch", () => {
+        throw new Error("unexpected_provider_io");
+    });
+    for (const kind of [
+        "consult_conversation",
+        "consult_mission_state",
+    ] as const) {
+        const measurements = new Map<
+            string,
+            { elapsed: number[]; bytes: number[] }
+        >();
+        for (let sample = -1; sample < samples; sample++) {
+            const f = await seedHistoryMission(
+                "Original analyst material. ".repeat(600),
+            );
+            if (kind === "consult_mission_state") {
+                const { recordMissionEvent } = await import(
+                    "@convex/execution/authority"
+                );
+                await f.t.run(async (ctx) => {
+                    const mission = await ctx.db.get(f.missionId);
+                    assert(mission);
+                    await recordMissionEvent(ctx, mission, {
+                        kind: "retained_evidence",
+                        cause: "performance",
+                        historySource: "material",
+                        observation: {
+                            text: "Original evidence. ".repeat(1000),
+                        },
+                    });
+                });
+            }
+            let cursor: string | undefined;
+            let retained:
+                | Awaited<ReturnType<typeof dispatchHistory>>
+                | undefined;
+            for (const workload of [
+                "first_page",
+                "issued_continuation",
+                "malformed_token",
+                "retained_reuse",
+            ] as const) {
+                const began = performance.now();
+                const result =
+                    workload === "retained_reuse" && retained
+                        ? {
+                              requestId: retained.requestId,
+                              outcome: await f.t.action(
+                                  internal.execution.operations.dispatch,
+                                  {
+                                      requestId: retained.requestId,
+                                      expectedGeneration: 1,
+                                  },
+                              ),
+                          }
+                        : await dispatchHistory(f, {
+                              kind,
+                              ...(workload === "issued_continuation"
+                                  ? { cursor }
+                                  : workload === "malformed_token"
+                                    ? { cursor: "history:invalid" }
+                                    : {}),
+                          });
+                const duration = performance.now() - began;
+                if (workload === "malformed_token")
+                    expect(result.outcome).toEqual({
+                        kind: "refused",
+                        code: "history_cursor_invalid",
+                    });
+                else {
+                    assert(result.outcome.kind === "success");
+                    const page = JSON.parse(result.outcome.valueJson);
+                    cursor = (page.history ?? page).continueCursor;
+                    assert(cursor);
+                }
+                if (workload === "issued_continuation") retained = result;
+                const row = measurements.get(workload) ?? {
+                    elapsed: [],
+                    bytes: [],
+                };
+                if (sample >= 0) {
+                    row.elapsed.push(duration);
+                    row.bytes.push(
+                        Buffer.byteLength(JSON.stringify(result.outcome)),
+                    );
+                }
+                measurements.set(workload, row);
+            }
+        }
+        for (const [workload, row] of measurements)
+            results.push({
+                workload: `history_${workload}`,
+                source: kind,
+                milliseconds: stats(row.elapsed),
+                resultBytes: stats(row.bytes),
+                boundary:
+                    "convex-test full enqueue/claim/query/record; reuse dispatches the retained request",
+                physicalDatabaseBytes: "not exposed by convex-test",
+            });
+    }
+});

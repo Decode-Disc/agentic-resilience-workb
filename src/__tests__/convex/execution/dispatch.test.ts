@@ -1,5 +1,8 @@
 import { api, internal } from "@convex/_generated/api";
-import { getAgentDefinition } from "@convex/execution/agentCatalog";
+import {
+    getAgentDefinition,
+    registeredAgentDefinitions,
+} from "@convex/execution/agentCatalog";
 import { modelOperationOutcome } from "@convex/execution/agentDefinition";
 import { commonOperations } from "@convex/execution/commonOperations";
 import { afterEach, assert, expect, test, vi } from "vitest";
@@ -565,4 +568,36 @@ test("every mixed batch request has a persisted outcome and later dispatch reche
         status: "completed",
         outcome: { kind: "refused", code: "stale_execution" },
     });
+});
+
+test("an adoption incident never claims its retained operation was not performed", () => {
+    const reply = modelOperationOutcome(getAgentDefinition("workbench_v1", 2), {
+        kind: "refused",
+        code: "operation_adoption_failed",
+    });
+    expect(reply).toContain("retained");
+    expect(reply).toContain("Do not repeat");
+    expect(reply).not.toContain("not performed");
+});
+
+test.each(
+    registeredAgentDefinitions().map((definition) => ({
+        name: `${definition.id}@${definition.version}`,
+        definition,
+    })),
+)("$name does not turn an authority refusal into an assertion of non-execution", ({
+    definition,
+}) => {
+    const diagnostic = modelOperationOutcome(definition, {
+        kind: "refused",
+        code: "stale_execution",
+    });
+    expect(diagnostic).not.toContain("not performed");
+    if (definition.nativeConversation)
+        expect(diagnostic).toContain("recorded state");
+    else
+        expect(JSON.parse(diagnostic)).toEqual({
+            kind: "refused",
+            code: "stale_execution",
+        });
 });

@@ -59,8 +59,9 @@ test("three_fresh_mission_pages_do_not_trigger_repetition and replayed content a
         expect(result.settlement).toMatchObject({ kind: "ready" });
         cursor = history.continueCursor;
         firstCursor ??= cursor;
-        const count = (await f.t.run((ctx) => ctx.db.get(f.missionId)))!
-            .progressKeys.length;
+        const current = await f.t.run((ctx) => ctx.db.get(f.missionId));
+        assert(current);
+        const count = current.progressKeys.length;
         expect(count).toBeGreaterThan(previousCount);
         previousCount = count;
     }
@@ -70,7 +71,7 @@ test("three_fresh_mission_pages_do_not_trigger_repetition and replayed content a
     });
     assert(reread.outcome.kind === "success");
     expect(
-        (await f.t.run((ctx) => ctx.db.get(f.missionId)))!.progressKeys,
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
     ).toHaveLength(previousCount);
     await Promise.all(
         [1, 2].map(() =>
@@ -82,7 +83,7 @@ test("three_fresh_mission_pages_do_not_trigger_repetition and replayed content a
         ),
     );
     expect(
-        (await f.t.run((ctx) => ctx.db.get(f.missionId)))!.progressKeys,
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
     ).toHaveLength(previousCount);
 });
 
@@ -136,11 +137,10 @@ test.each([
         requestId,
         expectedGeneration: 1,
     });
+    const operation = definition.operations.consult_run_state;
+    assert(operation);
     if (phase === "validator")
-        vi.spyOn(
-            definition.operations.consult_run_state!,
-            "validateOutcome",
-        ).mockImplementation(() => {
+        vi.spyOn(operation, "validateOutcome").mockImplementation(() => {
             throw new Error("private validator detail");
         });
     else
@@ -173,8 +173,9 @@ test("new draft observations cannot renew a restoration window, while material p
     const f = await seedHistoryMission();
     const first = await dispatchHistory(f, { kind: "consult_mission_state" });
     assert(first.outcome.kind === "success");
-    const keys = (await f.t.run((ctx) => ctx.db.get(f.missionId)))!
-        .progressKeys;
+    const current = await f.t.run((ctx) => ctx.db.get(f.missionId));
+    assert(current);
+    const keys = current.progressKeys;
     const begun = await f.t.mutation(internal.execution.invocations.begin, {
         missionId: f.missionId,
         expectedGeneration: 1,
@@ -198,7 +199,7 @@ test("new draft observations cannot renew a restoration window, while material p
         "NEW DRAFT WITHOUT DOMAIN WORK",
     );
     expect(
-        (await f.t.run((ctx) => ctx.db.get(f.missionId)))!.progressKeys,
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
     ).toEqual(keys);
     await f.t.run(async (ctx) => {
         const mission = await ctx.db.get(f.missionId);
@@ -214,6 +215,6 @@ test("new draft observations cannot renew a restoration window, while material p
     assert(renewed.outcome.kind === "success");
     expect(renewed.outcome.valueJson).toContain("NEW VERIFIED FACT");
     expect(
-        (await f.t.run((ctx) => ctx.db.get(f.missionId)))!.progressKeys.length,
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys.length,
     ).toBeGreaterThan(keys.length);
 });

@@ -42,7 +42,8 @@ test("history_text_is_unchanged_when_live_request_and_invocation_change", async 
     assert(requestId);
     const request = await f.t.run((ctx) => ctx.db.get(requestId));
     assert(request?.admissionEventId);
-    const event = await f.t.run((ctx) => ctx.db.get(request.admissionEventId!));
+    const eventId = request.admissionEventId;
+    const event = await f.t.run((ctx) => ctx.db.get(eventId));
     assert(event?.sequence);
     const read = () =>
         f.t.run(async (ctx) => {

@@ -215,7 +215,9 @@ async function authority(
         mission,
         request.input,
         runId,
-        request.effect?.pin,
+        isCommonConsultation(request.input.kind)
+            ? request.pin
+            : request.effect?.pin,
     );
     if (pin.kind !== "available") throw executionError(pin.code);
     if (stableStringify(pin.pin) !== stableStringify(expectedPin))

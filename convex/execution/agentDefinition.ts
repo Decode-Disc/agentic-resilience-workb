@@ -62,7 +62,7 @@ export type AgentDefinition = {
     consultationContext?(
         snapshot: Record<string, unknown>,
     ): Record<string, unknown>;
-    operationDiagnostic?(code: string): string;
+    operationDiagnostic?(code: string): string | undefined;
     conversationReply?(result: AgentResult): string;
     instructions: string;
     /** Domain distinctions the native summarizer must preserve across compaction. */
@@ -150,12 +150,16 @@ export function modelOperationOutcome(
         ...("code" in outcome
             ? {
                   diagnostic:
-                      outcome.code === "operation_outcome_unknown"
-                          ? "The operation outcome is unconfirmed. Do not repeat it or claim success or non-execution. Inspect retained state and wait for authorized recovery."
-                          : outcome.code === "history_cursor_invalid"
-                            ? "No history page was read. Omit cursor to start at the first page; for later pages copy only continueCursor returned by the same history operation. Use consult_conversation for prior analyst exchanges; consult_mission_state reads only the current mission."
-                            : (definition.operationDiagnostic?.(outcome.code) ??
-                              "This operation was not performed. Inspect the current state and correct the request before trying again."),
+                      outcome.code === "operation_adoption_failed"
+                          ? "The observed result was retained, but could not be adopted. Do not repeat the operation or infer non-execution; inspect confirmed effects and wait for authorized recovery."
+                          : outcome.code === "operation_outcome_unknown"
+                            ? "The operation outcome is unconfirmed. Do not repeat it or claim success or non-execution. Inspect retained state and wait for authorized recovery."
+                            : outcome.code === "history_cursor_invalid"
+                              ? "No history page was read. Omit cursor to start at the first page; for later pages copy only continueCursor returned by the same history operation. Use consult_conversation for prior analyst exchanges; consult_mission_state reads only the current mission."
+                              : (definition.operationDiagnostic?.(
+                                    outcome.code,
+                                ) ??
+                                "This result cannot advance the mission. Inspect recorded state and the reported prerequisite before choosing another action."),
               }
             : {}),
     });

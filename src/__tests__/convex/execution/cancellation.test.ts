@@ -158,6 +158,10 @@ test("run cancellation fences first and drains mission work in bounded scheduled
         requestId: firstRequestId,
         expectedGeneration: args.executionGeneration,
     });
+    const lateRead = await t.query(internal.execution.history.read, {
+        requestId: firstRequestId,
+        expectedGeneration: args.executionGeneration,
+    });
     const missionWorkflowId = await t.mutation(
         internal.execution.missions.resume,
         { missionId, expectedGeneration: args.executionGeneration },
@@ -252,7 +256,7 @@ test("run cancellation fences first and drains mission work in bounded scheduled
         await t.mutation(internal.execution.operations.recordResult, {
             requestId: firstRequestId,
             expectedGeneration: args.executionGeneration,
-            outcome: { kind: "success", valueJson: '{"retained":true}' },
+            ...lateRead,
         }),
     ).toMatchObject({ kind: "refused" });
     expect(await t.run((ctx) => ctx.db.get(firstRequestId))).toMatchObject({

@@ -191,6 +191,15 @@ test("a research reader's existing snapshot excludes an older queued message pub
     }
     const first = await read();
     expect(first.entries[0].content).toBe("First analyst question");
+    const pendingRoot = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: readerMission,
+            expectedGeneration: 4,
+            cause: "pending-snapshot",
+            input: { kind: "consult_conversation" },
+        },
+    );
     const nextTurn = await f.t.mutation(
         internal.execution.conversations.claimTurn,
         { runId: f.runId },
@@ -205,6 +214,11 @@ test("a research reader's existing snapshot excludes an older queued message pub
         requestKey: "future",
     });
     await finish(nextMission, "Later response");
+    const originalRoot = await f.t.action(
+        internal.execution.operations.dispatch,
+        { requestId: pendingRoot, expectedGeneration: 4 },
+    );
+    expect(originalRoot).toMatchObject({ kind: "success" });
     const next = await read(first.continueCursor);
     expect(next.entries[0].content).toBe("Original published answer");
     expect(JSON.stringify(next)).not.toContain("LATER QUEUED INSTRUCTION");
@@ -511,4 +525,117 @@ test("corrupted retained receipts are incidents; completed legacy pages retain t
     expect(await f.t.run((ctx) => ctx.db.get(pending))).toMatchObject({
         status: "completed",
     });
+});
+
+test("conversation restoration requests one native paginated record with explicit storage bounds", async () => {
+    const f = await seedHistoryMission();
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 1,
+            cause: "bounded-reader",
+            input: { kind: "consult_conversation" },
+        },
+    );
+    await f.t.mutation(internal.execution.operations.claim, {
+        requestId,
+        expectedGeneration: 1,
+    });
+    const { readHistoryPage } = await import("@convex/execution/history");
+    const calls: { method: string; args: unknown[] }[] = [];
+    await f.t.run(async (ctx) => {
+        const observe = <T extends object>(object: T, track = false): T =>
+            new Proxy(object, {
+                get(target, key, receiver) {
+                    const value = Reflect.get(target, key, receiver);
+                    if (typeof value !== "function") return value;
+                    return (...args: unknown[]) => {
+                        if (track && (key === "take" || key === "paginate"))
+                            calls.push({ method: String(key), args });
+                        const result = Reflect.apply(value, target, args);
+                        return result &&
+                            typeof result === "object" &&
+                            !(result instanceof Promise)
+                            ? observe(
+                                  result,
+                                  track ||
+                                      (key === "query" &&
+                                          args[0] === "agentMessageDeliveries"),
+                              )
+                            : result;
+                    };
+                },
+            });
+        const result = await readHistoryPage(
+            { ...ctx, db: observe(ctx.db) },
+            { requestId, expectedGeneration: 1 },
+        );
+        expect(result.outcome.kind).toBe("success");
+    });
+    expect(calls).toEqual([
+        {
+            method: "paginate",
+            args: [
+                expect.objectContaining({
+                    numItems: 1,
+                    maximumRowsRead: 4096,
+                    maximumBytesRead: 512 * 1024,
+                }),
+            ],
+        },
+    ]);
+});
+
+test("an empty conversation adds no facts and oversized required state cannot consume a fragment", async () => {
+    const f = await seedHistoryMission();
+    await f.t.run(async (ctx) => {
+        const messages = await ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_run_and_status", (q) =>
+                q.eq("runId", f.runId).eq("status", "processed"),
+            )
+            .take(20);
+        for (const message of messages) await ctx.db.delete(message._id);
+    });
+    const empty = await dispatchHistory(f, { kind: "consult_conversation" });
+    assert(empty.outcome.kind === "success");
+    expect(JSON.parse(empty.outcome.valueJson)).toEqual({
+        entries: [],
+        continueCursor: null,
+    });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+    ).toEqual([]);
+    const { initializeFraming } = await import("@convex/framing");
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.runId, {
+            startMode: "framed",
+            lifecycleState: "framing",
+        });
+        await initializeFraming(ctx, f.runId);
+        await ctx.db.patch(f.missionId, {
+            definitionId: "workbench_v1",
+            definitionVersion: 2,
+            scope: { kind: "workbench_v1" },
+            state: { kind: "workbench_v1" },
+        });
+    });
+    await f.client.mutation(api.framing.save, {
+        runId: f.runId,
+        expectedRevision: 1,
+        requestKey: "large-required-state",
+        content: {
+            scope: "Retain this exact material. ".repeat(1900),
+            questions: [],
+        },
+    });
+    const result = await dispatchHistory(f, { kind: "consult_mission_state" });
+    expect(result.outcome).toEqual({
+        kind: "unavailable",
+        code: "history_result_capacity",
+    });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+    ).toEqual([]);
 });

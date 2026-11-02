@@ -1332,3 +1332,108 @@ test("terminal recovery preserves a code-owned receipt instead of rewriting it a
         ),
     ).toHaveLength(1);
 }, 30000);
+
+test("native restoration repairs a refusal and reads several exact fragments before publishing", async () => {
+    const original =
+        "Analyst boundary: switching cost remains a question, never a finding. ".repeat(
+            110,
+        );
+    const restored: string[] = [];
+    const errors: unknown[] = [];
+    let stage = "initial";
+    let cursor: string | undefined;
+    vi.stubEnv("OPENROUTER_API_KEY", "local-fixture-only");
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (_url, init) => {
+            try {
+                if (stage === "initial")
+                    return reply("Ready to discuss the question.");
+                if (stage === "retain")
+                    return reply(
+                        "Your original boundary is retained. ".repeat(260),
+                    );
+                if (stage === "invalid") {
+                    stage = "repair";
+                    return toolReply("consult_conversation", {
+                        cursor: JSON.stringify({
+                            cursor: "invalid",
+                            offset: 1,
+                        }),
+                    });
+                }
+                const payload = JSON.parse(String(init?.body));
+                const tool = payload.messages
+                    .filter(
+                        (message: { role: string }) => message.role === "tool",
+                    )
+                    .at(-1);
+                assert(tool);
+                const result = JSON.parse(tool.content);
+                if (stage === "repair") {
+                    expect(result.kind).toBe("refused");
+                    stage = "read";
+                    return toolReply("consult_conversation", {});
+                }
+                expect(result.kind).toBe("success");
+                for (const entry of result.value.entries)
+                    restored.push(entry.content);
+                cursor = result.value.continueCursor;
+                if (cursor)
+                    return toolReply("consult_conversation", { cursor });
+                stage = "done";
+                return reply(
+                    "Switching cost remains your research question. The saved program is unchanged.",
+                );
+            } catch (error) {
+                errors.push(error);
+                throw error;
+            }
+        }),
+    );
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+    );
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
+    stage = "retain";
+    await client.mutation(api.execution.conversations.submit, {
+        runId,
+        requestKey: "original-material",
+        delivery: "queue",
+        text: original,
+    });
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
+    const framing = await client.query(api.framing.get, { runId });
+    stage = "invalid";
+    await client.mutation(api.execution.conversations.submit, {
+        runId,
+        requestKey: "restore-original",
+        delivery: "queue",
+        text: "Read the original exchange without changing the program.",
+    });
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 1000);
+    if (errors.length) throw errors[0];
+    expect(stage).toBe("done");
+    expect(restored.join("")).toContain(original);
+    expect(restored.length).toBeGreaterThanOrEqual(3);
+    expect(await client.query(api.framing.get, { runId })).toEqual(framing);
+    expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
+        executionStatus: "idle",
+        lifecycleState: "framing",
+    });
+    expect(
+        await t.run((ctx) => ctx.db.query("piSessions").collect()),
+    ).toHaveLength(1);
+    const messages = await client.query(
+        api.execution.conversations.listMessages,
+        { runId, paginationOpts: { numItems: 20, cursor: null } },
+    );
+    const final = messages.page
+        .filter((message) => message.role === "assistant")
+        .at(-1)?.text;
+    expect(final).toBe(
+        "Switching cost remains your research question. The saved program is unchanged.",
+    );
+    expect(final).not.toContain("history_cursor_invalid");
+});
