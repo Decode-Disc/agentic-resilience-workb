@@ -156,18 +156,19 @@ test.each([
 });
 
 test("prepares a public PDF from headers without reading its body", async () => {
-    const response = {
+    const response = new Response(null, {
         status: 200,
-        ok: true,
-        headers: new Headers({
+        headers: {
             "Content-Type": "application/pdf",
             "Content-Disposition":
                 'attachment; filename="Annual Report 2025.pdf"',
-        }),
-        get body() {
+        },
+    });
+    Object.defineProperty(response, "body", {
+        get() {
             throw new Error("PDF body must not be read");
         },
-    } as unknown as Response;
+    });
 
     await expect(
         inspectPublicSourceMetadata("https://example.com/reports/annual.pdf", {

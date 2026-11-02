@@ -59,6 +59,9 @@
                 "recommended": true,
                 "useButtonType": "error",
                 "useAnchorContent": "error"
+            },
+            "performance": {
+                "noAccumulatingSpread": "error"
             }
         }
     },
@@ -84,6 +87,14 @@
         }
     },
     "overrides": [
+        {
+            "includes": ["**/*", "!src/__tests__/**"],
+            "plugins": ["./tools/biome/no-chained-type-assertions-error.grit"]
+        },
+        {
+            "includes": ["src/__tests__/**"],
+            "plugins": ["./tools/biome/no-chained-type-assertions.grit"]
+        },
         {
             "includes": ["src/**/*.{js,jsx,ts,tsx}"],
             "linter": {

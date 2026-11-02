@@ -18,6 +18,12 @@ export {
     agentDefinitionVersionValidator,
     operationInputValidator,
 } from "./agentSchemas";
+
+export const executionScopeValidator = v.union(
+    v.literal("research"),
+    v.literal("conversation"),
+);
+export type ExecutionScope = Infer<typeof executionScopeValidator>;
 export type AgentOperationDefinition = {
     identity(context: {
         mission?: Doc<"agentMissions">;

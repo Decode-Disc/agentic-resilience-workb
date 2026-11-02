@@ -1,47 +1,22 @@
-import type { Id } from "@convex/_generated/dataModel";
-import type { ActionCtx } from "@convex/_generated/server";
+import { api, internal } from "@convex/_generated/api";
 import schema from "@convex/schema";
 import { submitManualUrlWithInspector } from "@convex/sourceActions";
-import { makeFunctionReference } from "convex/server";
-import { ConvexError } from "convex/values";
 import { convexTest } from "convex-test";
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
+import { seedManualSource } from "@/__tests__/setup/manual-source";
 
 const modules = import.meta.glob("/convex/**/*.ts");
+const metadata = {
+    canonicalUrl: "https://example.com/report",
+    title: "Public report",
+};
 
-const submitManualUrl = makeFunctionReference<
-    "action",
-    {
-        requestKey: string;
-        url: string;
-        target:
-            | { kind: "prelaunch"; collectionKey: string }
-            | {
-                  kind: "run";
-                  runId: Id<"researchRuns">;
-                  corpusRevisionId: Id<"corpusRevisions">;
-              };
-    },
-    | {
-          kind: "prepared";
-          preparationId: Id<"manualSourcePreparations">;
-          canonicalUrl: string;
-          title: string;
-          expiresAt: number;
-      }
-    | {
-          kind: "persisted";
-          sourceId: Id<"sources">;
-          canonicalUrl: string;
-          title: string;
-      }
->("sourceActions:submitManualUrl");
+afterEach(() => vi.useRealTimers());
 
 test("rejects unauthenticated source intake with structured application data", async () => {
     const t = convexTest(schema, modules);
-
     await expect(
-        t.action(submitManualUrl, {
+        t.action(api.sourceActions.submitManualUrl, {
             requestKey: "request-1",
             url: "https://example.com/report",
             target: { kind: "prelaunch", collectionKey: "composer-1" },
@@ -55,240 +30,168 @@ test("rejects unauthenticated source intake with structured application data", a
     });
 });
 
-test("prepares a source before launch and returns canonical metadata", async () => {
-    const runQuery = vi.fn(async () => null);
-    const runMutation = vi
-        .fn()
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({
-            shouldExecute: true,
-            status: "started",
-        })
-        .mockResolvedValueOnce({
-            shouldExecute: false,
-            status: "succeeded",
-        })
-        .mockResolvedValueOnce({
-            preparationId: "preparation-1",
-            canonicalUrl: "https://example.com/report",
-            title: "Public report",
-            expiresAt: 123_456,
-        });
-    const inspect = vi.fn(async () => ({
-        canonicalUrl: "https://example.com/report",
-        title: "Public report",
-    }));
-
-    await expect(
+test("prepares a source before launch and persists canonical metadata", async () => {
+    const { t, owned, userId } = await seedManualSource();
+    const inspect = vi.fn(async () => metadata);
+    const now = Date.now();
+    const result = await owned.action((ctx) =>
         submitManualUrlWithInspector(
-            { runQuery, runMutation } as unknown as Pick<
-                ActionCtx,
-                "runMutation" | "runQuery"
-            >,
-            "user-1" as Id<"users">,
+            ctx,
+            userId,
             {
                 requestKey: "request-1",
                 url: "https://example.com/report#overview",
-                target: {
-                    kind: "prelaunch",
-                    collectionKey: "composer-1",
-                },
+                target: { kind: "prelaunch", collectionKey: "composer-1" },
             },
             inspect,
-            () => 100_000,
+            () => now,
         ),
-    ).resolves.toEqual({
+    );
+    expect(result).toMatchObject({
         kind: "prepared",
-        preparationId: "preparation-1",
-        canonicalUrl: "https://example.com/report",
-        title: "Public report",
-        expiresAt: 123_456,
+        ...metadata,
+        expiresAt: now + 600_000,
     });
-
-    expect(runQuery).toHaveBeenCalledOnce();
-    expect(runMutation.mock.calls[0]?.[1]).toEqual({
-        authUserId: "user-1",
-    });
-    expect(inspect).toHaveBeenCalledOnce();
-    expect(runMutation.mock.calls[3]?.[1]).toMatchObject({
+    if (result.kind !== "prepared") throw new Error("Expected prepared source");
+    expect(
+        await t.run((ctx) => ctx.db.get(result.preparationId)),
+    ).toMatchObject({
+        ownerAuthUserId: userId,
         collectionKey: "composer-1",
         requestKey: "request-1",
-        canonicalUrl: "https://example.com/report",
-        expiresAt: 700_000,
+        ...metadata,
     });
+    expect(inspect).toHaveBeenCalledOnce();
+    expect(
+        await t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([
+        expect.objectContaining({
+            service: "url_metadata",
+            status: "succeeded",
+            attempt: 1,
+        }),
+    ]);
 });
 
 test("replays an existing preparation without rate limiting or inspection", async () => {
-    const existing = {
-        preparationId: "preparation-1",
-        canonicalUrl: "https://example.com/report",
-        title: "Public report",
-        expiresAt: 123_456,
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2025-01-01T00:00:00Z"));
+    const { t, owned, userId } = await seedManualSource();
+    const inspect = vi.fn(async () => metadata);
+    const args = {
+        requestKey: "request-1",
+        url: metadata.canonicalUrl,
+        target: { kind: "prelaunch" as const, collectionKey: "composer-1" },
     };
-    const runQuery = vi.fn(async () => existing);
-    const runMutation = vi.fn();
-    const inspect = vi.fn();
-
-    await expect(
-        submitManualUrlWithInspector(
-            { runQuery, runMutation } as unknown as Pick<
-                ActionCtx,
-                "runMutation" | "runQuery"
-            >,
-            "user-1" as Id<"users">,
-            {
-                requestKey: "request-1",
-                url: "https://example.com/report",
-                target: {
-                    kind: "prelaunch",
-                    collectionKey: "composer-1",
-                },
-            },
-            inspect,
-            () => 100_000,
+    const first = await owned.action((ctx) =>
+        submitManualUrlWithInspector(ctx, userId, args, inspect),
+    );
+    for (let i = 0; i < 11; i++) {
+        await t.mutation(
+            internal.providerCalls.reserveSourceMetadataRateLimit,
+            { authUserId: userId },
+        );
+    }
+    const second = await owned.action((ctx) =>
+        submitManualUrlWithInspector(ctx, userId, args, inspect),
+    );
+    expect(second).toEqual(first);
+    expect(inspect).toHaveBeenCalledOnce();
+    expect(
+        await t.run((ctx) =>
+            ctx.db.query("manualSourcePreparations").collect(),
         ),
-    ).resolves.toEqual({ kind: "prepared", ...existing });
-
-    expect(runMutation).not.toHaveBeenCalled();
-    expect(inspect).not.toHaveBeenCalled();
+    ).toHaveLength(1);
+    expect(
+        await t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toHaveLength(1);
 });
 
 test("stops a rate-limited preparation before inspection with structured data", async () => {
-    const runQuery = vi.fn(async () => null);
-    const runMutation = vi.fn(async () => {
-        throw new ConvexError({
-            area: "manual_source_intake" as const,
-            code: "intake_rate_limited" as const,
-            retryable: false,
-        });
-    });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2025-01-01T00:00:00Z"));
+    const { t, owned, userId } = await seedManualSource();
+    for (let i = 0; i < 12; i++) {
+        await t.mutation(
+            internal.providerCalls.reserveSourceMetadataRateLimit,
+            { authUserId: userId },
+        );
+    }
     const inspect = vi.fn();
-
     await expect(
-        submitManualUrlWithInspector(
-            { runQuery, runMutation } as unknown as Pick<
-                ActionCtx,
-                "runMutation" | "runQuery"
-            >,
-            "user-1" as Id<"users">,
-            {
-                requestKey: "request-1",
-                url: "https://example.com/report",
-                target: {
-                    kind: "prelaunch",
-                    collectionKey: "composer-1",
+        owned.action((ctx) =>
+            submitManualUrlWithInspector(
+                ctx,
+                userId,
+                {
+                    requestKey: "request-1",
+                    url: metadata.canonicalUrl,
+                    target: { kind: "prelaunch", collectionKey: "composer-1" },
                 },
-            },
-            inspect,
+                inspect,
+            ),
         ),
     ).rejects.toMatchObject({
-        data: {
-            code: "intake_rate_limited",
-            retryable: false,
-        },
+        data: { code: "intake_rate_limited", retryable: false },
     });
-
     expect(inspect).not.toHaveBeenCalled();
+    expect(
+        await t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toHaveLength(0);
 });
 
-test("persists an active-run source through the same action helper", async () => {
-    const runQuery = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({
-        executionGeneration: 4,
-        workflowVersion: 2,
-        stepKey: "source_review",
-        hasCapacity: true,
-    });
-    const runMutation = vi
-        .fn()
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({
-            shouldExecute: true,
-            status: "started",
-        })
-        .mockResolvedValueOnce("source-1")
-        .mockResolvedValueOnce({
-            shouldExecute: false,
-            status: "succeeded",
-        });
-    const inspect = vi.fn(async () => ({
-        canonicalUrl: "https://example.com/report",
-        title: "Public report",
-    }));
-
-    await expect(
+test("persists an active-run source through the action helper", async () => {
+    const { t, owned, userId, runId, corpusRevisionId } =
+        await seedManualSource();
+    const inspect = vi.fn(async () => metadata);
+    const result = await owned.action((ctx) =>
         submitManualUrlWithInspector(
-            { runQuery, runMutation } as unknown as Pick<
-                ActionCtx,
-                "runMutation" | "runQuery"
-            >,
-            "user-1" as Id<"users">,
+            ctx,
+            userId,
             {
                 requestKey: "request-1",
-                url: "https://example.com/report",
-                target: {
-                    kind: "run",
-                    runId: "run-1" as Id<"researchRuns">,
-                    corpusRevisionId: "revision-1" as Id<"corpusRevisions">,
-                },
+                url: metadata.canonicalUrl,
+                target: { kind: "run", runId, corpusRevisionId },
             },
             inspect,
         ),
-    ).resolves.toEqual({
-        kind: "persisted",
-        sourceId: "source-1",
-        canonicalUrl: "https://example.com/report",
-        title: "Public report",
+    );
+    expect(result).toMatchObject({ kind: "persisted", ...metadata });
+    if (result.kind !== "persisted")
+        throw new Error("Expected persisted source");
+    expect(await t.run((ctx) => ctx.db.get(result.sourceId))).toMatchObject({
+        runId,
+        ...metadata,
     });
-
-    expect(runMutation.mock.calls[0]?.[1]).toEqual({
-        authUserId: "user-1",
-    });
-    expect(runQuery).toHaveBeenCalledWith(expect.anything(), {
-        runId: "run-1",
-        corpusRevisionId: "revision-1",
-    });
+    expect(inspect).toHaveBeenCalledOnce();
 });
 
 test("replays an active-run request with persisted canonical metadata", async () => {
-    const runQuery = vi.fn().mockResolvedValueOnce({
-        sourceId: "source-1",
-        canonicalUrl: "https://example.com/report",
-        title: "Public report",
-    });
-    const runMutation = vi.fn();
-    const inspect = vi.fn();
-
-    await expect(
-        submitManualUrlWithInspector(
-            { runQuery, runMutation } as unknown as Pick<
-                ActionCtx,
-                "runMutation" | "runQuery"
-            >,
-            "user-1" as Id<"users">,
-            {
-                requestKey: "request-1",
-                url: "https://example.com/report",
-                target: {
-                    kind: "run",
-                    runId: "run-1" as Id<"researchRuns">,
-                    corpusRevisionId: "revision-1" as Id<"corpusRevisions">,
-                },
-            },
-            inspect,
+    const { t, owned, userId, runId, corpusRevisionId } =
+        await seedManualSource();
+    const inspect = vi.fn(async () => metadata);
+    const args = {
+        requestKey: "request-1",
+        url: metadata.canonicalUrl,
+        target: { kind: "run" as const, runId, corpusRevisionId },
+    };
+    const first = await owned.action((ctx) =>
+        submitManualUrlWithInspector(ctx, userId, args, inspect),
+    );
+    expect(
+        await owned.action((ctx) =>
+            submitManualUrlWithInspector(ctx, userId, args, inspect),
         ),
-    ).resolves.toEqual({
-        kind: "persisted",
-        sourceId: "source-1",
-        canonicalUrl: "https://example.com/report",
-        title: "Public report",
-    });
-
-    expect(runMutation).not.toHaveBeenCalled();
-    expect(inspect).not.toHaveBeenCalled();
-    expect(runQuery.mock.calls[0]?.[1]).toMatchObject({
-        runId: "run-1",
-        providerReference: expect.stringMatching(
-            /corpus:revision-1:manual-source:request:/,
+    ).toEqual(first);
+    if (first.kind !== "persisted")
+        throw new Error("Expected persisted source");
+    expect(await t.run((ctx) => ctx.db.get(first.sourceId))).toMatchObject({
+        providerReference: expect.stringContaining(
+            `corpus:${corpusRevisionId}:manual-source:request:`,
         ),
     });
+    expect(inspect).toHaveBeenCalledOnce();
+    expect(
+        await t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toHaveLength(1);
 });

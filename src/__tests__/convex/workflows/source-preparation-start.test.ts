@@ -1,11 +1,8 @@
 import { api, internal } from "@convex/_generated/api";
-import type { ActionCtx } from "@convex/_generated/server";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { addManualUrlWithInspector } from "@convex/sourceActions";
 import { startReviewPreparation } from "@convex/sourcePreparation";
 import { workflow } from "@convex/workflow";
-import type { FunctionReference } from "convex/server";
-import type { Value } from "convex/values";
 import { afterEach, expect, test, vi } from "vitest";
 import rateLimiterTest from "@/__tests__/convex/integrations/rate-limiter-test-register.js";
 
@@ -951,17 +948,6 @@ test("replays manual intake after automatic preparation advances the generation 
     const { t, runId, corpusRevisionId, userId } = await waitingReview();
     rateLimiterTest.register(t);
     const owned = t.withIdentity({ subject: userId });
-    // convex-test accepts concrete references, which are the only references used by this intake path.
-    const ctx = {
-        runQuery: (
-            reference: FunctionReference<"query">,
-            args: Record<string, Value>,
-        ) => owned.query(reference, args),
-        runMutation: (
-            reference: FunctionReference<"mutation">,
-            args: Record<string, Value>,
-        ) => owned.mutation(reference, args),
-    } as unknown as Pick<ActionCtx, "runMutation" | "runQuery">;
     const args = {
         authUserId: userId,
         runId,
@@ -973,12 +959,18 @@ test("replays manual intake after automatic preparation advances the generation 
         canonicalUrl: args.url,
         title: "New document",
     }));
-    const first = await addManualUrlWithInspector(ctx, args, inspect);
+    const first = await owned.action((ctx) =>
+        addManualUrlWithInspector(ctx, args, inspect),
+    );
     expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
         executionStatus: "running",
         executionGeneration: 4,
     });
-    expect(await addManualUrlWithInspector(ctx, args, inspect)).toEqual(first);
+    expect(
+        await owned.action((ctx) =>
+            addManualUrlWithInspector(ctx, args, inspect),
+        ),
+    ).toEqual(first);
     expect(inspect).toHaveBeenCalledTimes(1);
     const calls = await t.run((ctx) => ctx.db.query("providerCalls").take(3));
     expect(calls).toHaveLength(1);
@@ -993,7 +985,11 @@ test("replays manual intake after automatic preparation advances the generation 
             providerReference: calls[0]?.operationKey,
         }),
     );
-    expect(await addManualUrlWithInspector(ctx, args, inspect)).toEqual(first);
+    expect(
+        await owned.action((ctx) =>
+            addManualUrlWithInspector(ctx, args, inspect),
+        ),
+    ).toEqual(first);
     expect(inspect).toHaveBeenCalledTimes(1);
     await expect(
         t.query(internal.sources.findManualCandidateByProviderReference, {

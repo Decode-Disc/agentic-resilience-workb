@@ -1,8 +1,7 @@
+import { internal } from "./_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { fanOutFrozenBranches } from "@convex/domain/evidenceFanout";
 import { vResultValidator, vWorkflowId } from "@convex-dev/workflow";
-import type { FunctionReference } from "convex/server";
-import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import { applyEvidenceExtractionFailed } from "./domain/evidenceFailure";
@@ -13,53 +12,34 @@ import {
 } from "./resourceLimits";
 import { workflow } from "./workflow";
 
-type InternalQueryRef = FunctionReference<"query", "internal">;
-type InternalMutationRef = FunctionReference<"mutation", "internal">;
-type InternalActionRef = FunctionReference<"action", "internal">;
+const clearActiveWorkflowHandleOnSuccessRef =
+    internal.evidenceWorkflow.clearActiveWorkflowHandleOnSuccess;
 
-const clearActiveWorkflowHandleOnSuccessRef = makeFunctionReference(
-    "evidenceWorkflow:clearActiveWorkflowHandleOnSuccess",
-) as unknown as InternalMutationRef;
+const listFrozenSourcesForRunRef =
+    internal.evidenceArtifacts.listFrozenSourcesForRun;
 
-const listFrozenSourcesForRunRef = makeFunctionReference(
-    "evidenceArtifacts:listFrozenSourcesForRun",
-) as unknown as InternalQueryRef;
+const updateEvidenceSourceStatusRef =
+    internal.evidenceArtifacts.updateEvidenceSourceStatus;
 
-const updateEvidenceSourceStatusRef = makeFunctionReference(
-    "evidenceArtifacts:updateEvidenceSourceStatus",
-) as unknown as InternalMutationRef;
+const retrieveAndNormalizeSecSourceRef =
+    internal.evidenceActions.retrieveAndNormalizeSecSource;
 
-const retrieveAndNormalizeSecSourceRef = makeFunctionReference(
-    "evidenceActions:retrieveAndNormalizeSecSource",
-) as unknown as InternalActionRef;
+const retrieveAndNormalizeExaSourceRef =
+    internal.evidenceActions.retrieveAndNormalizeExaSource;
 
-const retrieveAndNormalizeExaSourceRef = makeFunctionReference(
-    "evidenceActions:retrieveAndNormalizeExaSource",
-) as unknown as InternalActionRef;
+const retrieveAndNormalizeManualSourceRef =
+    internal.evidenceActions.retrieveAndNormalizeManualSource;
 
-const retrieveAndNormalizeManualSourceRef = makeFunctionReference(
-    "evidenceActions:retrieveAndNormalizeManualSource",
-) as unknown as InternalActionRef;
+const generateClaimsForRunRef = internal.claimGeneration.generateClaimsForRun;
 
-const generateClaimsForRunRef = makeFunctionReference(
-    "claimGeneration:generateClaimsForRun",
-) as unknown as InternalMutationRef;
+const evaluatePolicyForRunRef = internal.policyEvaluations.evaluatePolicyForRun;
 
-const evaluatePolicyForRunRef = makeFunctionReference(
-    "policyEvaluations:evaluatePolicyForRun",
-) as unknown as InternalActionRef;
+const pauseForClaimGenerationUnavailableRef =
+    internal.researchRuns.pauseForClaimGenerationUnavailable;
 
-const pauseForClaimGenerationUnavailableRef = makeFunctionReference(
-    "researchRuns:pauseForClaimGenerationUnavailable",
-) as unknown as InternalMutationRef;
+const failEvidenceExtractionRef = internal.researchRuns.failEvidenceExtraction;
 
-const failEvidenceExtractionRef = makeFunctionReference(
-    "researchRuns:failEvidenceExtraction",
-) as unknown as InternalMutationRef;
-
-const evidenceReadyHandoffRef = makeFunctionReference(
-    "evidenceWorkflow:evidenceReadyHandoff",
-) as unknown as InternalMutationRef;
+const evidenceReadyHandoffRef = internal.evidenceWorkflow.evidenceReadyHandoff;
 
 export const run = workflow
     .define({
@@ -154,7 +134,11 @@ export const run = workflow
         }
 
         // Phase 5 claim generation step
-        const claimResult = await step.runMutation(generateClaimsForRunRef, {
+        // Recorded workflow steps may retain the previously handled failure outcome.
+        const claimResult: {
+            status: "unavailable" | "failed" | "succeeded";
+            reason?: string;
+        } = await step.runMutation(generateClaimsForRunRef, {
             runId: args.runId,
             executionGeneration: args.executionGeneration,
         });

@@ -1,6 +1,7 @@
 import type { api } from "@convex/_generated/api";
 import { dimensionLabel as domainDimensionLabel } from "@convex/domain/researchPlan";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
+import type { JobStage } from "@/components/ai/job-progress";
 
 type RunProjection = NonNullable<
     FunctionReturnType<typeof api.researchRuns.getMine>
@@ -880,8 +881,7 @@ export function sourcePreparationStages(
     const checksComplete =
         (phase === "proposal" || published) && !preparation.pendingComparisons;
     const step = !readingsComplete ? 1 : phase === "proposal" ? 3 : 2;
-    type StageStatus = "complete" | "running" | "pending" | "failed";
-    const state = (complete: boolean, current: boolean): StageStatus =>
+    const state = (complete: boolean, current: boolean): JobStage["status"] =>
         complete
             ? "complete"
             : current

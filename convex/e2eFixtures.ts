@@ -1,5 +1,3 @@
-import type { FunctionReference } from "convex/server";
-import { makeFunctionReference } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -673,24 +671,14 @@ export const inspectSourceReviewScenario = internalQuery({
     },
 });
 
-type InternalQueryRef = FunctionReference<"query", "internal">;
-type InternalMutationRef = FunctionReference<"mutation", "internal">;
-
-const evidenceWorkflowRun = makeFunctionReference(
-    "evidenceWorkflow:run",
-) as unknown as InternalMutationRef;
-const evidenceWorkflowOnComplete = makeFunctionReference(
-    "evidenceWorkflow:onComplete",
-) as unknown as InternalMutationRef;
-const getNormalizedClaimInputRef = makeFunctionReference(
-    "claimGeneration:getNormalizedClaimInput",
-) as unknown as InternalQueryRef;
-const registerFixtureManifestEntryRef = makeFunctionReference(
-    "fixtureManifestStore:registerFixtureManifestEntry",
-) as unknown as InternalMutationRef;
-const commitEvidenceMatrixSeedRef = makeFunctionReference(
-    "e2eFixtures:commitEvidenceMatrixSeed",
-) as unknown as InternalMutationRef;
+const evidenceWorkflowRun = internal.evidenceWorkflow.run;
+const evidenceWorkflowOnComplete = internal.evidenceWorkflow.onComplete;
+const getNormalizedClaimInputRef =
+    internal.claimGeneration.getNormalizedClaimInput;
+const registerFixtureManifestEntryRef =
+    internal.fixtureManifestStore.registerFixtureManifestEntry;
+const commitEvidenceMatrixSeedRef =
+    internal.e2eFixtures.commitEvidenceMatrixSeed;
 
 // The single committed normalized artifact for the evidence-matrix fixture.
 const FIXTURE_PASSAGES = [
@@ -1606,20 +1594,25 @@ export const scaleSourceReviewFixture = internalMutation({
  * actions-only; all database seeding and the guarded workflow start run inside
  * the commitEvidenceMatrixSeed mutation in one transaction.
  */
+const evidenceMatrixScenarioValidator = v.object({
+    runId: v.id("researchRuns"),
+    corpusRevisionId: v.id("corpusRevisions"),
+    sourceIds: v.array(v.id("sources")),
+    scenarioKind: v.union(v.literal("showcase"), v.literal("unavailable")),
+    executionGeneration: v.number(),
+});
+
 export const seedEvidenceMatrixScenario = internalAction({
     args: {
         slotKey: v.string(),
         fixtureKey: v.string(),
         scenarioKind: v.union(v.literal("showcase"), v.literal("unavailable")),
     },
-    returns: v.object({
-        runId: v.id("researchRuns"),
-        corpusRevisionId: v.id("corpusRevisions"),
-        sourceIds: v.array(v.id("sources")),
-        scenarioKind: v.union(v.literal("showcase"), v.literal("unavailable")),
-        executionGeneration: v.number(),
-    }),
-    handler: async (ctx, args) => {
+    returns: evidenceMatrixScenarioValidator,
+    handler: async (
+        ctx,
+        args,
+    ): Promise<Infer<typeof evidenceMatrixScenarioValidator>> => {
         if (env.E2E_FIXTURES_ENABLED !== "true") {
             throw new Error("E2E fixtures are disabled");
         }

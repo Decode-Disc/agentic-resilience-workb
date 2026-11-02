@@ -1,5 +1,11 @@
 import { v } from "convex/values";
 
+export const sourceDecisionValidator = v.union(
+    v.literal("accepted"),
+    v.literal("rejected"),
+    v.literal("pending"),
+);
+
 export const visitorRoleValidator = v.union(
     v.literal("admin"),
     v.literal("analyst"),

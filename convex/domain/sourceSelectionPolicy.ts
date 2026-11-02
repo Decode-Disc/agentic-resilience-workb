@@ -2,6 +2,7 @@ import type { CoveragePreset } from "@convex/domain/researchPlan";
 import { type Infer, v } from "convex/values";
 import type { SourceComparisonDisposition } from "./sourceComparison";
 import type { SourceQualification } from "./sourceQualification";
+import type { sourceDecisionValidator } from "./validators";
 
 export const SOURCE_SELECTION_POLICY_VERSION = "source-selection-v14";
 export const SOURCE_PUBLISHER_REGISTRY_VERSION = "source-publishers-v4";
@@ -90,12 +91,22 @@ export const SOURCE_COMPANY_LINKAGE_BASES = [
     "inspected_content",
 ] as const;
 
+export const sourceFamilyValidator = v.union(
+    ...SOURCE_FAMILIES.map((value) => v.literal(value)),
+);
+export const sourceCoverageRoleValidator = v.union(
+    ...SOURCE_COVERAGE_ROLES.map((value) => v.literal(value)),
+);
+export const sourceDocumentKindValidator = v.union(
+    ...SOURCE_DOCUMENT_KINDS.map((value) => v.literal(value)),
+);
+export const sourceAuthorityTierValidator = v.union(
+    ...SOURCE_AUTHORITY_TIERS.map((value) => v.literal(value)),
+);
+
 export type SourceFamily = (typeof SOURCE_FAMILIES)[number];
 export type SourceCoverageRole = (typeof SOURCE_COVERAGE_ROLES)[number];
 
-const selectionRoleValidator = v.union(
-    ...SOURCE_COVERAGE_ROLES.map((role) => v.literal(role)),
-);
 const selectionContributionsValidator = v.array(
     v.object({
         key: v.string(),
@@ -110,7 +121,7 @@ const selectionContributionsValidator = v.array(
             v.literal("publisher"),
             v.literal("document_candidate"),
         ),
-        role: v.optional(selectionRoleValidator),
+        role: v.optional(sourceCoverageRoleValidator),
         reportingPeriodEnd: v.optional(v.string()),
     }),
 );
@@ -123,7 +134,7 @@ export const sourceSelectionRationaleValidator = v.union(
     v.object({
         version: v.literal(1),
         trigger: v.literal("required_role"),
-        role: selectionRoleValidator,
+        role: sourceCoverageRoleValidator,
         contributions: selectionContributionsValidator,
     }),
     v.object({
@@ -143,26 +154,32 @@ export type SourceSelectionDisposition =
     | "recommended"
     | "needs_attention"
     | "alternative";
+export const SOURCE_SELECTION_REASON_CODES = [
+    "added_by_analyst",
+    "required_family_coverage",
+    "ranked_fill",
+    "unrecognized_source_family",
+    "not_selected",
+    "required_coverage_role",
+    "additional_coverage",
+    "canonical_duplicate",
+    "metadata_duplicate",
+    "search_or_index",
+    "low_information_document",
+    "company_identity_unverified",
+    "unverified_publisher",
+    "unverified_counter_evidence",
+    "qualified_partner_manual_review",
+    "no_new_coverage",
+    "recommendation_ceiling_reached",
+    "integrity_conflict",
+    "targeted_search_review",
+] as const;
+export const sourceSelectionReasonCodeValidator = v.union(
+    ...SOURCE_SELECTION_REASON_CODES.map((code) => v.literal(code)),
+);
 export type SourceSelectionReasonCode =
-    | "added_by_analyst"
-    | "required_family_coverage"
-    | "ranked_fill"
-    | "unrecognized_source_family"
-    | "not_selected"
-    | "required_coverage_role"
-    | "additional_coverage"
-    | "canonical_duplicate"
-    | "metadata_duplicate"
-    | "search_or_index"
-    | "low_information_document"
-    | "company_identity_unverified"
-    | "unverified_publisher"
-    | "unverified_counter_evidence"
-    | "qualified_partner_manual_review"
-    | "no_new_coverage"
-    | "recommendation_ceiling_reached"
-    | "integrity_conflict"
-    | "targeted_search_review";
+    (typeof SOURCE_SELECTION_REASON_CODES)[number];
 
 export type SourceSelectionCandidate = {
     sourceId: string;
@@ -198,7 +215,7 @@ export const SOURCE_EVIDENCE_USAGES = [
 
 export const sourceRoleAvailabilityValidator = v.array(
     v.object({
-        role: v.union(...SOURCE_COVERAGE_ROLES.map((role) => v.literal(role))),
+        role: sourceCoverageRoleValidator,
         state: v.union(
             v.literal("available"),
             v.literal("limited"),
@@ -2014,7 +2031,7 @@ export function evaluateSourceCoverage<SourceId extends string>(
         declaredCoverageRoles: Array<SourceCoverageRole>;
         duplicateOfSourceId?: string;
         included: boolean;
-        decision?: "accepted" | "rejected" | "pending";
+        decision?: Infer<typeof sourceDecisionValidator>;
         roleAvailability?: SourceRoleAvailability[];
         documentKind?: SourceDocumentKind;
     }>,

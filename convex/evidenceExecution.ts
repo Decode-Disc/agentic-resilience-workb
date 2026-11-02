@@ -1,5 +1,3 @@
-import type { FunctionReference } from "convex/server";
-import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
@@ -19,15 +17,9 @@ import { sourceDossierCandidateLimit } from "./resourceLimits";
 import { requireWorkspaceRun } from "./runWorkspace";
 import { workflow } from "./workflow";
 
-type InternalMutationRef = FunctionReference<"mutation", "internal">;
+const evidenceWorkflowRun = internal.evidenceWorkflow.run;
 
-const evidenceWorkflowRun = makeFunctionReference(
-    "evidenceWorkflow:run",
-) as unknown as InternalMutationRef;
-
-const evidenceWorkflowOnComplete = makeFunctionReference(
-    "evidenceWorkflow:onComplete",
-) as unknown as InternalMutationRef;
+const evidenceWorkflowOnComplete = internal.evidenceWorkflow.onComplete;
 
 async function startApprovedRun(
     ctx: MutationCtx,
@@ -251,10 +243,7 @@ export const retryClaimGeneration = mutation({
         // Compute the normalized input hash for this run's current state.
         // We use the internal query to build it (read-only).
         const normalizedInputResult = await ctx.runQuery(
-            "claimGeneration:getNormalizedClaimInput" as unknown as FunctionReference<
-                "query",
-                "internal"
-            >,
+            internal.claimGeneration.getNormalizedClaimInput,
             {
                 runId: run._id,
                 executionGeneration: run.executionGeneration,

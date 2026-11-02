@@ -17,6 +17,7 @@ import {
     agentBackendValidator,
     agentDefinitionIdValidator,
     agentDefinitionVersionValidator,
+    executionScopeValidator,
     missionStatusValidator,
     operationOutcomeValidator,
     operationRefusalValidator,
@@ -37,9 +38,7 @@ const missionFields = {
     rootMissionId: v.optional(v.id("agentMissions")),
     childMissionRequests: v.optional(v.number()),
     generationStorageRef: v.optional(v.string()),
-    executionScope: v.optional(
-        v.union(v.literal("research"), v.literal("conversation")),
-    ),
+    executionScope: v.optional(executionScopeValidator),
     conversationTurnId: v.optional(v.id("agentConversationTurns")),
     generationBackend: v.optional(agentBackendValidator),
     runId: v.id("researchRuns"),

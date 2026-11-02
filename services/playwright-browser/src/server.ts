@@ -197,13 +197,24 @@ function log(event: string, meta: Record<string, unknown> = {}): void {
 async function createPublicEgress(timeoutMs: number) {
     const password = randomBytes(24).toString("hex");
     const authorization = `Basic ${Buffer.from(`preview:${password}`).toString("base64")}`;
+    const probeUrl = `http://preview-${randomBytes(24).toString("hex")}.invalid/`;
     const sockets = new Set<Duplex>();
     let closed = false;
     let failure: RenderError | undefined;
     let connections = 0;
     let transferredBytes = 0;
-    const proxy = createServer((_req, res) => {
-        res.writeHead(403);
+    // Chromium must authenticate the local proxy before response interception
+    // starts; otherwise the intercepted 407 cannot complete its challenge.
+    const proxy = createServer((req, res) => {
+        if (req.method !== "GET" || req.url !== probeUrl) {
+            res.writeHead(403);
+        } else if (req.headers["proxy-authorization"] !== authorization) {
+            res.writeHead(407, {
+                "Proxy-Authenticate": 'Basic realm="preview"',
+            });
+        } else {
+            res.writeHead(200, { "Content-Type": "text/html" });
+        }
         res.end();
     });
     const reject = (socket: Duplex) =>
@@ -297,6 +308,7 @@ async function createPublicEgress(timeoutMs: number) {
             password,
             bypass: "<-loopback>",
         },
+        probeUrl,
         failure: () => failure,
         close: () => {
             clearTimeout(deadline);
@@ -361,6 +373,18 @@ async function render(url: string): Promise<RenderResult> {
         });
         await context.addInitScript(STEALTH_INIT_SCRIPT);
         const page = await context.newPage();
+        try {
+            const probe = await page.goto(egress.probeUrl, {
+                waitUntil: "commit",
+                timeout: NAVIGATION_TIMEOUT_MS,
+            });
+            if (probe?.status() !== 200) throw new Error("Unexpected status");
+        } catch {
+            throw new RenderError(
+                "egress_failed",
+                "Preview proxy authentication failed",
+            );
+        }
 
         let requests = 0;
         // Playwright routes run only for the first URL in a redirect chain. Pause redirect responses before Chromium follows them.

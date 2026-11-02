@@ -7,16 +7,15 @@ import { sha256Hex } from "./sourcePassages";
 import { sourcePreparationError } from "./sourcePreparationAuthority";
 import {
     FAMILY_BY_ROLE,
-    SOURCE_COVERAGE_ROLES,
+    sourceCoverageRoleValidator,
+    sourceFamilyValidator,
     SOURCE_FAMILIES,
     type SourceCoverageRole,
     type SourceFamily,
     type SourceSelectionCompany,
 } from "./sourceSelectionPolicy";
 
-export const coverageRoleValidator = v.union(
-    ...SOURCE_COVERAGE_ROLES.map((role) => v.literal(role)),
-);
+export const coverageRoleValidator = sourceCoverageRoleValidator;
 
 /** Stored object key order cannot create another logical search or retry allowance. */
 export function supplementalSearchInputHash(
@@ -83,9 +82,7 @@ export async function readSupplementalSearchAttempts(
     }
     return calls;
 }
-export const discoveryFamilyValidator = v.union(
-    ...SOURCE_FAMILIES.map((family) => v.literal(family)),
-);
+export const discoveryFamilyValidator = sourceFamilyValidator;
 export const recoveryTargetValidator = v.union(
     v.object({ kind: v.literal("failed_discovery") }),
     v.object({ kind: v.literal("coverage"), role: coverageRoleValidator }),

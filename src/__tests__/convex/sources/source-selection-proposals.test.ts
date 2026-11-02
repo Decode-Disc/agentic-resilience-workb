@@ -935,13 +935,16 @@ test("backfills a missing draft proposal idempotently without touching approved 
             status: "claimed",
             createdAt: 1,
         });
-        await ctx.db.insert("visitors", {
+        const adminVisitorId = await ctx.db.insert("visitors", {
             authUserId: adminUserId,
             invitationId,
             role: "admin",
             status: "active",
             analysesReserved: 0,
             admittedAt: 1,
+        });
+        await ctx.db.patch(invitationId, {
+            claimedByVisitorId: adminVisitorId,
         });
         const runId = await ctx.db.insert("researchRuns", {
             purpose: "research",

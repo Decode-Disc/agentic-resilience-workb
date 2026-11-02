@@ -1,3 +1,4 @@
+import { internal } from "./_generated/api";
 import type { DataModel, Id } from "@convex/_generated/dataModel";
 import {
     groupClaimsForCanonicalization,
@@ -46,17 +47,13 @@ import {
     MAX_PASSAGES_PER_SOURCE,
     sourceDossierCandidateLimit,
 } from "@convex/resourceLimits";
-import type { FunctionReference, GenericDatabaseReader } from "convex/server";
-import { makeFunctionReference } from "convex/server";
+import type { GenericDatabaseReader } from "convex/server";
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import schema from "./schema";
 
-type InternalQueryRef = FunctionReference<"query", "internal">;
-
-const getFixtureManifestEntryRef = makeFunctionReference(
-    "fixtureManifestStore:getFixtureManifestEntry",
-) as unknown as InternalQueryRef;
+const getFixtureManifestEntryRef =
+    internal.fixtureManifestStore.getFixtureManifestEntry;
 
 type LoadPlanResult =
     | { status: "missing_plan" }

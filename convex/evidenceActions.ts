@@ -2,8 +2,7 @@
 
 import { lookup } from "node:dns/promises";
 import type { Id } from "@convex/_generated/dataModel";
-import type { FunctionReference, FunctionReturnType } from "convex/server";
-import { makeFunctionReference } from "convex/server";
+import type { FunctionReturnType } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { ActionCtx } from "./_generated/server";
@@ -32,48 +31,30 @@ import {
     requestPinnedPublicSource,
 } from "./sourceActions";
 
-type InternalQueryRef = FunctionReference<"query", "internal">;
-type InternalMutationRef = FunctionReference<"mutation", "internal">;
+const getFrozenSourceForExecutionRef =
+    internal.evidenceArtifacts.getFrozenSourceForExecution;
 
-const getFrozenSourceForExecutionRef = makeFunctionReference(
-    "evidenceArtifacts:getFrozenSourceForExecution",
-) as unknown as InternalQueryRef;
+const updateEvidenceSourceStatusRef =
+    internal.evidenceArtifacts.updateEvidenceSourceStatus;
 
-const updateEvidenceSourceStatusRef = makeFunctionReference(
-    "evidenceArtifacts:updateEvidenceSourceStatus",
-) as unknown as InternalMutationRef;
+const reserveUploadLeaseRef = internal.evidenceArtifacts.reserveUploadLease;
 
-const reserveUploadLeaseRef = makeFunctionReference(
-    "evidenceArtifacts:reserveUploadLease",
-) as unknown as InternalMutationRef;
+const attachStorageToLeaseRef = internal.evidenceArtifacts.attachStorageToLease;
 
-const attachStorageToLeaseRef = makeFunctionReference(
-    "evidenceArtifacts:attachStorageToLease",
-) as unknown as InternalMutationRef;
+const finalizeSourceVersionRef =
+    internal.evidenceArtifacts.finalizeSourceVersion;
 
-const finalizeSourceVersionRef = makeFunctionReference(
-    "evidenceArtifacts:finalizeSourceVersion",
-) as unknown as InternalMutationRef;
+const markLeaseOrphanedRef = internal.evidenceArtifacts.markLeaseOrphaned;
 
-const markLeaseOrphanedRef = makeFunctionReference(
-    "evidenceArtifacts:markLeaseOrphaned",
-) as unknown as InternalMutationRef;
+const reserveSecRateLimitRef = internal.providerCalls.reserveSecRateLimit;
 
-const reserveSecRateLimitRef = makeFunctionReference(
-    "providerCalls:reserveSecRateLimit",
-) as unknown as InternalMutationRef;
+const recordAttemptRef = internal.providerCalls.recordAttempt;
 
-const recordAttemptRef = makeFunctionReference(
-    "providerCalls:recordAttempt",
-) as unknown as InternalMutationRef;
+const recordConfigurationFailureRef =
+    internal.providerCalls.recordConfigurationFailure;
 
-const recordConfigurationFailureRef = makeFunctionReference(
-    "providerCalls:recordConfigurationFailure",
-) as unknown as InternalMutationRef;
-
-const assertExecutionFenceQueryRef = makeFunctionReference(
-    "evidenceArtifacts:assertExecutionFenceQuery",
-) as unknown as InternalQueryRef;
+const assertExecutionFenceQueryRef =
+    internal.evidenceArtifacts.assertExecutionFenceQuery;
 
 export type RetrieveSourceResult = {
     status: "succeeded" | "partial" | "failed";
