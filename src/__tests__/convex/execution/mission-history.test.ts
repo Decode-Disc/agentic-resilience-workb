@@ -1,7 +1,8 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { recordMissionEvent } from "@convex/execution/authority";
-import { consultMissionState } from "@convex/execution/missionHistory";
+import { projectMissionHistoryEvent } from "@convex/execution/journal";
+import { readMissionState } from "@convex/execution/missionHistory";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import {
     dispatchHistory,
@@ -44,10 +45,10 @@ test("history_text_is_unchanged_when_live_request_and_invocation_change", async 
     const event = await f.t.run((ctx) => ctx.db.get(request.admissionEventId!));
     assert(event?.sequence);
     const read = () =>
-        f.t.query(internal.execution.missions.history, {
-            missionId: f.missionId,
-            expectedGeneration: 1,
-            cursor: `${event.sequence}:0`,
+        f.t.run(async (ctx) => {
+            const retained = await ctx.db.get(event._id);
+            assert(retained);
+            return projectMissionHistoryEvent(ctx, retained);
         });
     const before = await read();
     await f.t.run(async (ctx) => {
@@ -57,7 +58,7 @@ test("history_text_is_unchanged_when_live_request_and_invocation_change", async 
             blockCode: "later_incident",
         });
     });
-    expect((await read()).entries[0]?.content).toBe(before.entries[0]?.content);
+    expect(await read()).toEqual(before);
 });
 
 test("old_missing_operation_payload_is_explicit", async () => {
@@ -82,15 +83,9 @@ test("old_missing_operation_payload_is_explicit", async () => {
         return ctx.db.get(id);
     });
     assert(event?.sequence);
-    const page = await f.t.query(internal.execution.missions.history, {
-        missionId: f.missionId,
-        expectedGeneration: 1,
-        cursor: `${event.sequence}:0`,
-    });
-    expect(page.entries[0]?.content).toContain(
-        "operation_observation_unavailable",
-    );
-    expect(page.entries[0]?.content).not.toContain('"status":"pending"');
+    const page = await f.t.run((ctx) => projectMissionHistoryEvent(ctx, event));
+    expect(page.json).toContain("operation_observation_unavailable");
+    expect(page.json).not.toContain('"status":"pending"');
 });
 
 test("consultation_only_activity_does_not_advance_history_source", async () => {
@@ -195,7 +190,7 @@ test.each([
             missionId,
             expectedGeneration: args.executionGeneration,
             cause: "corrected-history",
-            input: { kind: "consult_mission_state", cursor: "1:0" },
+            input: { kind: "consult_mission_state" },
         },
     );
     expect(
@@ -225,10 +220,11 @@ test("unexpected history read failures remain visible as errors", async () => {
     });
     await expect(
         t.action((ctx) => {
-            const runQuery: typeof ctx.runQuery = async () => {
-                throw new Error("History read channel failed");
-            };
-            return consultMissionState(
+            const runQuery: import("@convex/_generated/server").QueryCtx["runQuery"] =
+                async () => {
+                    throw new Error("History read channel failed");
+                };
+            return readMissionState(
                 { ...ctx, runQuery },
                 {
                     missionId,

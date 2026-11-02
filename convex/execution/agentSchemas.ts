@@ -3,6 +3,7 @@ import { validationSchemas } from "@convex/domain/executionValidationContracts";
 import { savedMaterialSchemas } from "@convex/domain/savedMaterialOperations";
 import { workbenchSchemas } from "@convex/domain/workbenchContracts";
 import { v } from "convex/values";
+import { historyReadPinValidator } from "./operationContracts";
 
 // Pure schema registration stays independent of runtime bindings and generated function types.
 const registeredSchemas = [
@@ -50,6 +51,7 @@ export const operationInputValidator = v.union(
     ...registeredSchemas.map((schema) => schema.operation),
 );
 export const operationPinValidator = v.union(
+    historyReadPinValidator,
     v.object({ kind: v.literal("run_state"), stateHash: v.string() }),
     v.object({ kind: v.literal("mission_history") }),
     ...registeredSchemas.map((schema) => schema.pin),

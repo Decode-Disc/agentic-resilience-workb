@@ -5,10 +5,9 @@ import {
     consultMissionStateInputValidator,
     consultRunStateInputValidator,
 } from "./agentSchemas";
-import { executionError, executionFailureCode } from "./errors";
 import type { AgentOperationDefinition } from "./executionProtocol";
+import { pinHistoryRead } from "./history";
 import { operationReuseIdentity } from "./missionData";
-import { consultMissionState } from "./missionHistory";
 
 /** Read policies and execution are the same for native callers and generated tools. */
 export const consultMissionStateOperation: Extract<
@@ -16,9 +15,9 @@ export const consultMissionStateOperation: Extract<
     { effectKind: "read" }
 > = {
     effectKind: "read",
-    version: 1,
+    version: 2,
     description:
-        "Read only the current mission state and its bounded observable work history. For earlier analyst exchanges use consult_conversation. Omit cursor on the first read; on later pages copy only continueCursor returned by this operation, never a mission, turn or conversation ID.",
+        "Read current required mission state and immutable retained observations. Omit cursor initially; later copy only this operation's continueCursor, never an ID or an invented offset.",
     inputValidator: consultMissionStateInputValidator,
     identity(context) {
         return {
@@ -26,21 +25,16 @@ export const consultMissionStateOperation: Extract<
             stateVersion: context.mission?.nextEventSequence,
         };
     },
-    async pin(_ctx, mission) {
-        return mission
-            ? { kind: "available", pin: { kind: "mission_history" } }
-            : { kind: "unavailable", code: "mission_required" };
-    },
+    pin: pinHistoryRead,
     async execute(ctx, args) {
-        if (!args.missionId || args.input.kind !== "consult_mission_state")
-            return { outcome: { kind: "refused", code: "mission_required" } };
-        return {
-            outcome: await consultMissionState(ctx, {
-                missionId: args.missionId,
-                expectedGeneration: args.expectedGeneration,
-                cursor: args.input.cursor,
-            }),
-        };
+        if (!args.requestId)
+            return {
+                outcome: { kind: "refused", code: "request_unavailable" },
+            };
+        return ctx.runQuery(internal.execution.history.read, {
+            requestId: args.requestId,
+            expectedGeneration: args.expectedGeneration,
+        });
     },
     validateOutcome(_request, outcome) {
         return outcome;
@@ -103,54 +97,9 @@ const consultConversation: Extract<
 > = {
     ...consultMissionStateOperation,
     description:
-        "Read exact prior processed conversation messages in bounded fragments; queued instructions are excluded. Omit cursor on the first read; on later pages copy only continueCursor returned by this operation, never a mission, turn or conversation ID.",
+        "Read exact prior processed conversation messages in canonical fragments. Queued instructions and messages published after this read's snapshot are excluded. Omit cursor initially; later copy only this operation's continueCursor.",
     inputValidator: consultConversationInputValidator,
-    async execute(ctx, args) {
-        if (!args.missionId || args.input.kind !== "consult_conversation")
-            return { outcome: { kind: "refused", code: "mission_required" } };
-        try {
-            const valueJson = await ctx.runQuery(
-                internal.execution.conversations.historyForMission,
-                {
-                    missionId: args.missionId,
-                    expectedGeneration: args.expectedGeneration,
-                    cursor: args.input.cursor,
-                },
-            );
-            const page: unknown = JSON.parse(valueJson);
-            if (
-                !page ||
-                typeof page !== "object" ||
-                !("entries" in page) ||
-                !Array.isArray(page.entries)
-            )
-                throw executionError("conversation_message_unavailable");
-            return {
-                outcome: {
-                    kind: "success",
-                    valueJson,
-                    ...(page.entries.length
-                        ? {
-                              progressKey: sha256Hex(
-                                  stableStringify({
-                                      kind: "conversation_history",
-                                      entries: page.entries,
-                                  }),
-                              ),
-                          }
-                        : {}),
-                },
-            };
-        } catch (error) {
-            if (executionFailureCode(error) !== "history_cursor_invalid")
-                throw error;
-            return {
-                outcome: { kind: "refused", code: "history_cursor_invalid" },
-            };
-        }
-    },
 };
-
 export const commonOperations = {
     consult_conversation: consultConversation,
     consult_mission_state: consultMissionStateOperation,

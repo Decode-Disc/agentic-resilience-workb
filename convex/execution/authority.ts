@@ -5,6 +5,7 @@ import { runMatchesWorkspace, workspaceForVisitor } from "@convex/runWorkspace";
 import { validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
 import { executionError } from "./errors";
+import { retainExecutionEventPayload } from "./journal";
 import { missionScope, missionState } from "./missionData";
 
 export { executionError, executionFailureCode } from "./errors";
@@ -207,19 +208,22 @@ export async function recordMissionEvent(
         interpretedNeed?: string;
         generation?: number;
         instructionVersion?: number;
-        historySource?: true;
+        historySource?: "material" | "observation";
+        invocationPayloadId?: Id<"agentInvocationPayloads">;
+        observation?: unknown;
     },
 ) {
     const current = await ctx.db.get(mission._id);
     if (!current) throw executionError("mission_unavailable");
-    const { historySource, ...details } = event;
+    const { historySource, observation, ...details } = event;
+    const source =
+        historySource ??
+        (["mission_started", "mission_completed"].includes(event.kind)
+            ? "material"
+            : undefined);
     const eventId = await ctx.db.insert("agentExecutionEvents", {
         ...details,
-        historySourceSequence:
-            historySource ||
-            ["mission_started", "mission_completed"].includes(event.kind)
-                ? current.nextEventSequence
-                : undefined,
+        historySourceSequence: source ? current.nextEventSequence : undefined,
         actor:
             event.actor ??
             (event.invocationId
@@ -234,8 +238,13 @@ export async function recordMissionEvent(
     });
     await ctx.db.patch(mission._id, {
         nextEventSequence: current.nextEventSequence + 1,
+        ...(source === "material"
+            ? { historyMaterialSequence: current.nextEventSequence }
+            : {}),
         updatedAt: Date.now(),
     });
+    if (observation !== undefined)
+        await retainExecutionEventPayload(ctx, eventId, observation);
     return eventId;
 }
 

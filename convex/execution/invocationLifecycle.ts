@@ -51,7 +51,11 @@ import {
     MAX_WORKING_NOTES_BYTES,
     operationInputValidator,
 } from "./executionProtocol";
-import { hasKnownNonDispatch, retainInvocationPayload } from "./journal";
+import {
+    hasKnownNonDispatch,
+    invocationEventObservation,
+    retainInvocationPayload,
+} from "./journal";
 import {
     domainDataPatch,
     invocationScopeFields,
@@ -950,6 +954,13 @@ export const finish = internalMutation({
                 ...domainDataPatch(mission, { result: completion.result }),
             });
             await recordMissionEvent(ctx, mission, {
+                ...(await invocationEventObservation(
+                    ctx,
+                    invocation,
+                    args.response,
+                    args.rawOutputJson,
+                )),
+                historySource: "material",
                 kind: "mission_completed",
                 cause: invocation.taskKey,
                 invocationId: invocation._id,
@@ -1024,6 +1035,12 @@ export const finish = internalMutation({
         await ctx.db.patch(invocation._id, { requestIds });
         await ctx.db.patch(mission._id, { status: "waiting" });
         await recordMissionEvent(ctx, mission, {
+            ...(await invocationEventObservation(
+                ctx,
+                invocation,
+                args.response,
+                args.rawOutputJson,
+            )),
             kind: "invocation_returned",
             cause: invocation.taskKey,
             invocationId: invocation._id,

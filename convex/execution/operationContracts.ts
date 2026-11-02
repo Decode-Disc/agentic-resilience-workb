@@ -11,7 +11,8 @@ export const historyFrontierValidator = v.union(
     v.object({
         source: v.literal("conversation"),
         throughCreationTime: v.number(),
-        throughTurnCreationTime: v.number(),
+        throughMessageId: v.union(v.id("agentMessageDeliveries"), v.null()),
+        publicationRevision: v.number(),
     }),
 );
 
@@ -23,7 +24,7 @@ export const historyPositionValidator = v.union(
     }),
     v.object({
         source: v.literal("conversation"),
-        cursor: v.union(v.string(), v.null()),
+        afterMessageId: v.union(v.id("agentMessageDeliveries"), v.null()),
         offset: v.number(),
     }),
 );
@@ -42,6 +43,37 @@ export const historyReadReceiptValidator = v.object({
 });
 
 export type HistoryReadReceipt = Infer<typeof historyReadReceiptValidator>;
+
+export const historyReadPinValidator = v.object({
+    kind: v.literal("history_read"),
+    source: v.union(v.literal("conversation"), v.literal("mission")),
+    frontier: v.optional(historyFrontierValidator),
+});
+
+const fragmentFields = {
+    offset: v.number(),
+    totalCharacters: v.number(),
+    content: v.string(),
+};
+export const missionHistoryEntryValidator = v.object({
+    sequence: v.number(),
+    ...fragmentFields,
+});
+export const conversationHistoryEntryValidator = v.object({
+    messageId: v.id("agentMessageDeliveries"),
+    turnId: v.optional(v.id("agentConversationTurns")),
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    ...fragmentFields,
+});
+export const historyPageValidator = v.object({
+    entries: v.array(
+        v.union(
+            missionHistoryEntryValidator,
+            conversationHistoryEntryValidator,
+        ),
+    ),
+    continueCursor: v.union(v.string(), v.null()),
+});
 
 export const dispatchFailureValidator = v.object({
     category: v.union(
@@ -62,13 +94,18 @@ export const retainedPayloadValidator = v.object({
     code: v.optional(v.string()),
 });
 
-const COMMON_CONSULTATIONS: ReadonlySet<string> = new Set([
-    "consult_conversation",
-    "consult_mission_state",
-    "consult_run_state",
-]);
+/** Only the shared history declarations may issue private read receipts. */
+export function historySourceFor(
+    kind: string,
+): "conversation" | "mission" | undefined {
+    return kind === "consult_conversation"
+        ? "conversation"
+        : kind === "consult_mission_state"
+          ? "mission"
+          : undefined;
+}
 
 /** Consultation audit entries cannot manufacture new retained source material. */
 export function isCommonConsultation(kind: string): boolean {
-    return COMMON_CONSULTATIONS.has(kind);
+    return kind === "consult_run_state" || historySourceFor(kind) !== undefined;
 }

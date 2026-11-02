@@ -1,7 +1,8 @@
 import { internal } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import { sha256Hex } from "@convex/domain/sourcePassages";
+import type { OperationOutcome } from "@convex/execution/agentDefinition";
 import type { WorkflowId } from "@convex-dev/workflow";
-import type { FunctionReturnType } from "convex/server";
 import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { installModel } from "@/__tests__/setup/model-configuration";
@@ -652,48 +653,46 @@ test("exact history pagination reconstructs large observable records without gap
         response: { kind: "operations", requests: [] },
         rawOutputJson,
     });
-    const expected = await t.run(async (ctx) => {
-        const events = await ctx.db
-            .query("agentExecutionEvents")
-            .withIndex("by_mission_and_sequence", (q) =>
-                q.eq("missionId", missionId),
-            )
-            .collect();
-        return Promise.all(
-            events.map(async (event) =>
-                JSON.stringify({
-                    event,
-                    invocation: event.invocationId
-                        ? await ctx.db.get(event.invocationId)
-                        : null,
-                    request: event.requestId
-                        ? await ctx.db.get(event.requestId)
-                        : null,
-                }),
-            ),
-        );
-    });
     const actual = new Map<number, string>();
+    const lengths = new Map<number, number>();
     let cursor: string | null = null;
     let pages = 0;
     do {
-        const page: FunctionReturnType<
-            typeof internal.execution.missions.history
-        > = await t.query(internal.execution.missions.history, {
-            missionId,
-            expectedGeneration: 4,
-            ...(cursor ? { cursor } : {}),
-        });
+        const requestId: Id<"agentOperationRequests"> = await t.mutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId,
+                expectedGeneration: 4,
+                cause: "reconstruct-history",
+                input: {
+                    kind: "consult_mission_state" as const,
+                    ...(cursor ? { cursor } : {}),
+                },
+            },
+        );
+        const outcome: OperationOutcome = await t.action(
+            internal.execution.operations.dispatch,
+            { requestId, expectedGeneration: 4 },
+        );
+        expect(outcome.kind).toBe("success");
+        if (outcome.kind !== "success") throw new Error("Expected history");
+        const page = JSON.parse(outcome.valueJson).history;
         for (const entry of page.entries) {
             const previous = actual.get(entry.sequence) ?? "";
             expect(entry.offset).toBe(previous.length);
             actual.set(entry.sequence, previous + entry.content);
+            lengths.set(entry.sequence, entry.totalCharacters);
         }
         cursor = page.continueCursor;
         expect(++pages).toBeLessThan(100);
     } while (cursor);
     expect(pages).toBeGreaterThan(1);
-    expect([...actual.values()]).toEqual(expected);
+    for (const [sequence, text] of actual)
+        expect(text.length).toBe(lengths.get(sequence));
+    const observation = [...actual.values()]
+        .map((text) => JSON.parse(text))
+        .find((value) => value.observation?.value?.rawOutputJson);
+    expect(observation?.observation.value.rawOutputJson).toBe(rawOutputJson);
 });
 
 test.each([

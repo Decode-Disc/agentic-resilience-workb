@@ -2,8 +2,213 @@ import { api, internal } from "@convex/_generated/api";
 import { executionError } from "@convex/execution/errors";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
+import {
+    dispatchHistory,
+    seedHistoryMission,
+} from "@/__tests__/setup/execution-history";
+import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+});
+
+test.each([
+    "consult_conversation",
+    "consult_mission_state",
+] as const)("%s refuses fabricated and empty continuations before pagination", async (kind) => {
+    const f = await seedHistoryMission();
+    for (const cursor of [
+        "",
+        "history:not-an-id",
+        "1:0",
+        JSON.stringify({ cursor: "not-a-database-cursor", offset: 0 }),
+        JSON.stringify({ cursor: null, offset: 1 }),
+    ]) {
+        const result = await dispatchHistory(f, { kind, cursor });
+        expect(result.outcome).toEqual({
+            kind: "refused",
+            code: "history_cursor_invalid",
+        });
+        expect(
+            await f.t.run((ctx) => ctx.db.get(result.requestId)),
+        ).toMatchObject({ status: "completed", outcome: result.outcome });
+    }
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+    ).toHaveLength(0);
+    expect((await dispatchHistory(f, { kind })).outcome).toMatchObject({
+        kind: "success",
+    });
+});
+
+test("invalid_inner_cursor_is_a_recorded_refusal", async () => {
+    const f = await seedHistoryMission("Original analyst question");
+    const result = await dispatchHistory(f, {
+        kind: "consult_conversation",
+        cursor: JSON.stringify({ cursor: "not-a-database-cursor", offset: 0 }),
+    });
+    expect(result.outcome).toEqual({
+        kind: "refused",
+        code: "history_cursor_invalid",
+    });
+    expect(await f.t.run((ctx) => ctx.db.get(result.requestId))).toMatchObject({
+        status: "completed",
+        outcome: result.outcome,
+    });
+    const corrected = await dispatchHistory(f, {
+        kind: "consult_conversation",
+    });
+    assert(corrected.outcome.kind === "success");
+    expect(corrected.outcome.valueJson).toContain("Original analyst question");
+});
+
+test("issued canonical conversation fragments preserve Unicode boundaries and cannot be re-offset", async () => {
+    const text = `${"a".repeat(8191)}😀${"b".repeat(32)}`;
+    const f = await seedHistoryMission(text);
+    const first = await dispatchHistory(f, { kind: "consult_conversation" });
+    assert(first.outcome.kind === "success");
+    const page = JSON.parse(first.outcome.valueJson);
+    expect(page.continueCursor).toMatch(/^history:/);
+    expect(page.entries[0].content).not.toMatch(/[\uD800-\uDBFF]$/);
+    const second = await dispatchHistory(f, {
+        kind: "consult_conversation",
+        cursor: page.continueCursor,
+    });
+    assert(second.outcome.kind === "success");
+    const next = JSON.parse(second.outcome.valueJson);
+    expect(next.entries[0].content).not.toMatch(/^[\uDC00-\uDFFF]/);
+    expect(page.entries[0].content + next.entries[0].content).toBe(text);
+    const before = (await f.t.run((ctx) => ctx.db.get(f.missionId)))
+        ?.progressKeys;
+    const rejected = await dispatchHistory(f, {
+        kind: "consult_conversation",
+        cursor: JSON.stringify({ cursor: null, offset: 1 }),
+    });
+    expect(rejected.outcome).toEqual({
+        kind: "refused",
+        code: "history_cursor_invalid",
+    });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+    ).toEqual(before);
+});
+
+test("a research reader's existing snapshot excludes an older queued message published by a later response", async () => {
+    const f = await seedInspectedEvidence();
+    vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
+    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
+    await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run?.ownerVisitorId);
+        const owner = await ctx.db.get(run.ownerVisitorId);
+        assert(owner);
+        await ctx.db.patch(owner.invitationId, { slotKey: "analyst-4" });
+    });
+    const contextId = await f.t.mutation(
+        internal.runWorkspace.openBrowserTestContext,
+        {
+            slotKey: "analyst-4",
+            contextKey: "history-membership",
+            durationMs: 60_000,
+        },
+    );
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.runId, {
+            purpose: "browser_test",
+            browserTestContextId: contextId,
+        }),
+    );
+    const client = f.t.withIdentity({ subject: f.userId });
+    await client.mutation(api.execution.conversations.submit, {
+        runId: f.runId,
+        requestKey: "first",
+        delivery: "queue",
+        text: "First analyst question",
+    });
+    const priorTurn = await f.t.mutation(
+        internal.execution.conversations.claimTurn,
+        { runId: f.runId },
+    );
+    assert(priorTurn);
+    const priorMission = await f.t.mutation(internal.execution.missions.start, {
+        runId: f.runId,
+        expectedGeneration: 1,
+        conversationTurnId: priorTurn,
+        definitionId: "conversation_validation_v1",
+        scope: { kind: "conversation_validation_v1" },
+        requestKey: "prior",
+    });
+    await client.mutation(api.execution.conversations.submit, {
+        runId: f.runId,
+        requestKey: "future",
+        delivery: "queue",
+        text: "LATER QUEUED INSTRUCTION",
+    });
+    async function finish(missionId: typeof priorMission, text: string) {
+        const begun = await f.t.mutation(internal.execution.invocations.begin, {
+            missionId,
+            expectedGeneration: 1,
+            taskKey: `finish:${missionId}`,
+            provenance: "simulation",
+        });
+        assert(begun.kind === "ready");
+        await f.t.mutation(internal.execution.invocations.finish, {
+            invocationId: begun.invocationId,
+            expectedGeneration: 1,
+            response: { kind: "complete", text },
+        });
+    }
+    await finish(priorMission, "Original published answer");
+    const readerMission = await f.t.mutation(
+        internal.execution.missions.start,
+        {
+            runId: f.runId,
+            expectedGeneration: 4,
+            corpusRevisionId: f.corpusRevisionId,
+            definitionId: "saved_material_inspection_v1",
+            requestKey: "research-reader",
+        },
+    );
+    async function read(cursor?: string) {
+        const requestId = await f.t.mutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId: readerMission,
+                expectedGeneration: 4,
+                cause: "snapshot-membership",
+                input: { kind: "consult_conversation", cursor },
+            },
+        );
+        const outcome = await f.t.action(
+            internal.execution.operations.dispatch,
+            { requestId, expectedGeneration: 4 },
+        );
+        expect(outcome).toMatchObject({ kind: "success" });
+        assert(outcome.kind === "success");
+        return JSON.parse(outcome.valueJson);
+    }
+    const first = await read();
+    expect(first.entries[0].content).toBe("First analyst question");
+    const nextTurn = await f.t.mutation(
+        internal.execution.conversations.claimTurn,
+        { runId: f.runId },
+    );
+    assert(nextTurn);
+    const nextMission = await f.t.mutation(internal.execution.missions.start, {
+        runId: f.runId,
+        expectedGeneration: 1,
+        conversationTurnId: nextTurn,
+        definitionId: "conversation_validation_v1",
+        scope: { kind: "conversation_validation_v1" },
+        requestKey: "future",
+    });
+    await finish(nextMission, "Later response");
+    const next = await read(first.continueCursor);
+    expect(next.entries[0].content).toBe("Original published answer");
+    expect(JSON.stringify(next)).not.toContain("LATER QUEUED INSTRUCTION");
+});
 
 test("common conversation reading retrieves prior published turns and excludes queued instructions", async () => {
     const f = await seedConversation(true);
@@ -85,15 +290,17 @@ test("common conversation reading retrieves prior published turns and excludes q
     ).toHaveLength(1);
     const page = JSON.parse(outcome.valueJson);
     assert(typeof page.continueCursor === "string");
-    const inner = JSON.parse(page.continueCursor);
-    assert(typeof inner.cursor === "string");
+    expect(page.continueCursor).toMatch(/^history:/);
     const invalidId = await f.t.mutation(
         internal.execution.operations.enqueue,
         {
             missionId: nextMission,
             expectedGeneration: 1,
             cause: "invalid-pagination",
-            input: { kind: "consult_conversation", cursor: inner.cursor },
+            input: {
+                kind: "consult_conversation",
+                cursor: "not-a-database-cursor",
+            },
         },
     );
     expect(
@@ -208,4 +415,100 @@ test("common conversation reading retrieves prior published turns and excludes q
                 : { kind: "blocked", code: "repetition_stop" },
         );
     }
+});
+
+test("issued continuations reject the wrong source, mission and superseded instructions", async () => {
+    const f = await seedHistoryMission();
+    const first = await dispatchHistory(f, { kind: "consult_conversation" });
+    assert(first.outcome.kind === "success");
+    const cursor = JSON.parse(first.outcome.valueJson).continueCursor;
+    expect(
+        (await dispatchHistory(f, { kind: "consult_mission_state", cursor }))
+            .outcome,
+    ).toEqual({ kind: "refused", code: "history_cursor_invalid" });
+    const foreign = await f.t.run(async (ctx) => {
+        const prior = await ctx.db
+            .query("agentMissions")
+            .withIndex("by_run_and_request_key", (q) =>
+                q.eq("runId", f.runId).eq("requestKey", "prior"),
+            )
+            .unique();
+        const current = await ctx.db.get(first.requestId);
+        assert(prior && current?.historyRead);
+        const { _id, _creationTime, ...fields } = current;
+        return ctx.db.insert("agentOperationRequests", {
+            ...fields,
+            missionId: prior._id,
+            historyRead: { ...current.historyRead, missionId: prior._id },
+        });
+    });
+    expect(
+        (
+            await dispatchHistory(f, {
+                kind: "consult_conversation",
+                cursor: `history:${foreign}`,
+            })
+        ).outcome,
+    ).toEqual({ kind: "refused", code: "history_cursor_invalid" });
+    await f.client.mutation(api.execution.conversations.submit, {
+        runId: f.runId,
+        turnId: f.turnId,
+        requestKey: "steer-cursor",
+        delivery: "steer",
+        text: "Preserve this newly admitted instruction.",
+    });
+    expect(
+        (await dispatchHistory(f, { kind: "consult_conversation", cursor }))
+            .outcome,
+    ).toEqual({ kind: "refused", code: "history_cursor_invalid" });
+});
+
+test("corrupted retained receipts are incidents; completed legacy pages retain their exact bytes", async () => {
+    const f = await seedHistoryMission();
+    const first = await dispatchHistory(f, { kind: "consult_conversation" });
+    assert(first.outcome.kind === "success");
+    const cursor = JSON.parse(first.outcome.valueJson).continueCursor;
+    await f.t.run((ctx) =>
+        ctx.db.patch(first.requestId, { historyRead: undefined }),
+    );
+    const invalid = await dispatchHistory(f, {
+        kind: "consult_conversation",
+        cursor,
+    });
+    expect(invalid.outcome).toEqual({
+        kind: "unavailable",
+        code: "operation_execution_failed",
+    });
+    expect(await f.t.run((ctx) => ctx.db.get(invalid.requestId))).toMatchObject(
+        { status: "completed" },
+    );
+    await f.t.run((ctx) =>
+        ctx.db.patch(first.requestId, { operationVersion: 1 }),
+    );
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: first.requestId,
+            expectedGeneration: 1,
+        }),
+    ).toEqual(first.outcome);
+    expect(
+        (await dispatchHistory(f, { kind: "consult_conversation", cursor }))
+            .outcome,
+    ).toEqual({ kind: "refused", code: "history_cursor_invalid" });
+    const pending = await f.t.mutation(internal.execution.operations.enqueue, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        cause: "legacy-pending",
+        input: { kind: "consult_conversation" },
+    });
+    await f.t.run((ctx) => ctx.db.patch(pending, { operationVersion: 1 }));
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: pending,
+            expectedGeneration: 1,
+        }),
+    ).toEqual({ kind: "refused", code: "operation_version_conflict" });
+    expect(await f.t.run((ctx) => ctx.db.get(pending))).toMatchObject({
+        status: "completed",
+    });
 });

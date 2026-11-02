@@ -2,7 +2,6 @@ import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
     internalMutation,
-    internalQuery,
     type MutationCtx,
     mutation,
     type QueryCtx,
@@ -56,6 +55,20 @@ async function conversationForRun(ctx: QueryCtx, runId: Id<"researchRuns">) {
         .withIndex("by_run", (q) => q.eq("runId", runId))
         .unique();
 }
+
+/** Every newly processed batch receives one atomic, immutable visibility revision. */
+async function advancePublication(
+    ctx: MutationCtx,
+    conversationId: Id<"agentConversations">,
+) {
+    const conversation = await ctx.db.get(conversationId);
+    if (!conversation) throw executionError("conversation_unavailable");
+    const revision = (conversation.publicationRevision ?? 0) + 1;
+    if (!Number.isSafeInteger(revision) || revision < 1)
+        throw executionError("conversation_publication_invalid");
+    await ctx.db.patch(conversationId, { publicationRevision: revision });
+    return revision;
+}
 async function event(
     ctx: MutationCtx,
     runId: Id<"researchRuns">,
@@ -96,7 +109,7 @@ async function event(
         if (mission) {
             await recordMissionEvent(ctx, mission, {
                 ...details,
-                historySource: true,
+                historySource: "material",
             });
             return;
         }
@@ -128,6 +141,7 @@ export async function recordControlExchange(
     },
 ) {
     const createdAt = Date.now();
+    const publicationRevision = await advancePublication(ctx, conversation._id);
     const storageMessageRef = await saveConversationMessage(
         ctx,
         conversation.storageRef,
@@ -143,6 +157,7 @@ export async function recordControlExchange(
         role: "user",
         delivery: "control",
         status: "processed",
+        publicationRevision,
         createdAt,
     });
     const confirmationRef = await saveConversationMessage(
@@ -162,6 +177,7 @@ export async function recordControlExchange(
             role: "assistant",
             delivery: "reply",
             status: "processed",
+            publicationRevision,
             createdAt,
         },
     );
@@ -619,6 +635,7 @@ export async function publishTurn(
         throw executionError("response_capacity");
     const conversation = await ctx.db.get(turn.conversationId);
     if (!conversation) throw executionError("conversation_unavailable");
+    const publicationRevision = await advancePublication(ctx, conversation._id);
     const storageMessageRef = await saveConversationMessage(
         ctx,
         conversation.storageRef,
@@ -634,6 +651,7 @@ export async function publishTurn(
         role: "assistant",
         delivery: "reply",
         status: "processed",
+        publicationRevision,
         turnId: turn._id,
         createdAt: Date.now(),
     });
@@ -641,7 +659,10 @@ export async function publishTurn(
         .query("agentMessageDeliveries")
         .withIndex("by_turn", (q) => q.eq("turnId", turn._id));
     for await (const message of messages)
-        await ctx.db.patch(message._id, { status: "processed" });
+        await ctx.db.patch(message._id, {
+            status: "processed",
+            publicationRevision,
+        });
     await ctx.db.patch(turn._id, {
         status: "published",
         publishedMessageId: messageId,
@@ -797,83 +818,6 @@ export const startTurn = internalMutation({
             }
         }
         return { turnId, missionId };
-    },
-});
-
-/** Exact earlier turns remain available without exposing inputs queued for a later turn. */
-export const historyForMission = internalQuery({
-    args: {
-        missionId: v.id("agentMissions"),
-        expectedGeneration: v.number(),
-        cursor: v.optional(v.string()),
-    },
-    returns: v.string(),
-    handler: async (ctx, args) => {
-        const { mission } = await requireMissionAuthority(
-            ctx,
-            args.missionId,
-            args.expectedGeneration,
-        );
-        let position: { cursor: string | null; offset: number } = {
-            cursor: null,
-            offset: 0,
-        };
-        if (args.cursor) {
-            try {
-                position = JSON.parse(args.cursor);
-            } catch {
-                throw executionError("history_cursor_invalid");
-            }
-            if (
-                !position ||
-                !(
-                    position.cursor === null ||
-                    typeof position.cursor === "string"
-                ) ||
-                !Number.isSafeInteger(position.offset) ||
-                position.offset < 0
-            )
-                throw executionError("history_cursor_invalid");
-        }
-        const page = await ctx.db
-            .query("agentMessageDeliveries")
-            .withIndex("by_run_and_status", (q) =>
-                q.eq("runId", mission.runId).eq("status", "processed"),
-            )
-            .paginate({ numItems: 1, cursor: position.cursor });
-        const message = page.page[0];
-        if (!message)
-            return JSON.stringify({ entries: [], continueCursor: null });
-        const conversation = await conversationForRun(ctx, mission.runId);
-        if (!conversation) throw executionError("conversation_unavailable");
-        const [text] = await readConversationMessages(
-            ctx,
-            conversation.storageRef,
-            [message.storageMessageRef],
-        );
-        if (text === undefined || position.offset > text.length)
-            throw executionError("history_cursor_invalid");
-        const content = text.slice(position.offset, position.offset + 8192);
-        const offset = position.offset + content.length;
-        const next =
-            offset < text.length
-                ? { cursor: position.cursor, offset }
-                : page.isDone
-                  ? null
-                  : { cursor: page.continueCursor, offset: 0 };
-        return JSON.stringify({
-            entries: [
-                {
-                    messageId: message._id,
-                    turnId: message.turnId,
-                    role: message.role,
-                    offset: position.offset,
-                    totalCharacters: text.length,
-                    content,
-                },
-            ],
-            continueCursor: next ? JSON.stringify(next) : null,
-        });
     },
 });
 

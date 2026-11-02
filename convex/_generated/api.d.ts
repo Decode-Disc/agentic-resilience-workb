@@ -8,6 +8,11 @@
  * @module
  */
 
+import type {
+  ApiFromModules,
+  FilterApi,
+  FunctionReference,
+} from "convex/server";
 import type * as admin from "../admin.js";
 import type * as adminOperations from "../adminOperations.js";
 import type * as administrationAuthority from "../administrationAuthority.js";
@@ -24,6 +29,7 @@ import type * as domain_claims from "../domain/claims.js";
 import type * as domain_companyMetadata from "../domain/companyMetadata.js";
 import type * as domain_conversationValidation from "../domain/conversationValidation.js";
 import type * as domain_conversationValidationContracts from "../domain/conversationValidationContracts.js";
+import type * as domain_conversationValidationOperations from "../domain/conversationValidationOperations.js";
 import type * as domain_coverImageUrl from "../domain/coverImageUrl.js";
 import type * as domain_evidenceArtifacts from "../domain/evidenceArtifacts.js";
 import type * as domain_evidenceAuthority from "../domain/evidenceAuthority.js";
@@ -35,6 +41,7 @@ import type * as domain_evidencePolicy from "../domain/evidencePolicy.js";
 import type * as domain_executionClaim from "../domain/executionClaim.js";
 import type * as domain_executionValidationAgent from "../domain/executionValidationAgent.js";
 import type * as domain_executionValidationContracts from "../domain/executionValidationContracts.js";
+import type * as domain_executionValidationOperations from "../domain/executionValidationOperations.js";
 import type * as domain_framingContracts from "../domain/framingContracts.js";
 import type * as domain_framingEditAuthority from "../domain/framingEditAuthority.js";
 import type * as domain_invitationCodes from "../domain/invitationCodes.js";
@@ -48,6 +55,7 @@ import type * as domain_runCancellation from "../domain/runCancellation.js";
 import type * as domain_runPurpose from "../domain/runPurpose.js";
 import type * as domain_runWithdrawal from "../domain/runWithdrawal.js";
 import type * as domain_savedMaterial from "../domain/savedMaterial.js";
+import type * as domain_savedMaterialAgentOperations from "../domain/savedMaterialAgentOperations.js";
 import type * as domain_savedMaterialInspection from "../domain/savedMaterialInspection.js";
 import type * as domain_savedMaterialOperations from "../domain/savedMaterialOperations.js";
 import type * as domain_savedMaterialSimulation from "../domain/savedMaterialSimulation.js";
@@ -68,6 +76,7 @@ import type * as domain_sourceUsage from "../domain/sourceUsage.js";
 import type * as domain_transitions from "../domain/transitions.js";
 import type * as domain_validators from "../domain/validators.js";
 import type * as domain_workbenchAgent from "../domain/workbenchAgent.js";
+import type * as domain_workbenchAgentOperations from "../domain/workbenchAgentOperations.js";
 import type * as domain_workbenchContracts from "../domain/workbenchContracts.js";
 import type * as domain_workbenchInstructions from "../domain/workbenchInstructions.js";
 import type * as e2eFixtures from "../e2eFixtures.js";
@@ -90,6 +99,7 @@ import type * as execution_errors from "../execution/errors.js";
 import type * as execution_executionProtocol from "../execution/executionProtocol.js";
 import type * as execution_fixtures from "../execution/fixtures.js";
 import type * as execution_handoffs from "../execution/handoffs.js";
+import type * as execution_history from "../execution/history.js";
 import type * as execution_invocationLifecycle from "../execution/invocationLifecycle.js";
 import type * as execution_invocations from "../execution/invocations.js";
 import type * as execution_invokeAgentModel from "../execution/invokeAgentModel.js";
@@ -99,6 +109,7 @@ import type * as execution_missionHistory from "../execution/missionHistory.js";
 import type * as execution_missionWorkflow from "../execution/missionWorkflow.js";
 import type * as execution_missions from "../execution/missions.js";
 import type * as execution_modelActions from "../execution/modelActions.js";
+import type * as execution_operationContracts from "../execution/operationContracts.js";
 import type * as execution_operations from "../execution/operations.js";
 import type * as execution_piControl from "../execution/piControl.js";
 import type * as execution_piStore from "../execution/piStore.js";
@@ -168,12 +179,14 @@ import type * as workbench from "../workbench.js";
 import type * as workflow from "../workflow.js";
 import type * as workflowControls from "../workflowControls.js";
 
-import type {
-  ApiFromModules,
-  FilterApi,
-  FunctionReference,
-} from "convex/server";
-
+/**
+ * A utility for referencing Convex functions in your app's API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = api.myModule.myFunction;
+ * ```
+ */
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   adminOperations: typeof adminOperations;
@@ -191,6 +204,7 @@ declare const fullApi: ApiFromModules<{
   "domain/companyMetadata": typeof domain_companyMetadata;
   "domain/conversationValidation": typeof domain_conversationValidation;
   "domain/conversationValidationContracts": typeof domain_conversationValidationContracts;
+  "domain/conversationValidationOperations": typeof domain_conversationValidationOperations;
   "domain/coverImageUrl": typeof domain_coverImageUrl;
   "domain/evidenceArtifacts": typeof domain_evidenceArtifacts;
   "domain/evidenceAuthority": typeof domain_evidenceAuthority;
@@ -202,6 +216,7 @@ declare const fullApi: ApiFromModules<{
   "domain/executionClaim": typeof domain_executionClaim;
   "domain/executionValidationAgent": typeof domain_executionValidationAgent;
   "domain/executionValidationContracts": typeof domain_executionValidationContracts;
+  "domain/executionValidationOperations": typeof domain_executionValidationOperations;
   "domain/framingContracts": typeof domain_framingContracts;
   "domain/framingEditAuthority": typeof domain_framingEditAuthority;
   "domain/invitationCodes": typeof domain_invitationCodes;
@@ -215,6 +230,7 @@ declare const fullApi: ApiFromModules<{
   "domain/runPurpose": typeof domain_runPurpose;
   "domain/runWithdrawal": typeof domain_runWithdrawal;
   "domain/savedMaterial": typeof domain_savedMaterial;
+  "domain/savedMaterialAgentOperations": typeof domain_savedMaterialAgentOperations;
   "domain/savedMaterialInspection": typeof domain_savedMaterialInspection;
   "domain/savedMaterialOperations": typeof domain_savedMaterialOperations;
   "domain/savedMaterialSimulation": typeof domain_savedMaterialSimulation;
@@ -235,6 +251,7 @@ declare const fullApi: ApiFromModules<{
   "domain/transitions": typeof domain_transitions;
   "domain/validators": typeof domain_validators;
   "domain/workbenchAgent": typeof domain_workbenchAgent;
+  "domain/workbenchAgentOperations": typeof domain_workbenchAgentOperations;
   "domain/workbenchContracts": typeof domain_workbenchContracts;
   "domain/workbenchInstructions": typeof domain_workbenchInstructions;
   e2eFixtures: typeof e2eFixtures;
@@ -257,6 +274,7 @@ declare const fullApi: ApiFromModules<{
   "execution/executionProtocol": typeof execution_executionProtocol;
   "execution/fixtures": typeof execution_fixtures;
   "execution/handoffs": typeof execution_handoffs;
+  "execution/history": typeof execution_history;
   "execution/invocationLifecycle": typeof execution_invocationLifecycle;
   "execution/invocations": typeof execution_invocations;
   "execution/invokeAgentModel": typeof execution_invokeAgentModel;
@@ -266,6 +284,7 @@ declare const fullApi: ApiFromModules<{
   "execution/missionWorkflow": typeof execution_missionWorkflow;
   "execution/missions": typeof execution_missions;
   "execution/modelActions": typeof execution_modelActions;
+  "execution/operationContracts": typeof execution_operationContracts;
   "execution/operations": typeof execution_operations;
   "execution/piControl": typeof execution_piControl;
   "execution/piStore": typeof execution_piStore;
@@ -335,28 +354,10 @@ declare const fullApi: ApiFromModules<{
   workflow: typeof workflow;
   workflowControls: typeof workflowControls;
 }>;
-
-/**
- * A utility for referencing Convex functions in your app's public API.
- *
- * Usage:
- * ```js
- * const myFunctionReference = api.myModule.myFunction;
- * ```
- */
 export declare const api: FilterApi<
   typeof fullApi,
   FunctionReference<any, "public">
 >;
-
-/**
- * A utility for referencing Convex functions in your app's internal API.
- *
- * Usage:
- * ```js
- * const myFunctionReference = internal.myModule.myFunction;
- * ```
- */
 export declare const internal: FilterApi<
   typeof fullApi,
   FunctionReference<any, "internal">

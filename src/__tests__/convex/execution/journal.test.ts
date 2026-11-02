@@ -4,8 +4,8 @@ import { sha256Hex } from "@convex/domain/sourcePassages";
 import { recordMissionEvent } from "@convex/execution/authority";
 import {
     projectMissionHistoryEvent,
+    retainExecutionEventPayload,
     retainInvocationPayload,
-    retainOperationEventPayload,
 } from "@convex/execution/journal";
 import { makeFunctionReference } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
@@ -150,16 +150,16 @@ test("operation observations are canonical immutable snapshots with explicit cap
         });
     });
     await f.t.run((ctx) =>
-        retainOperationEventPayload(ctx, eventId, { b: 2, a: 1 }),
+        retainExecutionEventPayload(ctx, eventId, { b: 2, a: 1 }),
     );
     await f.t.run((ctx) =>
-        retainOperationEventPayload(ctx, eventId, { a: 1, b: 2 }),
+        retainExecutionEventPayload(ctx, eventId, { a: 1, b: 2 }),
     );
     expect(
         (await f.t.run((ctx) => ctx.db.get(eventId)))?.payload,
     ).toMatchObject({ state: "complete", json: '{"a":1,"b":2}' });
     await expect(
-        f.t.run((ctx) => retainOperationEventPayload(ctx, eventId, { a: 3 })),
+        f.t.run((ctx) => retainExecutionEventPayload(ctx, eventId, { a: 3 })),
     ).rejects.toThrow("journal_payload_conflict");
     const largeId = await f.t.run(async (ctx) => {
         const mission = await ctx.db.get(f.missionId);
@@ -170,7 +170,7 @@ test("operation observations are canonical immutable snapshots with explicit cap
         });
     });
     await f.t.run((ctx) =>
-        retainOperationEventPayload(ctx, largeId, {
+        retainExecutionEventPayload(ctx, largeId, {
             text: "a".repeat(513 * 1024),
         }),
     );

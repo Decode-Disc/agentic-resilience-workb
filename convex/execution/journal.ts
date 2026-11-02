@@ -12,7 +12,10 @@ import {
     HISTORY_PAGE_SIZE,
     MAX_OBSERVABLE_OUTPUT_BYTES,
 } from "./executionProtocol";
-import type { retainedPayloadValidator } from "./operationContracts";
+import {
+    isCommonConsultation,
+    type retainedPayloadValidator,
+} from "./operationContracts";
 
 type RetainedPayload = Infer<typeof retainedPayloadValidator>;
 
@@ -67,7 +70,7 @@ export function operationEventObservation(
 }
 
 /** Append-only event content is written in the same transaction as its observed effect/result. */
-export async function retainOperationEventPayload(
+export async function retainExecutionEventPayload(
     ctx: MutationCtx,
     eventId: Id<"agentExecutionEvents">,
     value: unknown,
@@ -114,33 +117,38 @@ export async function projectMissionHistoryEvent(
             : event.kind === "invocation_reply_recorded"
               ? "reply"
               : undefined;
-    const invocationPayload =
-        part && event.invocationId
-            ? await ctx.db
-                  .query("agentInvocationPayloads")
-                  .withIndex("by_invocation_and_part", (q) =>
-                      q
-                          .eq("invocationId", event.invocationId!)
-                          .eq("part", part),
-                  )
-                  .unique()
-            : null;
-    if (part && !invocationPayload)
+    const invocationPayload = event.invocationPayloadId
+        ? await ctx.db.get(event.invocationPayloadId)
+        : part && event.invocationId
+          ? await ctx.db
+                .query("agentInvocationPayloads")
+                .withIndex("by_invocation_and_part", (q) =>
+                    q.eq("invocationId", event.invocationId!).eq("part", part),
+                )
+                .unique()
+          : null;
+    if ((part || event.invocationPayloadId) && !invocationPayload)
         throw executionError("journal_payload_unavailable");
+    if (
+        invocationPayload &&
+        (invocationPayload.runId !== event.runId ||
+            invocationPayload.invocationId !== event.invocationId)
+    )
+        throw executionError("journal_payload_invalid");
     const json = stableStringify({
         version: 1,
         event: metadata,
         ...(event.payload
-            ? { operation: observablePayload(event.payload) }
+            ? { observation: observablePayload(event.payload) }
             : event.requestId && OPERATION_OBSERVATIONS.has(event.kind)
               ? {
-                    operation: {
+                    observation: {
                         state: "incomplete",
                         code: "operation_observation_unavailable",
                     },
                 }
               : {}),
-        ...(part
+        ...(part || event.invocationPayloadId
             ? {
                   invocation: invocationPayload
                       ? observablePayload(invocationPayload)
@@ -273,3 +281,38 @@ export const indexRetainedHistory = internalMutation({
         return { done: page.isDone, cursor };
     },
 });
+
+/** Capture application observations without substituting backend continuation state for a model reply. */
+export async function invocationEventObservation(
+    ctx: QueryCtx,
+    invocation: Doc<"agentInvocations">,
+    response: Infer<
+        typeof import("./executionProtocol").invocationResponseValidator
+    >,
+    rawOutputJson?: string,
+) {
+    const reply = await ctx.db
+        .query("agentInvocationPayloads")
+        .withIndex("by_invocation_and_part", (q) =>
+            q.eq("invocationId", invocation._id).eq("part", "reply"),
+        )
+        .unique();
+    const consultationOnly =
+        response.kind === "operations" &&
+        response.requests.length > 0 &&
+        response.requests.every((request) =>
+            isCommonConsultation(request.name),
+        );
+    return {
+        historySource: consultationOnly ? undefined : ("observation" as const),
+        invocationPayloadId: reply?._id,
+        observation: {
+            provenance: invocation.provenance,
+            response,
+            ...(invocation.provenance === "simulation" &&
+            rawOutputJson !== undefined
+                ? { rawOutputJson }
+                : {}),
+        },
+    };
+}

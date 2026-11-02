@@ -795,10 +795,12 @@ test("a malformed conversation continuation returns a refusal and the same respo
                     expect(result.kind).toBe("success");
                     continuation = result.value.continueCursor;
                     assert(typeof continuation === "string");
-                    const inner = JSON.parse(continuation);
-                    assert(typeof inner.cursor === "string");
+                    expect(continuation).toMatch(/^history:/);
                     return toolReply("consult_conversation", {
-                        cursor: inner.cursor,
+                        cursor: JSON.stringify({
+                            cursor: "not-a-database-cursor",
+                            offset: 0,
+                        }),
                     });
                 }
                 if (payloads.length === 4) {

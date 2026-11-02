@@ -1,5 +1,5 @@
 import { internal } from "@convex/_generated/api";
-import { internalMutation, internalQuery } from "@convex/_generated/server";
+import { internalMutation } from "@convex/_generated/server";
 import { stableStringify } from "@convex/domain/sourcePassages";
 import { readPreparationLimits } from "@convex/domain/sourcePreparationAuthority";
 import { pinMissionModel } from "@convex/modelConfiguration";
@@ -23,9 +23,7 @@ import {
     agentDefinitionIdValidator,
     DEFAULT_AGENT_BACKEND,
     EXECUTION_WINDOW_MS,
-    HISTORY_PAGE_SIZE,
 } from "./executionProtocol";
-import { projectMissionHistoryEvent } from "./journal";
 import { isRecoverableInterruption, missionScope } from "./missionData";
 import { cancelPiWake, schedulePiMission } from "./piControl";
 
@@ -420,96 +418,5 @@ export const resume = internalMutation({
             cause: "authorized_continuation",
         });
         return id;
-    },
-});
-
-/** Exact observable records are chunked with a cursor; a reading limit never silently deletes their remainder. */
-export const history = internalQuery({
-    args: {
-        missionId: v.id("agentMissions"),
-        expectedGeneration: v.number(),
-        cursor: v.optional(v.string()),
-    },
-    returns: v.object({
-        entries: v.array(
-            v.object({
-                sequence: v.number(),
-                offset: v.number(),
-                totalCharacters: v.number(),
-                content: v.string(),
-            }),
-        ),
-        continueCursor: v.union(v.string(), v.null()),
-    }),
-    handler: async (ctx, args) => {
-        await requireMissionAuthority(
-            ctx,
-            args.missionId,
-            args.expectedGeneration,
-        );
-        const match = /^(\d+):(\d+)$/.exec(args.cursor ?? "1:0");
-        if (!match) throw executionError("history_cursor_invalid");
-        const sequence = Number(match[1]);
-        let offset = Number(match[2]);
-        if (
-            !Number.isSafeInteger(sequence) ||
-            sequence < 1 ||
-            !Number.isSafeInteger(offset) ||
-            offset < 0
-        )
-            throw executionError("history_cursor_invalid");
-        const events = await ctx.db
-            .query("agentExecutionEvents")
-            .withIndex("by_mission_and_sequence", (q) =>
-                q.eq("missionId", args.missionId).gte("sequence", sequence),
-            )
-            .take(HISTORY_PAGE_SIZE);
-        const entries: {
-            sequence: number;
-            offset: number;
-            totalCharacters: number;
-            content: string;
-        }[] = [];
-        let bytes = 0;
-        for (const event of events) {
-            if (event.sequence === undefined)
-                throw executionError("mission_history_invalid");
-            const { json: payload } = await projectMissionHistoryEvent(
-                ctx,
-                event,
-            );
-            if (offset >= payload.length && offset !== 0)
-                throw executionError("history_cursor_invalid");
-            let end = Math.min(payload.length, offset + 4000);
-            if (
-                end < payload.length &&
-                /[\uD800-\uDBFF]/.test(payload[end - 1] ?? "")
-            )
-                end--;
-            const content = payload.slice(offset, end);
-            const size = new TextEncoder().encode(content).length;
-            if (bytes + size > 48 * 1024)
-                return {
-                    entries,
-                    continueCursor: `${event.sequence}:${offset}`,
-                };
-            entries.push({
-                sequence: event.sequence,
-                offset,
-                totalCharacters: payload.length,
-                content,
-            });
-            bytes += size;
-            if (end < payload.length)
-                return { entries, continueCursor: `${event.sequence}:${end}` };
-            offset = 0;
-        }
-        return {
-            entries,
-            continueCursor:
-                events.length === HISTORY_PAGE_SIZE
-                    ? `${(events.at(-1)?.sequence ?? sequence) + 1}:0`
-                    : null,
-        };
     },
 });

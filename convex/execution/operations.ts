@@ -35,17 +35,22 @@ import {
     validateOperationExecutionResult,
 } from "./executionProtocol";
 import {
+    prepareMissionHistorySnapshot,
+    verifyHistoryReadReceipt,
+} from "./history";
+import {
     operationEventObservation,
-    retainOperationEventPayload,
+    retainExecutionEventPayload,
 } from "./journal";
 import {
     domainDataPatch,
     operationIdentityScope,
-    operationProgressKeys,
     retainedOperationPin,
 } from "./missionData";
 import {
     dispatchFailureValidator,
+    historyReadReceiptValidator,
+    historySourceFor,
     isCommonConsultation,
 } from "./operationContracts";
 import { schedulePiMission } from "./piControl";
@@ -103,7 +108,7 @@ async function recordEvent(
     if (mission)
         eventId = await recordMissionEvent(ctx, mission, {
             ...event,
-            historySource: historySource ? true : undefined,
+            historySource: historySource ? "material" : undefined,
         });
     else if (request.runId)
         eventId = await ctx.db.insert("agentExecutionEvents", {
@@ -118,7 +123,7 @@ async function recordEvent(
         admissionOutcome,
     );
     if (observation !== undefined)
-        await retainOperationEventPayload(ctx, eventId, observation);
+        await retainExecutionEventPayload(ctx, eventId, observation);
     return eventId;
 }
 
@@ -185,12 +190,23 @@ async function authority(
             admittedRequest.instructionVersion,
         );
     if (
+        request.status === "completed" &&
+        isCommonConsultation(request.input.kind) &&
+        request.operationVersion !== operation.version
+    )
+        return { mission, runId };
+    if (
         (request.status !== "completed" &&
             (request.adoptionGeneration ?? request.expectedGeneration) !==
                 expectedGeneration) ||
         request.operationVersion !== operation.version
     )
-        throw executionError("stale_execution");
+        throw executionError(
+            isCommonConsultation(request.input.kind) &&
+                request.operationVersion !== operation.version
+                ? "operation_version_conflict"
+                : "stale_execution",
+        );
     const expectedPin = request.effect?.pin ?? retainedOperationPin(request);
     const pin = await operation.pin(
         ctx,
@@ -280,7 +296,13 @@ export async function persistOperationRequest(
         operation = operationFor(args.input, mission);
         if (!mission && !operation.nativeAuthority)
             throw executionError("operation_not_allowed");
-        const scope = await operation.pin(ctx, mission, args.input, runId);
+        const pinMission =
+            mission &&
+            args.input.kind === "consult_mission_state" &&
+            args.input.cursor === undefined
+                ? await prepareMissionHistorySnapshot(ctx, mission)
+                : mission;
+        const scope = await operation.pin(ctx, pinMission, args.input, runId);
         if (scope.kind === "available") pin = scope.pin;
         else outcome = { kind: "unavailable", code: scope.code };
     } catch (error) {
@@ -665,6 +687,7 @@ export const recordResult = internalMutation({
         requestId: v.id("agentOperationRequests"),
         expectedGeneration: v.number(),
         outcome: operationOutcomeValidator,
+        historyRead: v.optional(historyReadReceiptValidator),
     },
     returns: operationOutcomeValidator,
     handler: async (ctx, args): Promise<Outcome> => {
@@ -715,6 +738,27 @@ export const recordResult = internalMutation({
                 kind: "unavailable",
                 code: "operation_result_capacity",
             };
+        const historyRead = args.historyRead ?? request.historyRead;
+        if (
+            historyRead &&
+            request.historyRead &&
+            stableStringify(historyRead) !==
+                stableStringify(request.historyRead)
+        )
+            throw executionError("operation_result_conflict");
+        if (
+            outcome.kind === "success" &&
+            historySourceFor(request.input.kind) &&
+            request.operationVersion >= 2
+        ) {
+            if (!historyRead) throw executionError("history_receipt_invalid");
+            verifyHistoryReadReceipt(
+                request,
+                historyRead,
+                args.expectedGeneration,
+                outcome.valueJson,
+            );
+        } else if (historyRead) throw executionError("history_receipt_invalid");
         if (outcome.kind === "waiting") {
             if (!outcome.reference || outcome.reference.length > 160)
                 throw executionError("invalid_wait_reference");
@@ -737,6 +781,7 @@ export const recordResult = internalMutation({
                 await ctx.scheduler.cancel(request.expiryJobId);
             await ctx.db.patch(request._id, {
                 outcome,
+                historyRead,
                 status: "observed",
                 completedAt: Date.now(),
             });
@@ -800,7 +845,7 @@ export const recordResult = internalMutation({
                 const progressKeys = [
                     ...new Set([
                         ...mission.progressKeys,
-                        ...operationProgressKeys(outcome),
+                        ...(historyRead?.fragmentIds ?? []),
                     ]),
                 ];
                 progress =
@@ -883,6 +928,9 @@ export const dispatch = internalAction({
         let phase: Parameters<typeof classifyDispatchFailure>[1] =
             "before_callback";
         let outcome: Outcome;
+        let historyRead:
+            | import("./operationContracts").HistoryReadReceipt
+            | undefined;
         try {
             const mission = claimed.missionId
                 ? await ctx.runQuery(
@@ -911,10 +959,13 @@ export const dispatch = internalAction({
                           executeArgs,
                       )
                     : await operation.execute(ctx, executeArgs);
-            outcome = validateOperationExecutionResult(
+            const observed = validateOperationExecutionResult(
                 operation,
                 result,
-            ).outcome;
+                claimed.input.kind,
+            );
+            outcome = observed.outcome;
+            historyRead = observed.historyRead;
         } catch (error) {
             return ctx.runMutation(
                 internal.execution.operations.settleDispatchFailure,
@@ -927,6 +978,7 @@ export const dispatch = internalAction({
         return ctx.runMutation(internal.execution.operations.recordResult, {
             ...args,
             outcome,
+            historyRead,
         });
     },
 });

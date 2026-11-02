@@ -17,6 +17,7 @@ import { executionError } from "./errors";
 import {
     commonOperationSuccessValidator,
     historyReadReceiptValidator,
+    historySourceFor,
 } from "./operationContracts";
 
 export {
@@ -271,6 +272,14 @@ export const operationOutcomeValidator = v.union(
     operationRefusalValidator,
 );
 
+export const historyReadResultValidator = v.object({
+    outcome: v.union(
+        commonOperationSuccessValidator,
+        operationRefusalValidator,
+    ),
+    historyRead: v.optional(historyReadReceiptValidator),
+});
+
 export const operationExecutionResultValidator = v.object({
     outcome: operationOutcomeValidator,
     historyRead: v.optional(historyReadReceiptValidator),
@@ -280,10 +289,25 @@ export const operationExecutionResultValidator = v.object({
 export function validateOperationExecutionResult(
     operation: AgentOperationDefinition,
     result: unknown,
+    operationName?: string,
 ): OperationExecutionResult {
     if (
         !validate(operationExecutionResultValidator, result) ||
         (operation.effectKind === "read" && result.outcome.kind === "waiting")
+    )
+        throw executionError("operation_contract_invalid");
+    const historySource = operationName
+        ? historySourceFor(operationName)
+        : undefined;
+    if (
+        (result.historyRead &&
+            (!historySource ||
+                operation.effectKind !== "read" ||
+                result.outcome.kind !== "success")) ||
+        (historySource &&
+            operation.version >= 2 &&
+            result.outcome.kind === "success" &&
+            !result.historyRead)
     )
         throw executionError("operation_contract_invalid");
     return result;

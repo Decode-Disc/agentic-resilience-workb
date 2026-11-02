@@ -23,15 +23,25 @@ import {
     operationRefusalValidator,
     requestInputValidator,
 } from "./executionProtocol";
-import { retainedPayloadValidator } from "./operationContracts";
+import {
+    historyReadReceiptValidator,
+    retainedPayloadValidator,
+} from "./operationContracts";
 
 const missionFields = {
+    historyMaterialSequence: v.optional(v.number()),
     historyProjection: v.optional(
         v.object({
             version: v.literal(1),
             throughSequence: v.number(),
             cursor: v.union(v.string(), v.null()),
             ready: v.boolean(),
+            snapshot: v.optional(
+                v.object({
+                    anchorSequence: v.number(),
+                    throughSequence: v.number(),
+                }),
+            ),
         }),
     ),
     modelRevisionId: v.optional(v.id("modelRevisions")),
@@ -106,6 +116,7 @@ export const executionTables = {
         .index("by_session_and_sequence", ["sessionId", "sequence"])
         .index("by_session_and_key", ["sessionId", "key"]),
     agentConversations: defineTable({
+        publicationRevision: v.optional(v.number()),
         modelCatalogId: v.optional(v.id("modelCatalog")),
         reasoningEffort: v.optional(reasoningEffort),
         modelSelectionRevision: v.optional(v.number()),
@@ -150,6 +161,7 @@ export const executionTables = {
         completedAt: v.optional(v.number()),
     }).index("by_run", ["runId"]),
     agentMessageDeliveries: defineTable({
+        publicationRevision: v.optional(v.number()),
         runId: v.id("researchRuns"),
         conversationId: v.id("agentConversations"),
         storageMessageRef: v.string(),
@@ -254,6 +266,7 @@ export const executionTables = {
         .index("by_mission", ["missionId"])
         .index("by_run_and_task_key", ["runId", "taskKey"]),
     agentOperationRequests: defineTable({
+        historyRead: v.optional(historyReadReceiptValidator),
         admissionEventId: v.optional(v.id("agentExecutionEvents")),
         deadlineAt: v.optional(v.number()),
         runId: v.optional(v.id("researchRuns")),
@@ -306,6 +319,7 @@ export const executionTables = {
         .index("by_mission_and_status", ["missionId", "status"])
         .index("by_invocation", ["invocationId"]),
     agentExecutionEvents: defineTable({
+        invocationPayloadId: v.optional(v.id("agentInvocationPayloads")),
         payload: v.optional(retainedPayloadValidator),
         historySourceSequence: v.optional(v.number()),
         actor: v.optional(
