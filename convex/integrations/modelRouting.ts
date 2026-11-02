@@ -9,7 +9,8 @@ import durablePackage from "@earendil-works/pi-durable/package.json";
 import type { Infer } from "convex/values";
 export type ModelRoute = Readonly<{
     model: string;
-    provider: string;
+    /** Only historical configurations carry an explicitly pinned upstream provider. */
+    provider?: string;
     reasoningEffort?: Infer<typeof reasoningEffort>;
     reasoningEnabled?: boolean;
     profileKey?: string;
@@ -32,12 +33,10 @@ export const MODEL_MAX_OUTPUT_PRICE_PER_MILLION = 0.6;
 export const INITIAL_MODEL_CATALOG = [
     {
         model: "z-ai/glm-5.3-flash",
-        provider: "open-inference/fp4",
         label: "GLM-5.3-Flash",
     },
     {
         model: "deepseek/deepseek-v4.1-flash-1017",
-        provider: "open-inference/fp4",
         label: "DeepSeek V4.1 Flash 1017",
     },
 ] as const;
@@ -45,7 +44,6 @@ export const INITIAL_MODEL_CATALOG = [
 export const WORKBENCH_MODEL_ROUTE: ModelRoute & { authorizedForAgent: true } =
     {
         model: INITIAL_MODEL_CATALOG[0].model,
-        provider: INITIAL_MODEL_CATALOG[0].provider,
         reasoningEffort: "low",
         authorizedForAgent: true,
     };
@@ -64,9 +62,10 @@ export function defaultReasoningEffort(
 export function routedModelSettings(route: ModelRoute) {
     return {
         provider: {
-            only: [route.provider],
+            ...(route.provider
+                ? { only: [route.provider], allow_fallbacks: false }
+                : {}),
             require_parameters: true,
-            allow_fallbacks: false,
             max_price: {
                 prompt: MODEL_MAX_INPUT_PRICE_PER_MILLION,
                 completion: MODEL_MAX_OUTPUT_PRICE_PER_MILLION,

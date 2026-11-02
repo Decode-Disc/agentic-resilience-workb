@@ -13,6 +13,11 @@ import {
 } from "@convex/domain/executionClaim";
 import { upsertSourceReviewItem } from "@convex/domain/sourceReviewProjection";
 import { initializeFraming } from "@convex/framing";
+import { resolveAgentModel } from "@convex/modelConfiguration";
+import {
+    BROWSER_QUALIFICATION_MAX_COST_USD,
+    BROWSER_QUALIFICATION_MAX_REQUESTS,
+} from "@convex/resourceLimits";
 import {
     BROWSER_TEST_SLOT,
     requireBrowserFixtureContext,
@@ -556,6 +561,52 @@ export const startConversation = internalAction({
             { requestId: created.requestId, expectedGeneration: 1 },
         );
         return created.missionId;
+    },
+});
+
+/** Authorizes one bounded local inference lot, without enabling research or changing a human workspace. */
+export const authorizeWorkbenchQualification = internalMutation({
+    args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const { run, visitor } = await requireLocalFixtureRun(ctx, args);
+        if (
+            run.researchStartedAt !== undefined ||
+            !["framing", "awaiting_source_review"].includes(run.lifecycleState)
+        )
+            throw new Error("Unlaunched Workbench fixture required");
+        const contextId = await requireBrowserFixtureContext(ctx, visitor);
+        const context = await ctx.db.get(contextId);
+        if (!context) throw new Error("Active browser context required");
+        const conversation = await ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", run._id))
+            .unique();
+        const model = await resolveAgentModel(
+            ctx,
+            "workbench",
+            conversation?.modelCatalogId,
+        );
+        if (context.paidQualification) {
+            if (
+                context.paidQualification.runId !== run._id ||
+                context.paidQualification.modelRevisionId !== model._id
+            )
+                throw new Error(
+                    "Qualification authorization conflicts with the retained lot",
+                );
+            return null;
+        }
+        await ctx.db.patch(contextId, {
+            paidQualification: {
+                runId: run._id,
+                modelRevisionId: model._id,
+                maximumRequests: BROWSER_QUALIFICATION_MAX_REQUESTS,
+                maximumCostUsd: BROWSER_QUALIFICATION_MAX_COST_USD,
+                authorizedAt: Date.now(),
+            },
+        });
+        return null;
     },
 });
 

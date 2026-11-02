@@ -1,4 +1,18 @@
+import {
+    routedModelSettings,
+    WORKBENCH_MODEL_ROUTE,
+} from "@convex/integrations/modelRouting";
 import { afterEach, expect, test, vi } from "vitest";
+
+test("new Workbench requests leave provider selection to OpenRouter", () => {
+    const settings = routedModelSettings(WORKBENCH_MODEL_ROUTE);
+    expect(settings.provider).not.toHaveProperty("only");
+    expect(settings.provider).not.toHaveProperty("allow_fallbacks");
+    expect(settings.provider).toMatchObject({
+        require_parameters: true,
+        max_price: { prompt: 0.15, completion: 0.6 },
+    });
+});
 
 afterEach(() => {
     vi.doUnmock("@earendil-works/pi-ai/utils/version");

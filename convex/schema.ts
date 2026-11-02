@@ -46,9 +46,9 @@ import {
     sourceCoverageRoleValidator,
     sourceDocumentKindValidator,
     sourceFamilyValidator,
-    sourceSelectionReasonCodeValidator,
     sourceRoleAvailabilityValidator,
     sourceSelectionRationaleValidator,
+    sourceSelectionReasonCodeValidator,
 } from "./domain/sourceSelectionPolicy";
 import {
     auditActorValidator,
@@ -56,11 +56,11 @@ import {
     companySnapshotValidator,
     coveragePresetValidator,
     executionStatusValidator,
-    sourceDecisionValidator,
     invitationStatusValidator,
     researchRunLifecycleValidator,
     runEventTypeValidator,
     runPauseReasonValidator,
+    sourceDecisionValidator,
     visitorRoleValidator,
     workflowStepKeyValidator,
     workflowStepStateValidator,
@@ -155,6 +155,15 @@ export default defineSchema({
             "canonicalUrl",
         ]),
     browserTestContexts: defineTable({
+        paidQualification: v.optional(
+            v.object({
+                runId: v.id("researchRuns"),
+                modelRevisionId: v.id("modelRevisions"),
+                maximumRequests: v.number(),
+                maximumCostUsd: v.number(),
+                authorizedAt: v.number(),
+            }),
+        ),
         ownerVisitorId: v.id("visitors"),
         authUserId: v.id("users"),
         contextKey: v.string(),
@@ -832,6 +841,7 @@ export default defineSchema({
         ])
         .index("by_passage_key", ["passageKey"]),
     providerCalls: defineTable({
+        qualificationReservationUsd: v.optional(v.number()),
         missionId: v.optional(v.id("agentMissions")),
         invocationId: v.optional(v.id("agentInvocations")),
         inputHash: v.optional(v.string()),

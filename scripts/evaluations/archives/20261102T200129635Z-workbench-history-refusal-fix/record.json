@@ -1,0 +1,197 @@
+{
+    "schemaVersion": 1,
+    "id": "20261102T200129635Z-workbench-history-refusal-fix",
+    "createdAt": "2026-11-02T20:01:29.635Z",
+    "git": {
+        "head": "289a1df5ba70fbf843fc927cee82701058d85e8a",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/execution/commonOperations.ts",
+            "archivePath": "repository/convex/execution/commonOperations.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/execution/operations.ts",
+            "archivePath": "repository/convex/execution/operations.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/execution/conversation-history.test.ts",
+            "archivePath": "repository/src/__tests__/convex/execution/conversation-history.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/execution/workbench-native-interface.test.ts",
+            "archivePath": "repository/src/__tests__/convex/execution/workbench-native-interface.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/context/TECH.md",
+            "archivePath": "repository/context/TECH.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-02-workbench-summary-fidelity-qualification.md",
+            "archivePath": "repository/docs/verification/2026-11-02-workbench-summary-fidelity-qualification.md"
+        },
+        {
+            "origin": "/tmp/workbench-history-refusal-fix-20261102",
+            "archivePath": "external/verification"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/verification/biome.log",
+            "bytes": 41,
+            "sha256": "4c3dffc301e6f017b1bad092bef350c8e29eaed93dc9ea8f44c02ae97f02da7a"
+        },
+        {
+            "path": "external/verification/common-operations-before.ts",
+            "bytes": 4593,
+            "sha256": "13ca3fae706ab4b9fc6d520a679d7e9363807d80126eb1d43356390ace9fea76"
+        },
+        {
+            "path": "external/verification/conversation-history-before.ts",
+            "bytes": 3099,
+            "sha256": "dc83ad5557fd39653cb7693620805da4585ff02b329e4963ffe2c1d497456d3f"
+        },
+        {
+            "path": "external/verification/docs.log",
+            "bytes": 407,
+            "sha256": "22d20c99d51c5535436bf5fcf97c1eac05453d458d1bd97ca583ec8bb173f302"
+        },
+        {
+            "path": "external/verification/execution-regressions.log",
+            "bytes": 524,
+            "sha256": "cff205ab5b1f6360dabeb15af7b033cb6ff635e14d41d5a7bab34535e2f15659"
+        },
+        {
+            "path": "external/verification/green.log",
+            "bytes": 1812,
+            "sha256": "a064dc854ec95ac9c5a6f83d2ac65e6be16841f82373ee9f86ef80a814b57cb3"
+        },
+        {
+            "path": "external/verification/native-green-probe.log",
+            "bytes": 1794,
+            "sha256": "984513688069c678502c0a7fefe3d01cc1ab59f171072b1ca6f4f8115d550a80"
+        },
+        {
+            "path": "external/verification/native-interface-before.ts",
+            "bytes": 44776,
+            "sha256": "305e4cf0c6303b42eb5f7d3ac66a8f2183d64fb867ea2835f4a9c6721f284350"
+        },
+        {
+            "path": "external/verification/native-outcomes-probe.log",
+            "bytes": 1827,
+            "sha256": "d5f78aafd31b2c5abfb347b23e5abea22a5c1fda7b2b670447aa2de43e580a0a"
+        },
+        {
+            "path": "external/verification/native-red.log",
+            "bytes": 1794,
+            "sha256": "2c6e53c5cf183e20e418315447b4e8b6709b98d9227eb8f816146c97f4f40022"
+        },
+        {
+            "path": "external/verification/native-state-probe.log",
+            "bytes": 3273,
+            "sha256": "ef668c43644286d1ef581ad6ae41f10e81d6fc83deb862cb392e1be9074a057c"
+        },
+        {
+            "path": "external/verification/operation-import-setup-error.log",
+            "bytes": 1307,
+            "sha256": "535c3b5d2815128ee2697d11c943c24c824f18a2b71de899721a74e2c8a43326"
+        },
+        {
+            "path": "external/verification/operation-red.log",
+            "bytes": 2191,
+            "sha256": "06d43aeac001d3666da89ffacc68229bf0d43a379906fce5b2e6915302bbde3a"
+        },
+        {
+            "path": "external/verification/operations-before.ts",
+            "bytes": 33081,
+            "sha256": "ccd115901b36adaa7a1fde2259f332c8681fc3cc84d531a261c1067225bbcbad"
+        },
+        {
+            "path": "external/verification/progress-green.log",
+            "bytes": 613,
+            "sha256": "1882622e17dc3e8fb78944aa181d532881510f05c0370b7bb498443e2d8c1e2c"
+        },
+        {
+            "path": "external/verification/progress-red.log",
+            "bytes": 1539,
+            "sha256": "5cd08aab422cbf3317cc954a5d12f442fa118d4a307564470d207ac68ebc02c9"
+        },
+        {
+            "path": "external/verification/publication-after.json",
+            "bytes": 49,
+            "sha256": "75817c860ac5fa795ccedcfb78a2c87c3001d96fe7a90aca20b6f5a2e40b9c04"
+        },
+        {
+            "path": "external/verification/publication-before.json",
+            "bytes": 49,
+            "sha256": "75817c860ac5fa795ccedcfb78a2c87c3001d96fe7a90aca20b6f5a2e40b9c04"
+        },
+        {
+            "path": "external/verification/sync.log",
+            "bytes": 722,
+            "sha256": "f26856ee314d4fe5e892bae3f3651b47eb6a36087009264da7ca71b5b9a99954"
+        },
+        {
+            "path": "external/verification/tech-before.md",
+            "bytes": 132440,
+            "sha256": "5357833face4448a709b4db2fd4e6edefedb75534bbcc3907d9ed00d28509678"
+        },
+        {
+            "path": "external/verification/tsconfig.json",
+            "bytes": 691,
+            "sha256": "985f62ff938f607147e2e58fffb34ce0b8e99f805ffb2f9573abfcf29564a8bd"
+        },
+        {
+            "path": "external/verification/types-final.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "path": "external/verification/types-setup-error.log",
+            "bytes": 529,
+            "sha256": "97a7f8719fc0bde2e4a74ba0c81139d32e3d2190a5facc75c3c23ca2e71ff9e9"
+        },
+        {
+            "path": "external/verification/types.log",
+            "bytes": 529,
+            "sha256": "97a7f8719fc0bde2e4a74ba0c81139d32e3d2190a5facc75c3c23ca2e71ff9e9"
+        },
+        {
+            "path": "repository/context/TECH.md",
+            "bytes": 132694,
+            "sha256": "d9cca91935bb8cece45e12b261afe4d6c0e9932280cfb343f335927c79f25afd"
+        },
+        {
+            "path": "repository/convex/execution/commonOperations.ts",
+            "bytes": 5642,
+            "sha256": "24d3deb47e159e291060fd8e903f84c746176536d25884e2851b23fdee8f0962"
+        },
+        {
+            "path": "repository/convex/execution/operations.ts",
+            "bytes": 33585,
+            "sha256": "685409fcbe53f75913e3e7292451c7706cd6e6a303c57e974a654351ab65b1cd"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-02-workbench-summary-fidelity-qualification.md",
+            "bytes": 41250,
+            "sha256": "5eb841dfe31341f190ab02f024976f0dbfef80ae919849afdee654e3df315d82"
+        },
+        {
+            "path": "repository/src/__tests__/convex/execution/conversation-history.test.ts",
+            "bytes": 7680,
+            "sha256": "e68029983d8e54ef90f2bb3d0bbfa03b32dcc06fa60b2b4b25148f41c9ef1730"
+        },
+        {
+            "path": "repository/src/__tests__/convex/execution/workbench-native-interface.test.ts",
+            "bytes": 49844,
+            "sha256": "923c1fb85f5a3566fe532ed5827bfba636caf873ebc5e69b07a933c06a602367"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261102T200129635Z-workbench-history-refusal-fix.tar.gz",
+        "bytes": 137480,
+        "sha256": "8b1bfffde668ad929eed707921255857f391b3cf79d41b0cded022d5c56f2043"
+    },
+    "verification": "restored_and_verified"
+}

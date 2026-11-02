@@ -24,6 +24,7 @@ import {
     effectiveModelConfiguration,
     modelAgent,
     modelDescriptor,
+    modelPreparationInput,
     nativeProfile,
     type reasoningEffort,
 } from "./modelConfigurationSchema";
@@ -115,16 +116,20 @@ export const authorize = internalQuery({
     },
 });
 export const findCatalog = internalQuery({
-    args: { model: v.string(), provider: v.string() },
+    args: { model: v.string(), provider: v.optional(v.string()) },
     returns: v.union(modelView, v.null()),
     handler: async (ctx, args) => {
         await requireAdmin(ctx);
-        return ctx.db
+        const models = await ctx.db
             .query("modelCatalog")
             .withIndex("by_model_and_provider", (q) =>
-                q.eq("model", args.model).eq("provider", args.provider),
+                q.eq("model", args.model),
             )
-            .unique();
+            .take(101);
+        return (
+            models.find((model) => model.provider === args.provider) ??
+            (args.provider === undefined ? (models[0] ?? null) : null)
+        );
     },
 });
 
@@ -199,21 +204,16 @@ export const initializePrepared = internalMutation({
 });
 
 export const beginPreparation = internalMutation({
-    args: {
-        model: v.string(),
-        provider: v.string(),
-        label: v.string(),
-        requestKey: v.string(),
-        expectedRevision: v.optional(v.number()),
-    },
+    args: modelPreparationInput.fields,
     returns: claimedPreparationResult,
     handler: async (ctx, args) => {
         await requireAdmin(ctx);
         if (
             !/^[\w.-]+\/[\w.:-]+$/.test(args.model) ||
             args.model.length > 200 ||
-            !/^[\w./-]+$/.test(args.provider) ||
-            args.provider.length > 100 ||
+            (args.provider !== undefined &&
+                (!/^[\w./-]+$/.test(args.provider) ||
+                    args.provider.length > 100)) ||
             !args.label.trim() ||
             args.label.length > 100 ||
             !args.requestKey ||
@@ -237,12 +237,16 @@ export const beginPreparation = internalMutation({
                 claimed: false,
             };
         }
-        const current = await ctx.db
-            .query("modelCatalog")
-            .withIndex("by_model_and_provider", (q) =>
-                q.eq("model", args.model).eq("provider", args.provider),
-            )
-            .unique();
+        const current = args.catalogId
+            ? await ctx.db.get(args.catalogId)
+            : await ctx.db
+                  .query("modelCatalog")
+                  .withIndex("by_model_and_provider", (q) =>
+                      q.eq("model", args.model).eq("provider", args.provider),
+                  )
+                  .unique();
+        if (args.catalogId && (!current || current.model !== args.model))
+            throw executionError("model_configuration_conflict");
         if (current && args.expectedRevision !== current.revision)
             throw executionError("model_configuration_conflict");
         if (

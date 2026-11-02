@@ -4,8 +4,8 @@ import type { Doc, Id } from "./_generated/dataModel";
 import {
     internalMutation,
     internalQuery,
-    mutation,
     type MutationCtx,
+    mutation,
     type QueryCtx,
 } from "./_generated/server";
 import { requireAdmin } from "./administrationAuthority";
@@ -31,6 +31,12 @@ import {
     sourcePreparationError,
 } from "./domain/sourcePreparationAuthority";
 import { requireMissionAuthority } from "./execution/authority";
+import { MAX_CONTEXT_BYTES } from "./execution/executionProtocol";
+import {
+    MODEL_MAX_INPUT_PRICE_PER_MILLION,
+    MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
+    MODEL_MAX_OUTPUT_TOKENS,
+} from "./integrations/modelRouting";
 import { rateLimiter } from "./rateLimiter";
 import {
     MAX_CONCURRENT_SOURCE_EMBEDDING_CALLS,
@@ -40,7 +46,31 @@ import {
     MAX_SOURCE_EMBEDDING_INPUT_BYTES,
     MAX_SOURCE_EMBEDDING_TEXT_BYTES,
 } from "./resourceLimits";
+import { readWorkbenchQualification } from "./runWorkspace";
 import schema from "./schema";
+
+/** The same qualification authority is required at reservation and immediately before external dispatch. */
+export async function requireQualifiedBrowserMission(
+    ctx: QueryCtx,
+    run: Doc<"researchRuns">,
+    mission: Doc<"agentMissions"> | null,
+) {
+    if (run.purpose !== "browser_test") return null;
+    const qualification = await readWorkbenchQualification(ctx, run);
+    const control = await ctx.db
+        .query("paidWorkControls")
+        .withIndex("by_key", (q) => q.eq("key", "global"))
+        .unique();
+    if (
+        !qualification ||
+        mission?.definitionId !== "workbench_v1" ||
+        mission.runId !== run._id ||
+        mission.modelRevisionId !== qualification.modelRevisionId ||
+        control?.enabled === false
+    )
+        throw sourcePreparationError("paid_work_disabled");
+    return qualification;
+}
 
 const serviceValidator = v.union(
     v.literal("model"),
@@ -475,10 +505,23 @@ export const recordAttempt = internalMutation({
         args,
     ): Promise<Infer<typeof recordAttemptResultValidator>> => {
         const now = Date.now();
+        let qualification: Awaited<
+            ReturnType<typeof readWorkbenchQualification>
+        > = null;
         if (args.status === "started" && args.runId) {
             const run = await ctx.db.get(args.runId);
-            if (run && run.purpose === "browser_test")
-                throw sourcePreparationError("paid_work_disabled");
+            if (run && run.purpose === "browser_test") {
+                if (args.service !== "model")
+                    throw sourcePreparationError("paid_work_disabled");
+                const mission = args.missionId
+                    ? await ctx.db.get(args.missionId)
+                    : null;
+                qualification = await requireQualifiedBrowserMission(
+                    ctx,
+                    run,
+                    mission,
+                );
+            }
         }
         if (
             args.diagnostic &&
@@ -955,7 +998,46 @@ export const recordAttempt = internalMutation({
                     },
                 });
             }
+            let qualificationReservationUsd: number | undefined;
+            if (qualification) {
+                qualificationReservationUsd =
+                    ((MAX_CONTEXT_BYTES + 4096) *
+                        MODEL_MAX_INPUT_PRICE_PER_MILLION +
+                        MODEL_MAX_OUTPUT_TOKENS *
+                            MODEL_MAX_OUTPUT_PRICE_PER_MILLION) /
+                    1_000_000;
+                const calls = await ctx.db
+                    .query("providerCalls")
+                    .withIndex("by_run", (q) => q.eq("runId", args.runId))
+                    .take(qualification.maximumRequests + 1);
+                const reserved = calls.reduce(
+                    (sum, call) =>
+                        sum +
+                        Math.max(
+                            call.qualificationReservationUsd ??
+                                qualificationReservationUsd ??
+                                0,
+                            call.reportedCost ?? 0,
+                        ),
+                    0,
+                );
+                if (
+                    calls.length >= qualification.maximumRequests ||
+                    reserved + qualificationReservationUsd >
+                        qualification.maximumCostUsd ||
+                    calls.some(
+                        (call) =>
+                            call.reportedCost !== undefined &&
+                            call.reportedCost >
+                                (call.qualificationReservationUsd ?? 0),
+                    )
+                )
+                    throw sourcePreparationError(
+                        "qualification_budget_exhausted",
+                    );
+            }
             const providerCallId = await ctx.db.insert("providerCalls", {
+                qualificationReservationUsd,
                 missionId: args.missionId,
                 invocationId: args.invocationId,
                 inputHash: args.inputHash,

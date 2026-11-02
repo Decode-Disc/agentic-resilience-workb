@@ -2,6 +2,8 @@ import type { Id } from "./_generated/dataModel";
 import { env } from "./_generated/server";
 
 export const MAX_ANALYSES_PER_VISITOR = 3;
+export const BROWSER_QUALIFICATION_MAX_REQUESTS = 20;
+export const BROWSER_QUALIFICATION_MAX_COST_USD = 0.5;
 
 const DEFAULT_COMPANY_SEARCH_RESULT_LIMIT = 40;
 export const MAX_INITIAL_SOURCE_CANDIDATES = 48;

@@ -1,14 +1,62 @@
-import http from "node:http";
+import { createHash } from "node:crypto";
 import { once } from "node:events";
 import {
-    readFileSync,
-    writeFileSync,
     appendFileSync,
     existsSync,
+    readFileSync,
+    writeFileSync,
 } from "node:fs";
-import { createHash } from "node:crypto";
-import { parseEnv } from "node:util";
+import http from "node:http";
 import { pathToFileURL } from "node:url";
+import { parseEnv } from "node:util";
+
+/** Retains observable provider facts even when the consumer closes after the terminal SSE frame. */
+function sseFacts(body) {
+    let usage, cost, generationId, provider;
+    let terminal = false,
+        done = false,
+        invalidFrame = false;
+    for (const raw of body.split("\n")) {
+        const line = raw.trimEnd();
+        if (line === "data: [DONE]") {
+            done = true;
+            continue;
+        }
+        if (!line.startsWith("data: ")) continue;
+        let frame;
+        try {
+            frame = JSON.parse(line.slice(6));
+        } catch {
+            invalidFrame = true;
+            continue;
+        }
+        if (!frame || typeof frame !== "object" || Array.isArray(frame)) {
+            invalidFrame = true;
+            continue;
+        }
+        if (frame.usage) usage = frame.usage;
+        if (Number.isFinite(frame.usage?.cost) && frame.usage.cost >= 0)
+            cost = frame.usage.cost;
+        if (
+            Array.isArray(frame.choices) &&
+            frame.choices.some(
+                (choice) => choice && typeof choice.finish_reason === "string",
+            )
+        )
+            terminal = true;
+        if (typeof frame.id === "string") generationId = frame.id;
+        if (typeof frame.provider === "string") provider = frame.provider;
+    }
+    return {
+        usage,
+        cost,
+        generationId,
+        provider,
+        terminal,
+        done,
+        invalidFrame,
+    };
+}
 
 // Retained qualification relay, with its per-lot ledger and explicit fault controls.
 export function createQualificationRelay(
@@ -29,29 +77,40 @@ export function createQualificationRelay(
             .filter((r) => r.event === "dispatch")
             .reduce((s, r) => s + r.reserveUsd, 0),
         cost = prior
-            .filter((r) => r.event === "response")
-            .reduce((s, r) => s + r.cost, 0),
+            .filter((r) => r.event === "response" || r.event === "uncertain")
+            .reduce((s, r) => s + (r.cost ?? 0), 0),
         fatal;
     if (
         prior.some((r) => r.event === "halt") ||
-        prior.filter((r) => r.event === "response").length !== calls
+        prior.some(
+            (r) =>
+                r.event === "dispatch" &&
+                !prior.some(
+                    (outcome) =>
+                        outcome.call === r.call &&
+                        ["response", "uncertain"].includes(outcome.event),
+                ),
+        )
     )
         fatal = "Prior unresolved dispatch or halt; no restart retry permitted";
     const gated = new Set(),
         injected = new Set();
     const json = (p, v) =>
         writeFileSync(`${root}/${p}`, `${JSON.stringify(v, null, 2)}\n`);
-    const event = (v) =>
-        appendFileSync(
-            `${root}/ledger.jsonl`,
-            `${JSON.stringify({ ...v, at: new Date().toISOString() })}\n`,
-        );
+    const event = (v) => {
+        const entry = { ...v, at: new Date().toISOString() };
+        appendFileSync(`${root}/ledger.jsonl`, `${JSON.stringify(entry)}\n`);
+        prior.push(entry);
+    };
     const digest = (v) => createHash("sha256").update(v).digest("hex");
     const pause = (ms) => new Promise((r) => setTimeout(r, ms));
     return http.createServer(async (req, res) => {
         let dispatched = false,
             call,
-            control;
+            control,
+            httpStatus,
+            startedAt,
+            responseRecorded = false;
         const abort = new AbortController();
         res.once("close", () => abort.abort());
         try {
@@ -67,6 +126,32 @@ export function createQualificationRelay(
             const text = Buffer.concat(input).toString("utf8");
             control = JSON.parse(readFileSync(`${root}/control.json`, "utf8"));
             if (fatal) throw new Error(fatal);
+            if (
+                prior.some(
+                    (entry) =>
+                        entry.event === "uncertain" &&
+                        entry.scenario === control.scenario,
+                )
+            )
+                throw new Error(
+                    "Uncertain execution cannot be replayed in the same scenario",
+                );
+            const refusals = prior.filter(
+                (entry) =>
+                    entry.event === "response" &&
+                    entry.scenario === control.scenario &&
+                    entry.outcome === "http_refusal",
+            );
+            const refusal = refusals.at(-1);
+            if (
+                refusal &&
+                (refusals.length >= 2 ||
+                    !refusal.retryable ||
+                    Date.now() < refusal.retryAfterAt)
+            )
+                throw new Error(
+                    "Scenario recovery is unavailable or still cooling down",
+                );
             const p = JSON.parse(text),
                 states = p.messages
                     .filter(
@@ -96,9 +181,9 @@ export function createQualificationRelay(
             });
             if (
                 p.model !== "z-ai/glm-5.3-flash" ||
-                p.provider?.only?.length !== 1 ||
-                p.provider.only[0] !== "open-inference/fp4" ||
-                p.provider.allow_fallbacks !== false ||
+                p.provider?.only !== undefined ||
+                p.provider?.order !== undefined ||
+                p.provider?.allow_fallbacks === false ||
                 p.provider.require_parameters !== true ||
                 p.temperature !== 0 ||
                 (p.max_tokens ?? p.max_completion_tokens) !== 6144 ||
@@ -185,7 +270,7 @@ export function createQualificationRelay(
                 deliveryMode: bufferedFault ? "buffered-fault" : "streaming",
             });
             dispatched = true;
-            const start = Date.now();
+            startedAt = Date.now();
             const response = await providerFetch(
                 "https://openrouter.ai/api/v1/chat/completions",
                 {
@@ -202,11 +287,17 @@ export function createQualificationRelay(
                     ]),
                 },
             );
+            httpStatus = response.status;
             const forwardHeaders = () =>
                 res.writeHead(
                     response.status,
                     Object.fromEntries(
-                        ["content-type", "x-request-id", "x-generation-id"]
+                        [
+                            "content-type",
+                            "x-request-id",
+                            "x-generation-id",
+                            "retry-after",
+                        ]
                             .map((name) => [name, response.headers.get(name)])
                             .filter(([, value]) => value),
                     ),
@@ -231,25 +322,58 @@ export function createQualificationRelay(
             }
             let body = Buffer.concat(chunks).toString("utf8");
             writeFileSync(`${root}/upstream-${call}.sse`, body);
-            let usage;
-            for (const line of body.split("\n")) {
-                if (!line.startsWith("data: ") || line === "data: [DONE]")
-                    continue;
-                const x = JSON.parse(line.slice(6));
-                if (x.usage) usage = x.usage;
-            }
-            if (!response.ok || !Number.isFinite(usage?.cost) || usage.cost < 0)
-                throw new Error("Provider outcome or charge unknown");
-            cost += usage.cost;
+            const {
+                usage,
+                generationId,
+                provider: resolvedProvider,
+                terminal,
+                done,
+                invalidFrame,
+                cost: reportedCost,
+            } = sseFacts(response.ok ? body : "");
+            if (reportedCost !== undefined) cost += reportedCost;
+            const retryable =
+                [408, 429].includes(response.status) || response.status >= 500;
+            const retryAfter = response.headers.get("retry-after");
+            const delay = retryAfter === null ? 0 : Number(retryAfter);
+            const retryAfterAt = Math.max(
+                Date.now() + 15000,
+                Number.isFinite(delay)
+                    ? Date.now() + delay * 1000
+                    : Date.parse(retryAfter),
+            );
             event({
                 event: "response",
                 call,
                 scenario,
                 status: response.status,
                 usage,
-                cost: usage.cost,
-                elapsedMs: Date.now() - start,
+                cost: reportedCost,
+                billing: reportedCost === undefined ? "unknown" : "reported",
+                outcome: response.ok
+                    ? terminal && done && !invalidFrame
+                        ? "response_received"
+                        : "stream_incomplete"
+                    : "http_refusal",
+                generationId,
+                provider: resolvedProvider,
+                ...(!response.ok
+                    ? {
+                          retryable,
+                          retryAfterAt: Number.isFinite(retryAfterAt)
+                              ? retryAfterAt
+                              : Date.now() + 15000,
+                      }
+                    : {}),
+                elapsedMs: Date.now() - startedAt,
             });
+            responseRecorded = true;
+            if (reportedCost !== undefined && reportedCost > reserve) {
+                fatal = "Reported charge exceeded its reserved envelope";
+                event({ event: "halt", call, reason: fatal });
+            }
+            if (response.ok && (!(terminal && done) || invalidFrame))
+                throw new Error("Incomplete upstream SSE response");
             if (control.injectInvalidFraming && !injected.has(scenario)) {
                 let changed = false;
                 body = body
@@ -313,8 +437,69 @@ export function createQualificationRelay(
                 error instanceof Error ? error.message : error,
             ).replaceAll(key, "[REDACTED]");
             if (dispatched) {
-                fatal = reason;
-                event({ event: "halt", call, reason });
+                const partialPath = `${root}/upstream-${call}.sse`;
+                const facts = sseFacts(
+                    existsSync(partialPath)
+                        ? readFileSync(partialPath, "utf8")
+                        : "",
+                );
+                if (!responseRecorded && facts.cost !== undefined)
+                    cost += facts.cost;
+                if (
+                    !responseRecorded &&
+                    abort.signal.aborted &&
+                    httpStatus >= 200 &&
+                    httpStatus < 300 &&
+                    facts.terminal &&
+                    facts.done &&
+                    !facts.invalidFrame
+                ) {
+                    event({
+                        event: "response",
+                        call,
+                        scenario: control?.scenario,
+                        status: httpStatus,
+                        usage: facts.usage,
+                        cost: facts.cost,
+                        generationId: facts.generationId,
+                        provider: facts.provider,
+                        billing:
+                            facts.cost === undefined ? "unknown" : "reported",
+                        outcome: "response_received",
+                        transport: "closed_after_terminal",
+                        elapsedMs: Date.now() - startedAt,
+                    });
+                } else {
+                    event({
+                        event: "uncertain",
+                        call,
+                        scenario: control?.scenario,
+                        reason,
+                        ...(!responseRecorded
+                            ? {
+                                  cost: facts.cost,
+                                  generationId: facts.generationId,
+                                  provider: facts.provider,
+                                  billing:
+                                      facts.cost === undefined
+                                          ? "unknown"
+                                          : "reported",
+                              }
+                            : {}),
+                    });
+                }
+                const reserve = prior.find(
+                    (entry) =>
+                        entry.event === "dispatch" && entry.call === call,
+                )?.reserveUsd;
+                if (
+                    !responseRecorded &&
+                    facts.cost !== undefined &&
+                    facts.cost > reserve
+                ) {
+                    fatal = "Reported charge exceeded its reserved envelope";
+                    event({ event: "halt", call, reason: fatal });
+                }
             } else
                 event({
                     event: "refused_before_dispatch",

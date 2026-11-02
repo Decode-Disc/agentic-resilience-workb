@@ -14,7 +14,10 @@ import {
 } from "@convex/domain/sourcePreparationAuthority";
 import { agentToolSetKey } from "@convex/integrations/modelInput";
 import { pinMissionModel } from "@convex/modelConfiguration";
-import { providerAttemptValidator } from "@convex/providerCalls";
+import {
+    providerAttemptValidator,
+    requireQualifiedBrowserMission,
+} from "@convex/providerCalls";
 import schema from "@convex/schema";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
@@ -140,11 +143,13 @@ async function requireDispatchAuthority(
     )
         throw executionError("invocation_unavailable");
     if (invocation.missionId) {
-        const { mission } = await requireMissionAuthority(
+        const { mission, run } = await requireMissionAuthority(
             ctx,
             invocation.missionId,
             expectedGeneration,
         );
+        if (invocation.provenance === "live")
+            await requireQualifiedBrowserMission(ctx, run, mission);
         await requireInstructionVersion(
             ctx,
             mission,

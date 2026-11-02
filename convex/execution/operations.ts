@@ -35,6 +35,7 @@ import {
 import {
     domainDataPatch,
     operationIdentityScope,
+    operationProgressKeys,
     retainedOperationPin,
 } from "./missionData";
 import { schedulePiMission } from "./piControl";
@@ -756,12 +757,24 @@ export const recordResult = internalMutation({
                 mission.definitionId,
                 mission.definitionVersion,
             );
-            const progress =
+            let progress =
                 request.input.kind === "consult_mission_state" ||
                 request.input.kind === "consult_run_state" ||
                 request.input.kind === "consult_conversation"
                     ? {}
                     : definition.progress(mission, outcome);
+            if (request.input.kind === "consult_conversation") {
+                const progressKeys = [
+                    ...new Set([
+                        ...mission.progressKeys,
+                        ...operationProgressKeys(outcome),
+                    ]),
+                ];
+                progress =
+                    progressKeys.length > 256
+                        ? { blockCode: "context_capacity" }
+                        : { progressKeys };
+            }
             if (
                 progress.state &&
                 !validate(definition.stateValidator, progress.state, {

@@ -959,12 +959,17 @@ export async function runStudyCli(
                                 );
                                 saved.status = "succeeded";
                             } else {
+                                const quotedProvider = (
+                                    call.body.provider as { only: string[] }
+                                ).only[0];
+                                assert(
+                                    quotedProvider,
+                                    "Frozen evaluation provider is missing",
+                                );
                                 const route = {
                                     model: call.model,
-                                    provider: (
-                                        call.body.provider as { only: string[] }
-                                    ).only[0],
-                                } as Parameters<
+                                    provider: quotedProvider,
+                                } satisfies Parameters<
                                     typeof transport.qualifySourceDocument
                                 >[1];
                                 const dependencies = {

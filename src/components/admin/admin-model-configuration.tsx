@@ -30,7 +30,6 @@ export function AdminModels() {
     const prepare = useAction(api.modelConfigurationActions.prepare);
     const initialize = useAction(api.modelConfigurationActions.initialize);
     const [model, setModel] = useState("");
-    const [provider, setProvider] = useState("open-inference/fp4");
     const [label, setLabel] = useState("");
     const [editing, setEditing] = useState<CatalogModel | null>(null);
     const [pending, setPending] = useState(false);
@@ -40,7 +39,6 @@ export function AdminModels() {
         if (pending) return;
         const signature = JSON.stringify({
             model,
-            provider,
             label,
             revision: editing?.revision,
         });
@@ -51,14 +49,18 @@ export function AdminModels() {
         try {
             const result = await prepare({
                 model: model.trim(),
-                provider: provider.trim(),
                 label: label.trim(),
                 requestKey: identity.current.key,
-                ...(editing ? { expectedRevision: editing.revision } : {}),
+                ...(editing
+                    ? {
+                          catalogId: editing._id,
+                          expectedRevision: editing.revision,
+                      }
+                    : {}),
             });
             if (!result.ready) {
                 setError(
-                    "The model could not be prepared. Review its identity, provider, capabilities and cost limits, then try again.",
+                    "The model could not be prepared. Review its identity, capabilities and cost limits, then try again.",
                 );
                 identity.current = null;
                 return;
@@ -111,7 +113,7 @@ export function AdminModels() {
                 <h3 className="text-sm font-medium">
                     {editing ? "Edit model configuration" : "Add a model"}
                 </h3>
-                <div className="grid gap-4 lg:grid-cols-3">
+                <div className="grid gap-4 lg:grid-cols-2">
                     <div className="space-y-2">
                         <Label htmlFor="catalog-model">
                             OpenRouter model ID
@@ -124,17 +126,6 @@ export function AdminModels() {
                             maxLength={200}
                             disabled={pending || !!editing}
                             placeholder="z-ai/glm-5.3-flash"
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="catalog-provider">Provider ID</Label>
-                        <Input
-                            id="catalog-provider"
-                            value={provider}
-                            onChange={(e) => setProvider(e.target.value)}
-                            required
-                            maxLength={100}
-                            disabled={pending || !!editing}
                         />
                     </div>
                     <div className="space-y-2">
@@ -182,7 +173,6 @@ export function AdminModels() {
                     onEdit={(entry) => {
                         setEditing(entry);
                         setModel(entry.model);
-                        setProvider(entry.provider);
                         setLabel(entry.label);
                         setError(null);
                     }}
@@ -271,7 +261,10 @@ function ModelCatalogue({
                         <div className="min-w-0 space-y-1">
                             <h3 className="font-medium">{entry.label}</h3>
                             <p className="break-all text-xs text-muted-foreground">
-                                {entry.model} · {entry.provider}
+                                {entry.model}
+                                {entry.provider
+                                    ? ` · ${entry.provider} (fixed provider)`
+                                    : " · OpenRouter routing"}
                             </p>
                             <p className="text-xs text-muted-foreground">
                                 {entry.status === "ready"

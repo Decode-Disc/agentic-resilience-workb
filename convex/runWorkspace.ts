@@ -138,6 +138,38 @@ export async function requireBrowserTestOwner(ctx: QueryCtx, slotKey: string) {
     return visitor;
 }
 
+/** A fixture remains unpaid unless its active local context explicitly authorizes this framing dossier. */
+export async function readWorkbenchQualification(
+    ctx: QueryCtx,
+    run: Doc<"researchRuns">,
+) {
+    if (
+        !localBrowserFixturesEnabled() ||
+        run.purpose !== "browser_test" ||
+        !run.browserTestContextId ||
+        run.lifecycleState !== "framing" ||
+        run.researchStartedAt !== undefined ||
+        run.withdrawnAt !== undefined ||
+        run.executionStatus !== "idle"
+    )
+        return null;
+    const context = await ctx.db.get(run.browserTestContextId);
+    if (
+        context?.status !== "active" ||
+        context.expiresAt <= Date.now() ||
+        context.paidQualification?.runId !== run._id ||
+        context.ownerVisitorId !== run.ownerVisitorId
+    )
+        return null;
+    const visitor = await requireBrowserTestOwner(ctx, BROWSER_TEST_SLOT);
+    if (
+        visitor._id !== context.ownerVisitorId ||
+        visitor.authUserId !== context.authUserId
+    )
+        return null;
+    return context.paidQualification;
+}
+
 export const openBrowserTestContext = internalMutation({
     args: {
         slotKey: v.string(),

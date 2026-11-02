@@ -24,6 +24,15 @@ export const initialModelSelection = v.object({
 export const reasoningEffortValues = reasoningEffort.members.map(
     (member) => member.value,
 );
+/** Shared preparation identity for administrator admission and its action. */
+export const modelPreparationInput = v.object({
+    model: v.string(),
+    provider: v.optional(v.string()),
+    catalogId: v.optional(v.id("modelCatalog")),
+    label: v.string(),
+    requestKey: v.string(),
+    expectedRevision: v.optional(v.number()),
+});
 export const modelDescriptor = v.object({
     contextWindow: v.number(),
     maxTokens: v.number(),
@@ -38,7 +47,7 @@ export const modelDescriptor = v.object({
 });
 export const effectiveModelConfiguration = v.object({
     model: v.string(),
-    provider: v.string(),
+    provider: v.optional(v.string()),
     descriptor: modelDescriptor,
     reasoningEffort: v.optional(reasoningEffort),
 });
@@ -46,7 +55,7 @@ export const nativeProfile = v.object({ key: v.string(), bytes: v.number() });
 export const modelConfigurationTables = {
     modelCatalog: defineTable({
         model: v.string(),
-        provider: v.string(),
+        provider: v.optional(v.string()),
         label: v.string(),
         revision: v.number(),
         enabled: v.boolean(),

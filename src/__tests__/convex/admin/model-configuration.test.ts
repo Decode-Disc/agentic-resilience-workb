@@ -168,38 +168,20 @@ test("administrative import prepares a model absent from Pi's bundled catalogue 
                             mandatory: true,
                         },
                         context_length: 131072,
+                        pricing: {
+                            prompt: "0.00000003",
+                            completion: "0.0000001",
+                            input_cache_read: "0.00000001",
+                        },
                         top_provider: { max_completion_tokens: 8192 },
                         supported_parameters: [
                             "tools",
+                            "max_tokens",
                             "reasoning",
                             "structured_outputs",
                         ],
                     },
                 ],
-            });
-        if (url === `https://openrouter.ai/api/v1/models/${model}/endpoints`)
-            return Response.json({
-                data: {
-                    endpoints: [
-                        {
-                            tag: "example-provider",
-                            status: 0,
-                            context_length: 131072,
-                            max_completion_tokens: 8192,
-                            supported_parameters: [
-                                "tools",
-                                "max_tokens",
-                                "reasoning",
-                                "structured_outputs",
-                            ],
-                            pricing: {
-                                prompt: "0.00000003",
-                                completion: "0.0000001",
-                                input_cache_read: "0.00000001",
-                            },
-                        },
-                    ],
-                },
             });
         throw new Error(
             "Inference and unapproved metadata requests are forbidden",
@@ -208,7 +190,6 @@ test("administrative import prepares a model absent from Pi's bundled catalogue 
     vi.stubGlobal("fetch", fetch);
     const prepared = await admin.action(api.modelConfigurationActions.prepare, {
         model,
-        provider: "example-provider",
         label: "Runtime model",
         requestKey: "runtime-import",
     });
@@ -217,7 +198,8 @@ test("administrative import prepares a model absent from Pi's bundled catalogue 
     expect(config.models).toMatchObject([
         { model, enabled: false, status: "ready" },
     ]);
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(config.models[0]).not.toHaveProperty("provider");
     expect(
         await t.run((ctx) => ctx.db.query("modelRevisions").first()),
     ).toMatchObject({
@@ -300,7 +282,7 @@ test("availability cannot invalidate an in-progress preparation", async () => {
     ).toMatchObject({ revision: pending.revision, status: "preparing" });
 });
 
-test("missing endpoint prices cannot be accepted as free inference", async () => {
+test("missing model prices cannot be accepted as free inference", async () => {
     const { admin } = await setup();
     vi.stubGlobal(
         "fetch",
@@ -320,7 +302,17 @@ test("missing endpoint prices cannot be accepted as free inference", async () =>
                           ],
                       },
                   })
-                : Response.json({ data: [{ id: "example/no-price" }] }),
+                : Response.json({
+                      data: [
+                          {
+                              id: "example/no-price",
+                              context_length: 131072,
+                              top_provider: { max_completion_tokens: 8192 },
+                              supported_parameters: ["tools", "max_tokens"],
+                              pricing: { prompt: null, completion: null },
+                          },
+                      ],
+                  }),
         ),
     );
     expect(
@@ -568,4 +560,63 @@ test("initialization leaves an engaged metadata preparation untouched", async ()
         status: "preparing",
         revision: claimed.revision,
     });
+});
+
+test("repreparing a legacy entry keeps its identity and historical revision while removing its provider pin", async () => {
+    const { t, admin } = await setup();
+    const first = await admin.mutation(
+        internal.modelConfiguration.beginPreparation,
+        {
+            model: "example/legacy",
+            provider: "historical-provider",
+            label: "Legacy",
+            requestKey: "legacy-first",
+        },
+    );
+    const descriptor = {
+        contextWindow: 131072,
+        maxTokens: 8192,
+        reasoning: false,
+        inputPrice: 0.03,
+        outputPrice: 0.1,
+        cacheReadPrice: 0.03,
+        structuredOutputs: true,
+    };
+    await admin.mutation(internal.modelConfiguration.finishPreparation, {
+        catalogId: first.catalogId,
+        revision: first.revision,
+        descriptor,
+        profiles: [{ key: "legacy-profile", bytes: 1000 }],
+    });
+    const second = await admin.mutation(
+        internal.modelConfiguration.beginPreparation,
+        {
+            catalogId: first.catalogId,
+            model: "example/legacy",
+            label: "Legacy",
+            requestKey: "legacy-second",
+            expectedRevision: first.revision,
+        },
+    );
+    await admin.mutation(internal.modelConfiguration.finishPreparation, {
+        catalogId: second.catalogId,
+        revision: second.revision,
+        descriptor,
+        profiles: [{ key: "openrouter-profile", bytes: 990 }],
+    });
+    expect(second.catalogId).toBe(first.catalogId);
+    const revisions = await t.run((ctx) =>
+        ctx.db
+            .query("modelRevisions")
+            .withIndex("by_catalog_and_revision", (q) =>
+                q.eq("catalogId", first.catalogId),
+            )
+            .collect(),
+    );
+    expect(revisions).toHaveLength(2);
+    expect(revisions[0]?.provider).toBe("historical-provider");
+    expect(revisions[1]).not.toHaveProperty("provider");
+    expect(
+        (await admin.query(api.modelConfiguration.list, {})).models,
+    ).toHaveLength(1);
 });

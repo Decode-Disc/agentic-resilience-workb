@@ -5,6 +5,7 @@ import {
     consultMissionStateInputValidator,
     consultRunStateInputValidator,
 } from "./agentSchemas";
+import { executionError, executionFailureCode } from "./errors";
 import type { AgentOperationDefinition } from "./executionProtocol";
 import { operationReuseIdentity } from "./missionData";
 import { consultMissionState } from "./missionHistory";
@@ -91,17 +92,42 @@ const consultConversation: AgentOperationDefinition = {
     async execute(ctx, args) {
         if (!args.missionId || args.input.kind !== "consult_conversation")
             return { kind: "refused", code: "mission_required" };
-        return {
-            kind: "success",
-            valueJson: await ctx.runQuery(
+        try {
+            const valueJson = await ctx.runQuery(
                 internal.execution.conversations.historyForMission,
                 {
                     missionId: args.missionId,
                     expectedGeneration: args.expectedGeneration,
                     cursor: args.input.cursor,
                 },
-            ),
-        };
+            );
+            const page: unknown = JSON.parse(valueJson);
+            if (
+                !page ||
+                typeof page !== "object" ||
+                !("entries" in page) ||
+                !Array.isArray(page.entries)
+            )
+                throw executionError("conversation_message_unavailable");
+            return {
+                kind: "success",
+                valueJson,
+                ...(page.entries.length
+                    ? {
+                          progressKey: sha256Hex(
+                              stableStringify({
+                                  kind: "conversation_history",
+                                  entries: page.entries,
+                              }),
+                          ),
+                      }
+                    : {}),
+            };
+        } catch (error) {
+            if (executionFailureCode(error) !== "history_cursor_invalid")
+                throw error;
+            return { kind: "refused", code: "history_cursor_invalid" };
+        }
     },
 };
 

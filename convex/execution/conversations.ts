@@ -22,6 +22,7 @@ import {
 import type { initialModelSelection } from "@convex/modelConfigurationSchema";
 import {
     localBrowserFixturesEnabled,
+    readWorkbenchQualification,
     requireWorkspaceRun,
 } from "@convex/runWorkspace";
 import schema from "@convex/schema";
@@ -1067,7 +1068,8 @@ export const pumpWorkbench = internalMutation({
                 scope: { kind: "workbench_v1" },
                 simulation:
                     run.purpose === "browser_test" &&
-                    localBrowserFixturesEnabled(),
+                    localBrowserFixturesEnabled() &&
+                    !(await readWorkbenchQualification(ctx, run)),
             });
             await ctx.db.patch(conversation._id, {
                 admissionFailure: undefined,

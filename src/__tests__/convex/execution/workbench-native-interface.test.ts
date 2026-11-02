@@ -766,6 +766,127 @@ test("rejected framing receipts survive native handover and a later preservation
     ).toBeNull();
 }, 30000);
 
+test("a malformed conversation continuation returns a refusal and the same response completes after a corrected read", async () => {
+    const payloads: string[] = [];
+    const providerErrors: unknown[] = [];
+    let continuation: string | undefined;
+    const initialReply = "I acknowledged the initial request.";
+    const finalReply =
+        "The original exchange is retained. The saved program is unchanged.";
+    vi.stubEnv("OPENROUTER_API_KEY", "local-fixture-only");
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (_url, init) => {
+            try {
+                const body = String(init?.body);
+                payloads.push(body);
+                if (payloads.length === 1) return reply(initialReply);
+                if (payloads.length === 2)
+                    return toolReply("consult_conversation", {});
+                const payload = JSON.parse(body);
+                const lastTool = payload.messages
+                    .filter(
+                        (message: { role: string }) => message.role === "tool",
+                    )
+                    .at(-1);
+                assert(lastTool && typeof lastTool.content === "string");
+                const result = JSON.parse(lastTool.content);
+                if (payloads.length === 3) {
+                    expect(result.kind).toBe("success");
+                    continuation = result.value.continueCursor;
+                    assert(typeof continuation === "string");
+                    const inner = JSON.parse(continuation);
+                    assert(typeof inner.cursor === "string");
+                    return toolReply("consult_conversation", {
+                        cursor: inner.cursor,
+                    });
+                }
+                if (payloads.length === 4) {
+                    expect(result).toMatchObject({
+                        kind: "refused",
+                        code: "history_cursor_invalid",
+                        diagnostic: expect.stringContaining(
+                            "copy only continueCursor returned by the same history operation",
+                        ),
+                    });
+                    return toolReply("consult_conversation", {
+                        cursor: continuation,
+                    });
+                }
+                if (payloads.length === 5) {
+                    expect(result).toMatchObject({
+                        kind: "success",
+                        value: {
+                            entries: [
+                                expect.objectContaining({
+                                    role: "assistant",
+                                    content: initialReply,
+                                }),
+                            ],
+                        },
+                    });
+                    return reply(finalReply);
+                }
+                throw new Error("Unexpected conversation recovery loop");
+            } catch (error) {
+                providerErrors.push(error);
+                throw error;
+            }
+        }),
+    );
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+    );
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
+    const framing = await client.query(api.framing.get, { runId });
+    await client.mutation(api.execution.conversations.submit, {
+        runId,
+        requestKey: "conversation-pagination-recovery",
+        text: "Read our original exchange. Keep the saved program unchanged.",
+        delivery: "queue",
+    });
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
+    if (providerErrors.length) throw providerErrors[0];
+    const messages = await client.query(
+        api.execution.conversations.listMessages,
+        { runId, paginationOpts: { numItems: 20, cursor: null } },
+    );
+    const requests = await t.run((ctx) =>
+        ctx.db.query("agentOperationRequests").collect(),
+    );
+    expect(
+        await t.run((ctx) => ctx.db.query("agentMissions").collect()),
+    ).toEqual([
+        expect.objectContaining({ status: "completed" }),
+        expect.objectContaining({ status: "completed" }),
+    ]);
+    expect(requests.map((request) => request.outcome?.kind)).toEqual([
+        "success",
+        "refused",
+        "success",
+    ]);
+    expect(
+        messages.page.filter((m) => m.role === "assistant").map((m) => m.text),
+    ).toEqual([initialReply, finalReply]);
+    expect(payloads).toHaveLength(5);
+    expect(requests.every((request) => request.status === "completed")).toBe(
+        true,
+    );
+    expect(
+        (await client.query(api.execution.conversations.get, { runId }))
+            .activeTurn,
+    ).toBeNull();
+    expect(await client.query(api.framing.get, { runId })).toEqual(framing);
+    expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
+        lifecycleState: "framing",
+        executionStatus: "idle",
+    });
+    expect(
+        await t.run((ctx) => ctx.db.query("piSessions").collect()),
+    ).toHaveLength(1);
+});
+
 test("an invalid history cursor gives exact recovery guidance and permits reading prior conversation", async () => {
     const payloads: string[] = [];
     vi.stubEnv("OPENROUTER_API_KEY", "local-fixture-only");

@@ -12,20 +12,16 @@ import {
 } from "./integrations/modelRouting";
 import { prepareNativeProfiles } from "./integrations/piModelProfiles";
 import { modelPrepared } from "./modelConfiguration";
-import { reasoningEffortValues } from "./modelConfigurationSchema";
+import {
+    modelPreparationInput,
+    reasoningEffortValues,
+} from "./modelConfigurationSchema";
 
 const result = v.object({
     catalogId: v.id("modelCatalog"),
     revision: v.number(),
     ready: v.boolean(),
 });
-const input = {
-    model: v.string(),
-    provider: v.string(),
-    label: v.string(),
-    requestKey: v.string(),
-    expectedRevision: v.optional(v.number()),
-};
 
 async function readMetadata(
     url: string,
@@ -67,13 +63,7 @@ function object(value: unknown): Record<string, unknown> {
 
 async function prepareModel(
     ctx: ActionCtx,
-    args: {
-        model: string;
-        provider: string;
-        label: string;
-        requestKey: string;
-        expectedRevision?: number;
-    },
+    args: Infer<typeof modelPreparationInput>,
 ): Promise<Infer<typeof result>> {
     await ctx.runQuery(internal.modelConfiguration.authorize, {});
     const pending: Infer<typeof result> & { claimed: boolean } =
@@ -98,28 +88,14 @@ async function prepareModel(
             .map(object)
             .find((row) => row.id === args.model);
         if (!model) throw new Error("model_unavailable");
-        const endpointData = object(
-            object(
-                await readMetadata(
-                    `https://openrouter.ai/api/v1/models/${args.model}/endpoints`,
-                    signal,
-                ),
-            ).data,
-        );
-        if (!Array.isArray(endpointData.endpoints))
-            throw new Error("catalog_invalid");
-        const endpoint = endpointData.endpoints
-            .map(object)
-            .find((row) => row.tag === args.provider && row.status === 0);
-        if (!endpoint) throw new Error("provider_unavailable");
-        const parameters = endpoint.supported_parameters;
+        const parameters = model.supported_parameters;
         if (
             !Array.isArray(parameters) ||
             !parameters.includes("tools") ||
             !parameters.includes("max_tokens")
         )
             throw new Error("model_not_compatible");
-        const pricing = object(endpoint.pricing);
+        const pricing = object(model.pricing);
         for (const value of [pricing.prompt, pricing.completion])
             if (
                 (typeof value !== "string" && typeof value !== "number") ||
@@ -158,12 +134,8 @@ async function prepareModel(
                 reasoningEfforts.includes(effort),
         );
         const descriptor = {
-            contextWindow: Number(
-                endpoint.context_length ?? model.context_length,
-            ),
-            maxTokens: Number(
-                endpoint.max_completion_tokens ?? top.max_completion_tokens,
-            ),
+            contextWindow: Number(model.context_length),
+            maxTokens: Number(top.max_completion_tokens),
             reasoning: parameters.includes("reasoning"),
             reasoningEfforts,
             reasoningMandatory,
@@ -225,7 +197,7 @@ async function prepareModel(
 }
 
 export const prepare = action({
-    args: input,
+    args: modelPreparationInput.fields,
     returns: result,
     handler: prepareModel,
 });
@@ -238,12 +210,10 @@ export const initialize = action({
         await ctx.runQuery(internal.modelConfiguration.authorize, {});
         const initial = INITIAL_MODEL_CATALOG;
         for (const model of initial) {
-            const provider = model.provider;
             const existing: FunctionReturnType<
                 typeof internal.modelConfiguration.findCatalog
             > = await ctx.runQuery(internal.modelConfiguration.findCatalog, {
                 model: model.model,
-                provider,
             });
             if (existing?.status === "preparing") return { ready: false };
             if (existing?.status === "ready" && !modelPrepared(existing))
@@ -257,10 +227,12 @@ export const initialize = action({
                       }
                     : await prepareModel(ctx, {
                           ...model,
-                          provider,
                           requestKey: `initial:${model.model}:${existing?.revision ?? 0}`,
                           ...(existing
-                              ? { expectedRevision: existing.revision }
+                              ? {
+                                    catalogId: existing._id,
+                                    expectedRevision: existing.revision,
+                                }
                               : {}),
                       });
             if (!outcome.ready) return { ready: false };
