@@ -13,6 +13,7 @@ import type { EventId, WorkflowId } from "@convex-dev/workflow";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { getAgentDefinition, getRegisteredOperation } from "./agentCatalog";
+import type { AgentProgress } from "./agentDefinition";
 import {
     executionError,
     executionFailureCode,
@@ -54,6 +55,7 @@ import {
     isCommonConsultation,
 } from "./operationContracts";
 import { schedulePiMission } from "./piControl";
+import { adoptProgress, agentProgressValidator } from "./progress";
 
 type Outcome = Infer<typeof operationOutcomeValidator>;
 type Input = Infer<typeof requestInputValidator>;
@@ -728,7 +730,25 @@ export const recordResult = internalMutation({
                 stableStringify(args.outcome)
         )
             throw executionError("operation_result_conflict");
-        let outcome = operation.validateOutcome(request, args.outcome);
+        let outcome = args.outcome;
+        let adoptionFailed = false;
+        if (outcome.kind === "success") {
+            try {
+                const validated = operation.validateOutcome(request, outcome);
+                if (
+                    !validate(operationOutcomeValidator, validated, {
+                        db: ctx.db,
+                    }) ||
+                    (operation.effectKind === "read" &&
+                        validated.kind === "waiting")
+                )
+                    throw executionError("operation_contract_invalid");
+                outcome = validated;
+            } catch {
+                // Preserve the known observation; only pure domain callbacks are guarded here.
+                adoptionFailed = true;
+            }
+        }
         if (
             outcome.kind === "success" &&
             new TextEncoder().encode(outcome.valueJson).length >
@@ -835,50 +855,99 @@ export const recordResult = internalMutation({
                 mission.definitionId,
                 mission.definitionVersion,
             );
-            let progress =
-                request.input.kind === "consult_mission_state" ||
-                request.input.kind === "consult_run_state" ||
-                request.input.kind === "consult_conversation"
-                    ? {}
-                    : definition.progress(mission, outcome);
-            if (request.input.kind === "consult_conversation") {
-                const progressKeys = [
-                    ...new Set([
-                        ...mission.progressKeys,
-                        ...(historyRead?.fragmentIds ?? []),
-                    ]),
-                ];
-                progress =
-                    progressKeys.length > 256
-                        ? { blockCode: "context_capacity" }
-                        : { progressKeys };
+            let progress: AgentProgress = {};
+            let accounting: ReturnType<typeof adoptProgress> = {
+                kind: "ready",
+                keys: mission.progressKeys,
+                added: 0,
+            };
+            if (!adoptionFailed) {
+                try {
+                    const {
+                        progressKeys: _keys,
+                        noProgressTurns: _turns,
+                        lastSettledInvocationId: _settled,
+                        ...domainMission
+                    } = mission;
+                    progress =
+                        outcome.kind === "success" &&
+                        !isCommonConsultation(request.input.kind)
+                            ? definition.progress(domainMission, outcome)
+                            : {};
+                    if (
+                        !validate(agentProgressValidator, progress, {
+                            db: ctx.db,
+                        }) ||
+                        (progress.state &&
+                            !validate(
+                                definition.stateValidator,
+                                progress.state,
+                                { db: ctx.db },
+                            ))
+                    )
+                        throw executionError("mission_state_invalid");
+                    accounting = adoptProgress(
+                        mission.progressKeys,
+                        outcome.kind === "success"
+                            ? [
+                                  ...(progress.facts ?? []),
+                                  ...(historyRead?.fragmentIds ?? []),
+                              ]
+                            : [],
+                    );
+                } catch {
+                    adoptionFailed = true;
+                }
             }
-            if (
-                progress.state &&
-                !validate(definition.stateValidator, progress.state, {
-                    db: ctx.db,
-                })
-            )
-                throw executionError("mission_state_invalid");
+            const code = adoptionFailed
+                ? "operation_adoption_failed"
+                : accounting.kind === "blocked"
+                  ? accounting.code
+                  : progress.blockCode;
+            if (code) {
+                await ctx.db.patch(mission._id, {
+                    status: "blocked",
+                    blockCode: code,
+                });
+                await ctx.db.patch(request._id, {
+                    status: "completed",
+                    adoptionRefusalCode: code,
+                });
+                await recordEvent(
+                    ctx,
+                    { ...request, outcome },
+                    "operation_adoption_failed",
+                    code,
+                );
+                return adoptionFailed ? { kind: "refused", code } : outcome;
+            }
+            if (accounting.kind !== "ready")
+                throw executionError("progress_contract_invalid");
             advancedDomainProgress =
                 !isCommonConsultation(request.input.kind) &&
-                (progress.progressKeys?.length ?? 0) >
-                    mission.progressKeys.length;
+                accounting.added > 0;
             await ctx.db.patch(mission._id, {
                 ...domainDataPatch(
                     mission,
                     progress.state ? { state: progress.state } : {},
                 ),
-                ...(progress.progressKeys
-                    ? { progressKeys: progress.progressKeys }
-                    : {}),
+                progressKeys: accounting.keys,
                 ...(progress.obligations
                     ? { obligations: progress.obligations }
                     : {}),
-                ...(progress.blockCode
-                    ? { status: "blocked", blockCode: progress.blockCode }
-                    : {}),
             });
+        } else if (adoptionFailed) {
+            await ctx.db.patch(request._id, {
+                status: "completed",
+                adoptionRefusalCode: "operation_adoption_failed",
+            });
+            await recordEvent(
+                ctx,
+                { ...request, outcome },
+                "operation_adoption_failed",
+                "operation_adoption_failed",
+            );
+            return { kind: "refused", code: "operation_adoption_failed" };
         }
         await ctx.db.patch(request._id, {
             status: "completed",

@@ -1,5 +1,6 @@
 import type { Doc } from "@convex/_generated/dataModel";
 import type {
+    AgentProgressMission,
     AgentResult,
     AgentScope,
     AgentState,
@@ -31,7 +32,7 @@ export function isRecoverableInterruption(mission: Doc<"agentMissions">) {
 }
 
 /** Normalizes persisted v1 inspection fields without rewriting historical records. */
-export function missionScope(mission: Doc<"agentMissions">): AgentScope {
+export function missionScope(mission: AgentProgressMission): AgentScope {
     return "protocolVersion" in mission
         ? mission.scope
         : {
@@ -40,7 +41,7 @@ export function missionScope(mission: Doc<"agentMissions">): AgentScope {
           };
 }
 
-export function missionState(mission: Doc<"agentMissions">): AgentState {
+export function missionState(mission: AgentProgressMission): AgentState {
     return "protocolVersion" in mission
         ? mission.state
         : {

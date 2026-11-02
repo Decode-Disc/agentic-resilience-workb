@@ -114,6 +114,7 @@ import type * as execution_operations from "../execution/operations.js";
 import type * as execution_piControl from "../execution/piControl.js";
 import type * as execution_piStore from "../execution/piStore.js";
 import type * as execution_piWorker from "../execution/piWorker.js";
+import type * as execution_progress from "../execution/progress.js";
 import type * as execution_researchControl from "../execution/researchControl.js";
 import type * as execution_simulation from "../execution/simulation.js";
 import type * as fixtureManifestStore from "../fixtureManifestStore.js";
@@ -289,6 +290,7 @@ declare const fullApi: ApiFromModules<{
   "execution/piControl": typeof execution_piControl;
   "execution/piStore": typeof execution_piStore;
   "execution/piWorker": typeof execution_piWorker;
+  "execution/progress": typeof execution_progress;
   "execution/researchControl": typeof execution_researchControl;
   "execution/simulation": typeof execution_simulation;
   fixtureManifestStore: typeof fixtureManifestStore;

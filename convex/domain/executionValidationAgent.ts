@@ -90,7 +90,7 @@ export const executionValidationDefinition: AgentDefinition & {
         const checkedIndices = [...new Set([...state.checkedIndices, index])];
         return {
             state: { kind: "execution_validation_v1", checkedIndices },
-            progressKeys: checkedIndices.map((i) => `checked:${i}`),
+            facts: [outcome.progressKey],
             obligations:
                 checkedIndices.length === scope.values.length
                     ? []

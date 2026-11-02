@@ -151,7 +151,7 @@ export const workbenchDefinition: AgentDefinition & { id: "workbench_v1" } = {
             },
         };
     },
-    progress(mission, outcome) {
+    progress(_mission, outcome) {
         if (outcome.kind !== "success") return {};
         const value: unknown = JSON.parse(outcome.valueJson);
         const keys = operationProgressKeys(outcome);
@@ -162,10 +162,7 @@ export const workbenchDefinition: AgentDefinition & { id: "workbench_v1" } = {
             typeof value.revision === "number"
         )
             keys.push(sha256Hex(`framing:${value.revision}`));
-        const progressKeys = [...new Set([...mission.progressKeys, ...keys])];
-        return progressKeys.length > 256
-            ? { blockCode: "context_capacity" }
-            : { progressKeys };
+        return { facts: keys };
     },
     async complete(_ctx, _mission, response) {
         if (!("text" in response) || !response.text.trim())

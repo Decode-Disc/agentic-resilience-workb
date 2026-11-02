@@ -25,10 +25,15 @@ export type OperationInput = Infer<typeof requestInputValidator>;
 export type OperationOutcome = Infer<typeof operationOutcomeValidator>;
 export type AgentProgress = {
     state?: AgentState;
-    progressKeys?: string[];
+    facts?: readonly string[];
     obligations?: string[];
     blockCode?: string;
 };
+
+type WithoutAccounting<T> = T extends unknown
+    ? Omit<T, "progressKeys" | "noProgressTurns" | "lastSettledInvocationId">
+    : never;
+export type AgentProgressMission = WithoutAccounting<Doc<"agentMissions">>;
 
 /** Definitions supply business rules; only the executor can change lifecycle or accounting. */
 export type AgentDefinition = {
@@ -91,7 +96,7 @@ export type AgentDefinition = {
           }
     >;
     progress(
-        mission: Doc<"agentMissions">,
+        mission: AgentProgressMission,
         outcome: OperationOutcome,
     ): AgentProgress;
     complete(

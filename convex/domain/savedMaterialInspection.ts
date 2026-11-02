@@ -1,7 +1,10 @@
 import { internal } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
-import type { AgentDefinition } from "@convex/execution/agentDefinition";
+import type {
+    AgentDefinition,
+    AgentProgressMission,
+} from "@convex/execution/agentDefinition";
 import { executionError, executionFailureCode } from "@convex/execution/errors";
 import type { operationOutcomeValidator } from "@convex/execution/executionProtocol";
 import {
@@ -154,7 +157,7 @@ export const savedMaterialInspectionDefinition: AgentDefinition & {
         };
     },
     progress(
-        mission: Doc<"agentMissions">,
+        mission: AgentProgressMission,
         outcome: Infer<typeof operationOutcomeValidator>,
     ) {
         const state = missionState(mission);
@@ -166,17 +169,8 @@ export const savedMaterialInspectionDefinition: AgentDefinition & {
             !outcome.captureId
         )
             return {};
-        const progressKeys = [
-            ...new Set([
-                ...mission.progressKeys,
-                ...operationProgressKeys(outcome),
-            ]),
-        ];
-        if (progressKeys.length <= mission.progressKeys.length) return {};
-        if (progressKeys.length > 256)
-            return { blockCode: "inspection_capacity" };
         return {
-            progressKeys,
+            facts: operationProgressKeys(outcome),
             state: {
                 kind: "saved_material_inspection_v1",
                 inspectedCaptureIds: [
