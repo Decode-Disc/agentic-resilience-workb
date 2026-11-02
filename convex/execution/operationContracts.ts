@@ -42,3 +42,12 @@ export const historyReadReceiptValidator = v.object({
 });
 
 export type HistoryReadReceipt = Infer<typeof historyReadReceiptValidator>;
+
+export const dispatchFailureValidator = v.object({
+    category: v.union(
+        v.literal("authority"),
+        v.literal("incident"),
+        v.literal("uncertain_effect"),
+    ),
+    code: v.string(),
+});

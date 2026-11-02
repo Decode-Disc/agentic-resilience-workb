@@ -23,6 +23,7 @@ import {
     requireRunAuthority,
 } from "./authority";
 import { requireInstructionVersion } from "./conversations";
+import { classifyDispatchFailure } from "./errors";
 import {
     type AgentOperationDefinition,
     EXECUTION_WINDOW_MS,
@@ -39,6 +40,7 @@ import {
     operationProgressKeys,
     retainedOperationPin,
 } from "./missionData";
+import { dispatchFailureValidator } from "./operationContracts";
 import { schedulePiMission } from "./piControl";
 
 type Outcome = Infer<typeof operationOutcomeValidator>;
@@ -841,33 +843,134 @@ export const dispatch = internalAction({
                 ...args,
                 outcome: claimed.outcome,
             });
-        const mission = claimed.missionId
-            ? await ctx.runQuery(
-                  internal.execution.operations.missionForDispatch,
-                  {
-                      missionId: claimed.missionId,
-                      expectedGeneration: args.expectedGeneration,
-                  },
-              )
-            : undefined;
-        const operation = operationFor(claimed.input, mission ?? undefined);
-        const executeArgs = {
-            ...args,
-            missionId: claimed.missionId,
-            runId: claimed.runId,
-            input: claimed.input,
-        };
-        const result =
-            operation.effectKind === "read"
-                ? await operation.execute(
-                      { runQuery: ctx.runQuery.bind(ctx) },
-                      executeArgs,
+        let phase: Parameters<typeof classifyDispatchFailure>[1] =
+            "before_callback";
+        let outcome: Outcome;
+        try {
+            const mission = claimed.missionId
+                ? await ctx.runQuery(
+                      internal.execution.operations.missionForDispatch,
+                      {
+                          missionId: claimed.missionId,
+                          expectedGeneration: args.expectedGeneration,
+                      },
                   )
-                : await operation.execute(ctx, executeArgs);
-        const { outcome } = validateOperationExecutionResult(operation, result);
+                : undefined;
+            const operation = operationFor(claimed.input, mission ?? undefined);
+            const executeArgs = {
+                ...args,
+                missionId: claimed.missionId,
+                runId: claimed.runId,
+                input: claimed.input,
+            };
+            phase =
+                operation.effectKind === "read"
+                    ? "read_callback"
+                    : "effect_callback";
+            const result =
+                operation.effectKind === "read"
+                    ? await operation.execute(
+                          { runQuery: ctx.runQuery.bind(ctx) },
+                          executeArgs,
+                      )
+                    : await operation.execute(ctx, executeArgs);
+            outcome = validateOperationExecutionResult(
+                operation,
+                result,
+            ).outcome;
+        } catch (error) {
+            return ctx.runMutation(
+                internal.execution.operations.settleDispatchFailure,
+                {
+                    ...args,
+                    failure: classifyDispatchFailure(error, phase),
+                },
+            );
+        }
         return ctx.runMutation(internal.execution.operations.recordResult, {
             ...args,
             outcome,
+        });
+    },
+});
+
+async function markOperationUnknown(
+    ctx: MutationCtx,
+    request: Doc<"agentOperationRequests">,
+) {
+    if (request.status === "unknown") return;
+    await ctx.db.patch(request._id, { status: "unknown" });
+    const mission = request.missionId
+        ? await ctx.db.get(request.missionId)
+        : null;
+    if (mission && !["cancelled", "completed"].includes(mission.status))
+        await ctx.db.patch(mission._id, {
+            status: "blocked",
+            blockCode: "operation_outcome_unknown",
+        });
+    if (request.waitEventId && !request.waitNotified) {
+        await workflow.sendEvent(ctx, {
+            id: request.waitEventId as EventId,
+            value: null,
+        });
+        await ctx.db.patch(request._id, { waitNotified: true });
+    }
+    await recordEvent(
+        ctx,
+        request,
+        "operation_unknown",
+        "operation_outcome_unknown",
+    );
+}
+
+/** Settles observed callback failures; an unacknowledged transaction still relies on expiry. */
+export const settleDispatchFailure = internalMutation({
+    args: {
+        requestId: v.id("agentOperationRequests"),
+        expectedGeneration: v.number(),
+        failure: dispatchFailureValidator,
+    },
+    returns: operationOutcomeValidator,
+    handler: async (ctx, args): Promise<Outcome> => {
+        const request = await ctx.db.get(args.requestId);
+        if (
+            !request ||
+            (request.expectedGeneration !== args.expectedGeneration &&
+                request.adoptionGeneration !== args.expectedGeneration)
+        )
+            throw executionError("request_unavailable");
+        const retained = request.outcome ?? request.effect?.outcome;
+        if (retained)
+            return ctx.runMutation(internal.execution.operations.recordResult, {
+                requestId: args.requestId,
+                expectedGeneration: args.expectedGeneration,
+                outcome: retained,
+            });
+        if (request.status === "unknown")
+            return { kind: "unavailable", code: "operation_outcome_unknown" };
+        if (!["running", "waiting"].includes(request.status))
+            throw executionError("operation_not_dispatched");
+        if (args.failure.category === "uncertain_effect") {
+            await markOperationUnknown(ctx, request);
+            return { kind: "unavailable", code: "operation_outcome_unknown" };
+        }
+        if (args.failure.category === "incident")
+            await recordEvent(
+                ctx,
+                request,
+                "operation_execution_incident",
+                "operation_execution_failed",
+            );
+        return ctx.runMutation(internal.execution.operations.recordResult, {
+            requestId: args.requestId,
+            expectedGeneration: args.expectedGeneration,
+            outcome:
+                args.failure.category === "authority"
+                    ? { kind: "refused", code: args.failure.code }
+                    : {
+                          kind: "unavailable",
+                          code: "operation_execution_failed",
+                      },
         });
     },
 });
@@ -905,25 +1008,20 @@ export const expire = internalMutation({
             : null;
         const deadlineAt = mission?.deadlineAt ?? request.deadlineAt;
         if (deadlineAt === undefined || deadlineAt > Date.now()) return null;
-        await ctx.db.patch(request._id, { status: "unknown" });
-        if (mission && !["cancelled", "completed"].includes(mission.status))
-            await ctx.db.patch(mission._id, {
-                status: "blocked",
-                blockCode: "operation_outcome_unknown",
+        if (request.effect) {
+            await ctx.db.patch(request._id, { expiryJobId: undefined });
+            if (mission && !["cancelled", "completed"].includes(mission.status))
+                await ctx.db.patch(mission._id, {
+                    status: "blocked",
+                    blockCode: "execution_deadline",
+                });
+            await ctx.runMutation(internal.execution.operations.recordResult, {
+                ...args,
+                outcome: request.effect.outcome,
             });
-        if (request.waitEventId && !request.waitNotified) {
-            await workflow.sendEvent(ctx, {
-                id: request.waitEventId as EventId,
-                value: null,
-            });
-            await ctx.db.patch(request._id, { waitNotified: true });
+            return null;
         }
-        await recordEvent(
-            ctx,
-            request,
-            "operation_unknown",
-            "operation_outcome_unknown",
-        );
+        await markOperationUnknown(ctx, request);
         return null;
     },
 });

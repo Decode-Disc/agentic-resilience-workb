@@ -145,10 +145,12 @@ export function modelOperationOutcome(
         ...("code" in outcome
             ? {
                   diagnostic:
-                      outcome.code === "history_cursor_invalid"
-                          ? "No history page was read. Omit cursor to start at the first page; for later pages copy only continueCursor returned by the same history operation. Use consult_conversation for prior analyst exchanges; consult_mission_state reads only the current mission."
-                          : (definition.operationDiagnostic?.(outcome.code) ??
-                            "This operation was not performed. Inspect the current state and correct the request before trying again."),
+                      outcome.code === "operation_outcome_unknown"
+                          ? "The operation outcome is unconfirmed. Do not repeat it or claim success or non-execution. Inspect retained state and wait for authorized recovery."
+                          : outcome.code === "history_cursor_invalid"
+                            ? "No history page was read. Omit cursor to start at the first page; for later pages copy only continueCursor returned by the same history operation. Use consult_conversation for prior analyst exchanges; consult_mission_state reads only the current mission."
+                            : (definition.operationDiagnostic?.(outcome.code) ??
+                              "This operation was not performed. Inspect the current state and correct the request before trying again."),
               }
             : {}),
     });
