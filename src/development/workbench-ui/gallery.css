@@ -39,6 +39,7 @@ body {
     background: var(--background);
 }
 
+.gallery-scene[data-component="Composer"],
 .gallery-scene[data-component="AppraisalBlock"],
 .gallery-scene[data-component="OutcomeCard"],
 .gallery-scene[data-component="InventorySheet"] {

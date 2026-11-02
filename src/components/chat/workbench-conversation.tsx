@@ -11,6 +11,7 @@ import {
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import {
+    CommandIcon,
     ArrowRight01Icon,
     Cancel01Icon,
     File01Icon,
@@ -21,6 +22,11 @@ import {
 import { useControllableState } from "@radix-ui/react-use-controllable-state";
 import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
 import remarkGfm from "remark-gfm";
+import {
+    ComposerSurface,
+    ComposerToolbar,
+} from "@/components/composer/composer";
+import { ComposerToolsMenu } from "@/components/composer/tools-menu";
 import {
     type ConversationWorkItem,
     workStateLabels,
@@ -63,13 +69,15 @@ import { cn } from "@/lib/utils";
 import {
     ConversationComposerActions,
     ConversationQueue,
-} from "./conversation-composer-actions";
+    ConversationDeliveryOptions,
+} from "@/components/composer/conversation-actions";
 import {
     COMPOSER_COMMANDS,
     type ComposerCommand,
     ConversationSlashCommands,
+    ConversationCommandPicker,
     type ResearchControlCommand,
-} from "./conversation-slash-commands";
+} from "@/components/composer/slash-commands";
 import "./workbench-conversation.css";
 
 export {
@@ -233,6 +241,7 @@ function ConversationComposerContent({
     onOpenModels,
     modelSelector,
     controlsOpen = false,
+    availableCommands,
 }: {
     inputRef?: Ref<HTMLTextAreaElement>;
     onResumeQueue?: () => void;
@@ -240,6 +249,7 @@ function ConversationComposerContent({
     onOpenModels?: () => void;
     modelSelector?: ReactNode;
     controlsOpen?: boolean;
+    availableCommands?: readonly ComposerCommand[];
     label: string;
     placeholder?: string;
     compact?: boolean;
@@ -253,11 +263,18 @@ function ConversationComposerContent({
     const aui = useAui();
     const text = useAuiState((s) => s.composer.text);
     const triggers = unstable_useTriggerPopoverRootContext();
+    const hasDeliveryTools = useAuiState(
+        (state) =>
+            state.thread.isRunning &&
+            !!state.thread.capabilities.queue &&
+            !!state.composer.text.trim(),
+    );
     const [commandError, setCommandError] = useState<{
         title: string;
         description: string;
     } | null>(null);
     const [commandPending, setCommandPending] = useState(false);
+    const [commandsOpen, setCommandsOpen] = useState(false);
     const executing = useRef(false);
     const executeCommand = async (
         command: ComposerCommand,
@@ -301,12 +318,13 @@ function ConversationComposerContent({
             setCommandError({
                 title: "Unknown command",
                 description:
-                    "Choose /pause, /resume or /model. Your message has not been sent.",
+                    "Choose an available command from the menu. Your draft is kept.",
             });
         return true;
     };
     const root = useRef<HTMLDivElement>(null);
     const [expanded, setExpanded] = useState(false);
+    const [toolsOpen, setToolsOpen] = useState(false);
     useEffect(() => {
         const dock = root.current?.closest<HTMLElement>(
             '[data-slot="conversation-thread-dock"]',
@@ -323,32 +341,54 @@ function ConversationComposerContent({
         dock.addEventListener("focusout", leaveDock);
         return () => dock.removeEventListener("focusout", leaveDock);
     }, []);
+    const isExpanded =
+        expanded ||
+        controlsOpen ||
+        toolsOpen ||
+        commandsOpen ||
+        Boolean(actionLabel) ||
+        failed;
     return (
         <div
             ref={root}
             onFocusCapture={() => setExpanded(true)}
             data-slot="conversation-composer"
             data-composer-action={actionLabel ? true : undefined}
-            data-composer-expanded={
-                expanded || controlsOpen || Boolean(actionLabel) || failed
-            }
-            data-model-controls={modelSelector ? true : undefined}
+            data-composer-expanded={isExpanded}
             aria-busy={pending || commandPending}
             className="relative min-w-0 shrink-0">
+            {commandsOpen && (
+                <ConversationCommandPicker
+                    anchor={root}
+                    availableCommands={availableCommands}
+                    onClose={() => setCommandsOpen(false)}
+                    onExecute={(command) => {
+                        setCommandsOpen(false);
+                        void executeCommand(
+                            command,
+                            aui.composer().getState().text,
+                            true,
+                        );
+                    }}
+                />
+            )}
             {onCommand && !submission && !actionLabel && (
                 <ConversationSlashCommands
-                    enabled={!pending && !commandPending}
-                    onExecute={(command, original) =>
-                        void executeCommand(command, original, true)
-                    }
+                    enabled={!pending && !commandPending && !commandsOpen}
+                    availableCommands={availableCommands}
+                    onExecute={(command, original) => {
+                        setCommandsOpen(false);
+                        void executeCommand(command, original, true);
+                    }}
                 />
             )}
             {commandError && (
-                <LoadErrorAlert
-                    variant="inline"
-                    title={commandError.title}
-                    description={commandError.description}
-                />
+                <div role="alert" className="composer-command-feedback">
+                    <p>
+                        <strong>{commandError.title}</strong>
+                        <span> · {commandError.description}</span>
+                    </p>
+                </div>
             )}
             {failed && (
                 <LoadErrorAlert
@@ -367,13 +407,6 @@ function ConversationComposerContent({
             {onCancel && (
                 <div className="chat-composer-mode">
                     <span>{label}</span>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={pending}
-                        onClick={onCancel}>
-                        Cancel
-                    </Button>
                 </div>
             )}
             <ConversationQueue />
@@ -394,10 +427,9 @@ function ConversationComposerContent({
                                   aui.composer().send({ steer: false });
                           }
                 }>
-                <div
-                    data-slot="prompt-composer-card"
-                    className="rounded-[14px] border bg-card p-1.5">
-                    <div data-slot="composer-fields">
+                <ComposerSurface
+                    expanded={isExpanded}
+                    input={
                         <ComposerPrimitive.Input
                             render={<Textarea />}
                             ref={inputRef}
@@ -452,32 +484,93 @@ function ConversationComposerContent({
                                     : "min-h-10 max-h-40 px-1 py-2 text-[15px]/6",
                             )}
                         />
-                        <div data-slot="composer-bottom">
-                            {modelSelector ?? (
-                                <span>
-                                    Enter to send · Shift + Enter for a new line
-                                </span>
-                            )}
-                            {submission ? (
-                                <Button
-                                    type="submit"
-                                    variant="round"
-                                    disabled={submission.disabled || pending}
-                                    data-slot="prompt-composer-submit">
-                                    {actionLabel ?? "Continue"}
-                                </Button>
-                            ) : (
-                                <ConversationComposerActions
-                                    actionLabel={actionLabel}
-                                    onResumeQueue={onResumeQueue}
-                                    onSendCommand={
-                                        onCommand ? sendCommand : undefined
-                                    }
-                                />
-                            )}
-                        </div>
-                    </div>
-                </div>
+                    }
+                    footer={
+                        <ComposerToolbar
+                            tools={
+                                <>
+                                    {!submission &&
+                                        !actionLabel &&
+                                        (onCommand || hasDeliveryTools) && (
+                                            <ComposerToolsMenu
+                                                onOpenChange={setToolsOpen}
+                                                items={
+                                                    onCommand
+                                                        ? [
+                                                              {
+                                                                  label: "Commands",
+                                                                  description:
+                                                                      "Choose an available slash command",
+                                                                  icon: CommandIcon,
+                                                                  onSelect:
+                                                                      () => {
+                                                                          requestAnimationFrame(
+                                                                              () =>
+                                                                                  setCommandsOpen(
+                                                                                      true,
+                                                                                  ),
+                                                                          );
+                                                                      },
+                                                              },
+                                                          ]
+                                                        : []
+                                                }>
+                                                <ConversationDeliveryOptions
+                                                    onSendCommand={sendCommand}
+                                                />
+                                            </ComposerToolsMenu>
+                                        )}
+                                    {modelSelector}
+                                </>
+                            }
+                            action={
+                                <>
+                                    {onCancel && (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            disabled={pending}
+                                            onClick={() => {
+                                                onCancel();
+                                                requestAnimationFrame(() =>
+                                                    root.current
+                                                        ?.querySelector(
+                                                            "textarea",
+                                                        )
+                                                        ?.focus(),
+                                                );
+                                            }}>
+                                            Cancel
+                                        </Button>
+                                    )}
+                                    {submission ? (
+                                        <Button
+                                            type="submit"
+                                            variant="round"
+                                            disabled={
+                                                submission.disabled || pending
+                                            }
+                                            data-text-action
+                                            data-slot="prompt-composer-submit">
+                                            {actionLabel ?? "Continue"}
+                                        </Button>
+                                    ) : (
+                                        <ConversationComposerActions
+                                            actionLabel={actionLabel}
+                                            onResumeQueue={onResumeQueue}
+                                            onSendCommand={
+                                                onCommand
+                                                    ? sendCommand
+                                                    : undefined
+                                            }
+                                        />
+                                    )}
+                                </>
+                            }
+                        />
+                    }
+                />
             </ComposerPrimitive.Root>
         </div>
     );
@@ -616,23 +709,37 @@ export function ConversationPendingPanel({
     children,
     footer,
     composer,
+    headerAction,
 }: {
     title: string;
     summary: string;
-    children: ReactNode;
+    children?: ReactNode;
     footer?: ReactNode;
     composer?: ReactNode;
+    headerAction?: ReactNode;
 }) {
+    const heading = (
+        <>
+            <span>{title}</span>
+            <span>{summary}</span>
+        </>
+    );
     return (
         <section data-slot="conversation-pending-panel">
-            <details open data-slot="conversation-pending-details">
-                <summary>
-                    <span>{title}</span>
-                    <span>{summary}</span>
-                    <Icon iconNode={ArrowRight01Icon} size={14} />
-                </summary>
-                <div data-slot="conversation-pending-body">{children}</div>
-            </details>
+            {children ? (
+                <details open data-slot="conversation-pending-details">
+                    <summary>
+                        {heading}
+                        <Icon iconNode={ArrowRight01Icon} size={14} />
+                    </summary>
+                    <div data-slot="conversation-pending-body">{children}</div>
+                </details>
+            ) : (
+                <div data-slot="conversation-pending-summary">
+                    {heading}
+                    {headerAction}
+                </div>
+            )}
             {footer && (
                 <div data-slot="conversation-pending-footer">{footer}</div>
             )}

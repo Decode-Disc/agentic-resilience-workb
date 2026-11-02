@@ -1,5 +1,8 @@
 import type { api } from "@convex/_generated/api";
-import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
+import {
+    ArrowDown01Icon,
+    ArtificialIntelligence02Icon,
+} from "@hugeicons/core-free-icons";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
@@ -65,6 +68,7 @@ export function WorkbenchModelSelector({
                         className="composer-model-trigger"
                     />
                 }>
+                <Icon iconNode={ArtificialIntelligence02Icon} size={16} />
                 <span className="min-w-0 max-w-48 truncate">
                     {snapshot.label}
                     {snapshot.selectedId && !snapshot.available
@@ -102,7 +106,13 @@ export function WorkbenchModelSelector({
                             value={choice.id}
                             closeOnClick
                             className="composer-model-option">
-                            {choice.label}
+                            <Icon
+                                iconNode={ArtificialIntelligence02Icon}
+                                size={16}
+                            />
+                            <span className="composer-model-name">
+                                {choice.label}
+                            </span>
                         </DropdownMenuRadioItem>
                     ))}
                 </DropdownMenuRadioGroup>

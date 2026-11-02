@@ -81,7 +81,7 @@ for (const theme of ["light", "dark"])
             await input.fill("My unsent draft");
             await page
                 .getByRole("button", {
-                    name: "Message delivery options",
+                    name: "Composer tools",
                     exact: true,
                 })
                 .click();

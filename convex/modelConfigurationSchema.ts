@@ -17,6 +17,10 @@ export const reasoningEffort = v.union(
     v.literal("xhigh"),
     v.literal("max"),
 );
+export const initialModelSelection = v.object({
+    catalogId: v.id("modelCatalog"),
+    reasoningEffort: v.optional(reasoningEffort),
+});
 export const reasoningEffortValues = reasoningEffort.members.map(
     (member) => member.value,
 );

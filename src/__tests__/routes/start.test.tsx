@@ -96,6 +96,28 @@ describe("ResearchComposer", () => {
         confirmCompany.mockReset();
         claimInvitation.mockReset();
         convexReactHarness.reset();
+        convexReactHarness.query(api.workbench.models).returns({
+            selectedId: "model-first",
+            label: "First model",
+            available: true,
+            effort: "low",
+            effortChoices: ["low", "high"],
+            revision: 0,
+            choices: [
+                {
+                    id: "model-first",
+                    label: "First model",
+                    effort: "low",
+                    effortChoices: ["low", "high"],
+                },
+                {
+                    id: "model-second",
+                    label: "Second model",
+                    effort: "low",
+                    effortChoices: ["low", "high"],
+                },
+            ],
+        });
         convexReactHarness
             .query(api.visitors.current)
             .returns({ status: "active" } as never);
@@ -397,7 +419,10 @@ describe("ResearchComposer", () => {
         renderWithInvitationAccess(<ResearchComposer />);
 
         fireEvent.click(
-            screen.getByRole("button", { name: /Attach references/i }),
+            screen.getByRole("button", { name: /^Composer tools/ }),
+        );
+        fireEvent.click(
+            screen.getByRole("menuitem", { name: /Attach references/i }),
         );
         expect(
             await screen.findByRole("heading", {
@@ -441,7 +466,7 @@ describe("ResearchComposer", () => {
         fireEvent.click(screen.getByRole("button", { name: /Done/i }));
         expect(
             screen.getByRole("button", {
-                name: /Attach references \(2\)/i,
+                name: /Composer tools \(2\)/i,
             }),
         ).toBeTruthy();
 
@@ -489,7 +514,10 @@ describe("ResearchComposer", () => {
         renderWithInvitationAccess(<ResearchComposer />);
 
         fireEvent.click(
-            screen.getByRole("button", { name: /Attach references/i }),
+            screen.getByRole("button", { name: /^Composer tools/ }),
+        );
+        fireEvent.click(
+            screen.getByRole("menuitem", { name: /Attach references/i }),
         );
         const references = within(
             await screen.findByRole("dialog", { name: "Add public sources" }),
@@ -514,7 +542,7 @@ describe("ResearchComposer", () => {
         ).toHaveLength(1);
         fireEvent.click(references.getByRole("button", { name: /Done/i }));
         expect(
-            screen.getByRole("button", { name: /Attach references \(1\)/i }),
+            screen.getByRole("button", { name: /Composer tools \(1\)/i }),
         ).toBeTruthy();
 
         await searchAndSelectCompany("CCCS");
@@ -553,7 +581,10 @@ describe("ResearchComposer", () => {
         renderWithInvitationAccess(<ResearchComposer />);
 
         fireEvent.click(
-            screen.getByRole("button", { name: /Attach references/i }),
+            screen.getByRole("button", { name: /^Composer tools/ }),
+        );
+        fireEvent.click(
+            screen.getByRole("menuitem", { name: /Attach references/i }),
         );
         fireEvent.change(screen.getByLabelText(/Public source link/i), {
             target: { value: "https://example.com/expired-report" },
@@ -588,6 +619,35 @@ describe("ResearchComposer", () => {
         expect(confirm.hasAttribute("disabled")).toBe(true);
         fireEvent.click(confirm);
         expect(document.getElementById("invitation-code")).toBeNull();
+    });
+
+    it("retains the selected research model when confirming the company", async () => {
+        searchCompanies.mockResolvedValue(companyCandidates);
+        preflight.mockResolvedValue(resolvedCompany);
+        confirmCompany.mockResolvedValue({
+            runId: "run-selected-model",
+            remainingAnalyses: 3,
+        });
+        renderWithInvitationAccess(<ResearchComposer />);
+        fireEvent.click(
+            screen.getByRole("button", { name: "Workbench model and effort" }),
+        );
+        fireEvent.click(
+            await screen.findByRole("menuitemradio", { name: "Second model" }),
+        );
+        await searchAndSelectCompany("CCCS");
+        fireEvent.click(
+            screen.getByRole("button", {
+                name: /Confirm and propose framing/i,
+            }),
+        );
+        await waitFor(() =>
+            expect(confirmCompany).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    modelSelection: { catalogId: "model-second" },
+                }),
+            ),
+        );
     });
 
     it("asks for an access code only when an anonymous visitor confirms launch", async () => {
@@ -663,7 +723,7 @@ describe("ResearchComposer", () => {
         ).toBeTruthy();
         expect(screen.queryByText(/\[CONVEX A\(/i)).toBeNull();
         expect(
-            screen.getByRole("button", { name: /Attach references/i }),
+            screen.getByRole("button", { name: /^Composer tools/ }),
         ).toBeTruthy();
         expect(screen.queryByText(/drop files/i)).toBeNull();
     });

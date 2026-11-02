@@ -324,3 +324,99 @@ test("a refreshed model cannot strand a response when the saved effort is no lon
         effortChoices: ["low"],
     });
 }, 30_000);
+
+test("the research composer can inspect prepared choices before a dossier exists", async () => {
+    const { t } = await seedWorkbench();
+    const model = await installModel(t, {
+        model: "example/preflight",
+        provider: "test",
+    });
+    await expect(t.query(api.workbench.models, {})).rejects.toThrow(
+        "unauthorized",
+    );
+    const anonymousId = await t.run((ctx) =>
+        ctx.db.insert("users", { isAnonymous: true }),
+    );
+    const choices = await t
+        .withIdentity({ subject: anonymousId })
+        .query(api.workbench.models, {});
+    expect(
+        choices.choices.find((choice) => choice.id === model.catalogId),
+    ).toMatchObject({
+        id: model.catalogId,
+        effortChoices: expect.any(Array),
+    });
+});
+
+test("company confirmation retains the chosen model before the initial framing turn and rejects changed retry choices", async () => {
+    const { t, client, runId } = await seedWorkbench();
+    const selected = await installModel(
+        t,
+        { model: "example/chosen", provider: "test" },
+        "workbench",
+        { reasoningEfforts: ["low", "high"], reasoningDefault: "low" },
+    );
+    const other = await installModel(t, {
+        model: "example/default",
+        provider: "test",
+    });
+    const preflightId = await t.run(async (ctx) => {
+        const run = await ctx.db.get(runId);
+        assert(run?.ownerVisitorId && run.companyId);
+        return ctx.db.insert("companyPreflights", {
+            ownerVisitorId: run.ownerVisitorId,
+            companyId: run.companyId,
+            query: "1818201",
+            resolverVersion: "sec-company-v1",
+            status: "resolved",
+            expiresAt: Date.now() + 60000,
+            createdAt: Date.now(),
+        });
+    });
+    const args = {
+        preflightId,
+        idempotencyKey: "chosen-in-research-composer",
+        coveragePreset: "balanced" as const,
+        modelSelection: {
+            catalogId: selected.catalogId,
+            reasoningEffort: "high" as const,
+        },
+    };
+    const runsBefore = await t.run((ctx) =>
+        ctx.db.query("researchRuns").collect(),
+    );
+    await expect(
+        client.mutation(api.framing.confirmCompany, {
+            ...args,
+            idempotencyKey: "unsupported-initial-effort",
+            modelSelection: {
+                catalogId: selected.catalogId,
+                reasoningEffort: "medium",
+            },
+        }),
+    ).rejects.toThrow("model_effort_unavailable");
+    expect(
+        await t.run((ctx) => ctx.db.query("researchRuns").collect()),
+    ).toEqual(runsBefore);
+    const created = await client.mutation(api.framing.confirmCompany, args);
+    expect(
+        await client.query(api.workbench.models, { runId: created.runId }),
+    ).toMatchObject({ selectedId: selected.catalogId, effort: "high" });
+    expect(await client.mutation(api.framing.confirmCompany, args)).toEqual(
+        created,
+    );
+    await expect(
+        client.mutation(api.framing.confirmCompany, {
+            ...args,
+            modelSelection: { catalogId: other.catalogId },
+        }),
+    ).rejects.toThrow("message_identity_conflict");
+    const conversation = await t.run((ctx) =>
+        ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", created.runId))
+            .unique(),
+    );
+    expect(conversation?.modelCatalogId).toBe(selected.catalogId);
+    expect(conversation?.reasoningEffort).toBe("high");
+});

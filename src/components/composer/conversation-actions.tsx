@@ -8,7 +8,6 @@ import {
     ArrowTurnForwardIcon,
     ArrowUp02Icon,
     Cancel01Icon,
-    MoreHorizontalIcon,
     PlayIcon,
     Playlist02Icon,
     StopIcon,
@@ -16,12 +15,7 @@ import {
 import { useEffect, useState } from "react";
 import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { ComposerToolItem } from "./tools-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
     Tooltip,
@@ -46,7 +40,6 @@ export function ConversationComposerActions({
     const text = useAuiState((s) => s.composer.text);
     const canSend = useAuiState((s) => s.composer.canSend);
     const [alternate, setAlternate] = useState(false);
-    const [optionsOpen, setOptionsOpen] = useState(false);
     useEffect(() => {
         const modifiers = (event: KeyboardEvent) =>
             setAlternate(event.ctrlKey || event.metaKey);
@@ -63,7 +56,6 @@ export function ConversationComposerActions({
     const stop = running && cancel && !text.trim() && !actionLabel;
     const resume = !running && !text.trim() && onResumeQueue;
     const dispatch = (steer: boolean) => {
-        setOptionsOpen(false);
         if (onSendCommand?.()) return;
         aui.composer().send({ steer });
     };
@@ -79,42 +71,14 @@ export function ConversationComposerActions({
                 : "Send refinement"));
     return (
         <div className="chat-primary-actions">
-            {running && queue && text.trim() && !actionLabel && (
-                <DropdownMenu open={optionsOpen} onOpenChange={setOptionsOpen}>
-                    <DropdownMenuTrigger
-                        render={<Button variant="ghost" size="icon-xs" />}
-                        aria-label="Message delivery options">
-                        <Icon iconNode={MoreHorizontalIcon} size={16} />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                        align="end"
-                        side="top"
-                        className="chat-delivery-options">
-                        <DropdownMenuItem onClick={() => dispatch(false)}>
-                            Queue message
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => dispatch(true)}>
-                            Steer message
-                        </DropdownMenuItem>
-                        {cancel && (
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    setOptionsOpen(false);
-                                    aui.thread().cancelRun();
-                                }}>
-                                Stop generation
-                            </DropdownMenuItem>
-                        )}
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            )}
             <Tooltip>
                 <TooltipTrigger
                     render={
                         <Button
                             type="button"
                             variant="round"
-                            size="icon"
+                            size={actionLabel ? "sm" : "icon"}
+                            data-text-action={actionLabel ? true : undefined}
                             data-slot="prompt-composer-submit"
                             className={stop ? "chat-stop-control" : undefined}
                             aria-label={label}
@@ -162,6 +126,50 @@ export function ConversationComposerActions({
                 </TooltipContent>
             </Tooltip>
         </div>
+    );
+}
+
+/** Available delivery controls share the plus-menu while the primary action retains its keyboard shortcuts. */
+export function ConversationDeliveryOptions({
+    onSendCommand,
+}: {
+    onSendCommand?: () => boolean;
+}) {
+    const aui = useAui();
+    const available = useAuiState(
+        (state) =>
+            state.thread.isRunning &&
+            !!state.thread.capabilities.queue &&
+            !!state.composer.text.trim(),
+    );
+    const cancel = useAuiState((state) => state.thread.capabilities.cancel);
+    if (!available) return null;
+    const send = (steer: boolean) => {
+        if (!onSendCommand?.()) aui.composer().send({ steer });
+    };
+    return (
+        <>
+            <ComposerToolItem
+                label="Queue message"
+                description="Send after the current response"
+                icon={Playlist02Icon}
+                onSelect={() => send(false)}
+            />
+            <ComposerToolItem
+                label="Steer message"
+                description="Guide the response in progress"
+                icon={ArrowTurnForwardIcon}
+                onSelect={() => send(true)}
+            />
+            {cancel && (
+                <ComposerToolItem
+                    label="Stop generation"
+                    description="Keep partial output and queued messages"
+                    icon={StopIcon}
+                    onSelect={() => aui.thread().cancelRun()}
+                />
+            )}
+        </>
     );
 }
 

@@ -32,11 +32,7 @@ it("adds and edits through the same composer while protecting launch and preserv
         frame.getByRole("button", { name: "Add research question" }),
     );
     expect(screen.getAllByRole("textbox")).toHaveLength(1);
-    expect(
-        screen.getByRole<HTMLButtonElement>("button", {
-            name: "Start research",
-        }).disabled,
-    ).toBe(true);
+    expect(screen.queryByRole("button", { name: "Start research" })).toBeNull();
     fireEvent.change(form.getByRole("textbox"), {
         target: { value: "Can agents change pricing power?" },
     });

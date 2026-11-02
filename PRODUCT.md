@@ -38,7 +38,7 @@ This is an independent contribution to a public research problem, not a reproduc
 
 ### Company and research direction
 
-The analyst searches by partial name, ticker, CIK or SEC URL and explicitly selects the company. Preserve the populated composer, optional angle and public HTTPS references through preflight and confirmation. Website enrichment improves recognition only; it cannot change legal identity or block a valid selection. References are research inputs, not evidence merely because the server received them. Restoring the pre-confirmation composer draft after reload remains outside the MVP.
+The analyst searches by partial name, ticker, CIK or SEC URL and explicitly selects the company. Preserve the populated composer, optional angle and public HTTPS references through preflight and confirmation. Website enrichment improves recognition only; it cannot change legal identity or block a valid selection. References are research inputs, not evidence merely because the server received them. The analyst can choose a prepared model and supported reasoning effort before company confirmation; that choice governs the initial framing response and remains selected in the dossier chat until changed. Restoring the pre-confirmation composer draft after reload remains outside the MVP.
 
 Preserve the existing preflight interaction: explicit Continue opens the in-place company confirmation with legal entity, ticker, exchange and SEC identity. Do not add numbered steps or explanatory headings where the controls already communicate the action. The later framing proposal does not authorize replacing that established interaction.
 

@@ -28,6 +28,7 @@ import {
     sourcePreparationEnabled,
 } from "@convex/resourceLimits";
 import { requireWorkspaceRun } from "@convex/runWorkspace";
+import { initialModelSelection } from "@convex/modelConfigurationSchema";
 import schema from "@convex/schema";
 import { workflow } from "@convex/workflow";
 import { type Infer, v } from "convex/values";
@@ -35,6 +36,7 @@ import { type Infer, v } from "convex/values";
 export const confirmCompany = mutation({
     args: {
         preflightId: v.id("companyPreflights"),
+        modelSelection: v.optional(initialModelSelection),
         idempotencyKey: v.string(),
         coveragePreset: coveragePresetValidator,
         researchAngle: v.optional(v.string()),
@@ -50,11 +52,12 @@ export const confirmCompany = mutation({
         ctx,
         args,
     ): Promise<{ runId: Id<"researchRuns">; remainingAnalyses: number }> => {
+        const { modelSelection, ...launchArgs } = args;
         const result = await ctx.runMutation(
             internal.researchLaunch.confirmAndStartReserved,
-            { ...args, framingOnly: true },
+            { ...launchArgs, framingOnly: true },
         );
-        await initializeFraming(ctx, result.runId);
+        await initializeFraming(ctx, result.runId, modelSelection);
         return result;
     },
 });
@@ -63,6 +66,7 @@ export const confirmCompany = mutation({
 export async function initializeFraming(
     ctx: MutationCtx,
     runId: Id<"researchRuns">,
+    modelSelection?: Infer<typeof initialModelSelection>,
 ) {
     const { run } = await requireDossierAuthority(ctx, runId);
     if (!run.currentFramingRevisionId) {
@@ -83,6 +87,7 @@ export async function initializeFraming(
     await submitAuthorizedMessage(ctx, {
         runId: run._id,
         requestKey: "framing-intention",
+        ...(modelSelection ? { initialModel: modelSelection } : {}),
         text:
             run.researchAngle ??
             `Study ${run.companySnapshot?.legalName ?? "the selected company"}.`,

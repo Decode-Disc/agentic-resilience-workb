@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { BackgroundImageTexture } from "@/components/ui/bg-image-texture";
 import { cn } from "@/lib/utils";
 
-/** Shared workspace backdrop and texture, independent of navigation data and authentication. */
+/** Keeps dossier content mounted while its requested viewport changes the workspace backdrop. */
 export function WorkbenchShellSurface({
     plain = false,
     header,
@@ -31,17 +31,13 @@ export function WorkbenchShellSurface({
             )}
             {header}
 
-            {plain ? (
-                <div className={contentClassName}>{children}</div>
-            ) : (
-                <BackgroundImageTexture
-                    opacity={0.25}
-                    variant="fabric-of-squares"
-                    className={contentClassName}
-                    childrenClassName={contentClassName}>
-                    {children}
-                </BackgroundImageTexture>
-            )}
+            <BackgroundImageTexture
+                opacity={0.25}
+                variant={plain ? "none" : "fabric-of-squares"}
+                className={contentClassName}
+                childrenClassName={cn(contentClassName, plain && "flex-1")}>
+                {children}
+            </BackgroundImageTexture>
         </div>
     );
 }

@@ -40,6 +40,7 @@ import {
     readerContributions,
     readerPages,
 } from "./fixture-data";
+import { ComposerExample } from "./composer-example";
 import { OverlayLayersExample } from "./overlay-layers-example";
 
 function notify(message: string) {
@@ -1386,6 +1387,7 @@ function WorkspaceNavigationExample() {
     );
 }
 export const examples = {
+    Composer: ComposerExample,
     OverlayLayers: OverlayLayersExample,
     Chip: ChipExample,
     GlassPanel: GlassPanelExample,

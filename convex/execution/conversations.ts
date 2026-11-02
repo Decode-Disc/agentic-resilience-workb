@@ -14,7 +14,12 @@ import {
     readConversationMessages,
     saveConversationMessage,
 } from "@convex/integrations/agentStorage";
-import { modelPrepared } from "@convex/modelConfiguration";
+import type { initialModelSelection } from "@convex/modelConfigurationSchema";
+import {
+    requireReasoningEffort,
+    resolveAgentModel,
+    modelPrepared,
+} from "@convex/modelConfiguration";
 import {
     localBrowserFixturesEnabled,
     requireWorkspaceRun,
@@ -173,7 +178,9 @@ const messageInput = v.object({
 /** Shared admission for application callers and explicitly labelled native fixture messages. */
 export async function submitAuthorizedMessage(
     ctx: MutationCtx,
-    args: Infer<typeof messageInput>,
+    args: Infer<typeof messageInput> & {
+        initialModel?: Infer<typeof initialModelSelection>;
+    },
     actor?: { type: "system" },
 ): Promise<Id<"agentMessageDeliveries">> {
     const { visitor, run } = await requireDossierAuthority(ctx, args.runId);
@@ -188,6 +195,7 @@ export async function submitAuthorizedMessage(
             text: args.text,
             delivery: args.delivery,
             turnId: args.turnId ?? null,
+            ...(args.initialModel ? { initialModel: args.initialModel } : {}),
         }),
     );
     const previous = await ctx.db
@@ -208,22 +216,29 @@ export async function submitAuthorizedMessage(
             .query("agentModelSettings")
             .withIndex("by_agent", (q) => q.eq("agent", "workbench"))
             .unique();
-        const defaultModel = setting
-            ? await ctx.db.get(setting.catalogId)
+        const selected = args.initialModel;
+        const selectedConfiguration = selected
+            ? await resolveAgentModel(ctx, "workbench", selected.catalogId)
             : null;
-        const defaultConfiguration = defaultModel?.currentRevisionId
-            ? await ctx.db.get(defaultModel.currentRevisionId)
-            : null;
+        const defaultModel = selected
+            ? await ctx.db.get(selected.catalogId)
+            : setting
+              ? await ctx.db.get(setting.catalogId)
+              : null;
+        const defaultConfiguration =
+            selectedConfiguration ??
+            (defaultModel?.currentRevisionId
+                ? await ctx.db.get(defaultModel.currentRevisionId)
+                : null);
+        const effort =
+            selected?.reasoningEffort ?? defaultConfiguration?.reasoningEffort;
+        if (selectedConfiguration)
+            requireReasoningEffort(selectedConfiguration, effort);
         const id = await ctx.db.insert("agentConversations", {
             ...(defaultModel?.enabled && modelPrepared(defaultModel)
                 ? {
                       modelCatalogId: defaultModel._id,
-                      ...(defaultConfiguration?.reasoningEffort
-                          ? {
-                                reasoningEffort:
-                                    defaultConfiguration.reasoningEffort,
-                            }
-                          : {}),
+                      ...(effort ? { reasoningEffort: effort } : {}),
                   }
                 : {}),
             ...((await ctx.db.get(args.runId))?.startMode === "framed"

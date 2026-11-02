@@ -54,6 +54,7 @@ const readySnapshot = {
         },
     },
     researchControlAvailable: true,
+    availableCommands: ["/pause", "/resume"],
     activeWork: null,
     preparation: null,
     instructions: [],
@@ -277,6 +278,7 @@ test("research pause has a distinct control from stopping the conversation", asy
         company: { legalName: "Example Technology", ticker: "EX" },
         framing: null,
         researchControlAvailable: true,
+        availableCommands: ["/pause"],
         activeWork: null,
         preparation: null,
         instructions: [],
@@ -448,4 +450,40 @@ test("a native slash selection restores its original draft after an unconfirmed 
     await screen.findByText("Command not confirmed");
     expect((input as HTMLTextAreaElement).value).toBe("/p");
     expect(submitMessage).not.toHaveBeenCalled();
+});
+
+test("cancelling the first question restores the ordinary draft and keyboard focus", async () => {
+    convexReactHarness.query(api.workbench.snapshot).returns({
+        ...readySnapshot,
+        framing: {
+            ...readySnapshot.framing,
+            content: { ...readySnapshot.framing.content, questions: [] },
+        },
+    });
+    render(<ConnectedStartWorkspace runId={runId} />);
+    const input = screen.getByRole("textbox", {
+        name: "Refine the framing in your own words",
+    });
+    fireEvent.change(input, {
+        target: { value: "Keep my conversation draft" },
+    });
+    fireEvent.click(
+        screen.getByRole("button", { name: "Add research question" }),
+    );
+    fireEvent.change(
+        screen.getByRole("textbox", { name: "Add research question" }),
+        { target: { value: "Who sets the rules?" } },
+    );
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    cancel.focus();
+    fireEvent.click(cancel);
+    await waitFor(() => {
+        const restored = screen.getByRole("textbox", {
+            name: "Refine the framing in your own words",
+        });
+        expect((restored as HTMLTextAreaElement).value).toBe(
+            "Keep my conversation draft",
+        );
+        expect(document.activeElement).toBe(restored);
+    });
 });

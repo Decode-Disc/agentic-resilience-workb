@@ -85,102 +85,6 @@
     > [data-slot="message-body"] {
     width: 100%;
 }
-[data-slot="conversation-thread"] [data-slot="prompt-composer"] {
-    border: 1px solid transparent;
-    border-radius: 16px;
-    background: color-mix(in oklab, var(--card) 93%, var(--foreground));
-    box-shadow: 0 3px 12px
-        color-mix(in oklab, var(--foreground) 10%, transparent);
-    transition: border-color 160ms ease-out;
-}
-[data-slot="conversation-thread"] [data-slot="prompt-composer"]:focus-within {
-    border-color: var(--ring);
-}
-[data-slot="conversation-thread"] [data-slot="prompt-composer-card"] {
-    padding: 10px;
-    border: 0;
-    background: transparent;
-    border-radius: inherit;
-    transition: padding 160ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-[data-slot="conversation-thread"] [data-slot="prompt-composer-input"] {
-    width: 100%;
-    min-height: 40px;
-    max-height: 40px;
-    padding: 9px 0;
-    background: transparent;
-    font-size: 14px;
-    line-height: 22px;
-    transition:
-        min-height 160ms cubic-bezier(0.16, 1, 0.3, 1),
-        max-height 160ms cubic-bezier(0.16, 1, 0.3, 1),
-        padding 160ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-[data-slot="composer-fields"] {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 8px;
-}
-[data-model-controls="true"] [data-slot="composer-fields"] {
-    grid-template-columns: minmax(0, 1fr);
-}
-[data-slot="composer-bottom"] {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: auto;
-    gap: 12px;
-}
-
-[data-model-controls="true"] [data-slot="composer-bottom"] {
-    width: 100%;
-}
-[data-slot="composer-bottom"] > span {
-    display: none;
-    font-size: 10px;
-    color: var(--muted-foreground);
-}
-[data-slot="conversation-thread"] [data-slot="prompt-composer-submit"] {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-}
-[data-slot="conversation-thread"]
-    [data-slot="conversation-thread-dock"]:has([data-composer-expanded="true"])
-    [data-slot="prompt-composer"] {
-    border-color: var(--ring);
-}
-[data-slot="conversation-thread-dock"]:has([data-composer-expanded="true"])
-    [data-slot="prompt-composer"]
-    [data-slot="composer-fields"] {
-    grid-template-columns: minmax(0, 1fr);
-}
-[data-slot="conversation-thread"]
-    [data-slot="conversation-thread-dock"]:has([data-composer-expanded="true"])
-    [data-slot="prompt-composer"]
-    [data-slot="prompt-composer-card"] {
-    padding: var(--conversation-composer-focus-padding, 12px);
-}
-[data-slot="conversation-thread"]
-    [data-slot="conversation-thread-dock"]:has([data-composer-expanded="true"])
-    [data-slot="prompt-composer"]
-    [data-slot="prompt-composer-input"] {
-    min-height: var(--conversation-composer-focus-min-height, 64px);
-    max-height: var(--conversation-composer-focus-max-height, 150px);
-    padding: var(--conversation-composer-focus-input-padding, 0);
-}
-[data-slot="conversation-thread-dock"]:has([data-composer-expanded="true"])
-    [data-slot="prompt-composer"]
-    [data-slot="composer-bottom"] {
-    width: 100%;
-}
-[data-slot="conversation-thread-dock"]:has([data-composer-expanded="true"])
-    [data-slot="prompt-composer"]
-    [data-slot="composer-bottom"]
-    > span {
-    display: block;
-}
 [data-slot="conversation-pending-panel"] {
     border: 1px solid var(--divider);
     border-bottom: 0;
@@ -417,8 +321,6 @@
 }
 @media (prefers-reduced-motion: reduce) {
     [data-slot="conversation-thread"] [data-slot="message-actions"],
-    [data-slot="conversation-thread"] [data-slot="prompt-composer"],
-    [data-slot="conversation-thread"] [data-slot="prompt-composer-card"],
     [data-slot="conversation-thread"] [data-slot="prompt-composer-input"] {
         transition: none;
     }
@@ -1172,88 +1074,27 @@
     margin: 0 0 6px;
 }
 
-/* PastaUI prompt-input geometry stays local to composers with model controls. */
-[data-model-controls="true"] {
-    --conversation-composer-focus-padding: 10px;
-    --conversation-composer-focus-min-height: 72px;
-    --conversation-composer-focus-max-height: 240px;
-    --conversation-composer-focus-input-padding: 6px 8px;
-}
-[data-model-controls="true"] [data-slot="prompt-composer"] {
-    background: var(--card);
-    box-shadow:
-        0 1px 0 rgb(0 0 0 / 0.04),
-        0 6px 8px -6px rgb(0 0 0 / 0.08);
-}
-[data-model-controls="true"] [data-slot="prompt-composer-input"] {
-    min-height: 72px;
-    max-height: 240px;
-    padding: 6px 8px;
-}
-[data-model-controls="true"] [data-slot="composer-fields"] {
-    gap: 8px;
-}
-[data-model-controls="true"] [data-slot="composer-bottom"] {
-    gap: 8px;
-}
-.composer-model-trigger {
-    height: 32px;
-    min-width: 0;
-    max-width: calc(100% - 48px);
-    gap: 8px;
-    border-radius: 999px;
-    padding-inline: 12px;
-    font-size: 14px;
-    font-weight: 450;
-}
-.composer-model-menu {
-    width: 320px;
-    max-width: calc(100vw - 32px);
-    border-radius: 16px;
-    padding: 6px;
-    font-family: var(--font-sans);
-    font-size: 14px;
-    font-weight: 450;
-}
-.composer-effort-menu {
-    width: 256px;
-}
-.composer-model-option {
-    border-radius: 10px;
-    padding-block: 8px;
-    font-weight: 450;
-    white-space: normal;
-}
-.composer-model-option[data-highlighted] {
-    background: var(--accent);
-}
-.composer-slash-menu {
-    position: absolute;
-    inset-inline: 0;
-    bottom: 100%;
-    z-index: 50;
-    margin-bottom: 8px;
-    max-height: 224px;
-    overflow: auto;
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    background: var(--popover);
-    padding: 6px;
-    color: var(--popover-foreground);
-    box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
-}
-.composer-slash-option {
+[data-slot="conversation-pending-summary"] {
     display: flex;
-    width: 100%;
     align-items: center;
-    gap: 16px;
-    border-radius: 10px;
-    padding: 8px 12px;
-    text-align: left;
-    font-size: 14px;
-    outline: none;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    min-height: 44px;
+    padding: 6px 14px;
+    font-size: 12.5px;
 }
-.composer-slash-option[data-highlighted],
-.composer-slash-option:hover {
-    background: var(--accent);
+[data-slot="conversation-pending-summary"] > span:first-child::before {
+    content: "";
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--brand-purple);
+    margin-right: 8px;
+}
+[data-slot="conversation-pending-summary"] > span:nth-child(2) {
+    color: var(--muted-foreground);
+}
+[data-slot="conversation-pending-summary"] > button {
+    margin-left: auto;
 }

@@ -1,3 +1,4 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { api, internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
@@ -58,7 +59,7 @@ const commandResult = v.object({
 
 /** Exposes only analyst-relevant catalogue choices, independently of provider credentials. */
 export const models = query({
-    args: { runId: v.id("researchRuns") },
+    args: { runId: v.optional(v.id("researchRuns")) },
     returns: v.object({
         selectedId: v.union(v.id("modelCatalog"), v.null()),
         label: v.string(),
@@ -67,15 +68,24 @@ export const models = query({
         effortChoices: v.array(reasoningEffort),
         revision: v.number(),
         choices: v.array(
-            v.object({ id: v.id("modelCatalog"), label: v.string() }),
+            v.object({
+                id: v.id("modelCatalog"),
+                label: v.string(),
+                effortChoices: v.array(reasoningEffort),
+                effort: v.union(reasoningEffort, v.null()),
+            }),
         ),
     }),
     handler: async (ctx, args) => {
-        await requireWorkspaceRun(ctx, args.runId);
-        const conversation = await ctx.db
-            .query("agentConversations")
-            .withIndex("by_run", (q) => q.eq("runId", args.runId))
-            .unique();
+        if (!(await getAuthUserId(ctx))) throw executionError("unauthorized");
+        const runId = args.runId;
+        if (runId) await requireWorkspaceRun(ctx, runId);
+        const conversation = runId
+            ? await ctx.db
+                  .query("agentConversations")
+                  .withIndex("by_run", (q) => q.eq("runId", runId))
+                  .unique()
+            : null;
         const setting = await ctx.db
             .query("agentModelSettings")
             .withIndex("by_agent", (q) => q.eq("agent", "workbench"))
@@ -105,9 +115,20 @@ export const models = query({
                 null,
             effortChoices: configuration?.descriptor.reasoningEfforts ?? [],
             revision: conversation?.modelSelectionRevision ?? 0,
-            choices: choices
-                .filter(modelPrepared)
-                .map((m) => ({ id: m._id, label: m.label })),
+            choices: await Promise.all(
+                choices.filter(modelPrepared).map(async (m) => {
+                    const revision = m.currentRevisionId
+                        ? await ctx.db.get(m.currentRevisionId)
+                        : null;
+                    return {
+                        id: m._id,
+                        label: m.label,
+                        effortChoices:
+                            revision?.descriptor.reasoningEfforts ?? [],
+                        effort: revision?.reasoningEffort ?? null,
+                    };
+                }),
+            ),
         };
     },
 });
@@ -407,6 +428,7 @@ export const snapshot = query({
     returns: v.object({
         run: schema.doc("researchRuns"),
         researchControlAvailable: v.boolean(),
+        availableCommands: v.array(workbenchCommand),
         company: v.union(companySnapshotValidator, v.null()),
         framing: v.union(schema.doc("framingRevisions"), v.null()),
         instructions: v.array(
@@ -518,6 +540,19 @@ export const snapshot = query({
         return {
             run,
             researchControlAvailable: supportsResearchControl(run),
+            availableCommands:
+                conversation?.definitionId === "workbench_v1" &&
+                conversation.definitionVersion === 2 &&
+                run.fixedFramingRevisionId &&
+                supportsResearchControl(run)
+                    ? run.researchPauseRequested ||
+                      (run.executionStatus === "paused" &&
+                          run.pauseReason === "analyst")
+                        ? ["/resume" as const]
+                        : run.executionStatus === "running"
+                          ? ["/pause" as const]
+                          : []
+                    : [],
             company: company ?? null,
             framing,
             instructions,

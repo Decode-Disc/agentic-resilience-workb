@@ -558,6 +558,13 @@ export function FramingProposal({
         return () => observer.disconnect();
     }, [current, clarification]);
     const busy = pending || actionActive;
+    const emptyProgram =
+        collapsible &&
+        Boolean(composer) &&
+        !current &&
+        !clarification &&
+        !actionActive &&
+        !error;
     const body = (
         <div className={styles.framingProposal}>
             {introduction && <p>{introduction}</p>}
@@ -663,7 +670,7 @@ export function FramingProposal({
                             </fieldset>
                         </div>
                     )}
-                    {current ? (
+                    {current && !actionActive ? (
                         <section
                             ref={summaryRef}
                             tabIndex={-1}
@@ -682,7 +689,7 @@ export function FramingProposal({
                                 </div>
                             )}
                         </section>
-                    ) : (
+                    ) : !current && !actionActive ? (
                         <Empty className="flex-none items-start gap-0 rounded-none px-3.5 py-3 text-left">
                             <EmptyHeader className="max-w-none items-start gap-1">
                                 <EmptyTitle className="text-[13px]/[18px]">
@@ -697,13 +704,15 @@ export function FramingProposal({
                                 </EmptyDescription>
                             </EmptyHeader>
                         </Empty>
-                    )}
+                    ) : null}
                     {error && <p role="alert">{error}</p>}
                 </>
             )}
         </div>
     );
-    const footer = !clarification &&
+    const footer = !emptyProgram &&
+        !actionActive &&
+        !clarification &&
         (onStart || onEditRequest || onAddRequest) && (
             <div
                 className={styles.framingLaunch}
@@ -741,11 +750,7 @@ export function FramingProposal({
                         </Button>
                     )}
                 </div>
-                <p className={actionActive ? undefined : "sr-only"}>
-                    {actionActive
-                        ? "Save or cancel your draft before starting research."
-                        : "Research starts only when you choose."}
-                </p>
+                <p className="sr-only">Research starts only when you choose.</p>
                 {onStart && (
                     <Button
                         variant="launch"
@@ -772,11 +777,30 @@ export function FramingProposal({
                     summary={
                         clarification
                             ? "Research boundary"
-                            : `${questions.length} questions`
+                            : emptyProgram
+                              ? "No questions yet"
+                              : `${questions.length} questions`
+                    }
+                    headerAction={
+                        emptyProgram && onAddRequest ? (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                aria-label="Add research question"
+                                title="Add research question"
+                                disabled={busy}
+                                onClick={onAddRequest}>
+                                <Icon iconNode={PlusSignIcon} size={16} />
+                                <span className="hidden sm:inline">
+                                    Add question
+                                </span>
+                                <span className="sm:hidden">Add</span>
+                            </Button>
+                        ) : undefined
                     }
                     footer={footer}
                     composer={composer}>
-                    {body}
+                    {emptyProgram ? null : body}
                 </ConversationPendingPanel>
             ) : (
                 <>

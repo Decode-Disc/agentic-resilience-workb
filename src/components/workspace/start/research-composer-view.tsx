@@ -7,6 +7,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import type { FunctionReturnType } from "convex/server";
 import { type ReactNode, type Ref, useId } from "react";
+import { ComposerSurface } from "@/components/composer/composer";
 import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
 import Icon from "@/components/icon";
 import { Badge } from "@/components/ui/badge";
@@ -54,28 +55,27 @@ export function ResearchComposerView({
     const generatedId = useId();
     const inputId = id ?? generatedId;
     return (
-        <>
-            <div className="relative">
-                {companyAdornment}
-                <label htmlFor={inputId} className="sr-only">
-                    Research request — optional research angle
-                </label>
-                <textarea
-                    ref={textareaRef}
-                    id={inputId}
-                    value={value}
-                    onChange={(e) => onValueChange(e.target.value)}
-                    placeholder={placeholder}
-                    rows={3}
-                    className={cn(
-                        "block w-full resize-none rounded-t-2xl bg-input-surface px-5.5 pt-5.5 pb-3 text-[15.5px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground",
-                        companyAdornment && "pt-14",
-                        textareaClassName,
-                    )}
-                />
-            </div>
-            {toolbar}
-        </>
+        <ComposerSurface
+            expanded
+            context={companyAdornment}
+            footer={toolbar}
+            input={
+                <>
+                    <label htmlFor={inputId} className="sr-only">
+                        Research request — optional research angle
+                    </label>
+                    <textarea
+                        ref={textareaRef}
+                        id={inputId}
+                        value={value}
+                        onChange={(event) => onValueChange(event.target.value)}
+                        placeholder={placeholder}
+                        rows={3}
+                        className={textareaClassName}
+                    />
+                </>
+            }
+        />
     );
 }
 
@@ -255,7 +255,7 @@ export function CompanyContextBadge({
     onRemove: () => void;
 }) {
     return (
-        <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex">
+        <div className="flex min-w-0">
             <Badge
                 variant="outline"
                 color="sky"
@@ -276,24 +276,6 @@ export function CompanyContextBadge({
                     <Icon iconNode={Cancel01Icon} size={12} />
                 </button>
             </Badge>
-        </div>
-    );
-}
-
-/** The existing composer toolbar arrangement; callers supply its real controls. */
-export function ResearchComposerToolbar({
-    tools,
-    action,
-}: {
-    tools: ReactNode;
-    action: ReactNode;
-}) {
-    return (
-        <div className="flex items-center justify-between gap-3 border-t border-divider px-3 py-3">
-            <div className="flex min-w-0 items-center gap-2 rounded-item bg-fill-quiet p-1">
-                {tools}
-            </div>
-            {action}
         </div>
     );
 }

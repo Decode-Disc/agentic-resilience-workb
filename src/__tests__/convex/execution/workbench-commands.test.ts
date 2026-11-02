@@ -559,3 +559,34 @@ test("resuming already running research reports an unchanged state rather than a
     });
     expect(await t.run((ctx) => ctx.db.get(runId))).toEqual(before);
 });
+
+test("the composer only offers control commands supported by the current conversation and research state", async () => {
+    const { client, runId } = await seedWorkbench();
+    expect(
+        (await client.query(api.workbench.snapshot, { runId }))
+            .availableCommands,
+    ).toEqual([]);
+    const started = await startedWorkbench();
+    expect(
+        (
+            await started.client.query(api.workbench.snapshot, {
+                runId: started.runId,
+            })
+        ).availableCommands,
+    ).toEqual(["/pause"]);
+    await started.t.run(async (ctx) => {
+        const conversation = await ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", started.runId))
+            .unique();
+        assert(conversation);
+        await ctx.db.patch(conversation._id, { definitionVersion: 1 });
+    });
+    expect(
+        (
+            await started.client.query(api.workbench.snapshot, {
+                runId: started.runId,
+            })
+        ).availableCommands,
+    ).toEqual([]);
+});

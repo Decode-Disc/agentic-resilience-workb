@@ -1,4 +1,6 @@
-import { ArrowRight01Icon, Plus } from "@hugeicons/core-free-icons";
+import { ComposerToolsMenu } from "@/components/composer/tools-menu";
+import { ComposerToolbar } from "@/components/composer/composer";
+import { ArrowRight01Icon, Attachment01Icon } from "@hugeicons/core-free-icons";
 import {
     type ReactNode,
     useEffect,
@@ -41,10 +43,6 @@ import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
 import { SourcingLane } from "@/components/workbench-ui/sourcing-lane";
 import { AddSourceDialog } from "@/components/workspace/add-source-dialog";
 import {
-    MoreOptionsButton,
-    ToolbarIconButton,
-} from "@/components/workspace/composer-toolbar-actions";
-import {
     type CoveragePreset,
     CoveragePresetPicker,
 } from "@/components/workspace/coverage-preset-picker";
@@ -53,7 +51,6 @@ import {
     CompanyContextBadge,
     CompanyLookup,
     CompanyPickerTrigger,
-    ResearchComposerToolbar,
     ResearchComposerView,
 } from "@/components/workspace/start/research-composer-view";
 import { StartDossierHeading } from "@/components/workspace/start/start-dossier-heading";
@@ -268,102 +265,97 @@ function EntryExample() {
                             ) : undefined
                         }
                         toolbar={
-                            <ResearchComposerToolbar
-                                tools={
-                                    <>
-                                        <SmoothDropdwon
-                                            open={open}
-                                            onOpenChange={setOpen}
-                                            openWidth={isMobile ? 300 : 400}
-                                            closedWidth={215}
-                                            closedHeight={36}
-                                            className={`min-w-0 max-w-[calc(100cqw-10.25rem)] [&:not([data-open])>div]:max-w-full ${open ? "z-10" : ""}`}
-                                            itemsAriaLabel="Company search results"
-                                            trigger={
-                                                <CompanyPickerTrigger
-                                                    label={
-                                                        selected
-                                                            ? company.legalName
-                                                            : "Company to investigate"
-                                                    }
-                                                    ticker={
-                                                        selected
-                                                            ? company.ticker
-                                                            : undefined
-                                                    }
-                                                    highlighted={open}
-                                                />
-                                            }
-                                            header={
-                                                <CompanyLookup
-                                                    companyQuery={query}
-                                                    onCompanyQueryChange={(
-                                                        next,
-                                                    ) => {
-                                                        setQuery(next);
-                                                        setHasSearched(false);
-                                                    }}
-                                                    isSearching={false}
-                                                    lookupError={null}
-                                                    hasResolution={selected}
-                                                    hasSearched={hasSearched}
-                                                    resultCount={
-                                                        matches ? 1 : 0
-                                                    }
-                                                    onClear={() => {
-                                                        setSelected(false);
-                                                        setQuery("");
-                                                        setHasSearched(false);
-                                                    }}
-                                                    onSearch={() => {
-                                                        setSearchTerm(
-                                                            query.trim(),
-                                                        );
-                                                        setHasSearched(true);
-                                                    }}
-                                                    sessionReady
-                                                />
-                                            }
-                                            items={
-                                                matches
-                                                    ? [
-                                                          {
-                                                              id: company.cik,
-                                                              label: companyLabel,
-                                                              onSelect: () => {
-                                                                  setSelected(
-                                                                      true,
-                                                                  );
-                                                                  setOpen(
-                                                                      false,
-                                                                  );
-                                                              },
-                                                              renderLabel:
-                                                                  () => (
-                                                                      <CompanyCandidateLabel
-                                                                          company={
-                                                                              company
-                                                                          }
-                                                                          selecting={
-                                                                              false
-                                                                          }
-                                                                      />
-                                                                  ),
+                            <ComposerToolbar
+                                context={
+                                    <SmoothDropdwon
+                                        open={open}
+                                        onOpenChange={setOpen}
+                                        openWidth={isMobile ? 300 : 400}
+                                        closedWidth={215}
+                                        closedHeight={36}
+                                        className={`min-w-0 max-w-[calc(100cqw-10.25rem)] [&:not([data-open])>div]:max-w-full ${open ? "z-10" : ""}`}
+                                        itemsAriaLabel="Company search results"
+                                        trigger={
+                                            <CompanyPickerTrigger
+                                                label={
+                                                    selected
+                                                        ? company.legalName
+                                                        : "Company to investigate"
+                                                }
+                                                ticker={
+                                                    selected
+                                                        ? company.ticker
+                                                        : undefined
+                                                }
+                                                highlighted={open}
+                                            />
+                                        }
+                                        header={
+                                            <CompanyLookup
+                                                companyQuery={query}
+                                                onCompanyQueryChange={(
+                                                    next,
+                                                ) => {
+                                                    setQuery(next);
+                                                    setHasSearched(false);
+                                                }}
+                                                isSearching={false}
+                                                lookupError={null}
+                                                hasResolution={selected}
+                                                hasSearched={hasSearched}
+                                                resultCount={matches ? 1 : 0}
+                                                onClear={() => {
+                                                    setSelected(false);
+                                                    setQuery("");
+                                                    setHasSearched(false);
+                                                }}
+                                                onSearch={() => {
+                                                    setSearchTerm(query.trim());
+                                                    setHasSearched(true);
+                                                }}
+                                                sessionReady
+                                            />
+                                        }
+                                        items={
+                                            matches
+                                                ? [
+                                                      {
+                                                          id: company.cik,
+                                                          label: companyLabel,
+                                                          onSelect: () => {
+                                                              setSelected(true);
+                                                              setOpen(false);
                                                           },
-                                                      ]
-                                                    : []
-                                            }
-                                        />
-                                        <ToolbarIconButton
-                                            label="Add a public reference"
-                                            icon={Plus}
-                                            count={references.length}
-                                            onClick={() =>
-                                                setReferencesOpen(true)
-                                            }
-                                        />
-                                        <MoreOptionsButton />
-                                    </>
+                                                          renderLabel: () => (
+                                                              <CompanyCandidateLabel
+                                                                  company={
+                                                                      company
+                                                                  }
+                                                                  selecting={
+                                                                      false
+                                                                  }
+                                                              />
+                                                          ),
+                                                      },
+                                                  ]
+                                                : []
+                                        }
+                                    />
+                                }
+                                tools={
+                                    <ComposerToolsMenu
+                                        count={references.length}
+                                        items={[
+                                            {
+                                                label: "Attach references",
+                                                icon: Attachment01Icon,
+                                                description:
+                                                    "Add public HTTPS links as research inputs",
+                                                onSelect: () =>
+                                                    setReferencesOpen(true),
+                                            },
+                                        ]}
+                                    />
                                 }
                                 action={
                                     <Button
@@ -475,11 +467,13 @@ function FramingExample({
             inputRef={refinementRef}
             onResumeQueue={controller.resumeQueue}
             placeholder={
-                !state.launched && isMobile && !questionAction
-                    ? needsContext
-                        ? "Describe another scope…"
-                        : "Refine the framing…"
-                    : undefined
+                questionAction && !questionAction.id
+                    ? "What would you like to investigate?"
+                    : !state.launched && isMobile && !questionAction
+                      ? needsContext
+                          ? "Describe another scope…"
+                          : "Refine the framing…"
+                      : undefined
             }
             label={
                 state.launched

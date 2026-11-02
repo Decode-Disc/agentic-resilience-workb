@@ -10,8 +10,8 @@ import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ConversationHistory } from "@/components/chat/conversation-history";
 import type { ConversationMissionSnapshot } from "@/components/chat/conversation-mission";
-import { WorkbenchModelSelector } from "@/components/chat/conversation-model-controls";
-import type { ResearchControlCommand } from "@/components/chat/conversation-slash-commands";
+import { WorkbenchModelSelector } from "@/components/composer/model-picker";
+import type { ResearchControlCommand } from "@/components/composer/slash-commands";
 import {
     ConversationComposer,
     ConversationContext,
@@ -627,6 +627,7 @@ function StartWorkspaceContent({
         <ConversationComposer
             inputRef={inputRef}
             onCommand={!edit ? onCommand : undefined}
+            availableCommands={[...snapshot.availableCommands, "/model"]}
             onOpenModels={() => setModelPickerOpen(true)}
             controlsOpen={modelPickerOpen}
             modelSelector={
@@ -652,6 +653,11 @@ function StartWorkspaceContent({
                     : launched
                       ? "Ask about the sources"
                       : "Refine the framing in your own words"
+            }
+            placeholder={
+                edit?.kind === "question" && !edit.id
+                    ? "What would you like to investigate?"
+                    : undefined
             }
             actionLabel={
                 edit
@@ -786,8 +792,6 @@ function StartWorkspaceContent({
         <FramingProposal
             collapsible
             title={launched ? "Accepted research program" : undefined}
-            scope={framing?.content.scope}
-            onAdjustScope={!launched ? () => beginEdit("scope") : undefined}
             questions={
                 framing?.content.questions.map((q, index) => ({
                     ...q,

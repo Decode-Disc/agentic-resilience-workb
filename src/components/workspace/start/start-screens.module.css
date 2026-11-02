@@ -692,7 +692,7 @@
 }
 .pendingAction {
   min-height: 0;
-  margin-inline: 8px;
+  margin-inline: 16px;
 }
 .pendingAction .framingProposal {
   gap: 0;
@@ -849,7 +849,7 @@
   background: color-mix(in oklab, var(--foreground) 2%, var(--card));
 }
 .pendingAction [data-slot="conversation-composer"] {
-  margin-inline: -8px;
+  margin-inline: -16px;
 }
 .pendingAction .framingLaunch {
   padding: 10px 14px;
@@ -880,22 +880,15 @@
   background: transparent;
 }
 .pendingAction [data-composer-action] {
-  --conversation-composer-focus-min-height: 32px;
-  --conversation-composer-focus-max-height: 84px;
-  --conversation-composer-focus-padding: 8px 10px;
-  --conversation-composer-focus-input-padding: 4px 0;
+  --composer-field-min-height: 48px;
+  --composer-field-max-height: 84px;
+  --composer-field-padding: 10px 12px;
   margin: 10px 14px 0;
 }
 .pendingAction [data-composer-action] [class~="chat-composer-mode"] {
   padding: 0 0 6px;
 }
-.framingDock .pendingAction [data-composer-action] [data-slot="composer-fields"] {
-  grid-template-columns: minmax(0, 1fr) auto;
-}
 
-.framingDock .pendingAction [data-composer-action] [data-slot="composer-bottom"] > span {
-  display: none;
-}
 .pendingAction [data-slot="agent-question-body"] {
   padding: 2px 14px 0;
 }
@@ -922,18 +915,12 @@
 }
 @media (max-width: 640px) {
   .framingDock {
-    --conversation-composer-focus-min-height: 52px;
-    --conversation-composer-focus-max-height: 112px;
-    --conversation-composer-focus-padding: 8px;
     bottom: 8px;
   }
-  .framing .framingDock [data-slot="prompt-composer-card"] {
-    padding: 6px 8px;
-  }
-  .framing .framingDock [data-slot="prompt-composer-input"] {
-    min-height: 36px;
-    max-height: 36px;
-    padding-block: 8px;
+  .framing .framingDock [data-composer-expanded="false"] [data-slot="prompt-composer-input"] {
+    min-height: 46px;
+    max-height: 46px;
+    padding-block: 12px;
     font-size: 13px;
     line-height: 20px;
   }
@@ -996,17 +983,10 @@
     padding-inline: 8px;
   }
   .pendingAction [data-composer-action] {
-    --conversation-composer-focus-min-height: 28px;
-    --conversation-composer-focus-max-height: 72px;
-    --conversation-composer-focus-padding: 6px 8px;
-    --conversation-composer-focus-input-padding: 4px 0;
+    --composer-field-min-height: 44px;
+    --composer-field-max-height: 72px;
+    --composer-field-padding: 8px 10px;
     margin: 6px 12px 0;
-  }
-  .framingDock .pendingAction [data-composer-action] [data-slot="composer-fields"] {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .framingDock .pendingAction [data-composer-action] [data-slot="composer-bottom"] {
-    justify-content: flex-end;
   }
   .pendingAction [data-slot="agent-question-body"] {
     padding: 0;
@@ -1082,4 +1062,30 @@
     position: absolute;
     inset: -6px;
   }
+}
+
+.pendingAction [data-slot="conversation-pending-summary"] {
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+  background: color-mix(in oklab, var(--foreground) 2%, var(--card));
+}
+.pendingAction [data-slot="conversation-composer"] {
+  position: relative;
+  z-index: 1;
+  margin-top: -2px;
+}
+.pendingAction [class~="chat-focused-question"] {
+  margin: 0;
+  padding: 8px 14px;
+  border: 0;
+  background: transparent;
+}
+.pendingAction [class~="chat-focused-question"] h3 { font-size: 16px; }
+@media (max-width: 640px) {
+  .pendingAction [class~="chat-focused-question"] { padding: 6px 10px; }
+  .pendingAction [class~="chat-focused-question"] h3 { font-size: 14.5px; }
+  .pendingAction [data-slot="conversation-pending-summary"] { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: 8px 10px; gap: 2px 8px; font-size: 12px; }
+  .pendingAction [data-slot="conversation-pending-summary"] > span:nth-child(2) { grid-column: 1; grid-row: 2; }
+  .pendingAction [data-slot="conversation-pending-summary"] > button { grid-column: 2; grid-row: 1 / 3; }
 }
