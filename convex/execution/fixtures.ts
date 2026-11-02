@@ -632,6 +632,71 @@ export const revealWorkbenchSources = internalMutation({
     },
 });
 
+/** Exercises the real failure projection without dispatching a model or fabricating a provider receipt. */
+export const interruptWorkbench = internalMutation({
+    args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const { run } = await requireLocalFixtureRun(ctx, args);
+        const requestKey = `${args.fixtureKey}:interrupted-response`;
+        const previous = await ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_run_and_key", (q) =>
+                q.eq("runId", run._id).eq("requestKey", requestKey),
+            )
+            .unique();
+        if (previous) return null;
+        const conversation = await ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", run._id))
+            .unique();
+        if (
+            !conversation ||
+            conversation.activeTurnId ||
+            conversation.queuedCount
+        )
+            throw new Error("An idle simulated conversation is required");
+        await submitAuthorizedMessage(ctx, {
+            runId: run._id,
+            requestKey,
+            delivery: "queue",
+            text: "Simulation: exercise an interrupted response while preserving the research program.",
+        });
+        await ctx.runMutation(internal.execution.conversations.pumpWorkbench, {
+            runId: run._id,
+        });
+        const current = await ctx.db.get(conversation._id);
+        const turn = current?.activeTurnId
+            ? await ctx.db.get(current.activeTurnId)
+            : null;
+        const mission = turn?.missionId
+            ? await ctx.db.get(turn.missionId)
+            : null;
+        if (!mission?.piWakeToken || mission.provenance !== "simulation")
+            throw new Error("A simulated native mission is required");
+        const writer = `fixture:${requestKey}`;
+        const claimed = await ctx.runMutation(
+            internal.execution.piControl.prepare,
+            {
+                missionId: mission._id,
+                expectedGeneration: mission.generation,
+                token: mission.piWakeToken,
+                writer,
+            },
+        );
+        if (!claimed)
+            throw new Error("The simulated worker could not be claimed");
+        await ctx.runMutation(internal.execution.piControl.closeWorker, {
+            missionId: mission._id,
+            expectedGeneration: mission.generation,
+            writer,
+            error: "attempt_outcome_unknown",
+            nativeSettled: true,
+        });
+        return null;
+    },
+});
+
 export const inspectWorkbench = internalQuery({
     args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
     returns: v.object({

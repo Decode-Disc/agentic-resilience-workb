@@ -34,7 +34,7 @@ export type AgentDefinition = {
     id: AgentScope["kind"];
     version: number;
     authority: string;
-    executionScope?: "research" | "conversation";
+    executionScope: "research" | "conversation";
     nativeConversation?: true;
     nativeToolSets?(
         operations: AgentDefinition["operations"],

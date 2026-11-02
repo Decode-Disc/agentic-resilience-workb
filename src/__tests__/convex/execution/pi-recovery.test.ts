@@ -1,11 +1,12 @@
-import { internal } from "@convex/_generated/api";
+import { api, internal } from "@convex/_generated/api";
 import { openMissionPiStorage } from "@convex/integrations/piStorage";
 import { PI_COMMIT_MAX_BYTES } from "@convex/resourceLimits";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { ROOT_CONVERSATION_ID } from "@earendil-works/pi-durable";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedPiMission } from "@/__tests__/setup/pi-mission";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
+import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 afterEach(() => {
     vi.useRealTimers();
@@ -192,3 +193,186 @@ test("replay renews its fenced writer lease while loading multiple pages", async
         }
     });
 }, 30000);
+
+test("permanent native-tail failure preserves published work without scheduling another writer", async () => {
+    const { t, runId, client } = await seedWorkbench(true);
+    const active = await t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: true,
+        },
+    );
+    assert(active);
+    const lease = await t.mutation(internal.execution.piStore.claim, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        writer: "probe-0",
+    });
+    await t.run(async (ctx) => {
+        await ctx.db.patch(active.missionId, {
+            status: "completed",
+            piActiveWriter: "probe-0",
+            deadlineAt: Date.now() - 1,
+        });
+        await ctx.db.patch(lease.sessionId, {
+            sequence: 1,
+            settledSequence: 0,
+        });
+    });
+    await t.mutation(internal.execution.piControl.closeWorker, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        writer: "probe-0",
+        error: "publication_context_unavailable",
+    });
+    const failed = await t.run((ctx) => ctx.db.get(active.missionId));
+    expect(failed?.status).toBe("completed");
+    expect(failed?.piWakeToken).toBeUndefined();
+    expect(await t.run((ctx) => ctx.db.get(lease.sessionId))).toMatchObject({
+        settlementFailureCode: "publication_context_unavailable",
+    });
+    expect(
+        await client.query(api.execution.conversations.get, { runId }),
+    ).toMatchObject({
+        queuePaused: true,
+        admissionFailure: { code: "native_settlement_incomplete" },
+    });
+    await expect(
+        client.mutation(api.execution.conversations.resumeQueue, { runId }),
+    ).rejects.toThrow("native_settlement_incomplete");
+});
+
+test("native settlement retries are bounded and back off without losing a completed result", async () => {
+    const { t, runId } = await seedWorkbench(true);
+    const turn = await t.mutation(internal.execution.conversations.startTurn, {
+        runId,
+        definitionId: "workbench_v1",
+        scope: { kind: "workbench_v1" },
+        simulation: true,
+    });
+    assert(turn);
+    const lease = await t.mutation(internal.execution.piStore.claim, {
+        missionId: turn.missionId,
+        expectedGeneration: 1,
+        writer: "tail-retry",
+    });
+    await t.run(async (ctx) => {
+        await ctx.db.patch(turn.missionId, {
+            status: "completed",
+            piActiveWriter: "tail-retry",
+        });
+        await ctx.db.patch(lease.sessionId, {
+            sequence: 1,
+            settledSequence: 0,
+        });
+    });
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        const writer = attempt === 1 ? "tail-retry" : `tail-retry-${attempt}`;
+        await t.mutation(internal.execution.piStore.claim, {
+            missionId: turn.missionId,
+            expectedGeneration: 1,
+            writer,
+        });
+        await t.run((ctx) =>
+            ctx.db.patch(turn.missionId, { piActiveWriter: writer }),
+        );
+        await t.mutation(internal.execution.piControl.closeWorker, {
+            missionId: turn.missionId,
+            expectedGeneration: 1,
+            writer,
+            error: "execution_interrupted",
+        });
+        const mission = await t.run((ctx) => ctx.db.get(turn.missionId));
+        expect(mission?.status).toBe("completed");
+        if (attempt < 3)
+            expect(mission?.piWakeAt).toBe(
+                Date.now() + 1000 * 2 ** (attempt - 1),
+            );
+        else expect(mission?.piWakeToken).toBeUndefined();
+    }
+    expect(await t.run((ctx) => ctx.db.get(lease.sessionId))).toMatchObject({
+        settlementFailureCode: "native_settlement_incomplete",
+        settlementAttempts: 3,
+    });
+});
+
+test("successful native settlement clears the retry count for the next response", async () => {
+    const { t, runId } = await seedWorkbench(true);
+    const turn = await t.mutation(internal.execution.conversations.startTurn, {
+        runId,
+        definitionId: "workbench_v1",
+        scope: { kind: "workbench_v1" },
+        simulation: true,
+    });
+    assert(turn);
+    const lease = await t.mutation(internal.execution.piStore.claim, {
+        missionId: turn.missionId,
+        expectedGeneration: 1,
+        writer: "tail-success",
+    });
+    await t.run(async (ctx) => {
+        await ctx.db.patch(turn.missionId, {
+            status: "completed",
+            piActiveWriter: "tail-success",
+        });
+        await ctx.db.patch(lease.sessionId, {
+            sequence: 2,
+            settledSequence: 1,
+            settlementAttempts: 2,
+        });
+    });
+    await t.mutation(internal.execution.piControl.closeWorker, {
+        missionId: turn.missionId,
+        expectedGeneration: 1,
+        writer: "tail-success",
+        nativeSettled: true,
+    });
+    expect(await t.run((ctx) => ctx.db.get(lease.sessionId))).toMatchObject({
+        settledSequence: 2,
+    });
+    expect(
+        (await t.run((ctx) => ctx.db.get(lease.sessionId)))?.settlementAttempts,
+    ).toBeUndefined();
+});
+
+test("replaying a worker closure does not consume another native settlement attempt", async () => {
+    const { t, runId } = await seedWorkbench(true);
+    const turn = await t.mutation(internal.execution.conversations.startTurn, {
+        runId,
+        definitionId: "workbench_v1",
+        scope: { kind: "workbench_v1" },
+        simulation: true,
+    });
+    assert(turn);
+    const lease = await t.mutation(internal.execution.piStore.claim, {
+        missionId: turn.missionId,
+        expectedGeneration: 1,
+        writer: "closure-replay",
+    });
+    await t.run(async (ctx) => {
+        await ctx.db.patch(turn.missionId, {
+            status: "completed",
+            piActiveWriter: "closure-replay",
+        });
+        await ctx.db.patch(lease.sessionId, {
+            sequence: 1,
+            settledSequence: 0,
+        });
+    });
+    const args = {
+        missionId: turn.missionId,
+        expectedGeneration: 1,
+        writer: "closure-replay",
+        error: "execution_interrupted",
+    };
+    await t.mutation(internal.execution.piControl.closeWorker, args);
+    const first = await t.run((ctx) => ctx.db.get(turn.missionId));
+    await t.mutation(internal.execution.piControl.closeWorker, args);
+    expect(await t.run((ctx) => ctx.db.get(lease.sessionId))).toMatchObject({
+        settlementAttempts: 1,
+    });
+    expect(await t.run((ctx) => ctx.db.get(turn.missionId))).toEqual(first);
+});

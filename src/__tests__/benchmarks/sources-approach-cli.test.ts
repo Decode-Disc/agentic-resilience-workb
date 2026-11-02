@@ -12,7 +12,7 @@ const { buildSourcesMissions, runSourcesApproachCli, verifySourcesStudy } =
             "../../../scripts/evaluations/source-selection/sources-approach-cli.ts",
             import.meta.url,
         ).href
-    )) as typeof import("../../../scripts/evaluations/source-selection/sources-approach-cli");
+    )) as typeof import("@evaluations/source-selection/sources-approach-cli");
 
 test("the lot crosses both approaches and reasoning settings, balances order, and separates validation", () => {
     const scenarios = ["servicenow", "adobe", "snowflake"].map((id) => ({
@@ -333,12 +333,10 @@ test("prepare, offline replay and summary preserve four comparable missions with
 
 test("inspection freeze preserves the baseline and creates only fixed/off and agent/off missions", async () => {
     const { freezeSourcesStudy } = await import(
-        "../../../scripts/evaluations/source-selection/sources-approach-cli"
+        "@evaluations/source-selection/sources-approach-cli"
     );
     const { SourcesPreparation, sourcesDigest, inspectionScenarioHash } =
-        await import(
-            "../../../scripts/evaluations/source-selection/sources-approach-study"
-        );
+        await import("@evaluations/source-selection/sources-approach-study");
     const dir = mkdtempSync(join(tmpdir(), "sources-inspection-freeze-"));
     try {
         const text =
@@ -423,10 +421,10 @@ test("inspection freeze preserves the baseline and creates only fixed/off and ag
 
 test("live budget stopping preserves completed calls and settles each receipt before the next qualification", async () => {
     const { freezeSourcesStudy } = await import(
-        "../../../scripts/evaluations/source-selection/sources-approach-cli"
+        "@evaluations/source-selection/sources-approach-cli"
     );
     const { sourcesDigest } = await import(
-        "../../../scripts/evaluations/source-selection/sources-approach-study"
+        "@evaluations/source-selection/sources-approach-study"
     );
     const dir = mkdtempSync(join(tmpdir(), "sources-budget-contract-"));
     const text = "Acme publishes this public document.";

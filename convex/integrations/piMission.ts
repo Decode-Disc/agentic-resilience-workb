@@ -641,6 +641,7 @@ export async function runPiMission(
                     let preparationCode: string | undefined;
                     let upstreamProvider: string | undefined;
                     let reportedCost: number | undefined;
+                    let generationId: string | undefined;
                     const argumentCapture = createPiToolArgumentsCapture(
                         model.api,
                     );
@@ -670,6 +671,17 @@ export async function runPiMission(
                                     eventModel,
                                 );
                                 if (!data || typeof data !== "object") return;
+                                if (
+                                    "id" in data &&
+                                    typeof data.id === "string" &&
+                                    data.id !== generationId
+                                ) {
+                                    await lifecycle.observeProvider?.({
+                                        generationId: data.id,
+                                        httpStatus: responseState.httpStatus,
+                                    });
+                                    generationId = data.id;
+                                }
                                 if (
                                     "provider" in data &&
                                     typeof data.provider === "string" &&

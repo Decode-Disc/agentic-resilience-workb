@@ -33,14 +33,19 @@ async function main(): Promise<number> {
             url: { type: "string" },
             hold: { type: "boolean" },
             release: { type: "boolean" },
+            recover: { type: "boolean" },
             "lock-held": { type: "boolean" },
         },
     });
-    if (values.hold && values.release)
-        throw new LocalSyncError("Choose --hold or --release, not both.");
+    if (
+        [values.hold, values.release, values.recover].filter(Boolean).length > 1
+    )
+        throw new LocalSyncError(
+            "Choose one of --hold, --release or --recover.",
+        );
     if (!values.url)
         throw new LocalSyncError(
-            "Usage: pnpm convex:sync --url http://127.0.0.1:<port> [--hold | --release]",
+            "Usage: pnpm convex:sync --url http://127.0.0.1:<port> [--hold | --release | --recover]",
         );
     const target = new URL(values.url);
     if (
@@ -212,6 +217,18 @@ async function main(): Promise<number> {
         throw new LocalSyncError(
             "The publication guard is unavailable. Initialize it only on a verified quiet backend; publication was refused.",
         );
+    }
+    if (values.recover) {
+        await client.mutation(
+            makeFunctionReference<"mutation", Record<string, never>, null>(
+                "execution/piControl:recoverPublicationWorkers",
+            ),
+            {},
+        );
+        console.log(
+            "Expired admitted workers fenced; publication admission remains held.",
+        );
+        return 0;
     }
     if (values.release) {
         if (prior.hasActiveWorkers)

@@ -146,6 +146,7 @@ export const savedMaterialInspectionDefinition: AgentDefinition & {
 } = {
     id: SAVED_MATERIAL_DEFINITION_ID,
     version: SAVED_MATERIAL_DEFINITION_VERSION,
+    executionScope: "research",
     authority: "inspect_approved_saved_material_only",
     instructions: [
         "Inspect only source captures already approved for this mission's frozen corpus revision.",

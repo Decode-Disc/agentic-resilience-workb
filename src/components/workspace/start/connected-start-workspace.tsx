@@ -1,23 +1,21 @@
-import type {
-    AppendMessage,
-    ExternalThreadQueueAdapter,
-} from "@assistant-ui/react";
+import type { ExternalThreadQueueAdapter } from "@assistant-ui/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
+import { ConvexError } from "convex/values";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ConversationHistory } from "@/components/chat/conversation-history";
 import type { ConversationMissionSnapshot } from "@/components/chat/conversation-mission";
-import { WorkbenchModelSelector } from "@/components/composer/model-picker";
-import type { ResearchControlCommand } from "@/components/composer/slash-commands";
 import {
     ConversationComposer,
     ConversationContext,
     ConversationReference,
     useWorkbenchConversation,
 } from "@/components/chat/workbench-conversation";
+import { WorkbenchModelSelector } from "@/components/composer/model-picker";
+import type { ResearchControlCommand } from "@/components/composer/slash-commands";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { Button } from "@/components/ui/button";
 import {
@@ -61,10 +59,6 @@ const agents = {
     workbench: { id: "workbench", name: "Workbench Agent" },
     sources: { id: "sources", name: "Sources" },
 };
-const textOf = (message: AppendMessage) =>
-    message.content
-        .flatMap((part) => (part.type === "text" ? [part.text] : []))
-        .join("\n");
 
 type StartWorkspaceProps = {
     runId: Id<"researchRuns">;
@@ -243,7 +237,15 @@ function StartWorkspaceContent({
             });
             modelDelivery.current = null;
             setModelPickerOpen(false);
-        } catch {
+        } catch (error) {
+            if (
+                error instanceof ConvexError &&
+                typeof error.data === "object" &&
+                error.data &&
+                "code" in error.data &&
+                error.data.code === "model_configuration_conflict"
+            )
+                modelDelivery.current = null;
             setError(
                 "The model settings could not be confirmed. Check the selection and try again.",
             );
@@ -307,7 +309,7 @@ function StartWorkspaceContent({
         delivery.current = null;
         setDraft((current) => (current === text ? "" : current));
     };
-    const queue: ExternalThreadQueueAdapter = {
+    const queue: Omit<ExternalThreadQueueAdapter, "enqueue" | "steer"> = {
         items: history.results
             .filter((m) => m.status === "queued")
             .slice()
@@ -318,12 +320,6 @@ function StartWorkspaceContent({
                 parts: [{ type: "text", text: m.text }],
             })),
         steerItems: [],
-        enqueue: (m) => {
-            control(send(textOf(m), "queue"));
-        },
-        steer: (m) => {
-            control(send(textOf(m), m.steer ? "steer" : "queue"));
-        },
         remove: (id) =>
             control(
                 remove({
@@ -681,7 +677,8 @@ function StartWorkspaceContent({
             onResumeQueue={
                 state?.queuePaused &&
                 state.queuedCount &&
-                state.admissionFailure?.code !== "context_capacity"
+                state.admissionFailure?.code !== "context_capacity" &&
+                state.admissionFailure?.code !== "native_settlement_incomplete"
                     ? () => control(resume({ runId }))
                     : undefined
             }

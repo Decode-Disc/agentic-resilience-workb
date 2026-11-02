@@ -1,4 +1,3 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { api, internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
@@ -17,6 +16,7 @@ import {
     workbenchCommand,
     workbenchCommandOutcome,
 } from "@convex/domain/workbenchContracts";
+import { readWorkbenchInstructions } from "@convex/domain/workbenchInstructions";
 import {
     requireDossierAuthority,
     requireMissionAuthority,
@@ -44,6 +44,7 @@ import { sourceDossierCandidateLimit } from "@convex/resourceLimits";
 import { requireWorkspaceRun } from "@convex/runWorkspace";
 import schema from "@convex/schema";
 import { startReviewPreparation } from "@convex/sourcePreparation";
+import { getAuthUserId } from "@convex-dev/auth/server";
 import {
     paginationOptsValidator,
     paginationResultValidator,
@@ -511,32 +512,14 @@ export const snapshot = query({
                 };
             }),
         );
-        const requests = await ctx.db
-            .query("workbenchInstructions")
-            .withIndex("by_run", (q) => q.eq("runId", run._id))
-            .order("desc")
-            .take(20);
-        const instructions = await Promise.all(
-            requests.map(async (request) => {
-                const preparation = request.preparationId
-                    ? await ctx.db.get(request.preparationId)
-                    : null;
-                const finished =
-                    preparation && preparation.status !== "started";
-                return {
-                    id: request._id,
-                    need: request.interpretedNeed,
-                    status: finished
-                        ? preparation.status === "complete"
-                            ? "completed"
-                            : "limited"
-                        : request.status,
-                    outcome: finished
-                        ? "This preparation has ended. Inspect Sources for the retained material, limitations and any unfinished work."
-                        : request.outcome,
-                };
-            }),
-        );
+        const instructions = (
+            await readWorkbenchInstructions(ctx, run._id)
+        ).map((request) => ({
+            id: request._id,
+            need: request.interpretedNeed,
+            status: request.status,
+            outcome: request.outcome,
+        }));
         return {
             run,
             researchControlAvailable: supportsResearchControl(run),
@@ -866,11 +849,11 @@ export const processInstructions = internalMutation({
                 if (result.status === "started") return null;
             } catch (error) {
                 const code = preparationFailureCode(error);
+                if (!code) throw error;
                 await ctx.db.patch(request._id, {
                     status: "blocked",
-                    outcome: code
-                        ? "This request could not be transmitted under the current preparation limits. Inspect Sources to continue."
-                        : "This request could not be transmitted. Your instruction is retained; inspect Sources before trying again.",
+                    outcome:
+                        "This request could not be transmitted under the current preparation limits. Inspect Sources to continue.",
                 });
                 await ctx.db.insert("agentExecutionEvents", {
                     runId,
@@ -878,7 +861,7 @@ export const processInstructions = internalMutation({
                     kind: "analyst_instruction_blocked",
                     cause: "instruction_delivery",
                     messageId: request.messageId,
-                    code: code ?? "instruction_dispatch_failed",
+                    code,
                     occurredAt: Date.now(),
                 });
             }

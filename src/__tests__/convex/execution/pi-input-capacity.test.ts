@@ -1,11 +1,10 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { api, internal } from "@convex/_generated/api";
-import { getAgentDefinition } from "@convex/execution/agentCatalog";
+import { registeredAgentDefinitions } from "@convex/execution/agentCatalog";
 import {
     type AgentDefinition,
     agentToolSchemas,
 } from "@convex/execution/agentDefinition";
-import { agentDefinitionIdValidator } from "@convex/execution/agentSchemas";
 import {
     PI_MISSION_EXTENSION,
     PI_MISSION_INPUT,
@@ -216,17 +215,7 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
     );
     const profiles: Record<string, number> = {};
     const samples = [];
-    for (const [id, version] of agentDefinitionIdValidator.members.flatMap<
-        [AgentDefinition["id"], number]
-    >((member) =>
-        member.value === "workbench_v1"
-            ? [
-                  [member.value, 1],
-                  [member.value, 2],
-              ]
-            : [[member.value, 1]],
-    )) {
-        const canonical = getAgentDefinition(id, version);
+    for (const canonical of registeredAgentDefinitions()) {
         const snapshots: unknown[] = [undefined];
         if (canonical.nativeConversation)
             for (const framing of [
@@ -293,7 +282,9 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
             const routes = [
                 SIMULATION_MODEL_ROUTE,
                 nativePiFixtureRoute,
-                ...(id === "workbench_v1" ? [WORKBENCH_MODEL_ROUTE] : []),
+                ...(canonical.id === "workbench_v1"
+                    ? [WORKBENCH_MODEL_ROUTE]
+                    : []),
             ];
             for (const route of routes) {
                 if (!route) continue;

@@ -46,3 +46,15 @@ test("a full conversation journal explains preservation without inviting a futil
     expect(copy).not.toMatch(/send.*message|narrower request/i);
     expect(copy).not.toContain("pi_storage_capacity");
 });
+
+test("an unresolved conversation closure explains the retained work without promising another send can recover it", async () => {
+    const { workbenchFailureCopy } = await import(
+        "@/lib/presentation/workbench"
+    );
+    const copy = workbenchFailureCopy("native_settlement_incomplete");
+    expect(copy).toContain("requires recovery");
+    expect(copy).toContain("recorded work remain available");
+    expect(copy).not.toMatch(
+        /native_settlement|Send another message|writer|session/,
+    );
+});

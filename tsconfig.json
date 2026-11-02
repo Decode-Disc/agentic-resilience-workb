@@ -35,6 +35,7 @@
         "paths": {
             "@/*": ["./src/*"],
             "@convex/*": ["./convex/*"],
+            "@evaluations/*": ["./scripts/evaluations/*"],
             "@preview/*": ["./services/playwright-browser/src/*"],
             "@assets/*": ["./src/assets/*"]
         }

@@ -1,9 +1,8 @@
-import { getAgentDefinition } from "@convex/execution/agentCatalog";
+import { registeredAgentDefinitions } from "@convex/execution/agentCatalog";
 import {
     type AgentDefinition,
     agentToolSchemas,
 } from "@convex/execution/agentDefinition";
-import { agentDefinitionIdValidator } from "@convex/execution/agentSchemas";
 import type { modelDescriptor } from "@convex/modelConfigurationSchema";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import {
@@ -134,87 +133,85 @@ export async function prepareNativeProfiles(
     const model = configuredNativeModel(route.model, descriptor);
     const provider = openrouterProvider();
     const profiles = new Map<string, number>();
-    for (const member of agentDefinitionIdValidator.members)
-        for (const version of member.value === "workbench_v1" ? [1, 2] : [1]) {
-            const definition = getAgentDefinition(member.value, version);
-            const sets = definition.nativeToolSets?.(definition.operations) ?? [
-                agentToolSchemas(definition),
-            ];
-            for (const operations of sets) {
-                signal?.throwIfAborted();
-                const requests = await Promise.all(
-                    [
-                        ...new Set([
-                            route.reasoningEffort,
-                            ...(descriptor.reasoningEfforts ?? []),
-                        ]),
-                    ].map(async (effort) => {
-                        const nativeRoute = {
-                            ...configured,
-                            reasoningEffort: effort,
-                        };
-                        const key = await piInputProfileKey({
-                            instructions: definition.instructions,
-                            operations,
-                            prompt: "",
-                            definitionVersion: definition.version,
-                            nativeConversation: definition.nativeConversation,
-                            nativeRoute,
-                        });
-                        return { key, nativeRoute };
+    for (const definition of registeredAgentDefinitions()) {
+        const sets = definition.nativeToolSets?.(definition.operations) ?? [
+            agentToolSchemas(definition),
+        ];
+        for (const operations of sets) {
+            signal?.throwIfAborted();
+            const requests = await Promise.all(
+                [
+                    ...new Set([
+                        route.reasoningEffort,
+                        ...(descriptor.reasoningEfforts ?? []),
+                    ]),
+                ].map(async (effort) => {
+                    const nativeRoute = {
+                        ...configured,
+                        reasoningEffort: effort,
+                    };
+                    const key = await piInputProfileKey({
+                        instructions: definition.instructions,
+                        operations,
+                        prompt: "",
+                        definitionVersion: definition.version,
+                        nativeConversation: definition.nativeConversation,
+                        nativeRoute,
+                    });
+                    return { key, nativeRoute };
+                }),
+            );
+            const missing = requests.filter(
+                (request) => !profiles.has(request.key),
+            );
+            if (!missing.length) continue;
+            const history = await profileTranscript(definition, operations);
+            for (const { key, nativeRoute } of missing) {
+                let bytes: number | undefined;
+                let dispatchAttempted = false;
+                const result = provider.streamSimple(
+                    model,
+                    normalizeContext({
+                        messages: piMissionMessages(
+                            definition.instructions,
+                            "",
+                            history,
+                            0,
+                            definition.nativeConversation,
+                        ),
                     }),
-                );
-                const missing = requests.filter(
-                    (request) => !profiles.has(request.key),
-                );
-                if (!missing.length) continue;
-                const history = await profileTranscript(definition, operations);
-                for (const { key, nativeRoute } of missing) {
-                    let bytes: number | undefined;
-                    let dispatchAttempted = false;
-                    const result = provider.streamSimple(
-                        model,
-                        normalizeContext({
-                            messages: piMissionMessages(
-                                definition.instructions,
-                                "",
-                                history,
-                                0,
-                                definition.nativeConversation,
-                            ),
-                        }),
-                        {
-                            apiKey: "offline-profile-key",
-                            maxTokens: MODEL_MAX_OUTPUT_TOKENS,
-                            maxRetries: 0,
-                            signal,
-                            fetch: async () => {
-                                dispatchAttempted = true;
-                                throw new Error(
-                                    "Profile preparation forbids network access",
-                                );
-                            },
-                            onPayload(payload) {
-                                if (!payload || typeof payload !== "object")
-                                    throw new Error(
-                                        "Native profile payload unavailable",
-                                    );
-                                bytes = new TextEncoder().encode(
-                                    preparePiModelPayload(payload, nativeRoute)
-                                        .json,
-                                ).length;
-                                throw new Error(
-                                    "Offline preparation completed before dispatch",
-                                );
-                            },
+                    {
+                        apiKey: "offline-profile-key",
+                        maxTokens: MODEL_MAX_OUTPUT_TOKENS,
+                        maxRetries: 0,
+                        signal,
+                        fetch: async () => {
+                            dispatchAttempted = true;
+                            throw new Error(
+                                "Profile preparation forbids network access",
+                            );
                         },
-                    );
-                    await result.result();
-                    if (dispatchAttempted || bytes === undefined)
-                        throw new Error("Native profile preparation failed");
-                    profiles.set(key, bytes);
-                }
+                        onPayload(payload) {
+                            if (!payload || typeof payload !== "object")
+                                throw new Error(
+                                    "Native profile payload unavailable",
+                                );
+                            bytes = new TextEncoder().encode(
+                                preparePiModelPayload(payload, nativeRoute)
+                                    .json,
+                            ).length;
+                            throw new Error(
+                                "Offline preparation completed before dispatch",
+                            );
+                        },
+                    },
+                );
+                await result.result();
+                if (dispatchAttempted || bytes === undefined)
+                    throw new Error("Native profile preparation failed");
+                profiles.set(key, bytes);
             }
         }
+    }
     return [...profiles].map(([key, bytes]) => ({ key, bytes }));
 }

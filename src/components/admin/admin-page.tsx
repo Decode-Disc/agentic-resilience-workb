@@ -309,12 +309,17 @@ export function AdminPage() {
                     <DialogHeader>
                         <DialogTitle>Provider attempt</DialogTitle>
                         <DialogDescription>
-                            Read-only record of one provider attempt and its
-                            audited outcome.
+                            Recorded response outcome and provider accounting.
                         </DialogDescription>
                     </DialogHeader>
                     {inspectCall ? (
-                        <AdminProviderCallInspection call={inspectCall} />
+                        <LoadErrorBoundary
+                            title="Attempt unavailable"
+                            description="We couldn’t load this provider attempt. Try again.">
+                            <AdminProviderCallInspection
+                                providerCallId={inspectCall._id}
+                            />
+                        </LoadErrorBoundary>
                     ) : null}
                 </DialogContent>
             </Dialog>

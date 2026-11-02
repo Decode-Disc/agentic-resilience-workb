@@ -86,6 +86,9 @@ export const get = query({
         ),
         providerCalls: v.array(
             v.object({
+                _id: v.id("providerCalls"),
+                providerObservation: providerCallFields.providerObservation,
+                billing: providerCallFields.billing,
                 runId: providerCallFields.runId,
                 service: providerCallFields.service,
                 operation: providerCallFields.operation,
@@ -151,6 +154,9 @@ export const get = query({
                 occurredAt: checkpoint.occurredAt,
             })),
             providerCalls: providerCalls.map((call) => ({
+                _id: call._id,
+                providerObservation: call.providerObservation,
+                billing: call.billing,
                 runId: call.runId,
                 service: call.service,
                 operation: call.operation,
@@ -736,6 +742,16 @@ export const listRunProviderCallsPage = query({
             .withIndex("by_run", (q) => q.eq("runId", args.runId))
             .order("desc")
             .paginate(args.paginationOpts);
+    },
+});
+
+/** A selected receipt stays reactive even after it leaves the recent-attempt list. */
+export const inspectProviderCall = query({
+    args: { providerCallId: v.id("providerCalls") },
+    returns: v.union(schema.doc("providerCalls"), v.null()),
+    handler: async (ctx, args) => {
+        await requireAdmin(ctx);
+        return ctx.db.get(args.providerCallId);
     },
 });
 

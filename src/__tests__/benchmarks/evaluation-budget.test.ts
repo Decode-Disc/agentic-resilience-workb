@@ -6,7 +6,7 @@ const { EvaluationBudget } = (await import(
         "../../../scripts/evaluations/source-selection/evaluation-records.ts",
         import.meta.url,
     ).href
-)) as typeof import("../../../scripts/evaluations/source-selection/evaluation-records");
+)) as typeof import("@evaluations/source-selection/evaluation-records");
 
 test("a pending reservation waits for a known cost before admitting the next request", async () => {
     const budget = new EvaluationBudget({ budgetUsd: 0.1, maximumAttempts: 3 });
@@ -78,7 +78,7 @@ test("a historical tariff estimate cannot release an unknown-charge reservation"
     const { join } = await import("node:path");
     const { tmpdir } = await import("node:os");
     const { readEvaluationHistory } = await import(
-        "../../../scripts/evaluations/source-selection/evaluation-records"
+        "@evaluations/source-selection/evaluation-records"
     );
     const root = mkdtempSync(join(tmpdir(), "budget-history-"));
     try {

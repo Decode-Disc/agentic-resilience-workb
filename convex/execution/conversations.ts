@@ -14,12 +14,12 @@ import {
     readConversationMessages,
     saveConversationMessage,
 } from "@convex/integrations/agentStorage";
-import type { initialModelSelection } from "@convex/modelConfigurationSchema";
 import {
+    modelPrepared,
     requireReasoningEffort,
     resolveAgentModel,
-    modelPrepared,
 } from "@convex/modelConfiguration";
+import type { initialModelSelection } from "@convex/modelConfigurationSchema";
 import {
     localBrowserFixturesEnabled,
     requireWorkspaceRun,
@@ -1008,7 +1008,9 @@ export const resumeQueue = mutation({
         const conversation = await conversationForRun(ctx, runId);
         if (
             conversation?.admissionFailure?.code === "pi_storage_capacity" ||
-            conversation?.admissionFailure?.code === "pi_commit_capacity"
+            conversation?.admissionFailure?.code === "pi_commit_capacity" ||
+            conversation?.admissionFailure?.code ===
+                "native_settlement_incomplete"
         )
             throw executionError(conversation.admissionFailure.code);
         if (conversation)

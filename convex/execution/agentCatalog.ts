@@ -5,7 +5,7 @@ import { savedMaterialInspectionDefinition } from "@convex/domain/savedMaterialI
 import {
     nativeWorkbenchDefinition,
     workbenchDefinition,
-} from "@convex/domain/workbench";
+} from "@convex/domain/workbenchAgent";
 import type { AgentDefinition } from "./agentDefinition";
 import { commonOperations } from "./commonOperations";
 import { executionError } from "./errors";
@@ -17,6 +17,30 @@ const definitions = {
     [executionValidationDefinition.id]: executionValidationDefinition,
     [savedMaterialInspectionDefinition.id]: savedMaterialInspectionDefinition,
 } satisfies Record<Doc<"agentMissions">["definitionId"], AgentDefinition>;
+
+const registeredDefinitions = [
+    ...Object.values(definitions),
+    nativeWorkbenchDefinition,
+];
+
+function bindAgentDefinition(definition: AgentDefinition): AgentDefinition {
+    if (
+        (definition.nativeConversation &&
+            definition.executionScope !== "conversation") ||
+        (definition.executionScope === "conversation" &&
+            !definition.conversationReply)
+    )
+        throw executionError("definition_contract_invalid");
+    return {
+        ...definition,
+        operations: { ...definition.operations, ...commonOperations },
+    };
+}
+
+/** Enumerates the exact versioned bindings accepted by runtime resolution. */
+export function registeredAgentDefinitions(): readonly AgentDefinition[] {
+    return registeredDefinitions.map(bindAgentDefinition);
+}
 
 const operations = new Map<string, AgentOperationDefinition>(
     Object.entries(commonOperations),
@@ -40,20 +64,11 @@ export function getAgentDefinition(
     id: Doc<"agentMissions">["definitionId"],
     version?: number,
 ): AgentDefinition {
-    const definition: AgentDefinition =
-        id === nativeWorkbenchDefinition.id && version === 2
-            ? nativeWorkbenchDefinition
-            : definitions[id];
-    if (
-        !definition ||
-        (version !== undefined && definition.version !== version)
-    )
-        throw executionError("definition_version_conflict");
-    return {
-        ...definition,
-        operations: {
-            ...definition.operations,
-            ...commonOperations,
-        },
-    };
+    const selectedVersion = version ?? definitions[id].version;
+    const definition = registeredDefinitions.find(
+        (definition) =>
+            definition.id === id && definition.version === selectedVersion,
+    );
+    if (!definition) throw executionError("definition_version_conflict");
+    return bindAgentDefinition(definition);
 }

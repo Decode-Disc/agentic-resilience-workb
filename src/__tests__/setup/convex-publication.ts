@@ -19,6 +19,12 @@ export async function servePublicationGuard(
     if (payload.path === "execution/piControl:holdPublication") {
         state.held = payload.args[0].held;
         value = null;
+    } else if (
+        payload.path === "execution/piControl:recoverPublicationWorkers"
+    ) {
+        if (!state.held) throw new Error("publication_hold_required");
+        state.activeWorkers = false;
+        value = null;
     } else if (payload.path === "execution/piControl:publicationStatus") {
         value = {
             held: state.held,

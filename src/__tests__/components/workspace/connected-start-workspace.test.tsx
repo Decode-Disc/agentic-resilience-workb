@@ -1,6 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { ConvexError } from "convex/values";
 import { beforeEach, expect, test, vi } from "vitest";
 import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
 import { ConnectedStartWorkspace } from "@/components/workspace/start/connected-start-workspace";
@@ -486,4 +487,76 @@ test("cancelling the first question restores the ordinary draft and keyboard foc
         );
         expect(document.activeElement).toBe(restored);
     });
+});
+
+test("keeps an ordinary message available after a rejected submission", async () => {
+    submitMessage.mockRejectedValueOnce(
+        new Error("Rejected before persistence"),
+    );
+    render(<ConnectedStartWorkspace runId={runId} />);
+    const input = screen.getByRole("textbox") as HTMLTextAreaElement;
+    fireEvent.change(input, {
+        target: { value: "My unsaved analyst request" },
+    });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await screen.findByText("Your message could not be sent");
+    expect(input.value).toBe("My unsaved analyst request");
+});
+
+test("prevents a second ordinary send while first acknowledgement is pending", async () => {
+    submitMessage.mockImplementationOnce(() => new Promise(() => {}));
+    render(<ConnectedStartWorkspace runId={runId} />);
+    const input = screen.getByRole("textbox") as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "One request" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(submitMessage).toHaveBeenCalledTimes(1));
+    expect(input.disabled).toBe(true);
+});
+
+test.each([
+    true,
+    false,
+])("model selection renews a confirmed conflict and replays an unknown acknowledgement (%s)", async (confirmed) => {
+    setModel.mockRejectedValueOnce(
+        confirmed
+            ? new ConvexError({ code: "model_configuration_conflict" })
+            : new Error("Acknowledgement unavailable"),
+    );
+    const view = render(<ConnectedStartWorkspace runId={runId} />);
+    const choose = async () => {
+        fireEvent.click(
+            screen.getByRole("button", { name: "Workbench model and effort" }),
+        );
+        const option = await screen.findByRole("menuitemradio", {
+            name: "DeepSeek V4.1 Flash 1017",
+        });
+        fireEvent.pointerDown(option, { pointerType: "mouse", button: 0 });
+        fireEvent.click(option);
+    };
+    await choose();
+    await screen.findByText(
+        "The model settings could not be confirmed. Check the selection and try again.",
+    );
+    convexReactHarness.query(api.workbench.models).returns({
+        selectedId: "model-glm",
+        effort: "low",
+        effortChoices: ["low", "high"],
+        label: "GLM-5.3-Flash",
+        available: true,
+        revision: 1,
+        choices: [
+            { id: "model-glm", label: "GLM-5.3-Flash" },
+            { id: "model-deepseek", label: "DeepSeek V4.1 Flash 1017" },
+        ],
+    });
+    view.rerender(<ConnectedStartWorkspace runId={runId} />);
+    await choose();
+    await waitFor(() => expect(setModel).toHaveBeenCalledTimes(2));
+    expect(setModel.mock.calls[1]?.[0].expectedRevision).toBe(
+        confirmed ? 1 : 0,
+    );
+    const first = setModel.mock.calls[0]?.[0],
+        second = setModel.mock.calls[1]?.[0];
+    if (confirmed) expect(second?.requestKey).not.toBe(first?.requestKey);
+    else expect(second?.requestKey).toBe(first?.requestKey);
 });

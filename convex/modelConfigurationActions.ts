@@ -245,6 +245,7 @@ export const initialize = action({
                 model: model.model,
                 provider,
             });
+            if (existing?.status === "preparing") return { ready: false };
             if (existing?.status === "ready" && !modelPrepared(existing))
                 return { ready: false };
             const outcome =
@@ -257,7 +258,7 @@ export const initialize = action({
                     : await prepareModel(ctx, {
                           ...model,
                           provider,
-                          requestKey: `initial:${model.model}`,
+                          requestKey: `initial:${model.model}:${existing?.revision ?? 0}`,
                           ...(existing
                               ? { expectedRevision: existing.revision }
                               : {}),

@@ -521,6 +521,10 @@ test("stopping a native response settles its cancelled tasks and reuses the conv
     }
     await running;
     expect(count).toBe(1);
+    expect(
+        (await t.run((ctx) => ctx.db.query("piSessions").first()))
+            ?.settlementFailureCode,
+    ).toBeUndefined();
     await client.mutation(api.execution.conversations.resumeQueue, { runId });
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     expect(count).toBe(2);

@@ -62,6 +62,46 @@ export const holdPublication = internalMutation({
     },
 });
 
+/** Explicitly fences expired admitted writers while publication is held. */
+export const recoverPublicationWorkers = internalMutation({
+    args: {},
+    returns: v.null(),
+    handler: async (ctx) => {
+        if (!(await publicationControl(ctx))?.held)
+            throw executionError("publication_hold_required");
+        const marked = await ctx.db
+            .query("agentMissions")
+            .withIndex("by_pi_active_writer", (q) =>
+                q.gt("piActiveWriter", undefined),
+            )
+            .take(17);
+        if (marked.length > 16)
+            throw executionError("publication_recovery_capacity");
+        for (const mission of marked) {
+            const session = await sessionForMission(ctx, mission);
+            if (
+                !session ||
+                session.missionId !== mission._id ||
+                session.generation !== mission.generation ||
+                session.writer !== mission.piActiveWriter ||
+                session.leaseUntil > Date.now()
+            )
+                throw executionError("publication_workers_active");
+            await ctx.db.patch(session._id, {
+                epoch: session.epoch + 1,
+                writer: `publication-recovery:${session.epoch + 1}`,
+                leaseUntil: Date.now(),
+            });
+            await ctx.db.patch(mission._id, { piActiveWriter: undefined });
+            await recordMissionEvent(ctx, mission, {
+                kind: "publication_worker_recovered",
+                cause: "publication_recovery",
+            });
+        }
+        return null;
+    },
+});
+
 export const publicationStatus = internalQuery({
     args: {},
     returns: v.object({ held: v.boolean(), hasActiveWorkers: v.boolean() }),
@@ -270,6 +310,7 @@ export const prepare = internalMutation({
             return false;
         }
         const session = await sessionForMission(ctx, mission);
+        if (session?.settlementFailureCode) return false;
         const settling =
             ["completed", "cancelled"].includes(mission.status) &&
             needsNativeSettlement(mission, session);
@@ -446,11 +487,22 @@ export const closeWorker = internalMutation({
                     session.writer !== args.writer))
         )
             return null;
+        if (
+            !args.nativeSettled &&
+            session?.settlementEpoch === session?.epoch &&
+            session?.settlementEpoch !== undefined
+        )
+            return null;
         if (session)
             await ctx.db.patch(session._id, {
                 leaseUntil: Date.now(),
                 ...(session.conversationId && args.nativeSettled && !args.error
-                    ? { settledSequence: session.sequence }
+                    ? {
+                          settledSequence: session.sequence,
+                          settlementAttempts: undefined,
+                          settlementEpoch: undefined,
+                          settlementFailureCode: undefined,
+                      }
                     : {}),
             });
         if (mission.generation !== args.expectedGeneration) return null;
@@ -481,25 +533,58 @@ export const closeWorker = internalMutation({
             piActiveWriter: undefined,
         });
         const nextAt = mission.piResultWakePending ? Date.now() : args.at;
-        if (!args.error && nextAt !== undefined)
+        const settlingTerminal =
+            session?.conversationId &&
+            !args.nativeSettled &&
+            ["completed", "cancelled"].includes(mission.status);
+        if (!settlingTerminal && !args.error && nextAt !== undefined)
             await schedulePiMission(
                 ctx,
                 mission._id,
                 args.expectedGeneration,
                 Math.min(nextAt, mission.piWakeAt ?? nextAt),
             );
-        if (
-            session?.conversationId &&
-            !args.nativeSettled &&
-            !storageExhausted &&
-            ["completed", "cancelled"].includes(mission.status)
-        )
-            await schedulePiMission(
-                ctx,
-                mission._id,
-                args.expectedGeneration,
-                Date.now() + 1000,
-            );
+        if (settlingTerminal && session?.conversationId) {
+            const attempts = (session.settlementAttempts ?? 0) + 1;
+            const permanent =
+                code &&
+                (storageExhausted ||
+                    [
+                        "publication_context_unavailable",
+                        "pi_commit_invalid",
+                        "pi_commit_conflict",
+                        "pi_log_sequence_conflict",
+                        "pi_terminal_dispatch_forbidden",
+                        "retained_response_invalid",
+                    ].includes(code));
+            const failure = permanent
+                ? code
+                : attempts >= 3
+                  ? "native_settlement_incomplete"
+                  : undefined;
+            await ctx.db.patch(session._id, {
+                settlementAttempts: attempts,
+                settlementEpoch: session.epoch,
+                ...(failure ? { settlementFailureCode: failure } : {}),
+            });
+            if (failure) {
+                await ctx.db.patch(session.conversationId, {
+                    queuePaused: true,
+                    admissionFailure: { code: "native_settlement_incomplete" },
+                });
+                await recordMissionEvent(ctx, mission, {
+                    kind: "native_settlement_blocked",
+                    cause: "pi_worker",
+                    code: failure,
+                });
+            } else
+                await schedulePiMission(
+                    ctx,
+                    mission._id,
+                    args.expectedGeneration,
+                    Date.now() + 1000 * 2 ** (attempts - 1),
+                );
+        }
         if (mission.parentRequestId)
             await ctx.runMutation(internal.execution.handoffs.finishChild, {
                 missionId: mission._id,

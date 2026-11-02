@@ -118,6 +118,7 @@ export const executionValidationDefinition: AgentDefinition & {
 } = {
     id: "execution_validation_v1",
     version: 1,
+    executionScope: "research",
     authority: "local_fixture_validation_only",
     instructions:
         "Simulation only. Check each supplied fixture value, then report their total.",

@@ -563,3 +563,61 @@ async function activeMessage(
     assert(message);
     return message._id;
 }
+
+test("the version 2 framing operation preserves analyst authority independently of native journal selection", async () => {
+    const { t, client, runId, active } = await framedTurn(
+        "framing-domain-authority",
+    );
+    const messageId = await activeMessage(t, active.turnId);
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        cause: "framing-contract",
+        input: {
+            kind: "adjust_framing",
+            messageId,
+            expectedRevision: 1,
+            content: { scope: "Model overwrite", questions: [] },
+        },
+    });
+    await t.mutation(internal.execution.operations.claim, {
+        requestId,
+        expectedGeneration: 1,
+    });
+    await client.mutation(api.framing.save, {
+        runId,
+        expectedRevision: 1,
+        requestKey: "analyst-edit",
+        content: { scope: "Analyst scope", questions: [] },
+    });
+    const version = await t.run(async (ctx) => {
+        const turn = await ctx.db.get(active.turnId);
+        assert(turn);
+        await ctx.db.patch(active.missionId, { definitionVersion: 1 });
+        const request = await ctx.db.get(requestId);
+        assert(request);
+        expect(request.operationVersion).toBe(2);
+        await ctx.db.patch(requestId, {
+            instructionVersion: turn.instructionVersion,
+            input: {
+                ...request.input,
+                kind: "adjust_framing",
+                messageId,
+                expectedRevision: 2,
+                content: { scope: "Model overwrite", questions: [] },
+            },
+        });
+        return turn.instructionVersion;
+    });
+    expect(version).toBeGreaterThan(0);
+    await expect(
+        t.mutation(internal.framing.applyFromWorkbench, {
+            requestId,
+            expectedGeneration: 1,
+        }),
+    ).rejects.toThrow("framing_analyst_conflict");
+    expect(await client.query(api.framing.get, { runId })).toMatchObject({
+        revision: 2,
+        content: { scope: "Analyst scope" },
+    });
+});

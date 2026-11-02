@@ -53,7 +53,7 @@ export const start = internalMutation({
                 ? (conversation.definitionVersion ?? 1)
                 : 1,
         );
-        const executionScope = definition.executionScope ?? "research";
+        const executionScope = definition.executionScope;
         const { run, visitor } =
             executionScope === "conversation"
                 ? await requireDossierAuthority(ctx, args.runId)

@@ -1,6 +1,14 @@
 import { ConvexError, type Infer, v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
+import type { Doc, Id } from "./_generated/dataModel";
+import {
+    internalMutation,
+    internalQuery,
+    mutation,
+    type MutationCtx,
+    type QueryCtx,
+} from "./_generated/server";
+import { requireAdmin } from "./administrationAuthority";
 import { assertEvidenceExecutionFence } from "./domain/evidenceAuthority";
 import { manualSourceIntakeError } from "./domain/manualSourceIntake";
 import {
@@ -55,6 +63,238 @@ const PROVIDER_LEASE_MS = {
     url_metadata: 15_000,
     pdf: 15_000,
 } as const;
+
+/** Factual response identity survives an interrupted stream without settling its outcome. */
+export const observeGeneration = internalMutation({
+    args: {
+        invocationId: v.id("agentInvocations"),
+        generationId: v.string(),
+        httpStatus: v.optional(v.number()),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const call = await invocationCall(ctx, args.invocationId);
+        if (!/^[\w.:-]{1,256}$/.test(args.generationId))
+            throw new Error("Invalid provider observation");
+        if (call.providerObservation) {
+            if (call.providerObservation.generationId !== args.generationId)
+                throw new Error("Provider generation identity changed");
+            return null;
+        }
+        await ctx.db.patch(call._id, {
+            providerObservation: {
+                generationId: args.generationId,
+                httpStatus: args.httpStatus,
+                observedAt: Date.now(),
+            },
+        });
+        return null;
+    },
+});
+
+async function invocationCall(
+    ctx: QueryCtx | MutationCtx,
+    invocationId: Id<"agentInvocations">,
+) {
+    const invocation = await ctx.db.get(invocationId);
+    const call = invocation?.providerCallId
+        ? await ctx.db.get(invocation.providerCallId)
+        : null;
+    const request = await ctx.db
+        .query("agentInvocationPayloads")
+        .withIndex("by_invocation_and_part", (q) =>
+            q.eq("invocationId", invocationId).eq("part", "request"),
+        )
+        .unique();
+    if (
+        !call ||
+        !invocation ||
+        invocation.provenance !== "live" ||
+        request?.state !== "complete" ||
+        call.service !== "model" ||
+        call.invocationId !== invocation._id ||
+        call.inputHash !== sha256Hex(invocation.inputJson) ||
+        call.executionGeneration !== invocation.generation ||
+        call.missionId !== invocation.missionId ||
+        call.runId !== invocation.runId
+    )
+        throw new Error("Invalid provider observation");
+    return call;
+}
+
+const billingResult = v.object({ scheduled: v.boolean() });
+const billingReason =
+    schema.tables.providerCalls.validator.fields.billing.fields.reason;
+const BILLING_LEASE_MS = 30_000;
+
+function reportedCostSettlement(
+    call: Doc<"providerCalls">,
+    cost: number | undefined,
+) {
+    if (cost !== undefined && (!Number.isFinite(cost) || cost < 0))
+        throw new Error("Invalid provider cost");
+    if (
+        cost !== undefined &&
+        call.reportedCost !== undefined &&
+        Math.abs(call.reportedCost - cost) > 1e-12
+    ) {
+        return {
+            reportedCost: call.reportedCost,
+            billing: {
+                state: "conflict" as const,
+                reason: "amount_conflict" as const,
+                attempt: call.billing?.attempt ?? 0,
+                updatedAt: Date.now(),
+            },
+        };
+    }
+    return { reportedCost: call.reportedCost ?? cost };
+}
+
+/** Only the original admitted call can request accounting; this grants no execution authority. */
+export const requestBilling = internalMutation({
+    args: { invocationId: v.id("agentInvocations") },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const invocation = await ctx.db.get(args.invocationId);
+        if (!invocation?.providerCallId) return null;
+        const call = await invocationCall(ctx, args.invocationId);
+        if (
+            !call.providerObservation ||
+            call.billing ||
+            call.reportedCost !== undefined ||
+            call.status === "succeeded"
+        )
+            return null;
+        await ctx.db.patch(call._id, {
+            billing: {
+                state: "pending",
+                attempt: 0,
+                updatedAt: Date.now(),
+                retryAt: Date.now() + BILLING_LEASE_MS,
+            },
+        });
+        await ctx.scheduler.runAfter(
+            5000,
+            internal.integrations.openRouterGeneration.reconcile,
+            { providerCallId: call._id, attempt: 1 },
+        );
+        return null;
+    },
+});
+
+/** Explicit administrator recovery reads accounting only, never repeats model inference. */
+export const retryBilling = mutation({
+    args: { providerCallId: v.id("providerCalls") },
+    returns: billingResult,
+    handler: async (ctx, args) => {
+        await requireAdmin(ctx);
+        const call = await ctx.db.get(args.providerCallId);
+        if (!call?.invocationId) return { scheduled: false };
+        await invocationCall(ctx, call.invocationId);
+        if (
+            !call.providerObservation ||
+            !call.billing ||
+            !["pending", "unavailable", "checking"].includes(
+                call.billing.state,
+            ) ||
+            Date.now() < (call.billing.retryAt ?? Infinity)
+        )
+            return { scheduled: false };
+        await ctx.db.patch(call._id, {
+            billing: {
+                state: "pending",
+                attempt: call.billing.attempt,
+                updatedAt: Date.now(),
+                retryAt: Date.now() + BILLING_LEASE_MS,
+            },
+        });
+        await ctx.scheduler.runAfter(
+            0,
+            internal.integrations.openRouterGeneration.reconcile,
+            { providerCallId: call._id, attempt: call.billing.attempt + 1 },
+        );
+        return { scheduled: true };
+    },
+});
+
+export const claimBilling = internalMutation({
+    args: { providerCallId: v.id("providerCalls"), attempt: v.number() },
+    returns: v.union(v.object({ generationId: v.string() }), v.null()),
+    handler: async (ctx, args) => {
+        const call = await ctx.db.get(args.providerCallId);
+        if (
+            !call?.invocationId ||
+            call.billing?.state !== "pending" ||
+            call.billing.attempt + 1 !== args.attempt ||
+            !call.providerObservation
+        )
+            return null;
+        await invocationCall(ctx, call.invocationId);
+        if (call.reportedCost !== undefined) {
+            await ctx.db.patch(call._id, {
+                billing: {
+                    state: "confirmed",
+                    attempt: call.billing.attempt,
+                    updatedAt: Date.now(),
+                },
+            });
+            return null;
+        }
+        await ctx.db.patch(call._id, {
+            billing: {
+                state: "checking",
+                attempt: args.attempt,
+                updatedAt: Date.now(),
+                retryAt: Date.now() + BILLING_LEASE_MS,
+            },
+        });
+        return { generationId: call.providerObservation.generationId };
+    },
+});
+
+export const settleBilling = internalMutation({
+    args: {
+        providerCallId: v.id("providerCalls"),
+        attempt: v.number(),
+        generationId: v.string(),
+        cost: v.optional(v.number()),
+        reason: billingReason,
+        httpStatus: v.optional(v.number()),
+        latencyMs: v.optional(v.number()),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const call = await ctx.db.get(args.providerCallId);
+        if (
+            !call?.invocationId ||
+            call.billing?.state !== "checking" ||
+            call.billing.attempt !== args.attempt ||
+            call.providerObservation?.generationId !== args.generationId
+        )
+            return null;
+        await invocationCall(ctx, call.invocationId);
+        if ((args.cost === undefined) === (args.reason === undefined))
+            throw new Error("Invalid billing result");
+        await ctx.db.patch(call._id, {
+            billing: {
+                state: args.cost !== undefined ? "confirmed" : "unavailable",
+                attempt: args.attempt,
+                updatedAt: Date.now(),
+                httpStatus: args.httpStatus,
+                latencyMs: args.latencyMs,
+                ...(args.reason
+                    ? {
+                          reason: args.reason,
+                          retryAt: Date.now() + BILLING_LEASE_MS,
+                      }
+                    : {}),
+            },
+            ...reportedCostSettlement(call, args.cost),
+        });
+        return null;
+    },
+});
 
 function providerLeaseDurationMs(
     service: "sec" | "exa" | "url_metadata" | "pdf" | "model",
@@ -785,6 +1025,10 @@ export const recordAttempt = internalMutation({
                     existing.errorCode !== args.errorCode
                 )
                     throw sourcePreparationError("attempt_result_conflict");
+                await ctx.db.patch(
+                    existing._id,
+                    reportedCostSettlement(existing, args.reportedCost),
+                );
                 return {
                     providerCallId: existing._id,
                     shouldExecute: false,
@@ -832,7 +1076,7 @@ export const recordAttempt = internalMutation({
             status: args.status,
             latencyMs: args.latencyMs,
             usage: args.usage,
-            reportedCost: args.reportedCost,
+            ...reportedCostSettlement(existing, args.reportedCost),
             errorCode: args.errorCode,
             ...(args.diagnostic ? { diagnostic: args.diagnostic } : {}),
             retryable: args.retryable,

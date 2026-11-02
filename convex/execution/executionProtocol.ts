@@ -129,6 +129,10 @@ export type AgentGenerationResult =
 
 export type AgentGenerationLifecycle = {
     beforeDispatch(requestJson: string): Promise<void>;
+    observeProvider?(observation: {
+        generationId: string;
+        httpStatus?: number;
+    }): Promise<void>;
     observe(observation: AgentGenerationObservation): Promise<void>;
     signal?: AbortSignal;
 };

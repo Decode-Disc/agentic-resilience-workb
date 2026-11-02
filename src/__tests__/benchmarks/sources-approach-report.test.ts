@@ -1,14 +1,14 @@
 // @vitest-environment node
 import assert from "node:assert/strict";
 import { expect, test } from "vitest";
-import type { SourcesApproachResult } from "../../../scripts/evaluations/source-selection/sources-approach-study.ts";
+import type { SourcesApproachResult } from "@evaluations/source-selection/sources-approach-study.ts";
 
 const { buildSourcesApproachReport } = (await import(
     new URL(
         "../../../scripts/evaluations/source-selection/sources-approach-report.ts",
         import.meta.url,
     ).href
-)) as typeof import("../../../scripts/evaluations/source-selection/sources-approach-report");
+)) as typeof import("@evaluations/source-selection/sources-approach-report");
 
 function result(
     overrides: Partial<SourcesApproachResult> = {},

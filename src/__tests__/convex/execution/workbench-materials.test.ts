@@ -1,4 +1,4 @@
-import { internal } from "@convex/_generated/api";
+import { api, internal } from "@convex/_generated/api";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedWorkbenchMaterials } from "@/__tests__/setup/workbench-materials";
 
@@ -108,4 +108,77 @@ test("the grouped capture listing retains generation, ownership, availability an
     );
     await t.run((ctx) => ctx.db.patch(visitorId, { status: "revoked" }));
     await expect(t.query(query, args)).rejects.toThrow("not_authorized");
+});
+
+test("ended documentary treatment has the same current outcome in model context and workspace", async () => {
+    const { t, runId, captureId, start, client } = await seedWorkbenchMaterials(
+        1,
+        1,
+    );
+    await t.run(async (ctx) => {
+        const capture = await ctx.db.get(captureId);
+        assert(capture);
+        await ctx.db.patch(capture.preparationId, { status: "complete" });
+        const message = await ctx.db.query("agentMessageDeliveries").first();
+        assert(message);
+        const requestId = await ctx.db.insert("agentOperationRequests", {
+            runId,
+            actor: "agent",
+            cause: "fixture",
+            input: {
+                kind: "transmit_source_request",
+                messageId: message._id,
+                interpretedNeed: "Commercial terms",
+            },
+            operationVersion: 1,
+            expectedGeneration: 1,
+            logicalKey: "finished-instruction",
+            status: "completed",
+            createdAt: 1,
+        });
+        const frame = await ctx.db.insert("framingRevisions", {
+            runId,
+            revision: 1,
+            content: { scope: "Workflow", questions: [] },
+            contentHash: "fixture",
+            requestKey: "fixed",
+            origin: "analyst",
+            createdAt: 1,
+        });
+        await ctx.db.patch(runId, {
+            currentFramingRevisionId: frame,
+            fixedFramingRevisionId: frame,
+        });
+        const run = await ctx.db.get(runId);
+        assert(run?.fixedFramingRevisionId);
+        await ctx.db.insert("workbenchInstructions", {
+            runId,
+            requestId,
+            messageId: message._id,
+            interpretedNeed: "Commercial terms",
+            framingRevisionId: run.fixedFramingRevisionId,
+            status: "transmitted",
+            outcome: "Its treatment is still in progress.",
+            preparationId: capture.preparationId,
+            createdAt: 1,
+        });
+    });
+    const turn = await start();
+    assert(turn);
+    const context = await t.query(internal.execution.context.build, {
+        missionId: turn.missionId,
+        expectedGeneration: 1,
+    });
+    assert(context.kind === "ready");
+    const request = JSON.parse(context.inputJson).analystRequests[0];
+    expect(request).toMatchObject({
+        status: "completed",
+        transmissionStatus: "transmitted",
+    });
+    expect(request.outcome).not.toContain("still in progress");
+    const workspace = await client.query(api.workbench.snapshot, { runId });
+    expect(workspace.instructions[0]).toMatchObject({
+        status: request.status,
+        outcome: request.outcome,
+    });
 });

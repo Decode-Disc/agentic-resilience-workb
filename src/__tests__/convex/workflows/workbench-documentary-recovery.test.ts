@@ -1,5 +1,8 @@
 import { api, internal } from "@convex/_generated/api";
+import type { MutationCtx } from "@convex/_generated/server";
+import { processInstructions } from "@convex/workbench";
 import agentTest from "@convex-dev/agent/test";
+import { getFunctionName } from "convex/server";
 import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
@@ -8,7 +11,10 @@ afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
 });
-test("failed instruction delivery does not strand the remaining requests", async () => {
+test.each([
+    false,
+    true,
+])("instruction delivery preserves expected refusals and propagates infrastructure failures (%s)", async (unexpected) => {
     vi.useFakeTimers();
     const f = await seedSourcePreparation();
     const { t, runId, userId } = f;
@@ -83,6 +89,38 @@ test("failed instruction delivery does not strand the remaining requests", async
         if (!first || !second) throw new Error("Expected two instructions");
         return [first, second] as const;
     });
+    if (unexpected) {
+        const registered = processInstructions as typeof processInstructions & {
+            _handler(
+                ctx: MutationCtx,
+                args: { runId: typeof runId },
+            ): Promise<null>;
+        };
+        await expect(
+            t.mutation((ctx) =>
+                registered._handler(
+                    {
+                        ...ctx,
+                        runMutation: async (reference, ...args) => {
+                            if (
+                                getFunctionName(reference) ===
+                                "workbench:deliverSourceInstruction"
+                            )
+                                throw new Error(
+                                    "Documentary dispatch infrastructure unavailable",
+                                );
+                            return ctx.runMutation(reference, ...args);
+                        },
+                    },
+                    { runId },
+                ),
+            ),
+        ).rejects.toThrow("Documentary dispatch infrastructure unavailable");
+        expect(await t.run((ctx) => ctx.db.get(ids[0]))).toMatchObject({
+            status: "waiting",
+        });
+        return;
+    }
     await t.mutation(internal.workbench.processInstructions, { runId });
     expect(await t.run((ctx) => ctx.db.get(ids[0]))).toMatchObject({
         status: "blocked",

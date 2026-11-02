@@ -69,6 +69,8 @@ export function workbenchTurn(work: Work): ConversationTurnSnapshot {
     };
 }
 export function workbenchFailureCopy(code?: string) {
+    if (code === "native_settlement_incomplete")
+        return "This conversation requires recovery before another response can begin. Your messages and recorded work remain available. You can continue editing the research program directly.";
     if (code === "pi_storage_capacity" || code === "pi_commit_capacity")
         return "This conversation has reached its storage limit. Your messages and recorded work remain available in the dossier.";
     if (

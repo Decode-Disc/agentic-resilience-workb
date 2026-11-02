@@ -12,7 +12,6 @@ import { MAX_RESEARCH_PLAN_QUESTIONS } from "@convex/domain/researchPlan";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { readPreparationConcurrency } from "@convex/domain/sourcePreparationAuthority";
 import { coveragePresetValidator } from "@convex/domain/validators";
-import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import {
     requireDossierAuthority,
     requireMissionAuthority,
@@ -23,12 +22,12 @@ import {
 } from "@convex/execution/conversations";
 import { executionError } from "@convex/execution/errors";
 import { retainOperationEffect } from "@convex/execution/operations";
+import { initialModelSelection } from "@convex/modelConfigurationSchema";
 import {
     MAX_ANALYSES_PER_VISITOR,
     sourcePreparationEnabled,
 } from "@convex/resourceLimits";
 import { requireWorkspaceRun } from "@convex/runWorkspace";
-import { initialModelSelection } from "@convex/modelConfigurationSchema";
 import schema from "@convex/schema";
 import { workflow } from "@convex/workflow";
 import { type Infer, v } from "convex/values";
@@ -332,10 +331,7 @@ export const applyFromWorkbench = internalMutation({
                 throw executionError("operation_result_conflict");
             return value.revision;
         }
-        if (
-            getAgentDefinition(mission.definitionId, mission.definitionVersion)
-                .nativeConversation
-        )
+        if (request.operationVersion === 2)
             await requireFramingEditAuthority(ctx, mission, {
                 messageId: request.input.messageId,
                 proposed: request.input.content,

@@ -1,4 +1,5 @@
 import {
+    type AppendMessage,
     ComposerPrimitive,
     type ExternalThreadQueueAdapter,
     MessagePrimitive,
@@ -11,9 +12,9 @@ import {
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import {
-    CommandIcon,
     ArrowRight01Icon,
     Cancel01Icon,
+    CommandIcon,
     File01Icon,
     Loading03Icon,
     Task01Icon,
@@ -22,11 +23,6 @@ import {
 import { useControllableState } from "@radix-ui/react-use-controllable-state";
 import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
 import remarkGfm from "remark-gfm";
-import {
-    ComposerSurface,
-    ComposerToolbar,
-} from "@/components/composer/composer";
-import { ComposerToolsMenu } from "@/components/composer/tools-menu";
 import {
     type ConversationWorkItem,
     workStateLabels,
@@ -47,6 +43,23 @@ import {
     MessageContent,
     MessageFooter,
 } from "@/components/chat/message";
+import {
+    ComposerSurface,
+    ComposerToolbar,
+} from "@/components/composer/composer";
+import {
+    ConversationComposerActions,
+    ConversationDeliveryOptions,
+    ConversationQueue,
+} from "@/components/composer/conversation-actions";
+import {
+    COMPOSER_COMMANDS,
+    type ComposerCommand,
+    ConversationCommandPicker,
+    ConversationSlashCommands,
+    type ResearchControlCommand,
+} from "@/components/composer/slash-commands";
+import { ComposerToolsMenu } from "@/components/composer/tools-menu";
 import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -66,18 +79,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { useResponsive } from "@/hooks/use-responsive";
 import { cn } from "@/lib/utils";
-import {
-    ConversationComposerActions,
-    ConversationQueue,
-    ConversationDeliveryOptions,
-} from "@/components/composer/conversation-actions";
-import {
-    COMPOSER_COMMANDS,
-    type ComposerCommand,
-    ConversationSlashCommands,
-    ConversationCommandPicker,
-    type ResearchControlCommand,
-} from "@/components/composer/slash-commands";
 import "./workbench-conversation.css";
 
 export {
@@ -129,7 +130,7 @@ export function useWorkbenchConversation({
         delivery?: "queue" | "steer",
     ) => void | Promise<void>;
     isRunning?: boolean;
-    queue?: ExternalThreadQueueAdapter;
+    queue?: Omit<ExternalThreadQueueAdapter, "enqueue" | "steer">;
     onStop?: () => void | Promise<void>;
 }) {
     const syncingDraft = useRef(false);
@@ -156,6 +157,19 @@ export function useWorkbenchConversation({
             setSending(false);
         }
     }
+    const deliverMessage = async (
+        message: AppendMessage,
+        mode: "queue" | "steer" = "queue",
+    ) => {
+        const text = message.content
+            .flatMap((part) => (part.type === "text" ? [part.text] : []))
+            .join("\n");
+        if (
+            !(await submit(text, mode)) &&
+            !runtime.thread.composer.getState().text
+        )
+            runtime.thread.composer.setText(text);
+    };
     const runtime = useExternalStoreRuntime({
         messages,
         convertMessage: (message) => ({
@@ -169,24 +183,27 @@ export function useWorkbenchConversation({
             },
         }),
         isRunning,
-        queue,
+        queue: queue
+            ? {
+                  ...queue,
+                  enqueue: (message) => {
+                      void deliverMessage(message);
+                  },
+                  steer: (message) => {
+                      void deliverMessage(
+                          message,
+                          message.steer ? "steer" : "queue",
+                      );
+                  },
+              }
+            : undefined,
         onCancel: onStop
             ? async () => {
                   await onStop();
               }
             : undefined,
         isSendDisabled: sending,
-        onNew: async (message) => {
-            const text = message.content
-                .filter((part) => part.type === "text")
-                .map((part) => part.text)
-                .join("\n");
-            if (!(await submit(text))) {
-                // Delivery failed; preserve a newer draft if the analyst already continued typing.
-                if (!runtime.thread.composer.getState().text)
-                    runtime.thread.composer.setText(text);
-            }
-        },
+        onNew: deliverMessage,
     });
     useEffect(() => {
         if (sending) return;

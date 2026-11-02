@@ -1,5 +1,70 @@
 import { expect, test } from "@playwright/test";
 
+test("a growing framing dock keeps the latest alert visible without pulling a history reader down", async ({
+    page,
+}) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/?layout=start&screen=framing&theme=light");
+    await page
+        .getByRole("textbox", { name: "Refine the framing in your own words" })
+        .waitFor();
+    const viewport = page.getByRole("region", {
+        name: "Conversation scroll area",
+    });
+    // External status changes and wrapping can resize the dock independently of a model run.
+    await page.evaluate(() => {
+        const alert = document.createElement("div");
+        alert.role = "alert";
+        alert.style.minHeight = "118px";
+        alert.textContent =
+            "Response unavailable. Your recorded work remains available. Send another message to continue.";
+        document
+            .querySelector('[data-slot="conversation-thread-content"]')
+            ?.append(alert);
+    });
+    await viewport.evaluate((node) => {
+        node.scrollTop = node.scrollHeight;
+    });
+    await page.screenshot({
+        path: "test-results/workbench-ui/dock-before.png",
+    });
+    await page
+        .locator('[data-slot="conversation-thread-dock"]')
+        .evaluate((node) => {
+            node.style.minHeight = "470px";
+        });
+    await expect
+        .poll(async () => {
+            const alert = await page.getByRole("alert").boundingBox();
+            const dock = await page
+                .locator('[data-slot="conversation-thread-dock"]')
+                .boundingBox();
+            return !!alert && !!dock && alert.y + alert.height <= dock.y;
+        })
+        .toBe(true);
+    await viewport.evaluate((node) => {
+        node.scrollTop = 0;
+        node.dispatchEvent(new Event("scroll"));
+    });
+    await page
+        .locator('[data-slot="conversation-thread-dock"]')
+        .evaluate((node) => {
+            node.style.minHeight = "500px";
+        });
+    await expect
+        .poll(() => viewport.evaluate((node) => node.scrollTop))
+        .toBeLessThan(2);
+    await page.getByRole("button", { name: "Scroll to end" }).click();
+    await expect
+        .poll(() =>
+            viewport.evaluate(
+                (node) =>
+                    node.scrollHeight - node.scrollTop - node.clientHeight,
+            ),
+        )
+        .toBeLessThan(2);
+});
+
 for (const theme of ["light", "dark"] as const) {
     for (const width of [1440, 390]) {
         test(`START ${theme} ${width} growing reply respects the reader and stationary dock`, async ({

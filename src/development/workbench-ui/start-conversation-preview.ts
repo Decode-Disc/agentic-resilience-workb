@@ -1,5 +1,4 @@
 import type {
-    AppendMessage,
     ExternalThreadQueueAdapter,
     ThreadMessageLike,
 } from "@assistant-ui/react";
@@ -1375,28 +1374,16 @@ export function useStartConversationPreview(
             ? proposedScopeValue
             : "");
     const scopeAnswer = state.contextDraft?.trim() || contextChoice;
-    function dispatch(message: AppendMessage, delivery: "queue" | "steer") {
-        const text = message.content
-            .flatMap((part) => (part.type === "text" ? [part.text] : []))
-            .join("\n");
-        void conversation.submit(text, delivery).then((ok) => {
-            if (!ok && !conversation.runtime.thread.composer.getState().text)
-                conversation.runtime.thread.composer.setText(text);
-        });
-    }
     const queued = getMessages(state).filter(
         (message) => message.delivery === "queued",
     );
-    const queue: ExternalThreadQueueAdapter = {
+    const queue: Omit<ExternalThreadQueueAdapter, "enqueue" | "steer"> = {
         items: queued.map((message) => ({
             id: message.id,
             prompt: message.text,
             parts: [{ type: "text", text: message.text }],
         })),
         steerItems: [],
-        enqueue: (message) => dispatch(message, "queue"),
-        steer: (message) =>
-            dispatch(message, message.steer ? "steer" : "queue"),
         remove: (id) =>
             setState((current) =>
                 applyPreviewPatch(current, {

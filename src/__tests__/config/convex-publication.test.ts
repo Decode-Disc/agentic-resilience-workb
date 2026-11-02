@@ -154,3 +154,13 @@ test("concurrent publication commands cannot release each other's hold", async (
     expect(fixture.deployed()).toBe(true);
     expect(fixture.held()).toBe(false);
 });
+
+test("explicit recovery fences expired fixture workers without publishing or releasing admission", async () => {
+    const fixture = await publicationFixture({ activeWorkers: true });
+    await expect(fixture.run("--hold")).rejects.toThrow();
+    await fixture.run("--recover");
+    expect(fixture.deployed()).toBe(false);
+    expect(fixture.held()).toBe(true);
+    await fixture.run("--release");
+    expect(fixture.held()).toBe(false);
+});

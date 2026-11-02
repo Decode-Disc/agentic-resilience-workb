@@ -202,37 +202,88 @@ export function createBoundedModelFetch(
         const chunks: Uint8Array[] = [];
         let bytes = 0;
         const reader = response.body?.getReader();
+        const streaming =
+            response.headers.get("content-type")?.split(";")[0]?.trim() ===
+            "text/event-stream";
+        const observe = () => {
+            const body = new Uint8Array(bytes);
+            let offset = 0;
+            for (const chunk of chunks) {
+                body.set(chunk, offset);
+                offset += chunk.byteLength;
+            }
+            dependencies.onResponse?.({
+                status: response.status,
+                body: new TextDecoder().decode(body),
+                requestId: response.headers.get("x-request-id") ?? undefined,
+                generationId:
+                    response.headers.get("x-generation-id") ?? undefined,
+            });
+            return body;
+        };
+        const retain = async (chunk: Uint8Array) => {
+            bytes += chunk.byteLength;
+            if (bytes > 1024 * 1024) {
+                state.responseTooLarge = true;
+                await reader?.cancel();
+                throw new Error(
+                    "Structured provider response exceeds its byte bound",
+                );
+            }
+            if (!streaming || dependencies.onResponse) chunks.push(chunk);
+        };
+        if (reader && streaming) {
+            let cancelled = false;
+            const body = new ReadableStream<Uint8Array>(
+                {
+                    async pull(controller) {
+                        try {
+                            const part = await reader.read();
+                            if (cancelled) return;
+                            if (part.done) {
+                                if (dependencies.onResponse) observe();
+                                reader.releaseLock();
+                                controller.close();
+                            } else {
+                                await retain(part.value);
+                                if (cancelled) return;
+                                controller.enqueue(part.value);
+                            }
+                        } catch (error) {
+                            if (cancelled) return;
+                            reader.releaseLock();
+                            controller.error(error);
+                        }
+                    },
+                    async cancel(reason) {
+                        cancelled = true;
+                        try {
+                            await reader.cancel(reason);
+                        } finally {
+                            reader.releaseLock();
+                        }
+                    },
+                },
+                { highWaterMark: 0 },
+            );
+            return new Response(body, {
+                status: response.status,
+                statusText: response.statusText,
+                headers: response.headers,
+            });
+        }
         if (reader) {
             try {
                 while (true) {
                     const part = await reader.read();
                     if (part.done) break;
-                    bytes += part.value.byteLength;
-                    if (bytes > 1024 * 1024) {
-                        state.responseTooLarge = true;
-                        await reader.cancel();
-                        throw new Error(
-                            "Structured provider response exceeds its byte bound",
-                        );
-                    }
-                    chunks.push(part.value);
+                    await retain(part.value);
                 }
             } finally {
                 reader.releaseLock();
             }
         }
-        const body = new Uint8Array(bytes);
-        let offset = 0;
-        for (const chunk of chunks) {
-            body.set(chunk, offset);
-            offset += chunk.byteLength;
-        }
-        dependencies.onResponse?.({
-            status: response.status,
-            body: new TextDecoder().decode(body),
-            requestId: response.headers.get("x-request-id") ?? undefined,
-            generationId: response.headers.get("x-generation-id") ?? undefined,
-        });
+        const body = observe();
         return new Response(body, {
             status: response.status,
             statusText: response.statusText,

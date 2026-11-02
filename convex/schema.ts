@@ -1023,6 +1023,41 @@ export default defineSchema({
         latencyMs: v.optional(v.number()),
         usage: v.optional(v.any()),
         reportedCost: v.optional(v.number()),
+        providerObservation: v.optional(
+            v.object({
+                generationId: v.string(),
+                observedAt: v.number(),
+                httpStatus: v.optional(v.number()),
+            }),
+        ),
+        billing: v.optional(
+            v.object({
+                state: v.union(
+                    v.literal("pending"),
+                    v.literal("checking"),
+                    v.literal("confirmed"),
+                    v.literal("unavailable"),
+                    v.literal("conflict"),
+                ),
+                attempt: v.number(),
+                updatedAt: v.number(),
+                reason: v.optional(
+                    v.union(
+                        v.literal("missing_configuration"),
+                        v.literal("not_found"),
+                        v.literal("http_error"),
+                        v.literal("timeout"),
+                        v.literal("response_too_large"),
+                        v.literal("invalid_response"),
+                        v.literal("transport_error"),
+                        v.literal("amount_conflict"),
+                    ),
+                ),
+                retryAt: v.optional(v.number()),
+                httpStatus: v.optional(v.number()),
+                latencyMs: v.optional(v.number()),
+            }),
+        ),
         errorCode: v.optional(v.string()),
         diagnostic: v.optional(
             v.object({

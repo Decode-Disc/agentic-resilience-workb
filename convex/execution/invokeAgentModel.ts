@@ -416,6 +416,14 @@ export async function invokeControlledGeneration(
                 observe: async (observation) => {
                     await recordObservation(observation);
                 },
+                observeProvider: simulated
+                    ? undefined
+                    : async (observation) => {
+                          await ctx.runMutation(
+                              internal.providerCalls.observeGeneration,
+                              { invocationId: invocation._id, ...observation },
+                          );
+                      },
                 signal: AbortSignal.timeout(
                     Math.max(1, mission.deadlineAt - Date.now()),
                 ),
@@ -447,6 +455,10 @@ export async function invokeControlledGeneration(
             internal.execution.invocationLifecycle.noteBackendInterruption,
             args,
         );
+        if (!simulated)
+            await ctx.runMutation(internal.providerCalls.requestBilling, {
+                invocationId: invocation._id,
+            });
         throw executionError("generation_backend_interrupted");
     }
     if (result.status === "blocked") {

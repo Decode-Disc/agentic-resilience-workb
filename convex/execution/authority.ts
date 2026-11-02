@@ -111,7 +111,7 @@ async function requireMissionAccess(
         mission.definitionId,
         mission.definitionVersion,
     );
-    const scopeKind = definition.executionScope ?? "research";
+    const scopeKind = definition.executionScope;
     if (mission.executionScope && mission.executionScope !== scopeKind)
         throw executionError("mission_contract_invalid");
     const { run, visitor } =

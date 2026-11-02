@@ -9,13 +9,13 @@ const { runSourcesMission } = (await import(
         "../../../scripts/evaluations/source-selection/sources-approach-runner.ts",
         import.meta.url,
     ).href
-)) as typeof import("../../../scripts/evaluations/source-selection/sources-approach-runner");
+)) as typeof import("@evaluations/source-selection/sources-approach-runner");
 const { sourcesDigest } = (await import(
     new URL(
         "../../../scripts/evaluations/source-selection/sources-approach-study.ts",
         import.meta.url,
     ).href
-)) as typeof import("../../../scripts/evaluations/source-selection/sources-approach-study");
+)) as typeof import("@evaluations/source-selection/sources-approach-study");
 
 function options() {
     const text =
@@ -123,7 +123,7 @@ function envelope(content: unknown) {
 
 test("inspection agent starts with the dossier and compact tools and can finish without notes", async () => {
     const { SourcesPreparation, inspectionScenarioHash } = await import(
-        "../../../scripts/evaluations/source-selection/sources-approach-study"
+        "@evaluations/source-selection/sources-approach-study"
     );
     const args = options();
     const initial = new SourcesPreparation(args.scenario);
@@ -174,7 +174,7 @@ test("inspection agent starts with the dossier and compact tools and can finish 
 
 test("inspection reserves comparison work and finalizes it even when the agent exhausts its inspection steps", async () => {
     const { SourcesPreparation, inspectionScenarioHash } = await import(
-        "../../../scripts/evaluations/source-selection/sources-approach-study"
+        "@evaluations/source-selection/sources-approach-study"
     );
     const args = options();
     const preparation = new SourcesPreparation(args.scenario);
@@ -246,7 +246,7 @@ test("inspection reserves comparison work and finalizes it even when the agent e
 
 test("inspection rechecks a focused comparison even when its qualification has not changed", async () => {
     const { SourcesPreparation, inspectionScenarioHash } = await import(
-        "../../../scripts/evaluations/source-selection/sources-approach-study"
+        "@evaluations/source-selection/sources-approach-study"
     );
     const args = options();
     const registry = new SourcesPreparation(args.scenario);
@@ -713,7 +713,7 @@ test("completed readings leave the agent context, but an explicit reread remains
 
 test("a malformed inspection audit retains the dossier and records invalid work without retry", async () => {
     const { SourcesPreparation, inspectionScenarioHash } = await import(
-        "../../../scripts/evaluations/source-selection/sources-approach-study"
+        "@evaluations/source-selection/sources-approach-study"
     );
     const args = options();
     const initial = new SourcesPreparation(args.scenario);
@@ -748,7 +748,7 @@ test("a malformed inspection audit retains the dossier and records invalid work 
 
 test("inspection compacts repeated readings even when the qualification has not changed", async () => {
     const { SourcesPreparation, inspectionScenarioHash } = await import(
-        "../../../scripts/evaluations/source-selection/sources-approach-study"
+        "@evaluations/source-selection/sources-approach-study"
     );
     const args = options();
     const text = Array.from(
@@ -799,7 +799,7 @@ test.each([
     "agent",
 ] as const)("%s inspection searches and reads an omitted clause before retaining it", async (approach) => {
     const { SourcesPreparation, inspectionScenarioHash } = await import(
-        "../../../scripts/evaluations/source-selection/sources-approach-study"
+        "@evaluations/source-selection/sources-approach-study"
     );
     const args = options();
     const clause =

@@ -67,8 +67,9 @@ import type * as domain_sourceSelectionPolicy from "../domain/sourceSelectionPol
 import type * as domain_sourceUsage from "../domain/sourceUsage.js";
 import type * as domain_transitions from "../domain/transitions.js";
 import type * as domain_validators from "../domain/validators.js";
-import type * as domain_workbench from "../domain/workbench.js";
+import type * as domain_workbenchAgent from "../domain/workbenchAgent.js";
 import type * as domain_workbenchContracts from "../domain/workbenchContracts.js";
+import type * as domain_workbenchInstructions from "../domain/workbenchInstructions.js";
 import type * as e2eFixtures from "../e2eFixtures.js";
 import type * as evidenceActions from "../evidenceActions.js";
 import type * as evidenceArtifacts from "../evidenceArtifacts.js";
@@ -118,6 +119,7 @@ import type * as integrations_exaEvidence from "../integrations/exaEvidence.js";
 import type * as integrations_modelInput from "../integrations/modelInput.js";
 import type * as integrations_modelRouting from "../integrations/modelRouting.js";
 import type * as integrations_modelTransport from "../integrations/modelTransport.js";
+import type * as integrations_openRouterGeneration from "../integrations/openRouterGeneration.js";
 import type * as integrations_piMission from "../integrations/piMission.js";
 import type * as integrations_piModelProfiles from "../integrations/piModelProfiles.js";
 import type * as integrations_piNativeInput from "../integrations/piNativeInput.js";
@@ -232,8 +234,9 @@ declare const fullApi: ApiFromModules<{
   "domain/sourceUsage": typeof domain_sourceUsage;
   "domain/transitions": typeof domain_transitions;
   "domain/validators": typeof domain_validators;
-  "domain/workbench": typeof domain_workbench;
+  "domain/workbenchAgent": typeof domain_workbenchAgent;
   "domain/workbenchContracts": typeof domain_workbenchContracts;
+  "domain/workbenchInstructions": typeof domain_workbenchInstructions;
   e2eFixtures: typeof e2eFixtures;
   evidenceActions: typeof evidenceActions;
   evidenceArtifacts: typeof evidenceArtifacts;
@@ -283,6 +286,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/modelInput": typeof integrations_modelInput;
   "integrations/modelRouting": typeof integrations_modelRouting;
   "integrations/modelTransport": typeof integrations_modelTransport;
+  "integrations/openRouterGeneration": typeof integrations_openRouterGeneration;
   "integrations/piMission": typeof integrations_piMission;
   "integrations/piModelProfiles": typeof integrations_piModelProfiles;
   "integrations/piNativeInput": typeof integrations_piNativeInput;

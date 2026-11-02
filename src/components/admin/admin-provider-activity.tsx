@@ -5,6 +5,7 @@ import type { FunctionReturnType } from "convex/server";
 import { useState } from "react";
 
 import { AdminDetailDisclosure } from "@/components/admin/admin-detail-disclosure";
+import { AdminProviderBilling } from "@/components/admin/admin-provider-billing";
 import { AdminList } from "@/components/admin/admin-list";
 import {
     AdminAttemptFilters,
@@ -120,6 +121,7 @@ export function AdminProviderActivity({
                                             call.createdAt,
                                         ).toLocaleString("en")}
                                     </ItemDescription>
+                                    <AdminProviderBilling call={call} />
                                     <AdminDetailDisclosure label="Technical detail">
                                         <p className="break-all font-mono text-[10px] text-muted-foreground">
                                             Diagnostic: {call.service} ·{" "}

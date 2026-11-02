@@ -14,7 +14,7 @@ const {
         "../../../scripts/evaluations/source-selection/sources-approach-study.ts",
         import.meta.url,
     ).href
-)) as typeof import("../../../scripts/evaluations/source-selection/sources-approach-study");
+)) as typeof import("@evaluations/source-selection/sources-approach-study");
 
 function session() {
     const text =

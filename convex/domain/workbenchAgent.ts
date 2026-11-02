@@ -36,6 +36,7 @@ import {
     workbenchSchemas as schemas,
     sourceRequestInput,
 } from "./workbenchContracts";
+import { readWorkbenchInstructions } from "./workbenchInstructions";
 
 function recoverableWorkbenchRefusal(
     error: unknown,
@@ -291,11 +292,7 @@ export const workbenchDefinition: AgentDefinition & { id: "workbench_v1" } = {
             .take(61);
         if (sources.length > 60)
             return { kind: "blocked", code: "context_capacity" };
-        const instructions = await ctx.db
-            .query("workbenchInstructions")
-            .withIndex("by_run", (q) => q.eq("runId", run._id))
-            .order("desc")
-            .take(20);
+        const instructions = await readWorkbenchInstructions(ctx, run._id);
         return {
             kind: "ready",
             context: {

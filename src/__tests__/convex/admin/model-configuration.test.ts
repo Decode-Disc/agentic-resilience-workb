@@ -1,4 +1,5 @@
 import { api, internal } from "@convex/_generated/api";
+import { INITIAL_MODEL_CATALOG } from "@convex/integrations/modelRouting";
 import schema from "@convex/schema";
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
@@ -528,4 +529,43 @@ test("a Workbench default must be eligible for dossier selection", async () => {
     expect(
         (await admin.query(api.modelConfiguration.list, {})).assignments,
     ).toEqual([]);
+});
+
+test("initialization retries a confirmed metadata failure with a new attempt", async () => {
+    const { t, admin } = await setup();
+    const transport = vi.fn(
+        async () => new Response("Unavailable", { status: 503 }),
+    );
+    vi.stubGlobal("fetch", transport);
+    expect(
+        await admin.action(api.modelConfigurationActions.initialize, {}),
+    ).toEqual({ ready: false });
+    expect(
+        await admin.action(api.modelConfigurationActions.initialize, {}),
+    ).toEqual({ ready: false });
+    expect(transport).toHaveBeenCalledTimes(2);
+    expect(
+        await t.run((ctx) => ctx.db.query("modelCatalog").first()),
+    ).toMatchObject({ status: "failed", revision: 2 });
+});
+
+test("initialization leaves an engaged metadata preparation untouched", async () => {
+    const { t, admin } = await setup();
+    const model = INITIAL_MODEL_CATALOG[0];
+    const claimed = await admin.mutation(
+        internal.modelConfiguration.beginPreparation,
+        { ...model, requestKey: "engaged-initial-preparation" },
+    );
+    const transport = vi.fn(
+        async () => new Response("Unavailable", { status: 503 }),
+    );
+    vi.stubGlobal("fetch", transport);
+    expect(
+        await admin.action(api.modelConfigurationActions.initialize, {}),
+    ).toEqual({ ready: false });
+    expect(transport).not.toHaveBeenCalled();
+    expect(await t.run((ctx) => ctx.db.get(claimed.catalogId))).toMatchObject({
+        status: "preparing",
+        revision: claimed.revision,
+    });
 });

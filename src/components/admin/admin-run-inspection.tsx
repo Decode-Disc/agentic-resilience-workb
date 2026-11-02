@@ -48,6 +48,9 @@ type ReceiptDoc = FunctionReturnType<
  */
 function toProviderCallProjection(call: ReceiptDoc): ProviderCall {
     return {
+        _id: call._id,
+        providerObservation: call.providerObservation,
+        billing: call.billing,
         runId: call.runId,
         service: call.service,
         operation: call.operation,

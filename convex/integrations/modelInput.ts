@@ -247,6 +247,9 @@ export async function piInputProfileKey(args: AgentInput): Promise<string> {
     return sha256Hex(
         stableStringify({
             version: args.definitionVersion,
+            ...(args.nativeConversation
+                ? { nativeInstructions: args.instructions }
+                : {}),
             requiredMessage: piMissionMessages(
                 args.instructions,
                 "",

@@ -1,9 +1,12 @@
 "use client";
 
-import type { api } from "@convex/_generated/api";
-import type { FunctionReturnType } from "convex/server";
+import { api } from "@convex/_generated/api";
+import { useQuery } from "convex/react";
+import type { Id } from "@convex/_generated/dataModel";
 
 import { ProviderStatusBadge } from "@/components/admin/admin-status-badge";
+import { AdminProviderBilling } from "@/components/admin/admin-provider-billing";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import {
     providerDispatchLabel,
@@ -12,12 +15,27 @@ import {
     providerServiceLabel,
 } from "@/lib/presentation/research-copy";
 
-type ProviderCall = FunctionReturnType<
-    typeof api.adminOperations.get
->["providerCalls"][number];
-
-/** Read-only detail of one recorded provider attempt. */
-export function AdminProviderCallInspection({ call }: { call: ProviderCall }) {
+/** Reactive detail with accounting recovery for one recorded provider attempt. */
+export function AdminProviderCallInspection({
+    providerCallId,
+}: {
+    providerCallId: Id<"providerCalls">;
+}) {
+    const call = useQuery(api.adminOperations.inspectProviderCall, {
+        providerCallId,
+    });
+    if (call === undefined)
+        return (
+            <section
+                className="space-y-4"
+                aria-label="Loading provider attempt">
+                <Skeleton className="h-8" />
+                <Skeleton className="h-56" />
+                <Skeleton className="h-24" />
+            </section>
+        );
+    if (call === null)
+        return <p>This provider attempt is no longer available.</p>;
     return (
         <div className="space-y-4 text-sm">
             <section className="space-y-2">
@@ -28,6 +46,7 @@ export function AdminProviderCallInspection({ call }: { call: ProviderCall }) {
                     </h3>
                     <ProviderStatusBadge status={call.status} />
                 </div>
+                <AdminProviderBilling call={call} />
                 <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5">
                     <dt className="text-muted-foreground">Attempt</dt>
                     <dd>{call.attempt}</dd>
@@ -58,9 +77,9 @@ export function AdminProviderCallInspection({ call }: { call: ProviderCall }) {
                 ) : (
                     <p className="text-muted-foreground">No error recorded.</p>
                 )}
-                {call.validationReason ? (
+                {call.diagnostic?.reason ? (
                     <p className="text-muted-foreground">
-                        {call.validationReason}
+                        {call.diagnostic?.reason}
                     </p>
                 ) : null}
             </section>
