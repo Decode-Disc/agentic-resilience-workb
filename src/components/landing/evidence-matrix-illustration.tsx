@@ -210,15 +210,11 @@ export function EvidenceMatrixIllustration() {
             <header className={styles.header}>
                 <div className={styles.title}>
                     <Chip>{"// Examine the evidence"}</Chip>
-                    <h2>
-                        Which evidence bears
-                        <br />
-                        on which question
-                    </h2>
+                    <h2>Which evidence bears on which question</h2>
                 </div>
                 <div className={styles.explanation}>
                     <Chip kind="illustrative">Illustrative preview</Chip>
-                    <p>
+                    <p className="hidden">
                         Read across for one piece of evidence.
                         <br />
                         Read down for one question.

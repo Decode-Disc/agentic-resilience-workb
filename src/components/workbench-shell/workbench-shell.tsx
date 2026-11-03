@@ -2,6 +2,8 @@ import { api } from "@convex/_generated/api";
 import { useAuthActions } from "@convex-dev/auth/react";
 import {
     ChevronDownIcon,
+    Folder02Icon,
+    Home02Icon,
     Login02Icon,
     Logout01Icon,
     Settings02Icon,
@@ -164,10 +166,12 @@ function WorkbenchHeader({ activeRunId }: { activeRunId?: string }) {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent>
                             <DropdownMenuItem render={<Link to="/" />}>
+                                <Icon iconNode={Home02Icon} />
                                 Home
                             </DropdownMenuItem>
                             <DropdownMenuItem
                                 render={<Link to="/workspace/dossiers" />}>
+                                <Icon iconNode={Folder02Icon} />
                                 Dossiers
                             </DropdownMenuItem>
                         </DropdownMenuContent>
