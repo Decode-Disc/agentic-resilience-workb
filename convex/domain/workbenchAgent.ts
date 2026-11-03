@@ -5,12 +5,16 @@ import {
     type AgentDefinition,
     agentToolSchemas,
 } from "@convex/execution/agentDefinition";
-import { readOperationCause } from "@convex/execution/authority";
+import {
+    recordMissionEvent,
+    readOperationCause,
+} from "@convex/execution/authority";
 import { conversationInstructions } from "@convex/execution/conversations";
 import { executionError, executionFailureCode } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import { operationProgressKeys } from "@convex/execution/missionData";
 import {
+    conflictsWithResearchStatus,
     researchControlConfirmation,
     researchStateSummary,
 } from "@convex/execution/researchControl";
@@ -483,6 +487,18 @@ export const nativeWorkbenchDefinition: AgentDefinition & {
                 throw executionError("instruction_receipt_unavailable");
             confirmations.push(instruction.outcome);
         }
+        const statusConflict = conflictsWithResearchStatus(
+            completion.result.text,
+            run,
+        );
+        if (statusConflict)
+            await recordMissionEvent(ctx, mission, {
+                kind: "response_status_conflict",
+                cause: "workbench_publication",
+            });
+        const explanation = statusConflict
+            ? `${researchStateSummary(run)}\n\nI couldn't confirm the explanation in this response. Your messages and recorded work remain available.`
+            : completion.result.text;
         return {
             kind: "completed",
             result: {
@@ -491,7 +507,7 @@ export const nativeWorkbenchDefinition: AgentDefinition & {
                     ...new Set([
                         ...(commands.length === instructions.messages.length
                             ? []
-                            : [completion.result.text]),
+                            : [explanation]),
                         ...confirmations,
                     ]),
                 ].join("\n\n"),

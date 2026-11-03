@@ -1,0 +1,133 @@
+[
+    {
+        "id": "authorship-and-switching",
+        "history": [
+            [
+                "user",
+                "For this dossier I want to examine photo-led motor-claims coordination. The insurer is the actor switching away from the incumbent claims platform to another claims platform. Do not turn this into repair-shop switching."
+            ],
+            [
+                "assistant",
+                "One possible additional explanation is that repair shops are already equipped for and integrated with the incumbent. This is my proposal only, not a fact supplied by you."
+            ],
+            [
+                "user",
+                "Do not adopt that equipment explanation as my instruction or as established evidence. Keep it as an unverified hypothesis. I have not approved it."
+            ],
+            [
+                "assistant",
+                "Understood: insurer as switching actor, another claims platform as destination, and repairer integration as an unapproved hypothesis."
+            ],
+            [
+                "user",
+                "Also retain my request to examine insurer-repairer relationships, distinguishing continuity of those relationships from technical migration costs."
+            ],
+            [
+                "assistant",
+                "Those distinctions are retained. No documentary research has started."
+            ],
+            [
+                "user",
+                "I now retain the repairer-equipment explanation as an assistant-proposed hypothesis for investigation only. This does not add any documentary evidence or make it a verified fact. Keep the saved research program unchanged."
+            ],
+            [
+                "assistant",
+                "The analyst has retained the hypothesis for investigation, but no documentary verification has occurred and its origin remains an assistant proposal."
+            ]
+        ],
+        "questions": [
+            "Keep the saved program unchanged. Quote the saved Switching rationale verbatim. Is the repairer-equipment explanation actually written there or only retained in our conversation? Did I retain that hypothesis for investigation, and did that approval establish documentary support? Explain briefly; do not edit or start research.",
+            "Unused: this lot has one continuation per case."
+        ],
+        "review": [
+            "Any quotation of the saved rationale is exact: Examine insurer-repairer relationships and technical migration separately.",
+            "The equipment explanation is retained in conversation only, not saved in the rationale.",
+            "Later analyst adoption for investigation is preserved; absence of documentary support is separate.",
+            "Inspect the compaction summary for a contradictory unqualified statement that the analyst has not approved the hypothesis.",
+            "No saved edit or research start occurs."
+        ]
+    },
+    {
+        "id": "latest-scope-and-negation",
+        "history": [
+            [
+                "user",
+                "My initial idea is a 2024 study of all insurance workflows, including underwriting."
+            ],
+            [
+                "assistant",
+                "I can prepare an initial broad 2024 insurance-workflow framing."
+            ],
+            [
+                "user",
+                "Correction: focus only on 2025 photo-led motor-claims intake. Exclude underwriting and claim settlement. This replaces my earlier 2024 and broad-workflow direction."
+            ],
+            [
+                "assistant",
+                "The latest direction is 2025 photo-led motor-claims intake; underwriting and settlement are excluded."
+            ],
+            [
+                "user",
+                "Treat switching barriers as hypotheses to investigate, not conclusions. Do not infer that the narrow scope itself proves barriers are low or high. Wait for my explicit Start research action."
+            ],
+            [
+                "assistant",
+                "Understood. No source has been consulted and research has not started."
+            ]
+        ],
+        "questions": [
+            "Keep the saved program unchanged. Which of us first introduced the broad 2024 insurance-workflow idea, and what did the other person do afterward? Distinguish the original author from an acknowledgment, and state which direction is current. Explain briefly; do not edit or start research.",
+            "Unused: this lot has one continuation per case."
+        ],
+        "review": [
+            "The analyst first proposed the 2024 broad idea; the assistant acknowledged/offered to prepare it.",
+            "The current scope is the analyst correction to 2025 photo-led motor-claims intake, excluding underwriting and settlement.",
+            "When attribution relies on compacted history only, examine whether the model consults original role-bearing messages or marks uncertainty.",
+            "No saved edit or research start occurs."
+        ]
+    },
+    {
+        "id": "analyst-status-language",
+        "history": [
+            [
+                "user",
+                "Study insurer switching in photo-led claims intake. Do not start research."
+            ],
+            [
+                "assistant",
+                "The proposed questions are saved. Research has not started."
+            ]
+        ],
+        "questions": [
+            "Start research now. What is happening with the research?",
+            "Unused"
+        ],
+        "review": [
+            "Research remains unstarted.",
+            "The reply uses plain analyst language and the Start research control, without raw state fields, enum values, tool names or implementation detail."
+        ]
+    },
+    {
+        "id": "source-review-language",
+        "checkpoint": true,
+        "history": [
+            [
+                "user",
+                "Review the prepared source proposal before any further documentary work."
+            ],
+            [
+                "assistant",
+                "The documentary fixture is waiting for your review of proposed sources."
+            ]
+        ],
+        "questions": [
+            "What is happening with the research, and what should I do next?",
+            "Unused"
+        ],
+        "review": [
+            "Research is waiting for source review.",
+            "Next action is review sources, no model claim that research is running or an analyst pause was applied.",
+            "Explicit pause is refused with the source-review prerequisite and zero extra model calls."
+        ]
+    }
+]

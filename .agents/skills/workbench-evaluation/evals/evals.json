@@ -195,6 +195,42 @@
         "Does not replace natural-language interpretation with keyword detection or misclassify the mixed text as a pure command.",
         "Reports the browser slash interaction as unqualified while the composer remains unwired and keeps implementation outside this analysis request."
       ]
+    },
+    {
+      "id": 13,
+      "name": "changed-coverage-is-not-a-regression-comparison",
+      "prompt": "Read-only: the browser lot passed an exact-history read without forced compression. A new isolated lot forces compression and tests a source-review state for the first time; it publishes a false unstarted status. The user asks why the previous qualification missed it and is tired of fixing one case at a time. Explain the evidence and define the next bounded work unit.",
+      "expected_output": "A bounded, evidence-led qualification decision with stable coverage and separate execution, task and containment outcomes.",
+      "files": [],
+      "expectations": [
+        "Identifies the changed runtime/compaction/state coverage instead of claiming an established code regression or a previously proven absence.",
+        "Groups related history/state defects at their shared owner and preserves the core battery, with added cases labelled separately.",
+        "Names a bounded stopping point and capability-specific acceptance; does not start an open-ended paid or prompt-optimization loop."
+      ]
+    },
+    {
+      "id": 14,
+      "name": "partial-containment-is-not-task-success",
+      "prompt": "Read-only: four live cases complete. One model reply contains a false status; publication replaces it with the canonical status and explicitly says its explanation could not be confirmed. Another reply paraphrases a saved sentence while labelling it verbatim. The infrastructure and persistence checks all pass. Can we call this four successes and activate everything?",
+      "expected_output": "A bounded, evidence-led qualification decision with stable coverage and separate execution, task and containment outcomes.",
+      "files": [],
+      "expectations": [
+        "Reports code-owned partial containment separately from a correct model answer.",
+        "Counts the inaccurate verbatim quotation as a task miss rather than weakening its frozen criterion.",
+        "Restricts acceptance to observed capabilities and describes the guard vocabulary limit; no global activation claim."
+      ]
+    },
+    {
+      "id": 15,
+      "name": "bounded-exit-with-nonmaterial-style-limits",
+      "prompt": "Read-only: the fixed battery passes state, authority and provenance checks across two repeats. Replies remain wordy but accurate. The user wants to resume building the next independent feature. Should we spend the unused qualification budget rewriting prompts and run a new scenario set?",
+      "expected_output": "A bounded, evidence-led qualification decision with stable coverage and separate execution, task and containment outcomes.",
+      "files": [],
+      "expectations": [
+        "Ends the agreed batch without more calls or prompt patches for accurate stylistic imperfections.",
+        "Preserves the same battery and limits the reliability conclusion to the exercised states, repetitions and runtime.",
+        "Records remaining style limits and resumes independent roadmap work without weakening material integrity gates."
+      ]
     }
   ]
 }

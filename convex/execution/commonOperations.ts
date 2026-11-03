@@ -105,3 +105,21 @@ export const commonOperations = {
     consult_mission_state: consultMissionStateOperation,
     consult_run_state: consultRunStateOperation,
 };
+
+/** Native empty start markers are explicit first-page requests, never continuation recovery. */
+export function normalizeNativeHistoryInput(
+    name: string,
+    input: unknown,
+): unknown {
+    if (
+        (name !== "consult_conversation" && name !== "consult_mission_state") ||
+        !input ||
+        typeof input !== "object" ||
+        Array.isArray(input) ||
+        !("cursor" in input) ||
+        input.cursor !== ""
+    )
+        return input;
+    const { cursor: _start, ...rest } = input;
+    return rest;
+}

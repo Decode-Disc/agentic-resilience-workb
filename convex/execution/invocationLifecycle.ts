@@ -33,6 +33,7 @@ import {
     requireMissionObservationAuthority,
 } from "./authority";
 import { buildMissionContext } from "./context";
+import { normalizeNativeHistoryInput } from "./commonOperations";
 import {
     conversationInstructions,
     publishTurn,
@@ -986,7 +987,9 @@ export const finish = internalMutation({
             } catch {
                 decoded = null;
             }
-            let canonical = decoded;
+            let canonical = definition.nativeConversation
+                ? normalizeNativeHistoryInput(request.name, decoded)
+                : decoded;
             if (definition.normalizeOperationInput) {
                 const operation = modelOperations[request.name];
                 if (
@@ -998,7 +1001,7 @@ export const finish = internalMutation({
                     try {
                         canonical = definition.normalizeOperationInput(
                             request.name,
-                            decoded as Record<string, unknown>,
+                            canonical as Record<string, unknown>,
                             snapshot,
                         );
                     } catch (error) {

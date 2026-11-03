@@ -69,6 +69,20 @@ Use the existing success criteria and resource limits to define a bounded batch 
 
 Stop when the agreed question is answered, the authorized limit is reached, or another measurement cannot resolve the remaining uncertainty. If results are inconclusive, say so. Propose an additional batch only with the specific uncertainty it would resolve and the decision that could change. A small score difference alone does not justify expanding the study or replacing an adequate lower-cost approach.
 
+## Keep Corrective Qualification Bounded
+
+Changing scenarios between fixes hides coverage gaps and makes a successful run look more conclusive than it is. Correct a related set of failures at their shared owning boundary, then evaluate one frozen battery against explicit exit criteria. The aim is to decide whether the affected capability can advance, while keeping unrelated product work moving.
+
+Start from the [versioned conversation regression cases](../../../scripts/evaluations/workbench/continuity-cases.json) when qualifying these boundaries. Record the battery hash, fixture provenance, model/route/effort, code fingerprints, runtime boundary and repetitions before dispatch. Preserve prior core cases when adding coverage. Label additional cases separately; a different state, forced compaction or browser transport is new coverage, not an interchangeable rerun. For conversation reliability, cross the relevant states with compaction instead of testing each only in isolation: unstarted work, active work and human prerequisites can fail differently.
+
+Define separate outcomes for execution integrity, semantic task success and transparent containment. Compare original role-bearing messages, saved framing, operation receipts and current state with the actual published answer. A completed mission, safe refusal or code-owned partial reply is not a semantically successful answer. An unsupported status or authorship claim is material; an awkward but accurate formulation alone does not justify another correction cycle. Record whether a guard actually activated: model avoidance of a bad output does not qualify that guard; cite deterministic fault coverage separately.
+
+Reproduce related defects deterministically through the public boundary before paid dispatch. Prefer corrections in the module that owns the shared contract. A prompt instruction is not deterministic enforcement. When a guard is deliberately limited to a closed vocabulary, disclose that boundary and keep the original output; do not claim that it verifies arbitrary paraphrases or reasoning.
+
+Run the unchanged core battery on the final candidate. Where authorized, repeat the same cases within the lot to expose variability; a single passing response does not establish absence of the defect, and a few repeats do not establish a general reliability rate. Retain a failed original and classify its first demonstrated divergence. Do not remove a failed case, change its expected meaning, substitute a model, or pool later corrections into the original result.
+
+End the agreed batch with a capability-specific decision. Material state, authority, evidence or provenance failures block acceptance of the affected capability; record unresolved model limits and proceed with independent roadmap work where those limits do not apply. Do not automatically start another paid batch or accumulate wording patches because unused budget remains. Another iteration needs a concrete unresolved decision and a bounded correction scope, not an aspiration to perfect every model response.
+
 ## Prepare and Execute
 
 Comparable conditions make differences interpretable. Freeze captures, input preparation, reference judgments, code identities, model routes and parameters before dispatch. Record who authored the references and any unresolved judgments. Use equivalent inputs for common comparisons; evaluate real production preparation separately and do not pool different conditions into one ranking.

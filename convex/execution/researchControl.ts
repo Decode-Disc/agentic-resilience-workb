@@ -459,3 +459,26 @@ export function researchControlConfirmation(
         ? "No pause was executed. Check the current research state and use the research controls to pause it."
         : "No resume was executed. Check the current research state and complete any pending review before resuming.";
 }
+
+/** Checks explicit current-status clauses from the closed application vocabulary; historical quotations stay intact. */
+export function conflictsWithResearchStatus(
+    text: string,
+    run: Parameters<typeof researchStateSummary>[0],
+): boolean {
+    const expected = researchStateSummary(run).toLowerCase();
+    let fenced = false;
+    for (const line of text.split("\n")) {
+        if (/^\s*```/.test(line)) {
+            fenced = !fenced;
+            continue;
+        }
+        if (fenced || /^\s*>/.test(line)) continue;
+        const claim =
+            /^\s*(?:(?:current status|status):\s*)?(research (?:has not started|is running|is paused|is complete|has been cancelled))\b/i.exec(
+                line.replaceAll("**", ""),
+            );
+        if (claim?.[1] && !expected.startsWith(claim[1].toLowerCase()))
+            return true;
+    }
+    return false;
+}

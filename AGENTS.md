@@ -68,6 +68,8 @@ Prioritize work in this order:
 
 Every proposed task must improve the first-minute demonstration, protect evidence integrity or analyst authority, enable the next honest end-to-end slice, or mitigate a concrete risk created by the exposed prototype. If it does none of these, it must not delay the candidature.
 
+Reliability work must preserve delivery momentum: group related defects by their shared contract, define a bounded correction batch and its exit criteria, and keep a stable regression battery across qualifications. Judge execution integrity, semantic task success and explicit partial outcomes separately. Passing examples do not establish general model reliability. Material state, authority, evidence or provenance failures block acceptance of the affected capability; they do not suspend independent roadmap work. Accurate stylistic imperfections do not justify open-ended prompt tuning or successive paid batches. Record remaining limits and the capability-specific decision before starting another iteration.
+
 The earliest useful demonstration path is:
 
 ```text
