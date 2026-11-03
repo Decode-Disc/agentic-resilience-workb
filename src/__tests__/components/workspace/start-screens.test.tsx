@@ -133,18 +133,23 @@ describe("Start presentation without backend providers", () => {
             target: { value: "Who can change routing rules?" },
         });
         expect(
-            program.getByRole<HTMLButtonElement>("button", {
+            program.queryByRole("button", {
                 name: "Start research",
-            }).disabled,
-        ).toBe(true);
+            }),
+        ).toBeNull();
         fireEvent.click(program.getByRole("button", { name: "Save changes" }));
         expect(
             program.getByRole("heading", {
                 name: "Who can change routing rules?",
             }),
         ).toBeTruthy();
+        expect(
+            program.getByRole<HTMLButtonElement>("button", {
+                name: "Start research",
+            }).disabled,
+        ).toBe(false);
     });
-    it("cancels a question edit without changing its wording and returns focus", () => {
+    it("cancels a question edit without changing its wording and returns focus to the composer", async () => {
         sessionStorage.clear();
         render(
             <StartScreenPreview
@@ -171,7 +176,13 @@ describe("Start presentation without backend providers", () => {
             program.getByRole("region", { name: "Framing summary" })
                 .textContent,
         ).toBe(original);
-        expect(document.activeElement).toBe(edit);
+        await waitFor(() =>
+            expect(document.activeElement).toBe(
+                screen.getByRole("textbox", {
+                    name: "Refine the framing in your own words",
+                }),
+            ),
+        );
     });
     it("keeps shifted and composing Enter inside the composer and sends an ordinary Enter", async () => {
         sessionStorage.clear();
@@ -332,10 +343,10 @@ it("keeps an unfinished question edit and launch guard when the pending program 
     );
     expect(disclosure.open).toBe(false);
     expect(
-        screen.getByRole<HTMLButtonElement>("button", {
+        screen.queryByRole("button", {
             name: "Start research",
-        }).disabled,
-    ).toBe(true);
+        }),
+    ).toBeNull();
     fireEvent.click(
         screen.getByText("Proposed research program", {
             selector: "summary span",

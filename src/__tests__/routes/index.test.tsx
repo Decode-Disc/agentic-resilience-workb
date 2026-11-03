@@ -28,7 +28,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 import { IndexPage } from "@/components/landing/index-page";
 
 describe("IndexPage", () => {
-    it("introduces the research question with an illustrative evidence matrix", () => {
+    it("labels the evidence illustration as fictional and links to the workbench", () => {
         render(<IndexPage />);
 
         expect(
@@ -36,26 +36,17 @@ describe("IndexPage", () => {
                 name: "Which advantages survive the agentic shift?",
             }),
         ).toBeTruthy();
-        expect(
-            screen.getByRole("heading", { name: "Evidence matrix" }),
-        ).toBeTruthy();
-        expect(
-            screen
-                .getByRole("link", {
-                    name: "CCC 2025 Annual Report, pp. 8–9",
-                })
-                .getAttribute("href"),
-        ).toBe(
-            "https://cccis.gcs-web.com/static-files/915c24e8-371f-4d42-b0bf-d52881a52bd8",
+        const preview = within(
+            screen.getByRole("region", { name: "Evidence matrix preview" }),
         );
-        expect(screen.getByText("CCC · Photo-led auto claims")).toBeTruthy();
         expect(
-            within(
-                screen.getByRole("list", { name: "Research capabilities" }),
-            ).getAllByRole("listitem"),
-        ).toHaveLength(6);
+            preview.getByRole("region", {
+                name: "Illustrative evidence matrix",
+            }),
+        ).toBeTruthy();
+        expect(preview.getByText("Illustrative preview")).toBeTruthy();
         expect(
-            screen.getByText("Confront competing interpretations"),
+            preview.getByText(/Fictional company, assertions and sources\./),
         ).toBeTruthy();
         expect(
             screen.getByLabelText("Agentic Resilience Workbench"),
@@ -73,11 +64,7 @@ describe("IndexPage", () => {
         expect(
             screen.queryByRole("button", { name: "Explore the workbench" }),
         ).toBeNull();
-        expect(screen.getByText("Illustrative preview")).toBeTruthy();
         expect(screen.queryByText(/analysis complete/i)).toBeNull();
-        expect(
-            screen.queryByText(/pricing|get started|free trial/i),
-        ).toBeNull();
     });
 
     it("reveals project context from the fixed navigation menu", async () => {
@@ -122,7 +109,6 @@ describe("IndexPage", () => {
     });
 
     it.each([
-        ["Value at stake", "See what could hold. And what could erode."],
         ["Test the thesis", "Put the company's story to the test."],
         ["Your judgment", "Keep every conclusion open to challenge."],
     ])("opens the %s panel", async (label, title) => {

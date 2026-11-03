@@ -5,43 +5,19 @@ import {
     waitFor,
     within,
 } from "@testing-library/react";
-import { useState } from "react";
 import { expect, it, vi } from "vitest";
-import {
-    type StartScreenName,
-    StartScreenPreview,
-} from "@/development/workbench-ui/start-screen-examples";
+import { StartScreenPreview } from "@/development/workbench-ui/start-screen-examples";
 
-it("opens the activity trial from framing tools and keeps it available to restart after completion", async () => {
+it("restarts illustrative work while preserving the completed mission in conversation history", async () => {
     sessionStorage.clear();
-    function Gallery() {
-        const [name, setName] = useState<StartScreenName>("framing");
-        return (
-            <StartScreenPreview
-                name={name}
-                theme="light"
-                onNavigate={setName}
-                onOpenProgress={vi.fn()}
-            />
-        );
-    }
-    render(<Gallery />);
-    const draft = "Preserve my research direction.";
-    fireEvent.change(
-        screen.getByRole("textbox", {
-            name: "Refine the framing in your own words",
-        }),
-        { target: { value: draft } },
+    render(
+        <StartScreenPreview
+            name="launched"
+            theme="light"
+            onNavigate={vi.fn()}
+            onOpenProgress={vi.fn()}
+        />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Preview tools" }));
-    fireEvent.click(
-        await screen.findByRole("button", { name: "Try activity grouping" }),
-    );
-    expect(
-        screen.getByRole<HTMLTextAreaElement>("textbox", {
-            name: "Ask about the sources",
-        }).value,
-    ).toBe(draft);
     fireEvent.click(screen.getByRole("button", { name: "Preview tools" }));
     fireEvent.click(
         await screen.findByRole("button", { name: "Finish illustrative work" }),
@@ -52,16 +28,21 @@ it("opens the activity trial from framing tools and keeps it available to restar
         }).disabled,
     ).toBe(true);
     const retained = within(screen.getByRole("log")).getByRole("button", {
-        name: "Inspect source preparation",
+        name: "Inspect Sources mission: Documentary preparation",
     });
+    expect(retained.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(retained);
     expect(
-        within(screen.getByRole("log")).queryByText(
-            "Find product and integration documentation",
-            { exact: true },
-        ),
-    ).toBeNull();
+        within(screen.getByRole("log")).getByRole("button", {
+            name: "Inspect Find company reporting",
+        }),
+    ).toBeTruthy();
     fireEvent.click(retained);
+    expect(
+        within(screen.getByRole("log")).queryByRole("button", {
+            name: "Inspect Find company reporting",
+        }),
+    ).toBeNull();
     fireEvent.click(
         screen.getByRole("button", { name: "Restart illustrative work" }),
     );
@@ -71,10 +52,15 @@ it("opens the activity trial from framing tools and keeps it available to restar
         }).disabled,
     ).toBe(false);
     expect(
-        within(screen.getByRole("log")).queryByRole("button", {
-            name: "Inspect source preparation",
+        within(screen.getByRole("log")).getByRole("button", {
+            name: "Inspect Sources mission: Documentary preparation",
         }),
-    ).toBeNull();
+    ).toBeTruthy();
+    expect(
+        within(screen.getByRole("log")).getAllByRole("region", {
+            name: "Sources · Documentary preparation",
+        }),
+    ).toHaveLength(2);
     expect(
         within(screen.getByRole("log")).getByText(
             "Looking for filings and earnings material about claims coordination.",
@@ -92,6 +78,7 @@ it("retains an unsent draft after failed delivery and records it once on explici
             onOpenProgress={vi.fn()}
         />,
     );
+    expect(screen.queryByRole("button", { name: "Fail next send" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Preview tools" }));
     const fail = await screen.findByRole("button", { name: "Fail next send" });
     fireEvent.click(fail);
@@ -182,36 +169,4 @@ it("retains the result of a guided framing correction in conversation history", 
     expect(
         screen.queryByText("Response available", { exact: true }),
     ).toBeNull();
-});
-
-it("keeps preview tools secondary and preserves failed-send recovery after opening them", async () => {
-    sessionStorage.clear();
-    render(
-        <StartScreenPreview
-            name="framing"
-            theme="light"
-            onNavigate={vi.fn()}
-            onOpenProgress={vi.fn()}
-        />,
-    );
-    expect(screen.queryByRole("button", { name: "Fail next send" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Preview tools" }));
-    fireEvent.click(
-        await screen.findByRole("button", { name: "Fail next send" }),
-    );
-    fireEvent.keyDown(screen.getByRole("button", { name: "Fail next send" }), {
-        key: "Escape",
-    });
-    fireEvent.change(
-        screen.getByRole("textbox", {
-            name: "Refine the framing in your own words",
-        }),
-        { target: { value: "Examine decision rights." } },
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Send refinement" }));
-    await waitFor(() =>
-        expect(screen.getByRole("alert").textContent).toContain(
-            "Your draft is still available",
-        ),
-    );
 });

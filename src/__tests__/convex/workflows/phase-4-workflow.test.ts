@@ -14,6 +14,7 @@ import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import { serializeFakeStorageWrites } from "@/__tests__/setup/convex-storage";
+import { installModel } from "@/__tests__/setup/model-configuration";
 import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
 import workflowTest from "./workflow-test-register.js";
 
@@ -213,6 +214,16 @@ test.each([
     rateLimiterTest.register(t);
     workflowTest.register(t);
     if (prepareSources) await serializeFakeStorageWrites(t);
+    if (prepareSources)
+        await installModel(
+            t,
+            {
+                model: "z-ai/glm-5.3-flash",
+                provider: "open-inference/fp4",
+                reasoningEffort: "low",
+            },
+            "sources",
+        );
     const fixture = await t.run(async (ctx) => {
         const userId = await ctx.db.insert("users", { isAnonymous: true });
         const invitationId = await ctx.db.insert("invitations", {

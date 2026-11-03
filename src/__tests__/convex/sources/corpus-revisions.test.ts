@@ -573,7 +573,7 @@ test("backfills the derived source review projection idempotently", async () => 
             status: "claimed",
             createdAt: 1,
         });
-        await ctx.db.insert("visitors", {
+        const visitorId = await ctx.db.insert("visitors", {
             authUserId: adminUserId,
             invitationId,
             role: "admin",
@@ -581,6 +581,7 @@ test("backfills the derived source review projection idempotently", async () => 
             analysesReserved: 0,
             admittedAt: 1,
         });
+        await ctx.db.patch(invitationId, { claimedByVisitorId: visitorId });
         return adminUserId;
     });
     const admin = t.withIdentity({

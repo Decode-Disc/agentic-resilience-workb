@@ -92,6 +92,7 @@ async function backend(instanceName: string, port = 0) {
     return {
         origin: `http://127.0.0.1:${address.port}`,
         state,
+        server,
     };
 }
 
@@ -377,12 +378,16 @@ function initializeRuntimeFixture(root: string, selector: string) {
         resolve(process.cwd(), "scripts/local-dev.ts"),
         join(root, "scripts/local-dev.ts"),
     );
+    copyFileSync(
+        resolve(process.cwd(), "scripts/local-processes.ts"),
+        join(root, "scripts/local-processes.ts"),
+    );
     writeFileSync(
         join(root, "node_modules/convex/bin/main.js"),
         `import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, unlinkSync, writeFileSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, unlinkSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
 
@@ -437,6 +442,17 @@ const shutdown = () => {
 };
 process.once("SIGTERM", shutdown);
 process.once("SIGINT", shutdown);
+if (process.env.LOCAL_RUNTIME_CRASH_AFTER_WEB_FILE) {
+    const timer = setInterval(() => {
+        const path = join(root, '.local-runtime/manifest.json');
+        if (!existsSync(path)) return;
+        const manifest = JSON.parse(readFileSync(path, 'utf8'));
+        if (!manifest.origins.web) return;
+        writeFileSync(process.env.LOCAL_RUNTIME_CRASH_AFTER_WEB_FILE, String(webProcess.pid));
+        clearInterval(timer);
+        process.exit(17);
+    }, 10);
+}
 `,
     );
 }
@@ -536,6 +552,70 @@ function processExit(child: ReturnType<typeof spawn>): Promise<number | null> {
     });
 }
 
+async function portProcess(root: string, port = 0) {
+    const child = spawn(
+        process.execPath,
+        [
+            "--input-type=module",
+            "-e",
+            `
+        import { createServer } from 'node:http';
+        const server = createServer((request, response) => response.end('disposable listener'));
+        server.listen(${port}, '127.0.0.1', () => console.log(server.address().port));
+        const stop = () => { server.close(() => process.exit(0)); server.closeAllConnections(); };
+        process.on('SIGINT', stop);
+        process.on('SIGTERM', stop);
+    `,
+        ],
+        {
+            cwd: root,
+            env: {
+                ...process.env,
+                LOCAL_RUNTIME_ROOT: "",
+                LOCAL_RUNTIME_RUN_ID: "",
+            },
+            stdio: ["ignore", "pipe", "pipe"],
+        },
+    );
+    testProcesses.push(child);
+    const boundPort = await new Promise<number>((done, fail) => {
+        child.stdout.once("data", (chunk: Buffer) =>
+            done(Number(chunk.toString().trim())),
+        );
+        child.once("error", fail);
+        child.once("exit", () =>
+            fail(new Error("Disposable listener exited before readiness.")),
+        );
+    });
+    if (!child.pid) throw new Error("Missing disposable listener PID.");
+    return { child, port: boundPort, pid: child.pid };
+}
+
+function terminalLocalDev(
+    root: string,
+    mode: string,
+    overrides: NodeJS.ProcessEnv,
+) {
+    const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+    const command = [
+        process.execPath,
+        "--experimental-strip-types",
+        join(root, "scripts/local-dev.ts"),
+        mode,
+    ]
+        .map(quote)
+        .join(" ");
+    const env = { ...process.env, ...overrides };
+    delete env.CONVEX_DEPLOYMENT;
+    const child = spawn("script", ["-qefc", command, "/dev/null"], {
+        cwd: root,
+        env,
+        stdio: "pipe",
+    });
+    testProcesses.push(child);
+    return child;
+}
+
 async function stoppedPid(): Promise<number> {
     const child = spawn(process.execPath, ["-e", ""], { stdio: "ignore" });
     if (!child.pid) throw new Error("The dead-process fixture did not start");
@@ -590,6 +670,13 @@ async function fakeWebPnpm(root: string, port?: number) {
         `import { createServer } from "node:http";
 if (process.argv[2] === "exec" && process.argv[3] === "playwright" && process.argv[4] === "test") {
     writeFileSync(process.env.LOCAL_RUNTIME_PLAYWRIGHT_ARGS_FILE, JSON.stringify(process.argv.slice(5)));
+    if (process.env.LOCAL_RUNTIME_PLAYWRIGHT_PID_FILE) {
+        writeFileSync(process.env.LOCAL_RUNTIME_PLAYWRIGHT_PID_FILE, String(process.pid));
+        process.on('SIGINT', () => process.exit(0));
+        process.on('SIGTERM', () => process.exit(0));
+        setInterval(() => {}, 1000);
+        await new Promise(() => {});
+    }
     process.exit(0);
 }
 import { writeFileSync } from "node:fs";
@@ -602,6 +689,7 @@ const runId = process.env.LOCAL_RUNTIME_RUN_ID;
 const identity = getLocalRuntimeIdentity(root);
 const server = createServer((request, response) => {
     if (request.url?.startsWith("/__local_runtime")) {
+        if (process.env.LOCAL_RUNTIME_HOLD_WEB_IDENTITY === "yes") return;
         response.setHeader("Content-Type", "application/json");
         response.end(JSON.stringify({ worktreeId: identity.worktreeId, runId }));
         return;
@@ -1469,3 +1557,541 @@ it("refuses an unversioned existing deployment before native startup", async () 
     expect(output).not.toContain("fixture-secret-must-never-be-projected");
     expect(existsSync(argsPath)).toBe(false);
 });
+
+it("reports the actual occupant of a reserved port without starting services or exposing arguments", async () => {
+    const { first } = await createWorktreePair();
+    const occupied = await backend("occupied-web");
+    const port = Number(new URL(occupied.origin).port);
+    runtimeModule.getLocalRuntimePorts(first, { web: port });
+    const child = spawnLocalDev(first, "dev:status", {}, ["--json"], "pipe");
+    let output = "";
+    let errors = "";
+    child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => (errors += chunk.toString()));
+
+    expect(await processExit(child), errors).toBe(0);
+    const status = JSON.parse(output);
+    const web = status.ports.find(
+        (entry: { role: string }) => entry.role === "web",
+    );
+    expect(web.port).toBe(port);
+    expect(web.listeners[0].processes).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({ pid: process.pid, cwd: process.cwd() }),
+        ]),
+    );
+    expect(output).not.toContain("adminKey");
+    expect(output).not.toContain("cmdline");
+    expect(occupied.state.requests).toBe(0);
+    expect(existsSync(join(first, ".local-runtime/manifest.json"))).toBe(false);
+});
+
+it("stops only the verified worktree runtime and preserves its port reservation", async () => {
+    const { first } = await createWorktreePair();
+    const launcher = spawnLocalDev(first, "convex:dev");
+    const manifest = await waitForRuntimeManifest(first);
+    const ports = runtimeModule.getLocalRuntimePorts(first);
+    const unrelated = spawn(
+        process.execPath,
+        ["-e", "setInterval(() => {}, 1000)"],
+        { stdio: "ignore" },
+    );
+    testProcesses.push(unrelated);
+    const control = spawnLocalDev(first, "dev:stop", {}, [], "pipe");
+    let errors = "";
+    control.stderr?.on("data", (chunk: Buffer) => (errors += chunk.toString()));
+
+    expect(await processExit(control), errors).toBe(0);
+    expect(await processExit(launcher)).toBe(0);
+    expect(() => process.kill(manifest.ownedPids[0].pid, 0)).toThrow();
+    expect(() => process.kill(unrelated.pid as number, 0)).not.toThrow();
+    expect(runtimeModule.getLocalRuntimePorts(first)).toEqual(ports);
+    expect(
+        JSON.parse(
+            readFileSync(join(first, ".local-runtime/manifest.json"), "utf8"),
+        ).ownedPids,
+    ).toEqual([]);
+}, 20_000);
+
+it("detects an occupied frontend port before spawning the native watcher", async () => {
+    const { first } = await createWorktreePair();
+    const occupied = await backend("foreign-web");
+    const env = await fakeWebPnpm(first, Number(new URL(occupied.origin).port));
+    const argsPath = join(first, "must-not-start.json");
+    const child = spawnLocalDev(
+        first,
+        "dev",
+        { ...env, LOCAL_RUNTIME_CONVEX_ARGS_FILE: argsPath },
+        [],
+        "pipe",
+    );
+    let output = "";
+    child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    const result = await Promise.race([
+        processExit(child),
+        new Promise<string>((done) =>
+            setTimeout(() => done("still running"), 2_000),
+        ),
+    ]);
+    expect(result, output).toBe(1);
+    expect(existsSync(argsPath)).toBe(false);
+    expect(output).toContain("already in use");
+    expect(output).toContain(`PID ${process.pid}`);
+    expect(output).toContain("dev:stop");
+    expect(await (await fetch(`${occupied.origin}/instance_name`)).text()).toBe(
+        "foreign-web",
+    );
+}, 10_000);
+
+it("stops an unmanaged listener only when its reserved port and exact PID are selected", async () => {
+    const { first } = await createWorktreePair();
+    const selected = await portProcess(first);
+    const unrelated = await portProcess(first);
+    runtimeModule.getLocalRuntimePorts(first, { web: selected.port });
+    const control = spawnLocalDev(
+        first,
+        "dev:stop",
+        {},
+        ["--port", String(selected.port), "--pid", String(selected.pid)],
+        "pipe",
+    );
+    let errors = "";
+    control.stderr?.on("data", (chunk: Buffer) => (errors += chunk.toString()));
+    expect(await processExit(control), errors).toBe(0);
+    expect(selected.child.exitCode).toBe(0);
+    expect((await fetch(`http://127.0.0.1:${unrelated.port}`)).status).toBe(
+        200,
+    );
+    expect(runtimeModule.getLocalRuntimePorts(first).web).toBe(selected.port);
+});
+
+it("reuses a healthy owned stack on repeated noninteractive dev without replacing either process", async () => {
+    const { first } = await createWorktreePair();
+    const env = await fakeWebPnpm(first);
+    const original = spawnLocalDev(first, "dev", env);
+    const before = await waitForManifest(first, "web");
+    const repeated = spawnLocalDev(first, "dev", env, [], "pipe");
+    let output = "";
+    repeated.stdout?.on(
+        "data",
+        (chunk: Buffer) => (output += chunk.toString()),
+    );
+    repeated.stderr?.on(
+        "data",
+        (chunk: Buffer) => (output += chunk.toString()),
+    );
+    expect(await processExit(repeated), output).toBe(0);
+    expect(output).toContain("Reusing");
+    expect(output).toContain(before.origins.web);
+    const after = JSON.parse(
+        readFileSync(join(first, ".local-runtime/manifest.json"), "utf8"),
+    );
+    expect(after.ownedPids).toEqual(before.ownedPids);
+    expect(original.exitCode).toBeNull();
+    expect((await fetch(before.origins.web)).status).toBe(200);
+}, 20_000);
+
+it("restarts the owned development stack on the same ports", async () => {
+    const { first } = await createWorktreePair();
+    const env = await fakeWebPnpm(first);
+    const original = spawnLocalDev(first, "dev", env);
+    const before = await waitForManifest(first, "web");
+    const oldNativePid = before.ownedPids.find(
+        (entry: { role: string }) => entry.role === "convex",
+    )?.pid;
+    const restart = spawnLocalDev(first, "dev:restart", env, [], "pipe");
+    let errors = "";
+    restart.stderr?.on("data", (chunk: Buffer) => (errors += chunk.toString()));
+    const deadline = Date.now() + 5_000;
+    let after = before;
+    while (Date.now() < deadline) {
+        after = JSON.parse(
+            readFileSync(join(first, ".local-runtime/manifest.json"), "utf8"),
+        );
+        if (
+            after.origins.web &&
+            after.ownedPids.some(
+                (entry: { role: string; pid: number }) =>
+                    entry.role === "convex" && entry.pid !== oldNativePid,
+            )
+        )
+            break;
+        if (restart.exitCode !== null) break;
+        await new Promise((done) => setTimeout(done, 25));
+    }
+    expect(restart.exitCode, errors).toBeNull();
+    expect(
+        after.ownedPids.find(
+            (entry: { role: string }) => entry.role === "convex",
+        )?.pid,
+    ).not.toBe(oldNativePid);
+    expect(await processExit(original)).toBe(0);
+    expect(after.origins.web).toBe(before.origins.web);
+    expect(after.origins.convex).toBe(before.origins.convex);
+    expect((await fetch(after.origins.web)).status).toBe(200);
+}, 20_000);
+
+it("offers to stop the displayed foreign owner in a terminal before starting on the reserved port", async () => {
+    const { first, second } = await createWorktreePair();
+    const foreign = await portProcess(second);
+    const env = await fakeWebPnpm(first, foreign.port);
+    const terminal = terminalLocalDev(first, "dev", env);
+    let output = "";
+    let answered = false;
+    terminal.stdout.on("data", (chunk: Buffer) => {
+        output += chunk.toString();
+        if (!answered && output.includes("[s]top")) {
+            answered = true;
+            terminal.stdin.write("s\n");
+        }
+    });
+    const deadline = Date.now() + 5_000;
+    while (
+        Date.now() < deadline &&
+        terminal.exitCode === null &&
+        !existsSync(join(first, ".local-runtime/manifest.json"))
+    )
+        await new Promise((done) => setTimeout(done, 25));
+    expect(output).toContain("[s]top");
+    expect(output).toContain(`PID ${foreign.pid}`);
+    expect(output).toContain(second);
+    const ready = await waitForManifest(first, "web");
+    expect(Number(new URL(ready.origins.web).port)).toBe(foreign.port);
+    expect(foreign.child.exitCode).toBe(0);
+    expect((await fetch(ready.origins.web)).status).toBe(200);
+    terminal.stdin.write("\u0003");
+    expect(await processExit(terminal)).toBe(0);
+    expect(
+        runtimeModule
+            .inspectLocalRuntime(first)
+            .ports.filter(
+                (entry: { listeners: unknown[] }) => entry.listeners.length,
+            ),
+    ).toEqual([]);
+}, 20_000);
+
+it("treats interruption during frontend identity verification as an orderly stop", async () => {
+    const { first } = await createWorktreePair();
+    const child = spawnLocalDev(
+        first,
+        "dev",
+        {
+            ...(await fakeWebPnpm(first)),
+            LOCAL_RUNTIME_HOLD_WEB_IDENTITY: "yes",
+        },
+        [],
+        "pipe",
+    );
+    let output = "";
+    child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    await waitForManifest(first, "web");
+    child.kill("SIGTERM");
+    expect(await processExit(child), output).toBe(0);
+    expect(output).not.toContain("foreign web listener");
+    expect(
+        runtimeModule
+            .inspectLocalRuntime(first)
+            .ports.filter(
+                (entry: { listeners: unknown[] }) => entry.listeners.length,
+            ),
+    ).toEqual([]);
+}, 15_000);
+
+it("cleans up a frontend orphaned by a native watcher crash", async () => {
+    const { first } = await createWorktreePair();
+    const env = await fakeWebPnpm(first);
+    const marker = join(first, "orphan-web-pid");
+    const port = runtimeModule.getLocalRuntimePorts(first).web;
+    const child = spawnLocalDev(
+        first,
+        "dev",
+        { ...env, LOCAL_RUNTIME_CRASH_AFTER_WEB_FILE: marker },
+        [],
+        "pipe",
+    );
+    let output = "";
+    child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    const code = await processExit(child);
+    expect(existsSync(marker), output).toBe(true);
+    const orphanPid = Number(readFileSync(marker, "utf8"));
+    fixtureBackendPids.push(orphanPid);
+    expect(code).not.toBe(0);
+    await expect(fetch(`http://127.0.0.1:${port}`)).rejects.toThrow();
+    expect(
+        JSON.parse(
+            readFileSync(join(first, ".local-runtime/manifest.json"), "utf8"),
+        ).ownedPids,
+    ).toEqual([]);
+}, 15_000);
+
+it("rejects an unknown stop option before stopping any owned process", async () => {
+    const { first } = await createWorktreePair();
+    const original = spawnLocalDev(first, "convex:dev");
+    await waitForRuntimeManifest(first);
+    const control = spawnLocalDev(
+        first,
+        "dev:stop",
+        {},
+        ["--por", "5173"],
+        "pipe",
+    );
+    let errors = "";
+    control.stderr?.on("data", (chunk: Buffer) => (errors += chunk.toString()));
+    expect(await processExit(control), errors).toBe(1);
+    expect(errors).toContain("Unknown stop option");
+    expect(original.exitCode).toBeNull();
+    const native = runtimeModule.readNativeLocalDeployment(first);
+    expect(
+        await (
+            await fetch(`http://127.0.0.1:${native.cloudPort}/instance_name`)
+        ).text(),
+    ).toBe("runtime-first");
+}, 15_000);
+
+it("refuses a live recorded PID whose invocation identity does not match the worktree", async () => {
+    const { first } = await createWorktreePair();
+    const foreign = await portProcess(first);
+    await runtimeModule.publishRuntimeProcess(first, {
+        role: "web",
+        pid: foreign.pid,
+        runId: "obsolete-run",
+    });
+    const control = spawnLocalDev(first, "dev:stop", {}, [], "pipe");
+    let output = "";
+    control.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    expect(await processExit(control), output).toBe(1);
+    expect(output).toContain("execution identity");
+    expect((await fetch(`http://127.0.0.1:${foreign.port}`)).status).toBe(200);
+});
+
+it("preserves a replacement listener when the confirmed port snapshot is stale", async () => {
+    const { first } = await createWorktreePair();
+    const original = await portProcess(first);
+    runtimeModule.getLocalRuntimePorts(first, { web: original.port });
+    const selected = runtimeModule
+        .inspectLocalRuntime(first)
+        .ports.find((entry: { role: string }) => entry.role === "web");
+    original.child.kill("SIGTERM");
+    await processExit(original.child);
+    const replacement = await portProcess(first, original.port);
+    await expect(
+        runtimeModule.stopLocalRuntimeListener(first, selected, original.pid),
+    ).rejects.toThrow("identity changed");
+    expect((await fetch(`http://127.0.0.1:${replacement.port}`)).status).toBe(
+        200,
+    );
+});
+
+it("cancels a terminal port conflict without starting or stopping a service", async () => {
+    const { first, second } = await createWorktreePair();
+    const foreign = await portProcess(second);
+    const env = await fakeWebPnpm(first, foreign.port);
+    const marker = join(first, "must-not-start.json");
+    const terminal = terminalLocalDev(first, "dev", {
+        ...env,
+        LOCAL_RUNTIME_CONVEX_ARGS_FILE: marker,
+    });
+    let output = "";
+    let answered = false;
+    terminal.stdout.on("data", (chunk: Buffer) => {
+        output += chunk.toString();
+        if (!answered && output.includes("[s]top")) {
+            answered = true;
+            terminal.stdin.write("c\n");
+        }
+    });
+    expect(await processExit(terminal), output).toBe(1);
+    expect(output).toContain("cancelled");
+    expect(existsSync(marker)).toBe(false);
+    expect((await fetch(`http://127.0.0.1:${foreign.port}`)).status).toBe(200);
+}, 15_000);
+
+it.each([
+    "r",
+    "c",
+])("preserves a healthy stack when a terminal chooses %s", async (choice) => {
+    const { first } = await createWorktreePair();
+    const env = await fakeWebPnpm(first);
+    const original = spawnLocalDev(first, "dev", env);
+    const before = await waitForManifest(first, "web");
+    const terminal = terminalLocalDev(first, "dev", env);
+    let output = "";
+    let answered = false;
+    terminal.stdout.on("data", (chunk: Buffer) => {
+        output += chunk.toString();
+        if (!answered && output.includes("[r]euse")) {
+            answered = true;
+            terminal.stdin.write(`${choice}\n`);
+        }
+    });
+    expect(await processExit(terminal), output).toBe(choice === "r" ? 0 : 1);
+    expect(answered).toBe(true);
+    expect(
+        JSON.parse(
+            readFileSync(join(first, ".local-runtime/manifest.json"), "utf8"),
+        ).ownedPids,
+    ).toEqual(before.ownedPids);
+    expect(original.exitCode).toBeNull();
+}, 15_000);
+
+it("serializes simultaneous web starts and reuses the one that became ready", async () => {
+    const { first } = await createWorktreePair();
+    const native = await backend("runtime-first");
+    configureNativeRuntime(first, "runtime-first", native.origin);
+    const env = await fakeWebPnpm(first);
+    const firstStart = spawnLocalDev(first, "dev:web", env);
+    const secondStart = spawnLocalDev(first, "dev:web", env);
+    expect(
+        await Promise.race([processExit(firstStart), processExit(secondStart)]),
+    ).toBe(0);
+    const ready = await waitForManifest(first, "web");
+    expect(
+        ready.ownedPids.filter(
+            (entry: { role: string }) => entry.role === "web",
+        ),
+    ).toHaveLength(1);
+    expect((await fetch(ready.origins.web)).status).toBe(200);
+    expect(
+        [firstStart.exitCode, secondStart.exitCode].filter(
+            (code) => code === null,
+        ),
+    ).toHaveLength(1);
+}, 15_000);
+
+it("interrupts E2E against a reused stack without orphaning its command or stopping existing services", async () => {
+    const { first } = await createWorktreePair();
+    const env = await fakeWebPnpm(first);
+    const original = spawnLocalDev(first, "dev", env);
+    const before = await waitForManifest(first, "web");
+    const marker = join(first, "playwright-pid");
+    const tester = spawnLocalDev(first, "test:e2e", {
+        ...env,
+        LOCAL_RUNTIME_PLAYWRIGHT_PID_FILE: marker,
+        LOCAL_RUNTIME_PLAYWRIGHT_ARGS_FILE: join(first, "playwright-args.json"),
+    });
+    const deadline = Date.now() + 5_000;
+    while (
+        !existsSync(marker) &&
+        tester.exitCode === null &&
+        Date.now() < deadline
+    )
+        await new Promise((done) => setTimeout(done, 25));
+    expect(existsSync(marker)).toBe(true);
+    const pid = Number(readFileSync(marker, "utf8"));
+    fixtureBackendPids.push(pid);
+    tester.kill("SIGTERM");
+    expect(await processExit(tester)).toBe(0);
+    expect(() => process.kill(pid, 0)).toThrow();
+    expect(original.exitCode).toBeNull();
+    expect((await fetch(before.origins.web)).status).toBe(200);
+}, 15_000);
+
+it("does not infer ownership of an occupied site port from a matching Convex API alone", async () => {
+    const { first } = await createWorktreePair();
+    const native = await backend("runtime-first");
+    const foreign = await portProcess(first);
+    configureNativeRuntime(first, "runtime-first", native.origin);
+    const configPath = join(first, ".convex/local/default/config.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    config.ports.site = foreign.port;
+    writeFileSync(configPath, JSON.stringify(config));
+    const marker = join(first, "must-not-start.json");
+    const child = spawnLocalDev(
+        first,
+        "convex:dev",
+        { LOCAL_RUNTIME_CONVEX_ARGS_FILE: marker },
+        [],
+        "pipe",
+    );
+    let output = "";
+    child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    expect(await processExit(child), output).toBe(1);
+    expect(existsSync(marker)).toBe(false);
+    expect(output).toContain("site port");
+    expect((await fetch(`http://127.0.0.1:${foreign.port}`)).status).toBe(200);
+});
+
+it("does not report a reusable frontend as ready when its required backend has stopped", async () => {
+    const { first } = await createWorktreePair();
+    const native = await backend("runtime-first");
+    configureNativeRuntime(first, "runtime-first", native.origin);
+    const env = await fakeWebPnpm(first);
+    const original = spawnLocalDev(first, "dev:web", env);
+    const before = await waitForManifest(first, "web");
+    const deadline = Date.now() + 5_000;
+    while (
+        spawnSync("flock", [
+            "--nonblock",
+            runtimeModule.getRuntimeStartupLockPath(first),
+            "true",
+        ]).status !== 0
+    ) {
+        if (Date.now() >= deadline)
+            throw new Error("Frontend did not finish startup.");
+        await new Promise((done) => setTimeout(done, 25));
+    }
+    await new Promise<void>((done) => native.server.close(() => done()));
+    const repeated = spawnLocalDev(first, "dev:web", env, [], "pipe");
+    let errors = "";
+    repeated.stderr?.on(
+        "data",
+        (chunk: Buffer) => (errors += chunk.toString()),
+    );
+    expect(await processExit(repeated), errors).toBe(1);
+    expect(errors).toContain("Convex backend is unavailable");
+    expect(original.exitCode).toBeNull();
+    expect((await fetch(before.origins.web)).status).toBe(200);
+}, 15_000);
+
+it("reuses the actual owner of an explicitly reassigned web port while preserving the earlier service", async () => {
+    const { first, second } = await createWorktreePair();
+    const native = await backend("runtime-first");
+    configureNativeRuntime(first, "runtime-first", native.origin);
+    const env = await fakeWebPnpm(first);
+    const original = spawnLocalDev(first, "dev:web", env);
+    const before = await waitForManifest(first, "web");
+    const reserved = new Set([
+        ...Object.values(runtimeModule.getLocalRuntimePorts(first)),
+        ...Object.values(runtimeModule.getLocalRuntimePorts(second)),
+    ]);
+    let port = await freePort();
+    while (reserved.has(port)) port = await freePort();
+    const newer = spawnLocalDev(first, "dev:web", env, [
+        "--port",
+        String(port),
+    ]);
+    const deadline = Date.now() + 5_000;
+    while (
+        Number(
+            new URL(
+                JSON.parse(
+                    readFileSync(
+                        join(first, ".local-runtime/manifest.json"),
+                        "utf8",
+                    ),
+                ).origins.web,
+            ).port,
+        ) !== port
+    ) {
+        if (Date.now() >= deadline || newer.exitCode !== null)
+            throw new Error("Reassigned web port did not become ready.");
+        await new Promise((done) => setTimeout(done, 25));
+    }
+    const repeated = spawnLocalDev(first, "dev:web", env, [], "pipe");
+    let output = "";
+    repeated.stdout?.on(
+        "data",
+        (chunk: Buffer) => (output += chunk.toString()),
+    );
+    repeated.stderr?.on(
+        "data",
+        (chunk: Buffer) => (output += chunk.toString()),
+    );
+    expect(await processExit(repeated), output).toBe(0);
+    expect(output).toContain(`http://127.0.0.1:${port}`);
+    expect(original.exitCode).toBeNull();
+    expect(newer.exitCode).toBeNull();
+    expect((await fetch(before.origins.web)).status).toBe(200);
+    expect((await fetch(`http://127.0.0.1:${port}`)).status).toBe(200);
+}, 15_000);

@@ -11,6 +11,12 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
+import {
+    findLocalInvocationProcesses,
+    inspectLocalPorts,
+    readLocalProcess,
+    stopLocalProcessTree,
+} from "./local-processes.ts";
 
 export type LocalRuntimeRole = "convex" | "web" | "preview";
 export type LocalRuntimeOrigin = "convex" | "site" | "web" | "preview";
@@ -63,6 +69,7 @@ export type ResolveLocalRuntimeOptions = {
 type RuntimeProjectionUpdate =
     | { kind: "process-start"; process: OwnedRuntimeProcess }
     | { kind: "reconcile-dead-processes" }
+    | { kind: "process-stop"; process: OwnedRuntimeProcess }
     | {
           kind: "listener-ready";
           role: "web" | "preview";
@@ -96,6 +103,227 @@ const PORT_REGISTRY_NAME = "local-runtime-ports.json";
 
 export class LocalRuntimeError extends Error {
     override name = "LocalRuntimeError";
+}
+
+/** Show reservations and actual socket owners without starting or probing a service. */
+export function inspectLocalRuntime(root: string) {
+    const identity = getLocalRuntimeIdentity(root);
+    const ports = getLocalRuntimePorts(root);
+    const listeners = inspectLocalPorts(Object.values(ports));
+    const manifestPath = getRuntimeManifestPath(root);
+    const owners: OwnedRuntimeProcess[] = [];
+    if (existsSync(manifestPath)) {
+        const manifest = readManifest(manifestPath);
+        const native = readNativeLocalDeployment(root);
+        assertManifestIdentity(manifest, {
+            ...identity,
+            deploymentName: native.deploymentName,
+            deploymentSelector: native.selector,
+        });
+        owners.push(...manifest.ownedPids);
+    }
+    return {
+        identity,
+        processes: owners.map((owner) => {
+            const process = readLocalProcess(owner.pid);
+            return {
+                ...owner,
+                process,
+                verified:
+                    process?.runtimeRoot === identity.root &&
+                    process.runId === owner.runId,
+            };
+        }),
+        ports: PORT_ROLES.map((role) => ({
+            role,
+            port: ports[role],
+            listeners: listeners.filter(
+                (listener) => listener.port === ports[role],
+            ),
+        })),
+    };
+}
+
+/** Stop only live invocation owners whose kernel environment still matches this worktree and run. */
+export async function stopLocalRuntime(
+    root: string,
+    roles: readonly LocalRuntimeRole[] = ["web", "preview", "convex"],
+): Promise<void> {
+    const status = inspectLocalRuntime(root);
+    const selected = status.processes.filter((owner) =>
+        roles.includes(owner.role),
+    );
+    if (selected.some((owner) => owner.process && !owner.verified))
+        throw new LocalRuntimeError(
+            "A recorded runtime PID no longer has this worktree's execution identity. No process was stopped; inspect dev:status.",
+        );
+    const owners = [...selected].sort(
+        (a, b) => Number(a.role === "convex") - Number(b.role === "convex"),
+    );
+    for (const owner of owners) {
+        if (owner.process) await stopLocalProcessTree(owner.process);
+        await writeProjection(root, { kind: "process-stop", process: owner });
+    }
+}
+
+/** Clean up one invocation's surviving processes before removing its readiness entries. */
+export async function stopLocalRuntimeInvocation(
+    root: string,
+    runId: string,
+): Promise<void> {
+    const identity = getLocalRuntimeIdentity(root);
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const processes = findLocalInvocationProcesses(identity.root, runId);
+        if (!processes.length) {
+            await removeRuntimeRun(root, runId);
+            return;
+        }
+        for (const entry of processes.filter(
+            (entry) =>
+                !processes.some((parent) => parent.pid === entry.parentPid),
+        ))
+            await stopLocalProcessTree(entry);
+    }
+    if (findLocalInvocationProcesses(identity.root, runId).length)
+        throw new LocalRuntimeError(
+            "Invocation cleanup is incomplete; readiness entries were preserved for inspection.",
+        );
+    await removeRuntimeRun(root, runId);
+}
+
+export type LocalRuntimePortStatus = ReturnType<
+    typeof inspectLocalRuntime
+>["ports"][number];
+
+/** Stop only explicitly selected socket owners, rejecting stale inspection results before signaling. */
+export async function stopLocalRuntimeListener(
+    root: string,
+    selected: LocalRuntimePortStatus,
+    pid?: number,
+): Promise<void> {
+    if (getLocalRuntimePorts(root)[selected.role] !== selected.port)
+        throw new LocalRuntimeError(
+            "The selected port assignment changed. Inspect dev:status again.",
+        );
+    const targets = selected.listeners
+        .flatMap((listener) => listener.processes)
+        .filter((process) => pid === undefined || process.pid === pid);
+    if (!targets.length)
+        throw new LocalRuntimeError(
+            "The selected listener owner is unavailable. No process was stopped.",
+        );
+    const current = inspectLocalPorts([selected.port]).flatMap(
+        (listener) => listener.processes,
+    );
+    if (
+        targets.some(
+            (target) =>
+                !current.some(
+                    (process) =>
+                        process.pid === target.pid &&
+                        process.startTime === target.startTime,
+                ),
+        )
+    )
+        throw new LocalRuntimeError(
+            "The selected listener identity changed. Inspect dev:status again.",
+        );
+    const status = inspectLocalRuntime(root);
+    const ownedRole = selected.role === "site" ? "convex" : selected.role;
+    const owned = status.processes.find(
+        (owner) =>
+            owner.role === ownedRole &&
+            owner.verified &&
+            targets.some(
+                (target) =>
+                    target.runtimeRoot === status.identity.root &&
+                    target.runId === owner.runId,
+            ),
+    );
+    if (owned) await stopLocalRuntime(root, [owned.role]);
+    else for (const target of targets) await stopLocalProcessTree(target);
+    if (inspectLocalPorts([selected.port]).length)
+        throw new LocalRuntimeError(
+            `Port ${selected.port} is still in use. Inspect dev:status again; no replacement process was stopped.`,
+        );
+}
+
+/** Classify occupied assigned ports using the existing deployment and listener identity checks. */
+export async function inspectLocalRuntimeStartup(
+    root: string,
+    roles: readonly (keyof LocalRuntimePorts)[],
+) {
+    const status = inspectLocalRuntime(root);
+    const ready = new Set<keyof LocalRuntimePorts>();
+    const occupied = status.ports.filter(
+        (entry) => roles.includes(entry.role) && entry.listeners.length > 0,
+    );
+    if (
+        occupied.some(
+            (entry) => entry.role === "convex" || entry.role === "site",
+        )
+    ) {
+        try {
+            const native = readNativeLocalDeployment(root);
+            await verifyBackendOrigin(
+                originForPort(native.cloudPort),
+                native.deploymentName,
+            );
+            ready.add("convex");
+            const apiOwners =
+                status.ports
+                    .find((entry) => entry.role === "convex")
+                    ?.listeners.flatMap((listener) => listener.processes) ?? [];
+            const site = occupied.find((entry) => entry.role === "site");
+            if (
+                site?.listeners.every((listener) =>
+                    listener.processes.some((process) =>
+                        apiOwners.some(
+                            (owner) =>
+                                owner.pid === process.pid &&
+                                owner.startTime === process.startTime,
+                        ),
+                    ),
+                )
+            )
+                ready.add("site");
+        } catch (error) {
+            if (!(error instanceof LocalRuntimeError)) throw error;
+        }
+    }
+    for (const role of ["web", "preview"] as const) {
+        const entry = occupied.find((entry) => entry.role === role);
+        const owner = status.processes.find(
+            (owner) =>
+                owner.role === role &&
+                owner.verified &&
+                entry?.listeners.some((listener) =>
+                    listener.processes.some(
+                        (process) =>
+                            process.runtimeRoot === status.identity.root &&
+                            process.runId === owner.runId,
+                    ),
+                ),
+        );
+        if (!entry || !owner) continue;
+        try {
+            if (role === "web")
+                await verifyWebOrigin(
+                    originForPort(entry.port),
+                    status.identity.worktreeId,
+                    owner,
+                );
+            else await verifyPreviewOrigin(originForPort(entry.port));
+            ready.add(role);
+        } catch (error) {
+            if (!(error instanceof LocalRuntimeError)) throw error;
+        }
+    }
+    return {
+        status,
+        ready,
+        conflicts: occupied.filter((entry) => !ready.has(entry.role)),
+    };
 }
 
 /** Resolve a canonical Git worktree identity for this checkout. */
@@ -953,7 +1181,8 @@ function writeProjectionUnlocked(
         assertManifestOrigins(manifest, deployment);
     if (
         update.kind === "process-start" ||
-        update.kind === "reconcile-dead-processes"
+        update.kind === "reconcile-dead-processes" ||
+        update.kind === "process-stop"
     )
         pruneDeadOwnedProcesses(manifest);
     manifest.origins.convex = originForPort(deployment.cloudPort);
@@ -989,6 +1218,22 @@ function writeProjectionUnlocked(
             pid: update.pid,
             runId: update.runId,
         };
+    } else if (update.kind === "process-stop") {
+        manifest.ownedPids = manifest.ownedPids.filter(
+            (item) =>
+                item.pid !== update.process.pid ||
+                item.runId !== update.process.runId,
+        );
+        for (const role of ["web", "preview"] as const) {
+            const owner = manifest.originOwners[role];
+            if (
+                owner?.pid === update.process.pid &&
+                owner.runId === update.process.runId
+            ) {
+                delete manifest.origins[role];
+                delete manifest.originOwners[role];
+            }
+        }
     } else if (update.kind === "run-stop") {
         manifest.ownedPids = manifest.ownedPids.filter(
             (item) => item.runId !== update.runId,

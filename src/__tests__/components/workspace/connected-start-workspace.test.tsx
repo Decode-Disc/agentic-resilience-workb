@@ -255,6 +255,54 @@ test("the same composer saves an edited question against the visible framing rev
     );
     expect(screen.getAllByRole("textbox")).toHaveLength(1);
 });
+test("adding a question preserves the existing program and draft without starting research", async () => {
+    render(<ConnectedStartWorkspace runId={runId} />);
+    fireEvent.change(
+        screen.getByRole("textbox", {
+            name: "Refine the framing in your own words",
+        }),
+        { target: { value: "Keep my ordinary draft." } },
+    );
+    fireEvent.click(
+        screen.getByRole("button", { name: "Add research question" }),
+    );
+    expect(screen.getAllByRole("textbox")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Start research" })).toBeNull();
+    fireEvent.change(
+        screen.getByRole("textbox", { name: "Add research question" }),
+        { target: { value: "Can agents change pricing power?" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Add question" }));
+    await waitFor(() =>
+        expect(save).toHaveBeenCalledWith({
+            runId,
+            expectedRevision: 2,
+            requestKey: expect.any(String),
+            content: {
+                scope: "Claims coordination",
+                questions: [
+                    readySnapshot.framing.content.questions[0],
+                    {
+                        id: expect.any(String),
+                        text: "Can agents change pricing power?",
+                        shortLabel: "Question 2",
+                        rationale: "Added by the analyst.",
+                    },
+                ],
+            },
+        }),
+    );
+    await waitFor(() =>
+        expect(
+            screen.getByRole<HTMLTextAreaElement>("textbox", {
+                name: "Refine the framing in your own words",
+            }).value,
+        ).toBe("Keep my ordinary draft."),
+    );
+    expect(start).not.toHaveBeenCalled();
+    expect(submitMessage).not.toHaveBeenCalled();
+});
+
 test("Start research commits the visible revision", async () => {
     render(<ConnectedStartWorkspace runId={runId} />);
     fireEvent.click(screen.getByRole("button", { name: "Start research" }));

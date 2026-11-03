@@ -2,21 +2,10 @@
     "name": "agentic-resilience-workbench",
     "private": true,
     "type": "module",
-    "packageManager": "pnpm@10.20.0",
+    "packageManager": "pnpm@12.16.0",
     "engines": {
-        "node": ">=22.19.0 <25",
-        "pnpm": "10.20.0"
-    },
-    "pnpm": {
-        "onlyBuiltDependencies": [
-            "esbuild",
-            "lightningcss"
-        ],
-        "peerDependencyRules": {
-            "allowedVersions": {
-                "convex-helpers>typescript": ">=5.5"
-            }
-        }
+        "node": ">=26",
+        "pnpm": "12.16.0"
     },
     "scripts": {
         "dev": "node --experimental-strip-types scripts/local-dev.ts dev",
@@ -48,7 +37,10 @@
         "workbench-ui:dev": "vite --config workbench-ui.vite.config.ts",
         "workbench-ui:check": "playwright test --config workbench-ui.playwright.config.ts",
         "dev:urls": "node --experimental-strip-types scripts/local-runtime.ts",
-        "dev:ports": "node --experimental-strip-types scripts/local-runtime.ts --ports"
+        "dev:ports": "node --experimental-strip-types scripts/local-runtime.ts --ports",
+        "dev:status": "node --experimental-strip-types scripts/local-dev.ts dev:status",
+        "dev:stop": "node --experimental-strip-types scripts/local-dev.ts dev:stop",
+        "dev:restart": "node --experimental-strip-types scripts/local-dev.ts dev:restart"
     },
     "dependencies": {
         "@assistant-ui/react": "0.15.31",
@@ -126,5 +118,12 @@
         "typescript": "7.0.2",
         "vite": "8.1.4",
         "vitest": "4.1.10"
+    },
+    "devEngines": {
+        "runtime": {
+            "name": "node",
+            "version": "26.12.1",
+            "onFail": "download"
+        }
     }
 }

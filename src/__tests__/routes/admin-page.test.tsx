@@ -89,6 +89,7 @@ const evaluationRun = {
 };
 
 const failedExaCall = {
+    _id: "provider-exa",
     runId: "run-research",
     service: "exa",
     operation: "search",
@@ -102,6 +103,7 @@ const failedExaCall = {
 };
 
 const succeededSecCall = {
+    _id: "provider-sec",
     runId: "run-research",
     service: "sec",
     operation: "fetch_filing",
@@ -176,6 +178,16 @@ beforeEach(() => {
             status: "Exhausted",
             loadMore: vi.fn(),
         });
+    convexReactHarness
+        .query(api.adminOperations.inspectProviderCall)
+        .returnsFrom(({ args }) =>
+            args === "skip"
+                ? undefined
+                : ([failedExaCall, succeededSecCall].find(
+                      (call) => call._id === args.providerCallId,
+                  ) ?? null),
+        );
+    convexReactHarness.mutation(api.providerCalls.retryBilling).uses(vi.fn());
     convexReactHarness
         .paginatedQuery(api.adminOperations.listRunJournalEventsPage)
         .returns({ results: [], status: "Exhausted", loadMore: vi.fn() });

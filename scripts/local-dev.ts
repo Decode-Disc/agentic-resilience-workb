@@ -2,21 +2,28 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
+import { LocalProcessError } from "./local-processes.ts";
 import {
     assertRuntimeStartupLock,
     getLocalRuntimeIdentity,
     getLocalRuntimePorts,
     getRuntimeStartupLockPath,
+    inspectLocalRuntime,
+    inspectLocalRuntimeStartup,
     LocalRuntimeError,
+    type LocalRuntimePorts,
     type LocalRuntimeRole,
     publishRuntimeOrigin,
     publishRuntimeProcess,
     readNativeLocalDeployment,
     releaseRuntimeStartupLock,
-    removeRuntimeRun,
     resolveLocalRuntime,
+    stopLocalRuntime,
+    stopLocalRuntimeInvocation,
+    stopLocalRuntimeListener,
 } from "./local-runtime.ts";
 
 class LocalDevError extends Error {
@@ -46,14 +53,29 @@ async function main(): Promise<number> {
     const mode = args[0];
     const forwardedArgs = args.slice(1);
     const root = process.cwd();
+    if (mode === "dev:status") {
+        const status = inspectLocalRuntime(root);
+        if (forwardedArgs.includes("--json"))
+            console.log(JSON.stringify(status, null, 2));
+        else printRuntimeStatus(status);
+        return 0;
+    }
     if (!mode)
         throw new LocalDevError(
             "Choose dev, dev:web, convex:dev, dev:browser, dev:all, or test:e2e.",
         );
-    if (mode === "dev" || mode === "convex:dev" || mode === "test:e2e")
+    if (
+        [
+            "dev",
+            "convex:dev",
+            "test:e2e",
+            "dev:stop",
+            "dev:restart",
+            "dev:web",
+            "dev:browser",
+        ].includes(mode)
+    )
         return runWithStartupLock(root, mode, forwardedArgs);
-    if (mode === "dev:web") return runWeb(root, forwardedArgs);
-    if (mode === "dev:browser") return runPreview(root, forwardedArgs);
     if (mode === "dev:all")
         return runCommand(
             "pnpm",
@@ -92,6 +114,8 @@ async function runWithStartupLock(
         {
             cwd: identity.root,
             env: { ...process.env, LOCAL_RUNTIME_ROOT: identity.root },
+            // Forward Ctrl+C once instead of delivering it to every child in the terminal's process group.
+            detached: true,
             stdio: "inherit",
         },
     );
@@ -103,6 +127,51 @@ async function runLockedMode(
     mode: string,
     args: string[],
 ): Promise<number> {
+    if (mode === "dev:web") return runWeb(root, args);
+    if (mode === "dev:browser") return runPreview(root, args);
+    if (mode === "dev:restart") {
+        await stopLocalRuntime(root, ["web", "convex"]);
+        return runNativeWatcher(root, true, false, args);
+    }
+    if (mode === "dev:stop") {
+        const seen = new Set<string>();
+        for (let index = 0; index < args.length; index++) {
+            const argument = args[index] ?? "";
+            const name = argument.split("=")[0] ?? "";
+            if (!["--port", "--pid"].includes(name) || seen.has(name))
+                throw new LocalDevError(
+                    `Unknown stop option or repeated selection: ${name}`,
+                );
+            seen.add(name);
+            if (!argument.includes("=")) index++;
+        }
+        const port = portArgument(args, "--port");
+        const pid = pidArgument(args);
+        if (port !== undefined || pid !== undefined) {
+            if (port === undefined || pid === undefined)
+                throw new LocalDevError(
+                    "Select both --port and --pid to stop an unmanaged listener.",
+                );
+            const selected = inspectLocalRuntime(root).ports.find(
+                (entry) => entry.port === port,
+            );
+            if (!selected)
+                throw new LocalDevError(
+                    "The selected port is not assigned to this worktree.",
+                );
+            await stopLocalRuntimeListener(root, selected, pid);
+            console.log(
+                `Stopped the selected owner of port ${port}. Port reservations are preserved.`,
+            );
+            return 0;
+        }
+        await stopLocalRuntime(root);
+        console.log(
+            "Verified runtime processes have stopped. Unmanaged listeners and port reservations are preserved.",
+        );
+        printRuntimeStatus(inspectLocalRuntime(root));
+        return 0;
+    }
     if (mode === "dev" || mode === "convex:dev" || mode === "test:e2e")
         return runNativeWatcher(
             root,
@@ -111,6 +180,20 @@ async function runLockedMode(
             args,
         );
     throw new LocalDevError("Unknown locked local runtime command.");
+}
+
+function printRuntimeStatus(
+    status: ReturnType<typeof inspectLocalRuntime>,
+): void {
+    console.log(`Local runtime: ${status.identity.root}`);
+    for (const entry of status.ports) {
+        const owners = entry.listeners.flatMap(
+            (listener) => listener.processes,
+        );
+        console.log(
+            `${entry.role}: ${entry.port} — ${entry.listeners.length === 0 ? "free" : owners.length === 0 ? "in use (owner unavailable)" : owners.map((owner) => `${owner.command} (PID ${owner.pid}), ${owner.cwd ?? "directory unavailable"}`).join("; ")}`,
+        );
+    }
 }
 
 async function runNativeWatcher(
@@ -154,6 +237,46 @@ async function runNativeWatcher(
         backendVersionArgs = ["--local-backend-version", backendVersion];
     }
 
+    const startup = await prepareStartup(
+        root,
+        startWeb ? ["convex", "site", "web"] : ["convex", "site"],
+    );
+    if (
+        startup.ready.has("convex") &&
+        startup.status.processes.some(
+            (owner) => owner.role === "convex" && owner.verified,
+        )
+    ) {
+        if (!runE2e && args.length)
+            throw new LocalDevError(
+                "The native watcher is already running. Use dev:restart to apply different Convex arguments.",
+            );
+        if (
+            !runE2e &&
+            (await existingRuntimeChoice(
+                `http://127.0.0.1:${startWeb && startup.ready.has("web") ? ports.web : ports.convex}`,
+            )) === "restart"
+        ) {
+            await stopLocalRuntime(
+                root,
+                startWeb ? ["web", "convex"] : ["convex"],
+            );
+            return runNativeWatcher(root, startWeb, runE2e, args);
+        }
+        if (startWeb && !startup.ready.has("web"))
+            return runWeb(
+                root,
+                [],
+                runE2e ? () => runE2eTests(root, args) : undefined,
+            );
+        releaseRuntimeStartupLock();
+        if (runE2e) return runE2eTests(root, args);
+        console.log(
+            `Reusing this worktree's runtime at http://127.0.0.1:${startWeb ? ports.web : ports.convex}`,
+        );
+        return 0;
+    }
+
     const runId = randomUUID();
     const child = spawn(
         process.execPath,
@@ -165,7 +288,9 @@ async function runNativeWatcher(
             String(ports.convex),
             "--local-site-port",
             String(ports.site),
-            ...(startWeb ? ["--start", "pnpm exec vite dev"] : []),
+            ...(startWeb && !startup.ready.has("web")
+                ? ["--start", "pnpm exec vite dev"]
+                : []),
             ...nativeArgs,
         ],
         {
@@ -176,36 +301,117 @@ async function runNativeWatcher(
     );
     const exit = trackExit(child);
     // The native CLI's SIGINT handler shuts down the backend it started.
-    const removeSignals = forwardSignals(child, undefined, "SIGINT");
+    let stopping = false;
+    const removeSignals = forwardSignals(
+        child,
+        () => {
+            stopping = true;
+        },
+        "SIGINT",
+    );
     try {
         await waitForBackend(root, deploymentName, child, runId, exit);
+        if (startWeb)
+            await waitForOrigin(root, "web", child, exit, STARTUP_TIMEOUT_MS);
         releaseRuntimeStartupLock();
         if (!runE2e) return (await exit).code;
-
-        await waitForOrigin(root, "web", child, exit, STARTUP_TIMEOUT_MS);
-        const runtime = await resolveLocalRuntime(root, {
-            requiredOrigins: ["convex", "web"],
-        });
-        return await runCommand(
-            "pnpm",
-            ["exec", "playwright", "test", ...args],
-            root,
-            {
-                ...process.env,
-                PLAYWRIGHT_BASE_URL: runtime.origins.web,
-                LOCAL_RUNTIME_CONVEX_ORIGIN: runtime.origins.convex,
-                LOCAL_RUNTIME_WORKTREE_ID: runtime.identity.worktreeId,
-            },
-        );
+        return await runE2eTests(root, args);
     } catch (error) {
         await stopChild(child, "SIGINT");
+        if (stopping) return (await exit).code;
         throw error;
     } finally {
         removeSignals();
         if (runE2e) await stopChild(child, "SIGINT");
         await exit;
-        await removeRuntimeRun(root, runId);
+        await stopLocalRuntimeInvocation(root, runId);
     }
+}
+
+async function runE2eTests(root: string, args: string[]): Promise<number> {
+    const runtime = await resolveLocalRuntime(root, {
+        requiredOrigins: ["convex", "web"],
+    });
+    return runCommand("pnpm", ["exec", "playwright", "test", ...args], root, {
+        ...process.env,
+        PLAYWRIGHT_BASE_URL: runtime.origins.web,
+        LOCAL_RUNTIME_CONVEX_ORIGIN: runtime.origins.convex,
+        LOCAL_RUNTIME_WORKTREE_ID: runtime.identity.worktreeId,
+    });
+}
+
+async function prepareStartup(
+    root: string,
+    roles: readonly (keyof LocalRuntimePorts)[],
+) {
+    for (;;) {
+        const startup = await inspectLocalRuntimeStartup(root, roles);
+        const conflict = startup.conflicts[0];
+        if (!conflict) return startup;
+        const owners = conflict.listeners.flatMap(
+            (listener) => listener.processes,
+        );
+        const detail = owners.length
+            ? owners
+                  .map(
+                      (owner) =>
+                          `${owner.command}, PID ${owner.pid}, ${owner.cwd ?? "directory unavailable"}`,
+                  )
+                  .join("; ")
+            : "owner unavailable";
+        const diagnostic = `${conflict.role} port ${conflict.port}: address already in use (${detail}).`;
+        if (!process.stdin.isTTY || !process.stdout.isTTY || !owners.length)
+            throw new LocalDevError(
+                `${diagnostic} Inspect pnpm dev:status; use pnpm dev:stop --port ${conflict.port} --pid <PID> to stop an explicitly selected process.`,
+            );
+        console.log(diagnostic);
+        const choice = await terminalChoice(
+            "Stop the listed process tree(s) and retry? [s]top / [c]ancel [c]: ",
+            "c",
+        );
+        if (choice !== "s") throw new LocalDevError("Startup cancelled.");
+        await stopLocalRuntimeListener(root, conflict);
+    }
+}
+
+async function terminalChoice(
+    question: string,
+    fallback: string,
+): Promise<string> {
+    const terminal = createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    });
+    try {
+        return (
+            (await terminal.question(question)).trim().toLowerCase() || fallback
+        );
+    } catch (error) {
+        if (
+            error instanceof Error &&
+            (error.name === "AbortError" ||
+                ("code" in error && error.code === "ERR_USE_AFTER_CLOSE"))
+        )
+            throw new LocalDevError("Startup cancelled.");
+        throw new LocalDevError(
+            "Could not read the terminal selection. Startup stopped.",
+        );
+    } finally {
+        terminal.close();
+    }
+}
+
+async function existingRuntimeChoice(
+    origin: string,
+): Promise<"reuse" | "restart"> {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) return "reuse";
+    const choice = await terminalChoice(
+        `This worktree already has a healthy service at ${origin}. [r]euse / [s]restart / [c]ancel [r]: `,
+        "r",
+    );
+    if (choice === "s") return "restart";
+    if (choice === "r") return "reuse";
+    throw new LocalDevError("Startup cancelled.");
 }
 
 async function waitForBackend(
@@ -267,10 +473,34 @@ async function waitForBackend(
     );
 }
 
-async function runWeb(root: string, args: string[]): Promise<number> {
+async function runWeb(
+    root: string,
+    args: string[],
+    onReady?: () => Promise<number>,
+): Promise<number> {
     const port = portArgument(args, "--port");
-    getLocalRuntimePorts(root, port === undefined ? {} : { web: port });
+    const ports = getLocalRuntimePorts(
+        root,
+        port === undefined ? {} : { web: port },
+    );
+    const startup = await prepareStartup(root, ["web"]);
     await resolveLocalRuntime(root, { requiredOrigins: ["convex"] });
+    if (startup.ready.has("web")) {
+        if (
+            !onReady &&
+            (await existingRuntimeChoice(`http://127.0.0.1:${ports.web}`)) ===
+                "restart"
+        ) {
+            await stopLocalRuntime(root, ["web"]);
+            return runWeb(root, args);
+        }
+        releaseRuntimeStartupLock();
+        if (onReady) return onReady();
+        console.log(
+            `Reusing this worktree's web service at http://127.0.0.1:${ports.web}`,
+        );
+        return 0;
+    }
     return runTrackedService(
         root,
         "web",
@@ -278,6 +508,7 @@ async function runWeb(root: string, args: string[]): Promise<number> {
         ["exec", "vite", "dev", ...args],
         root,
         STARTUP_TIMEOUT_MS,
+        onReady,
     );
 }
 
@@ -288,6 +519,22 @@ async function runPreview(root: string, args: string[]): Promise<number> {
         root,
         explicitPort === undefined ? {} : { preview: explicitPort },
     );
+    const startup = await prepareStartup(root, ["preview"]);
+    if (startup.ready.has("preview")) {
+        if (
+            (await existingRuntimeChoice(
+                `http://127.0.0.1:${ports.preview}`,
+            )) === "restart"
+        ) {
+            await stopLocalRuntime(root, ["preview"]);
+            return runPreview(root, args);
+        }
+        releaseRuntimeStartupLock();
+        console.log(
+            `Reusing this worktree's preview service at http://127.0.0.1:${ports.preview}`,
+        );
+        return 0;
+    }
     const build = await runCommand("npm", ["run", "build"], serviceRoot);
     if (build !== 0) return build;
 
@@ -302,11 +549,11 @@ async function runPreview(root: string, args: string[]): Promise<number> {
             args,
         );
     } catch (error) {
-        if (hasNativeRuntimeConfig(root)) await removeRuntimeRun(root, runId);
+        await stopLocalRuntimeInvocation(root, runId);
         throw error;
     }
     if (started.status !== null) {
-        await removeRuntimeRun(root, runId);
+        await stopLocalRuntimeInvocation(root, runId);
         return started.status;
     }
     if (!started.origin)
@@ -316,8 +563,9 @@ async function runPreview(root: string, args: string[]): Promise<number> {
     process.stdout.write(
         `Local preview service listening at ${started.origin}\n`,
     );
+    releaseRuntimeStartupLock();
     return runUntilExit(started.child, async () => {
-        await removeRuntimeRun(root, runId);
+        await stopLocalRuntimeInvocation(root, runId);
     });
 }
 
@@ -472,6 +720,7 @@ async function runTrackedService(
     args: string[],
     cwd: string,
     timeoutMs: number,
+    onReady?: () => Promise<number>,
 ): Promise<number> {
     const runId = randomUUID();
     const child = spawn(executable, args, {
@@ -492,6 +741,8 @@ async function runTrackedService(
     try {
         await publishRuntimeProcess(root, { role, pid: child.pid, runId });
         await waitForOrigin(root, "web", child, exit, timeoutMs);
+        releaseRuntimeStartupLock();
+        if (onReady) return await onReady();
         return (await exit).code;
     } catch (error) {
         await stopChild(child);
@@ -500,7 +751,8 @@ async function runTrackedService(
         throw error;
     } finally {
         removeSignals();
-        await removeRuntimeRun(root, runId);
+        if (onReady) await stopChild(child);
+        await stopLocalRuntimeInvocation(root, runId);
     }
 }
 
@@ -555,10 +807,6 @@ async function runUntilExit(
     }
 }
 
-async function waitForChild(child: Child): Promise<number> {
-    return (await trackExit(child)).code;
-}
-
 async function runCommand(
     executable: string,
     args: string[],
@@ -566,7 +814,7 @@ async function runCommand(
     env: NodeJS.ProcessEnv = process.env,
 ): Promise<number> {
     const child = spawn(executable, args, { cwd, env, stdio: "inherit" });
-    return waitForChild(child);
+    return runUntilExit(child, () => stopChild(child));
 }
 
 function forwardSignals(
@@ -736,6 +984,23 @@ function portArgument(args: string[], name: string): number | undefined {
     return port;
 }
 
+function pidArgument(args: string[]): number | undefined {
+    const value =
+        args.find((arg) => arg.startsWith("--pid="))?.slice(6) ??
+        (args.includes("--pid") ? args[args.indexOf("--pid") + 1] : undefined);
+    if (value === undefined && !args.includes("--pid")) return undefined;
+    if (
+        !value ||
+        !/^\d+$/.test(value) ||
+        !Number.isSafeInteger(Number(value)) ||
+        Number(value) < 2
+    )
+        throw new LocalDevError(
+            "--pid must identify a process greater than 1.",
+        );
+    return Number(value);
+}
+
 class ChildEndedError extends LocalDevError {
     readonly status: ChildStatus;
 
@@ -757,7 +1022,8 @@ if (entry && fileURLToPath(import.meta.url) === resolve(entry)) {
             else {
                 console.error(
                     error instanceof LocalDevError ||
-                        error instanceof LocalRuntimeError
+                        error instanceof LocalRuntimeError ||
+                        error instanceof LocalProcessError
                         ? error.message
                         : "Local runtime command failed.",
                 );

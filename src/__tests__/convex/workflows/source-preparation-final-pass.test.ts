@@ -26,7 +26,7 @@ test.each([
         runId,
         corpusRevisionId,
         sourceId: primaryId,
-    } = await seedSourcePreparation();
+    } = await seedSourcePreparation({ models: true });
     workflowTest.register(t);
     await t.mutation(internal.researchPlanning.createForRun, {
         runId,
