@@ -847,10 +847,12 @@ export function StartSourceStages({
         <div className={styles.stageProgress}>
             <div className={styles.stageTrack} aria-hidden="true">
                 <span style={{ width: `${completedPercent}%` }} />
-                <span style={{ width: `${activePercent}%` }} />
-                {running && (
-                    <span className={`wb-sweep ${styles.stageSweep}`} />
-                )}
+                <span
+                    className={
+                        running ? `wb-sweep ${styles.stageSweep}` : undefined
+                    }
+                    style={{ width: `${activePercent}%` }}
+                />
             </div>
             <div className={styles.stageLabels}>
                 <span>Collect</span>

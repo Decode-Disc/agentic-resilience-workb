@@ -10,6 +10,7 @@ import {
 import type { ConversationMissionSnapshot } from "@/components/chat/conversation-mission";
 import type { ConversationTurnSnapshot } from "@/components/chat/conversation-turn";
 import { useWorkbenchConversation } from "@/components/chat/workbench-conversation";
+import type { ResearchControlCommand } from "@/components/composer/slash-commands";
 import type { StartFramingQuestion } from "@/components/workspace/start/start-screens";
 
 const request =
@@ -855,7 +856,7 @@ function endPreparation(
                 text:
                     outcome === "completed"
                         ? preparationReply
-                        : "Sources stopped its illustrative preparation. Recorded inputs and any listed candidates remain available. Restart illustrative work to continue this preview.",
+                        : "Sources stopped its illustrative preparation. Recorded inputs and any listed candidates remain available. Resume or restart illustrative work to continue this preview.",
             },
         ],
     });
@@ -1743,6 +1744,46 @@ export function useStartConversationPreview(
             setState((current) => endPreparation(current, "completed")),
         interruptPreparation: () =>
             setState((current) => endPreparation(current, "interrupted")),
+        controlPreparation: async (command: ResearchControlCommand) => {
+            const { mission } = sourcePreparation(state);
+            if (
+                !mission ||
+                (command === "/pause"
+                    ? mission.state !== "running"
+                    : mission.state !== "interrupted")
+            )
+                throw new Error(
+                    "Illustrative command is not available in this state",
+                );
+            setState((current) =>
+                command === "/pause"
+                    ? endPreparation(current, "interrupted")
+                    : {
+                          ...current,
+                          missions: current.missions.map((entry) =>
+                              entry.id !== mission.id
+                                  ? entry
+                                  : {
+                                        ...entry,
+                                        state: "running",
+                                        finishedAt: undefined,
+                                        operations: entry.operations.map(
+                                            (operation) =>
+                                                operation.state !==
+                                                "interrupted"
+                                                    ? operation
+                                                    : {
+                                                          ...operation,
+                                                          state: "running",
+                                                          summary:
+                                                              "Illustrative work resumed; recorded inputs are retained.",
+                                                      },
+                                        ),
+                                    },
+                          ),
+                      },
+            );
+        },
         restartPreparation: () =>
             setState((current) =>
                 sourcePreparation(current).state === "running"

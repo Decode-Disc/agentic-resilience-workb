@@ -413,28 +413,26 @@
     gap: 8px;
 }
 .stageTrack {
-    position: relative;
     display: flex;
     height: 8px;
     border-radius: 4px;
     overflow: hidden;
-    gap: 2px;
     background: var(--fill-quiet);
 }
-.stageTrack > span:first-child {
-    background: var(--foreground);
+.stageTrack > span {
+    flex-shrink: 0;
 }
-.stageTrack > span:nth-child(2) {
+.stageTrack > span:first-child {
     background: var(--brand-purple);
 }
-.stageSweep {
-    position: absolute;
-    inset: 0;
-    display: block;
+.stageTrack > span:nth-child(2) {
+    background-color: var(--foreground);
+}
+.stageTrack > .stageSweep {
     background-image: linear-gradient(
         90deg,
         transparent,
-        color-mix(in oklab, var(--brand-purple) 30%, transparent),
+        color-mix(in oklab, var(--background) 50%, transparent),
         transparent
     );
 }

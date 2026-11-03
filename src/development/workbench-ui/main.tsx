@@ -1,7 +1,15 @@
+import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
+import Icon from "@/components/icon";
+import {
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import "./preview-controls.css";
 import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
 import "@/styles.css";
@@ -13,16 +21,50 @@ import { StartScreenPreview, startScreenNames } from "./start-screen-examples";
 const params = new URLSearchParams(location.search);
 const initialTheme = params.get("theme") === "dark" ? "dark" : "light";
 document.documentElement.classList.toggle("dark", initialTheme === "dark");
-const requested = params.get("component");
+
 const requestedScreen =
     params.get("layout") === "start"
         ? (startScreenNames.find((name) => name === params.get("screen")) ??
           "composer")
         : undefined;
-document.body.dataset.single = String(!!requested);
+const groups = {
+    "Chat & composer": ["Composer", "RequestItem"],
+    "Research & evidence": [
+        "FramingControls",
+        "SourcingLane",
+        "Handoff",
+        "ProgressTimeline",
+        "WorkCard",
+        "InventoryDock",
+        "InventorySheet",
+        "EvidenceMatrix",
+        "SourceReader",
+        "QuestionCard",
+        "HypothesisNode",
+        "AppraisalBlock",
+        "ControlConclusion",
+        "OutcomeCard",
+        "MechanismNode",
+        "BriefReference",
+    ],
+    "UI primitives": [
+        "OverlayLayers",
+        "Chip",
+        "GlassPanel",
+        "Cover",
+        "Button",
+        "Badge",
+        "WorkspaceNavigation",
+    ],
+} satisfies Record<string, (keyof typeof examples)[]>;
 function Gallery() {
     const [theme, setTheme] = useState<"light" | "dark">(initialTheme);
     const [action, setAction] = useState("");
+    const [requested, setRequested] = useState(params.get("component"));
+    const [layout, setLayout] = useState(params.get("layout"));
+    const [query, setQuery] = useState("");
+    const [category, setCategory] = useState("All");
+    const [viewport, setViewport] = useState("responsive");
     const [activeScreen, setActiveScreen] = useState(requestedScreen);
     const changeTheme = (nextTheme: "light" | "dark") => {
         const url = new URL(location.href);
@@ -35,9 +77,12 @@ function Gallery() {
     }, [theme]);
     const navigateToScreen = (screen: (typeof startScreenNames)[number]) => {
         const url = new URL(location.href);
+        url.searchParams.set("layout", "start");
+        url.searchParams.delete("component");
         url.searchParams.set("screen", screen);
         history.pushState(null, "", url);
         setActiveScreen(screen);
+        setLayout("start");
     };
     useEffect(() => {
         const restore = () => {
@@ -46,12 +91,15 @@ function Gallery() {
                     ? "dark"
                     : "light",
             );
+            const restored = new URLSearchParams(location.search);
+            setRequested(restored.get("component"));
+            setLayout(restored.get("layout"));
             setActiveScreen(
-                startScreenNames.find(
-                    (name) =>
-                        name ===
-                        new URLSearchParams(location.search).get("screen"),
-                ) ?? "composer",
+                restored.get("layout") === "start"
+                    ? (startScreenNames.find(
+                          (name) => name === restored.get("screen"),
+                      ) ?? "composer")
+                    : undefined,
             );
         };
         window.addEventListener("popstate", restore);
@@ -64,13 +112,90 @@ function Gallery() {
         return () =>
             window.removeEventListener("workbench-example-action", listener);
     }, []);
-    if (params.get("layout") === "chat-mocks")
+    const href = (values: Record<string, string>) => {
+        const target = new URLSearchParams({ ...values, theme });
+        return `?${target}`;
+    };
+    const header = (
+        <header
+            className={`gallery-header${activeScreen ? " gallery-screen-header" : ""}`}>
+            <div className="gallery-heading">
+                <a className="gallery-brand" href={href({})}>
+                    Workbench UI
+                </a>
+                <DropdownMenu>
+                    <DropdownMenuTrigger
+                        render={<Button variant="secondary" size="sm" />}
+                        aria-label="Example navigation">
+                        {layout === "start"
+                            ? "START screens"
+                            : layout === "chat-mocks"
+                              ? "Design references"
+                              : "All examples"}
+                        <Icon iconNode={ArrowDown01Icon} size={14} />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                        <DropdownMenuItem
+                            render={<a href={href({})} />}
+                            aria-current={
+                                !requested && !layout ? "page" : undefined
+                            }>
+                            All examples
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            render={
+                                <a
+                                    href={href({
+                                        layout: "start",
+                                        screen: "composer",
+                                    })}
+                                />
+                            }
+                            aria-current={
+                                layout === "start" ? "page" : undefined
+                            }>
+                            START screens
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            render={<a href={href({ layout: "chat-mocks" })} />}
+                            aria-current={
+                                layout === "chat-mocks" ? "page" : undefined
+                            }>
+                            Design references
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+                <ThemeToggle theme={theme} onThemeChange={changeTheme} />
+            </div>
+            <p
+                className="gallery-disclosure"
+                title="Illustrative examples · no research or provider calls">
+                <span className="gallery-disclosure-full">
+                    Illustrative · no research executed
+                </span>
+                <span className="gallery-disclosure-short">Illustrative</span>
+            </p>
+            <output aria-live="polite">{action}</output>
+        </header>
+    );
+    if (layout === "chat-mocks")
         return (
-            <ChatCompositionMocks theme={theme} onThemeChange={changeTheme} />
+            <>
+                {header}
+                <p className="gallery-reference-note">
+                    Historical composition studies · these references do not
+                    represent the current chat controls.
+                </p>
+                <ChatCompositionMocks
+                    theme={theme}
+                    onThemeChange={changeTheme}
+                />
+            </>
         );
     if (activeScreen)
         return (
             <>
+                {header}
                 <header className="start-screen-toolbar">
                     <h1>START screens</h1>
                     <nav
@@ -107,9 +232,6 @@ function Gallery() {
                         ))}
                     </nav>
                     <div id="start-preview-controls" />
-                    <ThemeToggle theme={theme} onThemeChange={changeTheme} />
-                    <p>Illustrative · no research executed</p>
-                    <output aria-live="polite">{action}</output>
                 </header>
                 <StartScreenPreview
                     name={activeScreen}
@@ -126,53 +248,166 @@ function Gallery() {
                 />
             </>
         );
-    const names =
+    const selected =
         requested && requested in examples
-            ? [requested as keyof typeof examples]
-            : (Object.keys(examples) as (keyof typeof examples)[]);
+            ? (requested as keyof typeof examples)
+            : undefined;
+    const Example = selected ? examples[selected] : undefined;
     return (
         <>
-            {!requested && (
-                <header className="gallery-header">
-                    <h1>Workbench UI</h1>
-                    <nav aria-label="Screen previews">
-                        <a href={`?layout=chat-mocks&theme=${theme}`}>
-                            Chat composition studies
-                        </a>
-                        <a
-                            href={`?layout=start&screen=composer&theme=${theme}`}>
-                            START screens
-                        </a>
-                    </nav>
-                    <p>
-                        Illustrative component fixtures. No research is
-                        executed.
+            {header}
+            {Example && selected ? (
+                <main className="gallery-specimen">
+                    <div className="gallery-specimen-heading">
+                        <h1>{selected}</h1>
+                        <fieldset className="gallery-viewports">
+                            <legend>Preview width</legend>
+                            {["responsive", "desktop", "mobile"].map((size) => (
+                                <Button
+                                    key={size}
+                                    size="sm"
+                                    variant={
+                                        viewport === size
+                                            ? "secondary"
+                                            : "ghost"
+                                    }
+                                    aria-pressed={viewport === size}
+                                    onClick={() => setViewport(size)}>
+                                    {size}
+                                </Button>
+                            ))}
+                        </fieldset>
+                    </div>
+                    <p className="gallery-description">
+                        Interactive component fixture. Some reference canvases
+                        retain their original width and scroll horizontally.
                     </p>
-                    <ThemeToggle theme={theme} onThemeChange={changeTheme} />
-                    <output aria-live="polite">{action}</output>
-                </header>
+                    {selected === "Composer" && (
+                        <nav
+                            className="gallery-composer-states"
+                            aria-label="Composer states">
+                            {[
+                                ["Standard", ""],
+                                ["Empty program", "empty"],
+                                ["Ready program", "ready"],
+                            ].map(([label, program]) => (
+                                <a
+                                    key={label}
+                                    href={href({
+                                        component: "Composer",
+                                        ...(program ? { program } : {}),
+                                    })}
+                                    aria-current={
+                                        (params.get("program") ?? "") ===
+                                        program
+                                            ? "page"
+                                            : undefined
+                                    }>
+                                    {label}
+                                </a>
+                            ))}
+                        </nav>
+                    )}
+                    <div className="gallery-scroll" data-viewport={viewport}>
+                        <WorkbenchUiRoot
+                            theme={theme}
+                            className={`gallery-scene ${selected === "Cover" ? "gallery-cover" : selected === "Button" ? "gallery-buttons" : selected === "InventorySheet" ? "" : "wb-backdrop"}`}
+                            data-component={selected}>
+                            <Example />
+                        </WorkbenchUiRoot>
+                    </div>
+                </main>
+            ) : (
+                <main className="gallery-catalogue">
+                    <h1>Explore the interface</h1>
+                    <p className="gallery-description">
+                        Open a screen to follow the workflow, or inspect one
+                        component and its interactions.
+                    </p>
+                    <a
+                        className="gallery-screen-entry"
+                        href={href({ layout: "start", screen: "composer" })}>
+                        <strong>START screens</strong>
+                        <span>
+                            Compose a request, refine the framing and follow
+                            documentary preparation.
+                        </span>
+                    </a>
+                    <div className="gallery-filters">
+                        <label>
+                            Find an example
+                            <input
+                                type="search"
+                                value={query}
+                                onChange={(event) =>
+                                    setQuery(event.target.value)
+                                }
+                                placeholder="Composer, sources, navigation…"
+                            />
+                        </label>
+                        <fieldset aria-label="Example categories">
+                            {["All", ...Object.keys(groups)].map((group) => (
+                                <Button
+                                    key={group}
+                                    variant={
+                                        category === group
+                                            ? "secondary"
+                                            : "ghost"
+                                    }
+                                    size="sm"
+                                    aria-pressed={category === group}
+                                    onClick={() => setCategory(group)}>
+                                    {group}
+                                </Button>
+                            ))}
+                        </fieldset>
+                    </div>
+                    {Object.entries(groups)
+                        .filter(
+                            ([group]) =>
+                                category === "All" || group === category,
+                        )
+                        .map(([group, names]) => {
+                            const matches = names.filter((name) =>
+                                name
+                                    .toLowerCase()
+                                    .includes(query.toLowerCase().trim()),
+                            );
+                            return matches.length ? (
+                                <section
+                                    key={group}
+                                    className="gallery-category">
+                                    <h2>{group}</h2>
+                                    <ul>
+                                        {matches.map((name) => (
+                                            <li key={name}>
+                                                <a
+                                                    href={href({
+                                                        component: name,
+                                                    })}>
+                                                    {name}
+                                                </a>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </section>
+                            ) : null;
+                        })}
+                    {!Object.entries(groups).some(
+                        ([group, names]) =>
+                            (category === "All" || group === category) &&
+                            names.some((name) =>
+                                name
+                                    .toLowerCase()
+                                    .includes(query.toLowerCase().trim()),
+                            ),
+                    ) && (
+                        <p role="status">
+                            No matching examples. Try another name or category.
+                        </p>
+                    )}
+                </main>
             )}
-            {requested && action && (
-                <output className="gallery-notice" aria-live="polite">
-                    {action}
-                </output>
-            )}
-            {names.map((name) => {
-                const Example = examples[name];
-                return (
-                    <section key={name} className="gallery-section">
-                        {!requested && <h2>{name}</h2>}
-                        <div className="gallery-scroll">
-                            <WorkbenchUiRoot
-                                theme={theme}
-                                className={`gallery-scene ${name === "Cover" ? "gallery-cover" : name === "Button" ? "gallery-buttons" : name === "InventorySheet" ? "" : "wb-backdrop"}`}
-                                data-component={name}>
-                                <Example />
-                            </WorkbenchUiRoot>
-                        </div>
-                    </section>
-                );
-            })}
         </>
     );
 }

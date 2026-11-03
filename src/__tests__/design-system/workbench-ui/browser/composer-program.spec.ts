@@ -50,6 +50,17 @@ for (const width of [1440, 390])
                     exact: true,
                 })
                 .click();
+            await page
+                .getByRole("textbox", {
+                    name: "Add research question",
+                    exact: true,
+                })
+                .fill(
+                    "Does CCC control coordination, or supply replaceable modules?",
+                );
+            await page
+                .getByRole("button", { name: "Add question", exact: true })
+                .click();
             const question = program.getByRole("heading", {
                 name: "Does CCC control coordination, or supply replaceable modules?",
                 exact: true,

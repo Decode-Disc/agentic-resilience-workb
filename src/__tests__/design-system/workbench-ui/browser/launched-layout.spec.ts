@@ -286,10 +286,12 @@ for (const width of [1440, 1024, 390]) {
         await expect(toggle).toHaveAttribute("aria-expanded", "true");
         await expect(gaps.getByRole("listitem")).toHaveCount(2);
         await expect(
-            gaps.getByText("No results found", { exact: true }),
+            gaps.getByText("No matching material found in this search.", {
+                exact: true,
+            }),
         ).toBeInViewport();
         await expect(
-            gaps.getByText("Search unavailable", { exact: true }),
+            gaps.getByText("Search could not be completed.", { exact: true }),
         ).toBeInViewport();
         const firstDocument = progress.getByText("Repair networks and claims", {
             exact: true,

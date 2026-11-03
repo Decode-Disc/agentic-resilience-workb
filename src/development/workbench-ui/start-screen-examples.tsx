@@ -1,3 +1,5 @@
+import { usePreviewModelSelector } from "./preview-model-selector";
+import type { ComponentProps } from "react";
 import { ComposerToolsMenu } from "@/components/composer/tools-menu";
 import { ComposerToolbar } from "@/components/composer/composer";
 import { ArrowRight01Icon, Attachment01Icon } from "@hugeicons/core-free-icons";
@@ -231,7 +233,11 @@ function PreviewResearchContext({
         />
     );
 }
-function EntryExample() {
+function EntryExample({
+    modelControls,
+}: {
+    modelControls: ReturnType<typeof usePreviewModelSelector>;
+}) {
     const [value, setValue] = useState("");
     const { inputRef: composerRef, fill: fillComposer } =
         useQuickTextFill<HTMLTextAreaElement>(setValue);
@@ -343,19 +349,22 @@ function EntryExample() {
                                     />
                                 }
                                 tools={
-                                    <ComposerToolsMenu
-                                        count={references.length}
-                                        items={[
-                                            {
-                                                label: "Attach references",
-                                                icon: Attachment01Icon,
-                                                description:
-                                                    "Add public HTTPS links as research inputs",
-                                                onSelect: () =>
-                                                    setReferencesOpen(true),
-                                            },
-                                        ]}
-                                    />
+                                    <>
+                                        <ComposerToolsMenu
+                                            count={references.length}
+                                            items={[
+                                                {
+                                                    label: "Attach references",
+                                                    icon: Attachment01Icon,
+                                                    description:
+                                                        "Add public HTTPS links as research inputs",
+                                                    onSelect: () =>
+                                                        setReferencesOpen(true),
+                                                },
+                                            ]}
+                                        />
+                                        {modelControls.modelSelector}
+                                    </>
                                 }
                                 action={
                                     <Button
@@ -420,12 +429,21 @@ function EntryExample() {
 function FramingExample({
     trialControls,
     controller,
+    composerControls,
     history,
     onLaunch,
 }: {
     controller: StartConversationPreview;
     history: ReactNode;
     onLaunch: () => void;
+    composerControls: Pick<
+        ComponentProps<typeof ConversationComposer>,
+        | "modelSelector"
+        | "controlsOpen"
+        | "onOpenModels"
+        | "onCommand"
+        | "availableCommands"
+    >;
     trialControls: ReactNode;
 }) {
     const {
@@ -464,6 +482,7 @@ function FramingExample({
     }
     const composer = (
         <ConversationComposer
+            {...composerControls}
             inputRef={refinementRef}
             onResumeQueue={controller.resumeQueue}
             placeholder={
@@ -771,11 +790,13 @@ const captured = [
 function ResearchExample({
     trialControls,
     controller,
+    composerControls,
     history,
     onOpenProgress,
     onInspectFraming,
 }: {
     controller: StartConversationPreview;
+    composerControls: ComponentProps<typeof FramingExample>["composerControls"];
     history: ReactNode;
     onOpenProgress: () => void;
     onInspectFraming: () => void;
@@ -877,6 +898,7 @@ function ResearchExample({
             }
             conversationComposer={
                 <ConversationComposer
+                    {...composerControls}
                     label="Ask about the sources"
                     inputRef={inputRef}
                     onResumeQueue={controller.resumeQueue}
@@ -1011,7 +1033,9 @@ function ResearchExample({
                             className="start-preview-limitations-toggle">
                             <span className="start-preview-limitations-heading">
                                 Coverage gaps
-                                <Badge tone="ink">2</Badge>
+                                <span className="start-preview-limitations-count">
+                                    2
+                                </span>
                             </span>
                             <WorkbenchIcon name="chevron" size={14} />
                         </CollapsibleTrigger>
@@ -1020,13 +1044,20 @@ function ResearchExample({
                         <ul>
                             <li>
                                 <WorkbenchIcon name="unestablished" size={14} />
-                                <span>Analyst coverage</span>
-                                <Badge tone="ink">No results found</Badge>
+                                <div>
+                                    <span>Analyst coverage</span>
+                                    <p>
+                                        No matching material found in this
+                                        search.
+                                    </p>
+                                </div>
                             </li>
                             <li>
                                 <WorkbenchIcon name="clock" size={14} />
-                                <span>Patent register</span>
-                                <Badge tone="dashed">Search unavailable</Badge>
+                                <div>
+                                    <span>Patent register</span>
+                                    <p>Search could not be completed.</p>
+                                </div>
                             </li>
                         </ul>
                     </CollapsibleContent>
@@ -1089,6 +1120,20 @@ export function StartScreenPreview({
 }) {
     const controller = useStartConversationPreview(name, onStatus);
     const { state, reply, activeTurn } = controller;
+    const modelControls = usePreviewModelSelector();
+    const preparationState = sourcePreparation(state).state;
+    const composerControls = {
+        ...modelControls,
+        availableCommands: [
+            "/model",
+            ...(preparationState === "running"
+                ? ["/pause" as const]
+                : preparationState === "interrupted"
+                  ? ["/resume" as const]
+                  : []),
+        ] as const,
+        onCommand: controller.controlPreparation,
+    };
     const history = (
         <ConversationHistory
             entries={controller.historyEntries}
@@ -1181,6 +1226,7 @@ export function StartScreenPreview({
                     <FramingExample
                         trialControls={trialControls}
                         controller={controller}
+                        composerControls={composerControls}
                         history={history}
                         onLaunch={() => {
                             controller.startResearch();
@@ -1191,6 +1237,7 @@ export function StartScreenPreview({
                     <ResearchExample
                         trialControls={trialControls}
                         controller={controller}
+                        composerControls={composerControls}
                         history={history}
                         onInspectFraming={() => onNavigate("framing")}
                         onOpenProgress={onOpenProgress}
@@ -1204,7 +1251,7 @@ export function StartScreenPreview({
                         />
                     </div>
                 ) : (
-                    <EntryExample />
+                    <EntryExample modelControls={modelControls} />
                 )}
             </WorkbenchShellSurface>
         </WorkbenchUiRoot>

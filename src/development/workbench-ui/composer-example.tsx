@@ -1,87 +1,107 @@
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
-import type { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import type { FunctionReturnType } from "convex/server";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
     ConversationComposer,
     useWorkbenchConversation,
 } from "@/components/chat/workbench-conversation";
-import { FramingProposal } from "@/components/workspace/start/start-screens";
+import {
+    FramingProposal,
+    type StartFramingQuestion,
+} from "@/components/workspace/start/start-screens";
 import StartStyles from "@/components/workspace/start/start-screens.module.css";
-import { WorkbenchModelSelector } from "@/components/composer/model-picker";
-
-const first = "illustrative-first" as Id<"modelCatalog">;
-const second = "illustrative-second" as Id<"modelCatalog">;
-const models: FunctionReturnType<typeof api.workbench.models> = {
-    selectedId: first,
-    label: "Illustrative balanced model",
-    available: true,
-    effort: "low",
-    effortChoices: ["low", "high"],
-    revision: 0,
-    choices: [
-        {
-            id: first,
-            label: "Illustrative balanced model",
-            effort: "low",
-            effortChoices: ["low", "high"],
-        },
-        {
-            id: second,
-            label: "Illustrative fast model",
-            effort: null,
-            effortChoices: [],
-        },
-    ],
-};
+import { usePreviewModelSelector } from "./preview-model-selector";
 
 /** Exercises the real composer primitives with explicit, local-only catalogue and command fixtures. */
 export function ComposerExample() {
     const program = new URLSearchParams(location.search).get("program");
-    const [hasQuestion, setHasQuestion] = useState(program === "ready");
+    const [questions, setQuestions] = useState<StartFramingQuestion[]>(
+        program === "ready"
+            ? [
+                  {
+                      id: "coordination",
+                      label: "Q1",
+                      shortLabel: "Coordination",
+                      text: "Does CCC control coordination, or supply replaceable modules?",
+                      rationale:
+                          "Distinguish running the workflow from deciding its rules.",
+                  },
+              ]
+            : [],
+    );
+    const [editing, setEditing] = useState<{ id?: string } | null>(null);
+    const inputRef = useRef<HTMLTextAreaElement>(null);
+    const actionTrigger = useRef<HTMLElement | null>(null);
+    useEffect(() => {
+        if (editing) inputRef.current?.focus();
+        else actionTrigger.current?.focus();
+    }, [editing]);
     const [draft, setDraft] = useState("");
-    const [snapshot, setSnapshot] = useState(models);
-    const [open, setOpen] = useState(false);
+    const modelControls = usePreviewModelSelector();
     const [receipt, setReceipt] = useState("");
     const conversation = useWorkbenchConversation({
         messages: [],
         draft,
         onDraftChange: setDraft,
         onSend: async (text) => {
-            setReceipt(text);
+            if (editing) {
+                setQuestions((current) =>
+                    editing.id
+                        ? current.map((question) =>
+                              question.id === editing.id
+                                  ? { ...question, text }
+                                  : question,
+                          )
+                        : [
+                              ...current,
+                              {
+                                  id: crypto.randomUUID(),
+                                  label: `Q${current.length + 1}`,
+                                  shortLabel: "Custom question",
+                                  text,
+                                  rationale:
+                                      "Added by the analyst for this illustrative program.",
+                              },
+                          ],
+                );
+                setEditing(null);
+            } else setReceipt(text);
         },
     });
     const composer = (
         <ConversationComposer
-            label="Message"
+            inputRef={inputRef}
+            label={
+                editing
+                    ? editing.id
+                        ? "Edit research question"
+                        : "Add research question"
+                    : "Message"
+            }
+            placeholder={
+                editing && !editing.id
+                    ? "What would you like to investigate?"
+                    : undefined
+            }
+            actionLabel={
+                editing
+                    ? editing.id
+                        ? "Save changes"
+                        : "Add question"
+                    : undefined
+            }
+            onCancel={
+                editing
+                    ? () => {
+                          setEditing(null);
+                          setDraft("");
+                      }
+                    : undefined
+            }
             availableCommands={["/pause", "/model"]}
             onCommand={async () => {
                 throw new Error("Illustrative refusal");
             }}
-            onOpenModels={() => setOpen(true)}
-            controlsOpen={open}
-            modelSelector={
-                <WorkbenchModelSelector
-                    snapshot={snapshot}
-                    open={open}
-                    onOpenChange={setOpen}
-                    pending={false}
-                    onSelect={(id, effort) => {
-                        const choice = models.choices.find(
-                            (model) => model.id === id,
-                        );
-                        if (choice)
-                            setSnapshot({
-                                ...models,
-                                selectedId: id,
-                                label: choice.label,
-                                effort: effort ?? choice.effort,
-                                effortChoices: choice.effortChoices,
-                            });
-                    }}
-                />
-            }
+            {...modelControls}
         />
     );
     return (
@@ -99,22 +119,21 @@ export function ComposerExample() {
                         <div className={StartStyles.pendingAction}>
                             <FramingProposal
                                 collapsible
-                                questions={
-                                    hasQuestion
-                                        ? [
-                                              {
-                                                  id: "coordination",
-                                                  label: "Q1",
-                                                  shortLabel: "Coordination",
-                                                  text: "Does CCC control coordination, or supply replaceable modules?",
-                                                  rationale:
-                                                      "Distinguish running the workflow from deciding its rules.",
-                                              },
-                                          ]
-                                        : []
-                                }
+                                questions={questions}
                                 composer={composer}
-                                onAddRequest={() => setHasQuestion(true)}
+                                actionActive={editing !== null}
+                                onAddRequest={() => {
+                                    actionTrigger.current =
+                                        document.activeElement as HTMLElement;
+                                    setDraft("");
+                                    setEditing({});
+                                }}
+                                onEditRequest={(question) => {
+                                    actionTrigger.current =
+                                        document.activeElement as HTMLElement;
+                                    setDraft(question.text);
+                                    setEditing({ id: question.id });
+                                }}
                                 onStart={() =>
                                     setReceipt(
                                         "Illustrative launch only; no research is executed.",
