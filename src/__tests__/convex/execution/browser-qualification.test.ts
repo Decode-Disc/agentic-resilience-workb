@@ -297,3 +297,95 @@ test("the existing source-review fixture can receive its grant before activation
         lifecycleState: "awaiting_source_review",
     });
 });
+
+test("qualification binds an immutable numeric loopback relay and rejects other destinations", async () => {
+    const f = await fixture();
+    for (const relayOrigin of [
+        "https://example.com",
+        "http://localhost:49176",
+        "http://127.0.0.1:49176/path",
+        "http://127.0.0.1:49176/?x=1",
+    ]) {
+        await expect(
+            f.t.mutation(
+                internal.execution.fixtures.authorizeWorkbenchQualification,
+                {
+                    runId: f.runId,
+                    fixtureKey: "qualification",
+                    relayOrigin,
+                },
+            ),
+        ).rejects.toThrow("Invalid qualification relay origin");
+    }
+    await f.t.mutation(
+        internal.execution.fixtures.authorizeWorkbenchQualification,
+        {
+            runId: f.runId,
+            fixtureKey: "qualification",
+            relayOrigin: "http://127.0.0.1:49176",
+        },
+    );
+    await expect(
+        f.t.mutation(
+            internal.execution.fixtures.authorizeWorkbenchQualification,
+            {
+                runId: f.runId,
+                fixtureKey: "qualification",
+                relayOrigin: "http://127.0.0.1:49177",
+            },
+        ),
+    ).rejects.toThrow("conflicts");
+});
+
+test("the relay lookup checks mission generation and revokes transport when the browser context closes", async () => {
+    const f = await fixture();
+    await f.t.mutation(
+        internal.execution.fixtures.authorizeWorkbenchQualification,
+        {
+            runId: f.runId,
+            fixtureKey: "qualification",
+            relayOrigin: "http://127.0.0.1:49176",
+        },
+    );
+    const active = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: f.runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: false,
+        },
+    );
+    assert(active);
+    const mission = await f.t.run((ctx) => ctx.db.get(active.missionId));
+    assert(mission);
+    const input = {
+        missionId: mission._id,
+        expectedGeneration: mission.generation,
+    };
+    expect(
+        await f.t.query(internal.execution.fixtures.workbenchRelay, input),
+    ).toBe("http://127.0.0.1:49176");
+    await expect(
+        f.t.query(internal.execution.fixtures.workbenchRelay, {
+            ...input,
+            expectedGeneration: mission.generation + 1,
+        }),
+    ).rejects.toThrow();
+    const run = await f.t.run((ctx) => ctx.db.get(f.runId));
+    assert(run?.browserTestContextId);
+    const closedContextId = run.browserTestContextId;
+    await f.t.run((ctx) => ctx.db.patch(closedContextId, { status: "closed" }));
+    await expect(
+        f.t.query(internal.execution.fixtures.workbenchRelay, input),
+    ).rejects.toThrow();
+});
+
+test("Workbench qualification exposes bounded operation receipts for refusal verification", async () => {
+    const f = await fixture();
+    const snapshot = await f.t.query(
+        internal.execution.fixtures.inspectWorkbench,
+        { runId: f.runId, fixtureKey: "qualification" },
+    );
+    expect(snapshot.operationReceipts).toEqual([]);
+});

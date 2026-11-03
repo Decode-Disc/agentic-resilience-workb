@@ -111,7 +111,7 @@ test("normal qualification forwards the first SSE frame before upstream EOF", as
     }
 });
 
-async function withRelay(providerFetch, check) {
+async function withRelay(providerFetch, check, maximumRequests) {
     const root = mkdtempSync(join(tmpdir(), "workbench-relay-outcome-"));
     const fixture = join(root, "code.txt");
     writeFileSync(fixture, "frozen unpaid probe");
@@ -123,6 +123,11 @@ async function withRelay(providerFetch, check) {
                 .digest("hex"),
         }),
     );
+    if (maximumRequests !== undefined)
+        writeFileSync(
+            join(root, "protocol.json"),
+            JSON.stringify({ maximumRequests }),
+        );
     let relay;
     const restart = async () => {
         if (relay) {
@@ -178,6 +183,7 @@ async function withRelay(providerFetch, check) {
     try {
         await restart();
         await check({
+            root,
             send,
             request,
             restart,
@@ -416,6 +422,59 @@ test("closing after terminal SSE retains the completed response and charge witho
                     .reduce((sum, entry) => sum + (entry.cost ?? 0), 0),
                 0.000002,
             );
+        },
+    );
+});
+
+test("a smaller authorized request allowance stops before another upstream call", async () => {
+    let calls = 0;
+    await withRelay(
+        async () => {
+            calls++;
+            return complete();
+        },
+        async ({ send }) => {
+            assert.equal((await send("first")).status, 200);
+            assert.equal((await send("second")).status, 400);
+            assert.equal(calls, 1);
+        },
+        1,
+    );
+});
+
+test("a versioned qualification refuses inference before a passing validation of these fingerprints", async () => {
+    let calls = 0;
+    await withRelay(
+        async () => {
+            calls++;
+            return complete();
+        },
+        async ({ root, send, restart }) => {
+            writeFileSync(
+                join(root, "protocol.json"),
+                JSON.stringify({ version: 2, maximumRequests: 20 }),
+            );
+            await restart();
+            assert.equal((await send("unchecked")).status, 400);
+            assert.equal(calls, 0);
+            writeFileSync(
+                join(root, "validation.json"),
+                JSON.stringify({
+                    status: "failed",
+                    fingerprintsSha256: "wrong",
+                }),
+            );
+            assert.equal((await send("failed-checks")).status, 400);
+            assert.equal(calls, 0);
+            const fingerprintsSha256 = createHash("sha256")
+                .update(readFileSync(join(root, "fingerprints.json")))
+                .digest("hex");
+            writeFileSync(
+                join(root, "validation.json"),
+                JSON.stringify({ status: "passed", fingerprintsSha256 }),
+            );
+            assert.equal((await send("validated")).status, 200);
+            assert.equal(calls, 1);
         },
     );
 });

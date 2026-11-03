@@ -1,0 +1,17 @@
+# Automatic Workbench model preparation — 2026-11-03
+
+The live qualification command now checks the selected Workbench model through a separately admitted administrator session before authorizing inference. It reuses `modelConfigurationActions.refreshProfiles` for stale profiles, follows at most twenty continuation pages, and confirms compatibility without changing the model revision, assignments or availability. Current profiles cause no refresh. Disabled or unprepared models, stalled/incomplete continuation and concurrent configuration changes remain blocked. Browser authentication stays in memory; the temporary administrator context closes in `finally`.
+
+Six deterministic preparation tests cover these branches. The continuation-bound regression first failed because the current revision could become compatible before historical pagination finished; it now rejects unfinished refreshes. A relay regression likewise first admitted a request above a reduced allowance and now refuses it before upstream I/O. All 23 focused Node tests, application/backend types, scoped Biome and import/ownership checks passed. No backend implementation or model routing changed.
+
+## Real results and limitations
+
+The first attempt was started before the typecheck completed. A missing explicit TypeScript annotation was then reported; the attempt was deliberately interrupted after two completed provider calls. Those charges were retained: USD 0.00112224, no unknown outcomes. Cleanup completed. This was an execution-sequencing mistake, not a provider or application failure. [Interrupted attempt archive](../../scripts/evaluations/archives/20261103T093751295Z-workbench-qualification/record.json).
+
+After types and tests passed, the final candidate ran with `--mode live --maximum-requests 18` so both attempts stayed under the original twenty-request authorization. Its automatic administrator preflight succeeded with the existing GLM profiles already current; the stale-profile branch was covered deterministically, not forced in the live catalogue. No manual refresh was needed for this run.
+
+Eight scenarios passed: initial framing, refinement, actual malformed-argument injection and refusal with continuation, concurrent analyst edit, reload, cancellation before generation, subsequent continuation, and the conversational start request. Pause/resume were explicitly not run: with fifteen requests consumed, the runner retained its three-request margin for a complete turn. Accordingly, the overall battery is **incomplete**, not accepted as a ten-scenario success. [Final live archive](../../scripts/evaluations/archives/20261103T094330775Z-workbench-qualification/record.json).
+
+The final run used fifteen requests costing USD 0.010809612. Combined with the interrupted attempt: **17 requests, USD 0.011931852**, with all charges matched and none unknown. Desktop and two mobile viewport checks passed without console errors. Research remained unstarted. Post-run verification found no active writers or publication hold, both temporary flags absent, and the original paid-work state restored. Analytical quality and real provider/worker/backend failures remain outside these conclusions.
+
+Both archives returned `verified` and retain their actual code and evidence in local storage. The [teardown supplement](../../scripts/evaluations/archives/20261103T094617739Z-workbench-preparation-teardown/record.json) retains the later outer-administration restoration and aggregate accounting; these snapshots are not published remotely.

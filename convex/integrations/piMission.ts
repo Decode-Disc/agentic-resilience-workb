@@ -145,7 +145,28 @@ export async function runPiMission(
         httpStatus?: number;
         retryAfterAt?: number;
     } = { responseTooLarge: false };
-    const nativeFetch = createBoundedModelFetch({}, responseState);
+    const nativeFetch = createBoundedModelFetch(
+        {
+            fetch: async (input, init) => {
+                const origin = await ctx.runQuery(
+                    internal.execution.fixtures.workbenchRelay,
+                    args,
+                );
+                if (!origin) return fetch(input, init);
+                const request = new Request(input, init);
+                if (
+                    request.url !==
+                    "https://openrouter.ai/api/v1/chat/completions"
+                )
+                    throw executionError("evaluation_dossier_not_authorized");
+                request.headers.delete("authorization");
+                return fetch(
+                    new Request(`${origin}/chat/completions`, request),
+                );
+            },
+        },
+        responseState,
+    );
     const registry = createRegistry();
     let harness: Harness;
     let root: Conversation;

@@ -20,12 +20,15 @@ import {
 } from "@convex/resourceLimits";
 import {
     BROWSER_TEST_SLOT,
+    readWorkbenchQualification,
     requireBrowserFixtureContext,
     requireBrowserTestOwner,
 } from "@convex/runWorkspace";
+import schema from "@convex/schema";
 import { workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { type Infer, v } from "convex/values";
+import { requireMissionAuthority } from "./authority";
 import { submitAuthorizedMessage } from "./conversations";
 import {
     agentBackendValidator,
@@ -566,10 +569,21 @@ export const startConversation = internalAction({
 
 /** Authorizes one bounded local inference lot, without enabling research or changing a human workspace. */
 export const authorizeWorkbenchQualification = internalMutation({
-    args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
+    args: {
+        runId: v.id("researchRuns"),
+        fixtureKey: v.string(),
+        relayOrigin: v.optional(v.string()),
+    },
     returns: v.null(),
     handler: async (ctx, args) => {
         const { run, visitor } = await requireLocalFixtureRun(ctx, args);
+        if (
+            args.relayOrigin !== undefined &&
+            !/^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}$/.test(args.relayOrigin)
+        )
+            throw new Error("Invalid qualification relay origin");
+        if (args.relayOrigin && new URL(args.relayOrigin).port === "")
+            throw new Error("Invalid qualification relay origin");
         if (
             run.researchStartedAt !== undefined ||
             !["framing", "awaiting_source_review"].includes(run.lifecycleState)
@@ -590,7 +604,8 @@ export const authorizeWorkbenchQualification = internalMutation({
         if (context.paidQualification) {
             if (
                 context.paidQualification.runId !== run._id ||
-                context.paidQualification.modelRevisionId !== model._id
+                context.paidQualification.modelRevisionId !== model._id ||
+                context.paidQualification.relayOrigin !== args.relayOrigin
             )
                 throw new Error(
                     "Qualification authorization conflicts with the retained lot",
@@ -601,6 +616,7 @@ export const authorizeWorkbenchQualification = internalMutation({
             paidQualification: {
                 runId: run._id,
                 modelRevisionId: model._id,
+                relayOrigin: args.relayOrigin,
                 maximumRequests: BROWSER_QUALIFICATION_MAX_REQUESTS,
                 maximumCostUsd: BROWSER_QUALIFICATION_MAX_COST_USD,
                 authorizedAt: Date.now(),
@@ -760,6 +776,20 @@ export const inspectWorkbench = internalQuery({
         definitionVersion: v.number(),
         nativeSessionId: v.union(v.id("piSessions"), v.null()),
         nativeSettled: v.boolean(),
+        framing: v.union(schema.doc("framingRevisions"), v.null()),
+        missions: v.array(schema.doc("agentMissions")),
+        receipts: v.array(schema.doc("providerCalls")),
+        operationReceipts: v.array(
+            v.object({
+                id: v.id("agentOperationRequests"),
+                missionId: v.optional(v.id("agentMissions")),
+                invalid: v.boolean(),
+                refused: v.boolean(),
+                applied: v.boolean(),
+            }),
+        ),
+        researchStarted: v.boolean(),
+        executionStatus: v.string(),
     }),
     handler: async (ctx, args) => {
         const { run } = await requireLocalFixtureRun(ctx, args);
@@ -772,7 +802,9 @@ export const inspectWorkbench = internalQuery({
         const calls = await ctx.db
             .query("providerCalls")
             .withIndex("by_run", (q) => q.eq("runId", run._id))
-            .take(1);
+            .take(21);
+        if (calls.length > 20)
+            throw new Error("Fixture receipt capacity exceeded");
         const invocations = await ctx.db
             .query("agentInvocations")
             .withIndex("by_run_and_task_key", (q) => q.eq("runId", run._id))
@@ -791,7 +823,29 @@ export const inspectWorkbench = internalQuery({
                   )
                   .unique()
             : null;
+        const operations = await ctx.db
+            .query("agentOperationRequests")
+            .withIndex("by_run_and_logical_key", (q) => q.eq("runId", run._id))
+            .take(101);
+        if (operations.length > 100)
+            throw new Error("Fixture operation capacity exceeded");
         return {
+            operationReceipts: operations.map((r) => ({
+                id: r._id,
+                missionId: r.missionId,
+                invalid: r.input.kind === "invalid",
+                refused: r.outcome?.kind === "refused",
+                applied:
+                    r.effect?.outcome.kind === "success" ||
+                    r.adoptedAt !== undefined,
+            })),
+            framing: run.currentFramingRevisionId
+                ? await ctx.db.get(run.currentFramingRevisionId)
+                : null,
+            missions,
+            receipts: calls,
+            researchStarted: run.researchStartedAt !== undefined,
+            executionStatus: run.executionStatus,
             definitionVersion: conversation?.definitionVersion ?? 1,
             nativeSessionId: session?._id ?? null,
             nativeSettled:
@@ -807,5 +861,26 @@ export const inspectWorkbench = internalQuery({
             queuedCount: conversation?.queuedCount ?? 0,
             phase: run.lifecycleState,
         };
+    },
+});
+
+/** Rechecks the active local grant at the actual transport boundary. */
+export const workbenchRelay = internalQuery({
+    args: { missionId: v.id("agentMissions"), expectedGeneration: v.number() },
+    returns: v.union(v.string(), v.null()),
+    handler: async (ctx, args) => {
+        const mission = await ctx.db.get(args.missionId);
+        if (!mission?.runId) return null;
+        const run = await ctx.db.get(mission.runId);
+        if (run?.purpose !== "browser_test") return null;
+        await requireMissionAuthority(
+            ctx,
+            mission._id,
+            args.expectedGeneration,
+        );
+        const grant = await readWorkbenchQualification(ctx, run);
+        if (!grant || grant.modelRevisionId !== mission.modelRevisionId)
+            throw new Error("evaluation_dossier_not_authorized");
+        return grant.relayOrigin ?? null;
     },
 });

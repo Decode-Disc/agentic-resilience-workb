@@ -65,6 +65,16 @@ export function createQualificationRelay(
     providerFetch = globalThis.fetch,
 ) {
     if (!key) throw new Error("Provider credential unavailable");
+    const maximumRequests = existsSync(`${root}/protocol.json`)
+        ? (JSON.parse(readFileSync(`${root}/protocol.json`, "utf8"))
+              .maximumRequests ?? 20)
+        : 20;
+    if (
+        !Number.isInteger(maximumRequests) ||
+        maximumRequests < 1 ||
+        maximumRequests > 20
+    )
+        throw new Error("Invalid qualification request allowance");
     const prior = existsSync(`${root}/ledger.jsonl`)
         ? readFileSync(`${root}/ledger.jsonl`, "utf8")
               .trim()
@@ -93,8 +103,16 @@ export function createQualificationRelay(
         )
     )
         fatal = "Prior unresolved dispatch or halt; no restart retry permitted";
-    const gated = new Set(),
-        injected = new Set();
+    const gated = new Set(
+            prior
+                .filter((e) => e.event === "gate_armed")
+                .map((e) => e.scenario),
+        ),
+        injected = new Set(
+            prior
+                .filter((e) => e.event === "fault_applied")
+                .map((e) => e.scenario),
+        );
     const json = (p, v) =>
         writeFileSync(`${root}/${p}`, `${JSON.stringify(v, null, 2)}\n`);
     const event = (v) => {
@@ -214,6 +232,20 @@ export function createQualificationRelay(
                 );
             }
             if (control.mode !== "live") throw new Error("Paid mode is off");
+            const protocol = existsSync(`${root}/protocol.json`)
+                ? JSON.parse(readFileSync(`${root}/protocol.json`, "utf8"))
+                : null;
+            if (protocol?.version >= 2) {
+                const validation = JSON.parse(
+                    readFileSync(`${root}/validation.json`, "utf8"),
+                );
+                if (
+                    validation.status !== "passed" ||
+                    validation.fingerprintsSha256 !==
+                        digest(readFileSync(`${root}/fingerprints.json`))
+                )
+                    throw new Error("Candidate validation is missing or stale");
+            }
             const fingerprints = Object.entries(
                 JSON.parse(readFileSync(`${root}/fingerprints.json`, "utf8")),
             );
@@ -225,8 +257,13 @@ export function createQualificationRelay(
             const reserve =
                 ((Buffer.byteLength(text) + 4096) * 0.15) / 1e6 +
                 (6144 * 0.6) / 1e6;
-            if (calls >= 20 || reserved + reserve > 0.5)
+            if (calls >= maximumRequests || reserved + reserve > 0.5) {
+                event({
+                    event: "budget_exhausted",
+                    scenario: control.scenario,
+                });
                 throw new Error("Authorized aggregate ceiling reached");
+            }
             call = ++calls;
             reserved += reserve;
             const scenario = control.scenario;
@@ -253,6 +290,7 @@ export function createQualificationRelay(
             });
             const gate = control.hold && !gated.has(scenario);
             if (gate) {
+                event({ event: "gate_armed", scenario, call });
                 gated.add(scenario);
                 json(`gate-${scenario}.json`, {
                     call,
@@ -400,6 +438,7 @@ export function createQualificationRelay(
                     })
                     .join("\n");
                 if (changed) {
+                    event({ event: "fault_applied", scenario, call });
                     injected.add(scenario);
                     json(`fault-${call}.json`, {
                         scenario,

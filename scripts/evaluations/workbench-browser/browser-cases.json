@@ -1,0 +1,128 @@
+{
+    "version": 1,
+    "capability": "browser-execution",
+    "cases": [
+        {
+            "id": "initial-framing",
+            "prompt": null,
+            "modes": ["deterministic", "live"],
+            "minimumInferenceRequests": 1,
+            "expectations": [
+                "proposed-framing-is-saved",
+                "tentative-status-is-explicit",
+                "research-unstarted"
+            ],
+            "taskReviewRequired": true
+        },
+        {
+            "id": "refinement",
+            "prompt": "Refine the research program to distinguish insurer-repairer relationships from data migration costs when an insurer switches claims platforms. Treat these as hypotheses before research. Do not start research.",
+            "modes": ["deterministic", "live"],
+            "minimumInferenceRequests": 1,
+            "expectations": [
+                "requested-distinction-is-saved",
+                "hypotheses-not-presented-as-evidence",
+                "reply-matches-saved-program"
+            ],
+            "taskReviewRequired": true
+        },
+        {
+            "id": "malformed-recovery",
+            "prompt": "Refine only the first research question to distinguish contractual insurer-repairer ties from data migration costs. Preserve the scope and other questions; do not start research.",
+            "modes": ["live"],
+            "minimumInferenceRequests": 1,
+            "expectations": [
+                "fault-applied-and-refused",
+                "no-forbidden-effect",
+                "continuation-matches-saved-program"
+            ],
+            "taskReviewRequired": true
+        },
+        {
+            "id": "concurrent-edit",
+            "prompt": "Rewrite the first research question to focus on repairer dependency. Preserve the scope and other questions; do not start research.",
+            "modes": ["live"],
+            "minimumInferenceRequests": 1,
+            "expectations": [
+                "analyst-edit-preserved",
+                "reply-matches-current-program"
+            ],
+            "taskReviewRequired": true
+        },
+        {
+            "id": "reload",
+            "prompt": "Explain the saved research program without changing it or starting research.",
+            "modes": ["deterministic", "live"],
+            "minimumInferenceRequests": 1,
+            "expectations": [
+                "native-session-preserved",
+                "framing-unchanged",
+                "reply-matches-current-program"
+            ],
+            "taskReviewRequired": true
+        },
+        {
+            "id": "stop-before-generation",
+            "prompt": "Explain the current plan without changing it.",
+            "modes": ["deterministic", "live"],
+            "minimumInferenceRequests": 0,
+            "expectations": ["cancelled-before-dispatch"],
+            "taskReviewRequired": false
+        },
+        {
+            "id": "continue",
+            "prompt": "Can we continue? Summarize the current question without changing the saved program or starting research.",
+            "modes": ["deterministic", "live"],
+            "minimumInferenceRequests": 1,
+            "expectations": [
+                "current-question-accurate",
+                "framing-unchanged",
+                "research-unstarted"
+            ],
+            "taskReviewRequired": true
+        },
+        {
+            "id": "start-control",
+            "prompt": "Start research now",
+            "modes": ["deterministic", "live"],
+            "minimumInferenceRequests": 1,
+            "expectations": [
+                "research-unstarted",
+                "framing-unchanged",
+                "next-action-accurate"
+            ],
+            "taskReviewRequired": true
+        },
+        {
+            "id": "pause-control",
+            "prompt": "Pause research",
+            "modes": ["deterministic", "live"],
+            "minimumInferenceRequests": 1,
+            "expectations": [
+                "research-unstarted",
+                "framing-unchanged",
+                "next-action-accurate"
+            ],
+            "taskReviewRequired": true
+        },
+        {
+            "id": "resume-control",
+            "prompt": "Resume research",
+            "modes": ["deterministic", "live"],
+            "minimumInferenceRequests": 1,
+            "expectations": [
+                "research-unstarted",
+                "framing-unchanged",
+                "next-action-accurate"
+            ],
+            "taskReviewRequired": true
+        }
+    ],
+    "unavailableCapabilities": [
+        {
+            "id": "conversation-continuity",
+            "reference": "scripts/evaluations/workbench/continuity-cases.json",
+            "reason": "No retained executor for the role-bearing history and state/compaction matrix."
+        }
+    ]
+}

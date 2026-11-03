@@ -159,6 +159,7 @@ export default defineSchema({
             v.object({
                 runId: v.id("researchRuns"),
                 modelRevisionId: v.id("modelRevisions"),
+                relayOrigin: v.optional(v.string()),
                 maximumRequests: v.number(),
                 maximumCostUsd: v.number(),
                 authorizedAt: v.number(),
