@@ -6,6 +6,8 @@ Recorded on 2026-10-24, with functional revisions through 2026-10-26. This docum
 
 Status reviewed on 2026-10-30: the [shared Pi runtime is locally verified](../../verification/2026-10-30-pi-durable-replacement.md). The installed preparation path remains distinct from the target Sources mission binding and delegated selection, which are undelivered. Documentary quality acceptance remains separate from mechanical runtime checks; [the roadmap](../../ROADMAP.md#phase-7--shared-execution-and-sources) records those gaps.
 
+Conception refined on 2026-11-02: [the accepted decisions below](#accepted-sources-refinement-of-2026-11-02) resolve several earlier open choices without certifying implementation. [PRODUCT](../../../PRODUCT.md#source-preparation-and-corpus-review) owns the resulting behavior and [TECH](../../../context/TECH.md#sources-mission-and-prepared-material) owns the mission, operation, version and progression contracts. Earlier descriptions and open questions remain dated design history.
+
 ## Purpose and Simple Workflow
 
 Turn dispersed sources into structured, inspectable, reusable documentary material suited to the requested research needs.
@@ -112,7 +114,9 @@ Sources hides discovery, capture, normalization, qualification, comparison, sele
 
 Proposed verification: exercise the preparation interface with a useful source, a partial reading, opposing material, and a failed acquisition. Verify reproducible passages, explicit limitations, eligibility for the requested use, reuse of completed work, and continuation of independent work. Submit a targeted request against existing material and verify that its outcome preserves the same documentary controls and cumulative allowances. These checks remain to be designed and run; source counts and schema validity alone do not establish useful preparation.
 
-## Open Decisions
+## Original Open Decisions
+
+The following list records the 2026-10-26 design handoff. The refinement below resolves its structural choices; it must not be read as reopening accepted decisions.
 
 - Define the documentary foundation, query planning and selection criteria, and how a preparation request expresses its needs and allowances.
 - Specify source-module outcomes and executable completion checks, especially interrupted reading, partial availability, exhausted allowances, and missing technical capability.
@@ -120,3 +124,29 @@ Proposed verification: exercise the preparation interface with a useful source, 
 - Translate the transversal catalogue into concrete Sources interfaces and records, reusing existing domain owners under the common execution contract.
 - Develop executable checks and semantic evaluation for the retained documentary criteria, scoped conclusions, and comparison limitations.
 - Decide the source-matrix composition, including how source details, reading availability, contributions, restrictions, and preparation outcomes are inspected together.
+
+## Accepted Sources Refinement of 2026-11-02
+
+### Destination and Evidence
+
+Establish an implementable Sources contract within the question-led system. The system starts and progresses research after the analyst's explicit Start research; Workbench remains available for factual conversation, framing assistance and authorized instructions through tools. Sources prepares documentary material, Investigation conducts the economic inquiry and Synthesis connects retained appraisals. The refinement preserves these responsibilities and the shared Pi harness.
+
+Discovery examined the existing preparation workflow, source captures, qualification/comparison schemas, selection policy, approved-material tools, shared agent definitions, Workbench instructions and model configuration. Preparation already owns bounded acquisition, immutable captures, attempts and results, while the agent catalogue lacks a Sources business definition. Shared reading tools still require an approved corpus; qualification contributions are snapshot arrays referenced by version/index; preparation outcomes are mainly per source. These observations motivate extending existing owners rather than building another orchestration or evidence subsystem. Existing deterministic checks establish compatibility boundaries, not target mission or documentary quality.
+
+### Accepted Decisions and Alternatives
+
+| Accepted decision | Reason and alternatives not selected |
+| --- | --- |
+| Keep complete versioned qualifications with explicitly identified contributions in existing storage. | Enables targeted correction and exact reuse while preserving coherent document qualifications. Separate contribution storage and event reconstruction add relationships or replay machinery without a demonstrated prototype need. |
+| Track shared documentary needs with work, material and missing/unfinished outcomes. | Lets the system check the requested preparation and lets Investigation understand its limits. A source count or qualification count alone cannot account for unmet needs; the analyst does not manage this internal task list. |
+| Permit system-authorized Investigation on controlled partial material. | Preserves independent useful work while incomplete preparation and dependent appraisal limits stay explicit. A blanket wait for every assigned documentary task was not selected. Pause, authority and global resource guards remain binding. |
+| Retain every document with a controlled, useful, permitted contribution, without a second shortlist. | Avoids discarding useful material just to reduce the list. An additional code-ranked shortlist and an agent-proposed selection were not selected. Candidates, captures, leads and analyst exclusions retain their distinct meanings. |
+| Add need-bound targeted discovery through the existing discovery domain. | A new documentary lead may lack both an existing candidate and an observed link. Limiting Sources to the initial searches and observed destinations would defer avoidable gaps to Investigation's single complement. The system controls discovery execution and the active allowance. |
+
+### Integration and Verification Boundary
+
+The current contracts are maintained in [TECH](../../../context/TECH.md#sources-mission-and-prepared-material), including the seven operation families, scoped documentary controls, exact result versions, mandate-owned retention, Workbench instruction delivery and cumulative resources. The partial handoff is an input contract for Investigation, not evidence that its agent, appraisal controls or question-outcome projection exist. Useful inspection surfaces and historical corpus prerequisites remain protected until their controlled replacement is implemented.
+
+Remaining implementation work includes concrete request/result and control-finding schemas, scoped access to preparation captures, observed-link provenance, contribution identity/version handling, initial/complement discovery accounting, model binding and serializer profiles. Determine target numerical parameters and evaluate documentary quality before activation. No parameter value, model-quality winner or new provider is selected by this conception. Preserve historical evidence and use frozen failures as regressions rather than unseen evaluation cases.
+
+Verification must distinguish domain/operation tests, protected local interaction and model-backed documentary quality. Exercise useful and restricted contributions in one source, incomplete reading/control, empty versus unavailable discovery, correction without loss of independent material, exact native/tool authorization, retained consumption and unknown outcomes after interruption, partial handoff and paused instructions. The approved documentation work does not authorize application implementation, provider activation or a paid evaluation.
