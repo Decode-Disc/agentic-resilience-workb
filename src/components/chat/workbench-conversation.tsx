@@ -958,7 +958,8 @@ export function ConversationContext({
                 align="end"
                 sideOffset={10}
                 className="chat-context-card"
-                initialFocus={false}>
+                initialFocus={false}
+                positionerStyle={{ top: isMobile ? 0 : "5px" }}>
                 <div className="chat-context-topline">
                     <Icon iconNode={Task01Icon} size={16} />
                     <PopoverTitle>{title}</PopoverTitle>

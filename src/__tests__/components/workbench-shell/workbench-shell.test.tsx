@@ -1,3 +1,4 @@
+import { ThemeProvider } from "next-themes";
 import { api } from "@convex/_generated/api";
 import {
     fireEvent,
@@ -54,8 +55,8 @@ vi.mock("convex/react", async () => {
     return convexReactHarness.module;
 });
 
-vi.mock(import("@/components/workbench-shell/analyzed-company-list"), () => ({
-    AnalyzedCompanyList: ({
+vi.mock(import("@/components/workbench-shell/dossier-switcher"), () => ({
+    DossierSwitcher: ({
         isAdmissionLoading,
     }: {
         isAdmissionLoading?: boolean;
@@ -86,7 +87,35 @@ describe("WorkbenchShell", () => {
         convexReactHarness.query(api.visitors.current).returns(undefined);
     });
 
-    it("renders header with Home link and analyzed company list", () => {
+    it("switches the document theme without replacing page content", async () => {
+        render(
+            <ThemeProvider
+                attribute="class"
+                defaultTheme="light"
+                enableSystem={false}>
+                <InvitationAccessProvider>
+                    <WorkbenchShell>
+                        <input
+                            aria-label="Preserved draft"
+                            defaultValue="Keep this draft"
+                        />
+                    </WorkbenchShell>
+                </InvitationAccessProvider>
+            </ThemeProvider>,
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Switch theme" }));
+        await waitFor(() =>
+            expect(document.documentElement.classList.contains("dark")).toBe(
+                true,
+            ),
+        );
+        expect(
+            screen.getByRole<HTMLInputElement>("textbox", {
+                name: "Preserved draft",
+            }).value,
+        ).toBe("Keep this draft");
+    });
+    it("renders product navigation, dossier context and the new dossier action", () => {
         render(
             <InvitationAccessProvider>
                 <WorkbenchShell>
@@ -95,17 +124,14 @@ describe("WorkbenchShell", () => {
             </InvitationAccessProvider>,
         );
 
-        const homeLink = screen.getByRole("button", { name: /Go to Home/i });
-        const dossiersLink = screen.getByRole("button", {
-            name: /Start a company dossier/i,
-        });
-        expect(homeLink).toBeTruthy();
-        expect(homeLink.getAttribute("href")).toBe("/");
-        expect(dossiersLink.getAttribute("href")).toBe("/workspace/start");
         expect(
-            homeLink.compareDocumentPosition(dossiersLink) &
-                Node.DOCUMENT_POSITION_FOLLOWING,
+            screen.getByRole("button", { name: "Workbench navigation" }),
         ).toBeTruthy();
+        expect(
+            screen
+                .getByRole("button", { name: /Start a company dossier/i })
+                .getAttribute("href"),
+        ).toBe("/workspace/start");
     });
 
     it("renders custom children when provided", () => {

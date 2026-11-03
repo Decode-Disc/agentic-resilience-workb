@@ -37,6 +37,7 @@ skills-lock.json
 inspirations/
 tmp/
 .impeccable/mocks/decision/*
+.impeccable/mocks/dossier-navigation/*
 # !.impeccable/mocks/decision/source-review-2026-10-22/
 # .impeccable/mocks/decision/source-review-2026-10-22/*
 # !.impeccable/mocks/decision/source-review-2026-10-22/final/

@@ -53,6 +53,13 @@ export interface SmoothDropdownProps {
     openWidth?: number;
     closedHeight?: number;
     defaultActiveItemId?: string;
+    /** Controlled selection, independent of the current filtered items. */
+    activeItemId?: string;
+    /** Accessible name of the portalled menu’s persistent trigger. */
+    triggerAriaLabel?: string;
+    triggerClassName?: string;
+    /** Consumer-specific closed geometry; the expanded menu retains its shared shape. */
+    closedRadius?: number;
     style?: CSSProperties;
     /**
      * Optional controlled open state. When omitted, the dropdown manages its
@@ -86,6 +93,10 @@ export function SmoothDropdwon({
     openWidth = 220,
     closedHeight = 40,
     defaultActiveItemId,
+    activeItemId,
+    triggerAriaLabel = "Open dropdown",
+    triggerClassName,
+    closedRadius = 12,
     style,
     open: openProp,
     defaultOpen = false,
@@ -338,7 +349,8 @@ export function SmoothDropdwon({
                                 );
                             }
 
-                            const isActive = activeItem === item.id;
+                            const isActive =
+                                (activeItemId ?? activeItem) === item.id;
                             const isDestructive =
                                 item.variant === "destructive";
                             const showIndicator = hoveredItem
@@ -351,6 +363,7 @@ export function SmoothDropdwon({
                                 setActiveItem(item.id);
                                 item.onSelect?.();
                                 if (item.closeOnSelect !== false) {
+                                    restoreTriggerFocus.current = true;
                                     requestOpenChange(false);
                                 }
                             };
@@ -412,7 +425,7 @@ export function SmoothDropdwon({
                                                 "absolute inset-0 rounded",
                                                 isDestructive
                                                     ? "bg-destructive/10"
-                                                    : "bg-accent/40",
+                                                    : "bg-accent/60",
                                             )}
                                             transition={{
                                                 type: "spring",
@@ -429,7 +442,7 @@ export function SmoothDropdwon({
                                                 "absolute top-0 bottom-0 left-0 my-auto h-5 w-0.75 rounded-full",
                                                 isDestructive
                                                     ? "bg-destructive"
-                                                    : "bg-foreground",
+                                                    : "bg-accent-foreground",
                                             )}
                                             transition={{
                                                 type: "spring",
@@ -476,7 +489,7 @@ export function SmoothDropdwon({
             animate={{
                 width: isOpen ? effectiveOpenWidth : closedWidth,
                 height: isOpen ? openHeight : closedHeight,
-                borderRadius: isOpen ? 14 : 12,
+                borderRadius: isOpen ? 14 : closedRadius,
             }}
             transition={{
                 type: "spring" as const,
@@ -502,6 +515,33 @@ export function SmoothDropdwon({
             ref={containerRef}
             role="group"
             onKeyDown={(event) => {
+                if (
+                    isOpen &&
+                    (event.key === "ArrowDown" || event.key === "ArrowUp")
+                ) {
+                    const options = Array.from(
+                        contentRef.current?.querySelectorAll<HTMLElement>(
+                            '[role="option"]:not([aria-disabled="true"])',
+                        ) ?? [],
+                    );
+                    if (options.length) {
+                        const current = options.findIndex((option) =>
+                            option.contains(event.target as Node),
+                        );
+                        const next =
+                            current < 0
+                                ? event.key === "ArrowDown"
+                                    ? 0
+                                    : options.length - 1
+                                : (current +
+                                      (event.key === "ArrowDown" ? 1 : -1) +
+                                      options.length) %
+                                  options.length;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        options[next]?.focus();
+                    }
+                }
                 if (isOpen && event.key === "Escape") {
                     event.preventDefault();
                     event.stopPropagation();
@@ -517,8 +557,14 @@ export function SmoothDropdwon({
                 <>
                     <button
                         type="button"
-                        aria-label="Open dropdown"
-                        className="absolute inset-0 cursor-pointer overflow-hidden rounded-md border border-border bg-popover shadow-lg"
+                        aria-label={triggerAriaLabel}
+                        aria-expanded={isOpen}
+                        aria-haspopup="listbox"
+                        style={{ borderRadius: closedRadius }}
+                        className={cn(
+                            "absolute inset-0 cursor-pointer overflow-hidden border border-border bg-popover shadow-lg",
+                            triggerClassName,
+                        )}
                         onClick={() => requestOpenChange(true)}>
                         <div className="absolute inset-0 flex items-center justify-center">
                             {trigger ?? (

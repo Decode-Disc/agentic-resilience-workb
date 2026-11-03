@@ -2,7 +2,6 @@ import { api } from "@convex/_generated/api";
 import { useAuthActions } from "@convex-dev/auth/react";
 import {
     ChevronDownIcon,
-    Home01Icon,
     Login02Icon,
     Logout01Icon,
     Settings02Icon,
@@ -10,22 +9,31 @@ import {
 } from "@hugeicons/core-free-icons";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
+import { useTheme } from "next-themes";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
-
 import Icon from "@/components/icon";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
+import { AppLogo } from "@/components/logo-icon";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
     NestedMenu,
     type NestedMenuSectionProps,
 } from "@/components/ui/nested-menu";
-import { AnalyzedCompanyList } from "@/components/workbench-shell/analyzed-company-list";
+import { DossierSwitcher } from "@/components/workbench-shell/dossier-switcher";
 import { useInvitationAccess } from "@/components/workspace/invitation-access-context";
 import { useResponsive } from "@/hooks/use-responsive";
 import { uiLayerClasses } from "@/lib/ui-layers";
 import { cn } from "@/lib/utils";
 import { getWorkspaceDestination } from "@/lib/workspace/access-destination";
+import { NewDossierButton } from "./new-dossier-button";
 import { WorkbenchShellSurface } from "./workbench-shell-surface";
 import { WorkbenchViewportContext } from "./workbench-viewport";
 
@@ -80,6 +88,7 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
 }
 
 function WorkbenchHeader({ activeRunId }: { activeRunId?: string }) {
+    const { resolvedTheme, setTheme } = useTheme();
     const visitor = useQuery(api.visitors.current);
     const navigate = useNavigate();
     const { signOut } = useAuthActions();
@@ -139,38 +148,33 @@ function WorkbenchHeader({ activeRunId }: { activeRunId?: string }) {
             )}>
             <div className="max-width-container grid min-h-(--bar-height) grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-2">
                 <div className="min-w-0 flex items-center gap-3">
-                    <Button
-                        render={<Link to="/" />}
-                        nativeButton={false}
-                        variant="secondary"
-                        size="sm"
-                        className="rounded-tile bg-fill-quiet"
-                        aria-label="Go to Home"
-                        title="Go to Home">
-                        <Icon
-                            iconNode={Home01Icon}
-                            data-icon="inline-start"
-                            className="text-muted-foreground"
-                        />
-                        <span className="hidden font-medium sm:inline">
-                            Home
-                        </span>
-                    </Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger
+                            render={
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="h-10 gap-2 px-2"
+                                />
+                            }
+                            aria-label="Workbench navigation">
+                            <AppLogo />
+                            <span className="hidden sm:inline">Workbench</span>
+                            <Icon iconNode={ChevronDownIcon} />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                            <DropdownMenuItem render={<Link to="/" />}>
+                                Home
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                render={<Link to="/workspace/dossiers" />}>
+                                Dossiers
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                     {!isMobile &&
                     visitor?.workspace?.canStartDossier !== false ? (
-                        <Button
-                            render={<Link to="/workspace/start" />}
-                            nativeButton={false}
-                            variant="secondary"
-                            size="sm"
-                            aria-label="Start a company dossier"
-                            title="Start a company dossier"
-                            className="rounded-tile bg-nav-current">
-                            <span className="start-double-slash">{"//"}</span>
-                            <span className="start-label text-primary">
-                                start
-                            </span>
-                        </Button>
+                        <NewDossierButton size="default" />
                     ) : null}
                 </div>
                 <div className="flex min-w-0 flex-col items-center gap-1 md:flex-row">
@@ -179,7 +183,7 @@ function WorkbenchHeader({ activeRunId }: { activeRunId?: string }) {
                             Test data — not live
                         </span>
                     ) : null}
-                    <AnalyzedCompanyList
+                    <DossierSwitcher
                         activeRunId={activeRunId}
                         enabled={visitor !== undefined && visitor !== null}
                         isAdmissionLoading={visitor === undefined}
@@ -187,6 +191,10 @@ function WorkbenchHeader({ activeRunId }: { activeRunId?: string }) {
                     />
                 </div>
                 <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
+                    <ThemeToggle
+                        theme={resolvedTheme === "dark" ? "dark" : "light"}
+                        onThemeChange={setTheme}
+                    />
                     {visitor?.status === "active" ? (
                         <NestedMenu
                             sections={sessionMenuSections}
@@ -196,7 +204,6 @@ function WorkbenchHeader({ activeRunId }: { activeRunId?: string }) {
                                 <Button
                                     type="button"
                                     variant="secondary"
-                                    size="sm"
                                     className="rounded-tile bg-fill-quiet"
                                     aria-label="Workspace menu">
                                     <Icon iconNode={UserCircleIcon} />
@@ -213,7 +220,6 @@ function WorkbenchHeader({ activeRunId }: { activeRunId?: string }) {
                     ) : visitor === null ? (
                         <Button
                             type="button"
-                            size="sm"
                             variant="secondary"
                             className="border border-primary"
                             onClick={() =>

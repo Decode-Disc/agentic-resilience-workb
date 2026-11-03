@@ -1,3 +1,4 @@
+import { DossierSwitcherExample } from "./dossier-switcher-example";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1387,6 +1388,7 @@ function WorkspaceNavigationExample() {
     );
 }
 export const examples = {
+    DossierSwitcher: DossierSwitcherExample,
     Composer: ComposerExample,
     OverlayLayers: OverlayLayersExample,
     Chip: ChipExample,

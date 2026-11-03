@@ -1,9 +1,11 @@
+import type { IndexRangeBuilder } from "convex/server";
+import { stream } from "convex-helpers/server/stream";
 import {
     paginationOptsValidator,
     paginationResultValidator,
 } from "convex/server";
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, DataModel } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./_generated/server";
 import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
@@ -275,6 +277,15 @@ export const listMyEvents = query({
     },
 });
 
+async function framingScope(ctx: QueryCtx, run: Doc<"researchRuns">) {
+    const id = run.fixedFramingRevisionId ?? run.currentFramingRevisionId;
+    if (!id) return null;
+    const revision = await ctx.db.get(id);
+    if (!revision || revision.runId !== run._id)
+        throw new Error("Invalid dossier framing reference");
+    return revision.content.scope.trim() || null;
+}
+
 async function projectRun(ctx: QueryCtx, run: Doc<"researchRuns">) {
     const company = run.companyId ? await ctx.db.get(run.companyId) : null;
     const companySnapshot = mergeRunCompanyMetadata(
@@ -315,6 +326,7 @@ async function projectRun(ctx: QueryCtx, run: Doc<"researchRuns">) {
         pauseReason: run.pauseReason,
         coveragePreset: run.coveragePreset,
         researchAngle: run.researchAngle,
+        framingScope: await framingScope(ctx, run),
         activeCorpusRevisionId: run.activeCorpusRevisionId,
         completionOutcome: run.completionOutcome,
         updatedAt: run.updatedAt,
@@ -350,6 +362,7 @@ const runProjectionValidator = v.object({
     pauseReason: schema.tables.researchRuns.validator.fields.pauseReason,
     coveragePreset: schema.tables.researchRuns.validator.fields.coveragePreset,
     researchAngle: v.optional(v.string()),
+    framingScope: v.union(v.string(), v.null()),
     activeCorpusRevisionId: v.optional(v.id("corpusRevisions")),
     completionOutcome:
         schema.tables.researchRuns.validator.fields.completionOutcome,
@@ -365,7 +378,11 @@ const runProjectionValidator = v.object({
 });
 
 export const listMine = query({
-    args: { workspaceKey: v.string(), paginationOpts: paginationOptsValidator },
+    args: {
+        workspaceKey: v.string(),
+        search: v.optional(v.string()),
+        paginationOpts: paginationOptsValidator,
+    },
     returns: paginationResultValidator(runProjectionValidator),
     handler: async (ctx, args) => {
         const { visitor, workspace } = await readWorkspace(ctx);
@@ -375,20 +392,62 @@ export const listMine = query({
         ) {
             return { page: [], isDone: true, continueCursor: "" };
         }
-        const result = await ctx.db
+        if ((args.search?.length ?? 0) > 200)
+            throw new Error("Dossier search is too long");
+        const ownerRange = (
+            q: IndexRangeBuilder<
+                Doc<"researchRuns">,
+                DataModel["researchRuns"]["indexes"]["by_owner_purpose_context_withdrawn_updated_at"]
+            >,
+        ) =>
+            q
+                .eq("ownerVisitorId", visitor._id)
+                .eq("purpose", workspace.purpose)
+                .eq("browserTestContextId", workspace.contextId ?? undefined)
+                .eq("withdrawnAt", undefined);
+        const query = stream(ctx.db, schema)
             .query("researchRuns")
-            .withIndex("by_owner_purpose_context_withdrawn_updated_at", (q) =>
-                q
-                    .eq("ownerVisitorId", visitor._id)
-                    .eq("purpose", workspace.purpose)
-                    .eq(
-                        "browserTestContextId",
-                        workspace.contextId ?? undefined,
-                    )
-                    .eq("withdrawnAt", undefined),
+            .withIndex(
+                "by_owner_purpose_context_withdrawn_updated_at",
+                ownerRange,
             )
-            .order("desc")
-            .paginate(args.paginationOpts);
+            .order("desc");
+        const words =
+            args.search
+                ?.trim()
+                .toLocaleLowerCase("en")
+                .split(/\s+/)
+                .filter(Boolean) ?? [];
+        const result = words.length
+            ? await query
+                  .filterWith(async (run) => {
+                      const company = run.companyId
+                          ? await ctx.db.get(run.companyId)
+                          : null;
+                      const metadata = mergeRunCompanyMetadata(
+                          run.companySnapshot,
+                          company,
+                      );
+                      const text = [
+                          metadata?.legalName,
+                          metadata?.ticker,
+                          run.researchAngle,
+                          await framingScope(ctx, run),
+                      ]
+                          .filter(Boolean)
+                          .join(" ")
+                          .toLocaleLowerCase("en");
+                      return words.every((word) => text.includes(word));
+                  })
+                  .paginate({ ...args.paginationOpts, maximumRowsRead: 100 })
+            : await ctx.db
+                  .query("researchRuns")
+                  .withIndex(
+                      "by_owner_purpose_context_withdrawn_updated_at",
+                      ownerRange,
+                  )
+                  .order("desc")
+                  .paginate(args.paginationOpts);
         return {
             ...result,
             page: await Promise.all(

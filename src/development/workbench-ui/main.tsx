@@ -48,6 +48,7 @@ const groups = {
         "BriefReference",
     ],
     "UI primitives": [
+        "DossierSwitcher",
         "OverlayLayers",
         "Chip",
         "GlassPanel",

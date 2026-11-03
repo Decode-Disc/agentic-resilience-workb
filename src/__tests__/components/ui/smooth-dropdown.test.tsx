@@ -61,3 +61,44 @@ test("renders collection controls outside the option list", () => {
     const footerButton = screen.getByRole("button", { name: "Next results" });
     expect(listbox.contains(footerButton)).toBe(false);
 });
+
+test("moves from search to options with arrow keys and follows the supplied selection", () => {
+    const { rerender } = render(
+        <SmoothDropdwon
+            defaultOpen
+            activeItemId="first"
+            header={<input aria-label="Filter dossiers" />}
+            items={[
+                { id: "first", label: "First dossier" },
+                { id: "second", label: "Second dossier" },
+            ]}
+        />,
+    );
+    const input = screen.getByRole("textbox", { name: "Filter dossiers" });
+    input.focus();
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(
+        screen.getByRole("option", { name: "First dossier" }),
+    );
+    fireEvent.keyDown(screen.getByRole("option", { name: "First dossier" }), {
+        key: "ArrowDown",
+    });
+    expect(document.activeElement).toBe(
+        screen.getByRole("option", { name: "Second dossier" }),
+    );
+    rerender(
+        <SmoothDropdwon
+            defaultOpen
+            activeItemId="second"
+            items={[
+                { id: "first", label: "First dossier" },
+                { id: "second", label: "Second dossier" },
+            ]}
+        />,
+    );
+    expect(
+        screen
+            .getByRole("option", { name: "Second dossier" })
+            .getAttribute("aria-selected"),
+    ).toBe("true");
+});

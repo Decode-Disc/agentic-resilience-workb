@@ -1514,3 +1514,39 @@ export function sourceRecoveryFeedback(
                   };
     }
 }
+
+/** Dossier execution is distinct from the current research phase and analyst approval. */
+export function dossierStatus(
+    run: Pick<
+        RunProjection,
+        | "executionStatus"
+        | "lifecycleState"
+        | "pauseReason"
+        | "completionOutcome"
+    >,
+): {
+    label: string;
+    tone: "ink" | "accent" | "review" | "destructive" | "dashed";
+    running?: boolean;
+} {
+    if (run.executionStatus === "failed")
+        return { label: "Needs attention", tone: "destructive" };
+    if (run.executionStatus === "cancelled")
+        return { label: "Stopped", tone: "ink" };
+    if (run.executionStatus === "paused")
+        return run.pauseReason === "analyst"
+            ? { label: "Paused", tone: "ink" }
+            : run.pauseReason === "claim_generation_unavailable"
+              ? { label: "Blocked", tone: "dashed" }
+              : { label: "Review needed", tone: "review" };
+    if (run.executionStatus === "running")
+        return { label: "In progress", tone: "accent", running: true };
+    if (run.lifecycleState === "framing")
+        return { label: "Framing", tone: "ink" };
+    if (run.completionOutcome === "insufficient_public_evidence")
+        return { label: "Limited material", tone: "dashed" };
+    return {
+        label: run.executionStatus === "completed" ? "Complete" : "Ready",
+        tone: "ink",
+    };
+}

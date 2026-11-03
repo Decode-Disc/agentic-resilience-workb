@@ -19,8 +19,12 @@ function PopoverContent({
     side = "bottom",
     sideOffset = 4,
     layer = "popup",
+    positionerStyle,
     ...props
-}: PopoverPrimitive.Popup.Props & { layer?: "popup" | "context" } & Pick<
+}: PopoverPrimitive.Popup.Props & {
+    layer?: "popup" | "context";
+    positionerStyle?: React.CSSProperties;
+} & Pick<
         PopoverPrimitive.Positioner.Props,
         "align" | "alignOffset" | "side" | "sideOffset"
     >) {
@@ -31,6 +35,7 @@ function PopoverContent({
                 alignOffset={alignOffset}
                 side={side}
                 sideOffset={sideOffset}
+                style={positionerStyle}
                 className={cn(
                     "isolate",
                     uiLayerClasses[
