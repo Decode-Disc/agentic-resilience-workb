@@ -51,7 +51,9 @@ import {
     companyLookupErrorMessage,
     sourceAddErrorMessage,
 } from "@/lib/presentation/research-copy";
+import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
 import { cn } from "@/lib/utils";
+import styles from "./start-screens.module.css";
 
 type PreflightResult = FunctionReturnType<
     typeof api.companyResolution.preflight
@@ -78,51 +80,28 @@ const viewExitTransition = {
 const COMPANY_SEARCH_PAGE_SIZE = 5;
 const COMPANY_SEARCH_RESULT_LIMIT = 40;
 
-export interface ResearchComposerProps {
-    className?: string;
-    placeholderText?: string;
-    showStartScreen?: boolean;
-}
-
-/**
- * Preserves the established research composer while owning the real two-step
- * company resolution and launch boundary.
- */
-export function ResearchComposer({
-    className,
-    placeholderText,
-    showStartScreen,
-}: ResearchComposerProps) {
+/** Owns the initial dossier journey; the composer view owns only input presentation. */
+export function StartResearchPage() {
     const { isSessionReady, sessionError, retrySession } =
         useAnonymousSession();
-
-    if (sessionError) {
-        return (
-            <LoadErrorAlert
-                className={className}
-                title="Research workspace unavailable"
-                description="We couldn’t prepare your research workspace."
-                onRetry={retrySession}
-            />
-        );
-    }
-
     return (
-        <ResearchComposerContent
-            className={className}
-            placeholderText={placeholderText}
-            showStartScreen={showStartScreen}
-            isSessionReady={isSessionReady}
-        />
+        <WorkbenchUiRoot>
+            {sessionError ? (
+                <LoadErrorAlert
+                    title="Research workspace unavailable"
+                    description="We couldn’t prepare your research workspace."
+                    onRetry={retrySession}
+                />
+            ) : (
+                <StartResearchContent isSessionReady={isSessionReady} />
+            )}
+        </WorkbenchUiRoot>
     );
 }
 
-function ResearchComposerContent({
-    className,
-    placeholderText = "How can I help? Describe the resilience question to investigate.",
-    isSessionReady,
-    showStartScreen = false,
-}: ResearchComposerProps & { isSessionReady: boolean }) {
+function StartResearchContent({ isSessionReady }: { isSessionReady: boolean }) {
+    const placeholderText =
+        "Describe the resilience question to focus on for research. Or choose a company to start.";
     const navigate = useNavigate();
     const searchCompanies = useAction(api.companyResolution.search);
     const preflight = useAction(api.companyResolution.preflight);
@@ -164,14 +143,14 @@ function ResearchComposerContent({
     const [pickerOpen, setPickerOpen] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
     const [selectingCik, setSelectingCik] = useState<string | null>(null);
-    const [isLaunching, setIsLaunching] = useState(false);
+    const [isCreatingDossier, setIsCreatingDossier] = useState(false);
     const [lookupError, setLookupError] = useState<string | null>(null);
-    const [launchError, setLaunchError] = useState<string | null>(null);
+    const [creationError, setCreationError] = useState<string | null>(null);
     const [referencesOpen, setReferencesOpen] = useState(false);
     const [manualSources, setManualSources] = useState<
         Array<PreparedManualSource>
     >([]);
-    const launchKey = useRef<string | null>(null);
+    const creationKey = useRef<string | null>(null);
 
     const searchForCompanies = async () => {
         if (!isSessionReady) {
@@ -188,7 +167,7 @@ function ResearchComposerContent({
         }
 
         setLookupError(null);
-        setLaunchError(null);
+        setCreationError(null);
         setIsSearching(true);
         setHasSearched(false);
         setCompanySearchRevision((revision) => revision + 1);
@@ -217,7 +196,7 @@ function ResearchComposerContent({
             const result = await preflight({ cik: candidate.cik });
             setResolution(result);
             setPickerOpen(false);
-            launchKey.current = null;
+            creationKey.current = null;
         } catch (error) {
             setLookupError(companyLookupErrorMessage(error));
             setPickerOpen(true);
@@ -234,26 +213,26 @@ function ResearchComposerContent({
         setHasSearched(false);
         setView("compose");
         setLookupError(null);
-        setLaunchError(null);
-        launchKey.current = null;
+        setCreationError(null);
+        creationKey.current = null;
     };
 
-    const startResearch = async () => {
-        if (!resolution || isLaunching) {
+    const createDossier = async () => {
+        if (!resolution || isCreatingDossier) {
             if (!resolution) {
                 setPickerOpen(true);
             }
             return;
         }
 
-        setIsLaunching(true);
-        setLaunchError(null);
-        launchKey.current ??= crypto.randomUUID();
+        setIsCreatingDossier(true);
+        setCreationError(null);
+        creationKey.current ??= crypto.randomUUID();
 
         try {
             const result = await confirmCompany({
                 preflightId: resolution.preflightId,
-                idempotencyKey: launchKey.current,
+                idempotencyKey: creationKey.current,
                 coveragePreset,
                 ...(modelChoice ? { modelSelection: modelChoice } : {}),
                 researchAngle: researchAngle.trim() || undefined,
@@ -271,21 +250,18 @@ function ResearchComposerContent({
             });
         } catch (error) {
             const sourceErrorMessage = sourceAddErrorMessage(error);
-            setLaunchError(
+            setCreationError(
                 sourceErrorMessage === "We couldn't add that source. Try again."
                     ? "We couldn't start this research dossier. Try again."
                     : sourceErrorMessage,
             );
-            setIsLaunching(false);
+            setIsCreatingDossier(false);
         }
     };
 
     const form = (
         <section
-            className={cn(
-                "@container/research-composer w-full overflow-visible",
-                className,
-            )}
+            className="@container/research-composer w-full overflow-visible"
             aria-label="Research launch">
             <AnimatePresence initial={false} mode="wait">
                 {view === "compose" ? (
@@ -454,7 +430,7 @@ function ResearchComposerContent({
                                                 description="Your research draft is kept. Retry to choose a model.">
                                                 <ResearchModelPicker
                                                     ready={isSessionReady}
-                                                    pending={isLaunching}
+                                                    pending={isCreatingDossier}
                                                     choice={modelChoice}
                                                     onSelect={setModelChoice}
                                                 />
@@ -522,11 +498,11 @@ function ResearchComposerContent({
                                         onChange={setCoveragePreset}
                                     />
                                 }
-                                error={launchError ?? undefined}
+                                error={creationError ?? undefined}
                                 onBack={() => setView("compose")}
                                 isSessionReady={isSessionReady}
-                                isLaunching={isLaunching}
-                                onStart={startResearch}
+                                isCreatingDossier={isCreatingDossier}
+                                onConfirm={createDossier}
                             />
                         </LoadErrorBoundary>
                     </motion.div>
@@ -536,7 +512,7 @@ function ResearchComposerContent({
     );
     return (
         <>
-            {showStartScreen && view === "compose" ? (
+            {view === "compose" ? (
                 <StartEntryScreen
                     composer={form}
                     suggestions={
@@ -599,13 +575,11 @@ function ResearchComposerContent({
                         />
                     }
                 />
-            ) : showStartScreen ? (
-                <div className="mx-auto w-full max-w-[640px] px-4 py-14">
+            ) : (
+                <div className={styles.entry}>
                     <StartDossierHeading />
                     {form}
                 </div>
-            ) : (
-                form
             )}
 
             <AddSourceDialog
@@ -647,16 +621,16 @@ function ResearchComposerContent({
 
 function ResearchCompanyConfirmation({
     isSessionReady,
-    isLaunching,
-    onStart,
+    isCreatingDossier,
+    onConfirm,
     company,
     coverage,
     error,
     onBack,
 }: {
     isSessionReady: boolean;
-    isLaunching: boolean;
-    onStart: () => Promise<void>;
+    isCreatingDossier: boolean;
+    onConfirm: () => Promise<void>;
     company: PreflightResult["company"];
     coverage: import("react").ReactNode;
     error?: string;
@@ -681,30 +655,30 @@ function ResearchCompanyConfirmation({
         }
     }, [visitor, isOpen, resolveInvitationDrawer]);
 
-    const launch = () => {
-        if (isLaunching || !isSessionReady || visitor === undefined) {
+    const confirm = () => {
+        if (isCreatingDossier || !isSessionReady || visitor === undefined) {
             return;
         }
         if (visitor?.status !== "active") {
             openInvitationDrawer({
                 onSuccess: () => {
-                    void onStart();
+                    void onConfirm();
                 },
             });
             return;
         }
-        void onStart();
+        void onConfirm();
     };
 
     return (
         <CompanyMandatePanel
             company={company}
             coverage={coverage}
-            pending={isLaunching}
+            pending={isCreatingDossier}
             checkingAccess={!isSessionReady || visitor === undefined}
             error={error}
             onChangeCompany={onBack}
-            onConfirm={launch}
+            onConfirm={confirm}
             mandate={
                 <>
                     <p>

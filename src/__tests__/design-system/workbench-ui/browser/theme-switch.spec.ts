@@ -70,14 +70,16 @@ for (const width of [1440, 390]) {
     }
 }
 
-for (const layout of ["gallery", "chat-mocks"]) {
+for (const layout of ["catalog", "gallery", "chat-mocks"]) {
     test(`theme switch updates ${layout} without navigation`, async ({
         page,
     }) => {
         await page.goto(
-            layout === "gallery"
+            layout === "catalog"
                 ? "/?theme=dark"
-                : "/?layout=chat-mocks&theme=dark",
+                : layout === "gallery"
+                  ? "/?component=Composer&theme=dark"
+                  : "/?layout=chat-mocks&theme=dark",
         );
         const documents: string[] = [];
         page.on("request", (request) => {
@@ -85,13 +87,17 @@ for (const layout of ["gallery", "chat-mocks"]) {
                 documents.push(request.url());
         });
         await page
+            .getByRole("banner")
+            .first()
             .getByRole("button", { name: "Switch theme", exact: true })
             .click();
         await expect(page).toHaveURL(/theme=light/);
-        await expect(page.locator(".wb-ui").first()).toHaveAttribute(
-            "data-theme",
-            "light",
-        );
+        if (layout !== "catalog") {
+            await expect(page.locator(".wb-ui").first()).toHaveAttribute(
+                "data-theme",
+                "light",
+            );
+        }
         expect(
             await page
                 .locator("html")

@@ -1,4 +1,3 @@
-import { ThemeProvider } from "next-themes";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexQueryClient } from "@convex-dev/react-query";
 import { QueryClient } from "@tanstack/react-query";
@@ -6,7 +5,6 @@ import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
 import { ConvexReactClient } from "convex/react";
 
-import { InvitationAccessProvider } from "@/components/workspace/invitation-access-context";
 import { clientEnv } from "@/config/env";
 
 import { routeTree } from "./routeTree.gen";
@@ -34,16 +32,9 @@ export function getRouter() {
         defaultPreloadStaleTime: 0,
         scrollRestoration: true,
         Wrap: ({ children }) => (
-            <ThemeProvider
-                attribute="class"
-                defaultTheme="light"
-                enableSystem={false}>
-                <ConvexAuthProvider client={convexClient}>
-                    <InvitationAccessProvider>
-                        {children}
-                    </InvitationAccessProvider>
-                </ConvexAuthProvider>
-            </ThemeProvider>
+            <ConvexAuthProvider client={convexClient}>
+                {children}
+            </ConvexAuthProvider>
         ),
     });
 

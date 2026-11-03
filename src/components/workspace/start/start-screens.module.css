@@ -1,5 +1,5 @@
 .entry {
-  width: min(610px, calc(100% - 32px));
+  width: min(610px, 100%);
   margin: 0 auto;
   padding: 56px 0 40px;
   display: flex;

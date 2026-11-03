@@ -1,16 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
-import { ResearchComposer } from "@/components/workspace/research-composer";
+import { StartResearchPage } from "@/components/workspace/start/start-research-page";
+
 export const Route = createFileRoute("/workspace/start")({
-    component: StartAnalysisRoute,
+    component: StartResearchPage,
 });
-function StartAnalysisRoute() {
-    return (
-        <WorkbenchUiRoot>
-            <ResearchComposer
-                showStartScreen
-                placeholderText="Describe the resilience question to focus on for research. Or choose a company to start."
-            />
-        </WorkbenchUiRoot>
-    );
-}

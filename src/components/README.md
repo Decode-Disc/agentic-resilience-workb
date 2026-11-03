@@ -64,7 +64,7 @@ Most exports below live in [start-screens.tsx](workspace/start/start-screens.tsx
 
 | Need | Component or module | What the consumer supplies |
 | --- | --- | --- |
-| Initial research input | [ResearchComposerView and company lookup pieces](workspace/start/research-composer-view.tsx) | Controlled intention, company candidates/selection, reference tools and actions. [ResearchComposer](workspace/research-composer.tsx) is the existing connected consumer; inspect its launch operation before changing its workflow. |
+| Initial research input | [ResearchComposerView and company lookup pieces](workspace/start/research-composer-view.tsx) | Controlled intention, company candidates/selection, reference tools and actions. [StartResearchPage](workspace/start/start-research-page.tsx) owns the connected dossier-creation journey and page composition; the input view does not own page layout. |
 | Entry and showcase composition | StartEntryScreen, StartShowcaseCard, StartAngleSuggestions | Composer, example content and selection callbacks. |
 | Company confirmation | CompanyMandatePanel | Company identity, mandate, coverage controls, pending/error feedback and confirmation callback. |
 | Framing conversation | StartFramingScreen | One supplied runtime, history, identity/context, pending action and composer slots. It places the action/composer dock outside scrolling messages. |

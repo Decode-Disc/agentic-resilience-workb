@@ -19,6 +19,7 @@ import {
     NavigationMenuList,
     NavigationMenuTrigger,
 } from "@/components/navigation-menu";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
     Accordion,
     AccordionContent,
@@ -201,6 +202,7 @@ function LandingHeader() {
                 </NavigationMenu>
 
                 <div className="flex items-center gap-2">
+                    <ThemeToggle />
                     <div className="hidden sm:block">
                         <WorkbenchLink />
                     </div>

@@ -62,7 +62,7 @@ export interface AddSourceDialogProps {
     open?: boolean;
     /** Controlled open change handler. */
     onOpenChange?: (open: boolean) => void;
-    /** Optional list of staged URLs managed by parent state (e.g. ResearchComposer). */
+    /** Optional list of staged URLs managed by parent state (e.g. the dossier-creation screen). */
     urls?: ReadonlyArray<string>;
     /** Optional handler for staged URL updates. */
     onUrlsChange?: (urls: Array<string>) => void;

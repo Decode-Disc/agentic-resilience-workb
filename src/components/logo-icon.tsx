@@ -59,13 +59,13 @@ function LogoIconIMG({
     return <img src={dark ? imgDark : imgLight} alt={alt} {...props} />;
 }
 
-function AppLogo() {
+function AppLogo({ dark = false }: { dark?: boolean }) {
     return (
         <span
             role="img"
             aria-label={PRODUCT_NAME}
             className="grid size-8 place-items-center rounded-full bg-primary text-primary-foreground">
-            <LogoIconIMG className="size-8 rounded-full" dark />
+            <LogoIconIMG className="size-8 rounded-full" dark={dark} />
         </span>
     );
 }

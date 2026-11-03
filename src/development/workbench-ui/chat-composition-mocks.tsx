@@ -535,13 +535,7 @@ function MockConversation({
 }
 
 /** Standalone visual studies; choosing a study does not replace the installed conversation. */
-export function ChatCompositionMocks({
-    theme,
-    onThemeChange,
-}: {
-    theme: "light" | "dark";
-    onThemeChange: (theme: "light" | "dark") => void;
-}) {
+export function ChatCompositionMocks({ theme }: { theme: "light" | "dark" }) {
     const query = new URLSearchParams(location.search);
     const [view, setView] = useState<Composition | "compare">(
         () =>
@@ -572,7 +566,7 @@ export function ChatCompositionMocks({
                         it at full size.
                     </p>
                 </div>
-                <ThemeToggle theme={theme} onThemeChange={onThemeChange} />
+                <ThemeToggle />
             </header>
             <nav
                 className="cm-study-controls"

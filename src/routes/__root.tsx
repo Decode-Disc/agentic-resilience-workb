@@ -4,6 +4,8 @@ import {
     Scripts,
 } from "@tanstack/react-router";
 import { lazy, type ReactNode, Suspense } from "react";
+import { ThemeProvider } from "next-themes";
+import { InvitationAccessProvider } from "@/components/workspace/invitation-access-context";
 import { PRODUCT_NAME } from "@/config/product";
 import favicon from "@/favicon.svg?url";
 import type { AppRouterContext } from "@/integrations/convex/router-context";
@@ -55,12 +57,19 @@ function RootDocument({ children }: { children: ReactNode }) {
                 <HeadContent />
             </head>
             <body suppressHydrationWarning>
-                {children}
-                {ImpeccableLiveRoot ? (
-                    <Suspense fallback={null}>
-                        <ImpeccableLiveRoot />
-                    </Suspense>
-                ) : null}
+                <ThemeProvider
+                    attribute="class"
+                    defaultTheme="light"
+                    enableSystem={false}>
+                    <InvitationAccessProvider>
+                        {children}
+                        {ImpeccableLiveRoot ? (
+                            <Suspense fallback={null}>
+                                <ImpeccableLiveRoot />
+                            </Suspense>
+                        ) : null}
+                    </InvitationAccessProvider>
+                </ThemeProvider>
                 <Scripts />
             </body>
         </html>

@@ -26,7 +26,6 @@ import {
 } from "@/components/ui/empty";
 import { LoadErrorAlert } from "@/components/ui/load-error-alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useWorkbenchViewport } from "@/components/workbench-shell/workbench-viewport";
 import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
 import { SourcingLane } from "@/components/workbench-ui/sourcing-lane";
 import { useResponsive } from "@/hooks/use-responsive";
@@ -77,11 +76,18 @@ function useStartDraft() {
 }
 /** Keeps each dossier's draft above recoverable subscription failures. */
 export function ConnectedStartWorkspace(props: StartWorkspaceProps) {
-    return <StartWorkspaceSession key={props.runId} {...props} />;
+    return (
+        <div
+            data-workbench-layout={
+                props.detail === "timeline" ? "document" : "viewport"
+            }
+            className="flex min-h-0 flex-1 flex-col">
+            <StartWorkspaceSession key={props.runId} {...props} />
+        </div>
+    );
 }
 function StartWorkspaceSession(props: StartWorkspaceProps) {
     const drafts = useStartDraft();
-    useWorkbenchViewport(props.detail !== "timeline");
     return (
         <LoadErrorBoundary
             title="Research conversation unavailable"

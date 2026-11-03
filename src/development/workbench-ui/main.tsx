@@ -7,6 +7,8 @@ import {
     DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { useEffect, useState } from "react";
+import { useTheme } from "next-themes";
+import { GalleryTheme } from "./gallery-theme";
 import { createRoot } from "react-dom/client";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -19,8 +21,6 @@ import { examples } from "./examples";
 import { StartScreenPreview, startScreenNames } from "./start-screen-examples";
 
 const params = new URLSearchParams(location.search);
-const initialTheme = params.get("theme") === "dark" ? "dark" : "light";
-document.documentElement.classList.toggle("dark", initialTheme === "dark");
 
 const requestedScreen =
     params.get("layout") === "start"
@@ -59,7 +59,8 @@ const groups = {
     ],
 } satisfies Record<string, (keyof typeof examples)[]>;
 function Gallery() {
-    const [theme, setTheme] = useState<"light" | "dark">(initialTheme);
+    const { resolvedTheme } = useTheme();
+    const theme = resolvedTheme === "dark" ? "dark" : "light";
     const [action, setAction] = useState("");
     const [requested, setRequested] = useState(params.get("component"));
     const [layout, setLayout] = useState(params.get("layout"));
@@ -67,15 +68,6 @@ function Gallery() {
     const [category, setCategory] = useState("All");
     const [viewport, setViewport] = useState("responsive");
     const [activeScreen, setActiveScreen] = useState(requestedScreen);
-    const changeTheme = (nextTheme: "light" | "dark") => {
-        const url = new URL(location.href);
-        url.searchParams.set("theme", nextTheme);
-        history.replaceState(history.state, "", url);
-        setTheme(nextTheme);
-    };
-    useEffect(() => {
-        document.documentElement.classList.toggle("dark", theme === "dark");
-    }, [theme]);
     const navigateToScreen = (screen: (typeof startScreenNames)[number]) => {
         const url = new URL(location.href);
         url.searchParams.set("layout", "start");
@@ -87,11 +79,6 @@ function Gallery() {
     };
     useEffect(() => {
         const restore = () => {
-            setTheme(
-                new URLSearchParams(location.search).get("theme") === "dark"
-                    ? "dark"
-                    : "light",
-            );
             const restored = new URLSearchParams(location.search);
             setRequested(restored.get("component"));
             setLayout(restored.get("layout"));
@@ -166,7 +153,7 @@ function Gallery() {
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
-                <ThemeToggle theme={theme} onThemeChange={changeTheme} />
+                <ThemeToggle />
             </div>
             <p
                 className="gallery-disclosure"
@@ -187,10 +174,7 @@ function Gallery() {
                     Historical composition studies · these references do not
                     represent the current chat controls.
                 </p>
-                <ChatCompositionMocks
-                    theme={theme}
-                    onThemeChange={changeTheme}
-                />
+                <ChatCompositionMocks theme={theme} />
             </>
         );
     if (activeScreen)
@@ -414,4 +398,8 @@ function Gallery() {
 }
 const mount = document.getElementById("root");
 if (!mount) throw new Error("Gallery mount missing");
-createRoot(mount).render(<Gallery />);
+createRoot(mount).render(
+    <GalleryTheme>
+        <Gallery />
+    </GalleryTheme>,
+);
