@@ -94,9 +94,13 @@ Build the smallest runnable vertical slice that preserves the relevant invariant
 
 Keep domain rules out of UI components. Keep provider-specific types and model names out of domain records and workflow business logic. Convex remains the state owner.
 
+Words such as `connect`, `integrate`, `refactor`, `reuse`, or `make real` do not authorize a redesign, structural rewrite, deletion of an affordance, or replacement of an established interaction. Material product or visual changes require an explicit user decision.
+
 ### Coding Rules
 
 - Use the established package manager and lockfile. Do not change dependencies without verifying the exact package/version and following the dependency-installation skill. Preserve strict TypeScript, validate trust boundaries and avoid `any`.
+- Do not turn an implementation assumption into a test or documented product requirement. If a requirement is ambiguous, surface the decision before encoding it.
+- Keep examples resilient to external drift. Persist and test stable identity keys such as SEC CIK; treat ticker, company name, provider availability, model identifiers, pricing, and returned metadata as mutable unless a deterministic fixture owns the value.
 - Use the smallest relevant check during implementation and scope diagnostics to task files. After behavior stabilizes, format once and run the applicable lint, typecheck and test checks. Run project-wide checks only for a repository/CI requirement or a transversal risk, stating the reason first. `pnpm check` is the CI aggregate; documentation and standalone tooling changes use the relevant focused checks instead of rebuilding the application.
 - Documentation-only edits need link, structure and consistency checks, not a manufactured failing test. Run `pnpm docs:check`, and `pnpm design:check` when visual documentation is touched. The documentation checker validates locations, links and heading anchors; review meaning and requirement preservation separately. Tooling/configuration requires executable before-and-after validation; generated outputs are verified through their owner rather than edited independently.
 - Do not run `pnpm run build` for each change. Use a build after substantial application changes, not routine documentation edits.
@@ -112,17 +116,10 @@ Impeccable uses the permanent development-only root entry, enabled per page load
 - Decisions, semantic status, presentation tokens, validation, and policy must each have a single owner. When a concept appears on multiple surfaces, expose it through a focused shared helper, hook, or domain module at the owning boundary; never duplicate mapping or conditional logic.
 - Keep shared modules deep: expose the smallest useful API, retain implementation details internally, and make exceptional behavior opt-in with sensible defaults.
 
-### Implementation Planning and Scope Fidelity
+### Planning
 
-- The AI harness's native planning mode is the default for ordinary planning, task decomposition, sequencing, and implementation discussion, including work with multiple steps.
-- Create a persistent plan in the repository only when explicitly requested, with at most one active plan per authorized workstream and an explicitly agreed location. On closure, transfer outstanding work and verified delivery to the roadmap, then retire the plan. Skills cannot autonomously create document series or override this policy.
-- Treat `writing-plans` and the project `implementation-plan` skill as opt-in workflows. Invoke either skill only when the user explicitly names or requests that skill; never trigger them merely because a task is complex, spans multiple files, crosses runtimes, or asks for a plan.
-- When the user explicitly invokes `implementation-plan`, apply it after the principal `writing-plans` skill because it adds this repository's product, UI-preservation, provider-safety, and verification contracts. Invoking `writing-plans` alone does not implicitly invoke the project overlay.
+- For planning requests, apply [planning](.agents/skills/planning/SKILL.md) using the harness's native planning facilities. Use `writing-plans` only when explicitly requested, as the detailed alternative.
 - Planning and implementation are separate authorizations. A request to diagnose, brainstorm, review, or revise a plan does not authorize production code, dependency, schema, environment, deployment, or data changes.
-- Before planning changes to an existing feature, reconstruct the current behavior from the working tree, routes, tests, browser state, and history. Classify each affected surface or contract as `preserve`, `modify`, `replace`, or `remove`, and provide evidence for every item not marked `preserve`.
-- Words such as `connect`, `integrate`, `refactor`, `reuse`, or `make real` do not authorize a redesign, structural rewrite, deletion of an affordance, or replacement of an established interaction. Material product or visual changes require an explicit user decision before they enter a plan.
-- Do not turn an implementation assumption into a test or documented product requirement. If a requirement is ambiguous, surface the decision before encoding it. When implementation evidence invalidates a plan, stop and revise the plan and authoritative documentation before continuing.
-- Keep examples resilient to external drift. Persist and test stable identity keys such as SEC CIK; treat ticker, company name, provider availability, model identifiers, pricing, and returned metadata as mutable unless a deterministic fixture owns the value.
 
 ### Existing-Surface Preservation
 
@@ -133,9 +130,9 @@ Impeccable uses the permanent development-only root entry, enabled per page load
 - A skeleton must preserve the geometry and semantic regions of the loaded component. Rendering a generic rectangle for a distinctive card, matrix, or review surface is not an acceptable loading state.
 - Secondary list filters may use `AnimatedListFilter` only after accessible popup semantics, keyboard/focus handling, Escape/outside-click behavior, reduced-motion support and focused tests are established. Keep responsive rail sizing in its existing single component-owned configuration.
 
-### Provider and Durable-Workflow Planning
+### External I/O and Durable Execution
 
-- Every planned external-I/O boundary must specify authorization before I/O, validation, resource limits, timeout, bounded retry, idempotency key, provider-call telemetry, cancellation behavior, and the typed outcome for missing configuration or partial failure.
+- Every external-I/O boundary must specify authorization before I/O, validation, resource limits, timeout, bounded retry, idempotency key, provider-call telemetry, cancellation behavior, and the typed outcome for missing configuration or partial failure.
 - For URL retrieval, require authorization before DNS resolution, validation of every redirect, and connection to the public address that was validated so a later DNS resolution cannot redirect the request into a private network.
 - For retryable or durable work, bind each attempt to the active run, workflow version, execution generation, corpus revision, step, and attempt. Check the active generation before the external call and again before persistence; late or cancelled results cannot advance state or trigger another paid call.
 - Any resume that can make work `running` must claim the visitor's execution slot atomically. Provider absence or disabled paid work is an explicit typed blocked or reviewable state, never a silent empty success.

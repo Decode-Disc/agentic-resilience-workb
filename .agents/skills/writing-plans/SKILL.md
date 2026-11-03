@@ -1,6 +1,6 @@
 ---
 name: writing-plans
-description: Use when you have a spec or requirements for a multi-step task, before touching code
+description: Write a detailed implementation plan only when the user explicitly names or requests the writing-plans skill. Do not trigger automatically for ordinary planning, a specification, or a multi-step task.
 ---
 
 # Writing Plans
