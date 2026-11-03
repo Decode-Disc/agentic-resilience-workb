@@ -174,6 +174,12 @@ test("the real native compaction request receives Workbench provenance and appro
         "Only current framing describes what is saved in the research program",
     );
     expect(required).toContain(
+        "Explain research status using research.summary and the analyst's next action",
+    );
+    expect(required).toContain(
+        "Do not quote internal state fields, enum values, tool names or implementation mechanics",
+    );
+    expect(required).toContain(
         "When only a summary is available, use consult_conversation before attributing a historical idea",
     );
     expect(await t.run((ctx) => ctx.db.get(active.missionId))).toMatchObject({

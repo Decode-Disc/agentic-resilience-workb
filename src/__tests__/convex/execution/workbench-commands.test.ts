@@ -169,6 +169,18 @@ test("commands preserve human prerequisites and reject stale generations without
         text: "Research is waiting for source review. Review the proposed sources to continue.",
     });
     expect(await t.run((ctx) => ctx.db.get(runId))).toEqual(before);
+    const pause = await client.mutation(api.workbench.command, {
+        runId,
+        requestKey: "pause-at-prerequisite",
+        command: "/pause",
+        expectedGeneration: 1,
+    });
+    expect(pause).toMatchObject({
+        outcome: "refused",
+        text: "Research is waiting for source review. Review the proposed sources to continue.",
+    });
+    expect(pause.text).not.toMatch(/changed|stale_execution|source_review/);
+    expect(await t.run((ctx) => ctx.db.get(runId))).toEqual(before);
     expect(
         await client.mutation(api.workbench.command, {
             runId,

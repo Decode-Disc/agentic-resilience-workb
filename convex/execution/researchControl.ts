@@ -238,11 +238,10 @@ export async function pauseResearch(
         run.executionGeneration === args.expectedGeneration + 1
     )
         return run.executionGeneration;
-    if (
-        run.executionGeneration !== args.expectedGeneration ||
-        run.executionStatus !== "running"
-    )
+    if (run.executionGeneration !== args.expectedGeneration)
         throw executionError("stale_execution");
+    if (run.executionStatus !== "running")
+        throw executionError("human_prerequisite_required");
     if (run.startMode === "framed") {
         await ctx.db.patch(run._id, {
             researchPauseRequested: true,
