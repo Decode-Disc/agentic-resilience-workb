@@ -6,6 +6,7 @@ import { pinMissionModel } from "@convex/modelConfiguration";
 import { localBrowserFixturesEnabled } from "@convex/runWorkspace";
 import { workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
+import { vEventId } from "@convex-dev/workflow";
 import { v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
@@ -29,6 +30,7 @@ import { cancelPiWake, schedulePiMission } from "./piControl";
 
 export const start = internalMutation({
     args: {
+        completionEventId: v.optional(vEventId()),
         runId: v.id("researchRuns"),
         corpusRevisionId: v.optional(v.id("corpusRevisions")),
         scope: v.optional(agentScopeValidator),
@@ -105,6 +107,7 @@ export const start = internalMutation({
                 previous.generation !== args.expectedGeneration ||
                 previous.definitionId !== args.definitionId ||
                 previous.conversationTurnId !== args.conversationTurnId ||
+                previous.completionEventId !== args.completionEventId ||
                 (args.generationBackend !== undefined &&
                     stableStringify(previous.generationBackend) !==
                         stableStringify(args.generationBackend))
@@ -158,6 +161,7 @@ export const start = internalMutation({
             runId: run._id,
             protocolVersion: 3,
             executionScope,
+            completionEventId: args.completionEventId,
             conversationTurnId: args.conversationTurnId,
             scope,
             ownerVisitorId: visitor._id,

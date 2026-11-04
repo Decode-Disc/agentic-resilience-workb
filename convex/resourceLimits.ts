@@ -4,9 +4,12 @@ import { env } from "./_generated/server";
 export const MAX_ANALYSES_PER_VISITOR = 3;
 export const BROWSER_QUALIFICATION_MAX_REQUESTS = 20;
 export const BROWSER_QUALIFICATION_MAX_COST_USD = 0.5;
+/** Aggregate receipt bound for the whole Sources qualification, including technical I/O. */
+export const MAX_SOURCES_QUALIFICATION_RECEIPTS = 128;
 
 const DEFAULT_COMPANY_SEARCH_RESULT_LIMIT = 40;
 export const MAX_INITIAL_SOURCE_CANDIDATES = 48;
+export const MAX_OPERATION_RESULT_BYTES = 64 * 1024;
 const MAX_PREPARED_RECOMMENDATIONS = 24;
 const MAX_CONFIGURED_COLLECTION_LIMIT = 200;
 
@@ -102,6 +105,7 @@ export const PREVIEW_CACHE_MAX_BYTES = 700 * 1024;
 // Phase 5 locked resource and extraction limits
 export const MAX_APPROVED_SOURCE_BYTES = 16 * 1024 * 1024; // 16 MiB declared/decompressed
 export const MAX_NORMALIZED_ARTIFACT_BYTES = 16 * 1024 * 1024; // 16 MiB
+export const MAX_CAPTURE_OBSERVED_METADATA_BYTES = 192 * 1024;
 export const MAX_EVIDENCE_ARTIFACT_BYTES = 16 * 1024 * 1024;
 export const MAX_PDF_PAGES = 400;
 export const MAX_PASSAGES_PER_SOURCE = 512;

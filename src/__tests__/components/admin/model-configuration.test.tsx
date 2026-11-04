@@ -56,3 +56,52 @@ test("an administrator prepares a model without choosing an upstream provider", 
     );
     expect(screen.queryByLabelText("Provider ID")).toBeNull();
 });
+
+test("coherence thresholds and activation are saved together with the observed configuration version", async () => {
+    convexReactHarness.query(api.modelConfiguration.list).returns({
+        models: [],
+        assignments: [],
+        agents: [],
+        responseControl: {
+            revision: 4,
+            enabled: false,
+            model: "typesafe/jev-1.14",
+            contradictionThreshold: 0.95,
+            supportThreshold: 0.7,
+        },
+    });
+    const save = vi.fn(async () => ({
+        revision: 5,
+        enabled: true,
+        model: "typesafe/jev-1.14",
+        contradictionThreshold: 0.93,
+        supportThreshold: 0.75,
+    }));
+    convexReactHarness
+        .mutation(api.modelConfiguration.setResponseControl)
+        .uses(save);
+    render(<AdminModels />);
+    fireEvent.click(
+        screen.getByRole("switch", {
+            name: "Enable response coherence control",
+        }),
+    );
+    fireEvent.change(screen.getByLabelText("Contradiction threshold"), {
+        target: { value: "0.93" },
+    });
+    fireEvent.change(screen.getByLabelText("Support threshold"), {
+        target: { value: "0.75" },
+    });
+    fireEvent.click(
+        screen.getByRole("button", { name: "Save coherence settings" }),
+    );
+    await waitFor(() =>
+        expect(save).toHaveBeenCalledWith({
+            expectedRevision: 4,
+            enabled: true,
+            model: "typesafe/jev-1.14",
+            contradictionThreshold: 0.93,
+            supportThreshold: 0.75,
+        }),
+    );
+});

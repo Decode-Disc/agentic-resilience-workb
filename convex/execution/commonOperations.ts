@@ -1,5 +1,7 @@
 import { internal } from "@convex/_generated/api";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import { v } from "convex/values";
+import { z } from "zod";
 import {
     consultConversationInputValidator,
     consultMissionStateInputValidator,
@@ -8,6 +10,15 @@ import {
 import type { AgentOperationDefinition } from "./executionProtocol";
 import { pinHistoryRead } from "./history";
 import { operationReuseIdentity } from "./missionData";
+import {
+    conversationHistoryEntryValidator,
+    historyPageValidator,
+    runStateResultValidator,
+} from "./operationContracts";
+import {
+    observeOperationOutcome,
+    operationResultValidator,
+} from "./operationResults";
 
 /** Read policies and execution are the same for native callers and generated tools. */
 export const consultMissionStateOperation: Extract<
@@ -19,6 +30,21 @@ export const consultMissionStateOperation: Extract<
     description:
         "Read current required mission state and immutable retained observations. Omit cursor initially; later copy only this operation's continueCursor, never an ID or an invented offset.",
     inputValidator: consultMissionStateInputValidator,
+    resultValidator: z.strictObject({
+        kind: z.literal("consult_mission_state"),
+        state: z.record(z.string(), z.json()),
+        history: z.strictObject({
+            entries: z.array(
+                z.strictObject({
+                    sequence: z.number(),
+                    offset: z.number(),
+                    totalCharacters: z.number(),
+                    content: z.string(),
+                }),
+            ),
+            continueCursor: z.string().nullable(),
+        }),
+    }),
     identity(context) {
         return {
             ...operationReuseIdentity(context),
@@ -31,10 +57,11 @@ export const consultMissionStateOperation: Extract<
             return {
                 outcome: { kind: "refused", code: "request_unavailable" },
             };
-        return ctx.runQuery(internal.execution.history.read, {
+        const result = await ctx.runQuery(internal.execution.history.read, {
             requestId: args.requestId,
             expectedGeneration: args.expectedGeneration,
         });
+        return { ...result, outcome: observeOperationOutcome(result.outcome) };
     },
     validateOutcome(_request, outcome) {
         return outcome;
@@ -50,6 +77,7 @@ export const consultRunStateOperation: Extract<
     description:
         "Consult the authorized dossier's persisted lifecycle without starting work.",
     inputValidator: consultRunStateInputValidator,
+    resultValidator: operationResultValidator(runStateResultValidator),
     identity: operationReuseIdentity,
     async pin(ctx, mission, _input, runId) {
         const id = mission?.runId ?? runId;
@@ -83,7 +111,7 @@ export const consultRunStateOperation: Extract<
             },
         );
         return {
-            outcome: { kind: "success", valueJson: JSON.stringify(value) },
+            outcome: { kind: "success", value },
         };
     },
     validateOutcome(_request, outcome) {
@@ -99,6 +127,12 @@ const consultConversation: Extract<
     description:
         "Read exact prior processed conversation messages in canonical fragments. Queued instructions and messages published after this read's snapshot are excluded. Omit cursor initially; later copy only this operation's continueCursor.",
     inputValidator: consultConversationInputValidator,
+    resultValidator: operationResultValidator(
+        v.object({
+            entries: v.array(conversationHistoryEntryValidator),
+            continueCursor: historyPageValidator.fields.continueCursor,
+        }),
+    ),
 };
 export const commonOperations = {
     consult_conversation: consultConversation,

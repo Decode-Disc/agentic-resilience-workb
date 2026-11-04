@@ -1,4 +1,5 @@
-import { v } from "convex/values";
+import { observedDestinationValidator } from "@convex/domain/sourcesContracts";
+import { getDocumentSize, v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
@@ -17,6 +18,7 @@ import {
 } from "./integrations/evidenceNormalization";
 import { resolveDirectFilingUrl } from "./integrations/secEvidence";
 import {
+    MAX_CAPTURE_OBSERVED_METADATA_BYTES,
     MAX_HISTORICAL_SOURCE_CANDIDATES,
     MAX_NORMALIZED_ARTIFACT_BYTES,
 } from "./resourceLimits";
@@ -335,6 +337,10 @@ export const attachStorage = internalMutation({
 
 export const finalize = internalMutation({
     args: {
+        observedDestinations: v.optional(v.array(observedDestinationValidator)),
+        representationCompleteness: v.optional(
+            v.union(v.literal("complete"), v.literal("partial")),
+        ),
         preparationId: v.id("sourceSelectionProposalRebuilds"),
         captureId: v.id("sourceCaptures"),
         contentHash: v.string(),
@@ -374,6 +380,13 @@ export const finalize = internalMutation({
             args.byteCount > MAX_NORMALIZED_ARTIFACT_BYTES ||
             !Number.isInteger(args.omittedPassageCount) ||
             args.omittedPassageCount < 0
+        )
+            throw sourcePreparationError("capture_invalid");
+        if (
+            (args.observedDestinations?.length ?? 0) > 64 ||
+            getDocumentSize({
+                observedDestinations: args.observedDestinations ?? [],
+            }) > MAX_CAPTURE_OBSERVED_METADATA_BYTES
         )
             throw sourcePreparationError("capture_invalid");
         const {

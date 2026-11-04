@@ -186,6 +186,10 @@ async function cancelMission(
         });
     }
 
+    if (mission.completionEventId)
+        await ctx.runMutation(internal.execution.handoffs.finishChild, {
+            missionId: mission._id,
+        });
     if (mission.workflowId)
         await workflow.cancel(ctx, mission.workflowId as WorkflowId);
     return outstanding.length > requestsToRefuse.length;

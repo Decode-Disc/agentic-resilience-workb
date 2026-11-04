@@ -1,5 +1,16 @@
+import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import type { QueryCtx } from "@convex/_generated/server";
+import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
+import { requireDossierAuthority } from "@convex/execution/authority";
+import { executionFailureCode } from "@convex/execution/errors";
+import { preparationFailureCode } from "./sourcePreparationAuthority";
+import { SourceReviewReads } from "./sourceReviewReads";
+import {
+    assertSourcesCompletionCapacity,
+    hasEngagedSourcesControl,
+    SOURCES_HANDOFF_READ_CAPACITY,
+} from "./sources";
+import { isResumableResearchPause } from "./transitions";
 
 /** Resolves current treatment separately from the retained transmission receipt. */
 export async function readWorkbenchInstructions(
@@ -11,17 +22,35 @@ export async function readWorkbenchInstructions(
         .withIndex("by_run", (q) => q.eq("runId", runId))
         .order("desc")
         .take(20);
+    const preparationIds = [
+        ...new Set(
+            requests.flatMap((request) =>
+                request.preparationId ? [request.preparationId] : [],
+            ),
+        ),
+    ];
+    const preparations = new Map(
+        preparationIds.map((id) => [id, ctx.db.get(id)] as const),
+    );
     return Promise.all(
         requests.map(async (request) => {
             const preparation = request.preparationId
-                ? await ctx.db.get(request.preparationId)
+                ? await preparations.get(request.preparationId)
                 : null;
             const finished = preparation && preparation.status !== "started";
+            const needOutcome = request.needId
+                ? preparation?.sourcesMission?.result?.needs.find(
+                      (n) => n.needId === request.needId,
+                  )
+                : undefined;
+            const requestFinished = preparation?.sourcesMission
+                ? !!needOutcome && needOutcome.unfinished.length === 0
+                : preparation?.status === "complete";
             return {
                 ...request,
                 transmissionStatus: request.status,
                 status: finished
-                    ? preparation.status === "complete"
+                    ? requestFinished
                         ? ("completed" as const)
                         : ("limited" as const)
                     : request.status,
@@ -31,4 +60,205 @@ export async function readWorkbenchInstructions(
             };
         }),
     );
+}
+
+/** A registered request must receive an outcome before preparation can close. */
+export async function hasWaitingWorkbenchInstructions(
+    ctx: QueryCtx,
+    runId: Id<"researchRuns">,
+) {
+    return !!(await ctx.db
+        .query("workbenchInstructions")
+        .withIndex("by_run_and_status", (q) =>
+            q.eq("runId", runId).eq("status", "waiting"),
+        )
+        .first());
+}
+
+/** Delivers bounded instruction batches while preserving admitted material and individual outcomes. */
+export async function processWorkbenchInstructions(
+    ctx: MutationCtx,
+    { runId }: { runId: Id<"researchRuns"> },
+    sharedReads?: SourceReviewReads,
+): Promise<null> {
+    const { run } = await requireDossierAuthority(ctx, runId);
+    const requests = await ctx.db
+        .query("workbenchInstructions")
+        .withIndex("by_run_and_status", (q) =>
+            q.eq("runId", runId).eq("status", "waiting"),
+        )
+        .take(20);
+    if (
+        !requests.length ||
+        isResumableResearchPause(run) ||
+        run.researchPauseRequested
+    )
+        return null;
+    if (run.sourcesProtocol === "sources_mission_v1") {
+        const preparation = run.sourcePreparationId
+            ? await ctx.db.get(run.sourcePreparationId)
+            : null;
+        let data = preparation?.sourcesMission;
+        if (
+            !data &&
+            [
+                "draft",
+                "checking_public_evidence",
+                "discovering_sources",
+            ].includes(run.lifecycleState)
+        )
+            return null;
+        const reads =
+            sharedReads ??
+            new SourceReviewReads(
+                ctx.db,
+                run._id,
+                SOURCES_HANDOFF_READ_CAPACITY,
+            );
+        if (
+            preparation?.status === "started" &&
+            data &&
+            !data.result &&
+            (await hasEngagedSourcesControl(reads, data))
+        )
+            return null;
+        for (const request of requests) {
+            if (
+                preparation?.status !== "started" ||
+                !data ||
+                data.result ||
+                request.framingRevisionId !== run.fixedFramingRevisionId ||
+                data.needs.length >= data.envelope.maxNeeds
+            ) {
+                await ctx.db.patch(request._id, {
+                    status: "limited",
+                    outcome:
+                        "This request cannot begin another documentary phase or exceed the remaining preparation allowance.",
+                });
+                continue;
+            }
+            const needId = `instruction:${request._id}`;
+            const proposed = {
+                ...data,
+                needsRevision: data.needsRevision + 1,
+                needs: [
+                    ...data.needs,
+                    {
+                        id: needId,
+                        version: 1,
+                        information: request.interpretedNeed,
+                        questionIds: [],
+                        commonContext: false,
+                    },
+                ],
+            };
+            try {
+                await assertSourcesCompletionCapacity(
+                    reads,
+                    preparation,
+                    proposed,
+                    null,
+                    request.requestId,
+                );
+            } catch (error) {
+                const code =
+                    executionFailureCode(error) ??
+                    preparationFailureCode(error);
+                if (
+                    code !== "sources_result_capacity" &&
+                    code !== "sources_response_capacity" &&
+                    code !== "source_review_capacity"
+                )
+                    throw error;
+                await ctx.db.patch(request._id, {
+                    status: "limited",
+                    outcome:
+                        "Your request exceeds the remaining preparation capacity. The material already prepared remains available. Refine the request to continue.",
+                });
+                continue;
+            }
+            data = proposed;
+            await ctx.db.patch(request._id, {
+                status: "transmitted",
+                preparationId: preparation._id,
+                needId,
+                outcome:
+                    "Your request was transmitted to Sources. Its treatment is still in progress.",
+            });
+        }
+        if (preparation && data && data !== preparation.sourcesMission)
+            await ctx.db.patch(preparation._id, { sourcesMission: data });
+        return null;
+    }
+    if (
+        ["draft", "checking_public_evidence", "discovering_sources"].includes(
+            run.lifecycleState,
+        )
+    )
+        return null;
+    const preparation = run.sourcePreparationId
+        ? await ctx.db.get(run.sourcePreparationId)
+        : null;
+    if (preparation?.status === "started") return null;
+    const revision = run.activeCorpusRevisionId
+        ? await ctx.db.get(run.activeCorpusRevisionId)
+        : null;
+    const proposal = revision?.sourceSelectionProposalId
+        ? await ctx.db.get(revision.sourceSelectionProposalId)
+        : null;
+    for (const request of requests) {
+        if (
+            run.lifecycleState !== "awaiting_source_review" ||
+            revision?.status !== "draft" ||
+            !proposal ||
+            request.framingRevisionId !== run.fixedFramingRevisionId ||
+            !request.coverageRole
+        ) {
+            await ctx.db.patch(request._id, {
+                status: "limited",
+                outcome:
+                    "This request cannot reopen the fixed source set or begin another documentary phase.",
+            });
+            continue;
+        }
+        try {
+            const result = await ctx.runMutation(
+                internal.workbench.deliverSourceInstruction,
+                { instructionId: request._id },
+            );
+            await ctx.db.patch(request._id, {
+                status: result.status === "started" ? "transmitted" : "blocked",
+                preparationId: result.preparationId,
+                outcome:
+                    result.status === "started"
+                        ? "Your request was transmitted to source preparation. Its treatment is still in progress."
+                        : "Source preparation cannot perform this request within the remaining allowance. Inspect Sources for the retained work and available recovery.",
+            });
+            if (result.status === "started") return null;
+        } catch (error) {
+            const code = preparationFailureCode(error);
+            if (!code) throw error;
+            await ctx.db.patch(request._id, {
+                status: "blocked",
+                outcome:
+                    "This request could not be transmitted under the current preparation limits. Inspect Sources to continue.",
+            });
+            await ctx.db.insert("agentExecutionEvents", {
+                runId,
+                actor: { type: "system" },
+                kind: "analyst_instruction_blocked",
+                cause: "instruction_delivery",
+                messageId: request.messageId,
+                code,
+                occurredAt: Date.now(),
+            });
+        }
+    }
+    if (requests.length === 20)
+        await ctx.scheduler.runAfter(
+            0,
+            internal.workbench.processInstructions,
+            { runId },
+        );
+    return null;
 }

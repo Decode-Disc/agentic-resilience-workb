@@ -78,6 +78,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { useResponsive } from "@/hooks/use-responsive";
+import { responseCoherenceNotice } from "@/lib/presentation/workbench";
 import { cn } from "@/lib/utils";
 import "./workbench-conversation.css";
 
@@ -621,6 +622,9 @@ function ConversationMessage({
             .map((part) => part.text)
             .join("\n"),
     );
+    const coherence = responseCoherenceNotice(
+        useAuiState((s) => s.message.metadata.custom.responseControl),
+    );
     const streaming = useAuiState((s) => s.message.status?.type === "running");
     const interrupted = useAuiState(
         (s) => s.message.status?.type === "incomplete",
@@ -669,6 +673,18 @@ function ConversationMessage({
                         components={{ Text: ConversationMarkdown }}
                     />
                 </MessageContent>
+                {role === "assistant" && coherence && (
+                    <aside
+                        role="note"
+                        aria-label="Response consistency"
+                        className="mt-3 space-y-1 rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs text-muted-foreground">
+                        <p className="font-medium text-foreground">
+                            {coherence.title}
+                        </p>
+                        {coherence.score && <p>{coherence.score}</p>}
+                        <p>{coherence.detail}</p>
+                    </aside>
+                )}
                 {interrupted && (
                     <p role="status">
                         Response interrupted. The partial reply remains

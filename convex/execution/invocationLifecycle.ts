@@ -20,7 +20,7 @@ import {
 } from "@convex/providerCalls";
 import schema from "@convex/schema";
 import { type Infer, v } from "convex/values";
-import { validate } from "convex-helpers/validators";
+import { ValidationError, validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
 import { agentToolSchemas } from "./agentDefinition";
 import {
@@ -32,8 +32,8 @@ import {
     requireMissionAuthority,
     requireMissionObservationAuthority,
 } from "./authority";
-import { buildMissionContext } from "./context";
 import { normalizeNativeHistoryInput } from "./commonOperations";
+import { buildMissionContext } from "./context";
 import {
     conversationInstructions,
     publishTurn,
@@ -62,7 +62,12 @@ import {
     invocationScopeFields,
     missionScope,
 } from "./missionData";
+import {
+    completionFeedbackValidator,
+    operationInputFeedback,
+} from "./operationContracts";
 import { persistOperationRequest } from "./operations";
+import { pauseResearchAtBoundary } from "./researchControl";
 
 async function hasOutstandingOperations(
     ctx: QueryCtx,
@@ -170,6 +175,14 @@ async function requireDispatchAuthority(
             receipt.status !== "started"
         )
             throw executionError("provider_receipt_required");
+        const run = receipt.runId ? await ctx.db.get(receipt.runId) : null;
+        if (run?.purpose === "browser_test")
+            await requireQualifiedBrowserMission(
+                ctx,
+                run,
+                null,
+                receipt.preparationId,
+            );
         if (receipt.operation === "source_comparison") {
             if (!receipt.sourceId)
                 throw executionError("provider_receipt_required");
@@ -319,6 +332,8 @@ export const begin = internalMutation({
                 inputJson: existing.inputJson,
             };
         }
+        if (await pauseResearchAtBoundary(ctx, mission.runId, mission))
+            return { kind: "blocked" as const, code: "research_paused" };
         if (!args.purpose && (await hasOutstandingOperations(ctx, mission._id)))
             return { kind: "blocked" as const, code: "pending_operations" };
         const previousInvocation = mission.lastInvocationId
@@ -609,9 +624,11 @@ export const beginOneShot = internalMutation({
             !receipt.corpusRevisionId ||
             receipt.executionGeneration === undefined ||
             receipt.status !== "started" ||
-            !["source_qualification", "source_comparison"].includes(
-                receipt.operation,
-            )
+            ![
+                "source_qualification",
+                "source_comparison",
+                "source_documentary_control",
+            ].includes(receipt.operation)
         )
             throw executionError("one_shot_not_authorized");
         if (receipt.operation === "source_comparison" && receipt.sourceId)
@@ -750,11 +767,10 @@ export const settle = internalMutation({
             )
                 return { kind: "waiting" as const };
         }
-        const noProgressTurns =
-            mission.progressKeys.length > (invocation.progressCount ?? 0)
-                ? 0
-                : mission.noProgressTurns + 1;
-        const stopped = noProgressTurns >= MAX_NO_PROGRESS_TURNS;
+        const { noProgressTurns, stopped } = invocationProgressSettlement(
+            mission,
+            invocation,
+        );
         await ctx.db.patch(mission._id, {
             lastSettledInvocationId: invocation._id,
             noProgressTurns,
@@ -773,6 +789,17 @@ export const settle = internalMutation({
     },
 });
 
+const invocationFinishOutcomeValidator = v.object({
+    kind: v.union(
+        v.literal("waiting"),
+        v.literal("completed"),
+        v.literal("blocked"),
+    ),
+    requestIds: v.array(v.id("agentOperationRequests")),
+    code: v.optional(v.string()),
+    correction: v.optional(completionFeedbackValidator),
+});
+
 export const finish = internalMutation({
     args: {
         invocationId: v.id("agentInvocations"),
@@ -780,16 +807,11 @@ export const finish = internalMutation({
         response: invocationResponseValidator,
         rawOutputJson: v.optional(v.string()),
     },
-    returns: v.object({
-        kind: v.union(
-            v.literal("waiting"),
-            v.literal("completed"),
-            v.literal("blocked"),
-        ),
-        requestIds: v.array(v.id("agentOperationRequests")),
-        code: v.optional(v.string()),
-    }),
-    handler: async (ctx, args) => {
+    returns: invocationFinishOutcomeValidator,
+    handler: async (
+        ctx,
+        args,
+    ): Promise<Infer<typeof invocationFinishOutcomeValidator>> => {
         const invocation = await ctx.db.get(args.invocationId);
         if (
             !invocation?.missionId ||
@@ -829,6 +851,9 @@ export const finish = internalMutation({
                       : ("waiting" as const),
                 requestIds: invocation.requestIds ?? [],
                 ...(invocation.blockCode ? { code: invocation.blockCode } : {}),
+                ...(invocation.correction
+                    ? { correction: invocation.correction }
+                    : {}),
             };
         }
         const returned = {
@@ -842,6 +867,14 @@ export const finish = internalMutation({
         };
         const block = async (code: string, terminal = false) => {
             await ctx.db.patch(invocation._id, { blockCode: code });
+            // Domain completion can discover pending work after the generic notes preparation.
+            if (
+                code === "pending_operations" &&
+                mission.executionRuntime === "pi-durable"
+            )
+                await ctx.db.patch(mission._id, {
+                    workingNotes: mission.workingNotes,
+                });
             if (terminal)
                 await ctx.db.patch(mission._id, {
                     status: "blocked",
@@ -918,6 +951,7 @@ export const finish = internalMutation({
         if (!awaitingOperations || mission.executionRuntime !== "pi-durable")
             await ctx.db.patch(mission._id, { workingNotes: notes });
         if (awaitingOperations) return block("pending_operations");
+        const snapshot: unknown = JSON.parse(invocation.inputJson);
         if (args.response.kind === "complete") {
             const definition = getAgentDefinition(
                 mission.definitionId,
@@ -932,7 +966,47 @@ export const finish = internalMutation({
             const completion = await getAgentDefinition(
                 mission.definitionId,
                 mission.definitionVersion,
-            ).complete(ctx, mission, args.response);
+            ).complete(ctx, mission, args.response, snapshot, invocation);
+            if (completion.kind === "correct") {
+                await ctx.db.patch(mission._id, {
+                    workingNotes: mission.workingNotes,
+                });
+                if (
+                    new TextEncoder().encode(
+                        JSON.stringify(completion.feedback),
+                    ).length > MAX_OPERATION_RESULT_BYTES
+                )
+                    return block("operation_result_capacity", true);
+                if (
+                    !validate(
+                        completionFeedbackValidator,
+                        completion.feedback,
+                        { db: ctx.db },
+                    )
+                )
+                    return block("operation_contract_invalid", true);
+                const { noProgressTurns, stopped } =
+                    invocationProgressSettlement(mission, invocation);
+                await ctx.db.patch(invocation._id, {
+                    correction: completion.feedback,
+                });
+                await ctx.db.patch(mission._id, {
+                    workingNotes: mission.workingNotes,
+                    lastSettledInvocationId: invocation._id,
+                    noProgressTurns,
+                    status: stopped ? "blocked" : "ready",
+                    blockCode: stopped ? "repetition_stop" : undefined,
+                });
+                const refused = await block(
+                    stopped
+                        ? "repetition_stop"
+                        : "completion_correction_required",
+                    stopped,
+                );
+                return { ...refused, correction: completion.feedback };
+            }
+            if (completion.kind === "continue")
+                return block("mission_context_changed");
             if (completion.kind === "blocked") return block(completion.code);
             if (
                 !validate(definition.resultValidator, completion.result, {
@@ -978,8 +1052,9 @@ export const finish = internalMutation({
             mission.definitionId,
             mission.definitionVersion,
         );
-        const snapshot: unknown = JSON.parse(invocation.inputJson);
         const modelOperations = agentToolSchemas(definition, snapshot);
+        if (Object.keys(modelOperations).length === 0)
+            return block("operation_not_allowed", true);
         for (const request of args.response.requests) {
             let decoded: unknown;
             try {
@@ -1017,9 +1092,27 @@ export const finish = internalMutation({
                 !("kind" in canonical)
                     ? { ...canonical, kind: request.name }
                     : null;
-            const valid = validate(operationInputValidator, input, {
-                db: ctx.db,
-            });
+            let validation: { path: string; expected: string } | undefined;
+            const operation = modelOperations[request.name];
+            let fieldsValid = !!operation;
+            if (operation) {
+                try {
+                    validate(operation.inputValidator, decoded, {
+                        db: ctx.db,
+                        throw: true,
+                    });
+                } catch (error) {
+                    if (!(error instanceof ValidationError)) throw error;
+                    fieldsValid = false;
+                    validation = operationInputFeedback(
+                        operation.inputValidator,
+                        error,
+                    );
+                }
+            }
+            const valid =
+                fieldsValid &&
+                validate(operationInputValidator, input, { db: ctx.db });
             requestIds.push(
                 await persistOperationRequest(ctx, mission, {
                     invocationId: invocation._id,
@@ -1031,6 +1124,7 @@ export const finish = internalMutation({
                               kind: "invalid" as const,
                               name: request.name,
                               inputJson: request.inputJson,
+                              ...(validation ? { validation } : {}),
                           },
                 }),
             );
@@ -1051,3 +1145,20 @@ export const finish = internalMutation({
         return { kind: "waiting" as const, requestIds };
     },
 });
+
+/** A settled invocation consumes non-progress capacity once, whether it returned tools or a rejected completion. */
+function invocationProgressSettlement(
+    mission: Doc<"agentMissions">,
+    invocation: Doc<"agentInvocations">,
+) {
+    const noProgressTurns =
+        mission.lastSettledInvocationId === invocation._id
+            ? mission.noProgressTurns
+            : mission.progressKeys.length > (invocation.progressCount ?? 0)
+              ? 0
+              : mission.noProgressTurns + 1;
+    return {
+        noProgressTurns,
+        stopped: noProgressTurns >= MAX_NO_PROGRESS_TURNS,
+    };
+}

@@ -1,6 +1,12 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
 import { ConvexError } from "convex/values";
 import { beforeEach, expect, test, vi } from "vitest";
 import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
@@ -116,6 +122,56 @@ beforeEach(() => {
     convexReactHarness
         .mutation(api.execution.conversations.submit)
         .uses(submitMessage);
+});
+
+test.each([
+    "partial",
+    "blocked",
+])("the connected Sources mission does not claim completion for %s material", (status) => {
+    convexReactHarness.query(api.workbench.snapshot).returns({
+        ...readySnapshot,
+        run: {
+            ...readySnapshot.run,
+            fixedFramingRevisionId: "framing-1",
+            lifecycleState: "sources_prepared",
+            executionStatus: "idle",
+        },
+        preparation: { status },
+    });
+    render(<ConnectedStartWorkspace runId={runId} />);
+    const mission = document.querySelector(
+        '[data-mission-id="sources:run-connected"]',
+    );
+    expect(mission).not.toBeNull();
+    if (!(mission instanceof HTMLElement))
+        throw new Error("Missing Sources mission");
+    expect(within(mission).queryByText(/Completed/)).toBeNull();
+    expect(mission.getAttribute("data-state")).toBe("interrupted");
+    expect(mission.textContent).not.toMatch(
+        /sources_prepared|operation_result_capacity/,
+    );
+});
+
+test("a recoverable research interruption exposes the existing public Resume control", async () => {
+    convexReactHarness.query(api.workbench.snapshot).returns({
+        ...readySnapshot,
+        run: {
+            ...readySnapshot.run,
+            fixedFramingRevisionId: "framing-1",
+            lifecycleState: "discovering_sources",
+            executionStatus: "paused",
+            pauseReason: "execution_interrupted",
+        },
+    });
+    render(<ConnectedStartWorkspace runId={runId} />);
+    fireEvent.click(screen.getByRole("button", { name: "Resume research" }));
+    await waitFor(() =>
+        expect(resumeResearch).toHaveBeenCalledWith({
+            runId,
+            expectedGeneration: 1,
+        }),
+    );
+    expect(screen.queryByText("execution_interrupted")).toBeNull();
 });
 
 test("selecting a slash control executes it immediately without submitting a model message", async () => {

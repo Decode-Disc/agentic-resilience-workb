@@ -48,6 +48,7 @@ export const companySnapshotValidator = v.object({
 });
 
 export const researchRunLifecycleValidator = v.union(
+    v.literal("sources_prepared"),
     v.literal("framing"),
     v.literal("draft"),
     v.literal("checking_public_evidence"),
@@ -81,6 +82,8 @@ export const workflowStepStateValidator = v.union(
 );
 
 export const workflowStepKeyValidator = v.union(
+    v.literal("prepare_sources"),
+    v.literal("sources_prepared"),
     v.literal("resolve_company"),
     v.literal("check_public_evidence"),
     v.literal("evidence_sufficiency_review"),
@@ -155,4 +158,5 @@ export const runPauseReasonValidator = v.union(
     v.literal("assessment_review"),
     v.literal("claim_generation_unavailable"),
     v.literal("analyst"),
+    v.literal("execution_interrupted"),
 );

@@ -8,20 +8,27 @@ import {
 } from "@convex/_generated/server";
 import { mergeRunCompanyMetadata } from "@convex/domain/companyMetadata";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
-import { preparationFailureCode } from "@convex/domain/sourcePreparationAuthority";
-import { supportsResearchControl } from "@convex/domain/transitions";
+import {
+    isResumableResearchPause,
+    supportsResearchControl,
+} from "@convex/domain/transitions";
 import { companySnapshotValidator } from "@convex/domain/validators";
 import {
     explicitResearchControl,
     workbenchCommand,
     workbenchCommandOutcome,
 } from "@convex/domain/workbenchContracts";
-import { readWorkbenchInstructions } from "@convex/domain/workbenchInstructions";
+import {
+    processWorkbenchInstructions,
+    readWorkbenchInstructions,
+} from "@convex/domain/workbenchInstructions";
 import {
     requireDossierAuthority,
     requireMissionAuthority,
 } from "@convex/execution/authority";
 import {
+    analystConversationTurn,
+    conversationTurnForAnalyst,
     recordControlExchange,
     requireConversationRequestKey,
     requireInstructionVersion,
@@ -266,8 +273,7 @@ export const command = mutation({
             if (
                 (action === "pause" &&
                     (run.researchPauseRequested ||
-                        (run.executionStatus === "paused" &&
-                            run.pauseReason === "analyst"))) ||
+                        isResumableResearchPause(run))) ||
                 (action === "resume" &&
                     run.executionStatus === "running" &&
                     !run.researchPauseRequested)
@@ -333,7 +339,7 @@ const operationView = v.object({
     createdAt: v.number(),
 });
 const turnView = v.object({
-    turn: schema.doc("agentConversationTurns"),
+    turn: analystConversationTurn,
     missionStatus: v.optional(v.string()),
     operations: v.array(operationView),
     operationsLimited: v.boolean(),
@@ -343,6 +349,7 @@ const operationTitles: Record<string, string> = {
     adjust_framing: "Adjust the research program",
     consult_run_state: "Inspect dossier progress",
     consult_mission_state: "Inspect recorded work",
+    check_response_coherence: "Check response consistency",
     consult_conversation: "Read earlier conversation",
     search_available_material: "Search retained documentary material",
     read_in_context: "Read a passage in context",
@@ -360,7 +367,7 @@ async function readTurn(ctx: QueryCtx, turn: Doc<"agentConversationTurns">) {
               .take(33)
         : [];
     return {
-        turn,
+        turn: conversationTurnForAnalyst(turn),
         missionStatus: mission?.status,
         operationsLimited: requests.length > 32,
         operations: requests
@@ -529,8 +536,7 @@ export const snapshot = query({
                 run.fixedFramingRevisionId &&
                 supportsResearchControl(run)
                     ? run.researchPauseRequested ||
-                      (run.executionStatus === "paused" &&
-                          run.pauseReason === "analyst")
+                      isResumableResearchPause(run)
                         ? ["/resume" as const]
                         : run.executionStatus === "running"
                           ? ["/pause" as const]
@@ -555,6 +561,7 @@ const messageFields = schema.tables.agentMessageDeliveries.validator.pick(
     "delivery",
     "status",
     "createdAt",
+    "responseControl",
 ).fields;
 export const history = query({
     args: {
@@ -607,7 +614,7 @@ export const history = query({
                                   .first())
                             : false);
                     turns.set(turn._id, {
-                        turn,
+                        turn: conversationTurnForAnalyst(turn),
                         missionStatus: undefined,
                         operations: [],
                         operationsLimited: false,
@@ -629,6 +636,9 @@ export const history = query({
                     delivery: m.delivery,
                     status: m.status,
                     createdAt: m.createdAt,
+                    ...(m.responseControl
+                        ? { responseControl: m.responseControl }
+                        : {}),
                     text,
                     work: m.turnId ? (turns.get(m.turnId) ?? null) : null,
                 };
@@ -670,6 +680,7 @@ export const performInstruction = internalMutation({
         if (
             input.kind === "transmit_source_request" &&
             request.operationVersion !== 1 &&
+            run.sourcesProtocol !== "sources_mission_v1" &&
             input.coverageRole === undefined
         )
             throw executionError("source_request_target_required");
@@ -710,12 +721,12 @@ export const performInstruction = internalMutation({
                 expectedGeneration: pin.generation,
             });
             const current = await ctx.db.get(run._id);
-            const valueJson = JSON.stringify({
+            const value = {
                 generation,
                 status: current?.executionStatus,
                 pauseRequested: current?.researchPauseRequested ?? false,
-            });
-            await retainOperationEffect(
+            };
+            return retainOperationEffect(
                 ctx,
                 request,
                 {
@@ -724,9 +735,8 @@ export const performInstruction = internalMutation({
                     framingId: run.fixedFramingRevisionId,
                     controlRevision: current?.researchControlRevision,
                 },
-                valueJson,
+                value,
             );
-            return valueJson;
         }
         const pin = request.pin;
         if (
@@ -739,25 +749,26 @@ export const performInstruction = internalMutation({
             .withIndex("by_request", (q) => q.eq("requestId", request._id))
             .unique();
         if (existing) {
-            const valueJson = JSON.stringify({
+            const value = {
                 instructionId: existing._id,
                 status: existing.status,
                 outcome: existing.outcome,
-            });
-            await retainOperationEffect(ctx, request, pin, valueJson);
-            return valueJson;
+            };
+            return retainOperationEffect(ctx, request, pin, value);
         }
         if (
             !input.interpretedNeed.trim() ||
             input.interpretedNeed.length > 2000
         )
             throw executionError("instruction_capacity");
-        const status = input.coverageRole
-            ? ("waiting" as const)
-            : ("limited" as const);
-        const outcome = input.coverageRole
-            ? "Your request is recorded. Transmission waits for the applicable documentary phase and remaining capacity."
-            : "This request is recorded, but it cannot be executed through the documentary operations currently available. Inspect Sources or refine the request within the current research scope.";
+        const status =
+            input.coverageRole || run.sourcesProtocol === "sources_mission_v1"
+                ? ("waiting" as const)
+                : ("limited" as const);
+        const outcome =
+            input.coverageRole || run.sourcesProtocol === "sources_mission_v1"
+                ? "Your request is recorded. Transmission waits for the applicable documentary phase and remaining capacity."
+                : "This request is recorded, but it cannot be executed through the documentary operations currently available. Inspect Sources or refine the request within the current research scope.";
         const id = await ctx.db.insert("workbenchInstructions", {
             runId: run._id,
             requestId: request._id,
@@ -786,109 +797,20 @@ export const performInstruction = internalMutation({
                 internal.workbench.processInstructions,
                 { runId: run._id },
             );
-        const valueJson = JSON.stringify({
+        const value = {
             instructionId: id,
             status,
             outcome,
-        });
-        await retainOperationEffect(ctx, request, pin, valueJson);
-        return valueJson;
+        };
+        return retainOperationEffect(ctx, request, pin, value);
     },
 });
 
-/** Delivers one eligible request through the existing targeted-preparation owner and its cumulative allowances. */
+/** Delivers requests through the domain owner under the same native and mission contract. */
 export const processInstructions = internalMutation({
     args: { runId: v.id("researchRuns") },
     returns: v.null(),
-    handler: async (ctx, { runId }): Promise<null> => {
-        const { run } = await requireDossierAuthority(ctx, runId);
-        const requests = await ctx.db
-            .query("workbenchInstructions")
-            .withIndex("by_run_and_status", (q) =>
-                q.eq("runId", runId).eq("status", "waiting"),
-            )
-            .take(20);
-        if (
-            !requests.length ||
-            run.pauseReason === "analyst" ||
-            run.researchPauseRequested
-        )
-            return null;
-        if (
-            [
-                "draft",
-                "checking_public_evidence",
-                "discovering_sources",
-            ].includes(run.lifecycleState)
-        )
-            return null;
-        const preparation = run.sourcePreparationId
-            ? await ctx.db.get(run.sourcePreparationId)
-            : null;
-        if (preparation?.status === "started") return null;
-        const revision = run.activeCorpusRevisionId
-            ? await ctx.db.get(run.activeCorpusRevisionId)
-            : null;
-        const proposal = revision?.sourceSelectionProposalId
-            ? await ctx.db.get(revision.sourceSelectionProposalId)
-            : null;
-        for (const request of requests) {
-            if (
-                run.lifecycleState !== "awaiting_source_review" ||
-                revision?.status !== "draft" ||
-                !proposal ||
-                request.framingRevisionId !== run.fixedFramingRevisionId ||
-                !request.coverageRole
-            ) {
-                await ctx.db.patch(request._id, {
-                    status: "limited",
-                    outcome:
-                        "This request cannot reopen the fixed source set or begin another documentary phase.",
-                });
-                continue;
-            }
-            try {
-                const result = await ctx.runMutation(
-                    internal.workbench.deliverSourceInstruction,
-                    { instructionId: request._id },
-                );
-                await ctx.db.patch(request._id, {
-                    status:
-                        result.status === "started" ? "transmitted" : "blocked",
-                    preparationId: result.preparationId,
-                    outcome:
-                        result.status === "started"
-                            ? "Your request was transmitted to source preparation. Its treatment is still in progress."
-                            : "Source preparation cannot perform this request within the remaining allowance. Inspect Sources for the retained work and available recovery.",
-                });
-                if (result.status === "started") return null;
-            } catch (error) {
-                const code = preparationFailureCode(error);
-                if (!code) throw error;
-                await ctx.db.patch(request._id, {
-                    status: "blocked",
-                    outcome:
-                        "This request could not be transmitted under the current preparation limits. Inspect Sources to continue.",
-                });
-                await ctx.db.insert("agentExecutionEvents", {
-                    runId,
-                    actor: { type: "system" },
-                    kind: "analyst_instruction_blocked",
-                    cause: "instruction_delivery",
-                    messageId: request.messageId,
-                    code,
-                    occurredAt: Date.now(),
-                });
-            }
-        }
-        if (requests.length === 20)
-            await ctx.scheduler.runAfter(
-                0,
-                internal.workbench.processInstructions,
-                { runId },
-            );
-        return null;
-    },
+    handler: processWorkbenchInstructions,
 });
 
 /** Keeps a failed native delivery transactional independently from the retained instruction outcome. */
@@ -920,7 +842,7 @@ export const deliverSourceInstruction = internalMutation({
             : null;
         if (
             run.lifecycleState !== "awaiting_source_review" ||
-            run.pauseReason === "analyst" ||
+            isResumableResearchPause(run) ||
             run.researchPauseRequested ||
             revision?.status !== "draft" ||
             !proposal ||

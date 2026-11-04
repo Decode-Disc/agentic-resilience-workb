@@ -1,6 +1,12 @@
 import { api, internal } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import { sha256Hex } from "@convex/domain/sourcePassages";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
+import { agentToolSchemas } from "@convex/execution/agentDefinition";
+import { piInputProfileKey } from "@convex/integrations/modelInput";
 import { WORKBENCH_MODEL_ROUTE } from "@convex/integrations/modelRouting";
+import { revisionRoute } from "@convex/modelConfiguration";
+import { makeFunctionReference } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
@@ -132,6 +138,49 @@ test("concurrent reservations share the last request and replaying authorization
             await f.attempt("over"),
         ),
     ).rejects.toThrow("qualification_budget_exhausted");
+});
+
+test("a qualification can pin a lower allowance without increasing it on replay", async () => {
+    const f = await fixture();
+    const authorize = makeFunctionReference<
+        "mutation",
+        {
+            runId: Id<"researchRuns">;
+            fixtureKey: string;
+            maximumRequests: number;
+            maximumCostUsd: number;
+        },
+        null
+    >("execution/fixtures:authorizeWorkbenchQualification");
+    const args = {
+        runId: f.runId,
+        fixtureKey: "qualification",
+        maximumRequests: 3,
+        maximumCostUsd: 0.1,
+    };
+    await f.t.mutation(authorize, args);
+    await f.t.mutation(authorize, args);
+    await expect(
+        f.t.mutation(authorize, { ...args, maximumRequests: 4 }),
+    ).rejects.toThrow("conflicts");
+    const run = await f.t.run((ctx) => ctx.db.get(f.runId));
+    assert(run?.browserTestContextId);
+    const contextId = run.browserTestContextId;
+    const context = await f.t.run((ctx) => ctx.db.get(contextId));
+    expect(context?.paidQualification).toMatchObject({
+        maximumRequests: 3,
+        maximumCostUsd: 0.1,
+    });
+    await expect(
+        f.t.mutation(authorize, { ...args, maximumCostUsd: 0.2 }),
+    ).rejects.toThrow("conflicts");
+    for (const maximumRequests of [0, -1, 21, 2.5])
+        await expect(
+            f.t.mutation(authorize, { ...args, maximumRequests }),
+        ).rejects.toThrow("Invalid qualification limits");
+    await expect(
+        f.t.mutation(authorize, { ...args, maximumCostUsd: 0.6 }),
+    ).rejects.toThrow("Invalid qualification limits");
 });
 
 test("an unknown outcome retains its reservation and an unexpected charge prevents further dispatch", async () => {
@@ -388,4 +437,353 @@ test("Workbench qualification exposes bounded operation receipts for refusal ver
         { runId: f.runId, fixtureKey: "qualification" },
     );
     expect(snapshot.operationReceipts).toEqual([]);
+});
+
+test.each([
+    {
+        label: "GLM",
+        quota: 0,
+        route: { model: "z-ai/glm-5.3-flash", reasoningEffort: "low" as const },
+    },
+    {
+        label: "Nemo",
+        quota: 0,
+        route: { model: "mistralai/mistral-nemo", provider: "deepinfra/fp8" },
+    },
+    {
+        label: "a catalogue-selected GPT-OSS route",
+        quota: 0,
+        route: {
+            model: "openai/gpt-oss-20b",
+            provider: "primeintellect/fp4",
+            reasoningEffort: "low" as const,
+        },
+    },
+    {
+        label: "GLM with consumed product quota",
+        quota: 3,
+        route: { model: "z-ai/glm-5.3-flash", reasoningEffort: "low" as const },
+    },
+])("a Sources lot requires its exact input profile before authorizing two owned research dossiers with $label", async ({
+    route,
+    quota,
+}) => {
+    const f = await seedWorkbench(true);
+    vi.stubEnv("WORKBENCH_AGENT_ENABLED", "true");
+    vi.stubEnv("SOURCES_MISSION_ENABLED", "false");
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.runId, { reservationKey: "browser:qualification" }),
+    );
+    const { admin, catalogId } = await installModel(f.t, route, "workbench");
+    await admin.mutation(api.modelConfiguration.assign, {
+        agent: "sources",
+        catalogId,
+        expectedRevision: 0,
+        requestKey: "assign-sources-lot",
+    });
+    const secondId = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run);
+        const { _id, _creationTime, ...fields } = run;
+        return ctx.db.insert("researchRuns", {
+            ...fields,
+            reservationKey: "browser:qualification-adobe",
+        });
+    });
+    const authorize = makeFunctionReference<
+        "mutation",
+        {
+            runId: Id<"researchRuns">;
+            fixtureKey: string;
+            sourcesLot: Array<{
+                runId: Id<"researchRuns">;
+                fixtureKey: string;
+            }>;
+        },
+        null
+    >("execution/fixtures:authorizeWorkbenchQualification");
+    const args = {
+        runId: f.runId,
+        fixtureKey: "qualification",
+        sourcesLot: [
+            { runId: f.runId, fixtureKey: "qualification" },
+            { runId: secondId, fixtureKey: "qualification-adobe" },
+        ],
+    };
+    const missing = await f.t.run(async (ctx) => {
+        const catalog = await ctx.db.get(catalogId);
+        assert(catalog?.currentRevisionId);
+        const model = await ctx.db.get(catalog.currentRevisionId);
+        assert(model);
+        const definition = getAgentDefinition("sources_v1", 1);
+        const key = await piInputProfileKey({
+            instructions: definition.instructions,
+            prompt: "",
+            operations: agentToolSchemas(definition),
+            definitionVersion: definition.version,
+            nativeConversation: definition.nativeConversation,
+            nativeRoute: revisionRoute(model),
+        });
+        const row = await ctx.db
+            .query("nativeInputProfiles")
+            .withIndex("by_key", (q) => q.eq("key", key))
+            .unique();
+        assert(row);
+        await ctx.db.delete(row._id);
+        return { key: row.key, bytes: row.bytes };
+    });
+    await expect(f.t.mutation(authorize, args)).rejects.toThrow(
+        "model_input_profile_unavailable",
+    );
+    const unauthorizedContext = await f.t.run((ctx) =>
+        ctx.db.query("browserTestContexts").first(),
+    );
+    assert(unauthorizedContext);
+    expect(unauthorizedContext).not.toHaveProperty("paidQualification");
+    expect(
+        await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([]);
+    await f.t.run((ctx) => ctx.db.insert("nativeInputProfiles", missing));
+    await f.t.mutation(authorize, args);
+    const before = await f.t.run((ctx) => ctx.db.get(f.runId));
+    assert(before?.currentFramingRevisionId);
+    const framingId = before.currentFramingRevisionId;
+    const framing = await f.t.run((ctx) => ctx.db.get(framingId));
+    assert(framing);
+    await f.client.mutation(api.framing.save, {
+        runId: f.runId,
+        expectedRevision: framing.revision,
+        requestKey: "sources-framing",
+        content: {
+            scope: "Photo-led claims",
+            questions: [
+                {
+                    id: "coordination",
+                    text: "Who controls coordination?",
+                    shortLabel: "Coordination",
+                    rationale: "Document effective action rights.",
+                },
+            ],
+        },
+    });
+    assert(before.ownerVisitorId);
+    const ownerId = before.ownerVisitorId;
+    await f.t.run((ctx) => ctx.db.patch(ownerId, { analysesReserved: quota }));
+    await f.client.mutation(api.framing.startResearch, {
+        runId: f.runId,
+        expectedRevision: framing.revision + 1,
+        requestKey: "sources-start",
+    });
+    const run = await f.t.run((ctx) => ctx.db.get(f.runId));
+    expect(await f.t.run((ctx) => ctx.db.get(ownerId))).toMatchObject({
+        analysesReserved: quota,
+    });
+    if (quota === 3) {
+        assert(run?.fixedFramingRevisionId);
+        const fixedId = run.fixedFramingRevisionId;
+        await f.t.run(async (ctx) => {
+            const fixed = await ctx.db.get(fixedId);
+            assert(fixed);
+            const { _id, _creationTime, ...fields } = fixed;
+            const secondFramingId = await ctx.db.insert("framingRevisions", {
+                ...fields,
+                runId: secondId,
+                revision: 1,
+                requestKey: "second-quota-frame",
+            });
+            await ctx.db.patch(secondId, {
+                currentFramingRevisionId: secondFramingId,
+            });
+        });
+        const qualifiedContext = await f.t.run((ctx) =>
+            ctx.db.query("browserTestContexts").first(),
+        );
+        assert(qualifiedContext?.paidQualification);
+        await f.t.run((ctx) =>
+            ctx.db.patch(qualifiedContext._id, {
+                paidQualification: undefined,
+            }),
+        );
+        await expect(
+            f.client.mutation(api.framing.startResearch, {
+                runId: secondId,
+                expectedRevision: 1,
+                requestKey: "second-quota-start",
+            }),
+        ).rejects.toThrow("analysis_limit_reached");
+        await f.t.run((ctx) =>
+            ctx.db.patch(qualifiedContext._id, {
+                paidQualification: qualifiedContext.paidQualification,
+            }),
+        );
+        await expect(
+            f.client.mutation(api.framing.startResearch, {
+                runId: secondId,
+                expectedRevision: 1,
+                requestKey: "second-quota-start",
+            }),
+        ).rejects.toThrow("execution_slot_unavailable");
+        await f.t.run((ctx) =>
+            ctx.db.patch(f.runId, {
+                lifecycleState: "sources_prepared",
+                executionStatus: "idle",
+            }),
+        );
+        await f.client.mutation(api.framing.startResearch, {
+            runId: secondId,
+            expectedRevision: 1,
+            requestKey: "second-quota-start",
+        });
+        await expect(
+            f.client.mutation(api.framing.startResearch, {
+                runId: f.runId,
+                expectedRevision: framing.revision + 1,
+                requestKey: "sources-start",
+            }),
+        ).resolves.toBe(f.runId);
+        expect(await f.t.run((ctx) => ctx.db.get(ownerId))).toMatchObject({
+            analysesReserved: 3,
+        });
+        expect(await f.t.run((ctx) => ctx.db.get(secondId))).toMatchObject({
+            sourcesProtocol: "sources_mission_v1",
+            researchStartRequestKey: "second-quota-start",
+        });
+    }
+    expect(run).toMatchObject({
+        sourcesProtocol: "sources_mission_v1",
+        sourcesEnvelope: {
+            version: 1,
+            maxNeeds: 4,
+            initialSearches: 2,
+            complementSearches: 1,
+            acquisitions: 6,
+            controls: 8,
+        },
+    });
+    expect(process.env.SOURCES_MISSION_ENABLED).not.toBe("true");
+});
+
+test("a fresh Sources qualification fixture contains its real company but no seeded documentary material", async () => {
+    const f = await fixture();
+    const seed = makeFunctionReference<
+        "mutation",
+        {
+            slotKey: string;
+            fixtureKey: string;
+            emptyDocumentaryMaterial: boolean;
+            recordedScenario: {
+                companyName: string;
+                companyCik: string;
+                ticker: string;
+                websiteUrl: string;
+                researchAngle: string;
+                sources: [];
+            };
+        },
+        { runId: Id<"researchRuns">; sourceIds: Array<Id<"sources">> }
+    >("e2eFixtures:seedSourceReviewScenario");
+    const result = await f.t.mutation(seed, {
+        slotKey: "analyst-4",
+        fixtureKey: "fresh-sources",
+        emptyDocumentaryMaterial: true,
+        recordedScenario: {
+            companyName: "Adobe Inc.",
+            companyCik: "796343",
+            ticker: "ADBE",
+            websiteUrl: "https://www.adobe.com/",
+            researchAngle: "Creative Cloud production workflow",
+            sources: [],
+        },
+    });
+    expect(result.sourceIds).toEqual([]);
+    expect(await f.t.run((ctx) => ctx.db.get(result.runId))).toMatchObject({
+        lifecycleState: "framing",
+        executionStatus: "idle",
+        companySnapshot: { cik: "796343" },
+    });
+    expect(
+        await f.t.run((ctx) => ctx.db.query("sourceCaptures").collect()),
+    ).toEqual([]);
+});
+
+test("a Sources lot explicitly pins controller authority and cannot renew it", async () => {
+    const f = await fixture();
+    const config = await f.admin.query(api.modelConfiguration.list, {});
+    const workbench = config.assignments.find((a) => a.agent === "workbench");
+    const sources = config.assignments.find((a) => a.agent === "sources");
+    assert(workbench?.catalogId);
+    await f.admin.mutation(api.modelConfiguration.assign, {
+        agent: "sources",
+        catalogId: workbench.catalogId,
+        expectedRevision: sources?.revision ?? 0,
+        requestKey: "sources-controller-route",
+    });
+    const secondId = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run);
+        const { _id, _creationTime, ...fields } = run;
+        return ctx.db.insert("researchRuns", {
+            ...fields,
+            reservationKey: "browser:second",
+        });
+    });
+    const args = {
+        runId: f.runId,
+        fixtureKey: "qualification",
+        sourcesLot: [
+            { runId: f.runId, fixtureKey: "qualification" },
+            { runId: secondId, fixtureKey: "second" },
+        ],
+        responseControllerModel: "typesafe/jev-1.14",
+    };
+    await expect(
+        f.t.mutation(
+            internal.execution.fixtures.authorizeWorkbenchQualification,
+            args,
+        ),
+    ).rejects.toThrow("Qualification controller configuration mismatch");
+    const policy = await f.admin.mutation(
+        api.modelConfiguration.setResponseControl,
+        {
+            expectedRevision: config.responseControl.revision,
+            enabled: true,
+            model: args.responseControllerModel,
+            contradictionThreshold: 0.93,
+            supportThreshold: 0.75,
+        },
+    );
+    await expect(
+        f.t.mutation(
+            internal.execution.fixtures.authorizeWorkbenchQualification,
+            { ...args, responseControllerModel: "other/model" },
+        ),
+    ).rejects.toThrow("Qualification controller configuration mismatch");
+    await f.t.mutation(
+        internal.execution.fixtures.authorizeWorkbenchQualification,
+        args,
+    );
+    await f.t.mutation(
+        internal.execution.fixtures.authorizeWorkbenchQualification,
+        args,
+    );
+    const run = await f.t.run((ctx) => ctx.db.get(f.runId));
+    assert(run?.browserTestContextId);
+    const contextId = run.browserTestContextId;
+    const context = await f.t.run((ctx) => ctx.db.get(contextId));
+    expect(context?.paidQualification?.responseControl).toEqual(policy);
+    await f.admin.mutation(api.modelConfiguration.setResponseControl, {
+        expectedRevision: policy.revision,
+        enabled: true,
+        model: policy.model,
+        contradictionThreshold: 0.94,
+        supportThreshold: policy.supportThreshold,
+    });
+    await expect(
+        f.t.mutation(
+            internal.execution.fixtures.authorizeWorkbenchQualification,
+            args,
+        ),
+    ).rejects.toThrow(
+        "Qualification authorization conflicts with the retained lot",
+    );
 });

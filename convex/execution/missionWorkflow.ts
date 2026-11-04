@@ -218,7 +218,7 @@ export const onComplete = internalMutation({
                 code: "execution_interrupted",
             });
         }
-        if (mission.parentRequestId)
+        if (mission.parentRequestId || mission.completionEventId)
             await ctx.runMutation(internal.execution.handoffs.finishChild, {
                 missionId: mission._id,
             });

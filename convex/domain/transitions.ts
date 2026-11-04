@@ -9,6 +9,17 @@ import type {
 export type ResearchRunLifecycle = Infer<typeof researchRunLifecycleValidator>;
 export type ExecutionStatus = Infer<typeof executionStatusValidator>;
 
+/** Both analyst suspension and a recoverable research interruption use explicit Resume. */
+export function isResumableResearchPause(
+    run: Pick<Doc<"researchRuns">, "executionStatus" | "pauseReason">,
+) {
+    return (
+        run.executionStatus === "paused" &&
+        (run.pauseReason === "analyst" ||
+            run.pauseReason === "execution_interrupted")
+    );
+}
+
 /** Includes documentary discovery, preparation and their human checkpoints. */
 export function isDocumentaryResearchPhase(
     phase: ResearchRunLifecycle,
@@ -62,7 +73,8 @@ const allowedTransitions: Record<
         "discovering_sources",
         "completed",
     ],
-    discovering_sources: ["awaiting_source_review"],
+    discovering_sources: ["awaiting_source_review", "sources_prepared"],
+    sources_prepared: [],
     awaiting_source_review: ["corpus_approved"],
     corpus_approved: ["extracting_evidence", "awaiting_source_review"],
     extracting_evidence: ["evidence_ready"],
@@ -73,6 +85,7 @@ const allowedTransitions: Record<
 };
 
 const requiredExecutionStatus: Record<ResearchRunLifecycle, ExecutionStatus> = {
+    sources_prepared: "idle",
     framing: "idle",
     draft: "idle",
     checking_public_evidence: "running",

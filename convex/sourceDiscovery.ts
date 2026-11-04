@@ -73,7 +73,7 @@ export const persistCandidates = internalMutation({
                 ? await ctx.db.get(run.automaticSupplementOperationId)
                 : null;
         let recoveredFamily: string | undefined;
-        if (preparationState) {
+        if (preparationState && !preparationState.preparation.sourcesMission) {
             const call = args.providerCompletion
                 ? await ctx.db.get(args.providerCompletion.providerCallId)
                 : null;
@@ -118,10 +118,32 @@ export const persistCandidates = internalMutation({
                 recoveredFamily =
                     supplement.supplementQueries?.[queryIndex]?.discoveryIntent;
         }
+        if (preparationState?.preparation.sourcesMission) {
+            const call = args.providerCompletion
+                ? await ctx.db.get(args.providerCompletion.providerCallId)
+                : null;
+            if (
+                !call ||
+                call.runId !== run._id ||
+                call.preparationId !== args.preparationId ||
+                call.executionGeneration !== args.executionGeneration ||
+                call.operation !== "source_need_search" ||
+                call.operationKey !== args.operationKey ||
+                !(
+                    call.status === "started" ||
+                    (call.status === "succeeded" &&
+                        call.dispatchOutcome === "response_received")
+                )
+            )
+                throw sourcePreparationError("discovery_result_invalid");
+        }
         const capacity = await readSourceCandidateCapacity(
             ctx.db,
             run._id,
-            preparationState ? "dossier" : "initial_discovery",
+            preparationState &&
+                preparationState.preparation.sourcesMission?.phase !== "initial"
+                ? "dossier"
+                : "initial_discovery",
         );
         const remaining = supplement
             ? Math.min(
@@ -232,7 +254,13 @@ export const persistCandidates = internalMutation({
                 !providerCall ||
                 providerCall.runId !== run._id ||
                 providerCall.executionGeneration !== args.executionGeneration ||
-                providerCall.status !== "started"
+                !(
+                    providerCall.status === "started" ||
+                    (args.preparationId &&
+                        providerCall.operation === "source_need_search" &&
+                        providerCall.status === "succeeded" &&
+                        providerCall.dispatchOutcome === "response_received")
+                )
             ) {
                 throw new Error("Provider attempt cannot be completed");
             }

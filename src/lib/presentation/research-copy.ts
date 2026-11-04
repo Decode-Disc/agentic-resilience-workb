@@ -148,6 +148,7 @@ export function sourceAddErrorMessage(error: unknown): string {
 }
 
 const lifecycleLabels = {
+    sources_prepared: "Sources prepared — investigation is not available yet",
     framing: "Framing research",
     draft: "Preparing research",
     checking_public_evidence: "Checking public evidence",
@@ -1533,6 +1534,11 @@ export function dossierStatus(
         return { label: "Needs attention", tone: "destructive" };
     if (run.executionStatus === "cancelled")
         return { label: "Stopped", tone: "ink" };
+    if (
+        run.executionStatus === "paused" &&
+        run.pauseReason === "execution_interrupted"
+    )
+        return { label: "Interrupted", tone: "dashed" };
     if (run.executionStatus === "paused")
         return run.pauseReason === "analyst"
             ? { label: "Paused", tone: "ink" }

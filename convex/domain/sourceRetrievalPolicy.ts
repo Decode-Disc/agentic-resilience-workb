@@ -174,3 +174,10 @@ export async function readCaptureIndexState(
     }
     return state;
 }
+
+/** Stable source identity and the immutable representation selected by the server. */
+export const sourceMaterialReferenceValidator = v.object({
+    sourceId: v.id("sources"),
+    captureId: v.id("sourceCaptures"),
+    contentHash: v.string(),
+});

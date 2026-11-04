@@ -5,12 +5,16 @@ import {
     type MutationCtx,
     mutation,
 } from "@convex/_generated/server";
-import { supportsResearchControl } from "@convex/domain/transitions";
+import {
+    isResumableResearchPause,
+    supportsResearchControl,
+} from "@convex/domain/transitions";
 import { requireWorkspaceRun } from "@convex/runWorkspace";
 import { researchResumed, workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
+import { getAgentDefinition, getRegisteredOperation } from "./agentCatalog";
 import {
     executionFailureCode,
     recordMissionEvent,
@@ -56,6 +60,110 @@ export async function applyRequestedResearchPause(
     await ctx.db.patch(run._id, patch);
     await recordControl(ctx, run, "research_paused");
     return { ...run, ...patch };
+}
+
+/** Suspends new research admission immediately and settles the pause after engaged operations drain. */
+export async function pauseResearchAtBoundary(
+    ctx: MutationCtx,
+    runId: Id<"researchRuns">,
+    mission?: Doc<"agentMissions">,
+) {
+    if (
+        mission &&
+        getAgentDefinition(mission.definitionId, mission.definitionVersion)
+            .executionScope === "conversation"
+    )
+        return false;
+    const run = await ctx.db.get(runId);
+    if (
+        !run?.researchPauseRequested ||
+        run.startMode !== "framed" ||
+        !supportsResearchControl(run)
+    )
+        return false;
+    const running = await ctx.db
+        .query("agentOperationRequests")
+        .withIndex("by_run_and_status", (q) =>
+            q.eq("runId", runId).eq("status", "running"),
+        )
+        .take(9);
+    if (running.length > 8) return true;
+    for (const request of running) {
+        const owner = request.missionId
+            ? await ctx.db.get(request.missionId)
+            : null;
+        const scope = owner
+            ? getAgentDefinition(owner.definitionId, owner.definitionVersion)
+                  .executionScope
+            : request.input.kind === "invalid"
+              ? undefined
+              : getRegisteredOperation(request.input.kind)?.nativeAuthority;
+        if (scope === "research") return true;
+    }
+    if (
+        mission &&
+        (await ctx.db
+            .query("agentOperationRequests")
+            .withIndex("by_mission_and_status", (q) =>
+                q.eq("missionId", mission._id).eq("status", "running"),
+            )
+            .first())
+    )
+        return true;
+    return (
+        (await applyRequestedResearchPause(ctx, run)).executionStatus ===
+        "paused"
+    );
+}
+
+/** A stopped research worker releases its slot without fabricating an analyst pause or completing its mission. */
+export async function suspendInterruptedResearch(
+    ctx: MutationCtx,
+    mission: Doc<"agentMissions">,
+) {
+    const run = await ctx.db.get(mission.runId);
+    if (
+        !run ||
+        getAgentDefinition(mission.definitionId, mission.definitionVersion)
+            .executionScope !== "research" ||
+        run.startMode !== "framed" ||
+        !supportsResearchControl(run) ||
+        run.executionStatus !== "running" ||
+        run.executionGeneration !== mission.generation
+    )
+        return;
+    try {
+        await requireDossierAuthority(ctx, run._id);
+    } catch (error) {
+        const code = executionFailureCode(error);
+        if (!code) throw error;
+        await recordMissionEvent(ctx, mission, {
+            kind: "research_recovery_refused",
+            cause: "execution_interrupted",
+            code,
+        });
+        return;
+    }
+    if (run.researchPauseRequested) {
+        await applyRequestedResearchPause(ctx, run);
+        return;
+    }
+    await ctx.db.patch(run._id, {
+        executionStatus: "paused",
+        pauseReason: "execution_interrupted",
+        executionGeneration: run.executionGeneration + 1,
+        researchPauseRequested: false,
+        researchControlRevision: (run.researchControlRevision ?? 0) + 1,
+        updatedAt: Date.now(),
+    });
+    await ctx.db.insert("agentExecutionEvents", {
+        actor: { type: "system" },
+        runId: run._id,
+        missionId: mission._id,
+        kind: "research_interrupted",
+        cause: "execution_interrupted",
+        occurredAt: Date.now(),
+    });
 }
 
 export const pause = mutation({
@@ -108,7 +216,8 @@ export const resumeMissions = internalMutation({
                     expectedGeneration: args.generation,
                     simulation:
                         mission.provenance === "simulation" ||
-                        run.purpose === "browser_test",
+                        (mission.provenance === undefined &&
+                            run.purpose === "browser_test"),
                 });
             } catch (error) {
                 const code = executionFailureCode(error);
@@ -176,7 +285,7 @@ export const checkpoint = internalMutation({
             } else if (run.workflowId !== args.workflowId)
                 throw executionError("stale_execution");
         }
-        if (run.executionStatus === "paused" && run.pauseReason === "analyst")
+        if (isResumableResearchPause(run))
             return { waiting: true, generation: run.executionGeneration };
         if (run.executionStatus !== "running")
             throw executionError("human_prerequisite_required");
@@ -290,8 +399,7 @@ export async function resumeResearch(
         return run.executionGeneration;
     if (
         run.executionGeneration !== args.expectedGeneration ||
-        run.executionStatus !== "paused" ||
-        run.pauseReason !== "analyst"
+        !isResumableResearchPause(run)
     )
         throw executionError("human_prerequisite_required");
     if (
@@ -338,6 +446,11 @@ export async function resumeResearch(
         executionGeneration: generation,
         updatedAt: Date.now(),
     });
+    if (run.startMode === "framed" && run.sourcePreparationId)
+        await ctx.runMutation(internal.execution.researchControl.checkpoint, {
+            runId: run._id,
+            preparationId: run.sourcePreparationId,
+        });
     await ctx.scheduler.runAfter(
         0,
         internal.execution.researchControl.resumeMissions,
@@ -387,6 +500,8 @@ export function researchStateSummary(
     >,
 ): string {
     if (run.lifecycleState === "framing") return "Research has not started.";
+    if (run.lifecycleState === "sources_prepared")
+        return "Sources preparation has ended. Inspect the retained material and its limits. Question-led Investigation is not available yet.";
     if (run.executionStatus === "completed") return "Research is complete.";
     if (run.executionStatus === "cancelled")
         return "Research has been cancelled.";
@@ -398,6 +513,8 @@ export function researchStateSummary(
             run.executionStatus !== "running")
     )
         return "Research is waiting for source review. Review the proposed sources to continue.";
+    if (run.pauseReason === "execution_interrupted")
+        return "Research was interrupted. Retained work remains available. Resume research to continue.";
     if (run.pauseReason && run.pauseReason !== "analyst")
         return "Research is waiting for an analyst decision. Complete the pending review to continue.";
     if (run.executionStatus === "paused") return "Research is paused.";
@@ -460,7 +577,7 @@ export function researchControlConfirmation(
         : "No resume was executed. Check the current research state and complete any pending review before resuming.";
 }
 
-/** Checks explicit current-status clauses from the closed application vocabulary; historical quotations stay intact. */
+/** Checks explicit status clauses, including list items and unstarted-research wording; historical quotations stay intact. */
 export function conflictsWithResearchStatus(
     text: string,
     run: Parameters<typeof researchStateSummary>[0],
@@ -473,12 +590,31 @@ export function conflictsWithResearchStatus(
             continue;
         }
         if (fenced || /^\s*>/.test(line)) continue;
-        const claim =
-            /^\s*(?:(?:current status|status):\s*)?(research (?:has not started|is running|is paused|is complete|has been cancelled))\b/i.exec(
-                line.replaceAll("**", ""),
+        const paragraph = line
+            .replaceAll("**", "")
+            .replace(
+                /^\s*(?:(?:[-+*]|\d+[.)])\s+)?(?:(?:current(?: research)? status|status):\s*)?/i,
+                "",
             );
-        if (claim?.[1] && !expected.startsWith(claim[1].toLowerCase()))
-            return true;
+        for (const statement of paragraph.split(/(?<=[.!?;])\s+/)) {
+            const clause = statement.replace(
+                /^(?:the\s+)?research(?:\s+program)?\b/i,
+                "Research",
+            );
+            if (
+                /^(?:no research(?: program)? has been|research (?:has not|hasn't)(?: been)?) (?:started|initiated)\b/i.test(
+                    clause,
+                ) &&
+                !expected.startsWith("research has not started.")
+            )
+                return true;
+            const claim =
+                /^(research (?:has not started|is running|is paused|is complete|has been cancelled))\b/i.exec(
+                    clause,
+                );
+            if (claim?.[1] && !expected.startsWith(claim[1].toLowerCase()))
+                return true;
+        }
     }
     return false;
 }

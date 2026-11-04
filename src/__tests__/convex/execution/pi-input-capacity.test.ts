@@ -17,6 +17,7 @@ import {
 import {
     MODEL_MAX_OUTPUT_TOKENS,
     type ModelRoute,
+    nativeProfileCatalogueRevision,
     SIMULATION_MODEL_ROUTE,
     WORKBENCH_MODEL_ROUTE,
 } from "@convex/integrations/modelRouting";
@@ -213,10 +214,23 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
             ).version,
         ]),
     );
-    const profiles: Record<string, number> = {};
+    const previousProfiles = process.env.PI_INPUT_PROFILE_BASELINE
+        ? JSON.parse(
+              readFileSync(process.env.PI_INPUT_PROFILE_BASELINE, "utf8"),
+          )
+        : inputProfilesArtifact;
+    const profiles: Record<string, number> = { ...previousProfiles.profiles };
     const samples = [];
     for (const canonical of registeredAgentDefinitions()) {
-        const snapshots: unknown[] = [undefined];
+        const snapshots: unknown[] = [
+            undefined,
+            {
+                responseControl: {
+                    reminder:
+                        "Review the preceding explanation without repeating actions.",
+                },
+            },
+        ];
         if (canonical.nativeConversation)
             for (const framing of [
                 null,
@@ -332,6 +346,10 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
         }
     }
     const expected = {
+        profileCatalog: nativeProfileCatalogueRevision(
+            previousProfiles,
+            profiles,
+        ),
         generatedBy:
             "UPDATE_PI_INPUT_PROFILES=1 pnpm exec vitest run src/__tests__/convex/execution/pi-input-capacity.test.ts --maxWorkers=1",
         versions,

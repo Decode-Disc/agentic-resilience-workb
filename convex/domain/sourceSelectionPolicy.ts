@@ -2495,3 +2495,48 @@ export function buildSourceSelectionProposal(input: {
         },
     };
 }
+
+/** Interprets a controlled contribution for its declared use, independently of corpus membership. */
+export function controlledDocumentaryUse(
+    contribution: import("./sourcesContracts").DocumentaryContribution,
+    control:
+        | import("convex/values").Infer<
+              typeof import("./sourcesContracts").documentaryControlValidator
+          >
+        | null,
+    restrictions: readonly {
+        contributionId: string;
+        version: number;
+        permittedUse?:
+            | "documentary"
+            | "attributed_argument_only"
+            | "context_only"
+            | "blocked";
+    }[] = [],
+): "documentary" | "attributed_argument_only" | "context_only" | "blocked" {
+    const finding = control?.findings.find(
+        (item) => item.contributionId === contribution.id,
+    );
+    if (finding?.conclusion !== "supported") return "blocked";
+    if (
+        ["forecast", "attributed_argument"].includes(contribution.kind) &&
+        finding.permittedUse === "documentary"
+    )
+        return "blocked";
+    let permittedUse = finding.permittedUse;
+    for (const restriction of restrictions) {
+        if (
+            restriction.contributionId !== contribution.id ||
+            restriction.version !== contribution.version
+        )
+            continue;
+        const narrower = restriction.permittedUse ?? "blocked";
+        if (permittedUse === "blocked" || narrower === "blocked")
+            return "blocked";
+        if (narrower === "documentary") continue;
+        if (permittedUse === "documentary" || permittedUse === narrower)
+            permittedUse = narrower;
+        else return "blocked";
+    }
+    return permittedUse;
+}

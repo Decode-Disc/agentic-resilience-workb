@@ -5,6 +5,10 @@ import { executionError } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import { operationReuseIdentity } from "@convex/execution/missionData";
 import {
+    observeOperationOutcome,
+    operationResultValidator,
+} from "@convex/execution/operationResults";
+import {
     BROWSER_TEST_SLOT,
     localBrowserFixturesEnabled,
     requireBrowserFixtureContext,
@@ -45,6 +49,12 @@ export const conversationValidationOperations: Record<
         version: 1,
         description: "Request one bounded local validation mission.",
         inputValidator: v.object({ values: v.array(v.number()) }),
+        resultValidator: operationResultValidator(
+            v.object({
+                missionId: v.id("agentMissions"),
+                result: v.literal("retained_mission_result"),
+            }),
+        ),
         async pin(ctx, mission, input, runId) {
             const scopedRunId = mission?.runId ?? runId;
             if (!scopedRunId) throw executionError("simulation_not_authorized");
@@ -71,12 +81,14 @@ export const conversationValidationOperations: Record<
         async execute(ctx, args) {
             if (!args.requestId) throw executionError("request_unavailable");
             return {
-                outcome: await ctx.runMutation(
-                    internal.execution.handoffs.startChild,
-                    {
-                        requestId: args.requestId,
-                        expectedGeneration: args.expectedGeneration,
-                    },
+                outcome: observeOperationOutcome(
+                    await ctx.runMutation(
+                        internal.execution.handoffs.startChild,
+                        {
+                            requestId: args.requestId,
+                            expectedGeneration: args.expectedGeneration,
+                        },
+                    ),
                 ),
             };
         },
@@ -91,6 +103,9 @@ export const conversationValidationOperations: Record<
         version: 1,
         description: "Local deterministic deferred fixture.",
         inputValidator: v.object({ value: v.number() }),
+        resultValidator: operationResultValidator(
+            v.object({ value: v.number() }),
+        ),
         async pin(ctx, mission, input, runId) {
             const scopedRunId = mission?.runId ?? runId;
             if (!scopedRunId) throw executionError("simulation_not_authorized");

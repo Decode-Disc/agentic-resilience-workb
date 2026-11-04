@@ -15,6 +15,8 @@ import type {
     operationOutcomeValidator,
     requestInputValidator,
 } from "./executionProtocol";
+import type { completionFeedbackValidator } from "./operationContracts";
+import { operationResultKey } from "./operationResults";
 
 export type AgentScope = Infer<typeof agentScopeValidator>;
 export type AgentState = Infer<typeof agentStateValidator>;
@@ -99,12 +101,20 @@ export type AgentDefinition = {
         mission: AgentProgressMission,
         outcome: OperationOutcome,
     ): AgentProgress;
+    /** Completion examines the immutable input admitted to this invocation, including during retained-response replay. */
     complete(
         ctx: MutationCtx,
         mission: Doc<"agentMissions">,
         response: AgentCompletion,
+        admittedInput: unknown,
+        invocation: Doc<"agentInvocations">,
     ): Promise<
         | { kind: "blocked"; code: string }
+        | { kind: "continue" }
+        | {
+              kind: "correct";
+              feedback: Infer<typeof completionFeedbackValidator>;
+          }
         | { kind: "completed"; result: AgentResult }
     >;
     simulate?(input: unknown):
@@ -120,16 +130,32 @@ export type AgentDefinition = {
 export function agentToolSchemas(
     definition: Pick<AgentDefinition, "operations" | "modelOperation">,
     snapshot?: unknown,
+    variant?: AgentGenerationInput["operations"],
 ): AgentGenerationInput["operations"] {
     return Object.fromEntries(
         Object.entries(definition.operations).flatMap(([name, operation]) => {
-            const projected = definition.modelOperation
-                ? definition.modelOperation(name, operation, snapshot)
-                : {
-                      description: operation.description,
-                      inputValidator: operation.inputValidator,
-                  };
-            return projected ? [[name, projected]] : [];
+            if (operation.systemOnly) return [];
+            const projected = variant
+                ? variant[name]
+                : definition.modelOperation
+                  ? definition.modelOperation(name, operation, snapshot)
+                  : {
+                        description: operation.description,
+                        inputValidator: operation.inputValidator,
+                    };
+            return projected
+                ? [
+                      [
+                          name,
+                          {
+                              ...projected,
+                              resultContractKey: operationResultKey(
+                                  operation.resultValidator,
+                              ),
+                          },
+                      ],
+                  ]
+                : [];
         }),
     );
 }
@@ -139,7 +165,6 @@ export function modelOperationOutcome(
     definition: AgentDefinition,
     outcome: OperationOutcome,
 ): string {
-    if (!definition.nativeConversation) return JSON.stringify(outcome);
     if (outcome.kind === "success")
         return JSON.stringify({
             kind: "success",

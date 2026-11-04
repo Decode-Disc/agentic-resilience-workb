@@ -122,6 +122,27 @@ export function checkExecutionBoundaries(
                     rule,
                     message,
                 });
+            let directivePrologue = true;
+            for (const statement of source.statements) {
+                const expression = ts.isExpressionStatement(statement)
+                    ? unwrap(statement.expression)
+                    : undefined;
+                const directive =
+                    ts.isExpressionStatement(statement) &&
+                    ts.isStringLiteral(statement.expression);
+                if (
+                    expression &&
+                    ts.isStringLiteral(expression) &&
+                    expression.text === "use node" &&
+                    (!directive || !directivePrologue)
+                )
+                    report(
+                        statement,
+                        "runtime-directive",
+                        "Node runtime selection must be an unparenthesized directive before imports or other statements",
+                    );
+                directivePrologue = directivePrologue && directive;
+            }
             for (const statement of source.statements) {
                 if (
                     !ts.isImportDeclaration(statement) ||

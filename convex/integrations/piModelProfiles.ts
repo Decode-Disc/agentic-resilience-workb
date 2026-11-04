@@ -33,6 +33,7 @@ import {
 import {
     MODEL_MAX_OUTPUT_TOKENS,
     type ModelRoute,
+    modelCallSettings,
     modelConfigurationKey,
 } from "./modelRouting";
 
@@ -127,16 +128,19 @@ export async function prepareNativeProfiles(
 ) {
     const configured = {
         ...route,
-        reasoningEnabled: descriptor.reasoning,
+        descriptor,
         profileKey: modelConfigurationKey(descriptor),
     };
     const model = configuredNativeModel(route.model, descriptor);
     const provider = openrouterProvider();
     const profiles = new Map<string, number>();
     for (const definition of registeredAgentDefinitions()) {
-        const sets = definition.nativeToolSets?.(definition.operations) ?? [
-            agentToolSchemas(definition),
-        ];
+        const variants = definition.nativeToolSets?.(definition.operations);
+        const sets = variants
+            ? variants.map((variant) =>
+                  agentToolSchemas(definition, undefined, variant),
+              )
+            : [agentToolSchemas(definition)];
         for (const operations of sets) {
             signal?.throwIfAborted();
             const requests = await Promise.all(
@@ -167,6 +171,7 @@ export async function prepareNativeProfiles(
             if (!missing.length) continue;
             const history = await profileTranscript(definition, operations);
             for (const { key, nativeRoute } of missing) {
+                const generation = modelCallSettings(nativeRoute).generation;
                 let bytes: number | undefined;
                 let dispatchAttempted = false;
                 const result = provider.streamSimple(
@@ -182,8 +187,9 @@ export async function prepareNativeProfiles(
                     }),
                     {
                         apiKey: "offline-profile-key",
-                        maxTokens: MODEL_MAX_OUTPUT_TOKENS,
-                        maxRetries: 0,
+                        maxTokens: generation.maxOutputTokens,
+                        temperature: generation.temperature,
+                        maxRetries: generation.maxRetries,
                         signal,
                         fetch: async () => {
                             dispatchAttempted = true;

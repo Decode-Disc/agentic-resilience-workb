@@ -553,7 +553,8 @@ type ApprovedIndexPassage = {
 };
 
 const missionApprovedSourceScope = {
-    missionId: v.id("agentMissions"),
+    missionId: v.optional(v.id("agentMissions")),
+    runId: v.optional(v.id("researchRuns")),
     expectedGeneration: v.number(),
     sourceId: v.id("sources"),
 };
@@ -570,7 +571,22 @@ const approvedPassageResult = v.object({
 const approvedMaterialReadRequest = v.union(
     v.object({ kind: v.literal("search"), query: v.string() }),
     v.object({ kind: v.literal("context"), passageOrder: v.number() }),
+    v.object({
+        kind: v.literal("contexts"),
+        passageOrders: v.array(v.number()),
+    }),
 );
+
+const approvedContextReadResult = v.object({
+    status: v.literal("ready"),
+    kind: v.literal("context"),
+    captureId: v.id("sourceCaptures"),
+    contentHash: v.string(),
+    passage: v.object({
+        ...approvedPassageResult.fields,
+        surroundingText: v.string(),
+    }),
+});
 
 const approvedMaterialReadResult = v.union(
     v.object({ status: v.literal("unavailable"), reason: v.string() }),
@@ -584,15 +600,11 @@ const approvedMaterialReadResult = v.union(
         passages: v.array(approvedPassageResult),
         limitReached: v.boolean(),
     }),
+    approvedContextReadResult,
     v.object({
         status: v.literal("ready"),
-        kind: v.literal("context"),
-        captureId: v.id("sourceCaptures"),
-        contentHash: v.string(),
-        passage: v.object({
-            ...approvedPassageResult.fields,
-            surroundingText: v.string(),
-        }),
+        kind: v.literal("contexts"),
+        contexts: v.array(approvedContextReadResult),
     }),
 );
 
@@ -695,7 +707,8 @@ async function ensureApprovedIndex(
 async function ensureMissionApprovedIndex(
     ctx: ActionCtx,
     args: {
-        missionId: Id<"agentMissions">;
+        missionId?: Id<"agentMissions">;
+        runId?: Id<"researchRuns">;
         expectedGeneration: number;
         sourceId: Id<"sources">;
     },
@@ -727,8 +740,21 @@ export const readApprovedMaterialForMission = internalAction({
     },
     returns: approvedMaterialReadResult,
     handler: async (ctx, args): Promise<ApprovedMaterialReadResult> => {
+        if (
+            args.request.kind === "contexts" &&
+            (!args.request.passageOrders.length ||
+                args.request.passageOrders.length > 128 ||
+                args.request.passageOrders.some(
+                    (order) => !Number.isSafeInteger(order) || order < 0,
+                ))
+        )
+            return {
+                status: "unavailable",
+                reason: "retrieval_passage_invalid",
+            };
         const captureArgs = {
             missionId: args.missionId,
+            runId: args.runId,
             expectedGeneration: args.expectedGeneration,
             sourceId: args.sourceId,
         };
@@ -804,41 +830,87 @@ export const readApprovedMaterialForMission = internalAction({
             };
         }
 
-        const result: FunctionReturnType<
-            typeof internal.sourceRetrieval.approvedPassageForMission
-        > = await ctx.runQuery(
-            internal.sourceRetrieval.approvedPassageForMission,
-            { ...captureArgs, passageOrder: args.request.passageOrder },
-        );
-        if (result.status !== "ready")
-            return { status: "unavailable", reason: result.reason };
-        if (
-            result.capture.captureId !== allowed.capture._id ||
-            result.capture.contentHash !== allowed.capture.contentHash ||
-            result.passage.quotationHash !==
-                sha256Hex(result.passage.quotation) ||
-            stored.text.slice(
-                result.passage.startOffset,
-                result.passage.endOffset,
-            ) !== result.passage.quotation
-        )
-            return { status: "unavailable", reason: "capture_corrupt" };
-        return {
-            status: "ready",
-            kind: "context",
-            captureId: result.capture.captureId,
-            contentHash: result.capture.contentHash,
-            passage: {
-                ...result.passage,
-                surroundingText: stored.text.slice(
-                    Math.max(0, result.passage.startOffset - 512),
-                    Math.min(
-                        stored.text.length,
-                        result.passage.endOffset + 512,
+        const contextualPassages = new Map<
+            number,
+            Extract<
+                FunctionReturnType<
+                    typeof internal.sourceRetrieval.approvedPassageForMission
+                >,
+                { status: "ready" }
+            >
+        >();
+        if (args.request.kind === "contexts") {
+            const batch = await ctx.runQuery(
+                internal.sourceRetrieval.approvedPassagesForMission,
+                { ...captureArgs, passageOrders: args.request.passageOrders },
+            );
+            if (batch.status !== "ready")
+                return { status: "unavailable", reason: batch.reason };
+            for (const passage of batch.passages)
+                contextualPassages.set(passage.order, {
+                    status: "ready",
+                    capture: batch.capture,
+                    passage,
+                });
+        }
+        const readContext = async (
+            passageOrder: number,
+        ): Promise<
+            | Infer<typeof approvedContextReadResult>
+            | { status: "unavailable"; reason: string }
+        > => {
+            const result: FunctionReturnType<
+                typeof internal.sourceRetrieval.approvedPassageForMission
+            > =
+                args.request.kind === "contexts"
+                    ? (contextualPassages.get(passageOrder) ?? {
+                          status: "unavailable",
+                          reason: "passage_unavailable",
+                      })
+                    : await ctx.runQuery(
+                          internal.sourceRetrieval.approvedPassageForMission,
+                          { ...captureArgs, passageOrder },
+                      );
+            if (result.status !== "ready")
+                return { status: "unavailable", reason: result.reason };
+            if (
+                result.capture.captureId !== allowed.capture._id ||
+                result.capture.contentHash !== allowed.capture.contentHash ||
+                result.passage.quotationHash !==
+                    sha256Hex(result.passage.quotation) ||
+                stored.text.slice(
+                    result.passage.startOffset,
+                    result.passage.endOffset,
+                ) !== result.passage.quotation
+            )
+                return { status: "unavailable", reason: "capture_corrupt" };
+            return {
+                status: "ready",
+                kind: "context",
+                captureId: result.capture.captureId,
+                contentHash: result.capture.contentHash,
+                passage: {
+                    ...result.passage,
+                    surroundingText: stored.text.slice(
+                        Math.max(0, result.passage.startOffset - 512),
+                        Math.min(
+                            stored.text.length,
+                            result.passage.endOffset + 512,
+                        ),
                     ),
-                ),
-            },
+                },
+            };
         };
+        if (args.request.kind === "contexts") {
+            const contexts = [];
+            for (const order of new Set(args.request.passageOrders)) {
+                const reading = await readContext(order);
+                if (reading.status !== "ready") return reading;
+                contexts.push(reading);
+            }
+            return { status: "ready", kind: "contexts", contexts };
+        }
+        return readContext(args.request.passageOrder);
     },
 });
 

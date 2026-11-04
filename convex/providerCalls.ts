@@ -1,3 +1,8 @@
+import {
+    RESPONSE_CONTROL_LIMITS,
+    responseReviewOperationKey,
+} from "@convex/domain/workbenchResponseControlContracts";
+import { readResponseControlPolicy } from "@convex/modelConfiguration";
 import { ConvexError, type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -16,7 +21,7 @@ import {
     supplementalSearchInputHash,
     supplementalSearchOperationKey,
 } from "./domain/sourceDiscoveryRecovery";
-import { sha256Hex } from "./domain/sourcePassages";
+import { sha256Hex, stableStringify } from "./domain/sourcePassages";
 import {
     assertPreparationComparisonFence,
     assertPreparationExecutionFence,
@@ -45,15 +50,14 @@ import {
     MAX_SOURCE_EMBEDDING_BATCH_TEXTS,
     MAX_SOURCE_EMBEDDING_INPUT_BYTES,
     MAX_SOURCE_EMBEDDING_TEXT_BYTES,
+    MAX_SOURCES_QUALIFICATION_RECEIPTS,
 } from "./resourceLimits";
 import { readWorkbenchQualification } from "./runWorkspace";
 import schema from "./schema";
 
-/** The same qualification authority is required at reservation and immediately before external dispatch. */
-export async function requireQualifiedBrowserMission(
+async function requireBrowserQualification(
     ctx: QueryCtx,
     run: Doc<"researchRuns">,
-    mission: Doc<"agentMissions"> | null,
 ) {
     if (run.purpose !== "browser_test") return null;
     const qualification = await readWorkbenchQualification(ctx, run);
@@ -61,14 +65,43 @@ export async function requireQualifiedBrowserMission(
         .query("paidWorkControls")
         .withIndex("by_key", (q) => q.eq("key", "global"))
         .unique();
-    if (
-        !qualification ||
-        mission?.definitionId !== "workbench_v1" ||
-        mission.runId !== run._id ||
-        mission.modelRevisionId !== qualification.modelRevisionId ||
-        control?.enabled === false
-    )
+    if (!qualification || control?.enabled === false)
         throw sourcePreparationError("paid_work_disabled");
+    return qualification;
+}
+
+/** The same qualification authority is required at reservation and immediately before external dispatch. */
+export async function requireQualifiedBrowserMission(
+    ctx: QueryCtx,
+    run: Doc<"researchRuns">,
+    mission: Doc<"agentMissions"> | null,
+    preparationId?: Id<"sourceSelectionProposalRebuilds">,
+) {
+    const qualification = await requireBrowserQualification(ctx, run);
+    if (!qualification) return null;
+    if (mission) {
+        if (
+            mission.runId !== run._id ||
+            mission.modelRevisionId !== qualification.modelRevisionId ||
+            !(
+                qualification.sourcesLot
+                    ? ["workbench_v1", "workbench_v2", "sources_v1"]
+                    : ["workbench_v1"]
+            ).includes(mission.definitionId)
+        )
+            throw sourcePreparationError("paid_work_disabled");
+    } else {
+        const preparation = preparationId
+            ? await ctx.db.get(preparationId)
+            : null;
+        if (
+            !qualification.sourcesLot ||
+            !preparation?.sourcesMission ||
+            preparation.runId !== run._id ||
+            preparation.modelRevisionId !== qualification.modelRevisionId
+        )
+            throw sourcePreparationError("paid_work_disabled");
+    }
     return qualification;
 }
 
@@ -452,9 +485,11 @@ export const nextPreparationAttemptForInput = internalQuery({
         );
         if (
             !plan.attempt ||
-            !["source_qualification", "source_comparison"].includes(
-                args.operation,
-            )
+            ![
+                "source_qualification",
+                "source_comparison",
+                "source_documentary_control",
+            ].includes(args.operation)
         )
             return plan;
         const run = await ctx.db.get(preparation.runId);
@@ -469,6 +504,7 @@ export const nextPreparationAttemptForInput = internalQuery({
 });
 
 export const providerAttemptValidator = v.object({
+    operationRequestId: v.optional(v.id("agentOperationRequests")),
     missionId: v.optional(v.id("agentMissions")),
     invocationId: v.optional(v.id("agentInvocations")),
     inputHash: v.optional(v.string()),
@@ -511,16 +547,51 @@ export const recordAttempt = internalMutation({
         if (args.status === "started" && args.runId) {
             const run = await ctx.db.get(args.runId);
             if (run && run.purpose === "browser_test") {
-                if (args.service !== "model")
-                    throw sourcePreparationError("paid_work_disabled");
                 const mission = args.missionId
                     ? await ctx.db.get(args.missionId)
                     : null;
-                qualification = await requireQualifiedBrowserMission(
-                    ctx,
-                    run,
-                    mission,
-                );
+                if (args.service === "model") {
+                    qualification = await requireQualifiedBrowserMission(
+                        ctx,
+                        run,
+                        mission,
+                        args.preparationId,
+                    );
+                    if (
+                        qualification?.sourcesLot &&
+                        !(
+                            mission
+                                ? [
+                                      "agent_reasoning",
+                                      "agent_compaction",
+                                      ...(qualification.responseControl?.enabled
+                                          ? ["response_coherence"]
+                                          : []),
+                                  ]
+                                : ["source_documentary_control"]
+                        ).includes(args.operation)
+                    )
+                        throw sourcePreparationError("paid_work_disabled");
+                } else {
+                    qualification = await requireBrowserQualification(ctx, run);
+                    if (
+                        !qualification?.sourcesLot ||
+                        !(
+                            (args.service === "sec" &&
+                                [
+                                    "revalidate_company",
+                                    "resolve_company",
+                                    "retrieve_filing_html",
+                                ].includes(args.operation)) ||
+                            (args.service === "exa" &&
+                                args.preparationId &&
+                                ["source_need_search", "get_contents"].includes(
+                                    args.operation,
+                                ))
+                        )
+                    )
+                        throw sourcePreparationError("paid_work_disabled");
+                }
             }
         }
         if (
@@ -539,6 +610,49 @@ export const recordAttempt = internalMutation({
             const mission = args.missionId
                 ? await ctx.db.get(args.missionId)
                 : null;
+            let reviewIdentity = false;
+            if (
+                args.operationRequestId &&
+                mission?.conversationTurnId &&
+                invocation
+            ) {
+                const request = await ctx.db.get(args.operationRequestId);
+                const turn = await ctx.db.get(mission.conversationTurnId);
+                const check = turn?.responseControl?.checks.find(
+                    (c) =>
+                        c.requestId === args.operationRequestId &&
+                        c.invocationId === invocation._id,
+                );
+                reviewIdentity = !!(
+                    request?.actor === "system" &&
+                    request.missionId === mission._id &&
+                    request.input.kind === "check_response_coherence" &&
+                    request.input.invocationId === invocation._id &&
+                    (!qualification?.sourcesLot ||
+                        (qualification.responseControl?.enabled &&
+                            stableStringify(qualification.responseControl) ===
+                                stableStringify(
+                                    turn?.responseControl?.policy,
+                                ))) &&
+                    check?.requestJson &&
+                    check.requestHash === sha256Hex(check.requestJson) &&
+                    args.inputHash === check.requestHash &&
+                    args.operation === "response_coherence" &&
+                    args.stepKey === args.operation &&
+                    args.attempt === 1 &&
+                    args.operationKey ===
+                        responseReviewOperationKey(request._id) &&
+                    (turn?.responseControl?.checks.length ?? Infinity) <=
+                        RESPONSE_CONTROL_LIMITS.checksPerTurn
+                );
+                if (
+                    args.status === "started" &&
+                    (!reviewIdentity ||
+                        request?.status !== "running" ||
+                        !(await readResponseControlPolicy(ctx)).enabled)
+                )
+                    throw sourcePreparationError("response_review_unavailable");
+            }
             if (
                 !mission ||
                 !invocation ||
@@ -551,15 +665,17 @@ export const recordAttempt = internalMutation({
                 invocation.corpusRevisionId !== args.corpusRevisionId ||
                 args.executionGeneration !== invocation.generation ||
                 args.workflowVersion !== mission.definitionVersion ||
-                args.operation !==
-                    (invocation.purpose === "compaction"
-                        ? "agent_compaction"
-                        : "agent_reasoning") ||
-                args.stepKey !== args.operation ||
-                args.attempt !== 1 ||
-                args.inputHash !== sha256Hex(invocation.inputJson) ||
-                args.operationKey !==
-                    `mission:${mission._id}:invocation:${invocation._id}:attempt:1`
+                (args.operationRequestId
+                    ? !reviewIdentity
+                    : args.operation !==
+                          (invocation.purpose === "compaction"
+                              ? "agent_compaction"
+                              : "agent_reasoning") ||
+                      args.stepKey !== args.operation ||
+                      args.attempt !== 1 ||
+                      args.inputHash !== sha256Hex(invocation.inputJson) ||
+                      args.operationKey !==
+                          `mission:${mission._id}:invocation:${invocation._id}:attempt:1`)
             )
                 throw sourcePreparationError("qualification_attempt_invalid");
             // Factual settlement retains the original attempt; admission alone needs the current generation.
@@ -579,6 +695,7 @@ export const recordAttempt = internalMutation({
                 ![
                     "source_qualification",
                     "source_comparison",
+                    "source_documentary_control",
                     "source_embedding",
                 ].includes(args.operation) ||
                 !Number.isSafeInteger(args.attempt) ||
@@ -596,13 +713,18 @@ export const recordAttempt = internalMutation({
                 preparation?.kind !== "preparation" ||
                 preparation.runId !== args.runId ||
                 preparation.corpusRevisionId !== args.corpusRevisionId ||
-                preparation.executionGeneration !== args.executionGeneration ||
+                (args.status === "started" &&
+                    preparation.executionGeneration !==
+                        args.executionGeneration) ||
                 preparation.workflowVersion !== args.workflowVersion ||
                 args.acceptedDecisionId ||
                 (!args.sourceId &&
                     !(
                         (args.service === "exa" || args.service === "sec") &&
-                        args.operation === "source_supplement_search"
+                        [
+                            "source_supplement_search",
+                            "source_need_search",
+                        ].includes(args.operation)
                     )) ||
                 args.stepKey !== "source_preparation"
             ) {
@@ -1000,29 +1122,89 @@ export const recordAttempt = internalMutation({
             }
             let qualificationReservationUsd: number | undefined;
             if (qualification) {
-                qualificationReservationUsd =
+                const modelReservationUsd =
                     ((MAX_CONTEXT_BYTES + 4096) *
                         MODEL_MAX_INPUT_PRICE_PER_MILLION +
                         MODEL_MAX_OUTPUT_TOKENS *
                             MODEL_MAX_OUTPUT_PRICE_PER_MILLION) /
                     1_000_000;
-                const calls = await ctx.db
-                    .query("providerCalls")
-                    .withIndex("by_run", (q) => q.eq("runId", args.runId))
-                    .take(qualification.maximumRequests + 1);
+                qualificationReservationUsd =
+                    args.service === "model"
+                        ? modelReservationUsd
+                        : args.service === "exa"
+                          ? args.operation === "source_need_search"
+                              ? 0.007
+                              : 0.001
+                          : 0;
+                const calls = (
+                    await Promise.all(
+                        (qualification.sourcesLot ?? [qualification.runId]).map(
+                            (runId) =>
+                                ctx.db
+                                    .query("providerCalls")
+                                    .withIndex("by_run", (q) =>
+                                        q.eq("runId", runId),
+                                    )
+                                    .take(
+                                        MAX_SOURCES_QUALIFICATION_RECEIPTS + 1,
+                                    ),
+                        ),
+                    )
+                ).flat();
                 const reserved = calls.reduce(
                     (sum, call) =>
                         sum +
                         Math.max(
                             call.qualificationReservationUsd ??
-                                qualificationReservationUsd ??
-                                0,
+                                (call.service === "model"
+                                    ? modelReservationUsd
+                                    : 0),
                             call.reportedCost ?? 0,
                         ),
                     0,
                 );
+                const category = (
+                    call: Pick<Doc<"providerCalls">, "service" | "operation">,
+                ) =>
+                    call.service === "model"
+                        ? "model"
+                        : call.operation === "source_need_search"
+                          ? "search"
+                          : ["get_contents", "retrieve_filing_html"].includes(
+                                  call.operation,
+                              )
+                            ? "acquisition"
+                            : "technical";
+                const kind = category(args);
+                const perDossierLimit = {
+                    model: 20,
+                    search: 2,
+                    acquisition: 6,
+                    technical: 64,
+                }[kind];
+                const lotLimit = {
+                    model: Math.min(40, qualification.maximumRequests),
+                    search: 4,
+                    acquisition: 12,
+                    technical: 128,
+                }[kind];
                 if (
-                    calls.length >= qualification.maximumRequests ||
+                    (qualification.sourcesLot
+                        ? calls.length >= MAX_SOURCES_QUALIFICATION_RECEIPTS ||
+                          calls.filter(
+                              (call) =>
+                                  call.runId === args.runId &&
+                                  category(call) === kind,
+                          ).length >= perDossierLimit ||
+                          calls.filter((call) => category(call) === kind)
+                              .length >= lotLimit ||
+                          calls.some(
+                              (call) =>
+                                  call.dispatchOutcome === "unknown" ||
+                                  (call.status === "started" &&
+                                      (call.leaseExpiresAt ?? 0) <= now),
+                          )
+                        : calls.length >= qualification.maximumRequests) ||
                     reserved + qualificationReservationUsd >
                         qualification.maximumCostUsd ||
                     calls.some(
@@ -1038,6 +1220,7 @@ export const recordAttempt = internalMutation({
             }
             const providerCallId = await ctx.db.insert("providerCalls", {
                 qualificationReservationUsd,
+                operationRequestId: args.operationRequestId,
                 missionId: args.missionId,
                 invocationId: args.invocationId,
                 inputHash: args.inputHash,
@@ -1062,7 +1245,7 @@ export const recordAttempt = internalMutation({
                         : undefined,
                 createdAt: now,
             });
-            if (args.invocationId)
+            if (args.invocationId && !args.operationRequestId)
                 await ctx.db.patch(args.invocationId, { providerCallId });
             return {
                 providerCallId,
@@ -1089,6 +1272,19 @@ export const recordAttempt = internalMutation({
         if (!existing) {
             throw new Error("Provider attempt was not started");
         }
+        if (
+            args.preparationId &&
+            (existing.preparationId !== args.preparationId ||
+                existing.corpusRevisionId !== args.corpusRevisionId ||
+                existing.sourceId !== args.sourceId ||
+                existing.executionGeneration !== args.executionGeneration ||
+                existing.workflowVersion !== args.workflowVersion ||
+                existing.stepKey !== args.stepKey ||
+                ((args.inputHash !== undefined ||
+                    args.operation === "source_need_search") &&
+                    existing.inputHash !== args.inputHash))
+        )
+            throw sourcePreparationError("attempt_identity_conflict");
         if (
             args.service === "model" &&
             (args.preparationId || args.missionId) &&

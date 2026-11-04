@@ -226,6 +226,7 @@ export async function fetchExaSearch(
                 : undefined;
         return {
             results,
+            rejectedResults: record.results.length - results.length,
             searchTime:
                 typeof record.searchTime === "number"
                     ? record.searchTime

@@ -63,6 +63,7 @@ import {
     verifyQualificationCandidate,
 } from "./protocol.ts";
 import { createQualificationRelay } from "./relay.mjs";
+import { sourcesQualificationPhase } from "./sources.ts";
 
 const { values } = parseArgs({
     options: {
@@ -73,6 +74,7 @@ const { values } = parseArgs({
         assess: { type: "string" },
         review: { type: "string" },
         "maximum-requests": { type: "string", default: "20" },
+        "sources-phase": { type: "string" },
     },
 });
 
@@ -1002,11 +1004,20 @@ if (
 ) {
     if (values.help) {
         console.log(
-            "pnpm workbench:qualify [--mode deterministic|live] [--output ABSOLUTE_DIRECTORY] [--maximum-requests 1..20]\nUses the verified running local backend and web server. Real anonymous admission is required. Live mode uses the configured GLM lot, at most 20 inference requests / USD0.50. No research is launched. An existing output directory cannot renew a closed or interrupted lot.\nOffline assessment: --assess DIRECTORY [--review FILE]. Without --review, print the evidence-bound review template.",
+            "pnpm workbench:qualify [--sources-phase prepare|inspect|close --output ABSOLUTE_DIRECTORY] [--mode deterministic|live] [--output ABSOLUTE_DIRECTORY] [--maximum-requests 1..20]\nUses the verified running local backend and web server. Real anonymous admission is required. Workbench live mode uses at most 20 inference requests / USD0.50 and launches no research. Sources phases use the separately authorized two-dossier manifest, at most 40 model attempts / 4 searches / 12 acquisitions / USD2; Start research stays in the admitted browser. An existing output directory cannot renew a closed or interrupted lot.\nOffline assessment: --assess DIRECTORY [--review FILE]. Without --review, print the evidence-bound review template.",
         );
     } else {
         try {
-            if (values.assess) {
+            if (values["sources-phase"]) {
+                assert(
+                    values.output,
+                    "Sources phase requires an explicit output directory",
+                );
+                await sourcesQualificationPhase(
+                    values["sources-phase"],
+                    values.output,
+                );
+            } else if (values.assess) {
                 const result = values.review
                     ? assessQualification(
                           resolve(values.assess),

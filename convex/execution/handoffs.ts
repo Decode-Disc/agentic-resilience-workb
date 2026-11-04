@@ -1,6 +1,7 @@
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { internalMutation } from "@convex/_generated/server";
+import { workflow } from "@convex/workflow";
 import { v } from "convex/values";
 import { getAgentDefinition } from "./agentCatalog";
 import { recordMissionEvent, requireMissionAuthority } from "./authority";
@@ -142,7 +143,20 @@ export const finishChild = internalMutation({
     returns: v.null(),
     handler: async (ctx, args): Promise<null> => {
         const child = await ctx.db.get(args.missionId);
-        if (!child?.parentRequestId) return null;
+        if (!child) return null;
+        if (
+            child.completionEventId &&
+            !child.completionNotified &&
+            ["completed", "cancelled", "blocked"].includes(child.status) &&
+            !isRecoverableInterruption(child)
+        ) {
+            await workflow.sendEvent(ctx, {
+                id: child.completionEventId,
+                value: { missionId: child._id },
+            });
+            await ctx.db.patch(child._id, { completionNotified: true });
+        }
+        if (!child.parentRequestId) return null;
         if (
             !["completed", "cancelled", "blocked"].includes(child.status) ||
             isRecoverableInterruption(child)

@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
-import { describe, expect, test, vi } from "vitest";
+import type { RequestOptions } from "node:https";
+import { assert, describe, expect, test, vi } from "vitest";
 
 const { mockHttpsRequest } = vi.hoisted(() => {
     const mockHttpsRequest = vi.fn(
@@ -28,6 +29,42 @@ vi.mock("node:https", async (importOriginal) => {
 import { requestPinnedPublicSource } from "@convex/sourceActions";
 
 describe("requestPinnedPublicSource", () => {
+    test.each([
+        { address: "93.184.216.34", family: 4 },
+        { address: "2001:4860:4860::8888", family: 6 },
+    ])("the Node lookup contract retains only the approved $address in single and all-address modes", async ({
+        address,
+        family,
+    }) => {
+        const controller = new AbortController();
+        const pending = requestPinnedPublicSource(
+            "https://www.sec.gov/Archives/edgar/document.htm",
+            address,
+            { signal: controller.signal },
+        );
+        try {
+            const requestOptions: RequestOptions =
+                mockHttpsRequest.mock.lastCall?.[1];
+            assert(requestOptions.lookup);
+            const resolved = vi.fn();
+            requestOptions.lookup("www.sec.gov", { all: true }, resolved);
+            expect(resolved).toHaveBeenCalledExactlyOnceWith(null, [
+                { address, family },
+            ]);
+            resolved.mockClear();
+            requestOptions.lookup("www.sec.gov", { all: false }, resolved);
+            expect(resolved).toHaveBeenCalledExactlyOnceWith(
+                null,
+                address,
+                family,
+            );
+        } finally {
+            controller.abort(new Error("lookup contract fixture finished"));
+            await expect(pending).rejects.toThrow(
+                "lookup contract fixture finished",
+            );
+        }
+    });
     test("preserves provider identification and aborts a pinned request on cancellation", async () => {
         const controller = new AbortController();
         const promise = requestPinnedPublicSource(

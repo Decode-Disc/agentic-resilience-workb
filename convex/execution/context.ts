@@ -302,6 +302,9 @@ export async function buildMissionContext(
             previousInvocation?.status === "returned"
                 ? {
                       invocationId: previousInvocation._id,
+                      ...(previousInvocation.correction
+                          ? { correction: previousInvocation.correction }
+                          : {}),
                       status: "observable_reply_not_established_facts",
                       ...(mission.executionRuntime === "pi-durable"
                           ? { historyOperation: "consult_mission_state" }

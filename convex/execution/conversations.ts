@@ -15,6 +15,7 @@ import {
 } from "@convex/integrations/agentStorage";
 import {
     modelPrepared,
+    readResponseControlPolicy,
     requireReasoningEffort,
     resolveAgentModel,
 } from "@convex/modelConfiguration";
@@ -417,6 +418,10 @@ export const claimTurn = internalMutation({
             .take(single ? 1 : HISTORY_PAGE_SIZE);
         if (!messages.length) return null;
         const turnId = await ctx.db.insert("agentConversationTurns", {
+            responseControl: {
+                policy: await readResponseControlPolicy(ctx),
+                checks: [],
+            },
             runId,
             conversationId: conversation._id,
             status: "active",
@@ -437,6 +442,17 @@ export const claimTurn = internalMutation({
     },
 });
 
+export const analystConversationTurn = schema
+    .doc("agentConversationTurns")
+    .omit("responseControl");
+/** Public conversation views omit raw drafts, review requests and protected diagnostic observations. */
+export function conversationTurnForAnalyst(
+    turn: Doc<"agentConversationTurns">,
+) {
+    const { responseControl: _audit, ...visible } = turn;
+    return visible;
+}
+
 export const get = query({
     args: { runId: v.id("researchRuns") },
     returns: v.object({
@@ -451,7 +467,7 @@ export const get = query({
             }),
             v.null(),
         ),
-        activeTurn: v.union(schema.doc("agentConversationTurns"), v.null()),
+        activeTurn: v.union(analystConversationTurn, v.null()),
     }),
     handler: async (ctx, { runId }) => {
         await requireWorkspaceRun(ctx, runId);
@@ -466,7 +482,9 @@ export const get = query({
             queuedCount: conversation?.queuedCount ?? 0,
             queuePaused: conversation?.queuePaused ?? false,
             admissionFailure: conversation?.admissionFailure,
-            activeTurn,
+            activeTurn: activeTurn
+                ? conversationTurnForAnalyst(activeTurn)
+                : null,
             execution: mission
                 ? { status: mission.status, code: mission.blockCode }
                 : null,
@@ -491,6 +509,9 @@ export const listMessages = query({
             ).fields,
             _id: v.id("agentMessageDeliveries"),
             text: v.string(),
+            responseControl:
+                schema.tables.agentMessageDeliveries.validator.fields
+                    .responseControl,
         }),
     ),
     handler: async (ctx, args) => {
@@ -523,6 +544,9 @@ export const listMessages = query({
                     status: message.status,
                     createdAt: message.createdAt,
                     text,
+                    ...(message.responseControl
+                        ? { responseControl: message.responseControl }
+                        : {}),
                 };
             }),
         };
@@ -643,6 +667,9 @@ export async function publishTurn(
         text,
     );
     const messageId = await ctx.db.insert("agentMessageDeliveries", {
+        ...(turn.responseControl?.summary
+            ? { responseControl: turn.responseControl.summary }
+            : {}),
         runId: mission.runId,
         conversationId: conversation._id,
         storageMessageRef,
@@ -669,7 +696,15 @@ export async function publishTurn(
         publicationHash: hash,
         completedAt: Date.now(),
     });
-    await ctx.db.patch(conversation._id, { activeTurnId: undefined });
+    await ctx.db.patch(conversation._id, {
+        activeTurnId: undefined,
+        ...(turn.responseControl?.factsRevisionHash
+            ? {
+                  responseFactsRevisionHash:
+                      turn.responseControl.factsRevisionHash,
+              }
+            : {}),
+    });
     await event(ctx, mission.runId, "turn_published", turn._id, messageId);
     const run = await ctx.db.get(mission.runId);
     if (run?.startMode === "framed" && !conversation.queuePaused)

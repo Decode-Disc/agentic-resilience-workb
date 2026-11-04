@@ -1,6 +1,7 @@
 import type { ExternalThreadQueueAdapter } from "@assistant-ui/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { isResumableResearchPause } from "@convex/domain/transitions";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
@@ -361,6 +362,7 @@ function StartWorkspaceContent({
             metadata: {
                 custom: {
                     agentId: m.role === "assistant" ? "workbench" : undefined,
+                    responseControl: m.responseControl,
                 },
             },
         })),
@@ -476,7 +478,7 @@ function StartWorkspaceContent({
                             Keep researching
                         </Button>
                     </>
-                ) : run.pauseReason === "analyst" ? (
+                ) : isResumableResearchPause(run) ? (
                     <Button
                         variant="outline"
                         size="sm"

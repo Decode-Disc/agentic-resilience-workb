@@ -1,16 +1,17 @@
 "use node";
 
-import type { Doc } from "./_generated/dataModel";
 import type { FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
+import type { Doc } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import {
     defaultReasoningEffort,
-    NATIVE_PROFILE_CATALOG,
     INITIAL_MODEL_CATALOG,
     MODEL_MAX_INPUT_PRICE_PER_MILLION,
     MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
+    MODEL_MAX_OUTPUT_TOKENS,
+    NATIVE_PROFILE_CATALOG,
 } from "./integrations/modelRouting";
 import { prepareNativeProfiles } from "./integrations/piModelProfiles";
 import { modelPrepared, revisionRoute } from "./modelConfiguration";
@@ -86,13 +87,43 @@ async function prepareModel(
         );
         if (!Array.isArray(catalog.data) || catalog.data.length > 8192)
             throw new Error("catalog_invalid");
-        const model = catalog.data
+        let model = catalog.data
             .map(object)
             .find((row) => row.id === args.model);
         if (!model) throw new Error("model_unavailable");
+        if (args.provider) {
+            const metadata = object(
+                await readMetadata(
+                    `https://openrouter.ai/api/v1/models/${args.model.split("/").map(encodeURIComponent).join("/")}/endpoints`,
+                    signal,
+                ),
+            );
+            const data = object(metadata.data);
+            if (
+                data.id !== args.model ||
+                !Array.isArray(data.endpoints) ||
+                data.endpoints.length > 256
+            )
+                throw new Error("catalog_invalid");
+            const endpoint = data.endpoints
+                .map(object)
+                .find((row) => row.tag === args.provider);
+            if (endpoint?.status !== 0) throw new Error("provider_unavailable");
+            model = {
+                ...model,
+                ...endpoint,
+                top_provider: {
+                    max_completion_tokens: endpoint.max_completion_tokens,
+                },
+            };
+        }
         const parameters = model.supported_parameters;
         if (
             !Array.isArray(parameters) ||
+            parameters.length > 128 ||
+            parameters.some(
+                (value) => typeof value !== "string" || value.length > 100,
+            ) ||
             !parameters.includes("tools") ||
             !parameters.includes("max_tokens")
         )
@@ -147,6 +178,7 @@ async function prepareModel(
             cacheReadPrice:
                 Number(pricing.input_cache_read ?? pricing.prompt) * 1000000,
             structuredOutputs: parameters.includes("structured_outputs"),
+            supportedParameters: parameters,
         };
         if (
             !Number.isFinite(descriptor.inputPrice) ||
@@ -154,7 +186,7 @@ async function prepareModel(
             descriptor.inputPrice > MODEL_MAX_INPUT_PRICE_PER_MILLION ||
             descriptor.outputPrice > MODEL_MAX_OUTPUT_PRICE_PER_MILLION ||
             descriptor.contextWindow < 32768 ||
-            descriptor.maxTokens < 6144
+            descriptor.maxTokens < MODEL_MAX_OUTPUT_TOKENS
         )
             throw new Error("model_not_compatible");
         const profiles = await prepareNativeProfiles(
@@ -162,7 +194,6 @@ async function prepareModel(
                 model: args.model,
                 provider: args.provider,
                 reasoningEffort: defaultReasoningEffort(descriptor),
-                reasoningEnabled: descriptor.reasoning,
             },
             descriptor,
             signal,

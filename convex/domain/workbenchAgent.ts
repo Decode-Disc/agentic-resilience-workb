@@ -1,32 +1,27 @@
-import { internal } from "@convex/_generated/api";
-import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { Doc } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
 import {
     type AgentDefinition,
     agentToolSchemas,
 } from "@convex/execution/agentDefinition";
-import {
-    recordMissionEvent,
-    readOperationCause,
-} from "@convex/execution/authority";
+import { readOperationCause } from "@convex/execution/authority";
 import { conversationInstructions } from "@convex/execution/conversations";
-import { executionError, executionFailureCode } from "@convex/execution/errors";
+import { executionError } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import { operationProgressKeys } from "@convex/execution/missionData";
+import { researchControlConfirmation } from "@convex/execution/researchControl";
 import {
-    conflictsWithResearchStatus,
-    researchControlConfirmation,
-    researchStateSummary,
-} from "@convex/execution/researchControl";
+    completeResponseControl,
+    responseControlContext,
+} from "@convex/responseControl";
 import { v } from "convex/values";
 import { savedMaterialOperations } from "./savedMaterialAgentOperations";
-import { requireSavedMaterialScope } from "./savedMaterialInspection";
 import { sha256Hex } from "./sourcePassages";
-import { supportsResearchControl } from "./transitions";
 import {
     nativeWorkbenchOperations,
     workbenchOperations,
 } from "./workbenchAgentOperations";
+import { readWorkbenchFacts } from "./workbenchContext";
 import {
     controlResearchInput,
     explicitFramingPreservation,
@@ -35,7 +30,6 @@ import {
     nativeAdjustFramingInput,
     workbenchSchemas as schemas,
 } from "./workbenchContracts";
-import { readWorkbenchInstructions } from "./workbenchInstructions";
 
 async function framingFailureReceipt(
     ctx: QueryCtx,
@@ -113,48 +107,7 @@ export const workbenchDefinition: AgentDefinition & { id: "workbench_v1" } = {
         if (run.startMode !== "framed")
             throw executionError("workbench_not_available");
     },
-    async context(ctx, _mission, run) {
-        const framing = run.currentFramingRevisionId
-            ? await ctx.db.get(run.currentFramingRevisionId)
-            : null;
-        const sources = await ctx.db
-            .query("sources")
-            .withIndex("by_run_and_url", (q) => q.eq("runId", run._id))
-            .take(61);
-        if (sources.length > 60)
-            return { kind: "blocked", code: "context_capacity" };
-        const instructions = await readWorkbenchInstructions(ctx, run._id);
-        return {
-            kind: "ready",
-            context: {
-                company: run.companySnapshot ?? null,
-                originalRequest: run.researchAngle ?? null,
-                framing: framing
-                    ? {
-                          revision: framing.revision,
-                          ...framing.content,
-                          origin: framing.origin,
-                          fixed: !!run.fixedFramingRevisionId,
-                      }
-                    : null,
-                research: {
-                    summary: researchStateSummary(run),
-                    phase: run.lifecycleState,
-                    controlAvailable: supportsResearchControl(run),
-                    status: run.executionStatus,
-                    pauseReason: run.pauseReason ?? null,
-                    pauseRequested: run.researchPauseRequested ?? false,
-                },
-                availableMaterials: sources.map((s) => ({
-                    sourceId: s._id,
-                    title: s.title,
-                    url: s.canonicalUrl,
-                })),
-                analystRequests: instructions,
-                activeWork: {},
-            },
-        };
-    },
+    context: (ctx, mission, run) => readWorkbenchFacts(ctx, run, mission),
     progress(_mission, outcome) {
         if (outcome.kind !== "success") return {};
         const value: unknown = JSON.parse(outcome.valueJson);
@@ -303,7 +256,7 @@ export const nativeWorkbenchDefinition: AgentDefinition & {
         "Preserve explicit Start research prerequisites. A research task that has not started is not paused. Historical workflow wording in a summary cannot override the current required application state supplied to the next response.",
     ].join("\n"),
     nativeToolSets(operations) {
-        const sets = [];
+        const sets = [{}];
         // Enumerate the closed schema variants, independently of any dossier's private context.
         for (const single of [false, true])
             for (const action of [undefined, "pause", "resume"] as const)
@@ -312,6 +265,7 @@ export const nativeWorkbenchDefinition: AgentDefinition & {
                         Object.fromEntries(
                             Object.entries(operations).flatMap(
                                 ([name, operation]) => {
+                                    if (operation.systemOnly) return [];
                                     if (
                                         (name === "adjust_framing" &&
                                             !(mask & 1)) ||
@@ -357,6 +311,7 @@ export const nativeWorkbenchDefinition: AgentDefinition & {
             ...base,
             context: {
                 ...base.context,
+                responseControl: await responseControlContext(ctx, mission),
                 responseGuidance: [
                     hypothesisAuthorityInstruction,
                     "Explain research status using research.summary and the analyst's next action, without listing the underlying application state. Do not quote internal state fields, enum values, tool names or implementation mechanics in the analyst-facing reply. For example, say 'Research has not started. Choose Start research when ready.' rather than listing lifecycleState, executionStatus, framing or idle as technical status values. Explain unavailable actions by their consequence and the available control, not by the tools or operations you lack.",
@@ -366,40 +321,7 @@ export const nativeWorkbenchDefinition: AgentDefinition & {
                 ].join("\n"),
             },
         };
-        try {
-            await requireSavedMaterialScope(ctx, mission, run);
-        } catch (error) {
-            if (executionFailureCode(error) !== "corpus_not_approved")
-                throw error;
-            return {
-                ...state,
-                context: { ...state.context, availableMaterials: [] },
-            };
-        }
-        const candidates = state.context.availableMaterials as {
-            sourceId: Id<"sources">;
-            title: string;
-            url: string;
-        }[];
-        const available = new Set(
-            await ctx.runQuery(
-                internal.sourceRetrieval.availableCapturesForMission,
-                {
-                    missionId: mission._id,
-                    expectedGeneration: mission.generation,
-                    sourceIds: candidates.map((material) => material.sourceId),
-                },
-            ),
-        );
-        return {
-            ...state,
-            context: {
-                ...state.context,
-                availableMaterials: candidates.filter((material) =>
-                    available.has(material.sourceId),
-                ),
-            },
-        };
+        return state;
     },
     textCompletion: (text) => ({ kind: "complete", text }),
     operationDiagnostic(code) {
@@ -434,11 +356,13 @@ export const nativeWorkbenchDefinition: AgentDefinition & {
             return "Research has started and framing is fixed. Explain the limitation instead of editing the fixed research program.";
         return undefined;
     },
-    async complete(ctx, mission, response) {
+    async complete(ctx, mission, response, admittedInput, invocation) {
         const completion = await workbenchDefinition.complete(
             ctx,
             mission,
             response,
+            admittedInput,
+            invocation,
         );
         if (completion.kind !== "completed") return completion;
         if (!("text" in completion.result))
@@ -487,18 +411,16 @@ export const nativeWorkbenchDefinition: AgentDefinition & {
                 throw executionError("instruction_receipt_unavailable");
             confirmations.push(instruction.outcome);
         }
-        const statusConflict = conflictsWithResearchStatus(
-            completion.result.text,
+        const review = await completeResponseControl(ctx, mission, {
             run,
-        );
-        if (statusConflict)
-            await recordMissionEvent(ctx, mission, {
-                kind: "response_status_conflict",
-                cause: "workbench_publication",
-            });
-        const explanation = statusConflict
-            ? `${researchStateSummary(run)}\n\nI couldn't confirm the explanation in this response. Your messages and recorded work remain available.`
-            : completion.result.text;
+            invocation,
+            draft: completion.result.text,
+            input: admittedInput,
+            confirmationOnly: commands.length === instructions.messages.length,
+            requests,
+        });
+        if (review.kind !== "completed") return review;
+        const explanation = completion.result.text;
         return {
             kind: "completed",
             result: {
@@ -518,6 +440,7 @@ export const nativeWorkbenchDefinition: AgentDefinition & {
         const snapshot = input as WorkbenchModelSnapshot | undefined;
         const messages = snapshot?.conversationInstructions?.messages ?? [];
         if (snapshot) {
+            if (snapshot.responseControl?.reminder) return null;
             if (
                 name === "adjust_framing" &&
                 (!snapshot.framing ||
@@ -594,6 +517,8 @@ export const nativeWorkbenchDefinition: AgentDefinition & {
         research: snapshot.research,
         availableMaterials: snapshot.availableMaterials,
         analystRequests: snapshot.analystRequests,
+        documentaryPreparation: snapshot.documentaryPreparation,
+        responseControl: snapshot.responseControl,
         conversationInstructions: snapshot.conversationInstructions,
     }),
     simulate(input) {
@@ -630,6 +555,7 @@ export const nativeWorkbenchDefinition: AgentDefinition & {
 };
 
 type WorkbenchModelSnapshot = {
+    responseControl?: { reminder?: string };
     framing?: { revision: number; fixed: boolean } | null;
     research?: { controlAvailable: boolean };
     availableMaterials?: unknown[];

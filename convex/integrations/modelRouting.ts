@@ -11,18 +11,41 @@ import inputProfiles from "./piInputProfiles.json";
 
 export type ModelRoute = Readonly<{
     model: string;
-    /** Only historical configurations carry an explicitly pinned upstream provider. */
+    /** An optional explicit provider pin is retained in the admitted configuration. */
     provider?: string;
+    descriptor?: Infer<typeof modelDescriptor>;
     reasoningEffort?: Infer<typeof reasoningEffort>;
     reasoningEnabled?: boolean;
     profileKey?: string;
 }>;
 /** Installed SDK identity invalidates prepared profiles without a manually maintained version mirror. */
-export const NATIVE_MODEL_SERIALIZER = `pi-ai@${PI_AI_VERSION}/pi-durable@${durablePackage.version}/chord@${chordPackage.version}:1`;
-/** Changes with the generated tool/instruction catalogue, independently of frozen model descriptors. */
-export const NATIVE_PROFILE_CATALOG = sha256Hex(
-    stableStringify(Object.keys(inputProfiles.profiles).sort()),
-);
+export const NATIVE_MODEL_SERIALIZER = `pi-ai@${PI_AI_VERSION}/pi-durable@${durablePackage.version}/chord@${chordPackage.version}:2`;
+/** Additions do not invalidate existing exact profiles; removals or changed profiles require refresh. */
+export function nativeProfileCatalogueRevision(
+    previous: { profiles: Record<string, number>; profileCatalog?: string },
+    profiles: Record<string, number>,
+) {
+    const additive = Object.entries(previous.profiles).every(
+        ([key, bytes]) => profiles[key] === bytes,
+    );
+    if (additive)
+        return (
+            previous.profileCatalog ??
+            sha256Hex(stableStringify(Object.keys(previous.profiles).sort()))
+        );
+    return sha256Hex(
+        stableStringify(
+            Object.entries(profiles).sort(([a], [b]) => a.localeCompare(b)),
+        ),
+    );
+}
+export const NATIVE_PROFILE_CATALOG =
+    "profileCatalog" in inputProfiles &&
+    typeof inputProfiles.profileCatalog === "string"
+        ? inputProfiles.profileCatalog
+        : sha256Hex(
+              stableStringify(Object.keys(inputProfiles.profiles).sort()),
+          );
 export function modelConfigurationKey(descriptor: object) {
     return sha256Hex(
         stableStringify({ serializer: NATIVE_MODEL_SERIALIZER, descriptor }),
@@ -65,8 +88,24 @@ export function defaultReasoningEffort(
         : descriptor.reasoningDefault;
 }
 
-export function routedModelSettings(route: ModelRoute) {
-    return {
+/** Derives wire preferences and bounded generation options from the admitted model capabilities. */
+export function modelCallSettings(route: ModelRoute) {
+    const descriptor = route.descriptor;
+    const reasoningEnabled = descriptor?.reasoning ?? route.reasoningEnabled;
+    const generation = {
+        maxOutputTokens: Math.min(
+            MODEL_MAX_OUTPUT_TOKENS,
+            descriptor?.maxTokens ?? MODEL_MAX_OUTPUT_TOKENS,
+        ),
+        temperature:
+            descriptor?.supportedParameters &&
+            !descriptor.supportedParameters.includes("temperature")
+                ? undefined
+                : 0,
+        maxRetries: 0,
+        timeout: MODEL_ATTEMPT_TIMEOUT_MS,
+    };
+    const request = {
         provider: {
             ...(route.provider
                 ? { only: [route.provider], allow_fallbacks: false }
@@ -77,15 +116,23 @@ export function routedModelSettings(route: ModelRoute) {
                 completion: MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
             },
         },
-        reasoning: route.reasoningEffort
-            ? {
-                  enabled: route.reasoningEffort !== "none",
-                  effort: route.reasoningEffort,
-                  exclude: true,
-              }
-            : route.reasoningEnabled
-              ? { enabled: true, exclude: true }
-              : { enabled: false, effort: "none" as const, exclude: true },
+        reasoning:
+            reasoningEnabled === false
+                ? undefined
+                : route.reasoningEffort
+                  ? {
+                        enabled: route.reasoningEffort !== "none",
+                        effort: route.reasoningEffort,
+                        exclude: true,
+                    }
+                  : reasoningEnabled
+                    ? { enabled: true, exclude: true }
+                    : {
+                          enabled: false,
+                          effort: "none" as const,
+                          exclude: true,
+                      },
         usage: { include: true },
     };
+    return { request, generation };
 }

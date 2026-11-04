@@ -255,7 +255,13 @@ test.each([
                 progressKey: "checked:0",
             },
         }),
-    ).toMatchObject({ kind: "refused", code: "validation_result_invalid" });
+    ).toMatchObject({
+        kind: "refused",
+        code:
+            failure === "wrong value"
+                ? "validation_result_invalid"
+                : "operation_adoption_failed",
+    });
     expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
         progressKeys: [],
         state: { checkedIndices: [] },

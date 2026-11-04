@@ -390,6 +390,7 @@ export type ExaSearchClient = {
         },
     ): Promise<{
         results: ReadonlyArray<ExaSearchResult>;
+        rejectedResults?: number;
         searchTime?: number;
         costDollars?: { total: number };
     }>;
@@ -500,6 +501,12 @@ export function createExaWebsiteAdapter(client: ExaCompanySearchClient): {
     };
 }
 
+/** Classifies validated discovery independently of candidate adoption or provider transport success. */
+export function exaDiscoveryDisposition(accepted: number, rejected: number) {
+    if (!accepted && rejected > 0) return "failed" as const;
+    return rejected > 0 ? ("partial" as const) : ("succeeded" as const);
+}
+
 export function createExaDiscoveryAdapter(client: ExaSearchClient): {
     search(
         query: string,
@@ -518,7 +525,7 @@ export function createExaDiscoveryAdapter(client: ExaSearchClient): {
                     : {}),
             });
             const candidates: Array<DiscoveredSourceCandidate> = [];
-            let rejected = 0;
+            let rejected = response.rejectedResults ?? 0;
             for (const [
                 providerResultPosition,
                 result,

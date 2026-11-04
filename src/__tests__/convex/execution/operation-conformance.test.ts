@@ -1,4 +1,5 @@
 import { internal } from "@convex/_generated/api";
+import { initializeSources } from "@convex/domain/sources";
 import {
     bindAgentDefinition,
     registeredAgentDefinitions,
@@ -57,10 +58,41 @@ async function fixture(binding: AgentDefinition) {
             browserTestContextId: contextId,
         }),
     );
+    let sourcesPreparationId:
+        | import("@convex/_generated/dataModel").Id<"sourceSelectionProposalRebuilds">
+        | undefined;
+    if (binding.id === "sources_v1")
+        sourcesPreparationId = await f.t.run(async (ctx) => {
+            const run = await ctx.db.get(f.runId);
+            if (!run?.sourcePreparationId)
+                throw new Error("Missing preparation");
+            await ctx.db.patch(f.runId, {
+                sourcesProtocol: "sources_mission_v1",
+                lifecycleState: "discovering_sources",
+            });
+            await ctx.db.patch(f.corpusRevisionId, { status: "draft" });
+            await ctx.db.patch(run.sourcePreparationId, {
+                status: "started",
+                executionGeneration: 4,
+                deadlineAt: Date.now() + 60_000,
+                leaseExpiresAt: Date.now() + 60_000,
+            });
+            await initializeSources(ctx, run.sourcePreparationId, {
+                version: 1,
+                maxNeeds: 12,
+                initialSearches: 4,
+                complementSearches: 3,
+                acquisitions: 10,
+                controls: 20,
+            });
+            return run.sourcePreparationId;
+        });
     const scope: AgentScope =
-        binding.id === "saved_material_inspection_v1"
-            ? { kind: binding.id, corpusRevisionId: f.corpusRevisionId }
-            : { kind: "execution_validation_v1", values: [3, 7] };
+        binding.id === "sources_v1" && sourcesPreparationId
+            ? { kind: "sources_v1", preparationId: sourcesPreparationId }
+            : binding.id === "saved_material_inspection_v1"
+              ? { kind: binding.id, corpusRevisionId: f.corpusRevisionId }
+              : { kind: "execution_validation_v1", values: [3, 7] };
     const missionId = await f.t.mutation(internal.execution.missions.start, {
         runId: f.runId,
         expectedGeneration: 4,
@@ -121,6 +153,12 @@ test.each(
         status: "completed",
         outcome: { kind: "refused", code: "invalid_operation_input" },
     });
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: invalidId,
+            expectedGeneration: f.generation,
+        }),
+    ).toEqual({ kind: "refused", code: "invalid_operation_input" });
     const requestId = await enqueue("history:invalid");
     const dispatch = (id: typeof requestId) =>
         f.t.action(internal.execution.operations.dispatch, {

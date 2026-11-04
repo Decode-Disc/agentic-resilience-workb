@@ -11,6 +11,7 @@ import { requireFramingEditAuthority } from "@convex/domain/framingEditAuthority
 import { MAX_RESEARCH_PLAN_QUESTIONS } from "@convex/domain/researchPlan";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { readPreparationConcurrency } from "@convex/domain/sourcePreparationAuthority";
+import { sourcesEnvelope } from "@convex/domain/sources";
 import { coveragePresetValidator } from "@convex/domain/validators";
 import {
     requireDossierAuthority,
@@ -27,7 +28,11 @@ import {
     MAX_ANALYSES_PER_VISITOR,
     sourcePreparationEnabled,
 } from "@convex/resourceLimits";
-import { requireWorkspaceRun } from "@convex/runWorkspace";
+import {
+    readWorkbenchQualification,
+    requireWorkspaceRun,
+    SOURCES_QUALIFICATION_ENVELOPE,
+} from "@convex/runWorkspace";
 import schema from "@convex/schema";
 import { workflow } from "@convex/workflow";
 import { type Infer, v } from "convex/values";
@@ -145,7 +150,12 @@ export const startResearch = mutation({
             throw executionError("framing_fixed");
         if (!framing.content.scope.trim() || !framing.content.questions.length)
             throw executionError("framing_invalid");
-        if (visitor.analysesReserved >= MAX_ANALYSES_PER_VISITOR)
+        const qualification = await readWorkbenchQualification(ctx, run);
+        const qualifiedSourcesStart = !!qualification?.sourcesLot;
+        if (
+            !qualifiedSourcesStart &&
+            visitor.analysesReserved >= MAX_ANALYSES_PER_VISITOR
+        )
             throw executionError("analysis_limit_reached");
         const running = await ctx.db
             .query("researchRuns")
@@ -156,6 +166,11 @@ export const startResearch = mutation({
             )
             .first();
         if (running) throw executionError("execution_slot_unavailable");
+        const sourcesMissionEnvelope = qualifiedSourcesStart
+            ? SOURCES_QUALIFICATION_ENVELOPE
+            : process.env.SOURCES_MISSION_ENABLED === "true"
+              ? sourcesEnvelope()
+              : undefined;
         const prepareSources = sourcePreparationEnabled();
         if (prepareSources) readPreparationConcurrency();
         const workflowId = await workflow.start(
@@ -165,6 +180,7 @@ export const startResearch = mutation({
                 runId: run._id,
                 executionGeneration: run.executionGeneration,
                 prepareSources,
+                sourcesEnvelope: sourcesMissionEnvelope,
                 controlled: true,
             },
             {
@@ -174,6 +190,12 @@ export const startResearch = mutation({
         );
         await ctx.db.patch(run._id, {
             fixedFramingRevisionId: framing._id,
+            ...(sourcesMissionEnvelope
+                ? {
+                      sourcesProtocol: "sources_mission_v1" as const,
+                      sourcesEnvelope: sourcesMissionEnvelope,
+                  }
+                : {}),
             agentExecutionVersion: 3,
             researchStartedAt: Date.now(),
             researchStartRequestKey: args.requestKey,
@@ -184,9 +206,10 @@ export const startResearch = mutation({
             nextEventSequence: run.nextEventSequence + 1,
             updatedAt: Date.now(),
         });
-        await ctx.db.patch(visitor._id, {
-            analysesReserved: visitor.analysesReserved + 1,
-        });
+        if (!qualifiedSourcesStart)
+            await ctx.db.patch(visitor._id, {
+                analysesReserved: visitor.analysesReserved + 1,
+            });
         await ctx.db.insert("runEvents", {
             runId: run._id,
             sequence: run.nextEventSequence + 1,
@@ -356,7 +379,7 @@ export const applyFromWorkbench = internalMutation({
                 kind: "framing_revision",
                 revisionId: current.currentFramingRevisionId,
             },
-            JSON.stringify({ revision }),
+            { revision },
         );
         return revision;
     },

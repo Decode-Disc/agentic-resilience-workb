@@ -54,7 +54,19 @@ Use TDD through the real public boundary. Reproduce the observed failure, then t
 
 Keep raw observations and meaningful failure states inspectable. Do not turn unknown effects into retries, rewrite failed evidence or silently replace an invalid continuation with a different read.
 
+A semantic failure does not by itself justify another phrase filter. Establish whether authoritative facts were missing, execution violated its contract, or the model misinterpreted valid input. Preserve the approved closed vocabulary; broader wording requires semantic assessment rather than an expanding list of model-specific exceptions. Locate the current hybrid response-control contract in [TECH](../../../context/TECH.md) before changing its behavior.
+
 **Exit:** the regression catches the original failure and protects the relevant contract beyond the first agent that exposed it.
+
+### Advisory Controls and Bounded Correction
+
+An advisory assessment must not become a second execution authority. Integrate it through existing operations, provider receipts and domain completion, keeping the assessment separate from factual evidence and from permission to act. Reuse the authoritative fact projection and already-loaded records; refuse unsupported review capacity before additional I/O.
+
+Keep defaults, score comparisons and validation in one configuration owner. Pin the policy version to the affected work and retain it for audit; do not copy model names or threshold values into callers or this skill. Test nondefault thresholds and exact comparison boundaries so hardcoded defaults would fail. Cover disabled control, exempt replies, historical records without policy metadata and configuration changes during active work.
+
+Enforce correction limits at admission, offered capabilities and finalization rather than relying on a reminder. Test an actual continuation in which the model attempts a forbidden tool, retains a contradiction or encounters changed facts. Preserve raw drafts and receipts, prevent operation replay, and verify that no further generation escapes the configured bound. An advisory unavailable outcome may permit publication with an explicit reserve where the domain contract allows it; mandatory authority, structure, freshness and evidence failures retain their blocking behavior.
+
+Exercise cancellation, uncertain dispatch and settlement-acknowledgement loss separately: retain known response/cost facts without granting stale adoption or blind retry. Verify the public summary and protected audit independently; an unavailable assessment exposes no invented score, and an advisory score is not general factual confidence.
 
 ## 4. Verify Architecture and Behavior
 

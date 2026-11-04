@@ -4,7 +4,12 @@ import {
     workbenchCommand,
     workbenchCommandOutcome,
 } from "@convex/domain/workbenchContracts";
+import {
+    responseControlState,
+    responseControlSummary,
+} from "@convex/domain/workbenchResponseControlContracts";
 import { reasoningEffort } from "@convex/modelConfigurationSchema";
+import { vEventId } from "@convex-dev/workflow";
 import { defineTable } from "convex/server";
 import { v } from "convex/values";
 import {
@@ -24,12 +29,15 @@ import {
     requestInputValidator,
 } from "./executionProtocol";
 import {
+    completionFeedbackValidator,
     historyReadReceiptValidator,
     protectedDiagnosticValidator,
     retainedPayloadValidator,
 } from "./operationContracts";
 
 const missionFields = {
+    completionEventId: v.optional(vEventId()),
+    completionNotified: v.optional(v.boolean()),
     historyMaterialSequence: v.optional(v.number()),
     historyProjection: v.optional(
         v.object({
@@ -118,6 +126,7 @@ export const executionTables = {
         .index("by_session_and_key", ["sessionId", "key"]),
     agentConversations: defineTable({
         publicationRevision: v.optional(v.number()),
+        responseFactsRevisionHash: v.optional(v.string()),
         modelCatalogId: v.optional(v.id("modelCatalog")),
         reasoningEffort: v.optional(reasoningEffort),
         modelSelectionRevision: v.optional(v.number()),
@@ -139,6 +148,7 @@ export const executionTables = {
         createdAt: v.number(),
     }).index("by_run", ["runId"]),
     agentConversationTurns: defineTable({
+        responseControl: v.optional(responseControlState),
         runId: v.id("researchRuns"),
         conversationId: v.id("agentConversations"),
         status: v.union(
@@ -162,6 +172,7 @@ export const executionTables = {
         completedAt: v.optional(v.number()),
     }).index("by_run", ["runId"]),
     agentMessageDeliveries: defineTable({
+        responseControl: v.optional(responseControlSummary),
         publicationRevision: v.optional(v.number()),
         runId: v.id("researchRuns"),
         conversationId: v.id("agentConversations"),
@@ -255,6 +266,7 @@ export const executionTables = {
         outputJson: v.optional(v.string()),
         rawOutputJson: v.optional(v.string()),
         receivedOutputJson: v.optional(v.string()),
+        correction: v.optional(completionFeedbackValidator),
         receivedWhileAuthorized: v.optional(v.boolean()),
         adoptionGeneration: v.optional(v.number()),
         requestIds: v.optional(v.array(v.id("agentOperationRequests"))),
@@ -314,6 +326,8 @@ export const executionTables = {
         completedAt: v.optional(v.number()),
     })
         .index("by_run_and_logical_key", ["runId", "logicalKey"])
+        .index("by_run_and_status", ["runId", "status"])
+        .index("by_preparation_and_status", ["pin.preparationId", "status"])
         .index("by_mission", ["missionId"])
         .index("by_mission_and_logical_key", ["missionId", "logicalKey"])
         .index("by_mission_and_actor", ["missionId", "actor"])

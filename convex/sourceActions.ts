@@ -486,12 +486,13 @@ export function requestPinnedPublicSource(
                     Host: url.host,
                 },
                 servername: url.hostname,
-                lookup: (_hostname, _options, callback) => {
-                    callback(
-                        null,
-                        pinnedAddress,
-                        isIP(pinnedAddress) === 6 ? 6 : 4,
-                    );
+                lookup: (_hostname, lookupOptions, callback) => {
+                    const family = isIP(pinnedAddress) === 6 ? 6 : 4;
+                    if (lookupOptions.all) {
+                        callback(null, [{ address: pinnedAddress, family }]);
+                    } else {
+                        callback(null, pinnedAddress, family);
+                    }
                 },
             },
             (response) => {

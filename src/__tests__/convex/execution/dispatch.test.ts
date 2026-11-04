@@ -609,11 +609,9 @@ test.each(
         code: "stale_execution",
     });
     expect(diagnostic).not.toContain("not performed");
-    if (definition.nativeConversation)
-        expect(diagnostic).toContain("recorded state");
-    else
-        expect(JSON.parse(diagnostic)).toEqual({
-            kind: "refused",
-            code: "stale_execution",
-        });
+    expect(diagnostic).toContain("recorded state");
+    expect(JSON.parse(diagnostic)).toMatchObject({
+        kind: "refused",
+        code: "stale_execution",
+    });
 });

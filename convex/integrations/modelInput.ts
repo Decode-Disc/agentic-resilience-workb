@@ -1,6 +1,7 @@
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { executionError } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
+import { operationResultKey } from "@convex/execution/operationResults";
 import { type TranscriptContext, Type } from "@earendil-works/pi-ai";
 import { asSchema, type JSONSchema7, jsonSchema, type ToolSet, tool } from "ai";
 import { convexToZod } from "convex-helpers/server/zod4";
@@ -8,7 +9,7 @@ import { z } from "zod";
 import {
     MODEL_MAX_OUTPUT_TOKENS,
     type ModelRoute,
-    routedModelSettings,
+    modelCallSettings,
     SIMULATION_MODEL_ROUTE,
 } from "./modelRouting";
 import inputProfiles from "./piInputProfiles.json";
@@ -69,7 +70,10 @@ export function modelToolSetKey(
 export async function agentToolSetKey(
     operations: Record<
         string,
-        Pick<AgentOperationDefinition, "description" | "inputValidator">
+        Pick<AgentOperationDefinition, "description" | "inputValidator"> &
+            Partial<Pick<AgentOperationDefinition, "resultValidator">> & {
+                resultContractKey?: string;
+            }
     >,
 ) {
     return modelToolSetKey(
@@ -122,6 +126,7 @@ export function piMissionMessages(
 export function preparePiSimulationRequest(
     messages: TranscriptContext["messages"],
 ) {
+    const generation = modelCallSettings(SIMULATION_MODEL_ROUTE).generation;
     const normalized = messages.map((message) => ({
         ...message,
         timestamp: 0,
@@ -134,9 +139,9 @@ export function preparePiSimulationRequest(
             route: SIMULATION_MODEL_ROUTE,
             messages: normalized,
             settings: {
-                maxTokens: MODEL_MAX_OUTPUT_TOKENS,
-                maxRetries: 0,
-                temperature: 0,
+                maxTokens: generation.maxOutputTokens,
+                maxRetries: generation.maxRetries,
+                temperature: generation.temperature,
             },
         }),
     };
@@ -144,10 +149,17 @@ export function preparePiSimulationRequest(
 
 /** Routing and the serialized journal envelope are shared with native preflight calibration. */
 export function preparePiModelPayload(payload: object, route: ModelRoute) {
+    const { request, generation } = modelCallSettings(route);
     const prepared = {
         ...payload,
-        temperature: 0,
-        ...routedModelSettings(route),
+        temperature: generation.temperature,
+        ...request,
+        ...("max_completion_tokens" in payload
+            ? { max_completion_tokens: generation.maxOutputTokens }
+            : {}),
+        ...("max_tokens" in payload
+            ? { max_tokens: generation.maxOutputTokens }
+            : {}),
     };
     return {
         payload: prepared,
@@ -161,7 +173,7 @@ export function preparePiModelPayload(payload: object, route: ModelRoute) {
 
 function modelInputSchema<Schema extends z.ZodObject>(
     validator: Schema,
-    convexIdPaths: readonly string[] = [],
+    convexIdPaths: readonly { path: string; table: string }[] = [],
 ) {
     const strictValidator = validator.strict();
     type Input = z.output<typeof strictValidator>;
@@ -174,17 +186,21 @@ function modelInputSchema<Schema extends z.ZodObject>(
                 if (!(zodSchema instanceof z.ZodCustom)) return;
                 const idPath = path.join(".");
                 const fieldPath = idPath.replace(/^properties\./, "");
-                if (!convexIdPaths.includes(fieldPath))
+                const identity = convexIdPaths.find(
+                    (id) => id.path === fieldPath,
+                );
+                if (!identity)
                     throw new Error(
                         `Unsupported custom model input schema at ${idPath}`,
                     );
                 convertedIdPaths.add(fieldPath);
                 jsonSchema.type = "string";
+                jsonSchema.description = `Id<${identity.table}>: copy an observed identifier of this type; identifiers from other tables are invalid.`;
             },
         });
         if (
             convertedIdPaths.size !== convexIdPaths.length ||
-            convexIdPaths.some((path) => !convertedIdPaths.has(path))
+            convexIdPaths.some((id) => !convertedIdPaths.has(id.path))
         )
             throw new Error("Canonical Convex ID schema was not converted");
         // Zod declares a cross-draft union; the explicit target above produces draft-7.
@@ -201,15 +217,51 @@ function modelInputSchema<Schema extends z.ZodObject>(
     });
 }
 
+/** Walk the canonical validator so nested IDs retain the same narrow conversion as root fields. */
+type CanonicalValidator = import("convex/values").Validator<
+    unknown,
+    "required" | "optional",
+    string
+>;
+function convexIdPaths(
+    validator: CanonicalValidator,
+    path = "",
+): { path: string; table: string }[] {
+    if (validator.kind === "id" && "tableName" in validator)
+        return [
+            {
+                path: path.replace(/^properties\./, ""),
+                table: String(validator.tableName),
+            },
+        ];
+    if (validator.kind === "object" && "fields" in validator)
+        return Object.entries(
+            validator.fields as Record<string, CanonicalValidator>,
+        ).flatMap(([key, value]) =>
+            convexIdPaths(
+                value,
+                path ? `${path}.properties.${key}` : `properties.${key}`,
+            ),
+        );
+    if (validator.kind === "array" && "element" in validator)
+        return convexIdPaths(
+            validator.element as CanonicalValidator,
+            `${path}.items`,
+        );
+    if (validator.kind === "union" && "members" in validator)
+        return (validator.members as CanonicalValidator[]).flatMap(
+            (member, index) => convexIdPaths(member, `${path}.anyOf.${index}`),
+        );
+    return [];
+}
+
 /** Both generation engines derive model schemas from the canonical operation validator. */
 export function agentOperationInputSchema(
     operation: Pick<AgentOperationDefinition, "inputValidator">,
 ) {
     return modelInputSchema(
         convexToZod(operation.inputValidator),
-        Object.entries(operation.inputValidator.fields)
-            .filter(([, validator]) => validator.kind === "id")
-            .map(([field]) => field),
+        convexIdPaths(operation.inputValidator),
     );
 }
 
@@ -235,7 +287,10 @@ type AgentInput = {
     prompt: string;
     operations: Record<
         string,
-        Pick<AgentOperationDefinition, "description" | "inputValidator">
+        Pick<AgentOperationDefinition, "description" | "inputValidator"> &
+            Partial<Pick<AgentOperationDefinition, "resultValidator">> & {
+                resultContractKey?: string;
+            }
     >;
     nativeRoute?: ModelRoute;
     definitionVersion?: number;
@@ -258,6 +313,18 @@ export async function piInputProfileKey(args: AgentInput): Promise<string> {
                 args.nativeConversation,
             ),
             tools: await serializedTools(args.operations),
+            resultContracts: Object.fromEntries(
+                Object.entries(args.operations)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([name, operation]) => [
+                        name,
+                        operation.resultContractKey ??
+                            (operation.resultValidator
+                                ? operationResultKey(operation.resultValidator)
+                                : null),
+                    ]),
+            ),
+            resultRendering: 2,
             continuation: PI_MISSION_INPUT,
             extension: PI_MISSION_EXTENSION,
             route: args.nativeRoute
@@ -270,9 +337,11 @@ export async function piInputProfileKey(args: AgentInput): Promise<string> {
                 ? { configuration: args.nativeRoute.profileKey }
                 : {}),
             settings: args.nativeRoute
-                ? routedModelSettings(args.nativeRoute)
+                ? modelCallSettings(args.nativeRoute).request
                 : null,
-            maxTokens: MODEL_MAX_OUTPUT_TOKENS,
+            maxTokens: args.nativeRoute
+                ? modelCallSettings(args.nativeRoute).generation.maxOutputTokens
+                : MODEL_MAX_OUTPUT_TOKENS,
             simulationEnvelope:
                 args.nativeRoute?.model === SIMULATION_MODEL_ROUTE.model &&
                 args.nativeRoute.provider === SIMULATION_MODEL_ROUTE.provider

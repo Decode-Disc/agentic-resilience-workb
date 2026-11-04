@@ -1,7 +1,14 @@
+import {
+    executionStatusValidator,
+    researchRunLifecycleValidator,
+} from "@convex/domain/validators";
+import type { Validator } from "convex/values";
 import { type Infer, v } from "convex/values";
+import type { ValidationError } from "convex-helpers/validators";
 
 /** Shared observations cannot depend on a particular agent's business result schema. */
 export const commonOperationSuccessValidator = v.object({
+    progressKeys: v.optional(v.array(v.string())),
     kind: v.literal("success"),
     valueJson: v.string(),
 });
@@ -123,4 +130,83 @@ export function historySourceFor(
 /** Consultation audit entries cannot manufacture new retained source material. */
 export function isCommonConsultation(kind: string): boolean {
     return kind === "consult_run_state" || historySourceFor(kind) !== undefined;
+}
+
+export const validationFeedbackValidator = v.object({
+    path: v.string(),
+    expected: v.string(),
+});
+export const completionFeedbackValidator = v.object({
+    code: v.string(),
+    issues: v.array(validationFeedbackValidator),
+});
+
+export const runStateResultValidator = v.object({
+    lifecycleState: researchRunLifecycleValidator,
+    executionStatus: executionStatusValidator,
+    executionGeneration: v.number(),
+});
+
+const MAX_VALIDATION_FEEDBACK_FIELD_CHARS = 256;
+type FeedbackSchema = Validator<unknown, "required" | "optional", string>;
+
+/** Error paths locate the canonical type; received prototype names are not expected types. */
+export function operationInputFeedback(
+    schema: FeedbackSchema,
+    error: ValidationError,
+): Infer<typeof validationFeedbackValidator> {
+    const path = error.path ?? "";
+    const parts = path
+        .replace(/\[(\d+)\]/g, ".$1")
+        .split(".")
+        .filter(Boolean);
+    const locate = (
+        validator: FeedbackSchema,
+        remaining: string[],
+    ): FeedbackSchema[] => {
+        if (!remaining.length) return [validator];
+        if (validator.kind === "union" && "members" in validator)
+            return (validator.members as FeedbackSchema[]).flatMap((member) =>
+                locate(member, remaining),
+            );
+        const [head, ...tail] = remaining;
+        if (validator.kind === "object" && "fields" in validator && head) {
+            const child = (validator.fields as Record<string, FeedbackSchema>)[
+                head
+            ];
+            return child ? locate(child, tail) : [];
+        }
+        if (
+            validator.kind === "array" &&
+            "element" in validator &&
+            head &&
+            /^\d+$/.test(head)
+        )
+            return locate(validator.element as FeedbackSchema, tail);
+        if (validator.kind === "record" && "value" in validator)
+            return locate(validator.value as FeedbackSchema, tail);
+        return [];
+    };
+    const describe = (validator: FeedbackSchema): string => {
+        if (validator.kind === "id" && "tableName" in validator)
+            return `Id<${validator.tableName}>`;
+        if (validator.kind === "union" && "members" in validator)
+            return (validator.members as FeedbackSchema[])
+                .map(describe)
+                .join(" | ");
+        if (validator.kind === "literal" && "value" in validator)
+            return String(validator.value);
+        return validator.kind === "float64"
+            ? "number"
+            : validator.kind === "record"
+              ? "object"
+              : validator.kind;
+    };
+    const expected =
+        [...new Set(locate(schema, parts).map(describe))].join(" | ") ||
+        String(error.expected);
+    return {
+        path: path.slice(0, MAX_VALIDATION_FEEDBACK_FIELD_CHARS),
+        expected: expected.slice(0, MAX_VALIDATION_FEEDBACK_FIELD_CHARS),
+    };
 }

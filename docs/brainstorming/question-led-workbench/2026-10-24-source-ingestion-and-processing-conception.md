@@ -8,6 +8,8 @@ Status reviewed on 2026-10-30: the [shared Pi runtime is locally verified](../..
 
 Conception refined on 2026-11-02: [the accepted decisions below](#accepted-sources-refinement-of-2026-11-02) resolve several earlier open choices without certifying implementation. [PRODUCT](../../../PRODUCT.md#source-preparation-and-corpus-review) owns the resulting behavior and [TECH](../../../context/TECH.md#sources-mission-and-prepared-material) owns the mission, operation, version and progression contracts. Earlier descriptions and open questions remain dated design history.
 
+Implementation supersession, 2026-11-03: the default-disabled Sources backend now binds the shared executor, documentary needs, controlled qualifications and partial material handoff. Investigation-driven complement initiation and live documentary-quality acceptance remain pending. [TECH](../../../context/TECH.md#sources-mission-and-prepared-material) owns the implemented contract and [the roadmap](../../ROADMAP.md#phase-7--shared-execution-and-sources) owns verification and remaining delivery. Earlier status statements below retain their dated scope.
+
 ## Purpose and Simple Workflow
 
 Turn dispersed sources into structured, inspectable, reusable documentary material suited to the requested research needs.

@@ -11,7 +11,10 @@ import {
     PublicSourceUrlError,
     validatePublicSourceUrl,
 } from "./domain/publicSourceUrl";
-import { createExaDiscoveryAdapter } from "./integrations/exa";
+import {
+    createExaDiscoveryAdapter,
+    exaDiscoveryDisposition,
+} from "./integrations/exa";
 
 const MAX_EXA_ATTEMPTS = 2;
 const EXA_DISCOVERY_TIMEOUT_MS = 10_000;
@@ -194,7 +197,11 @@ export const discoverForRun = internalAction({
                                       ).map(({ address }) => address),
                               );
                     const rejected = batch.rejected + validated.rejected;
-                    if (validated.candidates.length === 0 && rejected > 0) {
+                    const disposition = exaDiscoveryDisposition(
+                        validated.candidates.length,
+                        rejected,
+                    );
+                    if (disposition === "failed") {
                         await ctx.runMutation(
                             internal.providerCalls.recordAttempt,
                             {
@@ -231,7 +238,7 @@ export const discoverForRun = internalAction({
                             candidates: validated.candidates,
                             providerCompletion: {
                                 providerCallId: lease.providerCallId,
-                                status: rejected > 0 ? "partial" : "succeeded",
+                                status: disposition,
                                 latencyMs: Date.now() - startedAt,
                                 accepted: validated.candidates.length,
                                 rejected,

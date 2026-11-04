@@ -1,0 +1,57 @@
+{
+    "version": 2,
+    "capability": "sources_mission_v1",
+    "model": "openai/gpt-oss-120b",
+    "maximumModelAttempts": 18,
+    "maximumSearchAttempts": 4,
+    "maximumAcquisitions": 12,
+    "maximumCostUsd": 1.4658448,
+    "cases": [
+        {
+            "id": "ccc",
+            "companyName": "CCC Intelligent Solutions Holdings Inc.",
+            "companyCik": "1818201",
+            "ticker": "CCCS",
+            "websiteUrl": "https://www.cccis.com/",
+            "scope": "Photo-led US auto physical-damage claims, from photo intake through estimate review and repair coordination.",
+            "questions": [
+                {
+                    "id": "coordination",
+                    "text": "What evidence establishes CCC's role in insurer and repairer coordination, and which participants retain effective action rights?",
+                    "shortLabel": "Coordination and rights",
+                    "rationale": "Distinguish workflow participation from control of decisions."
+                },
+                {
+                    "id": "limits",
+                    "text": "What limits or counter-evidence constrain a claim of operational dependency on CCC, including carrier or core-platform control and substitution?",
+                    "shortLabel": "Limits and substitution",
+                    "rationale": "Do not extend evidence to the entire claim lifecycle or payment without direct support."
+                }
+            ]
+        },
+        {
+            "id": "adobe",
+            "companyName": "Adobe Inc.",
+            "companyCik": "796343",
+            "ticker": "ADBE",
+            "websiteUrl": "https://www.adobe.com/",
+            "scope": "Creative Cloud production workflow, from creation through collaboration and delivery.",
+            "questions": [
+                {
+                    "id": "integration",
+                    "text": "What evidence establishes how Creative Cloud integrates the production workflow and constrains switching?",
+                    "shortLabel": "Integration and switching",
+                    "rationale": "Identify documented mechanisms and the participants that control them."
+                },
+                {
+                    "id": "limits",
+                    "text": "What limits and counter-evidence distinguish product capability or marketing arguments from established operational dependency?",
+                    "shortLabel": "Limits of dependency",
+                    "rationale": "Preserve attribution, uncertainty and viable alternatives."
+                }
+            ]
+        }
+    ],
+    "modelRole": "harness_stress",
+    "reasoningEffort": "low"
+}

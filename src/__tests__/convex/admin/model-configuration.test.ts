@@ -1,6 +1,8 @@
-import { NATIVE_PROFILE_CATALOG } from "@convex/integrations/modelRouting";
 import { api, internal } from "@convex/_generated/api";
-import { INITIAL_MODEL_CATALOG } from "@convex/integrations/modelRouting";
+import {
+    INITIAL_MODEL_CATALOG,
+    NATIVE_PROFILE_CATALOG,
+} from "@convex/integrations/modelRouting";
 import schema from "@convex/schema";
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
@@ -209,9 +211,109 @@ test("administrative import prepares a model absent from Pi's bundled catalogue 
         descriptor: {
             reasoningEfforts: ["low", "high", "max"],
             reasoningMandatory: true,
+            supportedParameters: [
+                "tools",
+                "max_tokens",
+                "reasoning",
+                "structured_outputs",
+            ],
         },
         reasoningEffort: "low",
     });
+});
+
+test.each([
+    0, 1,
+])("a pinned provider is prepared from its exact available endpoint (status=%s)", async (status) => {
+    const { t, admin } = await setup();
+    const model = "example/provider-capabilities";
+    const supported = [
+        "tools",
+        "max_tokens",
+        "structured_outputs",
+        "response_format",
+    ];
+    const pricing = { prompt: "0.00000003", completion: "0.0000001" };
+    const fetch = vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "https://openrouter.ai/api/v1/models")
+            return Response.json({
+                data: [
+                    {
+                        id: model,
+                        context_length: 131072,
+                        top_provider: { max_completion_tokens: 32768 },
+                        pricing,
+                        supported_parameters: [
+                            ...supported,
+                            "reasoning",
+                            "temperature",
+                        ],
+                    },
+                ],
+            });
+        if (url === `https://openrouter.ai/api/v1/models/${model}/endpoints`)
+            return Response.json({
+                data: {
+                    id: model,
+                    endpoints: [
+                        {
+                            tag: "selected/fp8",
+                            status,
+                            context_length: 65536,
+                            max_completion_tokens: 8192,
+                            pricing,
+                            supported_parameters: supported,
+                        },
+                    ],
+                },
+            });
+        throw Error("Inference and unrelated metadata are forbidden");
+    });
+    vi.stubGlobal("fetch", fetch);
+    const input = {
+        model,
+        provider: "selected/fp8",
+        label: "Provider capabilities",
+        requestKey: "provider-capabilities",
+    };
+    const prepared = await admin.action(
+        api.modelConfigurationActions.prepare,
+        input,
+    );
+    expect(prepared.ready).toBe(status === 0);
+    if (status === 0) {
+        const revision = await t.run((ctx) =>
+            ctx.db.query("modelRevisions").first(),
+        );
+        expect(revision).toMatchObject({
+            provider: "selected/fp8",
+            descriptor: {
+                contextWindow: 65536,
+                maxTokens: 8192,
+                reasoning: false,
+                supportedParameters: supported,
+                structuredOutputs: true,
+            },
+        });
+    } else {
+        expect(
+            await t.run((ctx) => ctx.db.query("modelRevisions").first()),
+        ).toBeNull();
+        expect(
+            (await admin.query(api.modelConfiguration.list, {})).models[0],
+        ).toMatchObject({
+            status: "failed",
+            failure: "provider_unavailable",
+            enabled: false,
+        });
+    }
+    expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([
+        "https://openrouter.ai/api/v1/models",
+        `https://openrouter.ai/api/v1/models/${model}/endpoints`,
+    ]);
+    await admin.action(api.modelConfigurationActions.prepare, input);
+    expect(fetch).toHaveBeenCalledTimes(2);
 });
 
 test("unauthenticated model preparation performs no metadata I/O or writes", async () => {
@@ -293,6 +395,7 @@ test("missing model prices cannot be accepted as free inference", async () => {
             String(input).endsWith("/endpoints")
                 ? Response.json({
                       data: {
+                          id: "example/no-price",
                           endpoints: [
                               {
                                   tag: "test",
@@ -628,4 +731,58 @@ test("repreparing a legacy entry keeps its identity and historical revision whil
     expect(
         (await admin.query(api.modelConfiguration.list, {})).models,
     ).toHaveLength(1);
+});
+
+test("response coherence policy has central defaults and administrator-versioned thresholds", async () => {
+    const { t, admin } = await setup();
+    const before = await admin.query(api.modelConfiguration.list, {});
+    expect(before.responseControl).toMatchObject({
+        revision: 0,
+        enabled: false,
+        model: "typesafe/jev-1.14",
+        contradictionThreshold: 0.9,
+        supportThreshold: 0.8,
+    });
+    await expect(
+        t.mutation(api.modelConfiguration.setResponseControl, {
+            expectedRevision: 0,
+            enabled: true,
+            model: "typesafe/jev-1.14",
+            contradictionThreshold: 0.95,
+            supportThreshold: 0.7,
+        }),
+    ).rejects.toThrow("Not authenticated");
+    await admin.mutation(api.modelConfiguration.setResponseControl, {
+        expectedRevision: 0,
+        enabled: true,
+        model: "typesafe/jev-1.14",
+        contradictionThreshold: 0.95,
+        supportThreshold: 0.7,
+    });
+    expect(
+        (await admin.query(api.modelConfiguration.list, {})).responseControl,
+    ).toMatchObject({
+        revision: 1,
+        enabled: true,
+        contradictionThreshold: 0.95,
+        supportThreshold: 0.7,
+    });
+    await expect(
+        admin.mutation(api.modelConfiguration.setResponseControl, {
+            expectedRevision: 0,
+            enabled: false,
+            model: "typesafe/jev-1.14",
+            contradictionThreshold: 0.9,
+            supportThreshold: 0.8,
+        }),
+    ).rejects.toThrow("version_conflict");
+    await expect(
+        admin.mutation(api.modelConfiguration.setResponseControl, {
+            expectedRevision: 1,
+            enabled: true,
+            model: "typesafe/jev-1.14",
+            contradictionThreshold: 1.1,
+            supportThreshold: 0.8,
+        }),
+    ).rejects.toThrow("response_control_policy_invalid");
 });

@@ -1,11 +1,11 @@
 import {
-    routedModelSettings,
+    modelCallSettings,
     WORKBENCH_MODEL_ROUTE,
 } from "@convex/integrations/modelRouting";
 import { afterEach, expect, test, vi } from "vitest";
 
 test("new Workbench requests leave provider selection to OpenRouter", () => {
-    const settings = routedModelSettings(WORKBENCH_MODEL_ROUTE);
+    const settings = modelCallSettings(WORKBENCH_MODEL_ROUTE).request;
     expect(settings.provider).not.toHaveProperty("only");
     expect(settings.provider).not.toHaveProperty("allow_fallbacks");
     expect(settings.provider).toMatchObject({

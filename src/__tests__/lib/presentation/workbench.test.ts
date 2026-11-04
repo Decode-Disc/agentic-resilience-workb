@@ -1,6 +1,18 @@
 import { expect, test } from "vitest";
 import { sourceMissionState } from "@/lib/presentation/workbench";
 
+test.each([
+    "partial",
+    "blocked",
+] as const)("Sources %s handoff remains visibly unfinished", (status) => {
+    expect(
+        sourceMissionState(
+            { lifecycleState: "sources_prepared", executionStatus: "idle" },
+            { status },
+        ),
+    ).toBe("interrupted");
+});
+
 test("a running analytical stage does not make Sources appear to be running", () => {
     expect(
         sourceMissionState(

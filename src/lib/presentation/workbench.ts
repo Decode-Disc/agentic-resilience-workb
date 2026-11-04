@@ -101,6 +101,11 @@ export function sourceMissionState(
 ): ConversationWorkItem["state"] {
     if (run.completionOutcome === "insufficient_public_evidence")
         return "blocked";
+    if (run.pauseReason === "execution_interrupted") return "interrupted";
+    if (run.lifecycleState === "sources_prepared") {
+        if (!preparation || preparation.status === "started") return "waiting";
+        return preparation.status === "complete" ? "completed" : "interrupted";
+    }
     if (!isDocumentaryResearchPhase(run.lifecycleState)) return "completed";
     if (run.executionStatus === "failed" || run.executionStatus === "cancelled")
         return "interrupted";
@@ -115,4 +120,36 @@ export function sourceMissionState(
     if (run.pauseReason === "analyst") return "paused";
     if (run.executionStatus === "running") return "running";
     return "waiting";
+}
+
+/** A consistency estimate is scoped to recorded facts; it never becomes a general truth score. */
+export function responseCoherenceNotice(value: unknown) {
+    if (!value || typeof value !== "object" || !("status" in value)) return;
+    if (value.status !== "review_needed" && value.status !== "unavailable")
+        return;
+    const score =
+        value.status === "review_needed" &&
+        "support" in value &&
+        typeof value.support === "number" &&
+        Number.isFinite(value.support) &&
+        value.support >= 0 &&
+        value.support <= 1
+            ? value.support
+            : undefined;
+    return {
+        title:
+            value.status === "unavailable"
+                ? "Consistency check unavailable"
+                : "Consistency with recorded actions: review needed",
+        score:
+            score === undefined
+                ? undefined
+                : `Estimated consistency: ${Math.round(score * 100)}%`,
+        detail:
+            value.status === "unavailable"
+                ? "This explanation has not received a current consistency assessment."
+                : score === undefined
+                  ? "A limited status check flagged a possible inconsistency. The original explanation is retained."
+                  : "This automated estimate concerns recorded actions and dossier state, not the factual accuracy of the whole explanation.",
+    };
 }

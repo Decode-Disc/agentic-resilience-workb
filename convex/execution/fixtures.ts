@@ -11,12 +11,19 @@ import {
     claimCorpusApprovedRunExecution,
     claimPausedRunExecution,
 } from "@convex/domain/executionClaim";
+import { stableStringify } from "@convex/domain/sourcePassages";
 import { upsertSourceReviewItem } from "@convex/domain/sourceReviewProjection";
 import { initializeFraming } from "@convex/framing";
-import { resolveAgentModel } from "@convex/modelConfiguration";
+import { agentInputByteLength } from "@convex/integrations/modelInput";
+import {
+    readResponseControlPolicy,
+    resolveAgentModel,
+    revisionRoute,
+} from "@convex/modelConfiguration";
 import {
     BROWSER_QUALIFICATION_MAX_COST_USD,
     BROWSER_QUALIFICATION_MAX_REQUESTS,
+    MAX_SOURCES_QUALIFICATION_RECEIPTS,
 } from "@convex/resourceLimits";
 import {
     BROWSER_TEST_SLOT,
@@ -28,6 +35,8 @@ import schema from "@convex/schema";
 import { workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { type Infer, v } from "convex/values";
+import { getAgentDefinition } from "./agentCatalog";
+import { agentToolSchemas } from "./agentDefinition";
 import { requireMissionAuthority } from "./authority";
 import { submitAuthorizedMessage } from "./conversations";
 import {
@@ -573,10 +582,38 @@ export const authorizeWorkbenchQualification = internalMutation({
         runId: v.id("researchRuns"),
         fixtureKey: v.string(),
         relayOrigin: v.optional(v.string()),
+        maximumRequests: v.optional(v.number()),
+        maximumCostUsd: v.optional(v.number()),
+        responseControllerModel: v.optional(v.string()),
+        sourcesLot: v.optional(
+            v.array(
+                v.object({
+                    runId: v.id("researchRuns"),
+                    fixtureKey: v.string(),
+                }),
+            ),
+        ),
     },
     returns: v.null(),
     handler: async (ctx, args) => {
         const { run, visitor } = await requireLocalFixtureRun(ctx, args);
+        const requestCeiling = args.sourcesLot
+            ? 40
+            : BROWSER_QUALIFICATION_MAX_REQUESTS;
+        const costCeiling = args.sourcesLot
+            ? 2
+            : BROWSER_QUALIFICATION_MAX_COST_USD;
+        const maximumRequests = args.maximumRequests ?? requestCeiling;
+        const maximumCostUsd = args.maximumCostUsd ?? costCeiling;
+        if (
+            !Number.isSafeInteger(maximumRequests) ||
+            maximumRequests < 1 ||
+            maximumRequests > requestCeiling ||
+            !Number.isFinite(maximumCostUsd) ||
+            maximumCostUsd <= 0 ||
+            maximumCostUsd > costCeiling
+        )
+            throw new Error("Invalid qualification limits");
         if (
             args.relayOrigin !== undefined &&
             !/^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}$/.test(args.relayOrigin)
@@ -601,11 +638,69 @@ export const authorizeWorkbenchQualification = internalMutation({
             "workbench",
             conversation?.modelCatalogId,
         );
+        const sourcesLot = args.sourcesLot?.map((entry) => entry.runId);
+        if (args.sourcesLot) {
+            if (
+                args.relayOrigin ||
+                sourcesLot?.length !== 2 ||
+                new Set(sourcesLot).size !== 2 ||
+                !sourcesLot.includes(run._id) ||
+                (await resolveAgentModel(ctx, "sources"))._id !== model._id
+            )
+                throw new Error("Invalid Sources qualification lot");
+            const definition = getAgentDefinition("sources_v1", 1);
+            for (const operations of definition.nativeToolSets?.(
+                definition.operations,
+            ) ?? [agentToolSchemas(definition)]) {
+                await agentInputByteLength(
+                    {
+                        instructions: definition.instructions,
+                        prompt: "",
+                        operations,
+                        definitionVersion: definition.version,
+                        nativeConversation: definition.nativeConversation,
+                        nativeRoute: revisionRoute(model),
+                    },
+                    async (key) =>
+                        (
+                            await ctx.db
+                                .query("nativeInputProfiles")
+                                .withIndex("by_key", (q) => q.eq("key", key))
+                                .unique()
+                        )?.bytes,
+                );
+            }
+            for (const entry of args.sourcesLot) {
+                const owned = await requireLocalFixtureRun(ctx, entry);
+                if (
+                    owned.run.researchStartedAt !== undefined ||
+                    owned.run.lifecycleState !== "framing"
+                )
+                    throw new Error("Unlaunched Sources fixture required");
+            }
+        }
+        const responseControl =
+            args.responseControllerModel !== undefined
+                ? await readResponseControlPolicy(ctx)
+                : undefined;
+        if (
+            responseControl &&
+            (!args.sourcesLot ||
+                !responseControl.enabled ||
+                responseControl.model !== args.responseControllerModel)
+        )
+            throw new Error("Qualification controller configuration mismatch");
         if (context.paidQualification) {
             if (
                 context.paidQualification.runId !== run._id ||
                 context.paidQualification.modelRevisionId !== model._id ||
-                context.paidQualification.relayOrigin !== args.relayOrigin
+                context.paidQualification.maximumRequests !== maximumRequests ||
+                context.paidQualification.maximumCostUsd !== maximumCostUsd ||
+                context.paidQualification.relayOrigin !== args.relayOrigin ||
+                JSON.stringify(context.paidQualification.sourcesLot) !==
+                    JSON.stringify(sourcesLot) ||
+                stableStringify(context.paidQualification.responseControl) !==
+                    stableStringify(responseControl)
             )
                 throw new Error(
                     "Qualification authorization conflicts with the retained lot",
@@ -617,9 +712,11 @@ export const authorizeWorkbenchQualification = internalMutation({
                 runId: run._id,
                 modelRevisionId: model._id,
                 relayOrigin: args.relayOrigin,
-                maximumRequests: BROWSER_QUALIFICATION_MAX_REQUESTS,
-                maximumCostUsd: BROWSER_QUALIFICATION_MAX_COST_USD,
+                maximumRequests,
+                maximumCostUsd,
                 authorizedAt: Date.now(),
+                sourcesLot,
+                responseControl,
             },
         });
         return null;
@@ -643,7 +740,11 @@ export const startWorkbench = internalAction({
     },
 });
 export const activateWorkbench = internalMutation({
-    args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
+    args: {
+        runId: v.id("researchRuns"),
+        fixtureKey: v.string(),
+        researchAngle: v.optional(v.string()),
+    },
     returns: v.id("researchRuns"),
     handler: async (ctx, args): Promise<Id<"researchRuns">> => {
         const { run } = await requireLocalFixtureRun(ctx, args);
@@ -658,6 +759,7 @@ export const activateWorkbench = internalMutation({
             workflowId: undefined,
             pauseReason: undefined,
             researchAngle:
+                args.researchAngle?.trim().slice(0, 2000) ??
                 "Simulation: propose a claims workflow research program.",
         });
         await initializeFraming(ctx, run._id);
@@ -802,8 +904,8 @@ export const inspectWorkbench = internalQuery({
         const calls = await ctx.db
             .query("providerCalls")
             .withIndex("by_run", (q) => q.eq("runId", run._id))
-            .take(21);
-        if (calls.length > 20)
+            .take(MAX_SOURCES_QUALIFICATION_RECEIPTS + 1);
+        if (calls.length > MAX_SOURCES_QUALIFICATION_RECEIPTS)
             throw new Error("Fixture receipt capacity exceeded");
         const invocations = await ctx.db
             .query("agentInvocations")
@@ -882,5 +984,102 @@ export const workbenchRelay = internalQuery({
         if (!grant || grant.modelRevisionId !== mission.modelRevisionId)
             throw new Error("evaluation_dossier_not_authorized");
         return grant.relayOrigin ?? null;
+    },
+});
+
+/** Bounded evidence export for an owned local Sources qualification; never grants execution. */
+export const inspectSourcesQualification = internalQuery({
+    args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
+    returns: v.object({
+        run: schema.doc("researchRuns"),
+        preparation: v.union(
+            schema.doc("sourceSelectionProposalRebuilds"),
+            v.null(),
+        ),
+        sources: v.array(schema.doc("sources")),
+        captures: v.array(schema.doc("sourceCaptures")),
+        tasks: v.array(schema.doc("aiTaskResults")),
+        requests: v.array(schema.doc("agentOperationRequests")),
+        invocations: v.array(schema.doc("agentInvocations")),
+        payloads: v.array(schema.doc("agentInvocationPayloads")),
+        captureDownloads: v.array(
+            v.object({ captureId: v.id("sourceCaptures"), url: v.string() }),
+        ),
+    }),
+    handler: async (ctx, args) => {
+        const { run } = await requireLocalFixtureRun(ctx, args);
+        const preparation = run.sourcePreparationId
+            ? await ctx.db.get(run.sourcePreparationId)
+            : null;
+        const [sources, tasks, requests, invocations, captures] =
+            await Promise.all([
+                ctx.db
+                    .query("sources")
+                    .withIndex("by_run_and_url", (q) => q.eq("runId", run._id))
+                    .take(61),
+                ctx.db
+                    .query("aiTaskResults")
+                    .withIndex("by_run", (q) => q.eq("runId", run._id))
+                    .take(33),
+                ctx.db
+                    .query("agentOperationRequests")
+                    .withIndex("by_run_and_logical_key", (q) =>
+                        q.eq("runId", run._id),
+                    )
+                    .take(101),
+                ctx.db
+                    .query("agentInvocations")
+                    .withIndex("by_run_and_task_key", (q) =>
+                        q.eq("runId", run._id),
+                    )
+                    .take(41),
+                preparation
+                    ? ctx.db
+                          .query("sourceCaptures")
+                          .withIndex("by_preparation_and_source", (q) =>
+                              q.eq("preparationId", preparation._id),
+                          )
+                          .take(13)
+                    : [],
+            ]);
+        if (
+            sources.length > 60 ||
+            tasks.length > 32 ||
+            requests.length > 100 ||
+            invocations.length > 40 ||
+            captures.length > 12
+        )
+            throw new Error(
+                "Sources qualification inspection capacity exceeded",
+            );
+        const payloads = (
+            await Promise.all(
+                invocations.map((invocation) =>
+                    ctx.db
+                        .query("agentInvocationPayloads")
+                        .withIndex("by_invocation_and_part", (q) =>
+                            q.eq("invocationId", invocation._id),
+                        )
+                        .take(2),
+                ),
+            )
+        ).flat();
+        const captureDownloads = [];
+        for (const capture of captures) {
+            if (!capture.storageId) continue;
+            const url = await ctx.storage.getUrl(capture.storageId);
+            if (url) captureDownloads.push({ captureId: capture._id, url });
+        }
+        return {
+            run,
+            preparation,
+            sources,
+            tasks,
+            requests,
+            invocations,
+            payloads,
+            captures,
+            captureDownloads,
+        };
     },
 });

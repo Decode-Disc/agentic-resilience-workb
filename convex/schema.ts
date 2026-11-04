@@ -4,6 +4,14 @@ import {
     retrievalMetadataValidator,
     SOURCE_RETRIEVAL_RANKING_POLICY,
 } from "@convex/domain/sourceRetrievalPolicy";
+import {
+    documentaryControlOutput,
+    documentaryQualificationOutput,
+    observedDestinationValidator,
+    sourcesEnvelopeValidator,
+    sourcesPreparationValidator,
+} from "@convex/domain/sourcesContracts";
+import { responseControlPolicy } from "@convex/domain/workbenchResponseControlContracts";
 import { authTables } from "@convex-dev/auth/server";
 import { vWorkflowId } from "@convex-dev/workflow";
 import { defineSchema, defineTable } from "convex/server";
@@ -65,6 +73,7 @@ import {
     workflowStepKeyValidator,
     workflowStepStateValidator,
 } from "./domain/validators";
+import { workbenchInstructionTransmissionStatus } from "./domain/workbenchContracts";
 import { executionTables } from "./execution/schema";
 import { modelConfigurationTables } from "./modelConfigurationSchema";
 import { SOURCE_EMBEDDING_DIMENSIONS } from "./resourceLimits";
@@ -163,6 +172,8 @@ export default defineSchema({
                 maximumRequests: v.number(),
                 maximumCostUsd: v.number(),
                 authorizedAt: v.number(),
+                sourcesLot: v.optional(v.array(v.id("researchRuns"))),
+                responseControl: v.optional(responseControlPolicy),
             }),
         ),
         ownerVisitorId: v.id("visitors"),
@@ -176,18 +187,14 @@ export default defineSchema({
         .index("by_owner_and_context_key", ["ownerVisitorId", "contextKey"])
         .index("by_auth_user_id_and_status", ["authUserId", "status"]),
     workbenchInstructions: defineTable({
+        needId: v.optional(v.string()),
         runId: v.id("researchRuns"),
         requestId: v.id("agentOperationRequests"),
         messageId: v.id("agentMessageDeliveries"),
         interpretedNeed: v.string(),
         framingRevisionId: v.id("framingRevisions"),
         coverageRole: v.optional(coverageRoleValidator),
-        status: v.union(
-            v.literal("waiting"),
-            v.literal("transmitted"),
-            v.literal("limited"),
-            v.literal("blocked"),
-        ),
+        status: workbenchInstructionTransmissionStatus,
         outcome: v.string(),
         preparationId: v.optional(v.id("sourceSelectionProposalRebuilds")),
         createdAt: v.number(),
@@ -211,6 +218,8 @@ export default defineSchema({
         .index("by_run_and_key", ["runId", "requestKey"])
         .index("by_run_and_revision", ["runId", "revision"]),
     researchRuns: defineTable({
+        sourcesProtocol: v.optional(v.literal("sources_mission_v1")),
+        sourcesEnvelope: v.optional(sourcesEnvelopeValidator),
         currentFramingRevisionId: v.optional(v.id("framingRevisions")),
         fixedFramingRevisionId: v.optional(v.id("framingRevisions")),
         researchStartRequestKey: v.optional(v.string()),
@@ -394,6 +403,10 @@ export default defineSchema({
             filterFields: ["embeddingScopeKey"],
         }),
     sourceCaptures: defineTable({
+        observedDestinations: v.optional(v.array(observedDestinationValidator)),
+        representationCompleteness: v.optional(
+            v.union(v.literal("complete"), v.literal("partial")),
+        ),
         qualificationInputPolicy: v.optional(
             v.literal(SOURCE_QUALIFICATION_INPUT_POLICY),
         ),
@@ -499,6 +512,7 @@ export default defineSchema({
         "version",
     ]),
     sourceSelectionProposalRebuilds: defineTable({
+        sourcesMission: v.optional(sourcesPreparationValidator),
         modelRevisionId: v.optional(v.id("modelRevisions")),
         executionPlanVersion: v.optional(
             sourcePreparationExecutionPlanValidator,
@@ -842,6 +856,7 @@ export default defineSchema({
         ])
         .index("by_passage_key", ["passageKey"]),
     providerCalls: defineTable({
+        operationRequestId: v.optional(v.id("agentOperationRequests")),
         qualificationReservationUsd: v.optional(v.number()),
         missionId: v.optional(v.id("agentMissions")),
         invocationId: v.optional(v.id("agentInvocations")),
@@ -1005,6 +1020,8 @@ export default defineSchema({
             v.literal("source_comparison"),
             v.literal("showcase_claim_extraction"),
             v.literal("semantic_verification"),
+            v.literal("documentary_qualification"),
+            v.literal("documentary_control"),
         ),
         executionMode: aiTaskExecutionModeValidator,
         fixtureId: v.optional(v.string()),
@@ -1013,6 +1030,8 @@ export default defineSchema({
         adapterVersion: v.string(),
         inputHash: v.string(),
         output: v.union(
+            documentaryQualificationOutput,
+            documentaryControlOutput,
             v.object({
                 kind: v.literal("source_qualification"),
                 selectionStrategy: v.optional(

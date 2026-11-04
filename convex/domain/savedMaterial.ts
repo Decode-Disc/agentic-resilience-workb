@@ -6,16 +6,15 @@ import { sha256Hex } from "@convex/domain/sourcePassages";
 import { executionFailureCode } from "@convex/execution/errors";
 import {
     MAX_OPERATION_RESULT_BYTES,
-    type operationOutcomeValidator,
+    type OperationObservationOutcome,
 } from "@convex/execution/executionProtocol";
-import type { Infer } from "convex/values";
 
-const MAX_SEARCH_RESULT_BYTES = 48 * 1024;
-
-type OperationOutcome = Infer<typeof operationOutcomeValidator>;
+// Reserve the remaining result budget for documentary permissions and observed-link previews.
+const MAX_SEARCH_RESULT_BYTES = 30 * 1024;
 
 type MissionOperationArgs = {
-    missionId: Id<"agentMissions">;
+    missionId?: Id<"agentMissions">;
+    runId?: Id<"researchRuns">;
     expectedGeneration: number;
 };
 
@@ -23,7 +22,9 @@ type MissionCaptureArgs = MissionOperationArgs & {
     sourceId: Id<"sources">;
 };
 
-function failedOutcome(error: unknown): OperationOutcome | undefined {
+function failedOutcome(
+    error: unknown,
+): OperationObservationOutcome | undefined {
     const code = executionFailureCode(error);
     if (!code) return undefined;
     if (
@@ -56,20 +57,33 @@ function failedOutcome(error: unknown): OperationOutcome | undefined {
     return undefined;
 }
 
-function successOutcome(
-    value: unknown,
+async function successOutcome(
+    ctx: ActionCtx,
+    args: MissionCaptureArgs,
+    value: Record<string, unknown>,
     progress?: {
         captureId: Id<"sourceCaptures">;
         progressKey?: string;
         progressKeys?: string[];
     },
-): OperationOutcome {
-    const valueJson = JSON.stringify(value);
+): Promise<OperationObservationOutcome> {
+    const documentaryStatus = await ctx.runQuery(
+        internal.sourcesMission.materialStatus,
+        {
+            missionId: args.missionId,
+            runId: args.runId,
+            expectedGeneration: args.expectedGeneration,
+            sourceId: args.sourceId,
+        },
+    );
+    const valueJson = JSON.stringify(
+        documentaryStatus ? { ...value, documentaryStatus } : value,
+    );
     if (new TextEncoder().encode(valueJson).length > MAX_OPERATION_RESULT_BYTES)
         return { kind: "unavailable", code: "operation_result_capacity" };
     return {
         kind: "success",
-        valueJson,
+        value: JSON.parse(valueJson),
         ...(progress
             ? {
                   captureId: progress.captureId,
@@ -87,9 +101,12 @@ function successOutcome(
 async function searchAvailableMaterial(
     ctx: ActionCtx,
     args: MissionCaptureArgs & { query: string },
-): Promise<OperationOutcome> {
+): Promise<OperationObservationOutcome> {
+    if (!args.query.trim())
+        return { kind: "refused", code: "retrieval_query_invalid" };
     const captureArgs = {
         missionId: args.missionId,
+        runId: args.runId,
         expectedGeneration: args.expectedGeneration,
         sourceId: args.sourceId,
     };
@@ -138,7 +155,7 @@ async function searchAvailableMaterial(
         limitReached:
             result.limitReached || selected.length < result.passages.length,
     };
-    if (!selected.length) return successOutcome(value);
+    if (!selected.length) return successOutcome(ctx, args, value);
     const progressKeys = selected.map(({ order, quotationHash }) =>
         sha256Hex(
             JSON.stringify({
@@ -149,17 +166,21 @@ async function searchAvailableMaterial(
             }),
         ),
     );
-    return successOutcome(value, { captureId: result.captureId, progressKeys });
+    return successOutcome(ctx, args, value, {
+        captureId: result.captureId,
+        progressKeys,
+    });
 }
 
 async function readInContext(
     ctx: ActionCtx,
     args: MissionCaptureArgs & { passageOrder: number },
-): Promise<OperationOutcome> {
+): Promise<OperationObservationOutcome> {
     const result = await ctx.runAction(
         internal.sourceRetrievalActions.readApprovedMaterialForMission,
         {
             missionId: args.missionId,
+            runId: args.runId,
             expectedGeneration: args.expectedGeneration,
             sourceId: args.sourceId,
             request: {
@@ -198,7 +219,7 @@ async function readInContext(
             quotationHash: passage.quotationHash,
         }),
     );
-    return successOutcome(value, {
+    return successOutcome(ctx, args, value, {
         captureId: result.captureId,
         progressKey,
     });
@@ -208,12 +229,13 @@ async function readInContext(
 export async function executeSavedMaterialOperation(
     ctx: ActionCtx,
     args: MissionOperationArgs & { input: SavedMaterialOperation },
-): Promise<OperationOutcome> {
+): Promise<OperationObservationOutcome> {
     try {
         switch (args.input.kind) {
             case "search_available_material":
                 return await searchAvailableMaterial(ctx, {
                     missionId: args.missionId,
+                    runId: args.runId,
                     expectedGeneration: args.expectedGeneration,
                     sourceId: args.input.sourceId,
                     query: args.input.query,
@@ -221,6 +243,7 @@ export async function executeSavedMaterialOperation(
             case "read_in_context":
                 return await readInContext(ctx, {
                     missionId: args.missionId,
+                    runId: args.runId,
                     expectedGeneration: args.expectedGeneration,
                     sourceId: args.input.sourceId,
                     passageOrder: args.input.passageOrder,

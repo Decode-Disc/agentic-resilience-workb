@@ -1,6 +1,10 @@
 import { v } from "convex/values";
 import { framingContentValidator } from "./framingContracts";
 import { coverageRoleValidator } from "./sourceDiscoveryRecovery";
+import {
+    responseReviewInput,
+    responseReviewPin,
+} from "./workbenchResponseControlContracts";
 
 export const workbenchCommand = v.union(
     v.literal("/pause"),
@@ -113,6 +117,10 @@ export const workbenchSchemas = {
     }),
     operation: v.union(
         v.object({
+            kind: v.literal("check_response_coherence"),
+            ...responseReviewInput.fields,
+        }),
+        v.object({
             kind: v.literal("adjust_framing"),
             ...adjustFramingInput.fields,
             messageId: v.optional(v.id("agentMessageDeliveries")),
@@ -130,6 +138,7 @@ export const workbenchSchemas = {
         }),
     ),
     pin: v.union(
+        responseReviewPin,
         v.object({
             kind: v.literal("framing_revision"),
             revisionId: v.id("framingRevisions"),
@@ -143,3 +152,11 @@ export const workbenchSchemas = {
     ),
     success: v.object({ kind: v.literal("success"), valueJson: v.string() }),
 };
+
+/** Transmission is a persisted receipt; later treatment is projected separately. */
+export const workbenchInstructionTransmissionStatus = v.union(
+    v.literal("waiting"),
+    v.literal("transmitted"),
+    v.literal("limited"),
+    v.literal("blocked"),
+);

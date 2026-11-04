@@ -30,6 +30,9 @@ test("the real architecture checker rejects aliases, protected writes and privat
             "export function x(ctx: unknown, id: unknown, key: string) { return ctx.db.patch(id, {[key]:0}); }",
         directTable:
             'export function x(ctx: unknown) { return ctx.db.insert("agentOperationRequests", {status:"completed"}); }',
+        misplacedRuntime:
+            'import { x } from "./allowed"; "use node"; export const value = x;',
+        parenthesizedRuntime: '("use node"); export const value = 1;',
     };
     try {
         mkdirSync(join(root, "convex/domain"), { recursive: true });
@@ -48,7 +51,7 @@ test("the real architecture checker rejects aliases, protected writes and privat
             writeFileSync(join(root, `convex/domain/${name}.ts`), code);
         writeFileSync(
             join(root, "convex/domain/allowed.ts"),
-            'import type { Doc } from "@convex/_generated/dataModel"; import { retainOperationEffect } from "@convex/execution/operations"; export const x = retainOperationEffect; export const read = (ctx:unknown) => ctx.db.get("id");',
+            '"use node"; import type { Doc } from "@convex/_generated/dataModel"; import { retainOperationEffect } from "@convex/execution/operations"; export const x = retainOperationEffect; export const read = (ctx:unknown) => ctx.db.get("id");',
         );
         const findings = checkExecutionBoundaries(root);
         for (const name of Object.keys(cases))

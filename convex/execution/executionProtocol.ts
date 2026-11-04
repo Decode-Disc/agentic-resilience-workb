@@ -1,6 +1,7 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { ActionCtx, QueryCtx } from "@convex/_generated/server";
 import type { ModelRoute } from "@convex/integrations/modelRouting";
+import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourceLimits";
 import {
     type Infer,
     type PropertyValidators,
@@ -8,6 +9,7 @@ import {
     v,
 } from "convex/values";
 import { validate } from "convex-helpers/validators";
+import type { z } from "zod";
 import {
     agentCompletionValidator,
     agentOperationSuccessValidator,
@@ -18,6 +20,7 @@ import {
     commonOperationSuccessValidator,
     historyReadReceiptValidator,
     historySourceFor,
+    validationFeedbackValidator,
 } from "./operationContracts";
 
 export {
@@ -32,6 +35,8 @@ export const executionScopeValidator = v.union(
 );
 export type ExecutionScope = Infer<typeof executionScopeValidator>;
 type AgentOperationContract = {
+    /** System operations are never offered to or admitted from model tool calls. */
+    systemOnly?: true;
     identity(context: {
         mission?: Doc<"agentMissions">;
         runId: Id<"researchRuns">;
@@ -53,7 +58,9 @@ type AgentOperationContract = {
     validateOutcome(
         request: Doc<"agentOperationRequests">,
         outcome: Infer<typeof operationOutcomeValidator>,
+        context: Pick<QueryCtx, "db">,
     ): Infer<typeof operationOutcomeValidator>;
+    resultValidator: z.ZodType;
     version: number;
     description: string;
     inputValidator: VObject<Record<string, unknown>, PropertyValidators>;
@@ -63,8 +70,17 @@ export type SettledOperationOutcome = Exclude<
     Infer<typeof operationOutcomeValidator>,
     { kind: "waiting" }
 >;
+export type OperationObservationOutcome =
+    | Exclude<Infer<typeof operationOutcomeValidator>, { kind: "success" }>
+    | {
+          kind: "success";
+          value: unknown;
+          captureId?: Id<"sourceCaptures">;
+          progressKey?: string;
+          progressKeys?: string[];
+      };
 export type OperationExecutionResult = {
-    outcome: Infer<typeof operationOutcomeValidator>;
+    outcome: OperationObservationOutcome;
     historyRead?: import("./operationContracts").HistoryReadReceipt;
 };
 export type OperationExecuteArgs = {
@@ -88,7 +104,10 @@ export type AgentOperationDefinition = AgentOperationContract &
                   ctx: Pick<ActionCtx, "runQuery">,
                   args: OperationExecuteArgs,
               ): Promise<{
-                  outcome: SettledOperationOutcome;
+                  outcome: Exclude<
+                      OperationObservationOutcome,
+                      { kind: "waiting" }
+                  >;
                   historyRead?: import("./operationContracts").HistoryReadReceipt;
               }>;
           }
@@ -99,6 +118,8 @@ export type AgentOperationDefinition = AgentOperationContract &
           }
         | {
               effectKind: "durable_effect";
+              /** Only advisory observations may finish unavailable after an uncertain call; no effect is retried. */
+              unknownOutcome?: { kind: "unavailable"; code: string };
               childMission?: never;
               execute: EffectExecutor;
           }
@@ -156,7 +177,9 @@ export type AgentGenerationInput = {
     prompt: string;
     operations: Record<
         string,
-        Pick<AgentOperationDefinition, "description" | "inputValidator">
+        Pick<AgentOperationDefinition, "description" | "inputValidator"> & {
+            resultContractKey?: string;
+        }
     >;
 };
 export type AgentGenerationObservation = ModelAttemptReceipt &
@@ -205,7 +228,7 @@ export type AgentGenerationBackend = AgentBackendIdentity & {
 };
 
 export const MAX_CONTEXT_BYTES = 128 * 1024;
-export const MAX_OPERATION_RESULT_BYTES = 64 * 1024;
+export { MAX_OPERATION_RESULT_BYTES };
 export const MAX_OBSERVABLE_OUTPUT_BYTES = 512 * 1024;
 export const MAX_WORKING_NOTES_BYTES = 16 * 1024;
 export const MAX_BATCH_REQUESTS = 4;
@@ -257,12 +280,17 @@ export const requestInputValidator = v.union(
         kind: v.literal("invalid"),
         name: v.string(),
         inputJson: v.string(),
+        validation: v.optional(validationFeedbackValidator),
     }),
 );
 
 export const operationRefusalValidator = v.union(
     v.object({ kind: v.literal("unavailable"), code: v.string() }),
-    v.object({ kind: v.literal("refused"), code: v.string() }),
+    v.object({
+        kind: v.literal("refused"),
+        code: v.string(),
+        validation: v.optional(validationFeedbackValidator),
+    }),
 );
 
 export const operationOutcomeValidator = v.union(
@@ -290,7 +318,27 @@ export function validateOperationExecutionResult(
     operation: AgentOperationDefinition,
     result: unknown,
     operationName?: string,
-): OperationExecutionResult {
+): {
+    outcome: Infer<typeof operationOutcomeValidator>;
+    historyRead?: import("./operationContracts").HistoryReadReceipt;
+} {
+    if (!result || typeof result !== "object" || !("outcome" in result))
+        throw executionError("operation_contract_invalid");
+    const raw = result.outcome;
+    if (
+        raw &&
+        typeof raw === "object" &&
+        "kind" in raw &&
+        raw.kind === "success"
+    ) {
+        if (!("value" in raw) || "valueJson" in raw)
+            throw executionError("operation_contract_invalid");
+        const { value, ...metadata } = raw;
+        result = {
+            ...result,
+            outcome: { ...metadata, valueJson: JSON.stringify(value) },
+        };
+    }
     if (
         !validate(operationExecutionResultValidator, result) ||
         (operation.effectKind === "read" && result.outcome.kind === "waiting")

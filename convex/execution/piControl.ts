@@ -18,6 +18,7 @@ import {
 } from "./authority";
 import { readTurnInstructions } from "./conversations";
 import { needsNativeSettlement, sessionForMission } from "./piStore";
+import { suspendInterruptedResearch } from "./researchControl";
 
 async function publicationControl(ctx: QueryCtx) {
     return ctx.db
@@ -267,7 +268,8 @@ async function recordWorkerFailure(
     const run = await ctx.db.get(mission.runId);
     const paused =
         mission.executionScope !== "conversation" &&
-        run?.executionStatus === "paused";
+        (run?.executionStatus === "paused" ||
+            (run?.researchPauseRequested && code === "research_paused"));
     await ctx.db.patch(mission._id, {
         status: paused ? "waiting" : "blocked",
         blockCode: paused ? undefined : code,
@@ -277,6 +279,8 @@ async function recordWorkerFailure(
         cause: "pi_worker",
         code,
     });
+    if (code === "execution_interrupted" && !paused)
+        await suspendInterruptedResearch(ctx, mission);
 }
 
 export const prepare = internalMutation({
@@ -331,7 +335,7 @@ export const prepare = internalMutation({
             const code = executionFailureCode(error);
             if (!code) throw error;
             await recordWorkerFailure(ctx, mission, code);
-            if (mission.parentRequestId)
+            if (mission.parentRequestId || mission.completionEventId)
                 await ctx.runMutation(internal.execution.handoffs.finishChild, {
                     missionId: mission._id,
                 });
@@ -585,7 +589,7 @@ export const closeWorker = internalMutation({
                     Date.now() + 1000 * 2 ** (attempts - 1),
                 );
         }
-        if (mission.parentRequestId)
+        if (mission.parentRequestId || mission.completionEventId)
             await ctx.runMutation(internal.execution.handoffs.finishChild, {
                 missionId: mission._id,
             });

@@ -294,3 +294,48 @@ export function normalizePdfPages(
         byteCount: encoded.byteLength,
     };
 }
+
+/** Retains only literal destinations in the acquired representation; resolution grants no retrieval authority. */
+export function extractObservedDestinations(
+    representation: string,
+    baseUrl: string,
+) {
+    const result: Array<{
+        url: string;
+        originText: string;
+        startOffset: number;
+        representationHash: string;
+    }> = [];
+    const representationHash = sha256Hex(representation);
+    const seen = new Set<string>();
+    const pattern = /href\s*=\s*(["'])(.*?)\1|https:\/\/[^\s<>"'\])]+/gi;
+    for (const match of representation.matchAll(pattern)) {
+        const raw = match[2] ?? match[0];
+        let url: URL;
+        try {
+            url = new URL(raw.replaceAll("&amp;", "&"), baseUrl);
+        } catch {
+            continue;
+        }
+        if (
+            url.protocol !== "https:" ||
+            url.username ||
+            url.password ||
+            (url.port && url.port !== "443") ||
+            url.href.length > 2048 ||
+            seen.has(url.href)
+        )
+            continue;
+        seen.add(url.href);
+        result.push({
+            url: url.href,
+            originText: Array.from(match[0].slice(0, 256))
+                .slice(0, 128)
+                .join(""),
+            startOffset: match.index,
+            representationHash,
+        });
+        if (result.length === 64) break;
+    }
+    return result;
+}

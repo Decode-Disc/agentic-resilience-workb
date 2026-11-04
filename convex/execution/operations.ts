@@ -53,12 +53,53 @@ import {
     historyReadReceiptValidator,
     historySourceFor,
     isCommonConsultation,
+    runStateResultValidator,
 } from "./operationContracts";
+import { validateOperationValue } from "./operationResults";
 import { schedulePiMission } from "./piControl";
 import { adoptProgress, agentProgressValidator } from "./progress";
+import { pauseResearchAtBoundary } from "./researchControl";
 
 type Outcome = Infer<typeof operationOutcomeValidator>;
 type Input = Infer<typeof requestInputValidator>;
+
+/** Binds settlement of an engaged operation to an authorized research workflow without redispatching it. */
+export async function registerOperationWaitEvent(
+    ctx: MutationCtx,
+    args: {
+        requestId: Id<"agentOperationRequests">;
+        workflowId: WorkflowId;
+        expectedGeneration: number;
+    },
+): Promise<EventId | null> {
+    const request = await ctx.db.get(args.requestId);
+    if (!request) throw executionError("operation_unavailable");
+    const runId =
+        request.runId ??
+        (request.missionId
+            ? (await ctx.db.get(request.missionId))?.runId
+            : undefined);
+    if (!runId) throw executionError("operation_scope_invalid");
+    const { run } = await requireRunAuthority(
+        ctx,
+        runId,
+        args.expectedGeneration,
+    );
+    if (run.workflowId !== args.workflowId)
+        throw executionError("stale_execution");
+    if (!["running", "waiting"].includes(request.status)) return null;
+    if (request.waitEventId) return request.waitEventId as EventId;
+    const eventId = await workflow.createEvent(ctx, {
+        name: `operation:${request._id}`,
+        workflowId: args.workflowId,
+    });
+    await ctx.db.patch(request._id, {
+        waitEventId: eventId,
+        waitNotified: false,
+    });
+    return eventId;
+}
+
 function operationFor(
     input: Input,
     mission?: Doc<"agentMissions">,
@@ -171,7 +212,31 @@ async function authority(
               )
           ).mission
         : undefined;
+    // Invalid inputs have a terminal admission receipt, not an executable operation.
+    if (request.input.kind === "invalid") {
+        if (!mission) throw executionError("not_authorized");
+        await requireInstructionVersion(
+            ctx,
+            mission,
+            admittedRequest.instructionVersion,
+        );
+        if (
+            request.status !== "completed" ||
+            !request.knownNotDispatched ||
+            request.outcome?.kind !== "refused" ||
+            request.outcome.code !== "invalid_operation_input"
+        )
+            throw executionError("invalid_operation_input");
+        return {
+            mission,
+            runId: mission.runId,
+            admittedRequest,
+            operation: undefined,
+        };
+    }
     const operation = operationFor(request.input, mission);
+    if (operation.systemOnly && request.actor !== "system")
+        throw executionError("operation_not_allowed");
     const runId = mission?.runId ?? request.runId;
     if (!runId) throw executionError("not_authorized");
     if (!mission) {
@@ -234,14 +299,22 @@ export async function retainOperationEffect(
     ctx: MutationCtx,
     request: Doc<"agentOperationRequests">,
     pin: import("./agentDefinition").OperationPin,
-    valueJson: string,
+    value: unknown,
 ) {
-    const outcome = operationFor(
+    const operation = operationFor(
         request.input,
         request.missionId
             ? ((await ctx.db.get(request.missionId)) ?? undefined)
             : undefined,
-    ).validateOutcome(request, { kind: "success", valueJson });
+    );
+    const valueJson = JSON.stringify(
+        validateOperationValue(operation.resultValidator, value, ctx.db),
+    );
+    const outcome = operation.validateOutcome(
+        request,
+        { kind: "success", valueJson },
+        ctx,
+    );
     if (
         outcome.kind !== "success" ||
         new TextEncoder().encode(outcome.valueJson).length >
@@ -252,12 +325,13 @@ export async function retainOperationEffect(
     if (request.effect) {
         if (stableStringify(request.effect) !== stableStringify(effect))
             throw executionError("operation_result_conflict");
-        return;
+        return valueJson;
     }
     if (request.status !== "running")
         throw executionError("operation_not_dispatched");
     await ctx.db.patch(request._id, { effect });
     await recordEvent(ctx, { ...request, effect }, "operation_effect_applied");
+    return valueJson;
 }
 
 /** One retained logical request drives both system calls and deferred model tools. */
@@ -302,6 +376,8 @@ export async function persistOperationRequest(
         if (args.input.kind === "invalid")
             throw executionError("invalid_operation_input");
         operation = operationFor(args.input, mission);
+        if (operation.systemOnly && args.actor !== "system")
+            throw executionError("operation_not_allowed");
         if (!mission && !operation.nativeAuthority)
             throw executionError("operation_not_allowed");
         const pinMission =
@@ -316,7 +392,13 @@ export async function persistOperationRequest(
     } catch (error) {
         const code = executionFailureCode(error);
         if (!code) throw error;
-        outcome = { kind: "refused", code };
+        outcome = {
+            kind: "refused",
+            code,
+            ...(args.input.kind === "invalid" && args.input.validation
+                ? { validation: args.input.validation }
+                : {}),
+        };
     }
     const version = operation?.version ?? 1;
     const identity = operation
@@ -501,11 +583,7 @@ export const readRunState = internalQuery({
         expectedGeneration: v.number(),
         missionId: v.optional(v.id("agentMissions")),
     },
-    returns: v.object({
-        lifecycleState: v.string(),
-        executionStatus: v.string(),
-        executionGeneration: v.number(),
-    }),
+    returns: runStateResultValidator,
     handler: async (ctx, args) => {
         const { run } = args.missionId
             ? await requireMissionAuthority(
@@ -597,6 +675,14 @@ export const claim = internalMutation({
             );
             return { kind: "outcome" as const, outcome };
         }
+        if (request.adoptionRefusalCode)
+            return {
+                kind: "outcome" as const,
+                outcome: {
+                    kind: "refused" as const,
+                    code: request.adoptionRefusalCode,
+                },
+            };
         if (request.outcome)
             return request.status === "observed"
                 ? { kind: "adopt" as const, outcome: request.outcome }
@@ -615,6 +701,11 @@ export const claim = internalMutation({
             };
         }
         if (request.status === "running" || request.status === "unknown") {
+            const unavailable = unknownObservationOutcome(request);
+            if (unavailable) {
+                await markOperationUnknown(ctx, request);
+                return { kind: "outcome" as const, outcome: unavailable };
+            }
             if (state.mission)
                 await ctx.db.patch(state.mission._id, {
                     status: "blocked",
@@ -634,6 +725,18 @@ export const claim = internalMutation({
                 },
             };
         }
+        if (
+            (state.mission ||
+                state.operation?.nativeAuthority === "research") &&
+            (await pauseResearchAtBoundary(ctx, state.runId, state.mission))
+        )
+            return {
+                kind: "outcome" as const,
+                outcome: {
+                    kind: "unavailable" as const,
+                    code: "research_paused",
+                },
+            };
         if (state.mission) {
             const missionId = state.mission._id;
             const active = await ctx.db
@@ -724,6 +827,8 @@ export const recordResult = internalMutation({
             }
             if (!request.outcome)
                 throw executionError("operation_result_unavailable");
+            if (request.adoptionRefusalCode)
+                return { kind: "refused", code: request.adoptionRefusalCode };
             return request.outcome;
         }
         const mission = request.missionId
@@ -741,11 +846,20 @@ export const recordResult = internalMutation({
             operation.effectKind === "atomic_effect" &&
             outcome.kind === "success" &&
             !request.effect;
-        let adoptionFailed = false;
+        let adoptionRefusalCode: string | undefined;
         let diagnostic: Doc<"agentExecutionEvents">["protectedDiagnostic"];
         if (outcome.kind === "success") {
             try {
-                const validated = operation.validateOutcome(request, outcome);
+                validateOperationValue(
+                    operation.resultValidator,
+                    JSON.parse(outcome.valueJson),
+                    ctx.db,
+                );
+                const validated = operation.validateOutcome(
+                    request,
+                    outcome,
+                    ctx,
+                );
                 if (
                     !validate(operationOutcomeValidator, validated, {
                         db: ctx.db,
@@ -754,10 +868,11 @@ export const recordResult = internalMutation({
                         validated.kind === "waiting")
                 )
                     throw executionError("operation_contract_invalid");
-                outcome = validated;
+                if ("code" in validated) adoptionRefusalCode = validated.code;
+                else outcome = validated;
             } catch (error) {
                 // Preserve the known observation; only pure domain callbacks are guarded here.
-                adoptionFailed = true;
+                adoptionRefusalCode = "operation_adoption_failed";
                 diagnostic = protectedDiagnostic(error, "validate_outcome");
             }
         }
@@ -876,7 +991,7 @@ export const recordResult = internalMutation({
                 keys: mission.progressKeys,
                 added: 0,
             };
-            if (!adoptionFailed && !missingEffectReceipt) {
+            if (!adoptionRefusalCode && !missingEffectReceipt) {
                 try {
                     const {
                         progressKeys: _keys,
@@ -911,17 +1026,16 @@ export const recordResult = internalMutation({
                             : [],
                     );
                 } catch (error) {
-                    adoptionFailed = true;
+                    adoptionRefusalCode = "operation_adoption_failed";
                     diagnostic = protectedDiagnostic(error, "reduce_progress");
                 }
             }
             const code = missingEffectReceipt
                 ? "operation_effect_receipt_missing"
-                : adoptionFailed
-                  ? "operation_adoption_failed"
-                  : accounting.kind === "blocked"
-                    ? accounting.code
-                    : progress.blockCode;
+                : (adoptionRefusalCode ??
+                  (accounting.kind === "blocked"
+                      ? accounting.code
+                      : progress.blockCode));
             if (code) {
                 await ctx.db.patch(mission._id, {
                     status: "blocked",
@@ -939,7 +1053,7 @@ export const recordResult = internalMutation({
                     undefined,
                     { diagnostic },
                 );
-                return adoptionFailed || missingEffectReceipt
+                return adoptionRefusalCode || missingEffectReceipt
                     ? { kind: "refused", code }
                     : outcome;
             }
@@ -958,23 +1072,25 @@ export const recordResult = internalMutation({
                     ? { obligations: progress.obligations }
                     : {}),
             });
-        } else if (adoptionFailed || missingEffectReceipt) {
+        } else {
             const code = missingEffectReceipt
                 ? "operation_effect_receipt_missing"
-                : "operation_adoption_failed";
-            await ctx.db.patch(request._id, {
-                status: "completed",
-                adoptionRefusalCode: code,
-            });
-            await recordEvent(
-                ctx,
-                { ...request, outcome },
-                "operation_adoption_failed",
-                code,
-                undefined,
-                { diagnostic },
-            );
-            return { kind: "refused", code };
+                : adoptionRefusalCode;
+            if (code) {
+                await ctx.db.patch(request._id, {
+                    status: "completed",
+                    adoptionRefusalCode: code,
+                });
+                await recordEvent(
+                    ctx,
+                    { ...request, outcome },
+                    "operation_adoption_failed",
+                    code,
+                    undefined,
+                    { diagnostic },
+                );
+                return { kind: "refused", code };
+            }
         }
         await ctx.db.patch(request._id, {
             status: "completed",
@@ -1001,6 +1117,9 @@ export const recordResult = internalMutation({
             await ctx.db.patch(mission._id, { piResultWakePending: true });
             await schedulePiMission(ctx, mission._id, args.expectedGeneration);
         }
+        const runId = mission?.runId ?? request.runId;
+        if (runId && (mission || operation.nativeAuthority === "research"))
+            await pauseResearchAtBoundary(ctx, runId, mission ?? undefined);
         return outcome;
     },
 });
@@ -1079,16 +1198,38 @@ export const dispatch = internalAction({
     },
 });
 
+function unknownObservationOutcome(request: Doc<"agentOperationRequests">) {
+    if (request.input.kind === "invalid") return undefined;
+    const operation = getRegisteredOperation(request.input.kind);
+    return operation?.effectKind === "durable_effect"
+        ? operation.unknownOutcome
+        : undefined;
+}
+
 async function markOperationUnknown(
     ctx: MutationCtx,
     request: Doc<"agentOperationRequests">,
 ) {
-    if (request.status === "unknown") return;
-    await ctx.db.patch(request._id, { status: "unknown" });
+    const unavailable = unknownObservationOutcome(request);
+    if (request.status === "unknown" && !unavailable) return;
+    await ctx.db.patch(
+        request._id,
+        unavailable
+            ? {
+                  status: "completed",
+                  outcome: unavailable,
+                  completedAt: Date.now(),
+              }
+            : { status: "unknown" },
+    );
     const mission = request.missionId
         ? await ctx.db.get(request.missionId)
         : null;
-    if (mission && !["cancelled", "completed"].includes(mission.status))
+    if (
+        !unavailable &&
+        mission &&
+        !["cancelled", "completed"].includes(mission.status)
+    )
         await ctx.db.patch(mission._id, {
             status: "blocked",
             blockCode: "operation_outcome_unknown",

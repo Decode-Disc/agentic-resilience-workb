@@ -27,6 +27,7 @@ test("registered operation versions and native schema distinctions survive reloc
         "conversation_validation_v1:1",
         "execution_validation_v1:1",
         "saved_material_inspection_v1:1",
+        "sources_v1:1",
         "workbench_v1:1",
         "workbench_v1:2",
     ]);

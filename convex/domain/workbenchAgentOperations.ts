@@ -3,18 +3,26 @@ import type { OperationOutcome } from "@convex/execution/agentDefinition";
 import { executionFailureCode } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import { operationReuseIdentity } from "@convex/execution/missionData";
+import { operationResultValidator } from "@convex/execution/operationResults";
+import { v } from "convex/values";
 import { savedMaterialOperations } from "./savedMaterialAgentOperations";
+import { executionStatusValidator } from "./validators";
 import {
     adjustFramingInput,
     controlResearchInput,
     nativeAdjustFramingInput,
     nativeSourceRequestInput,
     sourceRequestInput,
+    workbenchInstructionTransmissionStatus,
 } from "./workbenchContracts";
+import {
+    responseReviewInput,
+    responseReviewResult,
+} from "./workbenchResponseControlContracts";
 
 function recoverableWorkbenchRefusal(
     error: unknown,
-): OperationOutcome | undefined {
+): Extract<OperationOutcome, { kind: "refused" }> | undefined {
     const code = executionFailureCode(error);
     return code &&
         [
@@ -45,6 +53,9 @@ const adjustFraming: Extract<
     description:
         "Update the proposed activity and research questions before Start research. Read and preserve explicit analyst adjustments. Supply the currently observed revision; stale edits are refused.",
     inputValidator: adjustFramingInput,
+    resultValidator: operationResultValidator(
+        v.object({ revision: v.number() }),
+    ),
     identity: operationReuseIdentity,
     async pin(ctx, mission, input, _runId, effectPin) {
         if (!mission || input.kind !== "adjust_framing")
@@ -80,7 +91,7 @@ const adjustFraming: Extract<
             return {
                 outcome: {
                     kind: "success",
-                    valueJson: JSON.stringify({ revision }),
+                    value: { revision },
                 },
             };
         } catch (error) {
@@ -163,7 +174,7 @@ const instructionBehavior: Pick<
                     expectedGeneration: args.expectedGeneration,
                 },
             );
-            return { outcome: { kind: "success", valueJson: value } };
+            return { outcome: { kind: "success", value: JSON.parse(value) } };
         } catch (error) {
             const refusal = recoverableWorkbenchRefusal(error);
             if (refusal) return { outcome: refusal };
@@ -179,17 +190,89 @@ const transmitSourceRequest: AgentOperationDefinition = {
     ...instructionBehavior,
     version: 1,
     inputValidator: sourceRequestInput,
+    resultValidator: operationResultValidator(
+        v.object({
+            instructionId: v.id("workbenchInstructions"),
+            status: workbenchInstructionTransmissionStatus,
+            outcome: v.string(),
+        }),
+    ),
     description:
         "Register an analyst's documentary instruction with its original message and your interpreted need. Supply a coverage role only for a supported targeted search within the fixed framing. Initial work or an analyst pause may defer transmission. Other requests receive an explicit limitation; this tool does not open another documentary phase.",
 };
 
+/** Host-owned assessment uses the shared durable operation lifecycle, never a model-visible tool. */
+export const responseCoherenceOperation: Extract<
+    AgentOperationDefinition,
+    { effectKind: "durable_effect" }
+> = {
+    systemOnly: true,
+    effectKind: "durable_effect",
+    unknownOutcome: { kind: "unavailable", code: "operation_outcome_unknown" },
+    version: 1,
+    description:
+        "Check a retained response against its frozen authoritative facts.",
+    inputValidator: responseReviewInput,
+    resultValidator: operationResultValidator(responseReviewResult),
+    identity: operationReuseIdentity,
+    async pin(ctx, mission, input) {
+        if (
+            !mission ||
+            input.kind !== "check_response_coherence" ||
+            !mission.conversationTurnId
+        )
+            return { kind: "unavailable", code: "operation_not_allowed" };
+        const turn = await ctx.db.get(mission.conversationTurnId);
+        const requestHash = input.requestHash;
+        const check = turn?.responseControl?.checks.find(
+            (c) => c.requestHash === requestHash,
+        );
+        return check?.requestHash
+            ? {
+                  kind: "available",
+                  pin: { kind: "response_review", hash: check.requestHash },
+              }
+            : { kind: "unavailable", code: "response_review_unavailable" };
+    },
+    async execute(ctx, args) {
+        if (!args.requestId)
+            return {
+                outcome: { kind: "refused", code: "request_unavailable" },
+            };
+        const value = await ctx.runAction(
+            internal.responseControlActions.execute,
+            {
+                requestId: args.requestId,
+                expectedGeneration: args.expectedGeneration,
+            },
+        );
+        return {
+            outcome:
+                value.status === "unavailable"
+                    ? { kind: "unavailable", code: value.reason }
+                    : { kind: "success", value },
+        };
+    },
+    validateOutcome(_request, outcome) {
+        return outcome;
+    },
+};
+
 export const workbenchOperations: Record<string, AgentOperationDefinition> = {
+    check_response_coherence: responseCoherenceOperation,
     adjust_framing: adjustFraming,
     ...savedMaterialOperations,
     control_research: {
         ...instructionBehavior,
         version: 1,
         inputValidator: controlResearchInput,
+        resultValidator: operationResultValidator(
+            v.object({
+                generation: v.number(),
+                status: executionStatusValidator,
+                pauseRequested: v.boolean(),
+            }),
+        ),
         description:
             "Pause or resume research only on an explicit, unambiguous analyst request in the supplied message. A pause request lets admitted work finish before suspension; never claim an effective pause before its persisted state confirms it.",
     },

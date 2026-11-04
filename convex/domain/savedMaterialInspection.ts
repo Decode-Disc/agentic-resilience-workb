@@ -37,20 +37,25 @@ export async function requireSavedMaterialScope(
     const scope = missionScope(mission);
     if (
         scope.kind !== "saved_material_inspection_v1" &&
-        scope.kind !== "workbench_v1"
+        scope.kind !== "workbench_v1" &&
+        scope.kind !== "sources_v1"
     )
         throw executionError("operation_not_allowed");
     const owner = run ?? (await ctx.db.get(mission.runId));
     const corpusRevisionId =
-        scope.kind === "workbench_v1"
-            ? owner?.activeCorpusRevisionId
-            : scope.corpusRevisionId;
+        scope.kind === "saved_material_inspection_v1"
+            ? scope.corpusRevisionId
+            : owner?.activeCorpusRevisionId;
     const revision = corpusRevisionId
         ? await ctx.db.get(corpusRevisionId)
         : null;
     if (
         revision?.runId !== mission.runId ||
-        revision.status !== "approved" ||
+        (revision.status !== "approved" &&
+            !(
+                owner?.sourcesProtocol === "sources_mission_v1" &&
+                scope.kind !== "saved_material_inspection_v1"
+            )) ||
         owner?.activeCorpusRevisionId !== revision._id
     )
         throw executionError("corpus_not_approved");

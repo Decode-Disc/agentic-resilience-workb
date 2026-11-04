@@ -29,11 +29,7 @@ import { createAgentTools } from "./modelInput";
 export { agentInputByteLength, agentOperationInputSchema } from "./modelInput";
 
 import type { ModelRoute } from "./modelRouting";
-import {
-    MODEL_ATTEMPT_TIMEOUT_MS,
-    MODEL_MAX_OUTPUT_TOKENS,
-    routedModelSettings,
-} from "./modelRouting";
+import { modelCallSettings } from "./modelRouting";
 
 export type AttemptReceipt = ModelAttemptReceipt;
 
@@ -171,6 +167,7 @@ export type AgentStepGenerator = (input: {
     prompt: string;
     tools: ToolSet;
     signal?: AbortSignal;
+    generation: ReturnType<typeof modelCallSettings>["generation"];
 }) => Promise<unknown>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -308,7 +305,7 @@ function createRoutedModel(
     dependencies: AttemptDependencies,
     state: BoundedTransportState,
 ) {
-    const settings = routedModelSettings(route);
+    const settings = modelCallSettings(route).request;
     return wrapLanguageModel({
         model: provider.chat(route.model, {
             provider: settings.provider,
@@ -648,10 +645,7 @@ export async function invokeOneShot<T>(args: {
                 schema: args.schema,
                 name: args.schemaName,
             }),
-            maxOutputTokens: MODEL_MAX_OUTPUT_TOKENS,
-            temperature: 0,
-            maxRetries: 0,
-            timeout: MODEL_ATTEMPT_TIMEOUT_MS,
+            ...modelCallSettings(route).generation,
             abortSignal: dependencies.signal,
         });
         const receipt = createAttemptReceipt(route, state, startedAt, result);
@@ -716,21 +710,21 @@ export async function invokeDeferredAgentTurn(args: {
             prompt: args.prompt,
             tools: createAgentTools(args.operations),
             signal: dependencies.signal,
+            generation: modelCallSettings(route).generation,
         };
         if (args.generateStep) await args.generateStep(input);
         else {
+            const { timeout, ...generation } = input.generation;
             const agent = new ToolLoopAgent({
                 model: input.model,
                 instructions: input.instructions,
                 tools: input.tools,
                 stopWhen: isStepCount(1),
-                maxOutputTokens: MODEL_MAX_OUTPUT_TOKENS,
-                temperature: 0,
-                maxRetries: 0,
+                ...generation,
             });
             await agent.generate({
                 prompt: input.prompt,
-                timeout: MODEL_ATTEMPT_TIMEOUT_MS,
+                timeout,
                 abortSignal: input.signal,
             });
         }
@@ -759,5 +753,3 @@ export async function invokeDeferredAgentTurn(args: {
         });
     }
 }
-
-export { routedModelSettings } from "./modelRouting";

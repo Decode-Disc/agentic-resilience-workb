@@ -38,7 +38,7 @@
     {
       "id": 3,
       "name": "ambiguous-quality-request",
-      "prompt": "Je veux améliorer la qualité des dossiers, mais je ne sais pas si le problème vient des sources, des passages transmis ou de l'analyse finale. Dis-moi comment aborder ça. Ne lance rien et ne modifie aucun fichier.",
+      "prompt": "Je veux am\u00e9liorer la qualit\u00e9 des dossiers, mais je ne sais pas si le probl\u00e8me vient des sources, des passages transmis ou de l'analyse finale. Dis-moi comment aborder \u00e7a. Ne lance rien et ne modifie aucun fichier.",
       "expected_output": "A project-grounded framing that separates the possible outcome failures, reuses current evidence and asks one focused question only if the intended decision remains unresolved.",
       "files": [
         "../../../PRODUCT.md",
@@ -71,7 +71,7 @@
     {
       "id": 5,
       "name": "frontend-check-boundary",
-      "prompt": "Planifie uniquement la vérification du placement d'une icône dans le rail Coverage. Aucun comportement ou sens de texte ne change. Ne modifie rien.",
+      "prompt": "Planifie uniquement la v\u00e9rification du placement d'une ic\u00f4ne dans le rail Coverage. Aucun comportement ou sens de texte ne change. Ne modifie rien.",
       "expected_output": "A narrowly scoped frontend verification proposal using the relevant UI workflow rather than the research evaluation procedure.",
       "files": [
         "../../../AGENTS.md",
@@ -183,7 +183,7 @@
     {
       "id": 12,
       "name": "explicit-control-cost-and-unwired-composer",
-      "prompt": "The backend /pause and /resume API retains a deterministic receipt without a model invocation. The composer is deliberately not connected yet. Ordinary text such as “pause, then explain the current evidence” still goes through the model. How should we qualify control costs now, and can we call the browser slash journey complete? Analysis only, no edits or calls.",
+      "prompt": "The backend /pause and /resume API retains a deterministic receipt without a model invocation. The composer is deliberately not connected yet. Ordinary text such as \u201cpause, then explain the current evidence\u201d still goes through the model. How should we qualify control costs now, and can we call the browser slash journey complete? Analysis only, no edits or calls.",
       "expected_output": "An entry-point-specific qualification proposal preserving typed controls, model-mediated natural language and the visible composer delivery gap.",
       "files": [
         "../../../convex/workbench.ts",
@@ -230,6 +230,107 @@
         "Ends the agreed batch without more calls or prompt patches for accurate stylistic imperfections.",
         "Preserves the same battery and limits the reliability conclusion to the exercised states, repetitions and runtime.",
         "Records remaining style limits and resumes independent roadmap work without weakening material integrity gates."
+      ]
+    },
+    {
+      "id": 16,
+      "name": "hybrid-control-stage-attribution",
+      "prompt": "Read-only assessment of two completed turns. In the first, the initial explanation contradicts the recorded state, the controller flags it, a tool-free correction fixes it and the published answer is supported by investigator-reviewed evidence. In the second, the initial explanation is correct, the controller falsely flags it, the correction becomes inaccurate and publication retains that text with a visible reserve. Can both turns count as successes because the controller ran and publication completed? Use only these observations; no edits or calls.",
+      "expected_output": "Separate judgments for initial generator quality, controller correctness, correction benefit or harm, execution integrity and final analyst usefulness.",
+      "files": [
+        "../../../context/TECH.md"
+      ],
+      "expectations": [
+        "Classifies the first initial draft as wrong, its contradiction alert as correct and its revised final answer as supported; does not erase the original failure.",
+        "Classifies the second initial draft as correct, its alert as a false positive and its correction as harmful, even though a reserve is visible.",
+        "Distinguishes honest advisory containment from semantic task success without automatically declaring the permitted reserve a mandatory execution violation.",
+        "Uses the investigator-reviewed evidence rather than the controller score as the reference judgment and performs no new measurement."
+      ]
+    },
+    {
+      "id": 17,
+      "name": "control-eligibility-and-separated-call-cost",
+      "prompt": "Plan only a control-enabled versus control-disabled comparison with the same generator and frozen inputs. The cases include a final explanation after a refused operation, a discussion with no operation and unchanged authoritative facts since its preceding substantive reply and a code-owned command confirmation. A recorded eligible turn has one initial generation, two semantic checks and one corrective generation. Its last check has an unknown charge. What should be compared, counted and left unresolved? Do not run calls or change settings.",
+      "expected_output": "An eligibility-aware comparison and stage-specific call/cost accounting without enabling control on exempt paths or treating an unknown charge as zero.",
+      "files": [
+        "../../../context/TECH.md"
+      ],
+      "expectations": [
+        "Keeps the generator, facts and independent references constant and records the pinned control policy for each condition.",
+        "Treats the operation refusal as eligible under the current contract while exempt discussion and code-owned confirmations have no semantic-control call.",
+        "Counts one initial generation, one corrective generation and two controller calls separately rather than reporting only two model calls.",
+        "Separates stage latency and known charges from the unresolved charge/reservation, and checks that correction repeats no business operation.",
+        "Proposes bounded observations without dispatching providers or changing application configuration."
+      ]
+    },
+    {
+      "id": 18,
+      "name": "exposed-examples-do-not-calibrate-controller",
+      "prompt": "Read-only: the controller matches investigator labels on 38 of 40 examples used while designing its question. A correct analyst instruction was falsely flagged twice. Someone proposes tuning the threshold against these same examples, reporting the resulting controller score as the answer key and enabling it globally. What conclusion and next bounded check are justified? No calls, tuning or activation.",
+      "expected_output": "A supported development-set interpretation, explicit false-alert analysis and an independent validation proposal that does not mistake fitting for calibration.",
+      "files": [],
+      "expectations": [
+        "Labels the exposed examples as development evidence and does not infer held-out reliability or calibrated truth confidence from the match count.",
+        "Treats the repeated false flag as a controller error on an independently supported answer rather than proof that the answer needs changing.",
+        "Requires investigator-reviewed references separate from the assessed controller and an unexposed validation set for any broader reliability claim.",
+        "Describes any proposed threshold change as a separate versioned policy, preserves the original results and does not tune or activate it."
+      ]
+    },
+    {
+      "id": 19,
+      "name": "advisory-unavailability-and-authority-loss",
+      "prompt": "Interpret three recorded cases under the current hybrid control contract. A missing controller configuration publishes the unchanged explanation with an unavailable notice and no number. A final unsupported explanation is retained with a low consistency estimate and a visible reserve after the permitted correction. A third response arrives after cancellation, retains its provider cost receipt and is not published. Which cases establish containment, answer quality or an execution defect? Analysis only.",
+      "expected_output": "Contract-specific outcomes separating unavailable assessment, flagged wrong content and correct cancellation fencing.",
+      "files": [
+        "../../../context/TECH.md"
+      ],
+      "expectations": [
+        "Does not label unavailable assessment as either semantic support or a zero-confidence score; checks the explicit unavailable notice.",
+        "Counts the flagged unsupported answer as a semantic miss while assessing its advisory containment separately.",
+        "Recognizes that retaining cancellation-era response/cost facts does not authorize publication or a new call.",
+        "Does not weaken authority fences to obtain another published reply, infer zero cost from no publication or approve global activation."
+      ]
+    },
+    {
+      "id": 20,
+      "name": "close-interrupted-correction-with-causal-action",
+      "prompt": "The local qualification stopped; give me the final usable evaluation conclusion. Read-only, no new calls. Saved observations: the current program has two fixed questions and research has ended. The first draft instead discusses five earlier questions. The controller request contains that exact draft and the current facts, and returns contradiction 0.90. The corrective provider request contains the current two-question program, the ended-research state, the old published assistant answer, and a reminder to revise the preceding draft; the rejected draft itself is absent and no tools are offered. Its resulting draft still discusses five questions and asks the analyst to Start research. The observer then throws at 21 provider receipts although the approved lot allows 40 model calls plus retrieval. All charges are known and the lot is closed. Do not wait for me to ask whether this is a harness or model problem.",
+      "expected_output": "A proactive causal closeout that distinguishes the missing corrective draft in the application harness, the observer ceiling in evaluation tooling and the incorrect model output, without declaring model correction quality isolated. It gives each boundary a concrete correction and falsifiable regression, labels final publication and unstarted cases untested, and recommends no automatic paid rerun.",
+      "files": [],
+      "expectations": [
+        "Inspects the actual corrective request rather than treating the stored current facts or the controller score as proof of a valid correction experiment.",
+        "Performs available read-only isolation before the closeout instead of offering to inspect the supplied corrective request only after another user question.",
+        "Identifies the absent rejected draft as a confirmed application input defect and the receipt ceiling as a separate evaluation-tooling defect; does not attribute the whole failed correction to the model.",
+        "Names concrete owner-level corrections and checks: exact rejected draft in serialized corrective input with current facts and no tools, plus inspection covering admitted model and technical receipts.",
+        "States the observed model errors and the unresolved causal contribution of the faulty input; does not guarantee semantic repair from the proposed fix.",
+        "Places attribution, evidence, next actions and capability decision in the final answer itself, not only in a linked report or cost summary.",
+        "Keeps the closed lot closed and distinguishes untested final publication from a successfully contained published answer."
+      ]
+    },
+    {
+      "id": 21,
+      "name": "closeout-with-missing-provider-input",
+      "prompt": "Give me the evaluation closeout, read-only. The saved result contains a wrong answer and a completed mission. Current database state is correct. The actual provider request and the corrective request were not retained. No other evidence identifies what the model received. We have unused paid budget. Explain what is established and exactly what to do next; do not run anything.",
+      "expected_output": "An explicitly unresolved attribution with the known semantic failure, a concrete attempt to recover actual provider inputs/journals or reproduce the delivery boundary deterministically, and a clear limit on what completion and database state establish.",
+      "files": [],
+      "expectations": [
+        "Does not infer that correct stored state reached the provider or call the failure a confirmed model limitation.",
+        "Identifies the missing actual request as the observation blocking attribution and names the cheapest recovery or deterministic delivery check.",
+        "Provides the action, owner/boundary and observable resolution criterion in the user-facing closeout.",
+        "Does not invent a harness defect, present a hypothesis as confirmed or use remaining budget to authorize another experiment."
+      ]
+    },
+    {
+      "id": 22,
+      "name": "successful-closeout-needs-no-speculative-fix",
+      "prompt": "Close this evaluation from the supplied verified observations; do not edit or run new measurements. Actual provider inputs contain current facts and, for the one correction, the exact rejected draft. The one permitted correction produces an investigator-verified accurate explanation. Recorded actions occur once; publication and the separate notice match their contracts. All agreed cases complete, charges reconcile, and the analyst can inspect the retained useful passages. Coverage is local and small; production crash recovery was not exercised.",
+      "expected_output": "A concise useful-outcome decision with the limited local coverage and no invented defect, corrective work or unnecessary next paid comparison.",
+      "files": [],
+      "expectations": [
+        "States the demonstrated analyst benefit and distinguishes execution, answer quality and control containment using the supplied independent judgment.",
+        "Explains why no corrective action is justified for these observations while keeping production crash recovery and general reliability unverified.",
+        "Does not manufacture an architectural issue, tune thresholds or recommend another paid lot without a decision-relevant uncertainty.",
+        "Includes the supported capability decision in the final answer rather than only listing completed calls or passed checks."
       ]
     }
   ]

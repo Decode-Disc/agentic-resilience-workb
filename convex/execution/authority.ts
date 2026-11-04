@@ -1,6 +1,7 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import { isResumableResearchPause } from "@convex/domain/transitions";
 import { runMatchesWorkspace, workspaceForVisitor } from "@convex/runWorkspace";
 import { validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
@@ -124,8 +125,7 @@ async function requireMissionAccess(
         permission === "observation" &&
         !(
             run.agentExecutionVersion === 3 &&
-            run.executionStatus === "paused" &&
-            run.pauseReason === "analyst" &&
+            isResumableResearchPause(run) &&
             run.executionGeneration === expectedGeneration + 1
         )
     )

@@ -11,6 +11,15 @@ import {
 import { cancelRunExecution } from "./domain/runCancellation";
 
 export const BROWSER_TEST_SLOT = "analyst-4";
+/** Fixed limits of the explicitly authorized local two-dossier Sources qualification. */
+export const SOURCES_QUALIFICATION_ENVELOPE = {
+    version: 1 as const,
+    maxNeeds: 4,
+    initialSearches: 2,
+    complementSearches: 1,
+    acquisitions: 6,
+    controls: 8,
+};
 export function localBrowserFixturesEnabled() {
     if (env.E2E_FIXTURES_ENABLED !== "true") return false;
     try {
@@ -147,18 +156,30 @@ export async function readWorkbenchQualification(
         !localBrowserFixturesEnabled() ||
         run.purpose !== "browser_test" ||
         !run.browserTestContextId ||
-        run.lifecycleState !== "framing" ||
-        run.researchStartedAt !== undefined ||
-        run.withdrawnAt !== undefined ||
-        run.executionStatus !== "idle"
+        run.withdrawnAt !== undefined
     )
         return null;
     const context = await ctx.db.get(run.browserTestContextId);
     if (
         context?.status !== "active" ||
         context.expiresAt <= Date.now() ||
-        context.paidQualification?.runId !== run._id ||
+        !(context.paidQualification?.sourcesLot
+            ? context.paidQualification.sourcesLot.includes(run._id)
+            : context.paidQualification?.runId === run._id) ||
         context.ownerVisitorId !== run.ownerVisitorId
+    )
+        return null;
+    if (
+        !context.paidQualification?.sourcesLot &&
+        (run.lifecycleState !== "framing" ||
+            run.researchStartedAt !== undefined ||
+            run.executionStatus !== "idle")
+    )
+        return null;
+    if (
+        context.paidQualification?.sourcesLot &&
+        run.researchStartedAt !== undefined &&
+        Date.now() >= run.researchStartedAt + 15 * 60_000
     )
         return null;
     const visitor = await requireBrowserTestOwner(ctx, BROWSER_TEST_SLOT);

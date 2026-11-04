@@ -1,3 +1,9 @@
+import {
+    DEFAULT_RESPONSE_CONTROL_POLICY,
+    responseControlConfiguration,
+    responseControlPolicy,
+    validResponseControlConfiguration,
+} from "@convex/domain/workbenchResponseControlContracts";
 import { paginationResultValidator } from "convex/server";
 import { type Infer, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -18,6 +24,7 @@ import {
     defaultReasoningEffort,
     MODEL_MAX_INPUT_PRICE_PER_MILLION,
     MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
+    MODEL_MAX_OUTPUT_TOKENS,
     modelConfigurationKey,
     NATIVE_MODEL_SERIALIZER,
     NATIVE_PROFILE_CATALOG,
@@ -38,7 +45,7 @@ export const MODEL_AGENTS: Record<
 > = {
     workbench: { label: "Workbench", implemented: true },
     sources: {
-        label: "Sources · qualification and comparison",
+        label: "Sources · documentary preparation",
         implemented: true,
     },
     investigation: { label: "Investigation", implemented: false },
@@ -83,6 +90,7 @@ export function modelPrepared(model: Doc<"modelCatalog">) {
 export const list = query({
     args: {},
     returns: v.object({
+        responseControl: responseControlPolicy,
         models: v.array(preparedModelView),
         assignments: v.array(schema.doc("agentModelSettings")),
         agents: v.array(
@@ -96,6 +104,7 @@ export const list = query({
     handler: async (ctx) => {
         await requireAdmin(ctx);
         return {
+            responseControl: await readResponseControlPolicy(ctx),
             models: (await ctx.db.query("modelCatalog").take(101)).map(
                 (model) => ({ ...model, compatible: modelPrepared(model) }),
             ),
@@ -404,7 +413,7 @@ export const finishPreparation = internalMutation({
             !Number.isSafeInteger(d.contextWindow) ||
             d.contextWindow < 32768 ||
             !Number.isSafeInteger(d.maxTokens) ||
-            d.maxTokens < 6144 ||
+            d.maxTokens < MODEL_MAX_OUTPUT_TOKENS ||
             [d.inputPrice, d.outputPrice, d.cacheReadPrice].some(
                 (p) => !Number.isFinite(p) || p < 0,
             ) ||
@@ -606,7 +615,7 @@ export function revisionRoute(
         model: revision.model,
         provider: revision.provider,
         reasoningEffort: revision.reasoningEffort,
-        reasoningEnabled: revision.descriptor.reasoning,
+        descriptor: revision.descriptor,
         profileKey: modelConfigurationKey(revision.descriptor),
         authorizedForAgent: true as const,
     };
@@ -637,9 +646,11 @@ export async function pinMissionModel(
     const agent =
         mission.definitionId === "workbench_v1"
             ? "workbench"
-            : mission.definitionId === "saved_material_inspection_v1"
-              ? "saved_material_inspection"
-              : null;
+            : mission.definitionId === "sources_v1"
+              ? "sources"
+              : mission.definitionId === "saved_material_inspection_v1"
+                ? "saved_material_inspection"
+                : null;
     if (
         !agent ||
         (agent === "workbench" &&
@@ -752,5 +763,53 @@ export const profile = internalQuery({
                     .unique()
             )?.bytes ?? null
         );
+    },
+});
+
+/** Immutable turn snapshots use the same defaults and validation as administrative changes. */
+export async function readResponseControlPolicy(ctx: QueryCtx) {
+    const row = await ctx.db
+        .query("responseControlSettings")
+        .withIndex("by_key", (q) => q.eq("key", "global"))
+        .unique();
+    if (!row) return { ...DEFAULT_RESPONSE_CONTROL_POLICY };
+    const {
+        _id,
+        _creationTime,
+        key: _key,
+        updatedAt: _updatedAt,
+        ...policy
+    } = row;
+    return policy;
+}
+export const setResponseControl = mutation({
+    args: {
+        expectedRevision: v.number(),
+        ...responseControlConfiguration.fields,
+    },
+    returns: responseControlPolicy,
+    handler: async (ctx, { expectedRevision, ...configuration }) => {
+        await requireAdmin(ctx);
+        if (
+            !Number.isSafeInteger(expectedRevision) ||
+            expectedRevision < 0 ||
+            !validResponseControlConfiguration(configuration)
+        )
+            throw executionError("response_control_policy_invalid");
+        const row = await ctx.db
+            .query("responseControlSettings")
+            .withIndex("by_key", (q) => q.eq("key", "global"))
+            .unique();
+        if ((row?.revision ?? 0) !== expectedRevision)
+            throw executionError("version_conflict");
+        const policy = { ...configuration, revision: expectedRevision + 1 };
+        const value = {
+            ...policy,
+            key: "global" as const,
+            updatedAt: Date.now(),
+        };
+        if (row) await ctx.db.replace(row._id, value);
+        else await ctx.db.insert("responseControlSettings", value);
+        return policy;
     },
 });

@@ -11,6 +11,34 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
+test("Pi continues a mission when its domain requires refreshed completion context", async () => {
+    const { savedMaterialInspectionDefinition } = await import(
+        "@convex/domain/savedMaterialInspection"
+    );
+    const completion = vi
+        .spyOn(savedMaterialInspectionDefinition, "complete")
+        .mockImplementationOnce(async () => ({ kind: "continue" }));
+    try {
+        const { t, missionId, captureId } = await simulatedPiMissionFixture();
+        await t.mutation(internal.execution.missions.resume, {
+            missionId,
+            expectedGeneration: 4,
+            simulation: true,
+        });
+        await t.finishAllScheduledFunctions(
+            () => vi.advanceTimersByTime(10),
+            500,
+        );
+        expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
+            status: "completed",
+            result: { captureIds: [captureId] },
+        });
+        expect(completion.mock.calls.length).toBeGreaterThan(1);
+    } finally {
+        completion.mockRestore();
+    }
+}, 30000);
+
 test("Pi owns the generation and tool loop and retains durable checkpoints through saved-material completion", async () => {
     const { t, missionId, captureId } = await simulatedPiMissionFixture();
     await t.mutation(internal.execution.missions.resume, {

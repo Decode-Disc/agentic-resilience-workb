@@ -211,3 +211,62 @@ test("an incomplete framing draft can be saved without authorizing research", as
         executionStatus: "idle",
     });
 });
+
+test("new Sources research pins its protocol while repeated Start consumes no second analysis", async () => {
+    vi.stubEnv("SOURCES_MISSION_ENABLED", "true");
+    vi.stubEnv(
+        "SOURCES_MISSION_ENVELOPE",
+        JSON.stringify({
+            version: 1,
+            maxNeeds: 12,
+            initialSearches: 4,
+            complementSearches: 3,
+            acquisitions: 10,
+            controls: 20,
+        }),
+    );
+    try {
+        const t = convexTest(schema, modules);
+        agentTest.register(t);
+        workflowTest.register(t);
+        const { userId, preflightId } = await createAdmittedPreflight(t);
+        const analyst = t.withIdentity({ subject: userId });
+        const { runId } = await analyst.mutation(api.framing.confirmCompany, {
+            preflightId,
+            idempotencyKey: "sources-start",
+            coveragePreset: "balanced",
+        });
+        await analyst.mutation(api.framing.save, {
+            runId,
+            expectedRevision: 1,
+            requestKey: "sources-brief",
+            content: {
+                scope: "Photo-led auto claims",
+                questions: [
+                    {
+                        id: "control",
+                        text: "Who controls coordination?",
+                        rationale: "Document coordination",
+                        shortLabel: "Control",
+                    },
+                ],
+            },
+        });
+        const args = {
+            runId,
+            expectedRevision: 2,
+            requestKey: "sources-start",
+        };
+        await analyst.mutation(api.framing.startResearch, args);
+        await analyst.mutation(api.framing.startResearch, args);
+        expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
+            sourcesProtocol: "sources_mission_v1",
+            lifecycleState: "draft",
+        });
+        expect(
+            await t.run((ctx) => ctx.db.query("visitors").first()),
+        ).toMatchObject({ analysesReserved: 1 });
+    } finally {
+        vi.unstubAllEnvs();
+    }
+});

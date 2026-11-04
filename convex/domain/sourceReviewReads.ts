@@ -5,7 +5,12 @@ import type {
     GenericDatabaseReader,
     SystemDataModel,
 } from "convex/server";
-import { readPreparationSourceDecision } from "./sourcePreparationAuthority";
+import { getDocumentSize, type Value } from "convex/values";
+import {
+    readPreparationSourceDecision,
+    sourcePreparationError,
+} from "./sourcePreparationAuthority";
+import { SOURCE_RETRIEVAL_VERSION } from "./sourceRetrievalPolicy";
 import {
     readComparisonHistory,
     readPinnedComparisonReview,
@@ -45,6 +50,20 @@ export class SourceReviewReads {
         string,
         ReturnType<typeof readPreparationSourceDecision>
     >();
+    private readonly passages = new Map<
+        string,
+        Promise<Doc<"sourceSearchPassages"> | null>
+    >();
+    private readonly requests = new Map<
+        Id<"agentOperationRequests">,
+        Promise<Doc<"agentOperationRequests"> | null>
+    >();
+    private readonly preparationRequests = new Map<
+        string,
+        Promise<Doc<"agentOperationRequests"> | null>
+    >();
+    private bytes = 0;
+    private ranges = 0;
     private readonly reviews = new Map<
         string,
         ReturnType<typeof readPinnedComparisonReview>
@@ -54,20 +73,164 @@ export class SourceReviewReads {
     constructor(
         private readonly db: GenericDatabaseReader<DataModel>,
         private readonly runId: Id<"researchRuns">,
+        private readonly capacity?: { bytes: number; ranges: number },
     ) {}
+
+    /** Leaves capacity for not-yet-written dependencies before authorizing more work. */
+    requireCapacity(bytes = 0, ranges = 0) {
+        if (
+            this.capacity &&
+            (this.bytes + bytes > this.capacity.bytes ||
+                this.ranges + ranges > this.capacity.ranges)
+        )
+            throw sourcePreparationError("source_review_capacity");
+    }
+    private range() {
+        this.ranges++;
+        this.requireCapacity();
+    }
+    private observe<T extends Record<string, Value>>(row: T | null) {
+        if (row) this.bytes += getDocumentSize(row);
+        this.requireCapacity();
+        return row;
+    }
 
     capture(id: Id<"sourceCaptures">) {
         let value = this.captures.get(id);
         if (!value) {
-            value = this.db.get(id);
+            this.range();
+            value = this.db.get(id).then((row) => this.observe(row));
             this.captures.set(id, value);
+        }
+        return value;
+    }
+    passage(
+        corpusRevisionId: Id<"corpusRevisions">,
+        captureId: Id<"sourceCaptures">,
+        order: number,
+    ) {
+        const scopeKey = `${this.runId}:${corpusRevisionId}:${SOURCE_RETRIEVAL_VERSION}`;
+        const key = `${scopeKey}:${captureId}:${order}`;
+        let value = this.passages.get(key);
+        if (!value) {
+            this.range();
+            value = this.db
+                .query("sourceSearchPassages")
+                .withIndex("by_scope_capture_order", (q) =>
+                    q
+                        .eq("scopeKey", scopeKey)
+                        .eq("captureId", captureId)
+                        .eq("order", order),
+                )
+                .unique()
+                .then((row) => this.observe(row));
+            this.passages.set(key, value);
+        }
+        return value;
+    }
+    /** Reads only requested contiguous order ranges, preserving exact identities and caching misses. */
+    async prefetchPassages(
+        corpusRevisionId: Id<"corpusRevisions">,
+        references: readonly {
+            captureId: Id<"sourceCaptures">;
+            passageOrder: number;
+        }[],
+    ) {
+        const scopeKey = `${this.runId}:${corpusRevisionId}:${SOURCE_RETRIEVAL_VERSION}`;
+        const grouped = new Map<Id<"sourceCaptures">, Set<number>>();
+        for (const reference of references) {
+            if (
+                this.passages.has(
+                    `${scopeKey}:${reference.captureId}:${reference.passageOrder}`,
+                )
+            )
+                continue;
+            const orders =
+                grouped.get(reference.captureId) ?? new Set<number>();
+            orders.add(reference.passageOrder);
+            grouped.set(reference.captureId, orders);
+        }
+        for (const [captureId, values] of grouped) {
+            const orders = [...values].sort((a, b) => a - b);
+            for (let i = 0; i < orders.length; ) {
+                const first = orders[i];
+                if (first === undefined) break;
+                let end = i;
+                while (
+                    end + 1 < orders.length &&
+                    orders[end + 1] === (orders[end] ?? 0) + 1
+                )
+                    end++;
+                const last = orders[end] ?? first;
+                this.range();
+                const rows = await this.db
+                    .query("sourceSearchPassages")
+                    .withIndex("by_scope_capture_order", (q) =>
+                        q
+                            .eq("scopeKey", scopeKey)
+                            .eq("captureId", captureId)
+                            .gte("order", first)
+                            .lte("order", last),
+                    )
+                    .take(last - first + 2);
+                const byOrder = new Map<number, Doc<"sourceSearchPassages">>();
+                for (const row of rows) {
+                    this.observe(row);
+                    if (byOrder.has(row.order))
+                        throw sourcePreparationError(
+                            "capture_identity_conflict",
+                        );
+                    byOrder.set(row.order, row);
+                }
+                for (let order = first; order <= last; order++)
+                    this.passages.set(
+                        `${scopeKey}:${captureId}:${order}`,
+                        Promise.resolve(byOrder.get(order) ?? null),
+                    );
+                i = end + 1;
+            }
+        }
+    }
+    request(id: Id<"agentOperationRequests">) {
+        let value = this.requests.get(id);
+        if (!value) {
+            this.range();
+            value = this.db.get(id).then((row) => this.observe(row));
+            this.requests.set(id, value);
+        }
+        return value;
+    }
+    /** Finds a completion blocker even before the operation reserves preparation work. */
+    firstPreparationRequest(
+        preparationId: Id<"sourceSelectionProposalRebuilds">,
+        status: "running" | "waiting",
+    ) {
+        const key = `${preparationId}:${status}`;
+        let value = this.preparationRequests.get(key);
+        if (!value) {
+            this.range();
+            value = this.db
+                .query("agentOperationRequests")
+                .withIndex("by_preparation_and_status", (q) =>
+                    q
+                        .eq("pin.preparationId", preparationId)
+                        .eq("status", status),
+                )
+                .first()
+                .then((row) => {
+                    this.observe(row);
+                    if (row) this.requests.set(row._id, Promise.resolve(row));
+                    return row;
+                });
+            this.preparationRequests.set(key, value);
         }
         return value;
     }
     task(id: Id<"aiTaskResults">) {
         let value = this.tasks.get(id);
         if (!value) {
-            value = this.db.get(id);
+            this.range();
+            value = this.db.get(id).then((row) => this.observe(row));
             this.tasks.set(id, value);
         }
         return value;
@@ -83,7 +246,10 @@ export class SourceReviewReads {
     artifact(id: Id<"_storage">) {
         let value = this.artifacts.get(id);
         if (!value) {
-            value = this.db.system.get("_storage", id);
+            this.range();
+            value = this.db.system
+                .get("_storage", id)
+                .then((row) => this.observe(row));
             this.artifacts.set(id, value);
         }
         return value;

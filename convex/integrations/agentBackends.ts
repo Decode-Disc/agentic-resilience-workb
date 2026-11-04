@@ -11,10 +11,6 @@ import {
 } from "@convex/execution/executionProtocol";
 import { Agent } from "@convex-dev/agent";
 import { isStepCount } from "ai";
-import {
-    MODEL_ATTEMPT_TIMEOUT_MS,
-    MODEL_MAX_OUTPUT_TOKENS,
-} from "./modelRouting";
 import { invokeDeferredAgentTurn } from "./modelTransport";
 
 function transportDependencies(
@@ -57,10 +53,7 @@ const convexAgentBackend: AgentGenerationBackend = {
                     { threadId: reference },
                     {
                         prompt: step.prompt,
-                        maxOutputTokens: MODEL_MAX_OUTPUT_TOKENS,
-                        temperature: 0,
-                        maxRetries: 0,
-                        timeout: MODEL_ATTEMPT_TIMEOUT_MS,
+                        ...step.generation,
                         abortSignal: step.signal,
                     },
                 );

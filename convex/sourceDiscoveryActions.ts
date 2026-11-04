@@ -124,6 +124,7 @@ export function selectSecFilingsForDiscovery(
 export const discoverForRun = internalAction({
     args: {
         runId: v.id("researchRuns"),
+        skipWeb: v.optional(v.boolean()),
         cik: v.string(),
         filings: v.array(
             v.object({
@@ -167,6 +168,7 @@ export const discoverForRun = internalAction({
         if (result.total >= initialCapacity.limit) {
             return { total: result.total };
         }
+        if (args.skipWeb) return { total: result.total };
         if (environment?.EXA_API_KEY?.trim()) {
             return ctx.runAction(internal.exaDiscoveryActions.discoverForRun, {
                 runId: args.runId,

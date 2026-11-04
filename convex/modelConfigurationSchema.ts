@@ -1,3 +1,4 @@
+import { responseControlConfiguration } from "@convex/domain/workbenchResponseControlContracts";
 import { defineTable } from "convex/server";
 import { v } from "convex/values";
 
@@ -40,6 +41,7 @@ export const modelDescriptor = v.object({
     reasoningEfforts: v.optional(v.array(reasoningEffort)),
     reasoningMandatory: v.optional(v.boolean()),
     reasoningDefault: v.optional(reasoningEffort),
+    supportedParameters: v.optional(v.array(v.string())),
     inputPrice: v.number(),
     outputPrice: v.number(),
     cacheReadPrice: v.number(),
@@ -53,6 +55,12 @@ export const effectiveModelConfiguration = v.object({
 });
 export const nativeProfile = v.object({ key: v.string(), bytes: v.number() });
 export const modelConfigurationTables = {
+    responseControlSettings: defineTable({
+        key: v.literal("global"),
+        ...responseControlConfiguration.fields,
+        revision: v.number(),
+        updatedAt: v.number(),
+    }).index("by_key", ["key"]),
     modelCatalog: defineTable({
         model: v.string(),
         provider: v.optional(v.string()),

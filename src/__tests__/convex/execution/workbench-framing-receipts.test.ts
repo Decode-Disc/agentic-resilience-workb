@@ -140,7 +140,7 @@ test.each([
             requestId,
             expectedGeneration: 1,
         }),
-    ).toMatchObject({ kind: "refused", code: "operation_not_allowed" });
+    ).toMatchObject({ kind: "refused", code: "invalid_operation_input" });
     const final = await t.mutation(internal.execution.invocations.begin, {
         missionId,
         expectedGeneration: 1,

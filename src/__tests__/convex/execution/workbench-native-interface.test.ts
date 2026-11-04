@@ -1011,6 +1011,7 @@ test.each([
                 kind: "invalid",
                 name: "adjust_framing",
                 inputJson: original,
+                validation: { path: "", expected: "object" },
             },
             status: "completed",
             outcome: expect.objectContaining({ kind: "refused" }),
@@ -1158,7 +1159,12 @@ test("a corrected native framing operation succeeds after malformed original JSO
         await t.run((ctx) => ctx.db.query("agentOperationRequests").collect()),
     ).toEqual([
         expect.objectContaining({
-            input: { kind: "invalid", name: "adjust_framing", inputJson: "{" },
+            input: {
+                kind: "invalid",
+                name: "adjust_framing",
+                inputJson: "{",
+                validation: { path: "", expected: "object" },
+            },
             outcome: expect.objectContaining({ kind: "refused" }),
         }),
         expect.objectContaining({

@@ -172,6 +172,7 @@ export const seedSourceReviewScenario = internalMutation({
         fixtureKey: v.string(),
         recoveryScenario: v.optional(v.boolean()),
         legacySelectionReasons: v.optional(v.boolean()),
+        emptyDocumentaryMaterial: v.optional(v.boolean()),
         recordedScenario: v.optional(
             v.object({
                 companyName: v.string(),
@@ -200,13 +201,24 @@ export const seedSourceReviewScenario = internalMutation({
         if (
             args.recordedScenario &&
             (args.recoveryScenario ||
-                args.recordedScenario.sources.length < 1 ||
+                args.recordedScenario.sources.length <
+                    (args.emptyDocumentaryMaterial ? 0 : 1) ||
                 args.recordedScenario.sources.length > 8 ||
                 !["127.0.0.1", "localhost"].includes(
                     new URL(env.CONVEX_CLOUD_URL).hostname,
                 ))
         )
             throw new Error("Invalid local recorded review scenario");
+        if (
+            args.emptyDocumentaryMaterial &&
+            (!args.recordedScenario ||
+                args.recordedScenario.sources.length ||
+                args.recoveryScenario ||
+                args.legacySelectionReasons)
+        )
+            throw new Error(
+                "Empty qualification requires a company and no recorded sources",
+            );
         const slotKey = args.slotKey.trim();
         const fixtureKey = args.fixtureKey.trim();
         if (!slotKey || !fixtureKey || fixtureKey.length > 80) {
@@ -453,6 +465,20 @@ export const seedSourceReviewScenario = internalMutation({
                 .take(sourceIds.length);
             for (const item of items)
                 await ctx.db.patch(item._id, { selectionRationale: undefined });
+        }
+        if (args.emptyDocumentaryMaterial) {
+            await ctx.db.patch(runId, {
+                lifecycleState: "framing",
+                executionStatus: "idle",
+                reservationStatus: undefined,
+            });
+            return {
+                runId,
+                corpusRevisionId,
+                proposalId: proposal.proposalId,
+                proposalVersion: proposal.version,
+                sourceIds,
+            };
         }
         const workflowId = await workflow.start(
             ctx,

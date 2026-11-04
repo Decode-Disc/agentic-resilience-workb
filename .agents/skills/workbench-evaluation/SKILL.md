@@ -1,6 +1,6 @@
 ---
 name: workbench-evaluation
-description: Evaluate Workbench harness reliability, model usefulness and actual workflow outcomes separately. Use to interpret qualifications, diagnose failures or prepare bounded model and evidence comparisons, including paid browser qualification when authorized. Preserve recorded evidence and distinguish implemented runners from planned evaluation needs.
+description: Evaluate Workbench harness reliability, model usefulness and actual workflow outcomes separately. Use to interpret qualifications, diagnose failures or prepare bounded model and evidence comparisons, including paid browser qualification when authorized. Close with evidence-backed failure attribution and concrete next actions. Preserve recorded evidence and distinguish implemented runners from planned evaluation needs.
 ---
 
 # Workbench Evaluation
@@ -57,9 +57,21 @@ A weak model can expose defects that a stronger model avoids by chance. Judge th
 
 Use the user's selected inexpensive stress model for repeated harness checks while mechanical defects remain. A poor analytical answer can coexist with a passing harness case; a convincing answer cannot excuse lost instructions, false status or a stuck response. Qualify the intended stronger candidate after the relevant harness corrections, unless the user requests a separate bounded model investigation. Keep stress and quality candidates explicit, verify their exact provider/model identities before dispatch, and never substitute a cheaper or similarly named model silently. These roles are evaluation choices, not permanent production defaults.
 
-For each failure, locate the first demonstrated divergence using the original request, prepared input, raw model/tool output, operation receipt, persisted state and published message. Attribute it to the model, harness, provider/runtime, or a demonstrated interaction; keep the cause unresolved when observations cannot distinguish them. A model's invalid call is a model error; failure to refuse it safely or continue the dialogue can also be a harness error. A blocked state change does not make a contradictory published success claim acceptable. Do not diagnose a timeout from elapsed time alone.
+Before giving the final evaluation conclusion, investigate every material failure proactively, including failures in an interrupted lot; do not wait for the user to request a harness-versus-model diagnosis. Locate the first demonstrated divergence through the original request, actual serialized provider input, raw model/tool output, operation receipt, persisted state and published message. A domain snapshot or an intended prompt does not prove what reached the provider. For a failed correction, verify that the corrective request actually contains the rejected draft, current authoritative facts and applicable feedback, and that continuation preserves the promised capabilities and limits. Perform available, in-scope read-only inspection and the cheapest safe deterministic isolation check before answering; do not defer accessible diagnosis to a recommendation or another user prompt. A proposed investigation is the next action only when missing evidence, access or execution authority prevents completing it now.
+
+Attribute the observed divergence to the application harness, evaluation tooling, model, provider/runtime, a demonstrated interaction, or an unresolved cause. Explain the causal mechanism and cite the decisive artifact or reproducible check. Do not label an unsuccessful correction as a model weakness before checking its actual input; correct data in storage does not establish correct delivery. An invalid model call remains a model error, while unsafe refusal handling or a lost continuation can independently be a harness error. If evidence cannot separate the causes, name the missing observation and the cheapest discriminating check. A blocked state change does not make a contradictory published success claim acceptable. Do not diagnose a timeout from elapsed time alone.
 
 Assess analyst attribution against the actual request and its granted scope. An authorized refinement may add explanatory wording; ambiguity alone does not prove invented analyst intent or justify another guard. Distinguish a useful elaboration from an unsupported fact, changed meaning or unauthorized action.
+
+## Evaluate Hybrid Response Control
+
+A controller can miss a contradiction, flag a correct explanation or prompt an unhelpful correction. Evaluate those stages separately so a favorable control score or successful publication cannot conceal an incorrect answer. Locate the current response-control contract in [TECH](../../../context/TECH.md) and inspect the policy actually pinned to each turn; model identities, thresholds and eligibility rules belong in their existing configuration owners, not this skill.
+
+Trace the initial draft, frozen authoritative facts, filter outcome, controller assessment, corrective reminder, revised draft and published text with its separate notice. Judge initial and final answer quality independently of the controller. Use investigator-reviewed references to identify false alerts and missed contradictions; the controller's own score is not its answer key or a calibrated probability that the whole reply is true. Distinguish an incorrect answer visibly contained under the current publication contract from an unflagged false success claim. Neither is a semantic success, and valid advisory containment does not establish a mandatory execution failure.
+
+When a comparison is needed, hold the generator, inputs and references constant while comparing eligible control-enabled and control-disabled cases. Include ambiguous but supported wording, genuine contradictions, unavailable checks and exempt replies. Count generator, controller and corrective calls separately, including latency, known charges and unresolved reservations. Check that ineligible replies produce no semantic-control call and that correction does not repeat business operations.
+
+Keep development examples distinct from held-out cases. Threshold tuning creates a new policy version and requires independent validation; reusing exposed examples cannot establish general reliability. Preserve historical replacement cases as evidence for their original mechanism, and add current correction-and-reserve cases without rewriting their expected meaning.
 
 ## Define When to Stop
 
@@ -115,14 +127,17 @@ Use `pnpm evaluation:archive --help` for the command's options, storage layout a
 
 Link the report to the returned archive record. Report its verified status, included scope, missing inputs and local-only storage limitation. If an input is missing or verification fails, keep that failure visible and do not describe the experiment as fully archived or reproducible. Archiving proves byte preservation, not semantic correctness. Never remove originals as part of this workflow.
 
-## Conclude with a Usable Decision
+## Required Evaluation Closeout
 
-Scores and preserved files are inputs to a decision, not the final outcome. Give the user a conclusion they can act on so the investigation reduces uncertainty rather than merely adding measurements. For each investigation, cover the following points in proportion to its scope:
+The evaluation is not complete until the user receives a causal diagnosis and an actionable capability decision. Costs, scores, test counts, archive links and a statement that the run failed do not satisfy this requirement. Apply this gate to completed, interrupted and inconclusive lots; scale the detail to the material failures rather than auditing every harmless stylistic issue.
 
-- What the evidence establishes and what it does not, with the relevant saved results or observed boundaries.
-- What this means for the analyst's task: useful material retained or lost, work still required, and the meaningful quality, cost and latency trade-offs.
-- What can be chosen now, or why no choice is supported. Label the recommendation separately from any decision already accepted by the user; retaining the current approach or leaving the question open are valid outcomes.
-- What remains uncertain and the smallest next check, only if it could change the decision. Otherwise state that no further comparison is needed for the present question.
-- For retained experiments, where the evidence is preserved and any missing inputs or verification limits.
+Before the final response, check that each material failure has all of the following:
 
-Use plain language before technical scores and identifiers. A user asking which approach is useful should not need to reconstruct that answer from a benchmark table.
+- **Observed consequence and evidence:** what the analyst requested, what actually happened and the decisive request/output/state or executable check. Distinguish useful retained material, failed work and untested stages.
+- **Attribution and certainty:** the first demonstrated failing boundary and its causal mechanism, classified under the categories above. Separate confirmed defects, supported inferences and unresolved causes; a controller score is not an answer key and a revised reply is not proof of repair.
+- **Concrete next action:** the existing owner or boundary to correct, the smallest coherent correction, and the regression or observation that would establish resolution. If the cause is unresolved, specify an isolation step instead of a speculative fix. If no correction is justified, state why and what can be retained.
+- **Capability decision:** what can proceed, what remains blocked or incomplete, and which next check could change that decision. Keep harness reliability, model task quality and advisory containment separate. A new measurement must answer a named uncertainty; unused budget does not justify another lot.
+
+Put the material findings, their attribution and recommended actions in the user-facing answer itself; do not leave them only in a report or behind a link. State exactly what was checked and what remains unverified, then give the actual call count, known costs/unresolved reservations and retained evidence where applicable. Recommend the next bounded work without treating a recommendation as implementation or paid-execution authority. Preserve the original results when later diagnosis changes their interpretation; add a dated correction rather than rewriting raw observations or pooling code stages.
+
+For successful cases, explain the demonstrated analyst benefit, relevant limits and why no further correction is needed. Use plain language before technical identifiers. The user should be able to act on the conclusion without asking a follow-up to discover whether the failure belongs to the harness or the model, or what must be done next.

@@ -2,12 +2,24 @@ import { expect, test } from "vitest";
 import {
     checkpointDecisionLabel,
     checkpointLabel,
+    dossierStatus,
     eventLabel,
     sourceAssessmentExplanationCopy,
     sourceCompanyLinkageLabel,
     sourceSelectionExplanation,
     sourceUsageCopy,
 } from "@/lib/presentation/research-copy";
+
+test("recoverable research interruption is not labelled as an analyst review prerequisite", () => {
+    expect(
+        dossierStatus({
+            lifecycleState: "discovering_sources",
+            executionStatus: "paused",
+            pauseReason: "execution_interrupted",
+            completionOutcome: undefined,
+        }),
+    ).toEqual({ label: "Interrupted", tone: "dashed" });
+});
 
 test("keeps attributed-use restrictions explicit in the selection explanation", () => {
     const copy = sourceSelectionExplanation({

@@ -66,6 +66,7 @@ import {
     SOURCE_ROLE_REQUIREMENTS,
 } from "./domain/sourceSelectionPolicy";
 import { validateExaCandidates } from "./exaDiscoveryActions";
+import { extractObservedDestinations } from "./integrations/evidenceNormalization";
 import { SOURCE_EMBEDDING_PROFILE } from "./integrations/sourceEmbeddings";
 import { MAX_APPROVED_SOURCE_BYTES } from "./resourceLimits";
 import { requestPinnedPublicSource } from "./sourceActions";
@@ -86,14 +87,20 @@ type PreparationModelReceipt = {
 };
 
 /** Owns dispatch admission, pinned routing, bounded technical retry and receipts for both model tasks. */
-async function executePreparationModel<
-    Result extends QualificationAttemptResult | SourceComparisonAttemptResult,
+export async function executePreparationModel<
+    Result extends
+        | QualificationAttemptResult
+        | SourceComparisonAttemptResult
+        | import("./integrations/documentaryControl").DocumentaryControlAttempt,
 >(
     ctx: ActionCtx,
     input: {
         preparation: Doc<"sourceSelectionProposalRebuilds">;
         sourceId: Id<"sources">;
-        operation: "source_qualification" | "source_comparison";
+        operation:
+            | "source_qualification"
+            | "source_comparison"
+            | "source_documentary_control";
         inputHash: string;
         invocationInputJson: string;
         validate?: () => Promise<void>;
@@ -1446,6 +1453,7 @@ const inspectionResultValidator = v.object({
         v.literal("unavailable"),
     ),
     sourceCaptureId: v.optional(v.id("sourceCaptures")),
+    contentHash: v.optional(v.string()),
     reasonCode: v.optional(v.string()),
 });
 type InspectionResult = Infer<typeof inspectionResultValidator>;
@@ -1478,6 +1486,7 @@ async function inspectSourceDocument(
                 ? {
                       status: capture.readingCompleteness ?? "partial",
                       sourceCaptureId: capture._id,
+                      contentHash: capture.contentHash,
                   }
                 : {
                       status: "unavailable",
@@ -1711,6 +1720,18 @@ async function inspectSourceDocument(
             storageId,
         });
         await ctx.runMutation(internal.sourceCaptures.finalize, {
+            ...(preparation.sourcesMission
+                ? {
+                      representationCompleteness:
+                          retrieval.status === "partial"
+                              ? ("partial" as const)
+                              : ("complete" as const),
+                      observedDestinations: extractObservedDestinations(
+                          retrieval.rawContent ?? retrieval.normalizedText,
+                          retrieval.canonicalUrl,
+                      ),
+                  }
+                : {}),
             preparationId: args.preparationId,
             captureId,
             contentHash: prepared.request.document.contentHash,
@@ -1726,7 +1747,11 @@ async function inspectSourceDocument(
                 prepared.omittedPassageCount,
             ),
         });
-        return { status: readingCompleteness, sourceCaptureId: captureId };
+        return {
+            status: readingCompleteness,
+            sourceCaptureId: captureId,
+            contentHash: prepared.request.document.contentHash,
+        };
     } catch (error) {
         const reasonCode = preparationFailureCode(error);
         if (captureId) {

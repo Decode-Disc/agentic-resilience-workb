@@ -823,7 +823,7 @@ test.each(
                     interpretedNeed: "Commercial terms.",
                 };
     vi.spyOn(operation, "execute").mockResolvedValue({
-        outcome: { kind: "success", valueJson: "{}" },
+        outcome: { kind: "success", value: {} },
     });
     const requestId = await t.mutation(internal.execution.operations.enqueue, {
         missionId: active.missionId,

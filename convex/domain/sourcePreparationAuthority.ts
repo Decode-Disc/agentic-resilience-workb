@@ -9,6 +9,7 @@ import {
 import type { GenericDatabaseReader } from "convex/server";
 import { ConvexError, type Infer, v } from "convex/values";
 import { isExecutableQualificationVersion } from "./sourceQualification";
+import { isResumableResearchPause } from "./transitions";
 
 export const preparationDispatchOutcomeValidator = v.union(
     v.literal("not_dispatched"),
@@ -302,6 +303,7 @@ async function readCurrentPreparation(
         preparationId: Id<"sourceSelectionProposalRebuilds">;
         sourceId?: Id<"sources">;
     },
+    observation = false,
 ) {
     const preparation = await db.get(args.preparationId);
     if (
@@ -319,6 +321,11 @@ async function readCurrentPreparation(
         ? await db.get(run.ownerVisitorId)
         : null;
     const invitation = visitor ? await db.get(visitor.invitationId) : null;
+    const pausedObservation =
+        observation &&
+        run?.agentExecutionVersion === 3 &&
+        isResumableResearchPause(run) &&
+        run.executionGeneration === preparation.executionGeneration + 1;
     const expectedLifecycle =
         preparation.entryPoint === "initial_discovery"
             ? "discovering_sources"
@@ -330,9 +337,10 @@ async function readCurrentPreparation(
         visitor.status !== "active" ||
         invitation?.status !== "claimed" ||
         invitation.claimedByVisitorId !== visitor._id ||
-        run.executionStatus !== "running" ||
+        (run.executionStatus !== "running" && !pausedObservation) ||
         run.lifecycleState !== expectedLifecycle ||
-        run.executionGeneration !== preparation.executionGeneration ||
+        (run.executionGeneration !== preparation.executionGeneration &&
+            !pausedObservation) ||
         run.sourcePreparationId !== preparation._id ||
         run.activeCorpusRevisionId !== revision._id ||
         revision.runId !== run._id ||
@@ -433,6 +441,17 @@ export async function readEligiblePreparationSourceIds(
             eligible.push(source._id);
     }
     return eligible;
+}
+
+/** An engaged operation may retain its observation during the analyst pause; this grants no I/O or progression. */
+export async function assertPreparationObservationFence(
+    db: GenericDatabaseReader<DataModel>,
+    args: {
+        preparationId: Id<"sourceSelectionProposalRebuilds">;
+        sourceId?: Id<"sources">;
+    },
+) {
+    return readCurrentPreparation(db, args, true);
 }
 
 /** Expiry stops I/O while the unchanged generation can still produce a partial review. */

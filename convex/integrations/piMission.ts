@@ -55,10 +55,7 @@ import {
     preparePiModelPayload,
     preparePiSimulationRequest,
 } from "./modelInput";
-import {
-    MODEL_ATTEMPT_TIMEOUT_MS,
-    MODEL_MAX_OUTPUT_TOKENS,
-} from "./modelRouting";
+import { modelCallSettings, SIMULATION_MODEL_ROUTE } from "./modelRouting";
 import {
     createBoundedModelFetch,
     generationObservation,
@@ -87,6 +84,9 @@ export async function runPiMission(
         { missionId: mission._id },
     );
     const route = configuredModel ? revisionRoute(configuredModel) : undefined;
+    const generation = modelCallSettings(
+        route ?? SIMULATION_MODEL_ROUTE,
+    ).generation;
     const terminal = ["completed", "cancelled"].includes(mission.status);
     if (
         !terminal &&
@@ -114,7 +114,7 @@ export async function runPiMission(
             {
                 id: "controlled",
                 contextWindow: 32000,
-                maxTokens: MODEL_MAX_OUTPUT_TOKENS,
+                maxTokens: generation.maxOutputTokens,
             },
         ],
     });
@@ -352,7 +352,7 @@ export async function runPiMission(
                                 }
                                 return {
                                     continue:
-                                        "The analyst updated the active instructions. Continue with the current required mission state before publishing.",
+                                        "Required mission context changed. Continue with the current state and active instructions before completing.",
                                 };
                             }
                             return undefined;
@@ -603,9 +603,9 @@ export async function runPiMission(
                             },
                             messages,
                             settings: {
-                                maxTokens: MODEL_MAX_OUTPUT_TOKENS,
-                                maxRetries: 0,
-                                temperature: 0,
+                                maxTokens: generation.maxOutputTokens,
+                                maxRetries: generation.maxRetries,
+                                temperature: generation.temperature,
                             },
                         });
                     if (
@@ -677,13 +677,14 @@ export async function runPiMission(
                             apiKey: simulated
                                 ? "local-fixture"
                                 : process.env.OPENROUTER_API_KEY,
-                            maxRetries: 0,
-                            maxTokens: MODEL_MAX_OUTPUT_TOKENS,
-                            timeoutMs: MODEL_ATTEMPT_TIMEOUT_MS,
+                            maxRetries: generation.maxRetries,
+                            maxTokens: generation.maxOutputTokens,
+                            temperature: generation.temperature,
+                            timeoutMs: generation.timeout,
                             signal: AbortSignal.any([
                                 abort.signal,
                                 ...(lifecycle.signal ? [lifecycle.signal] : []),
-                                AbortSignal.timeout(MODEL_ATTEMPT_TIMEOUT_MS),
+                                AbortSignal.timeout(generation.timeout),
                             ]),
                             onProviderStreamEvent: async (data, eventModel) => {
                                 argumentCapture.observe(data);
@@ -959,6 +960,26 @@ export async function runPiMission(
             if (adopted.kind === "blocked") {
                 if (adopted.code === "pending_operations")
                     throw executionError("pi_slice_complete");
+                if (
+                    adopted.code === "completion_correction_required" &&
+                    "correction" in adopted &&
+                    adopted.correction
+                ) {
+                    preparationChanges++;
+                    return fauxAssistantMessage(
+                        fauxText(
+                            `The preceding completion was refused. Correct the proposal using current required state: ${JSON.stringify(adopted.correction)}`,
+                        ),
+                    );
+                }
+                if (adopted.code === "mission_context_changed") {
+                    preparationChanges++;
+                    return fauxAssistantMessage(
+                        fauxText(
+                            "The preceding completion was not adopted because required mission context changed.",
+                        ),
+                    );
+                }
                 if (adopted.code === "stale_instructions")
                     return fauxAssistantMessage(
                         fauxText(
@@ -997,7 +1018,10 @@ export async function runPiMission(
         ...base,
         streamSimple: guarded,
         stream: (m, t, o) =>
-            guarded(m, t, { signal: o?.signal, maxRetries: 0 }),
+            guarded(m, t, {
+                signal: o?.signal,
+                maxRetries: generation.maxRetries,
+            }),
     };
     const models = createModels();
     models.setProvider(provider);
@@ -1009,7 +1033,10 @@ export async function runPiMission(
             settings: {
                 toolExecution: "sequential",
                 retry: { enabled: false, maxRetries: 0 },
-                stream: { maxRetries: 0, timeoutMs: MODEL_ATTEMPT_TIMEOUT_MS },
+                stream: {
+                    maxRetries: generation.maxRetries,
+                    timeoutMs: generation.timeout,
+                },
                 compaction: {
                     enabled: true,
                     reserveTokens: 8192,

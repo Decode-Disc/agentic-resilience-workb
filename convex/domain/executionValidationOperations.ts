@@ -3,6 +3,8 @@ import {
     missionScope,
     operationReuseIdentity,
 } from "@convex/execution/missionData";
+import { operationResultValidator } from "@convex/execution/operationResults";
+import { v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import {
     checkValueInputValidator,
@@ -63,7 +65,7 @@ export const validationOperationBehavior: Pick<
         return {
             outcome: {
                 kind: "success",
-                valueJson: JSON.stringify({ index: args.input.index, value }),
+                value: { index: args.input.index, value },
                 progressKey: `checked:${args.input.index}`,
             },
         };
@@ -103,5 +105,8 @@ export const validationOperations: Record<string, AgentOperationDefinition> = {
         version: 1,
         description: "Inspect one deterministic fixture value.",
         inputValidator: checkValueInputValidator,
+        resultValidator: operationResultValidator(
+            v.object({ index: v.number(), value: v.number() }),
+        ),
     },
 };

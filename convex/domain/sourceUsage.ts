@@ -21,8 +21,8 @@ import {
 } from "./sourcePreparationAuthority";
 import type { SourceQualification } from "./sourceQualification";
 import {
-    MAX_QUALIFICATION_FINDINGS,
     isReadableQualificationVersion,
+    MAX_QUALIFICATION_FINDINGS,
     sourceQualificationSchema,
 } from "./sourceQualification";
 import type { SourceReviewReads } from "./sourceReviewReads";
@@ -645,4 +645,43 @@ export function validatePreparedEvidenceUse(input: {
         }
     }
     return { allowed: false, reasonCode: "source_usage_restricted" };
+}
+
+/** Current exclusions and exact indexed evidence constrain every pinned documentary contribution. */
+export async function documentaryContributionEvidenceAvailable(
+    reads: SourceReviewReads,
+    runId: Id<"researchRuns">,
+    corpusRevisionId: Id<"corpusRevisions">,
+    contribution: import("./sourcesContracts").DocumentaryContribution,
+) {
+    if (!contribution.evidence.length) return false;
+    for (const reference of contribution.evidence) {
+        const capture = await reads.capture(reference.captureId);
+        if (
+            !capture ||
+            capture.runId !== runId ||
+            capture.status !== "committed" ||
+            !capture.storageId ||
+            !capture.contentHash ||
+            !(await reads.artifact(capture.storageId))
+        )
+            return false;
+        if (
+            (await reads.decision(corpusRevisionId, capture.sourceId)) ===
+            "rejected"
+        )
+            return false;
+        const passage = await reads.passage(
+            corpusRevisionId,
+            capture._id,
+            reference.passageOrder,
+        );
+        if (
+            !passage ||
+            passage.contentHash !== capture.contentHash ||
+            passage.quotation !== reference.quotation
+        )
+            return false;
+    }
+    return true;
 }

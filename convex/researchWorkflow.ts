@@ -1,3 +1,4 @@
+import { sourcesEnvelopeValidator } from "@convex/domain/sourcesContracts";
 import { awaitResearchControl } from "@convex/execution/researchControl";
 import { vResultValidator, vWorkflowId } from "@convex-dev/workflow";
 import { v } from "convex/values";
@@ -16,6 +17,7 @@ export const run = workflow
             runId: v.id("researchRuns"),
             executionGeneration: v.number(),
             prepareSources: v.optional(v.boolean()),
+            sourcesEnvelope: v.optional(sourcesEnvelopeValidator),
             controlled: v.optional(v.boolean()),
         },
         returns: v.null(),
@@ -45,6 +47,76 @@ export const run = workflow
             executionStatus: "running",
             stepKey: "check_public_evidence",
         });
+        if (args.sourcesEnvelope) {
+            await step.runMutation(internal.researchRuns.transition, {
+                runId: args.runId,
+                expectedExecutionGeneration: executionGeneration,
+                lifecycleState: "discovering_sources",
+                executionStatus: "running",
+                stepKey: "prepare_sources",
+            });
+            await step.runMutation(internal.researchPlanning.createForRun, {
+                runId: args.runId,
+                expectedExecutionGeneration: executionGeneration,
+            });
+            await checkpoint();
+            await step.runAction(
+                internal.sourceDiscoveryActions.discoverForRun,
+                {
+                    runId: args.runId,
+                    cik: availability.cik,
+                    filings: availability.filings,
+                    skipWeb: true,
+                },
+                { retry: false },
+            );
+            const run = await step.runQuery(internal.researchRuns.get, {
+                runId: args.runId,
+            });
+            if (!run?.activeCorpusRevisionId)
+                throw new Error("Draft corpus revision not found");
+            const preparationId = await step.runMutation(
+                internal.sourcesMission.claim,
+                {
+                    runId: args.runId,
+                    corpusRevisionId: run.activeCorpusRevisionId,
+                    expectedGeneration: executionGeneration,
+                    envelope: args.sourcesEnvelope,
+                },
+            );
+            await checkpoint();
+            const started = await step.runMutation(
+                internal.sourcesMission.start,
+                {
+                    preparationId,
+                    expectedGeneration: executionGeneration,
+                    workflowId: step.workflowId,
+                },
+            );
+            const terminal = await step.awaitEvent({
+                id: started.eventId,
+                validator: v.object({ missionId: v.id("agentMissions") }),
+            });
+            await checkpoint();
+            while (true) {
+                const pending = await step.runMutation(
+                    internal.sourcesMission.finish,
+                    {
+                        preparationId,
+                        missionId: terminal.missionId,
+                        expectedGeneration: executionGeneration,
+                    },
+                );
+                if (!pending) break;
+                if (pending.eventId)
+                    await step.awaitEvent({
+                        id: pending.eventId,
+                        validator: v.null(),
+                    });
+                await checkpoint();
+            }
+            return null;
+        }
         while (true) {
             await checkpoint();
             const evaluation = await step.runMutation(

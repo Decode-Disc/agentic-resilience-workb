@@ -132,7 +132,19 @@ test.each([
     );
     const known = {
         kind: "success" as const,
-        valueJson: phase === "validator" ? "{}" : fixtureResult(7),
+        valueJson:
+            phase === "validator"
+                ? JSON.stringify(
+                      await f.t.query(
+                          internal.execution.operations.readRunState,
+                          {
+                              runId: f.runId,
+                              missionId: f.missionId,
+                              expectedGeneration: 1,
+                          },
+                      ),
+                  )
+                : fixtureResult(7),
     };
     await f.t.mutation(internal.execution.operations.claim, {
         requestId,
@@ -281,6 +293,16 @@ test("outcome-validation diagnostics survive an authority refusal after observat
         requestId,
         expectedGeneration: 1,
     });
+    const known = {
+        kind: "success" as const,
+        valueJson: JSON.stringify(
+            await f.t.query(internal.execution.operations.readRunState, {
+                runId: f.runId,
+                missionId: f.missionId,
+                expectedGeneration: 1,
+            }),
+        ),
+    };
     vi.spyOn(operation, "validateOutcome").mockImplementation(() => {
         throw new TypeError("Unexpected retained-shape mismatch");
     });
@@ -289,7 +311,7 @@ test("outcome-validation diagnostics survive an authority refusal after observat
         await f.t.mutation(internal.execution.operations.recordResult, {
             requestId,
             expectedGeneration: 1,
-            outcome: { kind: "success", valueJson: "{}" },
+            outcome: known,
         }),
     ).toEqual({ kind: "refused", code: "mission_cancelled" });
     const observed = await f.t.run((ctx) =>
@@ -308,6 +330,6 @@ test("outcome-validation diagnostics survive an authority refusal after observat
         },
     });
     expect(await f.t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
-        outcome: { kind: "success", valueJson: "{}" },
+        outcome: known,
     });
 });
