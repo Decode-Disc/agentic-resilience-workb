@@ -29,6 +29,7 @@ const cases = z
         modelRole: z.literal("harness_stress").optional(),
         capability: z.literal("sources_mission_v1"),
         model: z.string().min(1).max(200),
+        workbenchModel: z.string().min(1).max(200).optional(),
         provider: z.string().min(1).max(200).optional(),
         responseControllerModel: z.string().min(1).max(200).optional(),
         reasoningEffort: z.literal("low").optional(),

@@ -1,0 +1,132 @@
+{
+    "schemaVersion": 1,
+    "id": "20261104T205209128Z-jev-four-check-assessment",
+    "createdAt": "2026-11-04T20:52:09.128Z",
+    "git": {
+        "head": "523c98aebed055eada7eeca41741c59afd0cb7ee",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-04-workbench-phase-guidance-jev-comparison.md",
+            "archivePath": "repository/docs/verification/2026-11-04-workbench-phase-guidance-jev-comparison.md"
+        },
+        {
+            "origin": "/tmp/workbench-jev-four-check-assessment-20261104-jzuf8q17",
+            "archivePath": "external/assessment"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/assessment/adobe-published-browser.json",
+            "bytes": 56415,
+            "sha256": "2b19c689ce1f0b2562b72ed78efc50d82e82b853b4b8e71510c8c6cda70765e5"
+        },
+        {
+            "path": "external/assessment/assessment-chart.html",
+            "bytes": 2057,
+            "sha256": "646fce86dfce8b1cf7a370cdfd5ec032eece357c1802e28069d45b47a5fda966"
+        },
+        {
+            "path": "external/assessment/assessment.json",
+            "bytes": 5787,
+            "sha256": "153c7fae41c2d52b1eaa62a46709f47c44aafabfed4a83bcd080003991acb4ff"
+        },
+        {
+            "path": "external/assessment/ccc-published-browser.json",
+            "bytes": 54754,
+            "sha256": "271ea1c9413723cfc17fd396e72ec2e849fe5b9bed4dc2cf6394c9c1302c30be"
+        },
+        {
+            "path": "external/assessment/code-preservation-check.json",
+            "bytes": 229,
+            "sha256": "94dd218566e01d90767c0b299b29fad095d8b762b697d5f81ac9300aaabff223"
+        },
+        {
+            "path": "external/assessment/code/convex/domain/sources.ts",
+            "bytes": 25475,
+            "sha256": "852f1f72d37418c7ac4fc574c614880b9570be71848a11af90f9ec41fec3ad32"
+        },
+        {
+            "path": "external/assessment/code/convex/domain/transitions.ts",
+            "bytes": 3692,
+            "sha256": "d89bd1f5e29ffde7f8160f88bf06ee62ead9bf77f5e9e60aaa0df1cb986ae472"
+        },
+        {
+            "path": "external/assessment/code/convex/domain/workbenchContext.ts",
+            "bytes": 4489,
+            "sha256": "a59cf5e870c92d9f45559af3436131244e39bcf455ea97ad2af79b476f659a4c"
+        },
+        {
+            "path": "external/assessment/code/convex/domain/workbenchInstructions.ts",
+            "bytes": 10018,
+            "sha256": "976ff1b223c3f8a8ff2f5bdbecfcb197ad4b40f1493856cf63c927a457328324"
+        },
+        {
+            "path": "external/assessment/code/convex/domain/workbenchResponseControlContracts.ts",
+            "bytes": 5917,
+            "sha256": "98aaa2e4d1bc480ec75b34fe5e3a0975ec24fe54f0ee23c2408cbb43b91daac8"
+        },
+        {
+            "path": "external/assessment/docs-check.log",
+            "bytes": 282,
+            "sha256": "7011b61ea34aa4eb1ca2f2e2ed1d1b8b21fae488c411b4e328f736d8c9dcfee3"
+        },
+        {
+            "path": "external/assessment/frozen-request-probe.log",
+            "bytes": 268,
+            "sha256": "1df35e10366a628c977bbbfd92302d57d696effee7e3871abc19f2216069a955"
+        },
+        {
+            "path": "external/assessment/frozen-request.test.ts",
+            "bytes": 2866,
+            "sha256": "bc0d0b92836d3a29962305df3f30e62a7eea9c0168fa972b886811d04cd376fe"
+        },
+        {
+            "path": "external/assessment/provenance-check.json",
+            "bytes": 1399,
+            "sha256": "972ab8600556f8702675b535f7508e9b444f96462f77963b946d68602abf4ae2"
+        },
+        {
+            "path": "external/assessment/qd7b7yyxe8htgskrzhpyrypxpx8hjz22.txt",
+            "bytes": 8818,
+            "sha256": "e6e38a475d5974590c16f7f852322bb8c7e1a26f1daa11131d0f31043940c6e3"
+        },
+        {
+            "path": "external/assessment/qd7eydpbfa81vn495vkp5kz7jn8hka80.txt",
+            "bytes": 1445,
+            "sha256": "3b40fd57a1daeb3f5ff44cf47b078a98105852d7b6725e897deee00cc899dbd3"
+        },
+        {
+            "path": "external/assessment/rn71d29f2489pqf3envj435f1h8hj73g.json",
+            "bytes": 17193,
+            "sha256": "6ff5c949010b52e2da08107d0378635ffeb14b001f56cbd20fa62eb0318b6dd1"
+        },
+        {
+            "path": "external/assessment/rn734cm1hb8rgpbcw5pb16sj0n8hkpe5.json",
+            "bytes": 19791,
+            "sha256": "6616561780d41fc88912cd1a332947f054afba8fdbb10d6da24ca393a5837348"
+        },
+        {
+            "path": "external/assessment/rn769eg69kxypka9q6y2jgg7318hjt0s.json",
+            "bytes": 35072,
+            "sha256": "60f453745d13eadd5d63b73192878b9a466119a11a448ec23a3e14d788ef1e60"
+        },
+        {
+            "path": "external/assessment/rn7cbyzkrhc64p4kpwcf5mxgkx8hjz5z.json",
+            "bytes": 50381,
+            "sha256": "46e29feab7f80ff664e26ad5444c2f8a16d9c854e5e46e7258cb14b7ad164372"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-04-workbench-phase-guidance-jev-comparison.md",
+            "bytes": 18857,
+            "sha256": "c220af83e8985a24aecbf7f8525bb935e2ef7aec8383119c1968138c4c590ae6"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261104T205209128Z-jev-four-check-assessment.tar.gz",
+        "bytes": 68254,
+        "sha256": "99fc27c8efcc58372fe5400f38c3e16c6117f1945ca8a23fcbf1cd358fd77d91"
+    },
+    "verification": "restored_and_verified"
+}

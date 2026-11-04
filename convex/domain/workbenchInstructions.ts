@@ -9,6 +9,7 @@ import {
     assertSourcesCompletionCapacity,
     hasEngagedSourcesControl,
     SOURCES_HANDOFF_READ_CAPACITY,
+    sourcesInstructionTreatment,
 } from "./sources";
 import { isResumableResearchPause } from "./transitions";
 
@@ -123,17 +124,23 @@ export async function processWorkbenchInstructions(
         )
             return null;
         for (const request of requests) {
+            const treatment = sourcesInstructionTreatment(
+                preparation
+                    ? { status: preparation.status, sourcesMission: data }
+                    : null,
+            );
             if (
-                preparation?.status !== "started" ||
+                !preparation ||
                 !data ||
-                data.result ||
-                request.framingRevisionId !== run.fixedFramingRevisionId ||
-                data.needs.length >= data.envelope.maxNeeds
+                treatment.status !== "open" ||
+                request.framingRevisionId !== run.fixedFramingRevisionId
             ) {
                 await ctx.db.patch(request._id, {
                     status: "limited",
                     outcome:
-                        "This request cannot begin another documentary phase or exceed the remaining preparation allowance.",
+                        treatment.status !== "open"
+                            ? treatment.description
+                            : "This request refers to an earlier research framing and cannot change the fixed research program.",
                 });
                 continue;
             }

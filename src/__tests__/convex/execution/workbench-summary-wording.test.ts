@@ -27,6 +27,50 @@ test.each([
     ).toBe(summary);
 });
 
+test("post-preparation guidance preserves current state without an unstarted-research example", async () => {
+    const { t, runId } = await seedWorkbench(true);
+    const active = await t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: true,
+        },
+    );
+    assert(active);
+    await t.run(async (ctx) => {
+        await ctx.db.patch(runId, {
+            lifecycleState: "sources_prepared",
+            executionStatus: "idle",
+        });
+        const mission = await ctx.db.get(active.missionId);
+        const run = await ctx.db.get(runId);
+        assert(mission && run);
+        const projected = await getAgentDefinition("workbench_v1", 2).context(
+            ctx,
+            mission,
+            run,
+        );
+        assert(projected.kind === "ready");
+        expect(projected.context.research).toMatchObject({
+            phase: "sources_prepared",
+            controlAvailable: false,
+            summary:
+                "Sources preparation has ended. Inspect the retained material and its limits. Question-led Investigation is not available yet.",
+        });
+        expect(projected.context.responseGuidance).not.toContain(
+            "Research has not started.",
+        );
+        expect(projected.context.responseGuidance).not.toContain(
+            "Choose Start research when ready.",
+        );
+        expect(projected.context.responseGuidance).toContain(
+            "research.summary",
+        );
+    });
+});
+
 test("Workbench context distinguishes unstarted, running, requested pause and effective pause in one dossier", async () => {
     const { t, client, runId } = await seedWorkbench(true);
     const active = await t.mutation(
@@ -176,6 +220,7 @@ test("the real native compaction request receives Workbench provenance and appro
     expect(required).toContain(
         "Explain research status using research.summary and the analyst's next action",
     );
+    expect(required).not.toContain("Choose Start research when ready.");
     expect(required).toContain(
         "Do not quote internal state fields, enum values, tool names or implementation mechanics",
     );

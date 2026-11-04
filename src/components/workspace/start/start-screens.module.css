@@ -755,6 +755,7 @@
 }
 .conversationComposer {
   position: absolute;
+  z-index: 2;
   inset-inline: 16px;
   bottom: max(16px, env(safe-area-inset-bottom));
   margin-top: 0;

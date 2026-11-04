@@ -194,6 +194,33 @@ export const SOURCES_HANDOFF_READ_CAPACITY = {
     ranges: 3072,
 } as const;
 
+/** Phase admission for additional instructions; execution and request-specific capacity still gate treatment. */
+export function sourcesInstructionTreatment(
+    preparation: Pick<
+        Doc<"sourceSelectionProposalRebuilds">,
+        "status" | "sourcesMission"
+    > | null,
+) {
+    const data = preparation?.sourcesMission;
+    if (preparation?.status !== "started" || !data || data.result)
+        return {
+            status: "closed" as const,
+            description:
+                "This preparation cannot treat additional documentary instructions. Recording a request cannot reopen it or start another documentary phase. Existing material remains available for inspection.",
+        };
+    if (data.needs.length >= data.envelope.maxNeeds)
+        return {
+            status: "at_capacity" as const,
+            description:
+                "This preparation has reached its documentary need limit. Additional requests cannot enlarge it or start another documentary phase. Existing material remains available for inspection.",
+        };
+    return {
+        status: "open" as const,
+        description:
+            "Additional needs may join the current preparation, subject to framing, authority, execution and capacity checks. Registration is not completed treatment and cannot start another documentary phase.",
+    };
+}
+
 /** Required conversational state stays bounded; exact source material remains available through saved-material reads. */
 export function summarizeSourcesPreparation(
     preparation: Doc<"sourceSelectionProposalRebuilds">,
@@ -207,6 +234,7 @@ export function summarizeSourcesPreparation(
         needsRevision: data.needsRevision,
         phase: data.phase,
         needCount: data.needs.length,
+        instructionTreatment: sourcesInstructionTreatment(preparation),
         needsPreviewComplete: data.needs.length <= 8,
         needs: data.needs.slice(0, 8).map((need) => {
             const result = data.result?.needs.find((n) => n.needId === need.id);

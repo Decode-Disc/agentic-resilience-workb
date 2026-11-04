@@ -79,10 +79,15 @@ export async function requireQualifiedBrowserMission(
 ) {
     const qualification = await requireBrowserQualification(ctx, run);
     if (!qualification) return null;
+    const sourcesModelRevisionId =
+        qualification.sourcesModelRevisionId ?? qualification.modelRevisionId;
     if (mission) {
         if (
             mission.runId !== run._id ||
-            mission.modelRevisionId !== qualification.modelRevisionId ||
+            mission.modelRevisionId !==
+                (mission.definitionId === "sources_v1"
+                    ? sourcesModelRevisionId
+                    : qualification.modelRevisionId) ||
             !(
                 qualification.sourcesLot
                     ? ["workbench_v1", "workbench_v2", "sources_v1"]
@@ -98,7 +103,7 @@ export async function requireQualifiedBrowserMission(
             !qualification.sourcesLot ||
             !preparation?.sourcesMission ||
             preparation.runId !== run._id ||
-            preparation.modelRevisionId !== qualification.modelRevisionId
+            preparation.modelRevisionId !== sourcesModelRevisionId
         )
             throw sourcePreparationError("paid_work_disabled");
     }

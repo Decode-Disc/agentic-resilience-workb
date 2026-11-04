@@ -1,6 +1,7 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { sha256Hex } from "@convex/domain/sourcePassages";
+import { requireQualifiedBrowserMission } from "@convex/providerCalls";
 import { makeFunctionReference } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
@@ -173,6 +174,56 @@ test("the Sources grant admits live reasoning and preparation-bound search, pres
     expect(rows.map((c) => c.qualificationReservationUsd)).toEqual([
         0.0239616, 0.007,
     ]);
+});
+
+test("independent qualification pins admit Sources reasoning and native preparation without authorizing the Workbench model", async () => {
+    const f = await fixture();
+    const workbench = await installModel(f.t, {
+        model: "openai/gpt-oss-120b",
+        reasoningEffort: "low",
+    });
+    await f.t.run(async (ctx) => {
+        const context = await ctx.db.get(f.contextId);
+        const catalog = await ctx.db.get(workbench.catalogId);
+        assert(context?.paidQualification && catalog?.currentRevisionId);
+        await ctx.db.patch(context._id, {
+            paidQualification: {
+                ...context.paidQualification,
+                modelRevisionId: catalog.currentRevisionId,
+                sourcesModelRevisionId: f.modelRevisionId,
+            },
+        });
+        await ctx.db.patch(f.preparationId, {
+            modelRevisionId: f.modelRevisionId,
+        });
+    });
+    await expect(
+        f.t.query(internal.execution.fixtures.workbenchRelay, {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+        }),
+    ).resolves.toBeNull();
+    expect(
+        await f.t.mutation(
+            internal.providerCalls.recordAttempt,
+            await f.attempt("distinct-sources"),
+        ),
+    ).toMatchObject({ shouldExecute: true });
+    await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run);
+        await expect(
+            requireQualifiedBrowserMission(ctx, run, null, f.preparationId),
+        ).resolves.not.toBeNull();
+        const catalog = await ctx.db.get(workbench.catalogId);
+        assert(catalog?.currentRevisionId);
+        await ctx.db.patch(f.preparationId, {
+            modelRevisionId: catalog.currentRevisionId,
+        });
+        await expect(
+            requireQualifiedBrowserMission(ctx, run, null, f.preparationId),
+        ).rejects.toThrow("paid_work_disabled");
+    });
 });
 
 test("a reduced Sources model allowance is enforced before another attempt is reserved", async () => {

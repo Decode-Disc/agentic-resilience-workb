@@ -6,6 +6,7 @@ import { agentToolSchemas } from "@convex/execution/agentDefinition";
 import { piInputProfileKey } from "@convex/integrations/modelInput";
 import { WORKBENCH_MODEL_ROUTE } from "@convex/integrations/modelRouting";
 import { revisionRoute } from "@convex/modelConfiguration";
+import { requireQualifiedBrowserMission } from "@convex/providerCalls";
 import { makeFunctionReference } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
@@ -88,6 +89,120 @@ async function admittedFixture() {
         );
     return { ...f, mission, attempt, calls };
 }
+
+test("a Sources lot pins independent agent models and refuses swapped or renewed routes", async () => {
+    const f = await fixture();
+    const sources = await installModel(
+        f.t,
+        { model: "openai/gpt-oss-120b", reasoningEffort: "low" },
+        "sources",
+    );
+    const { secondId, workbenchRevisionId, sourcesRevisionId } = await f.t.run(
+        async (ctx) => {
+            const run = await ctx.db.get(f.runId);
+            assert(run);
+            const { _id, _creationTime, ...fields } = run;
+            const secondId = await ctx.db.insert("researchRuns", {
+                ...fields,
+                reservationKey: "browser:second",
+            });
+            const workbench = await ctx.db
+                .query("agentModelSettings")
+                .withIndex("by_agent", (q) => q.eq("agent", "workbench"))
+                .unique();
+            assert(workbench);
+            const catalog = await ctx.db.get(workbench.catalogId);
+            const sourceCatalog = await ctx.db.get(sources.catalogId);
+            assert(
+                catalog?.currentRevisionId && sourceCatalog?.currentRevisionId,
+            );
+            return {
+                secondId,
+                workbenchRevisionId: catalog.currentRevisionId,
+                sourcesRevisionId: sourceCatalog.currentRevisionId,
+            };
+        },
+    );
+    const args = {
+        runId: f.runId,
+        fixtureKey: "qualification",
+        sourcesLot: [
+            { runId: f.runId, fixtureKey: "qualification" },
+            { runId: secondId, fixtureKey: "second" },
+        ],
+    };
+    await f.t.mutation(
+        internal.execution.fixtures.authorizeWorkbenchQualification,
+        args,
+    );
+    await f.t.mutation(
+        internal.execution.fixtures.authorizeWorkbenchQualification,
+        args,
+    );
+    const active = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: f.runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: false,
+        },
+    );
+    assert(active);
+    await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        const mission = await ctx.db.get(active.missionId);
+        assert(
+            run?.browserTestContextId &&
+                mission?.definitionId === "workbench_v1",
+        );
+        const context = await ctx.db.get(run.browserTestContextId);
+        expect(context?.paidQualification).toMatchObject({
+            modelRevisionId: workbenchRevisionId,
+            sourcesModelRevisionId: sourcesRevisionId,
+        });
+        await expect(
+            requireQualifiedBrowserMission(ctx, run, mission),
+        ).resolves.not.toBeNull();
+        await expect(
+            requireQualifiedBrowserMission(ctx, run, {
+                ...mission,
+                definitionId: "sources_v1",
+                modelRevisionId: sourcesRevisionId,
+            }),
+        ).resolves.not.toBeNull();
+        await expect(
+            requireQualifiedBrowserMission(ctx, run, {
+                ...mission,
+                modelRevisionId: sourcesRevisionId,
+            }),
+        ).rejects.toThrow("paid_work_disabled");
+        await expect(
+            requireQualifiedBrowserMission(ctx, run, {
+                ...mission,
+                definitionId: "sources_v1",
+            }),
+        ).rejects.toThrow("paid_work_disabled");
+    });
+    const config = await f.admin.query(api.modelConfiguration.list, {});
+    const assignment = config.assignments.find((a) => a.agent === "sources");
+    const workbench = config.assignments.find((a) => a.agent === "workbench");
+    assert(assignment && workbench);
+    await f.admin.mutation(api.modelConfiguration.assign, {
+        agent: "sources",
+        catalogId: workbench.catalogId,
+        expectedRevision: assignment.revision,
+        requestKey: "attempt-route-change",
+    });
+    await expect(
+        f.t.mutation(
+            internal.execution.fixtures.authorizeWorkbenchQualification,
+            args,
+        ),
+    ).rejects.toThrow(
+        "Qualification authorization conflicts with the retained lot",
+    );
+});
 
 test("an explicitly authorized local Workbench fixture reserves one real model attempt without recharging its replay", async () => {
     const f = await admittedFixture(),

@@ -2,6 +2,7 @@
     "version": 2,
     "capability": "sources_mission_v1",
     "model": "openai/gpt-oss-120b",
+    "workbenchModel": "z-ai/glm-5.3-flash",
     "maximumModelAttempts": 18,
     "maximumSearchAttempts": 4,
     "maximumAcquisitions": 12,

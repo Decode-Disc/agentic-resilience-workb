@@ -20,6 +20,7 @@ import {
     resolveAgentModel,
     revisionRoute,
 } from "@convex/modelConfiguration";
+import { requireQualifiedBrowserMission } from "@convex/providerCalls";
 import {
     BROWSER_QUALIFICATION_MAX_COST_USD,
     BROWSER_QUALIFICATION_MAX_REQUESTS,
@@ -27,7 +28,6 @@ import {
 } from "@convex/resourceLimits";
 import {
     BROWSER_TEST_SLOT,
-    readWorkbenchQualification,
     requireBrowserFixtureContext,
     requireBrowserTestOwner,
 } from "@convex/runWorkspace";
@@ -639,13 +639,16 @@ export const authorizeWorkbenchQualification = internalMutation({
             conversation?.modelCatalogId,
         );
         const sourcesLot = args.sourcesLot?.map((entry) => entry.runId);
+        const sourcesModel = args.sourcesLot
+            ? await resolveAgentModel(ctx, "sources")
+            : undefined;
         if (args.sourcesLot) {
             if (
                 args.relayOrigin ||
                 sourcesLot?.length !== 2 ||
                 new Set(sourcesLot).size !== 2 ||
                 !sourcesLot.includes(run._id) ||
-                (await resolveAgentModel(ctx, "sources"))._id !== model._id
+                !sourcesModel
             )
                 throw new Error("Invalid Sources qualification lot");
             const definition = getAgentDefinition("sources_v1", 1);
@@ -659,7 +662,7 @@ export const authorizeWorkbenchQualification = internalMutation({
                         operations,
                         definitionVersion: definition.version,
                         nativeConversation: definition.nativeConversation,
-                        nativeRoute: revisionRoute(model),
+                        nativeRoute: revisionRoute(sourcesModel),
                     },
                     async (key) =>
                         (
@@ -694,6 +697,10 @@ export const authorizeWorkbenchQualification = internalMutation({
             if (
                 context.paidQualification.runId !== run._id ||
                 context.paidQualification.modelRevisionId !== model._id ||
+                (sourcesModel !== undefined &&
+                    (context.paidQualification.sourcesModelRevisionId ??
+                        context.paidQualification.modelRevisionId) !==
+                        sourcesModel._id) ||
                 context.paidQualification.maximumRequests !== maximumRequests ||
                 context.paidQualification.maximumCostUsd !== maximumCostUsd ||
                 context.paidQualification.relayOrigin !== args.relayOrigin ||
@@ -711,6 +718,7 @@ export const authorizeWorkbenchQualification = internalMutation({
             paidQualification: {
                 runId: run._id,
                 modelRevisionId: model._id,
+                sourcesModelRevisionId: sourcesModel?._id,
                 relayOrigin: args.relayOrigin,
                 maximumRequests,
                 maximumCostUsd,
@@ -980,9 +988,8 @@ export const workbenchRelay = internalQuery({
             mission._id,
             args.expectedGeneration,
         );
-        const grant = await readWorkbenchQualification(ctx, run);
-        if (!grant || grant.modelRevisionId !== mission.modelRevisionId)
-            throw new Error("evaluation_dossier_not_authorized");
+        const grant = await requireQualifiedBrowserMission(ctx, run, mission);
+        if (!grant) throw new Error("evaluation_dossier_not_authorized");
         return grant.relayOrigin ?? null;
     },
 });

@@ -1,11 +1,23 @@
 import { api, internal } from "@convex/_generated/api";
-import { afterEach, expect, test, vi } from "vitest";
+import { completeSources } from "@convex/domain/sources";
+import { sha256Hex } from "@convex/domain/sourcePassages";
+import { readWorkbenchFacts } from "@convex/domain/workbenchContext";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
+import { WORKBENCH_MODEL_ROUTE } from "@convex/integrations/modelRouting";
+import { afterEach, assert, expect, test, vi } from "vitest";
+import { installModel } from "@/__tests__/setup/model-configuration";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import { workbenchAdmissionInput } from "@/__tests__/setup/workbench";
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+});
 
-async function seedInstruction() {
-    const f = await seedCapturedSources();
+async function seedInstruction(
+    f: Awaited<ReturnType<typeof seedCapturedSources>>,
+) {
     const frameId = await f.t.run(async (ctx) => {
         const frameId = await ctx.db.insert("framingRevisions", {
             runId: f.runId,
@@ -65,9 +77,145 @@ async function seedInstruction() {
     return { ...f, analyst, instructionId };
 }
 
+test("closed instruction treatment reaches Workbench and its review without reopening preparation", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("WORKBENCH_AGENT_ENABLED", "true");
+    const source = await seedCapturedSources();
+    await source.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(source.preparationId);
+        assert(preparation?.sourcesMission);
+        const data = preparation.sourcesMission;
+        await completeSources(ctx, preparation._id, {
+            kind: "complete",
+            needsRevision: data.needsRevision,
+            needs: data.needs.map((need) => ({
+                needId: need.id,
+                workRequestIds: [],
+                unfinished: ["Documentary work remains."],
+            })),
+        });
+        await ctx.db.patch(source.runId, {
+            lifecycleState: "sources_prepared",
+            executionStatus: "idle",
+        });
+    });
+    const f = await seedInstruction(source);
+    const { admin } = await installModel(f.t, WORKBENCH_MODEL_ROUTE);
+    const settings = await admin.query(api.modelConfiguration.list, {});
+    await admin.mutation(api.modelConfiguration.setResponseControl, {
+        expectedRevision: settings.responseControl.revision,
+        enabled: true,
+        model: settings.responseControl.model,
+        contradictionThreshold: settings.responseControl.contradictionThreshold,
+        supportThreshold: settings.responseControl.supportThreshold,
+    });
+    const active = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: f.runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: false,
+        },
+    );
+    assert(active);
+    const mission = await f.t.run((ctx) => ctx.db.get(active.missionId));
+    assert(mission);
+    const projected = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run);
+        return getAgentDefinition("workbench_v1", 2).context(ctx, mission, run);
+    });
+    assert(projected.kind === "ready");
+    expect(projected.context.documentaryPreparation).toMatchObject({
+        instructionTreatment: {
+            status: "closed",
+            description: expect.stringContaining("cannot reopen"),
+        },
+    });
+    const invocation = await f.t.mutation(
+        internal.execution.invocations.begin,
+        {
+            missionId: mission._id,
+            expectedGeneration: mission.generation,
+            taskKey: "closed-instruction-review",
+            provenance: "live",
+            nativeInput: await workbenchAdmissionInput(
+                f.t,
+                mission._id,
+                mission.generation,
+            ),
+        },
+    );
+    assert(invocation.kind === "ready");
+    const row = await f.t.run((ctx) => ctx.db.get(invocation.invocationId));
+    assert(row);
+    const receipt = {
+        missionId: mission._id,
+        invocationId: row._id,
+        runId: f.runId,
+        executionGeneration: mission.generation,
+        workflowVersion: mission.definitionVersion,
+        corpusRevisionId: row.corpusRevisionId,
+        service: "model" as const,
+        operation: "agent_reasoning",
+        stepKey: "agent_reasoning",
+        operationKey: `mission:${mission._id}:invocation:${row._id}:attempt:1`,
+        attempt: 1,
+        inputHash: sha256Hex(row.inputJson),
+    };
+    await f.t.mutation(internal.providerCalls.recordAttempt, {
+        ...receipt,
+        status: "started",
+    });
+    await f.t.mutation(internal.providerCalls.recordAttempt, {
+        ...receipt,
+        status: "succeeded",
+        dispatchOutcome: "response_received",
+        reportedCost: 0,
+    });
+    expect(
+        await f.t.mutation(internal.execution.invocations.finish, {
+            invocationId: invocation.invocationId,
+            expectedGeneration: mission.generation,
+            response: {
+                kind: "complete",
+                text: "Registering another instruction does not reopen the ended preparation.",
+            },
+        }),
+    ).toMatchObject({ kind: "blocked", code: "pending_operations" });
+    const review = await f.t.run(async (ctx) => {
+        const current = await ctx.db.get(mission._id);
+        assert(current?.conversationTurnId);
+        return (await ctx.db.get(current.conversationTurnId))?.responseControl
+            ?.checks[0];
+    });
+    assert(review?.requestJson);
+    const facts = JSON.parse(review.requestJson).state.authoritative_facts;
+    expect(facts.documentaryPreparation).toEqual(
+        projected.context.documentaryPreparation,
+    );
+    await f.t.mutation(internal.workbench.processInstructions, {
+        runId: f.runId,
+    });
+    expect(await f.t.run((ctx) => ctx.db.get(f.instructionId))).toMatchObject({
+        status: "limited",
+        outcome: facts.documentaryPreparation.instructionTreatment.description,
+    });
+    expect(await f.t.run((ctx) => ctx.db.get(f.runId))).toMatchObject({
+        lifecycleState: "sources_prepared",
+        executionStatus: "idle",
+    });
+    expect(
+        (await f.t.run((ctx) => ctx.db.query("providerCalls").collect())).map(
+            (call) => call.operation,
+        ),
+    ).toEqual(["agent_reasoning"]);
+});
+
 test("paused instructions join the same Sources preparation after Resume without renewing allowances", async () => {
     vi.useFakeTimers();
-    const f = await seedInstruction();
+    const f = await seedInstruction(await seedCapturedSources());
     const { analyst, instructionId } = f;
     await analyst.mutation(api.execution.researchControl.pause, {
         runId: f.runId,
@@ -109,11 +257,66 @@ test("paused instructions join the same Sources preparation after Resume without
 });
 
 test.each([
+    "open",
+    "at_capacity",
+] as const)("projected instruction treatment %s agrees with real delivery", async (status) => {
+    vi.useFakeTimers();
+    const f = await seedInstruction(await seedCapturedSources());
+    if (status === "at_capacity")
+        await f.t.run(async (ctx) => {
+            const preparation = await ctx.db.get(f.preparationId);
+            assert(preparation?.sourcesMission);
+            const data = preparation.sourcesMission;
+            await ctx.db.patch(preparation._id, {
+                sourcesMission: {
+                    ...data,
+                    needs: [
+                        ...data.needs,
+                        ...Array.from(
+                            {
+                                length:
+                                    data.envelope.maxNeeds - data.needs.length,
+                            },
+                            (_, i) => ({
+                                id: `instruction:prior-${i}`,
+                                version: 1,
+                                information: `Previously admitted documentary need ${i}.`,
+                                questionIds: [],
+                                commonContext: false,
+                            }),
+                        ),
+                    ],
+                },
+            });
+        });
+    const projected = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run);
+        return readWorkbenchFacts(ctx, run);
+    });
+    assert(projected.kind === "ready");
+    expect(projected.context.documentaryPreparation).toMatchObject({
+        instructionTreatment: { status },
+    });
+    await f.t.mutation(internal.workbench.processInstructions, {
+        runId: f.runId,
+    });
+    const instruction = await f.t.run((ctx) => ctx.db.get(f.instructionId));
+    expect(instruction?.status).toBe(
+        status === "open" ? "transmitted" : "limited",
+    );
+    if (status === "at_capacity")
+        expect(projected.context.documentaryPreparation).toMatchObject({
+            instructionTreatment: { description: instruction?.outcome },
+        });
+});
+
+test.each([
     true,
     false,
 ])("an instruction admitted during final generation refreshes Sources before completion (delivery already ran: %s)", async (delivered) => {
     vi.useFakeTimers();
-    const f = await seedInstruction();
+    const f = await seedInstruction(await seedCapturedSources());
     const begun = await f.t.mutation(internal.execution.invocations.begin, {
         missionId: f.missionId,
         expectedGeneration: 4,
