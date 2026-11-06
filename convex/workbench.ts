@@ -1,3 +1,5 @@
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
+import { reasoningChoices } from "@convex/integrations/modelRouting";
 import { api, internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
@@ -65,6 +67,17 @@ const commandResult = v.object({
     text: v.string(),
 });
 
+function workbenchCommandsSupported(
+    conversation: Doc<"agentConversations"> | null,
+) {
+    const definition = getAgentDefinition("workbench_v1");
+    return (
+        conversation?.definitionId === definition.id &&
+        conversation.definitionVersion === definition.version &&
+        !!definition.nativeConversation
+    );
+}
+
 /** Exposes only analyst-relevant catalogue choices, independently of provider credentials. */
 export const models = query({
     args: { runId: v.optional(v.id("researchRuns")) },
@@ -121,7 +134,9 @@ export const models = query({
                 conversation?.reasoningEffort ??
                 configuration?.reasoningEffort ??
                 null,
-            effortChoices: configuration?.descriptor.reasoningEfforts ?? [],
+            effortChoices: configuration
+                ? reasoningChoices(configuration.descriptor)
+                : [],
             revision: conversation?.modelSelectionRevision ?? 0,
             choices: await Promise.all(
                 choices.filter(modelPrepared).map(async (m) => {
@@ -131,8 +146,9 @@ export const models = query({
                     return {
                         id: m._id,
                         label: m.label,
-                        effortChoices:
-                            revision?.descriptor.reasoningEfforts ?? [],
+                        effortChoices: revision
+                            ? reasoningChoices(revision.descriptor)
+                            : [],
                         effort: revision?.reasoningEffort ?? null,
                     };
                 }),
@@ -219,10 +235,7 @@ export const command = mutation({
             .query("agentConversations")
             .withIndex("by_run", (q) => q.eq("runId", run._id))
             .unique();
-        if (
-            conversation?.definitionId !== "workbench_v1" ||
-            conversation.definitionVersion !== 2
-        )
+        if (!conversation || !workbenchCommandsSupported(conversation))
             throw executionError("native_conversation_required");
         const contentHash = sha256Hex(
             stableStringify({
@@ -531,8 +544,7 @@ export const snapshot = query({
             run,
             researchControlAvailable: supportsResearchControl(run),
             availableCommands:
-                conversation?.definitionId === "workbench_v1" &&
-                conversation.definitionVersion === 2 &&
+                workbenchCommandsSupported(conversation) &&
                 run.fixedFramingRevisionId &&
                 supportsResearchControl(run)
                     ? run.researchPauseRequested ||

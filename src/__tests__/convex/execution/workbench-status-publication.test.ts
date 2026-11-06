@@ -175,7 +175,7 @@ test.each([
         });
         assert(context.kind === "ready");
         expect(
-            JSON.parse(context.inputJson).responseControl.reminder,
+            JSON.parse(context.inputJson).domain.responseControl.reminder,
         ).toContain(expected);
         const correction = await t.mutation(
             internal.execution.invocations.begin,

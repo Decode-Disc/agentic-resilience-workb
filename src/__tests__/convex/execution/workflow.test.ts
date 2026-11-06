@@ -167,6 +167,23 @@ test("the real Workflow recreates simulated invocations around persisted saved-m
                 "ServiceNow provides workflow software",
             ),
         ),
+    ).toBe(false);
+    const observed = await t.run((ctx) =>
+        ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_mission_and_sequence", (q) =>
+                q.eq("missionId", missionId),
+            )
+            .collect(),
+    );
+    const detailed = observed.filter((event) =>
+        event.payload?.json?.includes("ServiceNow provides workflow software"),
+    );
+    expect(detailed.length).toBeGreaterThan(0);
+    expect(
+        invocations.some((invocation) =>
+            detailed.some((event) => invocation.inputJson.includes(event._id)),
+        ),
     ).toBe(true);
     expect(
         await t.run((ctx) => ctx.db.query("providerCalls").collect()),

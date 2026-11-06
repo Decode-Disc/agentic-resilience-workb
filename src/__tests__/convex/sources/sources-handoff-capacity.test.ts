@@ -6,7 +6,10 @@ import {
 import { extractObservedDestinations } from "@convex/integrations/evidenceNormalization";
 import { getDocumentSize } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import {
+    recordDocumentaryRead,
+    seedCapturedSources,
+} from "@/__tests__/setup/sources-mission";
 
 afterEach(() => {
     vi.useRealTimers();
@@ -216,6 +219,15 @@ test.each([
             const contribution = task.output.contributions[0];
             assert(contribution);
             const { id, version, ...content } = contribution;
+            const readRequestId = await recordDocumentaryRead(ctx, {
+                runId: f.runId,
+                captureId: f.captureId,
+                evidence: contribution.evidence,
+            });
+            const selectedEvidence = contribution.evidence.map((e) => ({
+                readRequestId,
+                passageOrder: e.passageOrder,
+            }));
             const requestId = await ctx.runMutation(
                 internal.execution.operations.enqueueNative,
                 {
@@ -228,7 +240,7 @@ test.each([
                               needId: needs[0]?.id ?? "need-0",
                               sourceId: f.sourceId,
                               proposition: contribution.statement,
-                              evidence: contribution.evidence,
+                              evidence: selectedEvidence,
                               targets: [
                                   {
                                       qualificationTaskId: taskId,
@@ -248,6 +260,7 @@ test.each([
                                       expectedVersion: version,
                                       contribution: {
                                           ...content,
+                                          evidence: selectedEvidence,
                                           statement: "Additional context",
                                       },
                                   },
@@ -347,7 +360,8 @@ test.each([
             expectedGeneration: 1,
         });
         assert(context.kind === "ready");
-        const status = JSON.parse(context.inputJson).documentaryPreparation;
+        const status = JSON.parse(context.inputJson).domain
+            .documentaryPreparation;
         expect(status.result).toMatchObject({
             outcome: "complete",
             documentCount: 48,

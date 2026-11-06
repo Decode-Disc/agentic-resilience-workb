@@ -22,6 +22,8 @@ test("the real architecture checker rejects aliases, protected writes and privat
             'import * as executor from "@convex/execution/operations"; export const x = executor["recordResult"];',
         accounting:
             'export function x(ctx: unknown, id: unknown) { return ctx.db.patch(id, { progressKeys: ["fake"], noProgressTurns: 0 }); }',
+        recovery:
+            "export function x(ctx: unknown, id: unknown) { return ctx.db.patch(id, { recoveryRead: undefined }); }",
         hiddenWrite:
             "export function x(ctx: unknown, id: unknown) { const update = { historyRead: {} }; const save = ctx.db.patch; return save(id, update); }",
         receipt:

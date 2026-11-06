@@ -2,7 +2,10 @@ import { internal } from "@convex/_generated/api";
 import { extractObservedDestinations } from "@convex/integrations/evidenceNormalization";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import {
+    recordDocumentaryRead,
+    seedCapturedSources,
+} from "@/__tests__/setup/sources-mission";
 
 const examiner = vi.hoisted(() => vi.fn());
 vi.mock("@convex/integrations/documentaryControl", () => ({
@@ -106,6 +109,18 @@ test("admission stops before control I/O while every previously admitted qualifi
     });
     let admitted = 0;
     for (const document of documents) {
+        const readRequestId = await f.t.run((ctx) =>
+            recordDocumentaryRead(ctx, {
+                runId: f.runId,
+                captureId: document.captureId,
+                evidence: [
+                    {
+                        passageOrder: f.passage.order,
+                        quotation: f.passage.quotation,
+                    },
+                ],
+            }),
+        );
         const requestId = await f.t.mutation(
             internal.execution.operations.enqueueNative,
             {
@@ -125,9 +140,8 @@ test("admission stops before control I/O while every previously admitted qualifi
                             attribution: "publisher",
                             kind: "context" as const,
                             evidence: Array.from({ length: 8 }, () => ({
-                                captureId: document.captureId,
+                                readRequestId,
                                 passageOrder: f.passage.order,
-                                quotation: f.passage.quotation,
                             })),
                         },
                     })),
@@ -173,15 +187,11 @@ test("admission stops before control I/O while every previously admitted qualifi
                 expectedGeneration: 4,
                 response: {
                     kind: "complete",
-                    needsRevision: 1,
+
                     needs: [
                         {
                             needId: "common-context",
                             unfinished: [],
-                            workRequestIds:
-                                preparation.sourcesMission?.work.map(
-                                    (w) => w.requestId,
-                                ) ?? [],
                         },
                     ],
                 },

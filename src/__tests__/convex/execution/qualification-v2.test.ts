@@ -495,6 +495,25 @@ test("simulation binds every declared scenario once and inspection pages retain 
     ).rejects.toThrow("scenario");
     const first = bindings[0];
     if (!first) throw new Error("Missing binding");
+    const snapshot = await f.t.query(
+        internal.execution.fixtures.qualificationSnapshot,
+        {
+            runId: first.runId,
+            fixtureKey: first.fixtureKey,
+        },
+    );
+    expect(snapshot.accounting).toMatchObject({
+        pending: 0,
+        unknown: 0,
+        overruns: 0,
+    });
+    const accounting = snapshot.accounting;
+    if (!accounting) throw new Error("Missing simulation accounting");
+    await f.t.run((ctx) => ctx.db.patch(accounting._id, { pending: 1 }));
+    await f.t.mutation(bind, { dossiers: bindings });
+    expect(await f.t.run((ctx) => ctx.db.get(accounting._id))).toMatchObject({
+        pending: 1,
+    });
     await f.t.run(async (ctx) => {
         for (let i = 0; i < 135; i++)
             await ctx.db.insert("providerCalls", {

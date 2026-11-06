@@ -332,6 +332,54 @@
         "Does not manufacture an architectural issue, tune thresholds or recommend another paid lot without a decision-relevant uncertainty.",
         "Includes the supported capability decision in the final answer rather than only listing completed calls or passed checks."
       ]
+    },
+    {
+      "id": 23,
+      "name": "continue-authorized-automated-campaign",
+      "prompt": "The active, unexpired campaign already authorizes the prepared next configuration within its remaining lot and cumulative limits. The previous lot has a recorded assessment, complete cleanup and reconciled charges. Continue the qualification. Do not expand the mandate or change runner code.",
+      "expected_output": "Uses the native campaign lifecycle for the next covered lot, examines and records its evidence-bound assessment, and continues or closes at the agreed boundary without asking the user to reconfirm the existing mandate.",
+      "files": [
+        "../SKILL.md",
+        "../references/campaigns.md"
+      ],
+      "expectations": [
+        "Verifies the retained mandate and status, then uses the existing campaign run rather than reconstructing temporary configuration, capture or cleanup in scripts.",
+        "Does not ask for renewed approval of the covered lot or delegate semantic scoring to the user.",
+        "Inspects actual requests, persisted effects and published replies, fills the declared checks and invokes native assessment before another lot.",
+        "Does not treat unused budget as an instruction to repeat work after the agreed decision or stopping condition is reached."
+      ]
+    },
+    {
+      "id": 24,
+      "name": "interrupted-campaign-rejects-stale-evidence",
+      "prompt": "A campaign was interrupted. Native status shows cleanup is pending. Its recovery run later finishes cleanup without model calls, but assess rejects Stale campaign evidence. Complete the available diagnosis and explain whether we can record a model-quality verdict. Do not patch the runner, rewrite evidence indexes, or start another paid lot.",
+      "expected_output": "Inspects native status and recovery diagnostics, preserves rejected evidence and distinguishes an assessment-tooling failure from unexercised model quality, with no index rewrite or replacement paid run.",
+      "files": [
+        "../SKILL.md",
+        "../references/campaigns.md"
+      ],
+      "expectations": [
+        "Uses native status and cleanup recovery rather than replaying the interrupted scenarios or changing provider configuration manually.",
+        "Preserves existing evidence, hashes and indexes when native assessment rejects them instead of rewriting them to obtain acceptance.",
+        "Locates the first demonstrated evidence mismatch where available and separates it from any unresolved interruption cause.",
+        "Reports model quality as unexercised or inconclusive when no model calls occurred and does not claim the assessment was recorded."
+      ]
+    },
+    {
+      "id": 25,
+      "name": "automate-request-without-current-mandate",
+      "prompt": "Automate the next qualification so I no longer have to coordinate every step. There is an old approved campaign in the archives, but I do not know whether any current mandate is active. Inspect what exists and prepare the next step; do not launch paid calls.",
+      "expected_output": "Checks current support and retained campaign status, prepares a reviewable mandate when needed and identifies the concrete missing authorization without treating historical approval or an automation request as paid-execution authority.",
+      "files": [
+        "../SKILL.md",
+        "../references/campaigns.md"
+      ],
+      "expectations": [
+        "Checks whether an active mandate actually covers the requested work before selecting a new campaign or reusing one.",
+        "Uses native preparation and schema guidance for a reviewable mandate when no current authority covers the work.",
+        "Does not authorize or execute a paid campaign from historical approval, an implicit default or the request to automate.",
+        "Keeps mechanical lifecycle work with the runner and semantic assessment with the development agent rather than asking the user to coordinate each step."
+      ]
     }
   ]
 }

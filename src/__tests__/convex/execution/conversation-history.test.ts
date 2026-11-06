@@ -1,4 +1,5 @@
 import { api, internal } from "@convex/_generated/api";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { executionError } from "@convex/execution/errors";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
@@ -616,7 +617,7 @@ test("an empty conversation adds no facts and oversized required state cannot co
         await initializeFraming(ctx, f.runId);
         await ctx.db.patch(f.missionId, {
             definitionId: "workbench_v1",
-            definitionVersion: 2,
+            definitionVersion: getAgentDefinition("workbench_v1").version,
             scope: { kind: "workbench_v1" },
             state: { kind: "workbench_v1" },
         });
@@ -638,4 +639,6 @@ test("an empty conversation adds no facts and oversized required state cannot co
     expect(
         (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
     ).toEqual([]);
+    vi.useFakeTimers();
+    await f.t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(0));
 });

@@ -473,11 +473,11 @@ test("Sources receives the confirmed company and fixed framing even without init
     expect(assembled.kind).toBe("ready");
     if (assembled.kind !== "ready") throw new Error(assembled.code);
     const context = JSON.parse(assembled.inputJson);
-    expect(context.company).toMatchObject({
+    expect(context.domain.company).toMatchObject({
         cik: "1373715",
         legalName: "ServiceNow, Inc.",
     });
-    expect(context.framing).toMatchObject({
+    expect(context.domain.framing).toMatchObject({
         scope: "Enterprise workflows",
         fixed: true,
     });

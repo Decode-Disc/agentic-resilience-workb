@@ -9,6 +9,7 @@ import {
     type QueryCtx,
 } from "./_generated/server";
 import { cancelRunExecution } from "./domain/runCancellation";
+import { MAX_QUALIFICATION_CONTEXT_DURATION_MS } from "./qualificationCampaignPolicy";
 import { requireCampaignLot } from "./qualificationCampaigns";
 
 export const BROWSER_TEST_SLOT = "analyst-4";
@@ -212,7 +213,7 @@ export const openBrowserTestContext = internalMutation({
             !/^[a-zA-Z0-9._:-]{1,120}$/.test(args.contextKey) ||
             !Number.isSafeInteger(args.durationMs) ||
             args.durationMs < 1 ||
-            args.durationMs > 2 * 60 * 60 * 1000
+            args.durationMs > MAX_QUALIFICATION_CONTEXT_DURATION_MS
         )
             throw new Error("Invalid browser test context");
         const previous = await ctx.db

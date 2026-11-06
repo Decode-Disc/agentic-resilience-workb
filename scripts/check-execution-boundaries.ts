@@ -7,6 +7,7 @@ import { API } from "typescript/unstable/sync";
 const FIELD_OWNERS: Record<string, readonly string[]> = {
     progressKeys: ["operations", "missions"],
     noProgressTurns: ["missions", "invocationLifecycle"],
+    recoveryRead: ["invocationLifecycle"],
     lastSettledInvocationId: ["missions", "invocationLifecycle"],
     historyRead: ["operations"],
     historySourceSequence: ["authority", "journal"],

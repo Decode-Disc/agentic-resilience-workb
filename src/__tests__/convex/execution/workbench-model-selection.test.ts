@@ -154,29 +154,29 @@ test("effort is persisted per dossier and pinned independently for each response
     assert(first);
     const before = await client.query(api.workbench.models, { runId });
     expect(before).toMatchObject({
-        effort: "low",
+        effort: "high",
         effortChoices: ["low", "high", "max"],
     });
     const selection = {
         runId,
         catalogId,
-        reasoningEffort: "high" as const,
+        reasoningEffort: "low" as const,
         expectedRevision: before.revision,
-        requestKey: "high-effort",
+        requestKey: "low-effort",
     };
     const changed = await client.mutation(api.workbench.setModel, selection);
     expect(await client.mutation(api.workbench.setModel, selection)).toEqual(
         changed,
     );
     expect(await client.query(api.workbench.models, { runId })).toMatchObject({
-        effort: "high",
+        effort: "low",
         revision: 1,
     });
     expect(
         await t.query(internal.modelConfiguration.forMission, {
             missionId: first.missionId,
         }),
-    ).toMatchObject({ reasoningEffort: "low" });
+    ).toMatchObject({ reasoningEffort: "high" });
     await client.mutation(api.execution.conversations.stopResponse, {
         runId,
         turnId: first.turnId,
@@ -198,7 +198,7 @@ test("effort is persisted per dossier and pinned independently for each response
     const effective = await t.query(internal.modelConfiguration.forMission, {
         missionId: next.missionId,
     });
-    expect(effective).toMatchObject({ reasoningEffort: "high" });
+    expect(effective).toMatchObject({ reasoningEffort: "low" });
     expect(
         await t.query(internal.execution.context.build, {
             missionId: next.missionId,
@@ -216,7 +216,7 @@ test("effort is persisted per dossier and pinned independently for each response
         }),
     ).rejects.toThrow("model_effort_unavailable");
     expect(await client.query(api.workbench.models, { runId })).toMatchObject({
-        effort: "high",
+        effort: "low",
         revision: 1,
     });
     expect(

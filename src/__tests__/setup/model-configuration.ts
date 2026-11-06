@@ -52,6 +52,9 @@ export async function installModel(
         contextWindow: 131072,
         maxTokens: 8192,
         reasoning: !!route.reasoningEffort,
+        ...(route.reasoningEffort
+            ? { reasoningEfforts: [route.reasoningEffort] }
+            : {}),
         inputPrice: 0.03,
         outputPrice: 0.1,
         cacheReadPrice: 0.01,

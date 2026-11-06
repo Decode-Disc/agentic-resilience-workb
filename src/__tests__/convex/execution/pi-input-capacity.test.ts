@@ -132,6 +132,7 @@ async function nativeBytes(
     history: TranscriptContext["messages"],
     prompt: string,
     route: ModelRoute,
+    observe?: (request: string) => void,
 ) {
     if (definition.nativeConversation && prompt)
         history = history.map((message) =>
@@ -151,6 +152,7 @@ async function nativeBytes(
                     history,
                     0,
                     definition.nativeConversation,
+                    definition.contextRendering,
                 ),
             ).json,
         ).length;
@@ -175,6 +177,7 @@ async function nativeBytes(
                 history,
                 0,
                 definition.nativeConversation,
+                definition.contextRendering,
             ),
         }),
         {
@@ -185,9 +188,9 @@ async function nativeBytes(
             onPayload(payload) {
                 if (!payload || typeof payload !== "object")
                     throw new Error("Invalid profile payload");
-                bytes = new TextEncoder().encode(
-                    preparePiModelPayload(payload, route).json,
-                ).length;
+                const request = preparePiModelPayload(payload, route).json;
+                observe?.(request);
+                bytes = new TextEncoder().encode(request).length;
                 throw new Error("Payload measured before dispatch");
             },
         },
@@ -219,7 +222,7 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
               readFileSync(process.env.PI_INPUT_PROFILE_BASELINE, "utf8"),
           )
         : inputProfilesArtifact;
-    const profiles: Record<string, number> = { ...previousProfiles.profiles };
+    const profiles: Record<string, number> = {};
     const samples = [];
     for (const canonical of registeredAgentDefinitions()) {
         const snapshots: unknown[] = [
@@ -308,6 +311,7 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
                     definitionVersion: definition.version,
                     nativeRoute: route,
                     nativeConversation: canonical.nativeConversation,
+                    contextRendering: canonical.contextRendering,
                 };
                 const overhead = await nativeBytes(
                     definition,
@@ -428,3 +432,55 @@ test("native FIFO admission leaves the message queued when its actual required e
     ).toEqual([]);
     expect(network).not.toHaveBeenCalled();
 }, 30000);
+
+test("the installed native serializer receives stable method once for both execution scopes", async () => {
+    for (const definition of registeredAgentDefinitions()) {
+        const history = await minimalTranscript(definition);
+        let request = "";
+        await nativeBytes(
+            definition,
+            history,
+            JSON.stringify({
+                domain: { observation: "untrusted source data" },
+                conversationInstructions: { messages: [{ text: "Question" }] },
+            }),
+            WORKBENCH_MODEL_ROUTE,
+            (value) => {
+                request = value;
+            },
+        );
+        const messages = (
+            JSON.parse(request) as {
+                input: { messages: { content: string }[] };
+            }
+        ).input.messages;
+        const content = messages.map((message) => message.content).join("\n");
+        expect(content.split(definition.instructions).length - 1).toBe(1);
+        expect(content).toContain("Required current mission state");
+        if (definition.nativeConversation)
+            expect(content).not.toContain("Return its domain completion JSON");
+    }
+});
+
+test("preparing every advertised effort remains within the unchanged native-profile admission limit", async () => {
+    const { prepareNativeProfiles } = await import(
+        "@convex/integrations/piModelProfiles"
+    );
+    const { reasoningEffortValues } = await import(
+        "@convex/modelConfigurationValues"
+    );
+    const profiles = await prepareNativeProfiles(
+        { ...nativePiFixtureRoute, reasoningEffort: "medium" },
+        {
+            contextWindow: 131072,
+            maxTokens: 8192,
+            reasoning: true,
+            reasoningEfforts: [...reasoningEffortValues],
+            structuredOutputs: true,
+            inputPrice: 0.01,
+            outputPrice: 0.02,
+            cacheReadPrice: 0,
+        },
+    );
+    expect(profiles.length).toBeLessThanOrEqual(512);
+}, 60000);

@@ -1,3 +1,4 @@
+import { domainSnapshot } from "@convex/execution/agentDefinition";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import {
     missionScope,
@@ -46,7 +47,7 @@ export const validationOperationBehavior: Pick<
         });
         if (context.kind !== "ready")
             return { outcome: { kind: "unavailable", code: context.code } };
-        const input: unknown = JSON.parse(context.inputJson);
+        const input = domainSnapshot(JSON.parse(context.inputJson));
         if (
             args.input.kind !== "check_fixture_value" ||
             !input ||

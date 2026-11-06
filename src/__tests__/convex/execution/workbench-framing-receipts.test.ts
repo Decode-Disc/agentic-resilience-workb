@@ -52,7 +52,7 @@ test.each([
     "Pause research",
     "Resume research",
 ])("a preservation or control-only command removes framing writes (%s)", (text) => {
-    const tools = agentToolSchemas(getAgentDefinition("workbench_v1", 2), {
+    const tools = agentToolSchemas(getAgentDefinition("workbench_v1"), {
         framing: { revision: 1, fixed: false },
         conversationInstructions: {
             messages: [
@@ -68,7 +68,7 @@ test.each([
 });
 
 test("an incomplete French preservation phrase does not turn the response read-only", () => {
-    const tools = agentToolSchemas(getAgentDefinition("workbench_v1", 2), {
+    const tools = agentToolSchemas(getAgentDefinition("workbench_v1"), {
         framing: { revision: 1, fixed: false },
         conversationInstructions: {
             messages: [{ messageId: "current", text: "Garde le programme." }],
@@ -293,7 +293,7 @@ test.each([
     "Ne modifie pas le programme de recherche.",
     "Conserve le cadrage inchangé.",
 ])("an explicit preservation command keeps consultation available: %s", (text) => {
-    const tools = agentToolSchemas(getAgentDefinition("workbench_v1", 2), {
+    const tools = agentToolSchemas(getAgentDefinition("workbench_v1"), {
         framing: { revision: 1, fixed: false },
         conversationInstructions: {
             messages: [{ messageId: "current", text }],
@@ -309,7 +309,7 @@ test.each([
     "Keep the program unchanged if the evidence is stale.",
 ])("partial, quoted or conditional text does not assert an unconditional preservation command: %s", (text) => {
     expect(
-        agentToolSchemas(getAgentDefinition("workbench_v1", 2), {
+        agentToolSchemas(getAgentDefinition("workbench_v1"), {
             framing: { revision: 1, fixed: false },
             conversationInstructions: {
                 messages: [{ messageId: "current", text }],
@@ -464,7 +464,7 @@ test("a control message cannot cause a framing write while a separate active edi
             turnId: state.activeTurn._id,
         },
     );
-    const tools = agentToolSchemas(getAgentDefinition("workbench_v1", 2), {
+    const tools = agentToolSchemas(getAgentDefinition("workbench_v1"), {
         framing: { revision: 1, fixed: false },
         conversationInstructions: {
             messages: [

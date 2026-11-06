@@ -17,10 +17,15 @@ afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
 });
-async function fixture() {
+async function fixture(capabilities: Parameters<typeof installModel>[3] = {}) {
     const f = await seedWorkbench(true);
     vi.stubEnv("WORKBENCH_AGENT_ENABLED", "true");
-    const { admin } = await installModel(f.t, WORKBENCH_MODEL_ROUTE);
+    const { admin, catalogId } = await installModel(
+        f.t,
+        WORKBENCH_MODEL_ROUTE,
+        "workbench",
+        capabilities,
+    );
     await f.t.run((ctx) =>
         ctx.db.patch(f.runId, { reservationKey: "browser:qualification" }),
     );
@@ -29,7 +34,7 @@ async function fixture() {
             internal.execution.fixtures.authorizeWorkbenchQualification,
             { runId: f.runId, fixtureKey: "qualification" },
         );
-    return { ...f, authorize, admin };
+    return { ...f, authorize, admin, catalogId };
 }
 async function admittedFixture() {
     const f = await fixture();
@@ -96,6 +101,7 @@ test("a Sources lot pins independent agent models and refuses swapped or renewed
         f.t,
         { model: "openai/gpt-oss-120b", reasoningEffort: "low" },
         "sources",
+        { reasoningEfforts: ["low", "medium"] },
     );
     const { secondId, workbenchRevisionId, sourcesRevisionId } = await f.t.run(
         async (ctx) => {
@@ -126,11 +132,39 @@ test("a Sources lot pins independent agent models and refuses swapped or renewed
     const args = {
         runId: f.runId,
         fixtureKey: "qualification",
+        reasoningSelection: {
+            workbench: "recommended" as const,
+            sources: "recommended" as const,
+        },
         sourcesLot: [
             { runId: f.runId, fixtureKey: "qualification" },
             { runId: secondId, fixtureKey: "second" },
         ],
     };
+    await expect(
+        f.t.mutation(
+            internal.execution.fixtures.authorizeWorkbenchQualification,
+            {
+                ...args,
+                expectedModels: {
+                    workbench: "example/wrong",
+                    sources: "openai/gpt-oss-120b",
+                },
+            },
+        ),
+    ).rejects.toThrow("Qualification model configuration mismatch");
+    await expect(
+        f.t.mutation(
+            internal.execution.fixtures.authorizeWorkbenchQualification,
+            {
+                ...args,
+                reasoningSelection: {
+                    workbench: "recommended",
+                    sources: "low",
+                },
+            },
+        ),
+    ).rejects.toThrow("Prepare the sources reasoning preference");
     await f.t.mutation(
         internal.execution.fixtures.authorizeWorkbenchQualification,
         args,
@@ -169,6 +203,7 @@ test("a Sources lot pins independent agent models and refuses swapped or renewed
                 ...mission,
                 definitionId: "sources_v1",
                 modelRevisionId: sourcesRevisionId,
+                reasoningEffort: "medium",
             }),
         ).resolves.not.toBeNull();
         await expect(
@@ -202,6 +237,117 @@ test("a Sources lot pins independent agent models and refuses swapped or renewed
     ).rejects.toThrow(
         "Qualification authorization conflicts with the retained lot",
     );
+});
+
+test("a frozen lot checks the dossier effort at authorization and rejects later effort drift before provider reservation", async () => {
+    const f = await fixture({ reasoningEfforts: ["low", "high"] });
+    await f.admin.mutation(api.modelConfiguration.assign, {
+        agent: "sources",
+        catalogId: f.catalogId,
+        expectedRevision: 0,
+        requestKey: "sources-share-prepared-model",
+    });
+    const secondId = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run);
+        const { _id, _creationTime, ...fields } = run;
+        return ctx.db.insert("researchRuns", {
+            ...fields,
+            reservationKey: "browser:second",
+        });
+    });
+    const args = {
+        runId: f.runId,
+        fixtureKey: "qualification",
+        sourcesLot: [
+            { runId: f.runId, fixtureKey: "qualification" },
+            { runId: secondId, fixtureKey: "second" },
+        ],
+        reasoningSelection: {
+            workbench: "recommended" as const,
+            sources: "recommended" as const,
+        },
+    };
+    await f.client.mutation(api.workbench.setModel, {
+        runId: f.runId,
+        catalogId: f.catalogId,
+        reasoningEffort: "low",
+        expectedRevision: 0,
+        requestKey: "low-before-grant",
+    });
+    await expect(
+        f.t.mutation(
+            internal.execution.fixtures.authorizeWorkbenchQualification,
+            args,
+        ),
+    ).rejects.toThrow("Prepare the workbench reasoning preference");
+    await f.client.mutation(api.workbench.setModel, {
+        runId: f.runId,
+        catalogId: f.catalogId,
+        reasoningEffort: "high",
+        expectedRevision: 1,
+        requestKey: "recommended-before-grant",
+    });
+    await f.t.mutation(
+        internal.execution.fixtures.authorizeWorkbenchQualification,
+        args,
+    );
+    await f.client.mutation(api.workbench.setModel, {
+        runId: f.runId,
+        catalogId: f.catalogId,
+        reasoningEffort: "low",
+        expectedRevision: 2,
+        requestKey: "low-after-grant",
+    });
+    const active = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: f.runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: false,
+        },
+    );
+    assert(active);
+    const mission = await f.t.run((ctx) => ctx.db.get(active.missionId));
+    assert(mission);
+    expect(mission.reasoningEffort).toBe("low");
+    const inputJson = JSON.stringify({ taskKey: "frozen-effort" });
+    const invocationId = await f.t.run(async (ctx) => {
+        const turn = await ctx.db.get(active.turnId);
+        assert(turn);
+        return ctx.db.insert("agentInvocations", {
+            missionId: mission._id,
+            runId: f.runId,
+            generation: mission.generation,
+            definitionVersion: mission.definitionVersion,
+            taskKey: "frozen-effort",
+            instructionVersion: turn.instructionVersion,
+            provenance: "live",
+            status: "started",
+            inputJson,
+            createdAt: Date.now(),
+        });
+    });
+    await expect(
+        f.t.mutation(internal.providerCalls.recordAttempt, {
+            runId: f.runId,
+            missionId: mission._id,
+            invocationId,
+            service: "model",
+            operation: "agent_reasoning",
+            operationKey: `mission:${mission._id}:invocation:${invocationId}:attempt:1`,
+            inputHash: sha256Hex(inputJson),
+            stepKey: "agent_reasoning",
+            attempt: 1,
+            executionGeneration: mission.generation,
+            workflowVersion: mission.definitionVersion,
+            status: "started",
+        }),
+    ).rejects.toThrow("paid_work_disabled");
+    expect(
+        await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([]);
 });
 
 test("an explicitly authorized local Workbench fixture reserves one real model attempt without recharging its replay", async () => {
@@ -630,13 +776,14 @@ test.each([
         assert(catalog?.currentRevisionId);
         const model = await ctx.db.get(catalog.currentRevisionId);
         assert(model);
-        const definition = getAgentDefinition("sources_v1", 1);
+        const definition = getAgentDefinition("sources_v1");
         const key = await piInputProfileKey({
             instructions: definition.instructions,
             prompt: "",
             operations: agentToolSchemas(definition),
             definitionVersion: definition.version,
             nativeConversation: definition.nativeConversation,
+            contextRendering: definition.contextRendering,
             nativeRoute: revisionRoute(model),
         });
         const row = await ctx.db

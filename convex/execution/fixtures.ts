@@ -29,7 +29,10 @@ import {
 import { requireQualifiedBrowserMission } from "@convex/providerCalls";
 import { campaignConfiguration } from "@convex/qualificationCampaignPolicy";
 import { requireCampaignLot } from "@convex/qualificationCampaigns";
-import { initializeQualificationUsage } from "@convex/qualificationUsage";
+import {
+    initializeQualificationUsage,
+    readQualificationUsage,
+} from "@convex/qualificationUsage";
 import {
     BROWSER_QUALIFICATION_MAX_COST_USD,
     BROWSER_QUALIFICATION_MAX_REQUESTS,
@@ -57,22 +60,36 @@ import {
     DEFAULT_AGENT_BACKEND,
 } from "./executionProtocol";
 
-async function requireLocalFixtureRun(
+/** Validates retained fixture provenance without granting or renewing execution authority. */
+async function readLocalFixtureRun(
     ctx: MutationCtx | QueryCtx,
     args: { runId: Id<"researchRuns">; fixtureKey: string },
 ) {
     const visitor = await requireBrowserTestOwner(ctx, BROWSER_TEST_SLOT);
-    const contextId = await requireBrowserFixtureContext(ctx, visitor);
     const run = await ctx.db.get(args.runId);
+    const context = run?.browserTestContextId
+        ? await ctx.db.get(run.browserTestContextId)
+        : null;
     if (
         !/^[a-z0-9-]{1,80}$/.test(args.fixtureKey) ||
         run?.purpose !== "browser_test" ||
         run.ownerVisitorId !== visitor._id ||
-        run.browserTestContextId !== contextId ||
+        context?.ownerVisitorId !== visitor._id ||
         !run.reservationKey?.endsWith(`:${args.fixtureKey}`)
     )
         throw new Error("Local simulation scope required");
     return { run, visitor };
+}
+
+async function requireLocalFixtureRun(
+    ctx: MutationCtx | QueryCtx,
+    args: { runId: Id<"researchRuns">; fixtureKey: string },
+) {
+    const scope = await readLocalFixtureRun(ctx, args);
+    const contextId = await requireBrowserFixtureContext(ctx, scope.visitor);
+    if (scope.run.browserTestContextId !== contextId)
+        throw new Error("Local simulation scope required");
+    return scope;
 }
 
 const campaignDossier = v.object({
@@ -138,6 +155,11 @@ export const bindCampaignScenarios = internalMutation({
         )
             throw new Error("Campaign scenario bindings are immutable");
         await ctx.db.patch(context._id, { simulatedScenarios: bindings });
+        await initializeQualificationUsage(
+            ctx,
+            context._id,
+            bindings.map((binding) => binding.runId),
+        );
         return null;
     },
 });
@@ -1201,7 +1223,7 @@ export const inspectWorkbench = internalQuery({
         executionStatus: v.string(),
     }),
     handler: async (ctx, args) => {
-        const { run } = await requireLocalFixtureRun(ctx, args);
+        const { run } = await readLocalFixtureRun(ctx, args);
         const missions = await ctx.db
             .query("agentMissions")
             .withIndex("by_run_and_request_key", (q) => q.eq("runId", run._id))
@@ -1311,7 +1333,7 @@ export const inspectSourcesQualification = internalQuery({
         ),
     }),
     handler: async (ctx, args) => {
-        const { run } = await requireLocalFixtureRun(ctx, args);
+        const { run } = await readLocalFixtureRun(ctx, args);
         const preparation = run.sourcePreparationId
             ? await ctx.db.get(run.sourcePreparationId)
             : null;
@@ -1378,7 +1400,7 @@ export const inspectSourcesInvocations = internalQuery({
         payloads: v.array(schema.doc("agentInvocationPayloads")),
     }),
     handler: async (ctx, args) => {
-        const { run } = await requireLocalFixtureRun(ctx, args);
+        const { run } = await readLocalFixtureRun(ctx, args);
         if (args.paginationOpts.numItems !== 1)
             throw new Error(
                 "Sources transcript inspection requires one invocation per page",
@@ -1406,6 +1428,7 @@ export const inspectSourcesInvocations = internalQuery({
 /** Small polling snapshot: no transcript scan or sample-dependent ceiling. */
 export const qualificationSnapshot = internalQuery({
     returns: v.object({
+        accounting: v.union(schema.doc("qualificationUsage"), v.null()),
         run: schema.doc("researchRuns"),
         conversation: v.union(schema.doc("agentConversations"), v.null()),
         mission: v.union(schema.doc("agentMissions"), v.null()),
@@ -1420,7 +1443,7 @@ export const qualificationSnapshot = internalQuery({
     }),
     args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
     handler: async (ctx, args) => {
-        const { run } = await requireLocalFixtureRun(ctx, args);
+        const { run } = await readLocalFixtureRun(ctx, args);
         const conversation = await ctx.db
             .query("agentConversations")
             .withIndex("by_run", (q) => q.eq("runId", run._id))
@@ -1453,6 +1476,13 @@ export const qualificationSnapshot = internalQuery({
                   .unique()
             : null;
         return {
+            accounting: run.browserTestContextId
+                ? await readQualificationUsage(
+                      ctx,
+                      run.browserTestContextId,
+                      run._id,
+                  )
+                : null,
             run,
             conversation,
             mission,
@@ -1509,7 +1539,7 @@ export const inspectQualificationPage = internalQuery({
         paginationOpts: paginationOptsValidator,
     },
     handler: async (ctx, args) => {
-        const { run } = await requireLocalFixtureRun(ctx, args);
+        const { run } = await readLocalFixtureRun(ctx, args);
         if (
             args.paginationOpts.numItems < 1 ||
             args.paginationOpts.numItems > 32

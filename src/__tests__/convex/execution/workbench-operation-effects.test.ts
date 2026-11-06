@@ -452,8 +452,8 @@ test("an edit between claim and framing effect returns a refusal without overwri
         requestKey: "new-analyst-edit",
         content: { scope: "Latest analyst scope", questions: [] },
     });
-    const operation = getAgentDefinition("workbench_v1", 2).operations
-        .adjust_framing;
+    const operation =
+        getAgentDefinition("workbench_v1").operations.adjust_framing;
     assert(operation);
     expect(
         await t.action((ctx) =>
@@ -573,7 +573,7 @@ async function activeMessage(
     return message._id;
 }
 
-test("the version 2 framing operation preserves analyst authority independently of native journal selection", async () => {
+test("the current framing operation preserves analyst authority", async () => {
     const { t, client, runId, active } = await framedTurn(
         "framing-domain-authority",
     );
@@ -602,7 +602,6 @@ test("the version 2 framing operation preserves analyst authority independently 
     const version = await t.run(async (ctx) => {
         const turn = await ctx.db.get(active.turnId);
         assert(turn);
-        await ctx.db.patch(active.missionId, { definitionVersion: 1 });
         const request = await ctx.db.get(requestId);
         assert(request);
         expect(request.operationVersion).toBe(2);
@@ -649,8 +648,8 @@ test.each([
             text: "Inspect the public terms for switching restrictions.",
         },
     );
-    const operation = getAgentDefinition("workbench_v1", 1).operations
-        .transmit_source_request;
+    const operation =
+        getAgentDefinition("workbench_v1").operations.transmit_source_request;
     assert(operation?.effectKind === "atomic_effect");
     const execute = operation.execute;
     vi.spyOn(operation, "execute").mockImplementation((ctx, args) =>

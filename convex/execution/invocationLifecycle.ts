@@ -61,6 +61,7 @@ import {
     domainDataPatch,
     invocationScopeFields,
     missionScope,
+    operationProgressKeys,
 } from "./missionData";
 import {
     completionFeedbackValidator,
@@ -758,6 +759,7 @@ export const settle = internalMutation({
             throw executionError("stale_invocation");
         if (mission.lastSettledInvocationId === invocation._id)
             return { kind: "ready" as const };
+        const requests: Doc<"agentOperationRequests">[] = [];
         for (const id of invocation.requestIds ?? []) {
             const request = await ctx.db.get(id);
             if (
@@ -766,14 +768,14 @@ export const settle = internalMutation({
                 request.status !== "completed"
             )
                 return { kind: "waiting" as const };
+            requests.push(request);
         }
-        const { noProgressTurns, stopped } = invocationProgressSettlement(
-            mission,
-            invocation,
-        );
+        const { noProgressTurns, stopped, recoveryRead } =
+            invocationProgressSettlement(mission, invocation, requests);
         await ctx.db.patch(mission._id, {
             lastSettledInvocationId: invocation._id,
             noProgressTurns,
+            recoveryRead,
             status: stopped ? "blocked" : "ready",
             blockCode: stopped ? "repetition_stop" : undefined,
         });
@@ -781,6 +783,9 @@ export const settle = internalMutation({
             kind: stopped ? "repetition_stopped" : "continuation_ready",
             cause: invocation.taskKey,
             invocationId: invocation._id,
+            ...(recoveryRead?.restorationInvocationId === invocation._id
+                ? { observation: { recoveryRead, noProgressTurns } }
+                : {}),
             ...(stopped ? { code: "repetition_stop" } : {}),
         });
         return stopped
@@ -865,7 +870,13 @@ export const finish = internalMutation({
                 : {}),
             completedAt: Date.now(),
         };
-        const block = async (code: string, terminal = false) => {
+        const block = async (
+            code: string,
+            terminal = false,
+            correction?: import("convex/values").Infer<
+                typeof completionFeedbackValidator
+            >,
+        ) => {
             await ctx.db.patch(invocation._id, { blockCode: code });
             // Domain completion can discover pending work after the generic notes preparation.
             if (
@@ -880,13 +891,59 @@ export const finish = internalMutation({
                     status: "blocked",
                     blockCode: code,
                 });
+            const observed = await invocationEventObservation(
+                ctx,
+                invocation,
+                args.response,
+                args.rawOutputJson,
+            );
             await recordMissionEvent(ctx, mission, {
+                ...observed,
+                observation: {
+                    ...observed.observation,
+                    ...(correction ? { correction } : {}),
+                },
                 kind: "invocation_refused",
                 cause: invocation.taskKey,
                 invocationId: invocation._id,
                 code,
             });
             return { kind: "blocked" as const, requestIds: [], code };
+        };
+        const correctCompletion = async (
+            feedback: Infer<typeof completionFeedbackValidator>,
+        ) => {
+            await ctx.db.patch(mission._id, {
+                workingNotes: mission.workingNotes,
+            });
+            if (
+                new TextEncoder().encode(JSON.stringify(feedback)).length >
+                MAX_OPERATION_RESULT_BYTES
+            )
+                return block("operation_result_capacity", true);
+            if (
+                !validate(completionFeedbackValidator, feedback, { db: ctx.db })
+            )
+                return block("operation_contract_invalid", true);
+            const { noProgressTurns, stopped, recoveryRead } =
+                invocationProgressSettlement(mission, invocation, [], true);
+            await ctx.db.patch(invocation._id, {
+                correction: feedback,
+            });
+            await ctx.db.patch(mission._id, {
+                workingNotes: mission.workingNotes,
+                lastSettledInvocationId: invocation._id,
+                noProgressTurns,
+                recoveryRead,
+                status: stopped ? "blocked" : "ready",
+                blockCode: stopped ? "repetition_stop" : undefined,
+            });
+            const refused = await block(
+                stopped ? "repetition_stop" : "completion_correction_required",
+                stopped,
+                feedback,
+            );
+            return { ...refused, correction: feedback };
         };
         try {
             await requireMissionAuthority(
@@ -927,12 +984,31 @@ export const finish = internalMutation({
             !canAdoptRetainedResponse(mission, invocation)
         )
             return block("retained_response_not_reusable", true);
-        if (args.response.kind === "blocked")
+        const receipt = invocation.providerCallId
+            ? await ctx.db.get(invocation.providerCallId)
+            : null;
+        if (args.response.kind === "blocked") {
+            if (
+                args.response.code === "invalid_output" &&
+                receipt?.invocationId === invocation._id &&
+                receipt.status === "failed" &&
+                receipt.dispatchOutcome === "response_received" &&
+                receipt.errorCode === "invalid_output" &&
+                receipt.diagnostic?.reason === "invalid_output"
+            )
+                return correctCompletion({
+                    code: "invalid_output",
+                    issues: [
+                        {
+                            path: "",
+                            expected:
+                                "A single JSON completion object matching the declared schema, without surrounding prose or Markdown fences.",
+                        },
+                    ],
+                });
             return block(args.response.code, true);
+        }
         if (invocation.provenance === "live") {
-            const receipt = invocation.providerCallId
-                ? await ctx.db.get(invocation.providerCallId)
-                : null;
             if (
                 receipt?.status !== "succeeded" ||
                 receipt.invocationId !== invocation._id ||
@@ -957,54 +1033,29 @@ export const finish = internalMutation({
                 mission.definitionId,
                 mission.definitionVersion,
             );
-            if (
-                !validate(definition.completionValidator, args.response, {
+            try {
+                validate(definition.completionValidator, args.response, {
                     db: ctx.db,
-                })
-            )
-                return block("invalid_completion", true);
+                    throw: true,
+                });
+            } catch (error) {
+                if (!(error instanceof ValidationError)) throw error;
+                return correctCompletion({
+                    code: "invalid_completion",
+                    issues: [
+                        operationInputFeedback(
+                            definition.completionValidator,
+                            error,
+                        ),
+                    ],
+                });
+            }
             const completion = await getAgentDefinition(
                 mission.definitionId,
                 mission.definitionVersion,
             ).complete(ctx, mission, args.response, snapshot, invocation);
-            if (completion.kind === "correct") {
-                await ctx.db.patch(mission._id, {
-                    workingNotes: mission.workingNotes,
-                });
-                if (
-                    new TextEncoder().encode(
-                        JSON.stringify(completion.feedback),
-                    ).length > MAX_OPERATION_RESULT_BYTES
-                )
-                    return block("operation_result_capacity", true);
-                if (
-                    !validate(
-                        completionFeedbackValidator,
-                        completion.feedback,
-                        { db: ctx.db },
-                    )
-                )
-                    return block("operation_contract_invalid", true);
-                const { noProgressTurns, stopped } =
-                    invocationProgressSettlement(mission, invocation);
-                await ctx.db.patch(invocation._id, {
-                    correction: completion.feedback,
-                });
-                await ctx.db.patch(mission._id, {
-                    workingNotes: mission.workingNotes,
-                    lastSettledInvocationId: invocation._id,
-                    noProgressTurns,
-                    status: stopped ? "blocked" : "ready",
-                    blockCode: stopped ? "repetition_stop" : undefined,
-                });
-                const refused = await block(
-                    stopped
-                        ? "repetition_stop"
-                        : "completion_correction_required",
-                    stopped,
-                );
-                return { ...refused, correction: completion.feedback };
-            }
+            if (completion.kind === "correct")
+                return correctCompletion(completion.feedback);
             if (completion.kind === "continue")
                 return block("mission_context_changed");
             if (completion.kind === "blocked") return block(completion.code);
@@ -1150,15 +1201,54 @@ export const finish = internalMutation({
 function invocationProgressSettlement(
     mission: Doc<"agentMissions">,
     invocation: Doc<"agentInvocations">,
+    requests: Doc<"agentOperationRequests">[],
+    rejectedCompletion = false,
 ) {
-    const noProgressTurns =
-        mission.lastSettledInvocationId === invocation._id
-            ? mission.noProgressTurns
-            : mission.progressKeys.length > (invocation.progressCount ?? 0)
-              ? 0
-              : mission.noProgressTurns + 1;
+    if (mission.lastSettledInvocationId === invocation._id)
+        return {
+            noProgressTurns: mission.noProgressTurns,
+            stopped: mission.noProgressTurns >= MAX_NO_PROGRESS_TURNS,
+            recoveryRead: mission.recoveryRead,
+        };
+    if (mission.progressKeys.length > (invocation.progressCount ?? 0))
+        return { noProgressTurns: 0, stopped: false, recoveryRead: undefined };
+    const definition = getAgentDefinition(
+        mission.definitionId,
+        mission.definitionVersion,
+    );
+    const restored =
+        !!mission.recoveryRead &&
+        !mission.recoveryRead.restorationInvocationId &&
+        requests.length > 0 &&
+        requests.every(
+            (request) =>
+                request.outcome?.kind === "success" &&
+                !request.adoptionRefusalCode &&
+                ((request.historyRead &&
+                    request.historyRead.restorable !== false &&
+                    request.historyRead.fragmentIds.length > 0) ||
+                    (definition.operations[request.input.kind]?.materialRead &&
+                        operationProgressKeys(request.outcome).length > 0)),
+        );
+    const refusal =
+        rejectedCompletion ||
+        requests.some(
+            (request) =>
+                request.outcome?.kind === "refused" ||
+                request.outcome?.kind === "unavailable",
+        );
+    const recoveryRead =
+        restored && mission.recoveryRead
+            ? {
+                  ...mission.recoveryRead,
+                  restorationInvocationId: invocation._id,
+              }
+            : (mission.recoveryRead ??
+              (refusal ? { refusalInvocationId: invocation._id } : undefined));
+    const noProgressTurns = mission.noProgressTurns + (restored ? 0 : 1);
     return {
         noProgressTurns,
+        recoveryRead,
         stopped: noProgressTurns >= MAX_NO_PROGRESS_TURNS,
     };
 }

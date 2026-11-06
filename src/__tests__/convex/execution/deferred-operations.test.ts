@@ -224,7 +224,8 @@ test("agent reuse of native work does not inherit the original caller's instruct
     expect(uses[0]).toMatchObject({
         requestId,
         callId: "agent-reuse",
-        outcome: { kind: "success", valueJson: '{"value":14}' },
+        outcome: { kind: "success" },
+        historyReference: expect.any(String),
     });
     expect(uses[0]).not.toHaveProperty("analystInstruction");
     const events = await f.t.run((ctx) =>
@@ -506,7 +507,8 @@ test("deferred operations retain their outcome before continuation and duplicate
         triggeringRequestsAndResults: [
             {
                 requestId,
-                outcome: { kind: "success", valueJson: '{"value":14}' },
+                outcome: { kind: "success" },
+                historyReference: expect.any(String),
             },
         ],
     });
@@ -1216,7 +1218,8 @@ test("continuation includes native results and original instructions even after 
         expect.arrayContaining([
             expect.objectContaining({
                 requestId,
-                outcome: { kind: "success", valueJson: '{"value":14}' },
+                outcome: { kind: "success" },
+                historyReference: expect.any(String),
                 analystInstruction: {
                     messageId: f.messageId,
                     originalText: "Compute through a deterministic operation",

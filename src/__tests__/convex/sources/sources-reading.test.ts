@@ -18,6 +18,51 @@ test("contextual passage batch RPC declares its return contract", () => {
     expect(JSON.parse(serialized)).not.toBeNull();
 });
 
+test("a retained operation result without capture omission metadata remains usable and immutable", async () => {
+    const f = await seedCapturedSources();
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueueNative,
+        {
+            runId: f.runId,
+            expectedGeneration: 4,
+            cause: "retained-reading",
+            input: {
+                kind: "search_available_material",
+                sourceId: f.sourceId,
+                query: "workflow",
+            },
+        },
+    );
+    const current = await f.t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 4,
+    });
+    assert(current.kind === "success");
+    const value = JSON.parse(current.valueJson);
+    expect(value.documentaryStatus.capture).toHaveProperty(
+        "captureOmittedPassageCount",
+    );
+    delete value.documentaryStatus.capture.captureOmittedPassageCount;
+    const retained = { ...current, valueJson: JSON.stringify(value) };
+    await f.t.run((ctx) =>
+        ctx.db.patch(requestId, {
+            status: "observed",
+            outcome: retained,
+            adoptionRefusalCode: undefined,
+            completedAt: undefined,
+        }),
+    );
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 4,
+        }),
+    ).toEqual(retained);
+    expect((await f.t.run((ctx) => ctx.db.get(requestId)))?.outcome).toEqual(
+        retained,
+    );
+});
+
 test.each([
     "native",
     "mission",

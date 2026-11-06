@@ -16,6 +16,7 @@ import type { Doc, Id } from "../../../convex/_generated/dataModel";
 import {
     type ConfigurableCampaignManifest,
     campaignConfiguration,
+    MAX_QUALIFICATION_CONTEXT_DURATION_MS,
     type QualificationScenario,
 } from "../../../convex/qualificationCampaignPolicy.ts";
 import { openQualificationJournal } from "./journal.ts";
@@ -54,13 +55,19 @@ export async function prepareCampaignScenarios(
         "Scenario preparation cannot be renewed",
     );
     const profile = campaignConfiguration(manifest, configurationId);
+    const remainingMs = manifest.expiresAt - Date.now();
+    assert(remainingMs > 0, "Campaign has expired");
     const contextKey = `campaign-${randomUUID()}`;
     const contextId = await client.mutation(
         ref(internal.runWorkspace.openBrowserTestContext),
         {
             slotKey: "analyst-4",
             contextKey,
-            durationMs: Math.min(40 * 60000, manifest.expiresAt - Date.now()),
+            durationMs: Math.min(
+                manifest.contextDurationMs ??
+                    MAX_QUALIFICATION_CONTEXT_DURATION_MS,
+                remainingMs,
+            ),
         },
     );
     await client.mutation(ref(internal.qualificationCampaigns.bind), {
@@ -181,6 +188,11 @@ export async function inspectCampaignScenarios(
                     ref(internal.execution.fixtures.inspectQualificationPage),
                     { ...args, kind, paginationOpts: { cursor, numItems: 32 } },
                 );
+                const { downloads: _, ...retained } = {
+                    downloads: undefined,
+                    ...result,
+                };
+                save(directory, `${kind}-${++pageNumber}`, retained);
                 if ("downloads" in result) {
                     const downloads: Extract<
                         FunctionReturnType<
@@ -188,6 +200,18 @@ export async function inspectCampaignScenarios(
                         >,
                         { downloads: unknown }
                     >["downloads"] = result.downloads;
+                    for (const capture of result.page) {
+                        if (capture.status === "committed")
+                            assert(
+                                capture.contentHash &&
+                                    capture.storageId &&
+                                    downloads.some(
+                                        (download) =>
+                                            download.captureId === capture._id,
+                                    ),
+                                "Capture bytes unavailable",
+                            );
+                    }
                     for (const download of downloads) {
                         const capture: Doc<"sourceCaptures"> | undefined =
                             result.page.find(
@@ -221,11 +245,6 @@ export async function inspectCampaignScenarios(
                         );
                     }
                 }
-                const { downloads: _, ...retained } = {
-                    downloads: undefined,
-                    ...result,
-                };
-                save(directory, `${kind}-${++pageNumber}`, retained);
                 if (result.isDone) break;
                 assert(
                     result.continueCursor !== cursor,
@@ -283,6 +302,8 @@ export async function runCampaignScenarios(
     await expect
         .poll(() => admitted.query(api.visitors.current), { timeout: 20000 })
         .toMatchObject({ status: "active" });
+    assert.equal(errors.length, 0, "Browser initialization failed");
+    const failedScenarios: string[] = [];
     for (const c of prepared(root).cases) {
         const scenario = manifest.scenarios.find((s) => s.id === c.id);
         assert(scenario);
@@ -290,6 +311,8 @@ export async function runCampaignScenarios(
         const directory = join(root, c.id);
         mkdirSync(directory, { recursive: true, mode: 0o700 });
         let activeStep = "initialize";
+        const errorStart: number = errors.length;
+        let failed = false;
         let held = false;
         let armed:
             | undefined
@@ -605,7 +628,7 @@ export async function runCampaignScenarios(
                 text: await page.locator("body").innerText(),
             });
             assert.equal(
-                errors.length,
+                errors.length - errorStart,
                 0,
                 "Browser errors retained in scenario failure",
             );
@@ -616,17 +639,15 @@ export async function runCampaignScenarios(
         } catch (error) {
             save(directory, "failure", {
                 step: activeStep,
-                errors,
+                errors: errors.slice(errorStart),
                 reason:
                     error instanceof Error ? error.message : "Scenario failed",
             });
-            await page
-                .screenshot({
-                    path: join(directory, "failure.png"),
-                    fullPage: true,
-                })
-                .catch(() => {});
-            throw error;
+            await page.screenshot({
+                path: join(directory, "failure.png"),
+                fullPage: true,
+            });
+            failed = true;
         } finally {
             release();
             if (held)
@@ -634,6 +655,51 @@ export async function runCampaignScenarios(
                     ref(internal.execution.piControl.holdPublication),
                     { held: false },
                 );
+        }
+        if (failed) {
+            assert(
+                !interrupted(),
+                "Campaign interrupted after scenario failure",
+            );
+            const [state, publication] = await Promise.all([
+                inspect(),
+                client.query(
+                    ref(internal.execution.piControl.publicationStatus),
+                    {},
+                ),
+            ]);
+            const accounting = state.accounting;
+            assert(
+                settled(state) &&
+                    state.run.executionStatus === "idle" &&
+                    (!state.sourcesMission ||
+                        [
+                            "completed",
+                            "blocked",
+                            "failed",
+                            "cancelled",
+                        ].includes(state.sourcesMission.status)) &&
+                    accounting &&
+                    !accounting.pending &&
+                    !accounting.unknown &&
+                    !accounting.overruns &&
+                    !publication.held &&
+                    !publication.hasActiveWorkers,
+                "Failed scenario is not quiet and reconciled; independent continuation refused",
+            );
+            save(directory, "independent-continuation", {
+                executionStatus: state.run.executionStatus,
+                sourcesStatus: state.sourcesMission?.status ?? null,
+                pending: accounting.pending,
+                unknown: accounting.unknown,
+                overruns: accounting.overruns,
+                publication,
+            });
+            journal.finish(c.id, {
+                executionIntegrity: "failed",
+                semanticTask: "not_assessed",
+            });
+            failedScenarios.push(c.id);
         }
     }
     await inspectCampaignScenarios(client, root);
@@ -649,4 +715,9 @@ export async function runCampaignScenarios(
                 "Simulation dispatched a provider",
             );
         }
+    assert.equal(
+        failedScenarios.length,
+        0,
+        "Scenarios failed; independent results and original failures retained",
+    );
 }

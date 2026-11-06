@@ -46,6 +46,7 @@ export const historyReadReceiptValidator = v.object({
     instructionVersion: v.optional(v.number()),
     frontier: historyFrontierValidator,
     fragmentIds: v.array(v.string()),
+    restorable: v.optional(v.boolean()),
     next: v.union(historyPositionValidator, v.null()),
 });
 
@@ -53,6 +54,7 @@ export type HistoryReadReceipt = Infer<typeof historyReadReceiptValidator>;
 
 export const historyReadPinValidator = v.object({
     kind: v.literal("history_read"),
+    reference: v.optional(v.id("agentExecutionEvents")),
     source: v.union(v.literal("conversation"), v.literal("mission")),
     frontier: v.optional(historyFrontierValidator),
 });

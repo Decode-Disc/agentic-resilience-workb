@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 test("native documentary registration requires an explicit routing choice", () => {
-    const tools = agentToolSchemas(getAgentDefinition("workbench_v1", 2), {
+    const tools = agentToolSchemas(getAgentDefinition("workbench_v1"), {
         framing: { fixed: true },
         conversationInstructions: {
             messages: [
@@ -47,7 +47,7 @@ test("native documentary registration requires an explicit routing choice", () =
 });
 
 test("an explicit pause does not offer resume as an alternative action", () => {
-    const tools = agentToolSchemas(getAgentDefinition("workbench_v1", 2), {
+    const tools = agentToolSchemas(getAgentDefinition("workbench_v1"), {
         framing: { fixed: true },
         research: { controlAvailable: true },
         conversationInstructions: {
@@ -100,12 +100,9 @@ test("native controls offer only actions explicitly authorized by active message
     assert(context.kind === "ready");
     const state = JSON.parse(context.inputJson);
     // Exercise phase availability independently from explicit message authority.
-    state.research.controlAvailable = true;
-    state.framing.fixed = true;
-    const tools = agentToolSchemas(
-        getAgentDefinition("workbench_v1", 2),
-        state,
-    );
+    state.domain.research.controlAvailable = true;
+    state.domain.framing.fixed = true;
+    const tools = agentToolSchemas(getAgentDefinition("workbench_v1"), state);
     expect(tools).toHaveProperty("transmit_source_request");
     expect(tools).not.toHaveProperty("control_research");
 });

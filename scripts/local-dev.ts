@@ -278,6 +278,7 @@ async function runNativeWatcher(
     }
 
     const runId = randomUUID();
+    const queueWaitMs = process.env.ISOLATE_QUEUE_IDLE_TIMEOUT_MS ?? "10000";
     const child = spawn(
         process.execPath,
         [
@@ -295,7 +296,15 @@ async function runNativeWatcher(
         ],
         {
             cwd: root,
-            env: nativeEnvironment(root, runId),
+            env: {
+                ...nativeEnvironment(root, runId),
+                DATABASE_UDF_USER_TIMEOUT_SECONDS:
+                    process.env.DATABASE_UDF_USER_TIMEOUT_SECONDS ?? "10",
+                ISOLATE_QUEUE_IDLE_TIMEOUT_MS: queueWaitMs,
+                ISOLATE_QUEUE_CONGESTED_TIMEOUT_MS:
+                    process.env.ISOLATE_QUEUE_CONGESTED_TIMEOUT_MS ??
+                    queueWaitMs,
+            },
             stdio: "inherit",
         },
     );

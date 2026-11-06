@@ -7,6 +7,23 @@ import { runCampaign } from "../../../scripts/evaluations/workbench-browser/camp
 
 import { configurableCampaign } from "../setup/qualification-v2.ts";
 
+test("prepare retains the explicit campaign context duration", async () => {
+    const root = mkdtempSync(join(tmpdir(), "qualification-duration-"));
+    const input = join(root, "input.json");
+    writeFileSync(
+        input,
+        JSON.stringify({
+            ...configurableCampaign(),
+            contextDurationMs: 75 * 60_000,
+        }),
+    );
+    await runCampaign("prepare", root, { manifest: input });
+    const retained = JSON.parse(
+        readFileSync(join(root, "campaign.json"), "utf8"),
+    );
+    assert.equal(retained.manifest.contextDurationMs, 4_500_000);
+});
+
 test("prepare freezes three free scenarios and two configurations with allowances above the former lot caps", async () => {
     const root = mkdtempSync(join(tmpdir(), "qualification-v2-"));
     const input = join(root, "input.json");
@@ -34,7 +51,289 @@ test("prepare freezes three free scenarios and two configurations with allowance
     assert.match(retained.manifest.batteryHash, /^[a-f0-9]{64}$/);
 });
 
+import { getFunctionName } from "convex/server";
 import { campaignManifestSchema } from "../../../convex/qualificationCampaignPolicy.ts";
+import {
+    inspectCampaignScenarios,
+    prepareCampaignScenarios,
+    runCampaignScenarios,
+} from "../../../scripts/evaluations/workbench-browser/scenarios.ts";
+
+test("an unavailable retained capture fails export while preserving its metadata", async () => {
+    const root = mkdtempSync(join(tmpdir(), "qualification-missing-capture-"));
+    writeFileSync(
+        join(root, "prepared.json"),
+        JSON.stringify({
+            cases: [
+                { id: "retained", runId: "fixture-run", fixtureKey: "fixture" },
+            ],
+        }),
+    );
+    const capture = {
+        _id: "fixture-capture",
+        status: "committed",
+        storageId: "fixture-storage",
+        contentHash: "a".repeat(64),
+    };
+    const client = {
+        query: async (reference, args) => {
+            const name = getFunctionName(reference);
+            if (name === "execution/fixtures:qualificationSnapshot")
+                return { run: { _id: "fixture-run" } };
+            return {
+                page: args.kind === "captures" ? [capture] : [],
+                downloads: [],
+                isDone: true,
+                continueCursor: "",
+            };
+        },
+    };
+    await assert.rejects(
+        () => inspectCampaignScenarios(client, root),
+        /Capture bytes unavailable/,
+    );
+    const retained = JSON.parse(
+        readFileSync(join(root, "retained/captures-1.json"), "utf8"),
+    );
+    assert.deepEqual(retained.page, [capture]);
+    assert.equal("downloads" in retained, false);
+});
+
+async function independentScenarioProbe(t, overrides = {}) {
+    const root = mkdtempSync(join(tmpdir(), "qualification-independent-"));
+    const input = configurableCampaign();
+    const manifest = campaignManifestSchema.parse({
+        ...input,
+        batteryHash: "a".repeat(64),
+        scenarios: input.scenarios.slice(0, 2).map((s) => ({
+            ...s,
+            steps: [
+                {
+                    id: "settled",
+                    action: "wait_for",
+                    state: "conversation_settled",
+                },
+            ],
+        })),
+        expectations: input.expectations.slice(0, 2),
+    });
+    writeFileSync(
+        join(root, "protocol.json"),
+        `${JSON.stringify({ version: 3, manifest }, null, 2)}\n`,
+    );
+    writeFileSync(
+        join(root, "prepared.json"),
+        JSON.stringify({
+            cases: manifest.scenarios.map((s) => ({
+                id: s.id,
+                runId: `fixture-${s.id}`,
+                fixtureKey: `fixture-${s.id}`,
+            })),
+        }),
+    );
+    t.mock.method(
+        globalThis,
+        "fetch",
+        async () =>
+            new Response(
+                JSON.stringify({
+                    status: "success",
+                    value: { status: "active" },
+                }),
+                { headers: { "Content-Type": "application/json" } },
+            ),
+    );
+    const listeners = {};
+    const activated = [];
+    const page = {
+        on: (name, listener) => {
+            listeners[name] = listener;
+        },
+        goto: async (url) => {
+            if (url.endsWith("/fixture-claims")) {
+                listeners.console({ type: () => "error" });
+                throw new Error("Retained first-scenario browser failure");
+            }
+        },
+        evaluate: async () => "unit-boundary-token",
+        setViewportSize: async () => {},
+        screenshot: async ({ path }) => {
+            if (overrides.screenshotFailure)
+                throw new Error("Evidence capture failed");
+            writeFileSync(path, "Mocked screenshot boundary");
+        },
+        locator: () => ({
+            innerText: async () => "Unit boundary; no providers",
+        }),
+    };
+    const snapshot = {
+        run: { executionStatus: "idle" },
+        conversation: { queuedCount: 0 },
+        nativeSettled: true,
+        sourcesMission: null,
+        accounting: { pending: 0, unknown: 0, overruns: 0 },
+        ...overrides.snapshot,
+    };
+    const client = {
+        mutation: async (_reference, args) => {
+            activated.push(args.runId);
+        },
+        query: async (reference) => {
+            const name = getFunctionName(reference);
+            if (name === "execution/fixtures:qualificationSnapshot")
+                return snapshot;
+            if (name === "execution/piControl:publicationStatus")
+                return {
+                    held: false,
+                    hasActiveWorkers: false,
+                    ...overrides.publication,
+                };
+            return { page: [], payloads: [], isDone: true, continueCursor: "" };
+        },
+    };
+    await assert.rejects(() =>
+        runCampaignScenarios(
+            page,
+            client,
+            "http://localhost:5173",
+            "http://localhost:3210",
+            root,
+            manifest,
+            () => overrides.interrupted ?? false,
+        ),
+    );
+    return { root, activated };
+}
+
+test("a terminal scenario failure remains failed while a quiet independent scenario is evaluated", async (t) => {
+    const { root, activated } = await independentScenarioProbe(t);
+    assert.deepEqual(activated, ["fixture-claims", "fixture-creative"]);
+    const results = readFileSync(join(root, "progress.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line))
+        .filter((e) => e.event === "finished");
+    assert.deepEqual(
+        results.map((r) => [r.scenario, r.executionIntegrity]),
+        [
+            ["claims", "failed"],
+            ["creative", "passed"],
+        ],
+    );
+    assert.deepEqual(
+        JSON.parse(readFileSync(join(root, "claims/failure.json"))).errors,
+        ["console_error"],
+    );
+});
+
+test("unsettled work, uncertain accounting, publication holds and interruption prevent independent continuation", async (t) => {
+    for (const overrides of [
+        { snapshot: { nativeSettled: false } },
+        { snapshot: { run: { executionStatus: "running" } } },
+        { snapshot: { sourcesMission: { status: "running" } } },
+        { snapshot: { accounting: null } },
+        { snapshot: { accounting: { pending: 1, unknown: 0, overruns: 0 } } },
+        { snapshot: { accounting: { pending: 0, unknown: 1, overruns: 0 } } },
+        { snapshot: { accounting: { pending: 0, unknown: 0, overruns: 1 } } },
+        { publication: { hasActiveWorkers: true } },
+        { publication: { held: true } },
+        { interrupted: true },
+        { screenshotFailure: true },
+    ]) {
+        const { activated } = await independentScenarioProbe(t, overrides);
+        assert(!activated.includes("fixture-creative"));
+    }
+});
+
+test("scenario preparation uses the declared duration instead of the former forty-minute cap", async () => {
+    const root = mkdtempSync(join(tmpdir(), "qualification-context-"));
+    const manifest = campaignManifestSchema.parse({
+        ...configurableCampaign(),
+        batteryHash: "a".repeat(64),
+        contextDurationMs: 75 * 60_000,
+        expiresAt: Date.now() + 90 * 60_000,
+    });
+    let duration;
+    let seeded = 0;
+    await prepareCampaignScenarios(
+        {
+            mutation: async (reference, args) => {
+                const name = getFunctionName(reference);
+                if (name === "runWorkspace:openBrowserTestContext") {
+                    duration = args.durationMs;
+                    return "fixture-context";
+                }
+                if (name === "e2eFixtures:seedSourceReviewScenario")
+                    return { runId: `fixture-run-${++seeded}` };
+                return null;
+            },
+        },
+        root,
+        manifest,
+        "fixture-lot",
+        "first",
+    );
+    assert.equal(duration, 4_500_000);
+    assert.equal(seeded, 3);
+});
+
+test("context duration respects mandate expiry and the server maximum before setup", async () => {
+    const base = { ...configurableCampaign(), batteryHash: "a".repeat(64) };
+    assert.equal(
+        campaignManifestSchema.safeParse({
+            ...base,
+            contextDurationMs: 7_200_001,
+        }).success,
+        false,
+    );
+    for (const remaining of [30 * 60_000, 3 * 60 * 60_000]) {
+        const manifest = campaignManifestSchema.parse({
+            ...base,
+            expiresAt: Date.now() + remaining,
+        });
+        let duration;
+        await prepareCampaignScenarios(
+            {
+                mutation: async (reference, args) => {
+                    if (
+                        getFunctionName(reference) ===
+                        "runWorkspace:openBrowserTestContext"
+                    )
+                        duration = args.durationMs;
+                    return { runId: "fixture-run" };
+                },
+            },
+            mkdtempSync(join(tmpdir(), "qualification-cap-")),
+            manifest,
+            "lot",
+            "first",
+        );
+        assert(duration <= Math.min(remaining, 7_200_000));
+        assert(
+            duration >= Math.min(manifest.expiresAt - Date.now(), 7_200_000),
+        );
+    }
+    let calls = 0;
+    await assert.rejects(
+        () =>
+            prepareCampaignScenarios(
+                {
+                    mutation: async () => {
+                        calls++;
+                    },
+                },
+                mkdtempSync(join(tmpdir(), "qualification-expired-")),
+                campaignManifestSchema.parse({
+                    ...base,
+                    expiresAt: Date.now() - 1,
+                }),
+                "lot",
+                "first",
+            ),
+        /Campaign has expired/,
+    );
+    assert.equal(calls, 0);
+});
 
 test("omitted scenarios use the editable default battery and retain explicit steps", async () => {
     const root = mkdtempSync(join(tmpdir(), "qualification-default-"));

@@ -1,6 +1,6 @@
 import { api, internal } from "@convex/_generated/api";
-import { completeSources } from "@convex/domain/sources";
 import { sha256Hex } from "@convex/domain/sourcePassages";
+import { completeSources } from "@convex/domain/sources";
 import { readWorkbenchFacts } from "@convex/domain/workbenchContext";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { WORKBENCH_MODEL_ROUTE } from "@convex/integrations/modelRouting";
@@ -124,7 +124,7 @@ test("closed instruction treatment reaches Workbench and its review without reop
     const projected = await f.t.run(async (ctx) => {
         const run = await ctx.db.get(f.runId);
         assert(run);
-        return getAgentDefinition("workbench_v1", 2).context(ctx, mission, run);
+        return getAgentDefinition("workbench_v1").context(ctx, mission, run);
     });
     assert(projected.kind === "ready");
     expect(projected.context.documentaryPreparation).toMatchObject({
@@ -335,12 +335,11 @@ test.each([
             expectedGeneration: 4,
             response: {
                 kind: "complete",
-                needsRevision: 1,
+
                 needs: [
                     {
                         needId: "common-context",
                         unfinished: ["Independent work remains."],
-                        workRequestIds: [],
                     },
                 ],
             },
@@ -373,4 +372,32 @@ test.each([
             },
         ]),
     });
+});
+
+test("generation and review share compact documentary instructions with the actual analyst text", async () => {
+    const f = await seedInstruction(await seedCapturedSources());
+    await f.t.mutation(internal.workbench.processInstructions, {
+        runId: f.runId,
+    });
+    const context = await f.t.query(internal.execution.context.build, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+    });
+    assert(context.kind === "ready");
+    const requests = JSON.parse(context.inputJson).domain.documentaryRequests;
+    expect(requests[0]).toMatchObject({
+        instructionId: f.instructionId,
+        originalText: "Please inspect the linked interoperability guide",
+        interpretedNeed: "Inspect interoperability guide",
+    });
+    expect(requests[0]).not.toHaveProperty("originalMessage");
+    expect(requests[0]).not.toHaveProperty("_creationTime");
+    const facts = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        const mission = await ctx.db.get(f.missionId);
+        assert(run && mission);
+        return readWorkbenchFacts(ctx, run, mission);
+    });
+    assert(facts.kind === "ready");
+    expect(facts.context.analystRequests).toEqual(requests);
 });

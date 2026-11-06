@@ -31,6 +31,7 @@ export const agentCompletionValidator = v.union(
     ...registeredSchemas.map((schema) => schema.completion),
 );
 export const consultMissionStateInputValidator = v.object({
+    reference: v.optional(v.id("agentExecutionEvents")),
     cursor: v.optional(v.string()),
 });
 export const consultConversationInputValidator = v.object({

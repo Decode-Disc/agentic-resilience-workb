@@ -3,7 +3,10 @@ import { controlledDocumentaryUse } from "@convex/domain/sourceSelectionPolicy";
 import { completeSources } from "@convex/domain/sources";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import {
+    recordDocumentaryRead,
+    seedCapturedSources,
+} from "@/__tests__/setup/sources-mission";
 
 const examiner = vi.hoisted(() => vi.fn());
 vi.mock("@convex/integrations/documentaryControl", () => ({
@@ -144,9 +147,8 @@ async function qualify(f: Awaited<ReturnType<typeof seedCapturedSources>>) {
                             kind: "context",
                             evidence: [
                                 {
-                                    captureId: f.captureId,
+                                    readRequestId: f.readRequestId,
                                     passageOrder: f.passage.order,
-                                    quotation: f.passage.quotation,
                                 },
                             ],
                         },
@@ -234,7 +236,15 @@ test("capacity planning preserves independent qualification when earlier contrib
         });
         const indexed = await ctx.db.get(passageId);
         assert(indexed);
-        return { sourceId, captureId, passage: indexed };
+        const readRequestId = await recordDocumentaryRead(ctx, {
+            runId: f.runId,
+            missionId: f.missionId,
+            captureId,
+            evidence: [
+                { passageOrder: indexed.order, quotation: indexed.quotation },
+            ],
+        });
+        return { sourceId, captureId, passage: indexed, readRequestId };
     });
     expect((await qualify({ ...f, ...next })).outcome.kind).toBe("success");
     const preparation = await f.t.run((ctx) => ctx.db.get(f.preparationId));
@@ -312,7 +322,10 @@ test.each([
                 needId: "common-context",
                 sourceId: f.sourceId,
                 proposition: contribution.statement,
-                evidence: contribution.evidence,
+                evidence: contribution.evidence.map((e) => ({
+                    readRequestId: f.readRequestId,
+                    passageOrder: e.passageOrder,
+                })),
                 targets: [
                     {
                         qualificationTaskId: taskId,
@@ -460,9 +473,8 @@ test("one examination loads a shared capture once and supplies each exact contex
                         attribution: "publisher",
                         kind: "context" as const,
                         evidence: Array.from({ length: 5 }, () => ({
-                            captureId: f.captureId,
+                            readRequestId: f.readRequestId,
                             passageOrder: f.passage.order,
-                            quotation: f.passage.quotation,
                         })),
                     },
                 })),
@@ -572,10 +584,12 @@ test("controlled material is handed off partially with exact contribution versio
         expectedGeneration: 4,
         response: {
             kind: "complete",
-            needsRevision: 1,
-            needs: material.needs.map(
-                ({ contributions: _contributions, ...need }) => need,
-            ),
+
+            needs: material.needs.map(({ needId, gap, unfinished }) => ({
+                needId,
+                gap,
+                unfinished,
+            })),
         },
     });
     expect(finished).toMatchObject({ kind: "completed" });

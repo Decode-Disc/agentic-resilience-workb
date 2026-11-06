@@ -395,6 +395,9 @@ if (process.env.LOCAL_RUNTIME_FIXTURE_FAIL === "yes") process.exit(17);
 if (process.env.LOCAL_RUNTIME_CONVEX_ARGS_FILE) {
     writeFileSync(process.env.LOCAL_RUNTIME_CONVEX_ARGS_FILE, JSON.stringify(process.argv.slice(2)));
 }
+if (process.env.LOCAL_RUNTIME_CONVEX_ENV_FILE) {
+    writeFileSync(process.env.LOCAL_RUNTIME_CONVEX_ENV_FILE, JSON.stringify({ activeThreads: process.env.FUNRUN_ISOLATE_ACTIVE_THREADS ?? null, queueIdleMs: process.env.ISOLATE_QUEUE_IDLE_TIMEOUT_MS ?? null, queueCongestedMs: process.env.ISOLATE_QUEUE_CONGESTED_TIMEOUT_MS ?? null, userTimeout: process.env.DATABASE_UDF_USER_TIMEOUT_SECONDS ?? null }));
+}
 const root = process.cwd();
 const deploymentName = parseEnv(readFileSync(".env.local", "utf8")).CONVEX_DEPLOYMENT.split(":")[1];
 const commonDir = execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { encoding: "utf8" }).trim();
@@ -811,6 +814,76 @@ it("forwards e2e arguments through the startup lock to Playwright", async () => 
     ]);
     expect(output).not.toMatch(/startup-lock-held/);
 }, 20_000);
+
+it.each([
+    undefined,
+    "0",
+    "3",
+])("uses native isolate concurrency while preserving explicit override %s", async (override) => {
+    const { first } = await createWorktreePair();
+    const envPath = join(first, "convex-env.json");
+    const child = spawnLocalDev(first, "convex:dev", {
+        FUNRUN_ISOLATE_ACTIVE_THREADS: override,
+        ISOLATE_QUEUE_IDLE_TIMEOUT_MS: undefined,
+        ISOLATE_QUEUE_CONGESTED_TIMEOUT_MS: undefined,
+        DATABASE_UDF_USER_TIMEOUT_SECONDS: undefined,
+        LOCAL_RUNTIME_CONVEX_ENV_FILE: envPath,
+        LOCAL_RUNTIME_STARTUP_TIMEOUT_MS: "5000",
+    });
+    await waitForRuntimeManifest(first);
+    expect(JSON.parse(readFileSync(envPath, "utf8"))).toEqual({
+        activeThreads: override ?? null,
+        queueIdleMs: "10000",
+        queueCongestedMs: "10000",
+        userTimeout: "10",
+    });
+    child.kill("SIGTERM");
+    expect(await processExit(child)).toBe(0);
+});
+
+it.each([
+    undefined,
+    "3000",
+])("preserves the configured local queue wait with congested override %s", async (congested) => {
+    const { first } = await createWorktreePair();
+    const envPath = join(first, "convex-env.json");
+    const child = spawnLocalDev(first, "convex:dev", {
+        FUNRUN_ISOLATE_ACTIVE_THREADS: undefined,
+        ISOLATE_QUEUE_IDLE_TIMEOUT_MS: "6000",
+        ISOLATE_QUEUE_CONGESTED_TIMEOUT_MS: congested,
+        DATABASE_UDF_USER_TIMEOUT_SECONDS: undefined,
+        LOCAL_RUNTIME_CONVEX_ENV_FILE: envPath,
+        LOCAL_RUNTIME_STARTUP_TIMEOUT_MS: "5000",
+    });
+    await waitForRuntimeManifest(first);
+    expect(JSON.parse(readFileSync(envPath, "utf8"))).toEqual({
+        activeThreads: null,
+        queueIdleMs: "6000",
+        queueCongestedMs: congested ?? "6000",
+        userTimeout: "10",
+    });
+    child.kill("SIGTERM");
+    expect(await processExit(child)).toBe(0);
+});
+
+it.each([
+    undefined,
+    "2",
+])("provides local execution headroom while preserving explicit deadline %s", async (override) => {
+    const { first } = await createWorktreePair();
+    const envPath = join(first, "convex-env.json");
+    const child = spawnLocalDev(first, "convex:dev", {
+        DATABASE_UDF_USER_TIMEOUT_SECONDS: override,
+        LOCAL_RUNTIME_CONVEX_ENV_FILE: envPath,
+        LOCAL_RUNTIME_STARTUP_TIMEOUT_MS: "5000",
+    });
+    await waitForRuntimeManifest(first);
+    expect(JSON.parse(readFileSync(envPath, "utf8")).userTimeout).toBe(
+        override ?? "10",
+    );
+    child.kill("SIGTERM");
+    expect(await processExit(child)).toBe(0);
+});
 
 it("forwards Convex CLI arguments through the startup lock", async () => {
     const { first } = await createWorktreePair();
@@ -1628,12 +1701,7 @@ it("detects an occupied frontend port before spawning the native watcher", async
     let output = "";
     child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString()));
     child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
-    const result = await Promise.race([
-        processExit(child),
-        new Promise<string>((done) =>
-            setTimeout(() => done("still running"), 2_000),
-        ),
-    ]);
+    const result = await processExit(child);
     expect(result, output).toBe(1);
     expect(existsSync(argsPath)).toBe(false);
     expect(output).toContain("already in use");
@@ -1703,23 +1771,11 @@ it("restarts the owned development stack on the same ports", async () => {
     const restart = spawnLocalDev(first, "dev:restart", env, [], "pipe");
     let errors = "";
     restart.stderr?.on("data", (chunk: Buffer) => (errors += chunk.toString()));
-    const deadline = Date.now() + 5_000;
-    let after = before;
-    while (Date.now() < deadline) {
-        after = JSON.parse(
-            readFileSync(join(first, ".local-runtime/manifest.json"), "utf8"),
-        );
-        if (
-            after.origins.web &&
-            after.ownedPids.some(
-                (entry: { role: string; pid: number }) =>
-                    entry.role === "convex" && entry.pid !== oldNativePid,
-            )
-        )
-            break;
-        if (restart.exitCode !== null) break;
-        await new Promise((done) => setTimeout(done, 25));
-    }
+    const after = await waitForManifest(
+        first,
+        "web",
+        before.originOwners.web.runId,
+    );
     expect(restart.exitCode, errors).toBeNull();
     expect(
         after.ownedPids.find(

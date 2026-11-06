@@ -543,7 +543,7 @@ test("stopping a native response settles its cancelled tasks and reuses the conv
     expect(sessions[0].settledSequence).toBe(sessions[0].sequence);
 }, 30000);
 
-test("unversioned Workbench conversations retain strict JSON completions and their separate historical journals", async () => {
+test("superseded conversations retain readable history but cannot generate through the current definition", async () => {
     vi.stubEnv("OPENROUTER_API_KEY", "local-fixture-only");
     vi.stubGlobal(
         "fetch",
@@ -575,8 +575,8 @@ test("unversioned Workbench conversations retain strict JSON completions and the
     });
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     const sessions = await t.run((ctx) => ctx.db.query("piSessions").collect());
-    expect(sessions).toHaveLength(2);
-    expect(sessions.every((session) => !session.conversationId)).toBe(true);
+    expect(sessions).toHaveLength(0);
+    expect(fetch).not.toHaveBeenCalled();
     const page = await client.query(api.execution.conversations.listMessages, {
         runId,
         paginationOpts: { numItems: 20, cursor: null },
@@ -585,7 +585,10 @@ test("unversioned Workbench conversations retain strict JSON completions and the
         page.page
             .filter((message) => message.role === "assistant")
             .map((message) => message.text),
-    ).toEqual(["Legacy response.", "Legacy response."]);
+    ).toEqual([]);
+    expect(
+        page.page.filter((message) => message.role === "user").length,
+    ).toBeGreaterThan(0);
 }, 30000);
 
 test("successive steers retain their native submission identity across instruction versions", async () => {

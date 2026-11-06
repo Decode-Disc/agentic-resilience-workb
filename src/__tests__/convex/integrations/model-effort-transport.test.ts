@@ -215,3 +215,42 @@ test.each([
     });
     expect(fetch).toHaveBeenCalledOnce();
 });
+
+import { recommendedReasoningEffort } from "@convex/integrations/modelRouting";
+test("recommended reasoning follows advertised capability rather than a model name or low default", () => {
+    const descriptor = {
+        contextWindow: 32768,
+        maxTokens: 8192,
+        reasoning: true,
+        inputPrice: 0,
+        outputPrice: 0,
+        cacheReadPrice: 0,
+        structuredOutputs: true,
+    };
+    expect(
+        recommendedReasoningEffort({
+            ...descriptor,
+            reasoningEfforts: ["high", "medium", "low"],
+        }),
+    ).toBe("medium");
+    expect(
+        recommendedReasoningEffort({
+            ...descriptor,
+            reasoningEfforts: ["max", "high", "low"],
+        }),
+    ).toBe("high");
+    expect(
+        recommendedReasoningEffort({
+            ...descriptor,
+            reasoningEfforts: ["none", "low"],
+        }),
+    ).toBe("low");
+    expect(recommendedReasoningEffort(descriptor)).toBeUndefined();
+    expect(
+        recommendedReasoningEffort({
+            ...descriptor,
+            reasoning: false,
+            reasoningEfforts: ["medium"],
+        }),
+    ).toBeUndefined();
+});

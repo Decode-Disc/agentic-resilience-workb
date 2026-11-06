@@ -1,4 +1,5 @@
 import { internal } from "@convex/_generated/api";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import {
     seedWorkbench,
@@ -10,7 +11,7 @@ afterEach(() => {
     vi.unstubAllEnvs();
 });
 
-test("new Workbench conversations pin version 2 while unversioned conversations keep version 1", async () => {
+test("new Workbench conversations pin the current version and refuse superseded unversioned execution", async () => {
     const { t, runId } = await seedWorkbench();
     const conversation = await t.run((ctx) =>
         ctx.db
@@ -20,7 +21,7 @@ test("new Workbench conversations pin version 2 while unversioned conversations 
     );
     expect(conversation).toMatchObject({
         definitionId: "workbench_v1",
-        definitionVersion: 2,
+        definitionVersion: getAgentDefinition("workbench_v1").version,
     });
     if (!conversation) throw new Error("Missing conversation");
     await t.run((ctx) =>
@@ -29,19 +30,14 @@ test("new Workbench conversations pin version 2 while unversioned conversations 
             definitionVersion: undefined,
         }),
     );
-    const active = await t.mutation(
-        internal.execution.conversations.startTurn,
-        {
+    await expect(
+        t.mutation(internal.execution.conversations.startTurn, {
             runId,
             definitionId: "workbench_v1",
             scope: { kind: "workbench_v1" },
             simulation: false,
-        },
-    );
-    assert(active);
-    expect(await t.run((ctx) => ctx.db.get(active.missionId))).toMatchObject({
-        definitionVersion: 1,
-    });
+        }),
+    ).rejects.toThrow("definition_version_conflict");
 });
 
 test("a conversation journal rejects handover until its native tail settles, then fences its former mission", async () => {
@@ -128,7 +124,10 @@ test("successive Workbench responses reopen one native journal and retain the an
             )
             .first(),
     );
-    expect(first).toMatchObject({ definitionVersion: 2, status: "completed" });
+    expect(first).toMatchObject({
+        definitionVersion: getAgentDefinition("workbench_v1").version,
+        status: "completed",
+    });
     const { api } = await import("@convex/_generated/api");
     await client.mutation(api.execution.conversations.submit, {
         runId,

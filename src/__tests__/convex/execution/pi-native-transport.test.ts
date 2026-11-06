@@ -12,7 +12,7 @@ afterEach(() => {
 });
 
 function reply(
-    completion: object,
+    completion: object | string,
     finishReason = "stop",
     usage: Record<string, unknown> = {
         prompt_tokens: 10,
@@ -22,7 +22,7 @@ function reply(
     metadata: Record<string, unknown> = {},
 ) {
     return new Response(
-        `data: ${JSON.stringify({ ...metadata, id: "fixture-native", choices: [{ index: 0, delta: { role: "assistant", content: JSON.stringify(completion) }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ ...metadata, id: "fixture-native", choices: [{ index: 0, delta: {}, finish_reason: finishReason }], usage })}\n\ndata: [DONE]\n\n`,
+        `data: ${JSON.stringify({ ...metadata, id: "fixture-native", choices: [{ index: 0, delta: { role: "assistant", content: typeof completion === "string" ? completion : JSON.stringify(completion) }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ ...metadata, id: "fixture-native", choices: [{ index: 0, delta: {}, finish_reason: finishReason }], usage })}\n\ndata: [DONE]\n\n`,
         { headers: { "content-type": "text/event-stream" } },
     );
 }
@@ -152,6 +152,90 @@ async function fixture(reasoningEffort?: ModelRoute["reasoningEffort"]) {
     });
     return { ...f, missionId };
 }
+
+test.each([
+    { repeat: false, format: "malformed" },
+    { repeat: true, format: "malformed" },
+    { repeat: false, format: "wrong_schema" },
+    { repeat: true, format: "wrong_schema" },
+])("native Pi corrects received completions ($format, repeated=$repeat)", async ({
+    repeat,
+    format,
+}) => {
+    const malformed =
+        'Preparation is finished.\n```json\n{"kind":"complete","captureIds":[]}\n```';
+    const invalid =
+        format === "malformed"
+            ? malformed
+            : JSON.stringify({ kind: "complete", text: "Finished." });
+    const code =
+        format === "malformed" ? "invalid_output" : "invalid_completion";
+    let f: Awaited<ReturnType<typeof fixture>>;
+    const bodies: { messages: { content: unknown }[] }[] = [];
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (_url, init) => {
+            bodies.push(JSON.parse(String(init?.body)));
+            return reply(
+                repeat || bodies.length === 1
+                    ? invalid
+                    : { kind: "complete", captureIds: [f.captureId] },
+                "stop",
+                {
+                    prompt_tokens: 10,
+                    completion_tokens: 5,
+                    total_tokens: 15,
+                    cost: 0.001,
+                },
+            );
+        }),
+    );
+    f = await fixture();
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    const observed = await f.t.run(async (ctx) => ({
+        mission: await ctx.db.get(f.missionId),
+        calls: await ctx.db.query("providerCalls").collect(),
+        invocations: await ctx.db
+            .query("agentInvocations")
+            .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
+            .collect(),
+        requests: await ctx.db
+            .query("agentOperationRequests")
+            .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
+            .collect(),
+    }));
+    expect(observed.mission).toMatchObject({
+        status: repeat ? "blocked" : "completed",
+        ...(repeat ? { blockCode: "repetition_stop", noProgressTurns: 3 } : {}),
+    });
+    expect(observed.calls).toHaveLength(repeat ? 3 : 2);
+    expect(observed.calls[0]).toMatchObject({
+        status: format === "malformed" ? "failed" : "succeeded",
+        dispatchOutcome: "response_received",
+        reportedCost: 0.001,
+        ...(format === "malformed"
+            ? { errorCode: code, diagnostic: { output: invalid } }
+            : {}),
+    });
+    expect(
+        observed.calls.reduce((sum, call) => sum + (call.reportedCost ?? 0), 0),
+    ).toBe(repeat ? 0.003 : 0.002);
+    expect(observed.invocations).toHaveLength(repeat ? 3 : 2);
+    expect(observed.invocations[0]).toMatchObject({
+        correction: { code },
+        blockCode: "completion_correction_required",
+    });
+    expect(JSON.stringify(bodies[1]?.messages)).toContain(
+        format === "malformed" ? "Preparation is finished." : "Finished.",
+    );
+    expect(JSON.stringify(bodies[1]?.messages)).toContain(code);
+    expect(JSON.stringify(bodies[1]?.messages)).toContain(f.captureId);
+    expect(observed.requests).toHaveLength(1);
+    expect(observed.requests[0]?.input.kind).toBe("read_in_context");
+}, 30000);
 
 test("SDK-repaired malformed raw JSON is retained separately and refused before operation admission", async () => {
     let original = "";

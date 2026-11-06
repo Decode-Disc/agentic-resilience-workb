@@ -24,12 +24,11 @@ test("registered operation versions and native schema distinctions survive reloc
             .sort((a, b) => a.name.localeCompare(b.name)),
     }));
     expect(inventory.map((d) => `${d.id}:${d.version}`).sort()).toEqual([
-        "conversation_validation_v1:1",
-        "execution_validation_v1:1",
-        "saved_material_inspection_v1:1",
-        "sources_v1:1",
-        "workbench_v1:1",
-        "workbench_v1:2",
+        "conversation_validation_v1:2",
+        "execution_validation_v1:2",
+        "saved_material_inspection_v1:2",
+        "sources_v1:4",
+        "workbench_v1:4",
     ]);
     for (const d of definitions) {
         expect(d.operations).toHaveProperty("consult_conversation");
@@ -38,11 +37,11 @@ test("registered operation versions and native schema distinctions survive reloc
     }
     const versions = definitions.filter((d) => d.id === "workbench_v1");
     expect(versions.map((d) => d.operations.adjust_framing?.version)).toEqual([
-        1, 2,
+        2,
     ]);
     expect(
         versions.map((d) => d.operations.transmit_source_request?.version),
-    ).toEqual([1, 2]);
+    ).toEqual([2]);
     if (process.env.EXECUTION_INVENTORY_OUTPUT)
         writeFileSync(
             process.env.EXECUTION_INVENTORY_OUTPUT,

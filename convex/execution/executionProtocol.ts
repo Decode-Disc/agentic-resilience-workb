@@ -37,6 +37,8 @@ export type ExecutionScope = Infer<typeof executionScopeValidator>;
 type AgentOperationContract = {
     /** System operations are never offered to or admitted from model tool calls. */
     systemOnly?: true;
+    /** A successful result can restore exact retained material after a refusal, without inventing progress. */
+    materialRead?: true;
     identity(context: {
         mission?: Doc<"agentMissions">;
         runId: Id<"researchRuns">;
@@ -285,7 +287,11 @@ export const requestInputValidator = v.union(
 );
 
 export const operationRefusalValidator = v.union(
-    v.object({ kind: v.literal("unavailable"), code: v.string() }),
+    v.object({
+        kind: v.literal("unavailable"),
+        code: v.string(),
+        validation: v.optional(validationFeedbackValidator),
+    }),
     v.object({
         kind: v.literal("refused"),
         code: v.string(),

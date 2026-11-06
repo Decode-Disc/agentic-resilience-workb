@@ -113,17 +113,19 @@ export const savedMaterialOperations: Record<string, AgentOperationDefinition> =
     {
         search_available_material: {
             ...savedMaterialOperationBehavior,
+            materialRead: true,
             version: 1,
             description:
-                "Search one source in the mission's approved stored capture and return matching exact quotations.",
+                "Search one authorized saved capture with a nonblank query. Returns exact quotations and passageOrder locators; only returned locators can be read. Empty matches do not prove documentary absence. Inspect capture completeness and response omissions before concluding coverage.",
             inputValidator: searchAvailableMaterialInputValidator,
             resultValidator: searchAvailableMaterialResult,
         },
         read_in_context: {
             ...savedMaterialOperationBehavior,
+            materialRead: true,
             version: 1,
             description:
-                "Read one exact indexed quotation from an approved stored capture with bounded surrounding context.",
+                "Read a passageOrder returned by saved-material search in the same capture. Returns an exact quotation with bounded context and current documentary-use permissions. Capture/index omissions differ from response truncation; an unavailable locator was not read. Search again rather than guessing an order.",
             inputValidator: readInContextInputValidator,
             resultValidator: readInContextResult,
         },

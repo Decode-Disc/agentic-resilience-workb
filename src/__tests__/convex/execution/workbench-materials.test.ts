@@ -49,7 +49,7 @@ test("a Workbench response lists only accepted intact captures and admits its qu
     });
     assert(context.kind === "ready");
     const input = JSON.parse(context.inputJson);
-    expect(input.availableMaterials).toEqual([
+    expect(input.domain.availableMaterials).toEqual([
         expect.objectContaining({ title: "Material 2" }),
     ]);
     expect(input.conversationInstructions.messages).toHaveLength(20);
@@ -170,7 +170,7 @@ test("ended documentary treatment has the same current outcome in model context 
         expectedGeneration: 1,
     });
     assert(context.kind === "ready");
-    const request = JSON.parse(context.inputJson).analystRequests[0];
+    const request = JSON.parse(context.inputJson).domain.analystRequests[0];
     expect(request).toMatchObject({
         status: "completed",
         transmissionStatus: "transmitted",

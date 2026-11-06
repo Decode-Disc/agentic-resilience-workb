@@ -184,6 +184,7 @@ export async function invokeControlledGeneration(
                 prompt: invocation.inputJson,
                 operations: tools,
                 nativeConversation: definition.nativeConversation,
+                contextRendering: definition.contextRendering,
                 definitionVersion: definition.version,
                 nativeRoute:
                     mission.executionRuntime === "pi-durable"

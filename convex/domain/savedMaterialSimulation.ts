@@ -1,10 +1,14 @@
-import type { AgentDefinition } from "@convex/execution/agentDefinition";
+import {
+    type AgentDefinition,
+    domainSnapshot,
+} from "@convex/execution/agentDefinition";
 import { validate } from "convex-helpers/validators";
 import { savedMaterialCompletionValidator } from "./savedMaterialOperations";
 
 export const savedMaterialSimulation: NonNullable<
     AgentDefinition["simulate"]
 > = (input) => {
+    input = domainSnapshot(input);
     if (
         !input ||
         typeof input !== "object" ||

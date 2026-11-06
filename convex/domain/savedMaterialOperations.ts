@@ -4,7 +4,7 @@ import { sourceMaterialReferenceValidator } from "./sourceRetrievalPolicy";
 import { documentaryStatusValidator } from "./sourcesContracts";
 
 export const SAVED_MATERIAL_DEFINITION_ID = "saved_material_inspection_v1";
-export const SAVED_MATERIAL_DEFINITION_VERSION = 1;
+export const SAVED_MATERIAL_DEFINITION_VERSION = 2;
 export const savedMaterialDefinitionId = v.literal(
     SAVED_MATERIAL_DEFINITION_ID,
 );

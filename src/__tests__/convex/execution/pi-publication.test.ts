@@ -105,7 +105,9 @@ test("publication cannot be released while an admitted writer is still draining"
     ).resolves.toBeNull();
 });
 
-test("explicit publication recovery fences an expired admitted writer without provider work", async () => {
+test.each([
+    1, 2, 3,
+])("publication recovery fences an expired Workbench v%s writer without provider work", async (version) => {
     const external = vi.fn(() => {
         throw new Error("External I/O forbidden");
     });
@@ -135,6 +137,23 @@ test("explicit publication recovery fences an expired admitted writer without pr
         ctx.db.query("piSessions").first(),
     );
     assert(admittedSession);
+    if (version !== 3) {
+        await t.run(async (ctx) => {
+            const conversation = await ctx.db
+                .query("agentConversations")
+                .withIndex("by_run", (q) => q.eq("runId", runId))
+                .unique();
+            assert(conversation);
+            await ctx.db.patch(conversation._id, {
+                definitionVersion: version,
+            });
+            await ctx.db.patch(turn.missionId, { definitionVersion: version });
+            if (version === 1)
+                await ctx.db.patch(admittedSession._id, {
+                    conversationId: undefined,
+                });
+        });
+    }
     await expect(
         t.mutation(internal.execution.piControl.recoverPublicationWorkers, {}),
     ).rejects.toThrow("publication_workers_active");

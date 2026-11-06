@@ -26,9 +26,9 @@ export const consultMissionStateOperation: Extract<
     { effectKind: "read" }
 > = {
     effectKind: "read",
-    version: 2,
+    version: 3,
     description:
-        "Read current required mission state and immutable retained observations. Omit cursor initially; later copy only this operation's continueCursor, never an ID or an invented offset.",
+        "Read current required mission state and immutable retained observations, including refused proposals. Supply reference to inspect one observed journal event, or omit reference to browse history. Omit cursor initially; continue only with this operation's continueCursor and omit reference on continuation.",
     inputValidator: consultMissionStateInputValidator,
     resultValidator: z.strictObject({
         kind: z.literal("consult_mission_state"),
@@ -124,6 +124,7 @@ const consultConversation: Extract<
     { effectKind: "read" }
 > = {
     ...consultMissionStateOperation,
+    version: 2,
     description:
         "Read exact prior processed conversation messages in canonical fragments. Queued instructions and messages published after this read's snapshot are excluded. Omit cursor initially; later copy only this operation's continueCursor.",
     inputValidator: consultConversationInputValidator,

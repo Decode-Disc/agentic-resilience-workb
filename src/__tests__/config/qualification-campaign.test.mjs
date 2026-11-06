@@ -10,7 +10,13 @@ test("a campaign cannot silently default its spending allowance or expiration", 
     );
 });
 
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+    existsSync,
+    mkdtempSync,
+    readFileSync,
+    unlinkSync,
+    writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCampaign } from "../../../scripts/evaluations/workbench-browser/campaign.ts";
@@ -95,6 +101,110 @@ test("the qualification lock stays held until cleanup releases it", async () => 
     await release();
     await (await acquireCampaignLock(lock))();
 });
+
+for (const legacy of [false, true]) {
+    test(`recovery freezes a new evidence revision and preserves failed history (legacy=${legacy})`, () => {
+        const root = mkdtempSync(join(tmpdir(), "campaign-recovery-review-"));
+        writeFileSync(
+            join(root, "campaign-lot.json"),
+            JSON.stringify({
+                manifest: makeManifest(),
+                candidateHash: "b".repeat(64),
+                fingerprints: {},
+            }),
+        );
+        const resultPath = join(root, "campaign-result.json");
+        const reconciliationPath = join(root, "reconciliation.json");
+        const sourcePath = join(root, "evidence-index-source.txt");
+        writeFileSync(sourcePath, "Raw evidence");
+        writeFileSync(
+            resultPath,
+            JSON.stringify({
+                completed: false,
+                cleanupCompleted: false,
+                failure: "Timeout during initialization",
+            }),
+        );
+        writeFileSync(
+            reconciliationPath,
+            JSON.stringify({ reconciled: false }),
+        );
+        const first = campaignReviewTemplate(root);
+        writeFileSync(
+            join(root, "review-template.json"),
+            JSON.stringify(first),
+        );
+        if (legacy) {
+            unlinkSync(join(root, `evidence-index-${first.evidenceHash}.json`));
+            unlinkSync(
+                join(root, `review-template-${first.evidenceHash}.json`),
+            );
+        }
+        const originalIndex = readFileSync(
+            join(root, "evidence-index.json"),
+            "utf8",
+        );
+        writeFileSync(
+            resultPath,
+            JSON.stringify({
+                completed: false,
+                cleanupCompleted: true,
+                failure: "Timeout during initialization",
+            }),
+        );
+        writeFileSync(reconciliationPath, JSON.stringify({ reconciled: true }));
+        assert.throws(
+            () => campaignReviewTemplate(root),
+            /Stale campaign evidence/,
+        );
+
+        const recovered = campaignReviewTemplate(root, { recovery: true });
+        assert.notEqual(recovered.evidenceHash, first.evidenceHash);
+        assert.equal(
+            readFileSync(join(root, "evidence-index.json"), "utf8"),
+            originalIndex,
+        );
+        assert(
+            existsSync(join(root, `evidence-index-${first.evidenceHash}.json`)),
+        );
+        assert(
+            existsSync(
+                join(root, `evidence-index-${recovered.evidenceHash}.json`),
+            ),
+        );
+        writeFileSync(
+            join(root, "review-template.json"),
+            JSON.stringify(recovered),
+        );
+        assert.throws(
+            () => assessCampaignLot(root, first),
+            /Stale campaign review/,
+        );
+        for (const c of recovered.cases) {
+            c.checks = Object.fromEntries(
+                Object.keys(c.checks).map((key) => [key, "passed"]),
+            );
+            c.finding =
+                "Cleanup recovered, but the original execution failure remains.";
+            c.evidence = ["campaign-result.json", "reconciliation.json"];
+        }
+        assert.equal(assessCampaignLot(root, recovered).verdict, "failed");
+        writeFileSync(sourcePath, "Changed raw evidence");
+        assert.throws(
+            () => campaignReviewTemplate(root),
+            /Stale campaign evidence/,
+        );
+        writeFileSync(sourcePath, "Raw evidence");
+        writeFileSync(
+            reconciliationPath,
+            JSON.stringify({ reconciled: false }),
+        );
+        assert.throws(
+            () => campaignReviewTemplate(root),
+            /Stale campaign evidence/,
+        );
+    });
+}
 
 import { sourcesBatterySchema } from "../../../scripts/evaluations/workbench-browser/protocol.ts";
 

@@ -17,6 +17,7 @@ export async function readMissionState(
         missionId: Id<"agentMissions">;
         expectedGeneration: number;
     },
+    maximumBytes?: number,
 ): Promise<
     | { kind: "ready"; state: Record<string, unknown> }
     | { kind: "unavailable"; code: string }
@@ -32,19 +33,42 @@ export async function readMissionState(
         typeof input.definition.version !== "number"
     )
         throw executionError("mission_state_invalid");
+    const required = {
+        mission: input.mission,
+        humanInstructions: input.humanInstructions,
+        conversationInstructions: input.conversationInstructions,
+        decisions: input.decisions,
+        constraints: input.constraints,
+        workingNotes: input.workingNotes,
+    };
+    const base = {
+        ...required,
+        contextRendering: input.contextRendering,
+        domain: input.domain,
+        activeWork: input.activeWork,
+    };
+    const projection =
+        getAgentDefinition(
+            input.definition.id,
+            input.definition.version,
+        ).consultationContext?.(base, maximumBytes) ?? base;
+    const work = isRecord(projection.activeWork)
+        ? projection.activeWork
+        : input.activeWork;
     return {
         kind: "ready",
         state: {
-            ...getAgentDefinition(
-                input.definition.id,
-                input.definition.version,
-            ).consultationContext?.(input),
-            mission: input.mission,
-            humanInstructions: input.humanInstructions,
-            decisions: input.decisions,
-            constraints: input.constraints,
-            workingNotes: input.workingNotes,
-            activeWork: input.activeWork,
+            ...projection,
+            ...required,
+            activeWork:
+                isRecord(work) && isRecord(input.activeWork)
+                    ? {
+                          ...work,
+                          unfinishedObligations:
+                              input.activeWork.unfinishedObligations,
+                          noProgressTurns: input.activeWork.noProgressTurns,
+                      }
+                    : input.activeWork,
         },
     };
 }

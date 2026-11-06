@@ -997,6 +997,7 @@ export const recordResult = internalMutation({
                         progressKeys: _keys,
                         noProgressTurns: _turns,
                         lastSettledInvocationId: _settled,
+                        recoveryRead: _recoveryRead,
                         ...domainMission
                     } = mission;
                     progress =
@@ -1021,7 +1022,9 @@ export const recordResult = internalMutation({
                         outcome.kind === "success"
                             ? [
                                   ...(progress.facts ?? []),
-                                  ...(historyRead?.fragmentIds ?? []),
+                                  ...(historyRead?.restorable === false
+                                      ? []
+                                      : (historyRead?.fragmentIds ?? [])),
                               ]
                             : [],
                     );

@@ -22,6 +22,7 @@ import {
     requireSourcesPreparation,
     SOURCES_HANDOFF_READ_CAPACITY,
     sourcesCompletionAccounting,
+    sourcesReadingReferences,
     sourcesTaskObservations,
 } from "./sources";
 import {
@@ -264,6 +265,11 @@ export const sourcesDefinition: AgentDefinition & { id: "sources_v1" } = {
                     ...(await sourcesTaskObservations(
                         ctx,
                         run._id,
+                        state.data,
+                    )),
+                    ...(await sourcesReadingReferences(
+                        ctx,
+                        mission,
                         state.data,
                     )),
                     restrictedContributions: state.data.restrictedContributions,

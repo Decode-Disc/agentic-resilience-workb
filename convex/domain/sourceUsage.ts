@@ -1,14 +1,18 @@
 import type { DataModel, Doc, Id } from "@convex/_generated/dataModel";
+import { executionError } from "@convex/execution/errors";
 import {
     MAX_CLAIM_STATEMENT_CHARS,
     MAX_QUOTATION_CHARS,
 } from "@convex/resourceLimits";
 import type { GenericDatabaseReader } from "convex/server";
 import type { Infer } from "convex/values";
-import { executionError } from "@convex/execution/errors";
 import { zodToConvex } from "convex-helpers/server/zod4";
 import { z } from "zod";
 import type { ClaimClassification, EvidenceRelation } from "./claims";
+import {
+    readInContextResult,
+    searchAvailableMaterialResult,
+} from "./savedMaterialOperations";
 import {
     SOURCE_COMPARISON_MAX_CONTEXT_PASSAGES_PER_FINDING,
     SOURCE_COMPARISON_MAX_PASSAGES_PER_FINDING,
@@ -29,16 +33,6 @@ import {
     sourceQualificationSchema,
 } from "./sourceQualification";
 import type { SourceReviewReads } from "./sourceReviewReads";
-import {
-    readInContextResult,
-    searchAvailableMaterialResult,
-} from "./savedMaterialOperations";
-import {
-    SOURCES_MAX_EVIDENCE_REFERENCES,
-    type documentaryEvidenceSelectionValidator,
-    type documentaryQuoteValidator,
-    type SourcesPreparation,
-} from "./sourcesContracts";
 import type {
     SourceCoverageRole,
     SourceRoleAvailability,
@@ -47,6 +41,12 @@ import {
     SOURCE_EVIDENCE_USAGES,
     sourceFindingUsage,
 } from "./sourceSelectionPolicy";
+import {
+    type documentaryEvidenceSelectionValidator,
+    type documentaryQuoteValidator,
+    SOURCES_MAX_EVIDENCE_REFERENCES,
+    type SourcesPreparation,
+} from "./sourcesContracts";
 
 // A proposal stores comparison references in one Convex array; this is a format capacity, not an attempt allowance.
 const MAX_COMPARISON_HISTORY_REFERENCES = 8192;
@@ -660,6 +660,57 @@ export function validatePreparedEvidenceUse(input: {
     return { allowed: false, reasonCode: "source_usage_restricted" };
 }
 
+/** One admission rule governs evidence materialization and the durable reading-reference projection. */
+export function admittedDocumentaryReading(
+    read: Doc<"agentOperationRequests"> | null,
+    scope: Pick<Doc<"agentOperationRequests">, "runId" | "missionId">,
+    data: Pick<SourcesPreparation, "captureIds">,
+) {
+    if (
+        !read ||
+        read.runId !== scope.runId ||
+        read.missionId !== scope.missionId ||
+        read.status !== "completed" ||
+        read.adoptedAt === undefined ||
+        read.adoptionRefusalCode !== undefined ||
+        read.outcome?.kind !== "success" ||
+        read.pin?.kind !== "saved_material_inspection_v1" ||
+        !read.pin.expectedCaptureId ||
+        !data.captureIds.includes(read.pin.expectedCaptureId)
+    )
+        return null;
+    let value: unknown;
+    try {
+        value = JSON.parse(read.outcome.valueJson);
+    } catch {
+        throw executionError("documentary_quote_invalid");
+    }
+    const parsed =
+        read.input.kind === "search_available_material"
+            ? searchAvailableMaterialResult.safeParse(value)
+            : read.input.kind === "read_in_context"
+              ? readInContextResult.safeParse(value)
+              : null;
+    if (
+        !parsed?.success ||
+        parsed.data.sourceId !==
+            ("sourceId" in read.input ? read.input.sourceId : undefined) ||
+        parsed.data.captureId !== read.pin.expectedCaptureId ||
+        parsed.data.contentHash !== read.pin.expectedContentHash
+    )
+        throw executionError("documentary_quote_invalid");
+    return {
+        kind: parsed.data.kind,
+        sourceId: parsed.data.sourceId,
+        captureId: parsed.data.captureId,
+        contentHash: parsed.data.contentHash,
+        passages:
+            parsed.data.kind === "search_available_material"
+                ? parsed.data.passages
+                : [parsed.data.passage],
+    };
+}
+
 /** Resolves only passages actually returned by an adopted read in the caller's execution scope. */
 export async function materializeDocumentaryEvidence(
     reads: SourceReviewReads,
@@ -675,52 +726,19 @@ export async function materializeDocumentaryEvidence(
     const evidence = [];
     for (const selection of selections) {
         const read = await reads.request(selection.readRequestId);
+        const material = admittedDocumentaryReading(read, request, data);
         if (
-            !read ||
-            read.runId !== request.runId ||
-            read.missionId !== request.missionId ||
-            read.status !== "completed" ||
-            read.adoptedAt === undefined ||
-            read.adoptionRefusalCode !== undefined ||
-            read.outcome?.kind !== "success" ||
-            read.pin?.kind !== "saved_material_inspection_v1" ||
-            !read.pin.expectedCaptureId ||
-            !data.captureIds.includes(read.pin.expectedCaptureId) ||
+            !material ||
             !Number.isSafeInteger(selection.passageOrder) ||
             selection.passageOrder < 0
         )
             throw executionError("documentary_quote_invalid");
-        let value: unknown;
-        try {
-            value = JSON.parse(read.outcome.valueJson);
-        } catch {
-            throw executionError("documentary_quote_invalid");
-        }
-        const parsed =
-            read.input.kind === "search_available_material"
-                ? searchAvailableMaterialResult.safeParse(value)
-                : read.input.kind === "read_in_context"
-                  ? readInContextResult.safeParse(value)
-                  : null;
-        if (
-            !parsed?.success ||
-            parsed.data.sourceId !==
-                ("sourceId" in read.input ? read.input.sourceId : undefined) ||
-            parsed.data.captureId !== read.pin.expectedCaptureId ||
-            parsed.data.contentHash !== read.pin.expectedContentHash
-        )
-            throw executionError("documentary_quote_invalid");
-        const passage =
-            parsed.data.kind === "search_available_material"
-                ? parsed.data.passages.find(
-                      (p) => p.passageOrder === selection.passageOrder,
-                  )
-                : parsed.data.passage.passageOrder === selection.passageOrder
-                  ? parsed.data.passage
-                  : undefined;
+        const passage = material.passages.find(
+            (p) => p.passageOrder === selection.passageOrder,
+        );
         if (!passage) throw executionError("documentary_quote_invalid");
         evidence.push({
-            captureId: parsed.data.captureId,
+            captureId: material.captureId,
             passageOrder: selection.passageOrder,
             quotation: passage.exactQuote,
         });

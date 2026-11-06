@@ -338,6 +338,7 @@ export const executionTables = {
         .index("by_mission_and_logical_key", ["missionId", "logicalKey"])
         .index("by_mission_and_actor", ["missionId", "actor"])
         .index("by_mission_and_status", ["missionId", "status"])
+        .index("by_mission_and_input_kind", ["missionId", "input.kind"])
         .index("by_invocation", ["invocationId"]),
     agentExecutionEvents: defineTable({
         protectedDiagnostic: v.optional(protectedDiagnosticValidator),

@@ -15,7 +15,8 @@ export const conversationValidationDefinition: AgentDefinition & {
     id: "conversation_validation_v1";
 } = {
     id: "conversation_validation_v1",
-    version: 1,
+    version: 2,
+    contextRendering: "separated_v1",
     executionScope: "conversation",
     authority: "local_fixture_conversation_only",
     instructions:

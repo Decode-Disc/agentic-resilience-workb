@@ -116,7 +116,7 @@ test.each([
     const { fixtureResult } = await import(
         "@convex/domain/conversationValidationOperations"
     );
-    const definition = getAgentDefinition("conversation_validation_v1", 1);
+    const definition = getAgentDefinition("conversation_validation_v1");
     const input =
         phase === "validator"
             ? { kind: "consult_run_state" as const }
@@ -277,7 +277,7 @@ test("new draft observations cannot renew a restoration window, while material p
 
 test("outcome-validation diagnostics survive an authority refusal after observation", async () => {
     const f = await seedHistoryMission();
-    const operation = getAgentDefinition("conversation_validation_v1", 1)
+    const operation = getAgentDefinition("conversation_validation_v1")
         .operations.consult_run_state;
     assert(operation);
     const requestId = await f.t.mutation(

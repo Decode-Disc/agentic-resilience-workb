@@ -47,7 +47,7 @@ test("post-preparation guidance preserves current state without an unstarted-res
         const mission = await ctx.db.get(active.missionId);
         const run = await ctx.db.get(runId);
         assert(mission && run);
-        const projected = await getAgentDefinition("workbench_v1", 2).context(
+        const projected = await getAgentDefinition("workbench_v1").context(
             ctx,
             mission,
             run,
@@ -59,13 +59,13 @@ test("post-preparation guidance preserves current state without an unstarted-res
             summary:
                 "Sources preparation has ended. Inspect the retained material and its limits. Question-led Investigation is not available yet.",
         });
-        expect(projected.context.responseGuidance).not.toContain(
+        expect(getAgentDefinition("workbench_v1").instructions).not.toContain(
             "Research has not started.",
         );
-        expect(projected.context.responseGuidance).not.toContain(
+        expect(getAgentDefinition("workbench_v1").instructions).not.toContain(
             "Choose Start research when ready.",
         );
-        expect(projected.context.responseGuidance).toContain(
+        expect(getAgentDefinition("workbench_v1").instructions).toContain(
             "research.summary",
         );
     });
@@ -88,12 +88,13 @@ test("Workbench context distinguishes unstarted, running, requested pause and ef
             const mission = await ctx.db.get(active.missionId),
                 run = await ctx.db.get(runId);
             assert(mission && run);
-            const projected = await getAgentDefinition(
-                "workbench_v1",
-                2,
-            ).context(ctx, mission, run);
+            const projected = await getAgentDefinition("workbench_v1").context(
+                ctx,
+                mission,
+                run,
+            );
             assert(projected.kind === "ready");
-            expect(projected.context.responseGuidance).toEqual(
+            expect(getAgentDefinition("workbench_v1").instructions).toEqual(
                 expect.stringContaining(
                     "does not establish documentary support",
                 ),
@@ -218,7 +219,7 @@ test("the real native compaction request receives Workbench provenance and appro
         "Only current framing describes what is saved in the research program",
     );
     expect(required).toContain(
-        "Explain research status using research.summary and the analyst's next action",
+        "Explain research status using domain.research.summary and the analyst's next action",
     );
     expect(required).not.toContain("Choose Start research when ready.");
     expect(required).toContain(

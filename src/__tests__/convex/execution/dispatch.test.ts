@@ -299,7 +299,7 @@ test("expiry still recovers an unacknowledged settlement and retains a late obse
 });
 
 test("unknown effect diagnostics never claim non-execution or authorize repetition", () => {
-    const reply = modelOperationOutcome(getAgentDefinition("workbench_v1", 2), {
+    const reply = modelOperationOutcome(getAgentDefinition("workbench_v1"), {
         kind: "unavailable",
         code: "operation_outcome_unknown",
     });
@@ -309,7 +309,7 @@ test("unknown effect diagnostics never claim non-execution or authorize repetiti
 });
 
 test("a missing atomic receipt forbids repeating a known callback success", () => {
-    const reply = modelOperationOutcome(getAgentDefinition("workbench_v1", 2), {
+    const reply = modelOperationOutcome(getAgentDefinition("workbench_v1"), {
         kind: "refused",
         code: "operation_effect_receipt_missing",
     });
@@ -443,9 +443,29 @@ test("native dispatch persists exact retained reading once and continuation rece
         provenance: "simulation",
     });
     if (next.kind !== "ready") throw new Error("Expected continuation");
-    expect(JSON.parse(next.inputJson).triggeringRequestsAndResults).toEqual([
-        expect.objectContaining({ requestId, outcome }),
+    const observed = JSON.parse(next.inputJson).triggeringRequestsAndResults;
+    expect(observed).toEqual([
+        expect.objectContaining({
+            requestId,
+            outcome: { kind: "success", captureId },
+            historyReference: expect.any(String),
+        }),
     ]);
+    const { projectMissionHistoryEvent } = await import(
+        "@convex/execution/journal"
+    );
+    const retained = await t.run(async (ctx) => {
+        const id = ctx.db.normalizeId(
+            "agentExecutionEvents",
+            observed[0].historyReference,
+        );
+        const event = id ? await ctx.db.get(id) : null;
+        if (!event) throw new Error("Retained reading observation required");
+        return projectMissionHistoryEvent(ctx, event);
+    });
+    expect(JSON.parse(retained.json).observation.value.outcome).toEqual(
+        outcome,
+    );
     expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
         state: {
             kind: "saved_material_inspection_v1",
@@ -587,7 +607,7 @@ test("every mixed batch request has a persisted outcome and later dispatch reche
 });
 
 test("an adoption incident never claims its retained operation was not performed", () => {
-    const reply = modelOperationOutcome(getAgentDefinition("workbench_v1", 2), {
+    const reply = modelOperationOutcome(getAgentDefinition("workbench_v1"), {
         kind: "refused",
         code: "operation_adoption_failed",
     });

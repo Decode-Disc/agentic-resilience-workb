@@ -36,6 +36,8 @@ For a new operation, choose its declared effect kind and use the existing busine
 
 Keep mechanical parameters at the shared boundary that can derive them from observed state. Apply business validation in its domain owner. Pi retains the native generation/tool loop and compaction; Convex retains authority, persistence, scheduling, accounting and publication.
 
+For instruction or context changes, use the definition's current composition and the shared renderer. Stable method appears once at the root; current domain facts cannot overwrite executor authority. Reuse the same business projection for generation, consultation and advisory review, and distinguish action applicability from tools offered to the active message. Verify the actual installed serializer, not only the intermediate prompt. Keep model effort selection in the existing capability-aware configuration owner; preserve explicit choices and engaged pins. Extend domain diagnostics through the existing bounded correction mechanism rather than adding agent-specific repair loops.
+
 When relocating existing operations, move their bodies mechanically and establish preservation before rewriting behavior. Respect pinned records and versions; do not introduce an implicit migration or an extra compatibility layer.
 
 **Exit:** the real registered path uses the existing executor and owners, with no copied business rule or second retry, budget, history or publication mechanism.

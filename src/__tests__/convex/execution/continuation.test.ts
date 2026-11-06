@@ -1,6 +1,7 @@
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { sha256Hex } from "@convex/domain/sourcePassages";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import type { OperationOutcome } from "@convex/execution/agentDefinition";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { afterEach, expect, test, vi } from "vitest";
@@ -44,7 +45,8 @@ test.each([
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
         executionGeneration: 4,
-        workflowVersion: 1,
+        workflowVersion: getAgentDefinition("saved_material_inspection_v1")
+            .version,
         stepKey: "agent_reasoning",
         service: "model" as const,
         operation: "agent_reasoning",
@@ -244,7 +246,13 @@ test("a reused earlier request supplies its awaited result after newer requests"
     if (context.kind !== "ready") throw new Error("Expected context");
     expect(
         JSON.parse(context.inputJson).triggeringRequestsAndResults,
-    ).toContainEqual(expect.objectContaining({ requestId, outcome }));
+    ).toContainEqual(
+        expect.objectContaining({
+            requestId,
+            outcome: expect.objectContaining({ kind: outcome.kind }),
+            historyReference: expect.any(String),
+        }),
+    );
 });
 
 test("a recreated invocation receives retained notes, human instructions and obligations automatically", async () => {
@@ -279,7 +287,7 @@ test("a recreated invocation receives retained notes, human instructions and obl
     if (invocation.kind !== "ready")
         throw new Error("Expected ready invocation");
     const input = JSON.parse(invocation.inputJson);
-    expect(input.humanInstructions.researchAngle).toBe(
+    expect(input.domain.humanInstructions.researchAngle).toBe(
         "Compare operational control and distribution.",
     );
     expect(input.workingNotes.text).toContain(
@@ -537,7 +545,8 @@ test.each([
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
         executionGeneration: 4,
-        workflowVersion: 1,
+        workflowVersion: getAgentDefinition("saved_material_inspection_v1")
+            .version,
         stepKey: "agent_reasoning",
         service: "model" as const,
         operation: "agent_reasoning",

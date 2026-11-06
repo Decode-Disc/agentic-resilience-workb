@@ -87,6 +87,33 @@ export const pinHistoryRead: AgentOperationDefinition["pin"] = async (
             throw executionError("history_receipt_invalid");
         return { kind: "available", pin: retained };
     }
+    if ("reference" in input && input.reference !== undefined) {
+        if (
+            source !== "mission" ||
+            ("cursor" in input && input.cursor !== undefined)
+        )
+            return { kind: "unavailable", code: "history_reference_invalid" };
+        const event = await ctx.db.get(input.reference);
+        if (
+            !event ||
+            event.missionId !== mission._id ||
+            event.runId !== mission.runId ||
+            !event.sequence
+        )
+            return {
+                kind: "unavailable",
+                code: "history_reference_unavailable",
+            };
+        return {
+            kind: "available",
+            pin: {
+                kind: "history_read",
+                source,
+                reference: event._id,
+                frontier: { source, sequence: event.sequence },
+            },
+        };
+    }
     if ("cursor" in input && input.cursor !== undefined)
         return { kind: "available", pin: { kind: "history_read", source } };
     let frontier: Frontier;
@@ -140,16 +167,28 @@ async function resolvePosition(
     request: Doc<"agentOperationRequests">,
     pin: HistoryPin,
     generation: number,
-): Promise<{ frontier: Frontier; position: Position } | null> {
+): Promise<{
+    frontier: Frontier;
+    position: Position;
+    reference?: Id<"agentExecutionEvents">;
+} | null> {
     const cursor = "cursor" in request.input ? request.input.cursor : undefined;
     if (cursor === undefined) {
         if (!pin.frontier || pin.frontier.source !== pin.source)
             throw executionError("history_receipt_invalid");
         return {
             frontier: pin.frontier,
+            reference: pin.reference,
             position:
                 pin.source === "mission"
-                    ? { source: "mission", sequence: 1, offset: 0 }
+                    ? {
+                          source: "mission",
+                          sequence:
+                              pin.reference && pin.frontier.source === "mission"
+                                  ? pin.frontier.sequence
+                                  : 1,
+                          offset: 0,
+                      }
                     : {
                           source: "conversation",
                           cursor: null,
@@ -197,7 +236,13 @@ async function resolvePosition(
         return null;
     if (!validPosition(receipt.next, pin.source))
         throw executionError("history_receipt_invalid");
-    return { frontier: receipt.frontier, position: receipt.next };
+    return {
+        frontier: receipt.frontier,
+        position: receipt.next,
+        ...(previous.pin?.kind === "history_read" && previous.pin.reference
+            ? { reference: previous.pin.reference }
+            : {}),
+    };
 }
 
 /** Canonical boundaries make overlapping offsets unrepresentable without an issued server position. */
@@ -377,38 +422,62 @@ export async function readHistoryPage(
     );
     if (!resolved)
         return { outcome: { kind: "refused", code: "history_cursor_invalid" } };
-    const { frontier, position } = resolved;
+    const { frontier, position, reference } = resolved;
     const entries: HistoryEntry[] = [];
     const fragmentIds: string[] = [];
     let next: Position | null = null;
     let state: Record<string, unknown> | undefined;
+    let restorable = true;
     if (frontier.source === "mission" && position.source === "mission") {
-        const current = await readMissionState(ctx, {
-            missionId: mission._id,
-            expectedGeneration: args.expectedGeneration,
-        });
+        // Keep room for an immutable history fragment and its continuation envelope.
+        const current = await readMissionState(
+            ctx,
+            {
+                missionId: mission._id,
+                expectedGeneration: args.expectedGeneration,
+            },
+            MAX_HISTORY_RESULT_BYTES / 2,
+        );
         if (current.kind !== "ready") return { outcome: current };
         state = current.state;
         if (!Number.isSafeInteger(frontier.sequence) || frontier.sequence < 0)
             throw executionError("history_receipt_invalid");
-        const events =
-            position.sequence > frontier.sequence
-                ? []
-                : ctx.db
-                      .query("agentExecutionEvents")
-                      .withIndex("by_mission_and_history_source", (q) =>
-                          q
-                              .eq("missionId", mission._id)
-                              .gte("historySourceSequence", position.sequence)
-                              .lte("historySourceSequence", frontier.sequence),
-                      );
+        const referenced = reference ? await ctx.db.get(reference) : null;
+        if (
+            reference &&
+            (!referenced ||
+                referenced.missionId !== mission._id ||
+                referenced.runId !== mission.runId ||
+                referenced.sequence !== frontier.sequence)
+        )
+            return {
+                outcome: {
+                    kind: "refused",
+                    code: "history_reference_unavailable",
+                },
+            };
+        if (referenced && referenced.historySourceSequence === undefined)
+            restorable = false;
+        const events = referenced
+            ? [referenced]
+            : position.sequence > frontier.sequence
+              ? []
+              : ctx.db
+                    .query("agentExecutionEvents")
+                    .withIndex("by_mission_and_history_source", (q) =>
+                        q
+                            .eq("missionId", mission._id)
+                            .gte("historySourceSequence", position.sequence)
+                            .lte("historySourceSequence", frontier.sequence),
+                    );
         let offset = position.offset;
         let sourcesRead = 0;
         for await (const event of events) {
             sourcesRead++;
             if (
                 event.sequence === undefined ||
-                event.sequence !== event.historySourceSequence ||
+                (!reference &&
+                    event.sequence !== event.historySourceSequence) ||
                 event.runId !== mission.runId
             )
                 throw executionError("mission_history_invalid");
@@ -511,6 +580,7 @@ export async function readHistoryPage(
             instructionVersion: request.instructionVersion,
             frontier,
             fragmentIds,
+            ...(!restorable ? { restorable: false } : {}),
             next,
         },
     };

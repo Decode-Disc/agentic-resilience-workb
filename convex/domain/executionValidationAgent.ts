@@ -1,4 +1,7 @@
-import type { AgentDefinition } from "@convex/execution/agentDefinition";
+import {
+    type AgentDefinition,
+    domainSnapshot,
+} from "@convex/execution/agentDefinition";
 import { executionError } from "@convex/execution/errors";
 import { missionScope, missionState } from "@convex/execution/missionData";
 import {
@@ -19,7 +22,8 @@ export const executionValidationDefinition: AgentDefinition & {
     id: "execution_validation_v1";
 } = {
     id: "execution_validation_v1",
-    version: 1,
+    version: 2,
+    contextRendering: "separated_v1",
     executionScope: "research",
     authority: "local_fixture_validation_only",
     instructions:
@@ -116,6 +120,7 @@ export const executionValidationDefinition: AgentDefinition & {
         };
     },
     simulate(input) {
+        input = domainSnapshot(input);
         if (
             !input ||
             typeof input !== "object" ||

@@ -8,6 +8,10 @@ import type {
     AgentDefinition,
     AgentScope,
 } from "@convex/execution/agentDefinition";
+import {
+    agentMethodInstructions,
+    separatedContextInstructions,
+} from "@convex/execution/agentDefinition";
 import { commonOperations } from "@convex/execution/commonOperations";
 import { validateOperationExecutionResult } from "@convex/execution/executionProtocol";
 import { afterEach, assert, expect, test, vi } from "vitest";
@@ -242,4 +246,21 @@ test("registration rejects a definition overriding common operations", () => {
             },
         }),
     ).toThrow("operation_definition_conflict");
+});
+
+test("all current bindings install one autonomous recovery method and one rendering contract", () => {
+    for (const definition of registeredAgentDefinitions()) {
+        expect(
+            definition.instructions.split(agentMethodInstructions),
+        ).toHaveLength(2);
+        expect(
+            definition.instructions.split(separatedContextInstructions),
+        ).toHaveLength(definition.contextRendering === "separated_v1" ? 2 : 1);
+        expect(definition.compactionInstructions).toContain(
+            "exact observation references",
+        );
+        expect(
+            definition.operations.consult_mission_state?.inputValidator,
+        ).toHaveProperty("fields.reference");
+    }
 });

@@ -1,5 +1,6 @@
 import { internal } from "@convex/_generated/api";
 import { sha256Hex } from "@convex/domain/sourcePassages";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { expect, test } from "vitest";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
@@ -21,7 +22,9 @@ async function reasoningFixture() {
                 runId: args.runId,
                 corpusRevisionId: args.corpusRevisionId,
                 generation: 4,
-                definitionVersion: 1,
+                definitionVersion: getAgentDefinition(
+                    "saved_material_inspection_v1",
+                ).version,
                 taskKey,
                 provenance: "live",
                 status: "started",
@@ -35,7 +38,8 @@ async function reasoningFixture() {
             runId: args.runId,
             corpusRevisionId: args.corpusRevisionId,
             executionGeneration: 4,
-            workflowVersion: 1,
+            workflowVersion: getAgentDefinition("saved_material_inspection_v1")
+                .version,
             stepKey: "agent_reasoning",
             service: "model" as const,
             operation: "agent_reasoning",

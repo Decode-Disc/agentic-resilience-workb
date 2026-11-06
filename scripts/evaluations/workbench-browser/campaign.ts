@@ -75,7 +75,10 @@ const batteryPath = (m: CampaignManifest) =>
 const fingerprints = qualificationFingerprints;
 
 /** Binds each semantic judgment to preserved bytes, including Sources requests and captures. */
-export function campaignReviewTemplate(root: string) {
+export function campaignReviewTemplate(
+    root: string,
+    options: { recovery?: boolean } = {},
+) {
     const retained = read(join(root, "campaign-lot.json")) as {
         manifest: CampaignManifest;
         candidateHash: string;
@@ -89,7 +92,12 @@ export function campaignReviewTemplate(root: string) {
             if (item.isDirectory()) collect(path);
             else if (
                 !item.name.startsWith("assessment-") &&
-                item.name !== "review-template.json"
+                !(
+                    directory === root &&
+                    /^(?:review-template|evidence-index)(?:-[a-f0-9]{64})?\.json$/.test(
+                        item.name,
+                    )
+                )
             )
                 files[relative(root, path)] = sha256(readFileSync(path));
         }
@@ -102,25 +110,70 @@ export function campaignReviewTemplate(root: string) {
                 "Preserved candidate changed",
             );
     }
+    const freeze = (name: string, value: unknown) => {
+        const path = join(root, `${name}.json`);
+        if (existsSync(path))
+            assert.deepEqual(
+                read(path),
+                value,
+                "Frozen evidence revision changed",
+            );
+        else
+            writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, {
+                mode: 0o600,
+                flag: "wx",
+            });
+    };
     const indexPath = join(root, "evidence-index.json");
+    const templatePath = join(root, "review-template.json");
+    const currentHash = existsSync(templatePath)
+        ? (read(templatePath) as { evidenceHash: string }).evidenceHash
+        : undefined;
+    if (currentHash !== undefined)
+        assert(/^[a-f0-9]{64}$/.test(currentHash), "Invalid evidence revision");
+    const currentIndex = currentHash
+        ? join(root, `evidence-index-${currentHash}.json`)
+        : indexPath;
+    if (options.recovery && currentHash) {
+        const previous = read(
+            existsSync(currentIndex) ? currentIndex : indexPath,
+        ) as Record<string, string>;
+        assert.equal(
+            candidateHash(previous),
+            currentHash,
+            "Evidence revision unavailable",
+        );
+        freeze(`evidence-index-${currentHash}`, previous);
+        freeze(`review-template-${currentHash}`, read(templatePath));
+    }
     let evidence: Record<string, string>;
-    if (existsSync(indexPath))
+    if (!options.recovery && existsSync(currentIndex))
+        evidence = read(currentIndex) as Record<string, string>;
+    else if (!options.recovery && existsSync(indexPath))
         evidence = read(indexPath) as Record<string, string>;
     else {
         collect(root);
         evidence = files;
-        save(root, "evidence-index", evidence);
+        if (!existsSync(indexPath)) save(root, "evidence-index", evidence);
     }
+    const evidenceHash = candidateHash(evidence);
+    if (!options.recovery && currentHash)
+        assert.equal(
+            evidenceHash,
+            currentHash,
+            "Evidence revision unavailable",
+        );
     for (const [path, expected] of Object.entries(evidence))
         assert.equal(
             sha256(readFileSync(join(root, path))),
             expected,
             "Stale campaign evidence",
         );
-    return {
+    freeze(`evidence-index-${evidenceHash}`, evidence);
+    const template = {
         candidateHash: retained.candidateHash,
         batteryHash: manifest.batteryHash,
-        evidenceHash: candidateHash(evidence),
+        evidenceHash,
         cases: manifest.expectations.map((c) => ({
             id: c.id,
             checks: Object.fromEntries(
@@ -130,6 +183,8 @@ export function campaignReviewTemplate(root: string) {
             evidence: [] as string[],
         })),
     };
+    freeze(`review-template-${evidenceHash}`, template);
+    return template;
 }
 
 /** Appends an assessment; a mechanical success cannot fill missing semantic judgments. */
@@ -1037,7 +1092,11 @@ async function executeCampaign(
                     "Campaign archive failed; original evidence retained",
                 );
             }
-            save(lotRoot, "review-template", campaignReviewTemplate(lotRoot));
+            save(
+                lotRoot,
+                "review-template",
+                campaignReviewTemplate(lotRoot, { recovery: recovering }),
+            );
         }
         if (!cleanupCompleted || failure) process.exitCode = 1;
     }

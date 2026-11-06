@@ -1,9 +1,10 @@
 import "@convex/execution/agentCatalog";
 import { internal } from "@convex/_generated/api";
+import { completeSources } from "@convex/domain/sources";
 import { sourcesDefinition } from "@convex/domain/sourcesAgent";
 import type { SourcesPreparation } from "@convex/domain/sourcesContracts";
 import { afterEach, assert, expect, test, vi } from "vitest";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import { seedObservedSources } from "@/__tests__/setup/sources-mission";
 
 afterEach(() => {
     delete sourcesDefinition.simulate;
@@ -14,7 +15,7 @@ afterEach(() => {
 });
 
 async function claimNativeCheck(
-    f: Awaited<ReturnType<typeof seedCapturedSources>>,
+    f: Awaited<ReturnType<typeof seedObservedSources>>,
     proposition = "Activity context",
 ) {
     const requestId = await f.t.mutation(
@@ -30,9 +31,8 @@ async function claimNativeCheck(
                 proposition,
                 evidence: [
                     {
-                        captureId: f.captureId,
+                        readRequestId: f.nativeReadRequestId,
                         passageOrder: f.passage.order,
-                        quotation: f.passage.quotation,
                     },
                 ],
             },
@@ -55,7 +55,7 @@ test("Pi refreshes a retained completion after late reservation and completes wi
         throw new Error("Unexpected provider call");
     });
     vi.stubGlobal("fetch", network);
-    const f = await seedCapturedSources();
+    const f = await seedObservedSources();
     await f.t.run(async (ctx) => {
         const framingId = await ctx.db.insert("framingRevisions", {
             runId: f.runId,
@@ -92,13 +92,11 @@ test("Pi refreshes a retained completion after late reservation and completes wi
         const { activeWork } = input as { activeWork: SourcesPreparation };
         return {
             kind: "complete",
-            needsRevision: activeWork.needsRevision,
+
             needs: [
                 {
                     needId: "common-context",
-                    workRequestIds: activeWork.work.map(
-                        (work) => work.requestId,
-                    ),
+
                     unfinished: ["Documentary checking remains unfinished."],
                 },
             ],
@@ -198,9 +196,9 @@ test.each([
     "duplicated",
     "omitted-with-late",
     "duplicated-with-late",
-] as const)("completion rejects %s work already present in its admitted context", async (mode) => {
+] as const)("direct handoff rejects %s work already present in its admitted context", async (mode) => {
     vi.useFakeTimers({ toFake: ["Date"] });
-    const f = await seedCapturedSources();
+    const f = await seedObservedSources();
     const requestId = await claimNativeCheck(f);
     await f.t.mutation(internal.sourcesMission.reserve, {
         requestId,
@@ -239,26 +237,25 @@ test.each([
             outcome: { kind: "unavailable", code: "missing_configuration" },
         });
     }
-    const response = {
-        kind: "complete" as const,
-        needsRevision: 1,
-        needs: [
-            {
-                needId: "common-context",
-                workRequestIds: mode.startsWith("duplicated")
-                    ? [requestId, requestId]
-                    : [],
-                unfinished: ["Documentary checking remains unfinished."],
-            },
-        ],
-    };
-    expect(
-        await f.t.mutation(internal.execution.invocations.finish, {
-            invocationId: invocation.invocationId,
-            expectedGeneration: 4,
-            response,
-        }),
-    ).toMatchObject({ kind: "blocked", code: "sources_work_unaccounted" });
+    await expect(
+        f.t.run((ctx) =>
+            completeSources(ctx, f.preparationId, {
+                kind: "complete",
+                needsRevision: 1,
+                needs: [
+                    {
+                        needId: "common-context",
+                        workRequestIds: mode.startsWith("duplicated")
+                            ? [requestId, requestId]
+                            : [],
+                        unfinished: [
+                            "Documentary checking remains unfinished.",
+                        ],
+                    },
+                ],
+            }),
+        ),
+    ).rejects.toThrow("sources_work_unaccounted");
     expect(
         (await f.t.run((ctx) => ctx.db.get(f.preparationId)))?.sourcesMission
             ?.result,

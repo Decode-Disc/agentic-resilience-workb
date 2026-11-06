@@ -44,13 +44,26 @@ test("the same durable Workflow completes a second definition through temporary 
         activeWork: { checkedIndices: [0, 1] },
         triggeringRequestsAndResults: [
             {
-                input: { kind: "check_fixture_value", index: 1 },
-                outcome: {
-                    kind: "success",
-                    valueJson: '{"index":1,"value":7}',
-                },
+                input: { kind: "check_fixture_value" },
+                outcome: { kind: "success" },
+                historyReference: expect.any(String),
             },
         ],
+    });
+    const { projectMissionHistoryEvent } = await import(
+        "@convex/execution/journal"
+    );
+    const context = JSON.parse(invocations[2]?.inputJson ?? "null");
+    const reference = context.triggeringRequestsAndResults[0].historyReference;
+    const retained = await t.run(async (ctx) => {
+        const id = ctx.db.normalizeId("agentExecutionEvents", reference);
+        const event = id ? await ctx.db.get(id) : null;
+        if (!event) throw new Error("Retained observation required");
+        return projectMissionHistoryEvent(ctx, event);
+    });
+    expect(JSON.parse(retained.json).observation.value).toMatchObject({
+        input: { kind: "check_fixture_value", index: 1 },
+        outcome: { kind: "success", valueJson: '{"index":1,"value":7}' },
     });
 }, 30_000);
 

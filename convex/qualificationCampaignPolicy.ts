@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { reasoningPreferenceValues } from "./modelConfigurationValues.ts";
 
+export const MAX_QUALIFICATION_CONTEXT_DURATION_MS = 2 * 60 * 60 * 1000;
+
 export const campaignLimitsSchema = z
     .object({
         model: z.number().int().nonnegative().safe(),
@@ -228,6 +230,12 @@ const v2 = z
     .object({
         ...legacyCampaignManifestSchema.shape,
         version: z.literal(2),
+        contextDurationMs: z
+            .number()
+            .int()
+            .positive()
+            .max(MAX_QUALIFICATION_CONTEXT_DURATION_MS)
+            .optional(),
         expectations: z
             .array(
                 z

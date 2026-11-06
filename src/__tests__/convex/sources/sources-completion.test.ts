@@ -7,7 +7,7 @@ import { workflow } from "@convex/workflow";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { installModel } from "@/__tests__/setup/model-configuration";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import { seedObservedSources } from "@/__tests__/setup/sources-mission";
 
 const examiner = vi.hoisted(() => vi.fn());
 vi.mock("@convex/integrations/documentaryControl", () => ({
@@ -20,7 +20,7 @@ afterEach(() => {
 });
 
 async function seedCompletion() {
-    const f = await seedCapturedSources();
+    const f = await seedObservedSources();
     const framingId = await f.t.run(async (ctx) => {
         const preparation = await ctx.db.get(f.preparationId);
         assert(preparation?.sourcesMission);
@@ -122,13 +122,10 @@ function completion(
 ) {
     return {
         kind: "complete" as const,
-        needsRevision: data.needsRevision,
+
         needs: data.needs.map((need) => ({
             needId: need.id,
             unfinished: [explanation],
-            workRequestIds: data.work
-                .filter((work) => work.needIds.includes(need.id))
-                .map((work) => work.requestId),
         })),
     };
 }
@@ -152,9 +149,8 @@ test.each([
                 proposition: "Context",
                 evidence: [
                     {
-                        captureId: f.captureId,
+                        readRequestId: f.nativeReadRequestId,
                         passageOrder: f.passage.order,
-                        quotation: f.passage.quotation,
                     },
                 ],
             },
@@ -238,9 +234,8 @@ test.each([
                 proposition: "Context",
                 evidence: [
                     {
-                        captureId: f.captureId,
+                        readRequestId: f.nativeReadRequestId,
                         passageOrder: f.passage.order,
-                        quotation: f.passage.quotation,
                     },
                 ],
             },
@@ -317,11 +312,26 @@ test.each([
         expectedGeneration: 4,
         response,
     });
-    expect(second).toMatchObject(
-        count === 21
-            ? { kind: "completed" }
-            : { kind: "blocked", code: "mission_context_changed" },
-    );
+    expect(second).toMatchObject({
+        kind: "blocked",
+        code: "mission_context_changed",
+    });
+    if (count === 21) {
+        const fresh = await f.t.mutation(internal.execution.invocations.begin, {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            taskKey: "drained-instructions",
+            provenance: "simulation",
+        });
+        assert(fresh.kind === "ready");
+        expect(
+            await f.t.mutation(internal.execution.invocations.finish, {
+                invocationId: fresh.invocationId,
+                expectedGeneration: 4,
+                response: completion(p.sourcesMission),
+            }),
+        ).toMatchObject({ kind: "completed" });
+    }
     const instructions = await f.t.run((ctx) =>
         Promise.all(ids.map((id) => ctx.db.get(id))),
     );
@@ -412,9 +422,8 @@ test("fallback finishing waits for native qualification and receives its existin
                             kind: "context",
                             evidence: [
                                 {
-                                    captureId: f.captureId,
+                                    readRequestId: f.nativeReadRequestId,
                                     passageOrder: f.passage.order,
-                                    quotation: f.passage.quotation,
                                 },
                             ],
                         },
@@ -515,9 +524,8 @@ test("reservation admission preserves the shared completion response ceiling bef
                                 kind: "context",
                                 evidence: [
                                     {
-                                        captureId: f.captureId,
+                                        readRequestId: f.nativeReadRequestId,
                                         passageOrder: f.passage.order,
-                                        quotation: f.passage.quotation,
                                     },
                                 ],
                             },
@@ -574,6 +582,20 @@ test("reservation admission preserves the shared completion response ceiling bef
             expectedGeneration: 4,
             response,
         }),
+    ).toMatchObject({ kind: "blocked", code: "mission_context_changed" });
+    const fresh = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        taskKey: "fresh-capacity-completion",
+        provenance: "simulation",
+    });
+    assert(fresh.kind === "ready");
+    expect(
+        await f.t.mutation(internal.execution.invocations.finish, {
+            invocationId: fresh.invocationId,
+            expectedGeneration: 4,
+            response,
+        }),
     ).toMatchObject({ kind: "completed" });
 });
 
@@ -605,9 +627,8 @@ test("unqualified work retains storage headroom for unfinished explanations thro
                     proposition: `Context ${i}`,
                     evidence: [
                         {
-                            captureId: f.captureId,
+                            readRequestId: f.nativeReadRequestId,
                             passageOrder: f.passage.order,
-                            quotation: f.passage.quotation,
                         },
                     ],
                 },
@@ -658,5 +679,23 @@ test("unqualified work retains storage headroom for unfinished explanations thro
             expectedGeneration: 4,
             response,
         }),
-    ).toMatchObject({ kind: "completed" });
+    ).toMatchObject({ kind: "blocked", code: "mission_context_changed" });
+    const fresh = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        taskKey: "fresh-capacity-completion",
+        provenance: "simulation",
+    });
+    expect(fresh).toMatchObject({ kind: "blocked", code: "context_capacity" });
+    expect(
+        await f.t.mutation(internal.sourcesMission.finish, {
+            preparationId: f.preparationId,
+            missionId: f.missionId,
+            expectedGeneration: 4,
+        }),
+    ).toBeNull();
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.preparationId)))?.sourcesMission
+            ?.result,
+    ).toMatchObject({ outcome: "blocked", documents: [] });
 });

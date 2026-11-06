@@ -1,8 +1,9 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { sha256Hex } from "@convex/domain/sourcePassages";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { requireQualifiedBrowserMission } from "@convex/providerCalls";
-import { makeFunctionReference } from "convex/server";
+import { type FunctionReturnType, makeFunctionReference } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
@@ -75,7 +76,7 @@ async function fixture() {
                 runId: f.runId,
                 corpusRevisionId: f.corpusRevisionId,
                 generation: 4,
-                definitionVersion: 1,
+                definitionVersion: getAgentDefinition("sources_v1").version,
                 taskKey: key,
                 provenance: "live",
                 status: "started",
@@ -89,7 +90,7 @@ async function fixture() {
             missionId: f.missionId,
             invocationId,
             executionGeneration: 4,
-            workflowVersion: 1,
+            workflowVersion: getAgentDefinition("sources_v1").version,
             stepKey: "agent_reasoning",
             service: "model" as const,
             operation: "agent_reasoning",
@@ -447,6 +448,77 @@ test("owned qualification inspection returns exact retained documentary identiti
     expect(result.captures.map((c) => c._id)).toEqual([f.captureId]);
     await expect(
         f.t.query(inspect, { runId: f.runId, fixtureKey: "foreign" }),
+    ).rejects.toThrow("Local simulation scope required");
+});
+
+test("Sources inventory inspection does not hydrate invocation transcripts", async () => {
+    const f = await fixture();
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.runId, { reservationKey: "browser:bounded-export" }),
+    );
+    for (let index = 0; index < 6; index++) {
+        const attempt = await f.attempt(`large-transcript-${index}`);
+        await f.t.run(async (ctx) => {
+            await ctx.db.patch(attempt.invocationId, {
+                inputJson: JSON.stringify({ retained: "x".repeat(40000) }),
+            });
+            await ctx.db.insert("agentInvocationPayloads", {
+                runId: f.runId,
+                invocationId: attempt.invocationId,
+                part: "request",
+                version: 1,
+                state: "complete",
+                json: "x".repeat(120000),
+                contentHash: sha256Hex("x".repeat(120000)),
+                sizeBytes: 120000,
+                createdAt: 1,
+            });
+        });
+    }
+    const inventory = await f.t.run((ctx) =>
+        ctx.runQuery(
+            internal.execution.fixtures.inspectSourcesQualification,
+            { runId: f.runId, fixtureKey: "bounded-export" },
+            { transactionLimits: { bytesRead: 256 * 1024 } },
+        ),
+    );
+    expect(inventory.preparation?._id).toBe(f.preparationId);
+    expect(inventory).not.toHaveProperty("payloads");
+    const exported = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < 6; page++) {
+        const result: FunctionReturnType<
+            typeof internal.execution.fixtures.inspectSourcesInvocations
+        > = await f.t.query(
+            internal.execution.fixtures.inspectSourcesInvocations,
+            {
+                runId: f.runId,
+                fixtureKey: "bounded-export",
+                paginationOpts: { numItems: 1, cursor },
+            },
+        );
+        expect(result.page).toHaveLength(1);
+        expect(result.payloads).toHaveLength(1);
+        expect(result.payloads[0]?.invocationId).toBe(result.page[0]?._id);
+        expect(result.payloads[0]?.json).toHaveLength(120000);
+        exported.push(result.page[0]?._id);
+        cursor = result.continueCursor;
+        expect(result.isDone).toBe(page === 5);
+    }
+    expect(new Set(exported).size).toBe(6);
+    await expect(
+        f.t.query(internal.execution.fixtures.inspectSourcesInvocations, {
+            runId: f.runId,
+            fixtureKey: "bounded-export",
+            paginationOpts: { numItems: 6, cursor: null },
+        }),
+    ).rejects.toThrow("one invocation per page");
+    await expect(
+        f.t.query(internal.execution.fixtures.inspectSourcesInvocations, {
+            runId: f.runId,
+            fixtureKey: "foreign",
+            paginationOpts: { numItems: 1, cursor: null },
+        }),
     ).rejects.toThrow("Local simulation scope required");
 });
 

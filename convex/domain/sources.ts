@@ -17,15 +17,18 @@ import {
 import { SourceReviewReads } from "./sourceReviewReads";
 import { controlledDocumentaryUse } from "./sourceSelectionPolicy";
 import {
-    SOURCES_MAX_EVIDENCE_REFERENCES,
     type DocumentaryContribution,
     type materializedQualificationInput,
+    SOURCES_MAX_EVIDENCE_REFERENCES,
     SOURCES_PROTOCOL,
     type SourcesPreparation,
     type sourcesCompletionValidator,
     sourcesEnvelopeValidator,
 } from "./sourcesContracts";
-import { documentaryContributionEvidenceAvailable } from "./sourceUsage";
+import {
+    admittedDocumentaryReading,
+    documentaryContributionEvidenceAvailable,
+} from "./sourceUsage";
 
 /** A missing or malformed envelope disables this protocol; historical defaults are not activation consent. */
 export function sourcesEnvelope() {
@@ -368,6 +371,60 @@ export async function sourcesTaskObservations(
         }),
     );
     return { workOutcomes, contributionObservations };
+}
+
+/** Current evidence handles remain available when Pi compacts its conversation history. */
+export async function sourcesReadingReferences(
+    ctx: QueryCtx,
+    mission: Doc<"agentMissions">,
+    data: SourcesPreparation,
+) {
+    const limit = 32;
+    const pages = await Promise.all(
+        (["search_available_material", "read_in_context"] as const).map(
+            (kind) =>
+                ctx.db
+                    .query("agentOperationRequests")
+                    .withIndex("by_mission_and_input_kind", (q) =>
+                        q.eq("missionId", mission._id).eq("input.kind", kind),
+                    )
+                    .order("desc")
+                    .take(limit + 1),
+        ),
+    );
+    const references = pages
+        .flat()
+        .sort(
+            (a, b) =>
+                b._creationTime - a._creationTime || b._id.localeCompare(a._id),
+        )
+        .flatMap((request) => {
+            const material = admittedDocumentaryReading(
+                request,
+                { runId: mission.runId, missionId: mission._id },
+                data,
+            );
+            return material
+                ? [
+                      {
+                          readRequestId: request._id,
+                          kind: material.kind,
+                          sourceId: material.sourceId,
+                          captureId: material.captureId,
+                          contentHash: material.contentHash,
+                          passageOrders: material.passages.map(
+                              (p) => p.passageOrder,
+                          ),
+                      },
+                  ]
+                : [];
+        });
+    return {
+        readingReferences: references.slice(0, limit),
+        readingReferencesComplete:
+            references.length <= limit &&
+            pages.every((page) => page.length <= limit),
+    };
 }
 
 /** Reserved controls hold completion capacity until their proposal is retained or cannot be adopted. */
