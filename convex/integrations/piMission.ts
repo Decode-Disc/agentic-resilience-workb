@@ -586,6 +586,7 @@ export async function runPiMission(
                               transcript.messages,
                               Date.now(),
                               definition.nativeConversation,
+                              definition.contextRendering,
                           );
                     const simulationRequest = simulated
                         ? preparePiSimulationRequest(expandedMessages)
@@ -966,11 +967,15 @@ export async function runPiMission(
                     adopted.correction
                 ) {
                     preparationChanges++;
-                    return fauxAssistantMessage(
-                        fauxText(
-                            `The preceding completion was refused. Correct the proposal using current required state: ${JSON.stringify(adopted.correction)}`,
-                        ),
-                    );
+                    return {
+                        ...message,
+                        content: [
+                            ...message.content,
+                            fauxText(
+                                `The preceding completion was refused. Correct the proposal using current required state: ${JSON.stringify(adopted.correction)}`,
+                            ),
+                        ],
+                    };
                 }
                 if (adopted.code === "mission_context_changed") {
                     preparationChanges++;

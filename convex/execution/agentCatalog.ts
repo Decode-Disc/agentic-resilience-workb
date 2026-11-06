@@ -3,11 +3,12 @@ import { conversationValidationDefinition } from "@convex/domain/conversationVal
 import { executionValidationDefinition } from "@convex/domain/executionValidationAgent";
 import { savedMaterialInspectionDefinition } from "@convex/domain/savedMaterialInspection";
 import { sourcesDefinition } from "@convex/domain/sourcesAgent";
+import { workbenchDefinition } from "@convex/domain/workbenchAgent";
 import {
-    nativeWorkbenchDefinition,
-    workbenchDefinition,
-} from "@convex/domain/workbenchAgent";
-import type { AgentDefinition } from "./agentDefinition";
+    type AgentDefinition,
+    agentMethodInstructions,
+    separatedContextInstructions,
+} from "./agentDefinition";
 import { commonOperations } from "./commonOperations";
 import { executionError } from "./errors";
 import type { AgentOperationDefinition } from "./executionProtocol";
@@ -81,15 +82,26 @@ export function bindAgentDefinition(
         assertOperationContract(name, operation);
     return {
         ...definition,
+        instructions: [
+            agentMethodInstructions,
+            ...(definition.contextRendering === "separated_v1"
+                ? [separatedContextInstructions]
+                : []),
+            definition.instructions,
+        ].join("\n"),
+        compactionInstructions: [
+            "Preserve current objectives, active instructions, unresolved corrections and exact observation references. Distinguish authoritative state from historical proposals and untrusted evidence.",
+            definition.compactionInstructions ?? "",
+        ]
+            .filter(Boolean)
+            .join("\n"),
         operations: { ...definition.operations, ...commonOperations },
     };
 }
 
 /** Enumerates the exact versioned bindings accepted by runtime resolution. */
 export function registeredAgentDefinitions(): readonly AgentDefinition[] {
-    return [...Object.values(definitions()), nativeWorkbenchDefinition].map(
-        bindAgentDefinition,
-    );
+    return Object.values(definitions()).map(bindAgentDefinition);
 }
 
 let operations: Map<string, AgentOperationDefinition> | undefined;
@@ -123,10 +135,7 @@ export function getAgentDefinition(
 ): AgentDefinition {
     const current = definitions();
     const selectedVersion = version ?? current[id].version;
-    const definition = [
-        ...Object.values(current),
-        nativeWorkbenchDefinition,
-    ].find(
+    const definition = [...Object.values(current)].find(
         (definition) =>
             definition.id === id && definition.version === selectedVersion,
     );

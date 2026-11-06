@@ -30,10 +30,15 @@ import {
     documentaryStatusValidator,
     preparedMaterialValidator,
     restrictedContributionValidator,
+    SOURCES_MAX_EVIDENCE_REFERENCES,
     type SourcesOperation,
     sourcesEnvelopeValidator,
     sourcesOperationValidator,
 } from "@convex/domain/sourcesContracts";
+import {
+    documentaryQuotationMatches,
+    materializeDocumentaryEvidence,
+} from "@convex/domain/sourceUsage";
 import { isResumableResearchPause } from "@convex/domain/transitions";
 import {
     hasWaitingWorkbenchInstructions,
@@ -46,6 +51,10 @@ import {
 } from "@convex/execution/authority";
 import { executionError } from "@convex/execution/errors";
 import { registerOperationWaitEvent } from "@convex/execution/operations";
+import {
+    simulatedDocumentaryControl,
+    sourcesSimulationEnabled,
+} from "@convex/sourcesSimulation";
 import { getDocumentSize, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { requireWorkspaceRun } from "./runWorkspace";
@@ -320,8 +329,25 @@ export const reserve = internalMutation({
                 capture.status !== "committed"
             )
                 throw executionError("capture_unavailable");
+            const materialized = {
+                ...input,
+                changes: await Promise.all(
+                    input.changes.map(async (change) => ({
+                        ...change,
+                        contribution: {
+                            ...change.contribution,
+                            evidence: await materializeDocumentaryEvidence(
+                                reads,
+                                request,
+                                data,
+                                change.contribution.evidence,
+                            ),
+                        },
+                    })),
+                ),
+            };
             contributions = reconstructQualification(
-                input,
+                materialized,
                 previous?.output.kind === "documentary_qualification"
                     ? previous.output
                     : null,
@@ -329,7 +355,7 @@ export const reserve = internalMutation({
                 request.logicalKey,
             );
             proposedQualification = {
-                input,
+                input: materialized,
                 contributions,
                 contentHash: capture.contentHash ?? "",
             };
@@ -338,9 +364,15 @@ export const reserve = internalMutation({
                 !input.proposition.trim() ||
                 input.proposition.length > 4000 ||
                 !input.evidence.length ||
-                input.evidence.length > 8
+                input.evidence.length > SOURCES_MAX_EVIDENCE_REFERENCES
             )
                 throw executionError("documentary_check_invalid");
+            const evidence = await materializeDocumentaryEvidence(
+                reads,
+                request,
+                data,
+                input.evidence,
+            );
             contributions = [
                 {
                     id: "target",
@@ -351,7 +383,7 @@ export const reserve = internalMutation({
                     modality: "documentary check",
                     attribution: "as referenced",
                     kind: "context",
-                    evidence: input.evidence,
+                    evidence,
                 },
             ];
             if (input.targets?.length) {
@@ -376,7 +408,7 @@ export const reserve = internalMutation({
                         throw executionError("documentary_target_invalid");
                     contributions.push({
                         ...contribution,
-                        evidence: input.evidence,
+                        evidence,
                     });
                 }
             }
@@ -402,10 +434,11 @@ export const reserve = internalMutation({
                 quote.passageOrder,
             );
             if (
-                !passage ||
-                passage.contentHash !== capture.contentHash ||
-                passage.quotation !== quote.quotation ||
-                passage.quotationHash !== sha256Hex(quote.quotation)
+                !documentaryQuotationMatches(
+                    passage,
+                    capture.contentHash,
+                    quote.quotation,
+                )
             )
                 throw executionError("documentary_quote_invalid");
         }
@@ -504,23 +537,36 @@ export const retainControl = internalMutation({
         inputHash: v.string(),
         contributions: v.array(documentaryContributionValidator),
         control: documentaryControlValidator,
-        providerCallId: v.id("providerCalls"),
+        providerCallId: v.optional(v.id("providerCalls")),
     },
     returns: v.id("aiTaskResults"),
     handler: async (ctx, args): Promise<Id<"aiTaskResults">> => {
-        const { preparation, run, data, input } = await workContext(
+        const { preparation, run, data, input, request } = await workContext(
             ctx,
             args,
             true,
         );
-        const call = await ctx.db.get(args.providerCallId);
+        const simulation = await sourcesSimulationEnabled(ctx, run._id);
+        const call = args.providerCallId
+            ? await ctx.db.get(args.providerCallId)
+            : null;
         if (
-            !call ||
-            call.runId !== run._id ||
-            call.preparationId !== preparation._id ||
-            call.inputHash !== args.inputHash ||
-            call.status !== "succeeded" ||
-            call.operation !== "source_documentary_control"
+            simulation &&
+            (args.providerCallId ||
+                stableStringify(args.control) !==
+                    stableStringify(
+                        simulatedDocumentaryControl(args.contributions),
+                    ))
+        )
+            throw executionError("documentary_control_unavailable");
+        if (
+            !simulation &&
+            (!call ||
+                call.runId !== run._id ||
+                call.preparationId !== preparation._id ||
+                call.inputHash !== args.inputHash ||
+                call.status !== "succeeded" ||
+                call.operation !== "source_documentary_control")
         )
             throw executionError("documentary_control_unavailable");
         if (
@@ -550,11 +596,16 @@ export const retainControl = internalMutation({
             runId: run._id,
             corpusRevisionId: preparation.corpusRevisionId,
             sourceId,
-            executionMode: "live" as const,
+            executionMode: simulation
+                ? ("showcase" as const)
+                : ("live" as const),
+            ...(simulation
+                ? { fixtureId: "sources-simulation", fixtureVersion: "1" }
+                : {}),
             schemaVersion: "documentary-control-v1",
             adapterVersion: "one-shot-v1",
             inputHash: args.inputHash,
-            providerCallId: call._id,
+            providerCallId: call?._id,
             createdAt: Date.now(),
         };
         const controlTaskId =
@@ -611,8 +662,29 @@ export const retainControl = internalMutation({
         const previous = input.expectedTaskId
             ? await ctx.db.get(input.expectedTaskId)
             : null;
+        const reads = new SourceReviewReads(
+            ctx.db,
+            run._id,
+            SOURCES_HANDOFF_READ_CAPACITY,
+        );
         const reconstructed = reconstructQualification(
-            input,
+            {
+                ...input,
+                changes: await Promise.all(
+                    input.changes.map(async (change) => ({
+                        ...change,
+                        contribution: {
+                            ...change.contribution,
+                            evidence: await materializeDocumentaryEvidence(
+                                reads,
+                                request,
+                                data,
+                                change.contribution.evidence,
+                            ),
+                        },
+                    })),
+                ),
+            },
             previous?.output.kind === "documentary_qualification"
                 ? previous.output
                 : null,
@@ -764,6 +836,7 @@ export const start = internalMutation({
         await ctx.runMutation(internal.execution.missions.resume, {
             missionId,
             expectedGeneration: args.expectedGeneration,
+            simulation: await sourcesSimulationEnabled(ctx, run._id),
         });
         const pinned = await ctx.db.get(missionId);
         if (pinned?.modelRevisionId)
@@ -914,6 +987,7 @@ export const materialStatus = internalQuery({
                 _id: capture._id,
                 contentHash: capture.contentHash ?? "",
                 readingCompleteness: capture.readingCompleteness,
+                captureOmittedPassageCount: capture.omittedPassageCount ?? null,
                 representationCompleteness: capture.representationCompleteness,
                 observedDestinationCount:
                     capture.observedDestinations?.length ?? 0,

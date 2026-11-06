@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { ConvexHttpClient } from "convex/browser";
 import {
     type FunctionArgs,
@@ -18,47 +18,16 @@ import { resolveLocalRuntime } from "../../local-runtime.ts";
 import { openQualificationJournal } from "./journal.ts";
 import {
     candidateHash,
+    preserveQualificationCandidate,
     sha256,
+    sourcesBatterySchema,
     verifyQualificationCandidate,
 } from "./protocol.ts";
 
 const casesPath = "scripts/evaluations/workbench-browser/sources-cases.json";
-const cases = z
-    .object({
-        version: z.union([z.literal(1), z.literal(2)]),
-        modelRole: z.literal("harness_stress").optional(),
-        capability: z.literal("sources_mission_v1"),
-        model: z.string().min(1).max(200),
-        workbenchModel: z.string().min(1).max(200).optional(),
-        provider: z.string().min(1).max(200).optional(),
-        responseControllerModel: z.string().min(1).max(200).optional(),
-        reasoningEffort: z.literal("low").optional(),
-        maximumModelAttempts: z.number().int().min(1).max(40),
-        maximumSearchAttempts: z.literal(4),
-        maximumAcquisitions: z.literal(12),
-        maximumCostUsd: z.number().positive().max(2),
-        cases: z
-            .array(
-                z.object({
-                    id: z.enum(["ccc", "adobe"]),
-                    companyName: z.string(),
-                    companyCik: z.string(),
-                    ticker: z.string(),
-                    websiteUrl: z.string().url(),
-                    scope: z.string(),
-                    questions: z.array(
-                        z.object({
-                            id: z.string(),
-                            text: z.string(),
-                            shortLabel: z.string(),
-                            rationale: z.string(),
-                        }),
-                    ),
-                }),
-            )
-            .length(2),
-    })
-    .parse(JSON.parse(readFileSync(casesPath, "utf8")));
+const defaultCases = sourcesBatterySchema.parse(
+    JSON.parse(readFileSync(casesPath, "utf8")),
+);
 const save = (root: string, name: string, value: unknown) =>
     writeFileSync(
         join(root, `${name}.json`),
@@ -88,7 +57,26 @@ function command(args: string[]) {
 }
 
 /** Extends the existing qualification journal and fixture owners; research starts only through the admitted browser. */
-export async function sourcesQualificationPhase(phase: string, output: string) {
+export async function sourcesQualificationPhase(
+    phase: string,
+    output: string,
+    options?: {
+        battery?: typeof defaultCases;
+        lotId?: Id<"qualificationLots">;
+    },
+) {
+    const cases =
+        options?.battery ??
+        (phase !== "prepare"
+            ? sourcesBatterySchema.parse(
+                  JSON.parse(
+                      readFileSync(
+                          join(resolve(output), "protocol.json"),
+                          "utf8",
+                      ),
+                  ).battery,
+              )
+            : defaultCases);
     assert(
         ["prepare", "inspect", "close"].includes(phase),
         "Unknown Sources qualification phase",
@@ -118,40 +106,19 @@ export async function sourcesQualificationPhase(phase: string, output: string) {
         mkdirSync(root, { recursive: true, mode: 0o700 });
         const protocol = {
             version: 1,
-            boundary: "protected_local_browser_real_providers",
+            boundary:
+                cases.mode === "deterministic"
+                    ? "protected_local_browser_simulated_providers"
+                    : "protected_local_browser_real_providers",
             battery: cases,
-            batteryHash: sha256(readFileSync(casesPath)),
+            batteryHash: sha256(JSON.stringify(cases)),
             contextKey: `sources-${randomUUID()}`,
             approval:
                 "Explicit user approval is required before running prepare; this file does not grant it.",
         };
         const journal = openQualificationJournal(root, protocol);
         journal.begin("qualification");
-        const listing = spawnSync(
-            "git",
-            [
-                "ls-files",
-                "--cached",
-                "--others",
-                "--exclude-standard",
-                "convex",
-                "src",
-                "scripts/evaluations/workbench-browser",
-                "package.json",
-                "pnpm-lock.yaml",
-            ],
-            { encoding: "utf8" },
-        );
-        assert(listing.status === 0);
-        const fingerprints: Record<string, string> = {};
-        for (const path of listing.stdout.trim().split("\n")) {
-            const bytes = readFileSync(path);
-            fingerprints[path] = sha256(bytes);
-            const target = join(root, "code", path);
-            mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
-            writeFileSync(target, bytes, { mode: 0o600 });
-        }
-        save(root, "fingerprints", fingerprints);
+        const fingerprints = preserveQualificationCandidate(root);
         verifyQualificationCandidate(root, fingerprints);
         const publication = await client.query(
             ref(internal.execution.piControl.publicationStatus),
@@ -180,7 +147,7 @@ export async function sourcesQualificationPhase(phase: string, output: string) {
             for (const flag of flags)
                 if (flag.previous !== "true")
                     command(["env", "set", flag.name, "true"]);
-            await client.mutation(
+            const contextId = await client.mutation(
                 ref(internal.runWorkspace.openBrowserTestContext),
                 {
                     slotKey: "analyst-4",
@@ -188,6 +155,11 @@ export async function sourcesQualificationPhase(phase: string, output: string) {
                     durationMs: 40 * 60000,
                 },
             );
+            if (options?.lotId)
+                await client.mutation(
+                    ref(internal.qualificationCampaigns.bind),
+                    { lotId: options.lotId, contextId },
+                );
             const prepared = [];
             for (const item of cases.cases) {
                 const fixtureKey = `${protocol.contextKey}-${item.id}`;
@@ -215,22 +187,39 @@ export async function sourcesQualificationPhase(phase: string, output: string) {
             });
             const first = prepared[0];
             assert(first);
-            await client.mutation(
-                ref(
-                    internal.execution.fixtures.authorizeWorkbenchQualification,
-                ),
-                {
-                    runId: first.runId,
-                    fixtureKey: first.fixtureKey,
-                    maximumRequests: cases.maximumModelAttempts,
-                    maximumCostUsd: cases.maximumCostUsd,
-                    responseControllerModel: cases.responseControllerModel,
-                    sourcesLot: prepared.map(({ runId, fixtureKey }) => ({
-                        runId,
-                        fixtureKey,
-                    })),
-                },
-            );
+            if (cases.mode === "deterministic")
+                assert(
+                    options?.lotId,
+                    "Deterministic Sources requires a bound campaign",
+                );
+            else
+                await client.mutation(
+                    ref(
+                        internal.execution.fixtures
+                            .authorizeWorkbenchQualification,
+                    ),
+                    {
+                        runId: first.runId,
+                        fixtureKey: first.fixtureKey,
+                        maximumRequests: cases.maximumModelAttempts,
+                        maximumCostUsd: cases.maximumCostUsd,
+                        responseControllerModel: cases.responseControllerModel,
+                        ...(cases.version === 3
+                            ? {
+                                  reasoningSelection: cases.reasoningByRole,
+                                  expectedModels: {
+                                      workbench:
+                                          cases.workbenchModel ?? cases.model,
+                                      sources: cases.model,
+                                  },
+                              }
+                            : {}),
+                        sourcesLot: prepared.map(({ runId, fixtureKey }) => ({
+                            runId,
+                            fixtureKey,
+                        })),
+                    },
+                );
             console.log(
                 JSON.stringify({
                     root,
@@ -278,6 +267,18 @@ export async function sourcesQualificationPhase(phase: string, output: string) {
                 ref(internal.execution.fixtures.inspectSourcesQualification),
                 args,
             );
+            const { invocations, payloads } = await collectSourcesTranscripts(
+                (paginationOpts) =>
+                    client.query(
+                        ref(
+                            internal.execution.fixtures
+                                .inspectSourcesInvocations,
+                        ),
+                        { ...args, paginationOpts },
+                    ),
+                cases.maximumModelAttempts,
+                cases.mode,
+            );
             mkdirSync(join(root, "captures"), { recursive: true, mode: 0o700 });
             for (const download of documentary.captureDownloads) {
                 const capture = documentary.captures.find(
@@ -301,7 +302,7 @@ export async function sourcesQualificationPhase(phase: string, output: string) {
             const { captureDownloads, ...retained } = documentary;
             save(root, `${item.id}-${stamp}`, {
                 execution,
-                documentary: retained,
+                documentary: { ...retained, invocations, payloads },
             });
             console.log(
                 JSON.stringify({
@@ -365,4 +366,60 @@ export async function sourcesQualificationPhase(phase: string, output: string) {
     save(root, "cleanup", { at: new Date().toISOString(), diagnostics });
     assert(!diagnostics.length, "Qualification cleanup incomplete");
     console.log(JSON.stringify({ root, status: "closed" }));
+}
+
+type TranscriptPage = FunctionReturnType<
+    typeof internal.execution.fixtures.inspectSourcesInvocations
+>;
+type TranscriptPagination = FunctionArgs<
+    typeof internal.execution.fixtures.inspectSourcesInvocations
+>["paginationOpts"];
+
+/** Collect exact transcript pages while preserving the lot's finite invocation bound. */
+export async function collectSourcesTranscripts(
+    readPage: (paginationOpts: TranscriptPagination) => Promise<TranscriptPage>,
+    maximumProviderAttempts: number,
+    mode?: "deterministic" | "live",
+) {
+    if (mode === "deterministic")
+        assert.equal(
+            maximumProviderAttempts,
+            0,
+            "Simulated inspection requires zero provider attempts",
+        );
+    const maximumInvocations =
+        mode === "deterministic" ? 100 : maximumProviderAttempts;
+    const invocations: TranscriptPage["page"] = [];
+    const payloads: TranscriptPage["payloads"] = [];
+    let cursor: string | null = null;
+    assert(
+        Number.isSafeInteger(maximumInvocations) && maximumInvocations > 0,
+        "Invalid transcript inspection bound",
+    );
+    const observed = new Set<string>();
+    for (let page = 0; page <= maximumInvocations; page++) {
+        const transcript = await readPage({ numItems: 1, cursor });
+        assert(
+            transcript.page.length <= 1 &&
+                invocations.length + transcript.page.length <=
+                    maximumInvocations,
+            "Sources transcript inspection exceeds the authorized invocation count",
+        );
+        for (const invocation of transcript.page) {
+            assert(
+                !observed.has(invocation._id),
+                "Duplicate invocation during transcript inspection",
+            );
+            observed.add(invocation._id);
+        }
+        invocations.push(...transcript.page);
+        payloads.push(...transcript.payloads);
+        if (transcript.isDone) return { invocations, payloads };
+        assert(
+            transcript.continueCursor && transcript.continueCursor !== cursor,
+            "Transcript inspection cursor did not advance",
+        );
+        cursor = transcript.continueCursor;
+    }
+    throw new Error("Sources transcript inspection incomplete");
 }

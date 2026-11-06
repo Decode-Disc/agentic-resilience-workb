@@ -2,7 +2,13 @@ import {
     RESPONSE_CONTROL_LIMITS,
     responseReviewOperationKey,
 } from "@convex/domain/workbenchResponseControlContracts";
+import { resolveReasoningPreference } from "@convex/integrations/modelRouting";
 import { readResponseControlPolicy } from "@convex/modelConfiguration";
+import {
+    assertQualificationAllowance,
+    patchQualificationReceipt,
+    updateQualificationUsage,
+} from "@convex/qualificationUsage";
 import { ConvexError, type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -107,6 +113,26 @@ export async function requireQualifiedBrowserMission(
         )
             throw sourcePreparationError("paid_work_disabled");
     }
+    if (qualification.reasoningSelection) {
+        const role =
+            !mission || mission.definitionId === "sources_v1"
+                ? "sources"
+                : "workbench";
+        const model = await ctx.db.get(
+            role === "sources"
+                ? sourcesModelRevisionId
+                : qualification.modelRevisionId,
+        );
+        if (
+            !model ||
+            (mission?.reasoningEffort ?? model.reasoningEffort) !==
+                resolveReasoningPreference(
+                    model.descriptor,
+                    qualification.reasoningSelection[role],
+                )
+        )
+            throw sourcePreparationError("paid_work_disabled");
+    }
     return qualification;
 }
 
@@ -149,7 +175,7 @@ export const observeGeneration = internalMutation({
                 throw new Error("Provider generation identity changed");
             return null;
         }
-        await ctx.db.patch(call._id, {
+        await patchQualificationReceipt(ctx, call, {
             providerObservation: {
                 generationId: args.generationId,
                 httpStatus: args.httpStatus,
@@ -234,7 +260,7 @@ export const requestBilling = internalMutation({
             call.status === "succeeded"
         )
             return null;
-        await ctx.db.patch(call._id, {
+        await patchQualificationReceipt(ctx, call, {
             billing: {
                 state: "pending",
                 attempt: 0,
@@ -269,7 +295,7 @@ export const retryBilling = mutation({
             Date.now() < (call.billing.retryAt ?? Infinity)
         )
             return { scheduled: false };
-        await ctx.db.patch(call._id, {
+        await patchQualificationReceipt(ctx, call, {
             billing: {
                 state: "pending",
                 attempt: call.billing.attempt,
@@ -300,7 +326,7 @@ export const claimBilling = internalMutation({
             return null;
         await invocationCall(ctx, call.invocationId);
         if (call.reportedCost !== undefined) {
-            await ctx.db.patch(call._id, {
+            await patchQualificationReceipt(ctx, call, {
                 billing: {
                     state: "confirmed",
                     attempt: call.billing.attempt,
@@ -309,7 +335,7 @@ export const claimBilling = internalMutation({
             });
             return null;
         }
-        await ctx.db.patch(call._id, {
+        await patchQualificationReceipt(ctx, call, {
             billing: {
                 state: "checking",
                 attempt: args.attempt,
@@ -344,7 +370,7 @@ export const settleBilling = internalMutation({
         await invocationCall(ctx, call.invocationId);
         if ((args.cost === undefined) === (args.reason === undefined))
             throw new Error("Invalid billing result");
-        await ctx.db.patch(call._id, {
+        await patchQualificationReceipt(ctx, call, {
             billing: {
                 state: args.cost !== undefined ? "confirmed" : "unavailable",
                 attempt: args.attempt,
@@ -922,7 +948,7 @@ export const recordAttempt = internalMutation({
                     existing.leaseExpiresAt <= now
                 ) {
                     if (args.preparationId || args.missionId) {
-                        await ctx.db.patch(existing._id, {
+                        await patchQualificationReceipt(ctx, existing, {
                             status: "failed",
                             errorCode: "attempt_outcome_unknown",
                             retryable: false,
@@ -1141,10 +1167,25 @@ export const recordAttempt = internalMutation({
                               ? 0.007
                               : 0.001
                           : 0;
-                const calls = (
-                    await Promise.all(
-                        (qualification.sourcesLot ?? [qualification.runId]).map(
-                            (runId) =>
+                if (qualification.scenarios && args.runId) {
+                    const run = await ctx.db.get(args.runId);
+                    if (!run?.browserTestContextId)
+                        throw sourcePreparationError("paid_work_disabled");
+                    await assertQualificationAllowance(
+                        ctx,
+                        run.browserTestContextId,
+                        args.runId,
+                        args,
+                        qualificationReservationUsd,
+                    );
+                } else {
+                    const calls = (
+                        await Promise.all(
+                            (
+                                qualification.sourcesLot ?? [
+                                    qualification.runId,
+                                ]
+                            ).map((runId) =>
                                 ctx.db
                                     .query("providerCalls")
                                     .withIndex("by_run", (q) =>
@@ -1153,78 +1194,89 @@ export const recordAttempt = internalMutation({
                                     .take(
                                         MAX_SOURCES_QUALIFICATION_RECEIPTS + 1,
                                     ),
-                        ),
-                    )
-                ).flat();
-                const reserved = calls.reduce(
-                    (sum, call) =>
-                        sum +
-                        Math.max(
-                            call.qualificationReservationUsd ??
-                                (call.service === "model"
-                                    ? modelReservationUsd
-                                    : 0),
-                            call.reportedCost ?? 0,
-                        ),
-                    0,
-                );
-                const category = (
-                    call: Pick<Doc<"providerCalls">, "service" | "operation">,
-                ) =>
-                    call.service === "model"
-                        ? "model"
-                        : call.operation === "source_need_search"
-                          ? "search"
-                          : ["get_contents", "retrieve_filing_html"].includes(
-                                  call.operation,
-                              )
-                            ? "acquisition"
-                            : "technical";
-                const kind = category(args);
-                const perDossierLimit = {
-                    model: 20,
-                    search: 2,
-                    acquisition: 6,
-                    technical: 64,
-                }[kind];
-                const lotLimit = {
-                    model: Math.min(40, qualification.maximumRequests),
-                    search: 4,
-                    acquisition: 12,
-                    technical: 128,
-                }[kind];
-                if (
-                    (qualification.sourcesLot
-                        ? calls.length >= MAX_SOURCES_QUALIFICATION_RECEIPTS ||
-                          calls.filter(
-                              (call) =>
-                                  call.runId === args.runId &&
-                                  category(call) === kind,
-                          ).length >= perDossierLimit ||
-                          calls.filter((call) => category(call) === kind)
-                              .length >= lotLimit ||
-                          calls.some(
-                              (call) =>
-                                  call.dispatchOutcome === "unknown" ||
-                                  (call.status === "started" &&
-                                      (call.leaseExpiresAt ?? 0) <= now),
-                          )
-                        : calls.length >= qualification.maximumRequests) ||
-                    reserved + qualificationReservationUsd >
-                        qualification.maximumCostUsd ||
-                    calls.some(
-                        (call) =>
-                            call.reportedCost !== undefined &&
-                            call.reportedCost >
-                                (call.qualificationReservationUsd ?? 0),
-                    )
-                )
-                    throw sourcePreparationError(
-                        "qualification_budget_exhausted",
+                            ),
+                        )
+                    ).flat();
+                    const reserved = calls.reduce(
+                        (sum, call) =>
+                            sum +
+                            Math.max(
+                                call.qualificationReservationUsd ??
+                                    (call.service === "model"
+                                        ? modelReservationUsd
+                                        : 0),
+                                call.reportedCost ?? 0,
+                            ),
+                        0,
                     );
+                    const category = (
+                        call: Pick<
+                            Doc<"providerCalls">,
+                            "service" | "operation"
+                        >,
+                    ) =>
+                        call.service === "model"
+                            ? "model"
+                            : call.operation === "source_need_search"
+                              ? "search"
+                              : [
+                                      "get_contents",
+                                      "retrieve_filing_html",
+                                  ].includes(call.operation)
+                                ? "acquisition"
+                                : "technical";
+                    const kind = category(args);
+                    const perDossierLimit = {
+                        model: 20,
+                        search: 2,
+                        acquisition: 6,
+                        technical: 64,
+                    }[kind];
+                    const lotLimit = {
+                        model: Math.min(40, qualification.maximumRequests),
+                        search: qualification.maximumSearchAttempts ?? 4,
+                        acquisition: qualification.maximumAcquisitions ?? 12,
+                        technical: 128,
+                    }[kind];
+                    if (
+                        (qualification.sourcesLot
+                            ? calls.length >=
+                                  MAX_SOURCES_QUALIFICATION_RECEIPTS ||
+                              calls.filter(
+                                  (call) =>
+                                      call.runId === args.runId &&
+                                      category(call) === kind,
+                              ).length >= perDossierLimit ||
+                              calls.filter((call) => category(call) === kind)
+                                  .length >= lotLimit ||
+                              calls.some(
+                                  (call) =>
+                                      call.dispatchOutcome === "unknown" ||
+                                      (call.status === "started" &&
+                                          (call.leaseExpiresAt ?? 0) <= now),
+                              )
+                            : calls.length >= qualification.maximumRequests) ||
+                        reserved + qualificationReservationUsd >
+                            qualification.maximumCostUsd ||
+                        calls.some(
+                            (call) =>
+                                call.reportedCost !== undefined &&
+                                call.reportedCost >
+                                    (call.qualificationReservationUsd ?? 0),
+                        )
+                    )
+                        throw sourcePreparationError(
+                            "qualification_budget_exhausted",
+                        );
+                }
             }
+            const qualificationContextId =
+                qualification?.scenarios && args.runId
+                    ? (await ctx.db.get(args.runId))?.browserTestContextId
+                    : undefined;
             const providerCallId = await ctx.db.insert("providerCalls", {
                 qualificationReservationUsd,
+                qualificationContextId,
                 operationRequestId: args.operationRequestId,
                 missionId: args.missionId,
                 invocationId: args.invocationId,
@@ -1250,6 +1302,11 @@ export const recordAttempt = internalMutation({
                         : undefined,
                 createdAt: now,
             });
+            if (qualificationContextId) {
+                const call = await ctx.db.get(providerCallId);
+                if (!call) throw new Error("Missing provider receipt");
+                await updateQualificationUsage(ctx, null, call);
+            }
             if (args.invocationId && !args.operationRequestId)
                 await ctx.db.patch(args.invocationId, { providerCallId });
             return {
@@ -1308,10 +1365,15 @@ export const recordAttempt = internalMutation({
                     existing.errorCode !== args.errorCode
                 )
                     throw sourcePreparationError("attempt_result_conflict");
-                await ctx.db.patch(
-                    existing._id,
-                    reportedCostSettlement(existing, args.reportedCost),
+                const settlement = reportedCostSettlement(
+                    existing,
+                    args.reportedCost,
                 );
+                await updateQualificationUsage(ctx, existing, {
+                    ...existing,
+                    ...settlement,
+                });
+                await ctx.db.patch(existing._id, settlement);
                 return {
                     providerCallId: existing._id,
                     shouldExecute: false,
@@ -1355,7 +1417,7 @@ export const recordAttempt = internalMutation({
                 sourceQualificationAttemptCount: budget.dispatches,
             });
         }
-        await ctx.db.patch(existing._id, {
+        const update = {
             status: args.status,
             latencyMs: args.latencyMs,
             usage: args.usage,
@@ -1371,7 +1433,12 @@ export const recordAttempt = internalMutation({
             httpStatus: args.httpStatus,
             retryAfterAt: args.retryAfterAt,
             completedAt: now,
+        };
+        await updateQualificationUsage(ctx, existing, {
+            ...existing,
+            ...update,
         });
+        await ctx.db.patch(existing._id, update);
         return {
             providerCallId: existing._id,
             shouldExecute: false,

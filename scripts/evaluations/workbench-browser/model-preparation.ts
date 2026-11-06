@@ -7,9 +7,10 @@ import { api } from "../../../convex/_generated/api.js";
 /** Repairs only stale input profiles through their authenticated owner, preserving the selected model and revision. */
 export async function prepareQualificationModel(
     client: Pick<ConvexHttpClient, "query" | "action">,
+    agent: "workbench" | "sources" = "workbench",
 ) {
     const before = await client.query(api.modelConfiguration.list, {});
-    const assignment = before.assignments.find((a) => a.agent === "workbench");
+    const assignment = before.assignments.find((a) => a.agent === agent);
     const selected = before.models.find((m) => m._id === assignment?.catalogId);
     assert(
         selected?.enabled &&
@@ -68,10 +69,11 @@ export async function prepareQualificationModel(
 }
 
 /** Uses real anonymous admission; authentication material stays in memory and the temporary context is always closed. */
-export async function prepareBrowserQualificationModel(
+export async function withQualificationAdministrator<T>(
     browser: Browser,
     origins: { web: string; convex: string },
     code: string,
+    use: (client: ConvexHttpClient) => Promise<T>,
 ) {
     const context = await browser.newContext();
     try {
@@ -94,8 +96,22 @@ export async function prepareBrowserQualificationModel(
         assert(token, "Admitted administrator authentication unavailable");
         const client = new ConvexHttpClient(origins.convex, { logger: false });
         client.setAuth(token);
-        return await prepareQualificationModel(client);
+        return await use(client);
     } finally {
         await context.close();
     }
+}
+
+/** Prepares the selected Workbench model through the admitted administrator. */
+export async function prepareBrowserQualificationModel(
+    browser: Browser,
+    origins: { web: string; convex: string },
+    code: string,
+) {
+    return withQualificationAdministrator(
+        browser,
+        origins,
+        code,
+        prepareQualificationModel,
+    );
 }

@@ -21,7 +21,9 @@ import { assertPreparationExecutionFence } from "./domain/sourcePreparationAutho
 import { requireDossierAuthority } from "./execution/authority";
 import { executionError, executionFailureCode } from "./execution/errors";
 import {
-    defaultReasoningEffort,
+    recommendedReasoningEffort,
+    resolveReasoningPreference,
+    reasoningChoices,
     MODEL_MAX_INPUT_PRICE_PER_MILLION,
     MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
     MODEL_MAX_OUTPUT_TOKENS,
@@ -35,7 +37,8 @@ import {
     modelDescriptor,
     modelPreparationInput,
     nativeProfile,
-    type reasoningEffort,
+    reasoningEffort,
+    reasoningPreference,
 } from "./modelConfigurationSchema";
 import schema from "./schema";
 
@@ -78,6 +81,12 @@ const preparedModelView = v.object({
     _id: v.id("modelCatalog"),
     _creationTime: v.number(),
     compatible: v.boolean(),
+    reasoning: v.object({
+        preference: v.union(reasoningPreference, v.null()),
+        recommended: v.union(reasoningEffort, v.null()),
+        effective: v.union(reasoningEffort, v.null()),
+        choices: v.array(reasoningEffort),
+    }),
 });
 export function modelPrepared(model: Doc<"modelCatalog">) {
     return (
@@ -105,8 +114,33 @@ export const list = query({
         await requireAdmin(ctx);
         return {
             responseControl: await readResponseControlPolicy(ctx),
-            models: (await ctx.db.query("modelCatalog").take(101)).map(
-                (model) => ({ ...model, compatible: modelPrepared(model) }),
+            models: await Promise.all(
+                (await ctx.db.query("modelCatalog").take(101)).map(
+                    async (model) => {
+                        const revision = model.currentRevisionId
+                            ? await ctx.db.get(model.currentRevisionId)
+                            : null;
+                        return {
+                            ...model,
+                            compatible: modelPrepared(model),
+                            reasoning: {
+                                preference:
+                                    revision?.reasoningPreference ??
+                                    revision?.reasoningEffort ??
+                                    null,
+                                effective: revision?.reasoningEffort ?? null,
+                                recommended: revision
+                                    ? (recommendedReasoningEffort(
+                                          revision.descriptor,
+                                      ) ?? null)
+                                    : null,
+                                choices: revision
+                                    ? reasoningChoices(revision.descriptor)
+                                    : [],
+                            },
+                        };
+                    },
+                ),
             ),
             assignments: await ctx.db
                 .query("agentModelSettings")
@@ -422,6 +456,23 @@ export const finishPreparation = internalMutation({
         )
             throw executionError("model_not_compatible");
         await retainNativeProfiles(ctx, args.profiles);
+        const previous = current.currentRevisionId
+            ? await ctx.db.get(current.currentRevisionId)
+            : null;
+        const preference = previous
+            ? previous.reasoningPreference
+            : "recommended";
+        const effort =
+            preference === undefined
+                ? previous?.reasoningEffort
+                : resolveReasoningPreference(d, preference);
+        if (
+            effort &&
+            (!d.reasoning ||
+                !d.reasoningEfforts?.includes(effort) ||
+                (effort === "none" && d.reasoningMandatory))
+        )
+            throw executionError("model_effort_unavailable");
         const revisionId = await ctx.db.insert("modelRevisions", {
             catalogId: current._id,
             revision: current.revision,
@@ -429,9 +480,8 @@ export const finishPreparation = internalMutation({
             provider: current.provider,
             descriptor: d,
             preparationHash,
-            ...(defaultReasoningEffort(d)
-                ? { reasoningEffort: defaultReasoningEffort(d) }
-                : {}),
+            reasoningPreference: preference,
+            reasoningEffort: effort,
             createdAt: Date.now(),
         });
         await ctx.db.patch(current._id, {
@@ -521,6 +571,68 @@ export const updateAvailability = mutation({
             occurredAt: Date.now(),
         });
         return { revision: row.revision + 1 };
+    },
+});
+/** A preference change creates a new default revision; engaged missions retain their pins. */
+export const setReasoningPreference = mutation({
+    args: {
+        catalogId: v.id("modelCatalog"),
+        expectedRevision: v.number(),
+        requestKey: v.string(),
+        preference: reasoningPreference,
+    },
+    returns: v.object({ revision: v.number() }),
+    handler: async (ctx, args) => {
+        const admin = await requireAdmin(ctx);
+        const catalog = await ctx.db.get(args.catalogId);
+        const hash = sha256Hex(stableStringify(args));
+        if (catalog?.lastUpdateKey === args.requestKey) {
+            if (catalog.lastUpdateHash !== hash)
+                throw executionError("model_configuration_conflict");
+            return { revision: catalog.revision };
+        }
+        if (
+            !catalog ||
+            catalog.revision !== args.expectedRevision ||
+            !catalog.currentRevisionId
+        )
+            throw executionError("model_configuration_conflict");
+        if (catalog.status === "preparing")
+            throw executionError("model_preparation_pending");
+        if (!args.requestKey || args.requestKey.length > 200)
+            throw executionError("invalid_model_configuration");
+        const current = await ctx.db.get(catalog.currentRevisionId);
+        if (!current) throw executionError("model_unavailable");
+        const effort = resolveReasoningPreference(
+            current.descriptor,
+            args.preference,
+        );
+        requireReasoningEffort(current, effort);
+        const { _id, _creationTime, ...configuration } = current;
+        const revision = catalog.revision + 1;
+        const revisionId = await ctx.db.insert("modelRevisions", {
+            ...configuration,
+            revision,
+            reasoningPreference: args.preference,
+            reasoningEffort: effort,
+            createdAt: Date.now(),
+        });
+        await ctx.db.patch(catalog._id, {
+            revision,
+            currentRevisionId: revisionId,
+            lastUpdateKey: args.requestKey,
+            lastUpdateHash: hash,
+            updatedAt: Date.now(),
+        });
+        await ctx.db.insert("auditEvents", {
+            actor: { type: "visitor", visitorId: admin._id },
+            action: "model_configuration_changed",
+            targetType: "model_catalog",
+            targetId: catalog._id,
+            reason: "Reasoning preference changed; existing mission pins preserved.",
+            occurredAt: Date.now(),
+        });
+        return { revision };
     },
 });
 export const assign = mutation({

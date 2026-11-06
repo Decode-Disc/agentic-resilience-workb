@@ -6,7 +6,7 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import {
-    defaultReasoningEffort,
+    recommendedReasoningEffort,
     INITIAL_MODEL_CATALOG,
     MODEL_MAX_INPUT_PRICE_PER_MILLION,
     MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
@@ -193,7 +193,7 @@ async function prepareModel(
             {
                 model: args.model,
                 provider: args.provider,
-                reasoningEffort: defaultReasoningEffort(descriptor),
+                reasoningEffort: recommendedReasoningEffort(descriptor),
             },
             descriptor,
             signal,

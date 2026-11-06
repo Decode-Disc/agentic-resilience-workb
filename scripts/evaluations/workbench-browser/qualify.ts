@@ -10,7 +10,7 @@ import {
     writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs, parseEnv } from "node:util";
 import { chromium, expect } from "@playwright/test";
@@ -51,13 +51,14 @@ type Snapshot = FunctionReturnType<
     typeof internal.execution.fixtures.inspectWorkbench
 >;
 
+import { runCampaign } from "./campaign.ts";
 import { openQualificationJournal } from "./journal.ts";
 import { prepareBrowserQualificationModel } from "./model-preparation.ts";
 import {
     assessQualification,
-    browserBatteryPath,
     candidateHash,
     planQualification,
+    preserveQualificationCandidate,
     qualificationReviewTemplate,
     readQualificationBattery,
     verifyQualificationCandidate,
@@ -75,6 +76,10 @@ const { values } = parseArgs({
         review: { type: "string" },
         "maximum-requests": { type: "string", default: "20" },
         "sources-phase": { type: "string" },
+        campaign: { type: "string" },
+        manifest: { type: "string" },
+        correction: { type: "string" },
+        configuration: { type: "string" },
     },
 });
 
@@ -106,7 +111,17 @@ const save = (root: string, name: string, value: unknown) =>
         { mode: 0o600 },
     );
 
-async function main() {
+export async function runWorkbenchQualification(
+    options: {
+        mode?: string;
+        output?: string;
+        locked?: boolean;
+        "maximum-requests"?: string;
+        campaignLotId?: Id<"qualificationLots">;
+        maximumCostUsd?: number;
+    } = values,
+) {
+    const values = options;
     const maximumRequests = Number(values["maximum-requests"]);
     assert(
         Number.isInteger(maximumRequests) &&
@@ -114,7 +129,7 @@ async function main() {
             maximumRequests <= 20,
         "Request allowance must be between one and twenty",
     );
-    if (!["deterministic", "live"].includes(values.mode))
+    if (!["deterministic", "live"].includes(values.mode ?? "deterministic"))
         throw new Error("Unknown qualification mode");
     const runtime = await resolveLocalRuntime(process.cwd(), {
         requiredOrigins: ["convex", "web"],
@@ -164,7 +179,7 @@ async function main() {
         battery,
         plan,
         maximumRequests: live ? maximumRequests : 0,
-        maximumCostUsd: live ? 0.5 : 0,
+        maximumCostUsd: live ? (values.maximumCostUsd ?? 0.5) : 0,
         boundary: live
             ? "protected_browser_real_inference"
             : "protected_browser_simulated_model",
@@ -183,30 +198,7 @@ async function main() {
     const journal = openQualificationJournal(root, protocol);
     if (!journal.begin("qualification"))
         throw new Error("This lot is already closed");
-    const files = command("git", [
-        "ls-files",
-        "--cached",
-        "--others",
-        "--exclude-standard",
-        "convex",
-        "src",
-        "scripts/evaluations/workbench-browser",
-        browserBatteryPath,
-        "scripts/evaluations/workbench/continuity-cases.json",
-        "package.json",
-        "pnpm-lock.yaml",
-    ])
-        .split("\n")
-        .filter(Boolean);
-    const fingerprints: Record<string, string> = {};
-    for (const file of files) {
-        const bytes = readFileSync(file);
-        fingerprints[file] = digest(bytes);
-        const target = join(root, "code", file);
-        mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
-        writeFileSync(target, bytes, { mode: 0o600 });
-    }
-    save(root, "fingerprints", fingerprints);
+    const fingerprints = preserveQualificationCandidate(root);
     try {
         verifyQualificationCandidate(root, fingerprints);
     } catch (error) {
@@ -325,7 +317,8 @@ async function main() {
             reducedMotion: "reduce",
         });
         const page = await context.newPage();
-        page.setDefaultTimeout(20_000);
+        const interactionTimeoutMs = 20_000;
+        page.setDefaultTimeout(interactionTimeoutMs);
         page.on("pageerror", (error) =>
             errors.push(qualificationDiagnostic("browser-page", error)),
         );
@@ -362,7 +355,7 @@ async function main() {
             .locator("form:has(#invitation-code) button[type=submit]")
             .click();
         await expect(page.locator("#invitation-code")).toHaveCount(0);
-        await client.mutation(
+        const qualificationContextId = await client.mutation(
             localReference(internal.runWorkspace.openBrowserTestContext),
             {
                 slotKey: "analyst-4",
@@ -371,6 +364,14 @@ async function main() {
             },
         );
         contextOpened = true;
+        if (values.campaignLotId)
+            await client.mutation(
+                localReference(internal.qualificationCampaigns.bind),
+                {
+                    lotId: values.campaignLotId,
+                    contextId: qualificationContextId,
+                },
+            );
         runId = (
             await client.mutation(
                 localReference(internal.e2eFixtures.seedSourceReviewScenario),
@@ -402,6 +403,8 @@ async function main() {
                     runId,
                     fixtureKey,
                     relayOrigin: `http://127.0.0.1:${(relay.address() as import("node:net").AddressInfo).port}`,
+                    maximumRequests,
+                    maximumCostUsd: values.maximumCostUsd ?? 0.5,
                 },
             );
         }
@@ -744,15 +747,19 @@ async function main() {
             activeStep = `layout:${viewport.width}x${viewport.height}`;
             await page.setViewportSize(viewport);
             await page.reload();
+            activeStep = `layout:${viewport.width}x${viewport.height}:framing`;
             await expect(
                 page.getByRole("region", {
                     name: "Research framing",
                     exact: true,
                 }),
-            ).toBeVisible();
+            ).toBeVisible({ timeout: interactionTimeoutMs });
+            activeStep = `layout:${viewport.width}x${viewport.height}:focus`;
             await page.getByRole("textbox").focus();
             await expect(page.getByRole("textbox")).toBeFocused();
+            activeStep = `layout:${viewport.width}x${viewport.height}:input-viewport`;
             await expect(page.getByRole("textbox")).toBeInViewport();
+            activeStep = `layout:${viewport.width}x${viewport.height}:horizontal-overflow`;
             assert.equal(
                 await page.evaluate(
                     () => document.documentElement.scrollWidth > innerWidth,
@@ -775,6 +782,44 @@ async function main() {
             );
     } catch (error) {
         failure = true;
+        const failurePage = browser?.contexts().at(-1)?.pages().at(-1);
+        if (failurePage) {
+            try {
+                save(
+                    root,
+                    "failure-layout",
+                    await failurePage.evaluate(() => ({
+                        viewport: { width: innerWidth, height: innerHeight },
+                        documentWidth: document.documentElement.scrollWidth,
+                        regions: [
+                            ...document.querySelectorAll("section[aria-label]"),
+                        ].map((region) => region.getAttribute("aria-label")),
+                        inputs: [
+                            ...document.querySelectorAll(
+                                "textarea, [contenteditable=true]",
+                            ),
+                        ].map((input) => {
+                            const bounds = input.getBoundingClientRect();
+                            return {
+                                top: bounds.top,
+                                bottom: bounds.bottom,
+                                height: bounds.height,
+                                focused: input === document.activeElement,
+                            };
+                        }),
+                    })),
+                );
+                await failurePage.screenshot({
+                    path: join(root, "failure.png"),
+                    fullPage: true,
+                    mask: [failurePage.locator("#invitation-code")],
+                });
+            } catch (captureError) {
+                diagnostics.push(
+                    qualificationDiagnostic("failure-capture", captureError),
+                );
+            }
+        }
         diagnostics.push(
             qualificationDiagnostic(
                 activeStep,
@@ -1004,11 +1049,22 @@ if (
 ) {
     if (values.help) {
         console.log(
-            "pnpm workbench:qualify [--sources-phase prepare|inspect|close --output ABSOLUTE_DIRECTORY] [--mode deterministic|live] [--output ABSOLUTE_DIRECTORY] [--maximum-requests 1..20]\nUses the verified running local backend and web server. Real anonymous admission is required. Workbench live mode uses at most 20 inference requests / USD0.50 and launches no research. Sources phases use the separately authorized two-dossier manifest, at most 40 model attempts / 4 searches / 12 acquisitions / USD2; Start research stays in the admitted browser. An existing output directory cannot renew a closed or interrupted lot.\nOffline assessment: --assess DIRECTORY [--review FILE]. Without --review, print the evidence-bound review template.",
+            "Campaign: --campaign prepare|authorize|run|status|assess|close --output ABSOLUTE_DIRECTORY [--manifest FILE] [--configuration ID] [--correction DESCRIPTION] [--review FILE]. Prepare has no authorization effects. Authorize requires the user-approved immutable mandate. Run retains a lot and stops for development-agent review; it never edits code or retries unfinished calls.\n\npnpm workbench:qualify [--sources-phase prepare|inspect|close --output ABSOLUTE_DIRECTORY] [--mode deterministic|live] [--output ABSOLUTE_DIRECTORY] [--maximum-requests 1..20]\nUses the verified running local backend and web server. Real anonymous admission is required. Version-2 campaign manifests declare scenarios, ordered steps, configurations and budgets; run selects the next configuration or --configuration ID. Historical standalone Workbench mode retains 20 requests / USD0.50. Historical standalone Sources phases retain the two-dossier manifest, 40 model attempts / 4 searches / 12 acquisitions / USD2; Start research stays in the admitted browser. An existing output directory cannot renew a closed or interrupted lot.\nOffline assessment: --assess DIRECTORY [--review FILE]. Without --review, print the evidence-bound review template.",
         );
     } else {
         try {
-            if (values["sources-phase"]) {
+            if (values.campaign) {
+                assert(
+                    values.output,
+                    "Campaign requires an external evidence directory",
+                );
+                await runCampaign(
+                    values.campaign,
+                    values.output,
+                    values,
+                    runWorkbenchQualification,
+                );
+            } else if (values["sources-phase"]) {
                 assert(
                     values.output,
                     "Sources phase requires an explicit output directory",
@@ -1029,7 +1085,7 @@ if (
                     process.exitCode = result.status === "inconclusive" ? 2 : 1;
             } else {
                 assert(!values.review, "--review requires --assess");
-                await main();
+                await runWorkbenchQualification();
             }
         } catch {
             console.error(

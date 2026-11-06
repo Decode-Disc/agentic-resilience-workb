@@ -3,12 +3,19 @@ import type { Doc } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
 import type { AgentDefinition } from "@convex/execution/agentDefinition";
 import { executionFailureCode } from "@convex/execution/errors";
-import { researchStateSummary } from "@convex/execution/researchControl";
+import {
+    readResearchControlReadiness,
+    researchStateSummary,
+} from "@convex/execution/researchControl";
+import { researchStartBlock } from "./framingEditAuthority";
 import { requireSavedMaterialScope } from "./savedMaterialInspection";
 import { sha256Hex, stableStringify } from "./sourcePassages";
 import { summarizeSourcesPreparation } from "./sources";
 import { supportsResearchControl } from "./transitions";
-import { readWorkbenchInstructions } from "./workbenchInstructions";
+import {
+    projectWorkbenchInstructions,
+    readWorkbenchInstructions,
+} from "./workbenchInstructions";
 
 export async function readWorkbenchFacts(
     ctx: QueryCtx,
@@ -29,18 +36,26 @@ export async function readWorkbenchFacts(
         title: s.title,
         url: s.canonicalUrl,
     }));
-    if (mission && mission.definitionVersion >= 2) {
+    let captureMetadata: Awaited<
+        ReturnType<
+            typeof ctx.runQuery<
+                typeof internal.sourceRetrieval.availableCaptureMetadataForMission
+            >
+        >
+    > = [];
+    if (mission) {
         try {
             await requireSavedMaterialScope(ctx, mission, run);
+            captureMetadata = await ctx.runQuery(
+                internal.sourceRetrieval.availableCaptureMetadataForMission,
+                {
+                    missionId: mission._id,
+                    expectedGeneration: mission.generation,
+                    sourceIds: availableMaterials.map((m) => m.sourceId),
+                },
+            );
             const available = new Set(
-                await ctx.runQuery(
-                    internal.sourceRetrieval.availableCapturesForMission,
-                    {
-                        missionId: mission._id,
-                        expectedGeneration: mission.generation,
-                        sourceIds: availableMaterials.map((m) => m.sourceId),
-                    },
-                ),
+                captureMetadata.map((capture) => capture.sourceId),
             );
             availableMaterials = availableMaterials.filter((m) =>
                 available.has(m.sourceId),
@@ -51,6 +66,39 @@ export async function readWorkbenchFacts(
             availableMaterials = [];
         }
     }
+    const visitor = run.ownerVisitorId
+        ? await ctx.db.get(run.ownerVisitorId)
+        : null;
+    const startBlock = visitor
+        ? await researchStartBlock(ctx, run, framing, visitor)
+        : "not_authorized";
+    const { block: pauseBlock } = await readResearchControlReadiness(
+        ctx,
+        run,
+        "pause",
+    );
+    const { block: resumeBlock } = await readResearchControlReadiness(
+        ctx,
+        run,
+        "resume",
+    );
+    const actions = {
+        start: {
+            actor: "analyst_only",
+            applicable: startBlock === null,
+            reason: startBlock,
+        },
+        pause: {
+            actor: "analyst_or_authorized_workbench",
+            applicable: pauseBlock === null,
+            reason: pauseBlock,
+        },
+        resume: {
+            actor: "analyst_or_authorized_workbench",
+            applicable: resumeBlock === null,
+            reason: resumeBlock,
+        },
+    };
     const instructions = await readWorkbenchInstructions(ctx, run._id);
     const preparation =
         run.sourcesProtocol === "sources_mission_v1" && run.sourcePreparationId
@@ -69,14 +117,26 @@ export async function readWorkbenchFacts(
             : null,
         research: {
             summary: researchStateSummary(run),
+            started: !!(
+                run.researchStartRequestKey ||
+                run.researchStartedAt ||
+                run.fixedFramingRevisionId
+            ),
+            actions,
             phase: run.lifecycleState,
             controlAvailable: supportsResearchControl(run),
             status: run.executionStatus,
             pauseReason: run.pauseReason ?? null,
             pauseRequested: run.researchPauseRequested ?? false,
         },
-        availableMaterials,
-        analystRequests: instructions,
+        availableMaterials: availableMaterials.map((material) => ({
+            ...material,
+            capture:
+                captureMetadata.find(
+                    (capture) => capture.sourceId === material.sourceId,
+                ) ?? null,
+        })),
+        analystRequests: await projectWorkbenchInstructions(ctx, instructions),
         ...(preparation?.sourcesMission
             ? {
                   documentaryPreparation:

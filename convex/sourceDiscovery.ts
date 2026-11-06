@@ -1,3 +1,10 @@
+import { internal } from "@convex/_generated/api";
+import { stableStringify } from "@convex/domain/sourcePassages";
+import { patchQualificationReceipt } from "@convex/qualificationUsage";
+import {
+    simulatedSourceCandidate,
+    sourcesSimulationEnabled,
+} from "@convex/sourcesSimulation";
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
@@ -118,7 +125,33 @@ export const persistCandidates = internalMutation({
                 recoveredFamily =
                     supplement.supplementQueries?.[queryIndex]?.discoveryIntent;
         }
-        if (preparationState?.preparation.sourcesMission) {
+        if (
+            preparationState?.preparation.sourcesMission &&
+            (await sourcesSimulationEnabled(ctx, run._id))
+        ) {
+            const work = preparationState.preparation.sourcesMission.work.find(
+                (w) =>
+                    w.kind === "discover_sources_for_need" &&
+                    args.operationKey === `sources:${w.requestId}:search`,
+            );
+            if (
+                !work ||
+                args.providerCompletion ||
+                stableStringify(args.candidates) !==
+                    stableStringify([
+                        {
+                            ...simulatedSourceCandidate(run._id),
+                            origin: "exa",
+                            category: "research_lead",
+                        },
+                    ])
+            )
+                throw sourcePreparationError("discovery_result_invalid");
+            await ctx.runQuery(internal.sourcesMission.assertActive, {
+                requestId: work.requestId,
+                expectedGeneration: args.executionGeneration,
+            });
+        } else if (preparationState?.preparation.sourcesMission) {
             const call = args.providerCompletion
                 ? await ctx.db.get(args.providerCompletion.providerCallId)
                 : null;
@@ -264,7 +297,7 @@ export const persistCandidates = internalMutation({
             ) {
                 throw new Error("Provider attempt cannot be completed");
             }
-            await ctx.db.patch(providerCall._id, {
+            await patchQualificationReceipt(ctx, providerCall, {
                 status: args.providerCompletion.status,
                 dispatchOutcome: "response_received",
                 latencyMs: args.providerCompletion.latencyMs,

@@ -9,6 +9,7 @@ import {
     type QueryCtx,
 } from "./_generated/server";
 import { cancelRunExecution } from "./domain/runCancellation";
+import { requireCampaignLot } from "./qualificationCampaigns";
 
 export const BROWSER_TEST_SLOT = "analyst-4";
 /** Fixed limits of the explicitly authorized local two-dossier Sources qualification. */
@@ -163,9 +164,13 @@ export async function readWorkbenchQualification(
     if (
         context?.status !== "active" ||
         context.expiresAt <= Date.now() ||
-        !(context.paidQualification?.sourcesLot
-            ? context.paidQualification.sourcesLot.includes(run._id)
-            : context.paidQualification?.runId === run._id) ||
+        !(context.paidQualification?.scenarios
+            ? context.paidQualification.scenarios.some(
+                  (s) => s.runId === run._id,
+              )
+            : context.paidQualification?.sourcesLot
+              ? context.paidQualification.sourcesLot.includes(run._id)
+              : context.paidQualification?.runId === run._id) ||
         context.ownerVisitorId !== run.ownerVisitorId
     )
         return null;
@@ -182,6 +187,8 @@ export async function readWorkbenchQualification(
         Date.now() >= run.researchStartedAt + 15 * 60_000
     )
         return null;
+    if (context.campaignLotId)
+        await requireCampaignLot(ctx, context.campaignLotId);
     const visitor = await requireBrowserTestOwner(ctx, BROWSER_TEST_SLOT);
     if (
         visitor._id !== context.ownerVisitorId ||

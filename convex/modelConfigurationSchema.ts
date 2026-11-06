@@ -1,3 +1,8 @@
+import {
+    reasoningEffortValues,
+    reasoningPreferenceValues,
+} from "./modelConfigurationValues";
+export { reasoningEffortValues } from "./modelConfigurationValues";
 import { responseControlConfiguration } from "@convex/domain/workbenchResponseControlContracts";
 import { defineTable } from "convex/server";
 import { v } from "convex/values";
@@ -10,21 +15,19 @@ export const modelAgent = v.union(
     v.literal("saved_material_inspection"),
 );
 export const reasoningEffort = v.union(
-    v.literal("none"),
-    v.literal("minimal"),
-    v.literal("low"),
-    v.literal("medium"),
-    v.literal("high"),
-    v.literal("xhigh"),
-    v.literal("max"),
+    ...reasoningEffortValues.map((value) => v.literal(value)),
 );
+export const reasoningPreference = v.union(
+    ...reasoningPreferenceValues.map((value) => v.literal(value)),
+);
+export const qualificationReasoningSelection = v.object({
+    workbench: reasoningPreference,
+    sources: reasoningPreference,
+});
 export const initialModelSelection = v.object({
     catalogId: v.id("modelCatalog"),
     reasoningEffort: v.optional(reasoningEffort),
 });
-export const reasoningEffortValues = reasoningEffort.members.map(
-    (member) => member.value,
-);
 /** Shared preparation identity for administrator admission and its action. */
 export const modelPreparationInput = v.object({
     model: v.string(),
@@ -94,6 +97,7 @@ export const modelConfigurationTables = {
         catalogId: v.id("modelCatalog"),
         revision: v.number(),
         ...effectiveModelConfiguration.fields,
+        reasoningPreference: v.optional(reasoningPreference),
         preparationHash: v.string(),
         createdAt: v.number(),
     }).index("by_catalog_and_revision", ["catalogId", "revision"]),

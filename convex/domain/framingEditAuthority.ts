@@ -1,7 +1,10 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
+import { researchSlotBlock } from "@convex/execution/authority";
 import { conversationInstructions } from "@convex/execution/conversations";
 import { executionError } from "@convex/execution/errors";
+import { MAX_ANALYSES_PER_VISITOR } from "@convex/resourceLimits";
+import { sourcesQualificationEnabled } from "@convex/sourcesSimulation";
 import { stableStringify } from "./sourcePassages";
 import {
     explicitFramingPreservation,
@@ -127,4 +130,33 @@ export async function requireFramingEditAuthority(
         orderConflict
     )
         throw executionError("framing_analyst_conflict");
+}
+
+/** Shared Start admission: presentation reports the same unmet prerequisite as execution. */
+export async function researchStartBlock(
+    ctx: QueryCtx,
+    run: Doc<"researchRuns">,
+    framing: Doc<"framingRevisions"> | null,
+    visitor: Doc<"visitors">,
+) {
+    if (
+        run.researchStartRequestKey ||
+        run.researchStartedAt ||
+        run.fixedFramingRevisionId
+    )
+        return "research_already_started";
+    if (
+        run.startMode !== "framed" ||
+        run.lifecycleState !== "framing" ||
+        run.executionStatus !== "idle"
+    )
+        return "framing_fixed";
+    if (!framing?.content.scope.trim() || !framing.content.questions.length)
+        return "framing_invalid";
+    if (
+        !(await sourcesQualificationEnabled(ctx, run)) &&
+        visitor.analysesReserved >= MAX_ANALYSES_PER_VISITOR
+    )
+        return "analysis_limit_reached";
+    return researchSlotBlock(ctx, visitor._id);
 }

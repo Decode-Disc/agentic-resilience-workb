@@ -55,6 +55,10 @@ import {
 } from "@convex/integrations/sourceQualification";
 import type { SourceQualificationRoute } from "@convex/integrations/sourceQualificationConfig";
 import { revisionRoute } from "@convex/modelConfiguration";
+import {
+    simulatedSourceCandidate,
+    simulatedSourceText,
+} from "@convex/sourcesSimulation";
 import type { FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -1495,7 +1499,21 @@ async function inspectSourceDocument(
                           capture.failureCode ?? "inspection_in_progress",
                   };
         }
-        if (source.origin !== "sec" && !process.env.EXA_API_KEY?.trim()) {
+        const simulation = await ctx.runQuery(
+            internal.sourcesSimulation.enabled,
+            { runId: capture.runId },
+        );
+        if (
+            simulation &&
+            source.canonicalUrl !==
+                simulatedSourceCandidate(capture.runId).canonicalUrl
+        )
+            throw sourcePreparationError("acquisition_target_invalid");
+        if (
+            !simulation &&
+            source.origin !== "sec" &&
+            !process.env.EXA_API_KEY?.trim()
+        ) {
             throw sourcePreparationError("missing_configuration");
         }
         const preparation = await ctx.runQuery(
@@ -1509,6 +1527,7 @@ async function inspectSourceDocument(
                 validatePublicSourceUrl(
                     source.canonicalUrl,
                     async (hostname) => {
+                        if (simulation) return ["93.184.216.34"];
                         const addresses = await lookup(hostname, {
                             all: true,
                             verbatim: true,
@@ -1560,16 +1579,18 @@ async function inspectSourceDocument(
         const operationScope = `${preparation.operationKey}:step:source_preparation:source:${source._id}:capture:${capture._id}`;
         const acquisitionOperation =
             source.origin === "sec" ? "retrieve_filing_html" : "get_contents";
-        const acquisitionPlan = await ctx.runQuery(
-            internal.providerCalls.nextPreparationAttemptForInput,
-            {
-                preparationId: args.preparationId,
-                sourceId: source._id,
-                operation: acquisitionOperation,
-                inputHash: capture.requestInputHash,
-                now: Date.now(),
-            },
-        );
+        const acquisitionPlan = simulation
+            ? { attempt: 1, errorCode: undefined }
+            : await ctx.runQuery(
+                  internal.providerCalls.nextPreparationAttemptForInput,
+                  {
+                      preparationId: args.preparationId,
+                      sourceId: source._id,
+                      operation: acquisitionOperation,
+                      inputHash: capture.requestInputHash,
+                      now: Date.now(),
+                  },
+              );
         if (!acquisitionPlan.attempt)
             throw sourcePreparationError(
                 acquisitionPlan.errorCode ?? "retrieval_unavailable",
@@ -1667,14 +1688,28 @@ async function inspectSourceDocument(
                   )
                 : await retrieveAndNormalizeExaFiling(
                       createExaContentsAdapter(
-                          createExaContentsClient(
-                              process.env.EXA_API_KEY?.trim() ?? "",
-                          ),
+                          simulation
+                              ? {
+                                    getContents: async (urls) => ({
+                                        results: urls.map((url) => ({
+                                            id: "sources-simulation-v1",
+                                            url,
+                                            text: simulatedSourceText,
+                                        })),
+                                    }),
+                                }
+                              : createExaContentsClient(
+                                    process.env.EXA_API_KEY?.trim() ?? "",
+                                ),
                           {
-                              recordAttempt,
-                              operationScope,
-                              firstAttempt,
-                              maxAttempts,
+                              ...(simulation
+                                  ? { maxAttempts: 1 }
+                                  : {
+                                        recordAttempt,
+                                        operationScope,
+                                        firstAttempt,
+                                        maxAttempts,
+                                    }),
                               retryPolicy: "confirmed_response",
                               timeoutMs: Math.min(120_000, remainingMs),
                           },

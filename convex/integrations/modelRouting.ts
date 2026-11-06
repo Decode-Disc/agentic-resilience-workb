@@ -1,7 +1,9 @@
+import { reasoningEffortValues } from "@convex/modelConfigurationValues";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import type {
     modelDescriptor,
     reasoningEffort,
+    reasoningPreference,
 } from "@convex/modelConfigurationSchema";
 import chordPackage from "@earendil-works/chord/package.json";
 import { PI_AI_VERSION } from "@earendil-works/pi-ai/utils/version";
@@ -77,15 +79,40 @@ export const WORKBENCH_MODEL_ROUTE: ModelRoute & { authorizedForAgent: true } =
         authorizedForAgent: true,
     };
 
-/** Preserve the existing economical default when the provider explicitly supports it. */
-export function defaultReasoningEffort(
+/** Only advertised levels can be offered or recommended; mandatory reasoning excludes off. */
+export function reasoningChoices(descriptor: Infer<typeof modelDescriptor>) {
+    return descriptor.reasoning
+        ? (descriptor.reasoningEfforts ?? []).filter(
+              (effort) => effort !== "none" || !descriptor.reasoningMandatory,
+          )
+        : [];
+}
+
+/** Medium is a recommendation, never an admission floor or an invented capability. */
+export function recommendedReasoningEffort(
     descriptor: Infer<typeof modelDescriptor>,
 ) {
     if (!descriptor.reasoning) return undefined;
-    if (descriptor.reasoningEfforts === undefined) return "low" as const;
-    return descriptor.reasoningEfforts.includes("low")
-        ? ("low" as const)
-        : descriptor.reasoningDefault;
+    const supported = reasoningChoices(descriptor);
+    const order = reasoningEffortValues;
+    return (
+        order
+            .slice(order.indexOf("medium"))
+            .find((effort) => supported.includes(effort)) ??
+        [...order.slice(0, order.indexOf("medium"))]
+            .reverse()
+            .find((effort) => supported.includes(effort))
+    );
+}
+
+/** Resolves an administrative or frozen evaluation choice against its saved capabilities. */
+export function resolveReasoningPreference(
+    descriptor: Infer<typeof modelDescriptor>,
+    preference: Infer<typeof reasoningPreference>,
+) {
+    return preference === "recommended"
+        ? recommendedReasoningEffort(descriptor)
+        : preference;
 }
 
 /** Derives wire preferences and bounded generation options from the admitted model capabilities. */

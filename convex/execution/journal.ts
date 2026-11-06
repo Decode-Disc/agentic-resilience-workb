@@ -103,6 +103,85 @@ function observablePayload(payload: RetainedPayload) {
     return { state: "complete", value };
 }
 
+/** Current operation status is compact; detailed input/result remains in its immutable observation. */
+export function operationContextObservation(
+    request: Doc<"agentOperationRequests">,
+) {
+    const outcome = request.outcome;
+    return {
+        requestId: request._id,
+        input: { kind: request.input.kind },
+        status: request.status,
+        outcome: outcome
+            ? {
+                  kind: outcome.kind,
+                  ...("captureId" in outcome && outcome.captureId
+                      ? { captureId: outcome.captureId }
+                      : {}),
+                  ...("code" in outcome ? { code: outcome.code } : {}),
+                  ...("validation" in outcome && outcome.validation
+                      ? { validation: outcome.validation }
+                      : {}),
+              }
+            : null,
+        adopted:
+            request.adoptedAt !== undefined && !request.adoptionRefusalCode,
+        ...(request.adoptionRefusalCode
+            ? {
+                  adoption: {
+                      kind: "refused",
+                      code: request.adoptionRefusalCode,
+                  },
+              }
+            : {}),
+    };
+}
+
+/** References resolve to retained events, never a reconstructed historical request. */
+export async function operationHistoryReference(
+    ctx: Pick<QueryCtx, "db">,
+    requestId: Id<"agentOperationRequests">,
+) {
+    for (const kind of [
+        "operation_completed",
+        "operation_observed",
+        "operation_refused",
+        "operation_requested",
+    ]) {
+        const event = await ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_request_and_kind", (q) =>
+                q.eq("requestId", requestId).eq("kind", kind),
+            )
+            .order("desc")
+            .first();
+        if (event) return event._id;
+    }
+    return null;
+}
+
+/** Locate an immutable observation without consulting mutable invocation output. */
+export async function invocationHistoryReference(
+    ctx: Pick<QueryCtx, "db">,
+    invocationId: Id<"agentInvocations">,
+) {
+    for (const kind of [
+        "invocation_refused",
+        "invocation_returned",
+        "invocation_reply_recorded",
+    ]) {
+        const event = await ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_invocation_and_kind", (q) =>
+                q.eq("invocationId", invocationId).eq("kind", kind),
+            )
+            .order("desc")
+            .first();
+        if (event) return event._id;
+    }
+    return null;
+}
+
 /** Historical fragments never join the current mutable execution documents. */
 export async function projectMissionHistoryEvent(
     ctx: QueryCtx,
@@ -142,14 +221,21 @@ export async function projectMissionHistoryEvent(
         event: metadata,
         ...(event.payload
             ? { observation: observablePayload(event.payload) }
-            : event.requestId && OPERATION_OBSERVATIONS.has(event.kind)
+            : event.kind === "invocation_refused"
               ? {
                     observation: {
                         state: "incomplete",
-                        code: "operation_observation_unavailable",
+                        code: "invocation_observation_unavailable",
                     },
                 }
-              : {}),
+              : event.requestId && OPERATION_OBSERVATIONS.has(event.kind)
+                ? {
+                      observation: {
+                          state: "incomplete",
+                          code: "operation_observation_unavailable",
+                      },
+                  }
+                : {}),
         ...(part || event.invocationPayloadId
             ? {
                   invocation: invocationPayload

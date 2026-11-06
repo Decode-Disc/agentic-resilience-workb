@@ -77,6 +77,20 @@ export async function requireDossierAuthority(
     return { run, visitor };
 }
 
+/** Start and Resume claim the same visitor-owned research slot. */
+export async function researchSlotBlock(
+    ctx: QueryCtx,
+    visitorId: Id<"visitors">,
+) {
+    const active = await ctx.db
+        .query("researchRuns")
+        .withIndex("by_owner_and_execution_status", (q) =>
+            q.eq("ownerVisitorId", visitorId).eq("executionStatus", "running"),
+        )
+        .first();
+    return active ? "execution_slot_unavailable" : null;
+}
+
 export async function requireRunAuthority(
     ctx: QueryCtx,
     runId: Id<"researchRuns">,

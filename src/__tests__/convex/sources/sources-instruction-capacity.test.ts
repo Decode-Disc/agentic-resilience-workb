@@ -6,7 +6,10 @@ import { executionFailureCode } from "@convex/execution/errors";
 import { extractObservedDestinations } from "@convex/integrations/evidenceNormalization";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import {
+    recordDocumentaryRead,
+    seedObservedSources,
+} from "@/__tests__/setup/sources-mission";
 
 const examiner = vi.hoisted(() => vi.fn());
 vi.mock("@convex/integrations/documentaryControl", () => ({
@@ -19,7 +22,7 @@ afterEach(() => {
 });
 
 async function seedInstructionPreparation() {
-    const f = await seedCapturedSources();
+    const f = await seedObservedSources();
     const framingId = await f.t.run(async (ctx) => {
         const preparation = await ctx.db.get(f.preparationId);
         assert(preparation?.sourcesMission);
@@ -104,7 +107,7 @@ async function registerInstructions(
 test.each([
     { documentCount: 3, needCount: 80, large: false },
     { documentCount: 48, needCount: 2, large: true },
-])("need admission preserves controlled material through invocation completion: %j", async ({
+])("need admission preserves controlled material through fallback after context-capacity refusal: %j", async ({
     documentCount,
     needCount,
     large,
@@ -209,6 +212,18 @@ test.each([
     });
     const requestIds: Id<"agentOperationRequests">[] = [];
     for (const document of documents) {
+        const readRequestId = await f.t.run((ctx) =>
+            recordDocumentaryRead(ctx, {
+                runId: f.runId,
+                captureId: document.captureId,
+                evidence: [
+                    {
+                        passageOrder: f.passage.order,
+                        quotation: f.passage.quotation,
+                    },
+                ],
+            }),
+        );
         const requestId = await f.t.mutation(
             internal.execution.operations.enqueueNative,
             {
@@ -229,9 +244,8 @@ test.each([
                             kind: "context" as const,
                             evidence: [
                                 {
-                                    captureId: document.captureId,
+                                    readRequestId,
                                     passageOrder: f.passage.order,
-                                    quotation: f.passage.quotation,
                                 },
                             ],
                         },
@@ -275,16 +289,7 @@ test.each([
     });
     expect(before.documents).toHaveLength(requestIds.length);
     expect(requestIds.length).toBeGreaterThan(2);
-    const invocation = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: f.missionId,
-            expectedGeneration: 4,
-            taskKey: "need-capacity-completion",
-            provenance: "simulation",
-        },
-    );
-    assert(invocation.kind === "ready");
+
     const instructionIds = await registerInstructions(
         f,
         "additional",
@@ -325,6 +330,19 @@ test.each([
     assert(preparation?.sourcesMission);
     const data = preparation.sourcesMission;
     expect(data.needs).toHaveLength(originalNeeds.length + transmitted.length);
+    const invocation = await f.t.mutation(
+        internal.execution.invocations.begin,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            taskKey: "need-capacity-completion",
+            provenance: "simulation",
+        },
+    );
+    expect(invocation).toMatchObject({
+        kind: "blocked",
+        code: "context_capacity",
+    });
     const [lastInstruction] = await registerInstructions(
         f,
         "during-completion",
@@ -333,23 +351,11 @@ test.each([
     assert(lastInstruction);
     const completion = await f.t.run((ctx) =>
         ctx.runMutation(
-            internal.execution.invocations.finish,
+            internal.sourcesMission.finish,
             {
-                invocationId: invocation.invocationId,
+                preparationId: f.preparationId,
+                missionId: f.missionId,
                 expectedGeneration: 4,
-                response: {
-                    kind: "complete",
-                    needsRevision: data.needsRevision,
-                    needs: data.needs.map((need) => ({
-                        needId: need.id,
-                        unfinished: originalNeeds.includes(need.id)
-                            ? []
-                            : ["New documentary work remains."],
-                        workRequestIds: originalNeeds.includes(need.id)
-                            ? requestIds
-                            : [],
-                    })),
-                },
             },
             {
                 transactionLimits: {
@@ -359,7 +365,7 @@ test.each([
             },
         ),
     );
-    expect(completion.kind).toBe("completed");
+    expect(completion).toBeNull();
     expect((await f.t.run((ctx) => ctx.db.get(lastInstruction)))?.status).toBe(
         "limited",
     );
@@ -373,16 +379,7 @@ test.each([
 test("unavailable controls and later requests retain explicit outcomes within completion capacity", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     const f = await seedInstructionPreparation();
-    const invocation = await f.t.mutation(
-        internal.execution.invocations.begin,
-        {
-            missionId: f.missionId,
-            expectedGeneration: 4,
-            taskKey: "unavailable-work-completion",
-            provenance: "simulation",
-        },
-    );
-    assert(invocation.kind === "ready");
+
     await f.t.run(async (ctx) => {
         const p = await ctx.db.get(f.preparationId);
         assert(p?.sourcesMission);
@@ -429,9 +426,8 @@ test("unavailable controls and later requests retain explicit outcomes within co
                                 kind: "context",
                                 evidence: [
                                     {
-                                        captureId: f.captureId,
+                                        readRequestId: f.nativeReadRequestId,
                                         passageOrder: f.passage.order,
-                                        quotation: f.passage.quotation,
                                     },
                                 ],
                             },
@@ -497,6 +493,16 @@ test("unavailable controls and later requests retain explicit outcomes within co
     const p = await f.t.run((ctx) => ctx.db.get(f.preparationId));
     assert(p?.sourcesMission);
     const data = p.sourcesMission;
+    const invocation = await f.t.mutation(
+        internal.execution.invocations.begin,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            taskKey: "unavailable-work-completion",
+            provenance: "simulation",
+        },
+    );
+    assert(invocation.kind === "ready", JSON.stringify(invocation));
     const completion = await f.t.mutation(
         internal.execution.invocations.finish,
         {
@@ -504,13 +510,10 @@ test("unavailable controls and later requests retain explicit outcomes within co
             expectedGeneration: 4,
             response: {
                 kind: "complete",
-                needsRevision: data.needsRevision,
+
                 needs: data.needs.map((n) => ({
                     needId: n.id,
                     unfinished: ["Documentary examination remains unfinished."],
-                    workRequestIds: originalNeeds.includes(n.id)
-                        ? requestIds
-                        : [],
                 })),
             },
         },
@@ -535,9 +538,8 @@ test.each([
     assert(instructionId);
     const evidence = [
         {
-            captureId: f.captureId,
+            readRequestId: f.nativeReadRequestId,
             passageOrder: f.passage.order,
-            quotation: f.passage.quotation,
         },
     ];
     const input: SourcesOperation =
@@ -613,12 +615,11 @@ test.each([
             expectedGeneration: 4,
             response: {
                 kind: "complete",
-                needsRevision: 1,
+
                 needs: [
                     {
                         needId: "common-context",
                         unfinished: ["Examination remains unavailable."],
-                        workRequestIds: [requestId],
                     },
                 ],
             },

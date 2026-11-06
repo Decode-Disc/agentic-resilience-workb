@@ -7,6 +7,7 @@ import {
     planQualification,
     readQualificationBattery,
     sha256,
+    sourcesBatterySchema,
     verifyQualificationCandidate,
 } from "../../../scripts/evaluations/workbench-browser/protocol.ts";
 
@@ -207,4 +208,70 @@ test("a material failed expectation blocks acceptance despite completed missions
     } finally {
         rmSync(f.root, { recursive: true });
     }
+});
+
+test("repeated validation of identical source bytes and tools reuses its successful checks", () => {
+    const f = fixture();
+    try {
+        let checks = 0;
+        const execute = () => {
+            checks++;
+            return { status: 0 };
+        };
+        verifyQualificationCandidate(f.root, f.fingerprints, execute);
+        verifyQualificationCandidate(f.root, f.fingerprints, execute);
+        assert.equal(checks, 6);
+    } finally {
+        rmSync(f.root, { recursive: true });
+    }
+});
+
+test("Sources simulation requires an explicit zero-provider battery; live defaults cannot accept zero allowances", () => {
+    const base = JSON.parse(
+        readFileSync(
+            "scripts/evaluations/workbench-browser/sources-cases.json",
+            "utf8",
+        ),
+    );
+    const zero = {
+        ...base,
+        maximumModelAttempts: 0,
+        maximumSearchAttempts: 0,
+        maximumAcquisitions: 0,
+        maximumCostUsd: 0,
+    };
+    assert.equal(sourcesBatterySchema.safeParse(zero).success, false);
+    assert.equal(
+        sourcesBatterySchema.safeParse({ ...zero, mode: "deterministic" })
+            .success,
+        true,
+    );
+    assert.equal(
+        sourcesBatterySchema.safeParse({
+            ...zero,
+            mode: "deterministic",
+            maximumSearchAttempts: 1,
+        }).success,
+        false,
+    );
+});
+
+import { collectSourcesTranscripts } from "../../../scripts/evaluations/workbench-browser/sources.ts";
+
+test("zero paid attempts still permit bounded inspection of simulated invocations", async () => {
+    const invocation = { _id: "simulated-invocation" };
+    const readPage = async () => ({
+        page: [invocation],
+        payloads: [],
+        isDone: true,
+        continueCursor: "",
+    });
+    await assert.rejects(
+        collectSourcesTranscripts(readPage, 0),
+        /Invalid transcript inspection bound/,
+    );
+    assert.deepEqual(
+        await collectSourcesTranscripts(readPage, 0, "deterministic"),
+        { invocations: [invocation], payloads: [] },
+    );
 });

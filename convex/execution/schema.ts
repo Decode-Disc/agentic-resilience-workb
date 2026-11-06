@@ -85,6 +85,12 @@ const missionFields = {
     lastInvocationId: v.optional(v.id("agentInvocations")),
     lastSettledInvocationId: v.optional(v.id("agentInvocations")),
     noProgressTurns: v.number(),
+    recoveryRead: v.optional(
+        v.object({
+            refusalInvocationId: v.id("agentInvocations"),
+            restorationInvocationId: v.optional(v.id("agentInvocations")),
+        }),
+    ),
     progressKeys: v.array(v.string()),
     workingNotes: v.string(),
     obligations: v.array(v.string()),
@@ -374,6 +380,7 @@ export const executionTables = {
             "historySourceSequence",
         ])
         .index("by_mission_and_kind", ["missionId", "kind"])
+        .index("by_request_and_kind", ["requestId", "kind"])
         .index("by_invocation_and_kind", ["invocationId", "kind"])
         .index("by_run", ["runId"]),
 };

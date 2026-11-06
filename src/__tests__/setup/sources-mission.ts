@@ -1,7 +1,72 @@
 import { internal } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import type { MutationCtx } from "@convex/_generated/server";
 import { SOURCE_RETRIEVAL_VERSION } from "@convex/domain/sourceRetrievalPolicy";
 import { initializeSources } from "@convex/domain/sources";
 import { seedInspectedEvidence } from "./source-preparation";
+
+/** Declares an already-adopted read for capacity/history fixtures; reading behavior tests dispatch the real operation. */
+export async function recordDocumentaryRead(
+    ctx: MutationCtx,
+    args: {
+        runId: Id<"researchRuns">;
+        missionId?: Id<"agentMissions">;
+        captureId: Id<"sourceCaptures">;
+        evidence: readonly { passageOrder: number; quotation: string }[];
+    },
+) {
+    const capture = await ctx.db.get(args.captureId);
+    const run = await ctx.db.get(args.runId);
+    if (!capture?.contentHash || !run)
+        throw new Error("Recorded read requires a captured source");
+    const source = await ctx.db.get(capture.sourceId);
+    if (!source) throw new Error("Recorded read requires source metadata");
+    const passages = [
+        ...new Map(args.evidence.map((e) => [e.passageOrder, e])).values(),
+    ];
+    return ctx.db.insert("agentOperationRequests", {
+        runId: args.runId,
+        missionId: args.missionId,
+        actor: args.missionId ? "agent" : "system",
+        cause: "recorded-documentary-read",
+        logicalKey: `recorded-read:${args.captureId}:${args.missionId ?? "native"}:${passages.length}`,
+        expectedGeneration: run.executionGeneration,
+        operationVersion: 1,
+        status: "completed",
+        createdAt: 1,
+        completedAt: 1,
+        adoptedAt: 1,
+        input: {
+            kind: "search_available_material",
+            sourceId: capture.sourceId,
+            query: "recorded passage selection",
+        },
+        pin: {
+            kind: "saved_material_inspection_v1",
+            expectedCaptureId: capture._id,
+            expectedContentHash: capture.contentHash,
+        },
+        outcome: {
+            kind: "success",
+            captureId: capture._id,
+            valueJson: JSON.stringify({
+                kind: "search_available_material",
+                sourceId: capture.sourceId,
+                captureId: capture._id,
+                contentHash: capture.contentHash,
+                canonicalUrl: source.canonicalUrl,
+                retrievedAt: capture.retrievedAt,
+                passages: passages.map((e) => ({
+                    passageOrder: e.passageOrder,
+                    exactQuote: e.quotation,
+                    headingPath: [],
+                })),
+                omittedPassageCount: 0,
+                limitReached: false,
+            }),
+        },
+    });
+}
 
 export const sourcesTestEnvelope = {
     version: 1 as const,
@@ -80,5 +145,36 @@ export async function seedCapturedSources() {
             .first(),
     );
     if (!passage) throw new Error("Fixture capture was not indexed");
-    return { ...f, preparationId, missionId, passage };
+    return {
+        ...f,
+        preparationId,
+        missionId,
+        passage,
+        readRequestId: requestId,
+    };
+}
+
+/** Adds an adopted native reading only for scenarios exercising native documentary controls. */
+export async function seedObservedSources() {
+    const f = await seedCapturedSources();
+    const nativeReadRequestId = await f.t.mutation(
+        internal.execution.operations.enqueueNative,
+        {
+            runId: f.runId,
+            expectedGeneration: 4,
+            cause: "fixture-native-read",
+            input: {
+                kind: "read_in_context",
+                sourceId: f.sourceId,
+                passageOrder: f.passage.order,
+            },
+        },
+    );
+    const nativeOutcome = await f.t.action(
+        internal.execution.operations.dispatch,
+        { requestId: nativeReadRequestId, expectedGeneration: 4 },
+    );
+    if (nativeOutcome.kind !== "success")
+        throw new Error("Native fixture read failed");
+    return { ...f, nativeReadRequestId };
 }

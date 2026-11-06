@@ -11,6 +11,7 @@ export const observedDestinationValidator = v.object({
 });
 
 export const SOURCES_PROTOCOL = "sources_mission_v1";
+export const SOURCES_MAX_EVIDENCE_REFERENCES = 8;
 export const sourcesEnvelopeValidator = v.object({
     version: v.literal(1),
     maxNeeds: v.number(),
@@ -30,6 +31,10 @@ export const documentaryQuoteValidator = v.object({
     captureId: sourceMaterialReferenceValidator.fields.captureId,
     passageOrder: v.number(),
     quotation: v.string(),
+});
+export const documentaryEvidenceSelectionValidator = v.object({
+    readRequestId: v.id("agentOperationRequests"),
+    passageOrder: v.number(),
 });
 export const documentaryContributionValidator = v.object({
     id: v.string(),
@@ -141,6 +146,8 @@ export const documentaryStatusValidator = v.object({
         representationCompleteness: v.optional(
             v.union(v.literal("complete"), v.literal("partial")),
         ),
+        /** Absent on retained results; absence and null both mean unknown. */
+        captureOmittedPassageCount: v.optional(v.union(v.number(), v.null())),
         observedDestinationCount: v.number(),
     }),
     observedDestinations: v.array(
@@ -209,7 +216,7 @@ export const consultableSourceInput = v.object({
     ),
     observedLinkIndex: v.optional(v.number()),
 });
-export const qualificationSubmissionInput = v.object({
+export const materializedQualificationInput = v.object({
     sourceId: sourceMaterialReferenceValidator.fields.sourceId,
     captureId: sourceMaterialReferenceValidator.fields.captureId,
     expectedTaskId: v.union(v.id("aiTaskResults"), v.null()),
@@ -229,7 +236,20 @@ export const qualificationSubmissionInput = v.object({
         }),
     ),
 });
-export const documentaryCheckInput = v.object({
+export const qualificationSubmissionInput = v.object({
+    ...materializedQualificationInput.fields,
+    changes: v.array(
+        v.object({
+            ...materializedQualificationInput.fields.changes.element.fields,
+            contribution: v.object({
+                ...materializedQualificationInput.fields.changes.element.fields
+                    .contribution.fields,
+                evidence: v.array(documentaryEvidenceSelectionValidator),
+            }),
+        }),
+    ),
+});
+const materializedDocumentaryCheckInput = v.object({
     ...needInput,
     sourceId: sourceMaterialReferenceValidator.fields.sourceId,
     proposition: v.string(),
@@ -243,6 +263,10 @@ export const documentaryCheckInput = v.object({
             }),
         ),
     ),
+});
+export const documentaryCheckInput = v.object({
+    ...materializedDocumentaryCheckInput.fields,
+    evidence: v.array(documentaryEvidenceSelectionValidator),
 });
 export const sourcesOperationValidator = v.union(
     v.object({
@@ -275,6 +299,18 @@ export const sourcesCompletionValidator = v.object({
     needs: v.array(needOutcomeValidator),
     workingNotes: v.optional(v.string()),
 });
+export const sourcesCompletionProposalValidator = v.object({
+    kind: v.literal("complete"),
+    needs: v.array(
+        v.object({
+            needId: needOutcomeValidator.fields.needId,
+            gap: needOutcomeValidator.fields.gap,
+            unfinished: needOutcomeValidator.fields.unfinished,
+            readRequestIds: v.optional(v.array(v.id("agentOperationRequests"))),
+        }),
+    ),
+    workingNotes: v.optional(v.string()),
+});
 export const sourcesResultValidator = v.object({
     kind: v.literal("sources_v1"),
     preparationId: v.id("sourceSelectionProposalRebuilds"),
@@ -284,9 +320,23 @@ export const sourcesSchemas = {
     id: v.literal("sources_v1"),
     scope: sourcesScopeValidator,
     state: sourcesStateValidator,
-    completion: sourcesCompletionValidator,
+    completion: v.union(
+        sourcesCompletionProposalValidator,
+        sourcesCompletionValidator,
+    ),
     result: sourcesResultValidator,
-    operation: sourcesOperationValidator,
+    // Historical requests retain their original bytes; current operation bindings admit selections only.
+    operation: v.union(
+        ...sourcesOperationValidator.members,
+        v.object({
+            kind: v.literal("submit_documentary_qualification"),
+            ...materializedQualificationInput.fields,
+        }),
+        v.object({
+            kind: v.literal("request_documentary_check"),
+            ...materializedDocumentaryCheckInput.fields,
+        }),
+    ),
     pin: v.object({
         kind: v.literal("sources_v1"),
         preparationId: v.id("sourceSelectionProposalRebuilds"),

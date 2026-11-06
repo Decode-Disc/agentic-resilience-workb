@@ -1,3 +1,4 @@
+import { patchQualificationReceipt } from "@convex/qualificationUsage";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { WorkflowId } from "@convex-dev/workflow";
 import {
@@ -1999,7 +2000,7 @@ export const persistRebuildCandidates = internalMutation({
             });
             inserted += 1;
         }
-        await ctx.db.patch(providerCall._id, {
+        await patchQualificationReceipt(ctx, providerCall, {
             status: args.providerStatus,
             latencyMs: args.latencyMs,
             usage: {

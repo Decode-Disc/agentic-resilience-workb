@@ -1,4 +1,5 @@
 import { api, internal } from "@convex/_generated/api";
+import { domainSnapshot } from "@convex/execution/agentDefinition";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import {
     seedWorkbench,
@@ -56,10 +57,10 @@ test("a closed status conflict asks for one contextual correction without replac
     });
     assert(context.kind === "ready");
     const input = JSON.parse(context.inputJson);
-    expect(input.responseControl.reminder).toContain(
+    expect(input.domain.responseControl.reminder).toContain(
         "Research has not started.",
     );
-    expect(input.responseControl.draft).toBe(draft);
+    expect(input.domain.responseControl.draft).toBe(draft);
     expect(input.constraints.operations).toEqual([]);
     const correction = await t.mutation(internal.execution.invocations.begin, {
         missionId: active.missionId,
@@ -201,7 +202,7 @@ async function liveReviewFixture() {
             invocationId: row._id,
             runId,
             executionGeneration: 1,
-            workflowVersion: 2,
+            workflowVersion: row.definitionVersion,
             service: "model" as const,
             operation: "agent_reasoning",
             stepKey: "agent_reasoning",
@@ -458,7 +459,7 @@ test("an unavailable correction profile preserves the draft with an explicit res
         ).page.find((m) => m.role === "assistant"),
     ).toMatchObject({
         text: "Research is running.",
-        responseControl: { status: "unavailable" },
+        responseControl: { status: "review_needed" },
     });
 });
 
@@ -506,7 +507,7 @@ test("unknown advisory work becomes unavailable without redispatch or refunding 
         invocationId: row._id,
         runId,
         executionGeneration: 1,
-        workflowVersion: 2,
+        workflowVersion: row.definitionVersion,
         service: "model",
         operation: "response_coherence",
         stepKey: "response_coherence",
@@ -726,13 +727,13 @@ test("an enabled controller reviews the first reply even without operations", as
 });
 
 test("the actual Pi worker delivers the reminder and publishes only the revised explanation", async () => {
-    const { nativeWorkbenchDefinition } = await import(
+    const { workbenchDefinition } = await import(
         "@convex/domain/workbenchAgent"
     );
     const generated = vi
-        .spyOn(nativeWorkbenchDefinition, "simulate")
+        .spyOn(workbenchDefinition, "simulate")
         .mockImplementation((input) => {
-            const snapshot = input as {
+            const snapshot = domainSnapshot(input) as {
                 responseControl?: { reminder?: string };
             };
             return {
@@ -783,7 +784,7 @@ test("the actual Pi worker delivers the reminder and publishes only the revised 
         );
         expect(invocations).toHaveLength(2);
         const corrected = invocations.find(
-            (i) => JSON.parse(i.inputJson).responseControl?.reminder,
+            (i) => JSON.parse(i.inputJson).domain.responseControl?.reminder,
         );
         assert(corrected);
         const request = await t.run((ctx) =>
@@ -804,9 +805,9 @@ test("the actual Pi worker delivers the reminder and publishes only the revised 
             )
             .join("\n");
         expect(actualMessageText).toContain('"draft":"Research is running."');
-        expect(JSON.parse(corrected.inputJson).responseControl.draft).toBe(
-            "Research is running.",
-        );
+        expect(
+            JSON.parse(corrected.inputJson).domain.responseControl.draft,
+        ).toBe("Research is running.");
         expect(
             invocations.map(
                 (i) => JSON.parse(i.receivedOutputJson ?? "{}").text,
@@ -1145,7 +1146,7 @@ test("a correction refused by the shared model budget publishes the original wit
         ).page.find((m) => m.role === "assistant"),
     ).toMatchObject({
         text: response.text,
-        responseControl: { status: "unavailable" },
+        responseControl: { status: "review_needed" },
     });
     expect(
         (await t.run((ctx) => ctx.db.get(runId)))?.sourcePreparationBudget
@@ -1296,14 +1297,16 @@ test("a model cannot request the host review operation", async () => {
 });
 
 test("a corrective model attempting tools cannot obtain another generation", async () => {
-    const { nativeWorkbenchDefinition } = await import(
+    const { workbenchDefinition } = await import(
         "@convex/domain/workbenchAgent"
     );
     const generated = vi
-        .spyOn(nativeWorkbenchDefinition, "simulate")
+        .spyOn(workbenchDefinition, "simulate")
         .mockImplementation((input) => {
             const reminder = (
-                input as { responseControl?: { reminder?: string } }
+                domainSnapshot(input) as {
+                    responseControl?: { reminder?: string };
+                }
             ).responseControl?.reminder;
             return reminder
                 ? {
@@ -1376,8 +1379,169 @@ test("historical turns without a pinned policy remain exempt when the global con
         expectedGeneration: 1,
     });
     assert(context.kind === "ready");
-    expect(JSON.parse(context.inputJson).responseControl.policy).toMatchObject({
+    expect(
+        JSON.parse(context.inputJson).domain.responseControl.policy,
+    ).toMatchObject({
         enabled: false,
         revision: 0,
     });
+});
+
+test.each([
+    { enabled: false, conflict: true },
+    { enabled: true, conflict: true },
+    { enabled: true, conflict: false },
+])("large retained material preserves correction or review (controller $enabled, conflict $conflict)", async ({
+    enabled,
+    conflict,
+}) => {
+    const { seedWorkbenchMaterials } = await import(
+        "@/__tests__/setup/workbench-materials"
+    );
+    const { sha256Hex } = await import("@convex/domain/sourcePassages");
+    const { searchAvailableMaterialResult } = await import(
+        "@convex/domain/savedMaterialOperations"
+    );
+    const { t, runId, sourceId, captureId, start } =
+        await seedWorkbenchMaterials(1, 1);
+    await t.run(async (ctx) => {
+        await ctx.db.patch(runId, {
+            lifecycleState: "framing",
+            executionStatus: "idle",
+        });
+        await ctx.db.insert("responseControlSettings", {
+            key: "global",
+            revision: 1,
+            updatedAt: 1,
+            enabled,
+            model: "typesafe/jev-1.14",
+            contradictionThreshold: 0.95,
+            supportThreshold: 0.7,
+        });
+    });
+    const active = await start();
+    assert(active);
+    // Valid retained search responses reproduce Adobe's aggregate evidence size without provider I/O.
+    const requestIds = await t.run(async (ctx) => {
+        const capture = await ctx.db.get(captureId);
+        assert(capture?.contentHash);
+        const ids = [];
+        for (let index = 0; index < 2; index++) {
+            const value = {
+                kind: "search_available_material" as const,
+                sourceId,
+                captureId,
+                contentHash: capture.contentHash,
+                canonicalUrl: capture.requestedUrl,
+                retrievedAt: 1,
+                passages: Array.from({ length: 12 }, (_, order) => ({
+                    passageOrder: order,
+                    exactQuote: "Documented workflow economics. ".repeat(50),
+                    headingPath: [],
+                })),
+                omittedPassageCount: 0,
+                limitReached: false,
+            };
+            expect(searchAvailableMaterialResult.safeParse(value).success).toBe(
+                true,
+            );
+            ids.push(
+                await ctx.db.insert("agentOperationRequests", {
+                    runId,
+                    missionId: active.missionId,
+                    actor: "agent",
+                    cause: "retained-search-fixture",
+                    input: {
+                        kind: "search_available_material",
+                        sourceId,
+                        query: `workflow ${index}`,
+                    },
+                    operationVersion: 1,
+                    expectedGeneration: 1,
+                    logicalKey: `large-search-${index}`,
+                    status: "completed",
+                    outcome: {
+                        kind: "success",
+                        valueJson: JSON.stringify(value),
+                    },
+                    createdAt: 1,
+                    completedAt: 1,
+                    adoptedAt: 1,
+                }),
+            );
+        }
+        return ids;
+    });
+    expect(
+        await t.run(
+            async (ctx) =>
+                JSON.stringify(
+                    await Promise.all(requestIds.map((id) => ctx.db.get(id))),
+                ).length,
+        ),
+    ).toBeGreaterThan(32768);
+    const begun = await t.mutation(internal.execution.invocations.begin, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        taskKey: "large-status-draft",
+        provenance: "live",
+        nativeInput: await workbenchAdmissionInput(t, active.missionId),
+    });
+    assert(begun.kind === "ready");
+    const row = await t.run((ctx) => ctx.db.get(begun.invocationId));
+    assert(row);
+    const identity = {
+        missionId: active.missionId,
+        invocationId: row._id,
+        runId,
+        executionGeneration: 1,
+        workflowVersion: row.definitionVersion,
+        service: "model" as const,
+        operation: "agent_reasoning",
+        stepKey: "agent_reasoning",
+        operationKey: `mission:${active.missionId}:invocation:${row._id}:attempt:1`,
+        attempt: 1,
+        inputHash: sha256Hex(row.inputJson),
+        corpusRevisionId: row.corpusRevisionId,
+    };
+    await t.mutation(internal.providerCalls.recordAttempt, {
+        ...identity,
+        status: "started",
+    });
+    await t.mutation(internal.providerCalls.recordAttempt, {
+        ...identity,
+        status: "succeeded",
+        dispatchOutcome: "response_received",
+        reportedCost: 0,
+    });
+    expect(
+        await t.mutation(internal.execution.invocations.finish, {
+            invocationId: row._id,
+            expectedGeneration: 1,
+            response: {
+                kind: "complete",
+                text: conflict
+                    ? "Research is running."
+                    : "The dossier remains available.",
+            },
+        }),
+    ).toMatchObject({
+        kind: "blocked",
+        code: conflict ? "mission_context_changed" : "pending_operations",
+    });
+    const turn = await t.run((ctx) => ctx.db.get(active.turnId));
+    if (conflict)
+        expect(turn?.responseControl?.correction?.invocationId).toBe(row._id);
+    else {
+        const check = turn?.responseControl?.checks[0];
+        assert(check?.requestId);
+        expect(
+            new TextEncoder().encode(check.factsJson).length,
+        ).toBeLessThanOrEqual(32768);
+        const facts = JSON.parse(check.factsJson);
+        expect(facts.operations).toHaveLength(2);
+        for (const operation of facts.operations)
+            expect(operation.outcome).toEqual({ kind: "success" });
+        expect(check.factsJson).not.toContain("exactQuote");
+    }
 });

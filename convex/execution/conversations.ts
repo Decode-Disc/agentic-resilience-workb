@@ -49,6 +49,7 @@ import {
     missionStatusValidator,
 } from "./executionProtocol";
 import { cancelPiWake, schedulePiMission } from "./piControl";
+import { sessionForMission } from "./piStore";
 
 async function conversationForRun(ctx: QueryCtx, runId: Id<"researchRuns">) {
     return ctx.db
@@ -283,7 +284,8 @@ export async function submitAuthorizedMessage(
             ...((await ctx.db.get(args.runId))?.startMode === "framed"
                 ? {
                       definitionId: "workbench_v1" as const,
-                      definitionVersion: 2,
+                      definitionVersion:
+                          getAgentDefinition("workbench_v1").version,
                   }
                 : {}),
             runId: args.runId,
@@ -791,11 +793,14 @@ export const startTurn = internalMutation({
     returns: startTurnResult,
     handler: async (ctx, args): Promise<Infer<typeof startTurnResult>> => {
         const conversation = await conversationForRun(ctx, args.runId);
+        const currentDefinition = getAgentDefinition(args.definitionId);
         const definition = getAgentDefinition(
             args.definitionId,
             conversation?.definitionId === args.definitionId
                 ? (conversation.definitionVersion ?? 1)
-                : 1,
+                : currentDefinition.nativeConversation && conversation
+                  ? 1
+                  : currentDefinition.version,
         );
         if (
             definition.executionScope !== "conversation" ||
@@ -1040,28 +1045,34 @@ export const pumpWorkbench = internalMutation({
             !conversation.queuedCount
         )
             return null;
-        if (conversation.definitionVersion === 2) {
-            const session = await ctx.db
-                .query("piSessions")
-                .withIndex("by_conversation", (q) =>
-                    q.eq("conversationId", conversation._id),
-                )
-                .unique();
-            if (
-                session &&
-                (session.settledSequence !== session.sequence ||
-                    session.leaseUntil > Date.now())
-            ) {
-                await schedulePiMission(
-                    ctx,
-                    session.missionId,
-                    session.generation,
-                    Math.max(Date.now(), session.leaseUntil),
-                );
-                return null;
-            }
-        }
         try {
+            if (
+                conversation.definitionId &&
+                getAgentDefinition(
+                    conversation.definitionId,
+                    conversation.definitionVersion ?? 1,
+                ).nativeConversation
+            ) {
+                const session = await ctx.db
+                    .query("piSessions")
+                    .withIndex("by_conversation", (q) =>
+                        q.eq("conversationId", conversation._id),
+                    )
+                    .unique();
+                if (
+                    session &&
+                    (session.settledSequence !== session.sequence ||
+                        session.leaseUntil > Date.now())
+                ) {
+                    await schedulePiMission(
+                        ctx,
+                        session.missionId,
+                        session.generation,
+                        Math.max(Date.now(), session.leaseUntil),
+                    );
+                    return null;
+                }
+            }
             await ctx.runMutation(internal.execution.conversations.startTurn, {
                 runId,
                 definitionId: "workbench_v1",
@@ -1120,21 +1131,14 @@ async function stopActiveResponse(
                 piWakeId: undefined,
                 piWakeToken: undefined,
             });
-            if (conversation.definitionVersion === 2) {
-                const session = await ctx.db
-                    .query("piSessions")
-                    .withIndex("by_conversation", (q) =>
-                        q.eq("conversationId", conversation._id),
-                    )
-                    .unique();
-                if (session)
-                    await schedulePiMission(
-                        ctx,
-                        mission._id,
-                        mission.generation,
-                        Math.max(Date.now(), session.leaseUntil),
-                    );
-            }
+            const session = await sessionForMission(ctx, mission);
+            if (session?.conversationId && session.missionId === mission._id)
+                await schedulePiMission(
+                    ctx,
+                    mission._id,
+                    mission.generation,
+                    Math.max(Date.now(), session.leaseUntil),
+                );
         }
     }
     await ctx.db.patch(turn._id, {

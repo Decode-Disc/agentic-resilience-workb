@@ -25,3 +25,5 @@ allowBuilds:
 peerDependencyRules:
   allowedVersions:
     convex-helpers>typescript: '>=5.5'
+patchedDependencies:
+  convex@1.47.0: patches/convex@1.47.0.patch

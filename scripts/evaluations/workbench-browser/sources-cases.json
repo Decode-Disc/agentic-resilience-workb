@@ -28,6 +28,55 @@
                     "shortLabel": "Limits and substitution",
                     "rationale": "Do not extend evidence to the entire claim lifecycle or payment without direct support."
                 }
+            ],
+            "steps": [
+                {
+                    "id": "framing",
+                    "action": "save_framing"
+                },
+                {
+                    "id": "start",
+                    "action": "start_research"
+                },
+                {
+                    "id": "pause",
+                    "action": "pause_research"
+                },
+                {
+                    "id": "away",
+                    "action": "navigate",
+                    "target": "dossier_list"
+                },
+                {
+                    "id": "mobile",
+                    "action": "viewport",
+                    "width": 390,
+                    "height": 844
+                },
+                {
+                    "id": "return",
+                    "action": "navigate",
+                    "target": "dossier"
+                },
+                {
+                    "id": "resume",
+                    "action": "resume_research"
+                },
+                {
+                    "id": "handoff",
+                    "action": "wait_for",
+                    "state": "sources_prepared"
+                },
+                {
+                    "id": "follow-up",
+                    "action": "send_message",
+                    "text": "Explain the available documentary material, unfinished work and limitations without starting new research."
+                }
+            ],
+            "expectations": [
+                "documentary-handoff",
+                "traceable-captures",
+                "unfinished-work-explicit"
             ]
         },
         {
@@ -50,6 +99,31 @@
                     "shortLabel": "Limits of dependency",
                     "rationale": "Preserve attribution, uncertainty and viable alternatives."
                 }
+            ],
+            "steps": [
+                {
+                    "id": "framing",
+                    "action": "save_framing"
+                },
+                {
+                    "id": "start",
+                    "action": "start_research"
+                },
+                {
+                    "id": "handoff",
+                    "action": "wait_for",
+                    "state": "sources_prepared"
+                },
+                {
+                    "id": "follow-up",
+                    "action": "send_message",
+                    "text": "Explain the available documentary material, unfinished work and limitations without starting new research."
+                }
+            ],
+            "expectations": [
+                "documentary-handoff",
+                "traceable-captures",
+                "unfinished-work-explicit"
             ]
         }
     ],

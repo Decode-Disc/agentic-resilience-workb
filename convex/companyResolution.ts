@@ -1,3 +1,4 @@
+import { patchQualificationReceipt } from "@convex/qualificationUsage";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
@@ -706,7 +707,7 @@ export const persistWebsiteResolution = internalMutation({
                 canonicalizedAt: now,
             });
         }
-        await ctx.db.patch(providerCall._id, {
+        await patchQualificationReceipt(ctx, providerCall, {
             status: args.status,
             latencyMs: args.latencyMs,
             usage: {
@@ -998,6 +999,27 @@ export const revalidateRun = internalAction({
             internal.companyResolution.getRunCompany,
             args,
         );
+        const simulation = await ctx.runQuery(
+            internal.sourcesSimulation.enabled,
+            args,
+        );
+        if (simulation) {
+            const valid = await ctx.runMutation(
+                internal.companyResolution.verifyRevalidation,
+                {
+                    runId: args.runId,
+                    executionGeneration: current.executionGeneration,
+                    resolved: current.company,
+                },
+            );
+            if (!valid) throw new Error("Confirmed company identity changed");
+            return {
+                cik: current.company.cik,
+                secFilingCount: 0,
+                investorRelationsPresent: true,
+                filings: [],
+            };
+        }
         const userAgent = process.env.SEC_USER_AGENT?.trim();
         if (!userAgent) {
             throw new Error("SEC company resolution is not configured");

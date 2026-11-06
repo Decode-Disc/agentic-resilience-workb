@@ -21,7 +21,16 @@ import {
     MAX_BATCH_REQUESTS,
     MAX_CONTEXT_BYTES,
 } from "./executionProtocol";
+import {
+    invocationHistoryReference,
+    operationContextObservation,
+    operationHistoryReference,
+} from "./journal";
 import { missionScope } from "./missionData";
+import {
+    operationResultSchema,
+    operationResultValidator,
+} from "./operationResults";
 
 async function requestContext(
     ctx: QueryCtx,
@@ -75,18 +84,11 @@ async function requestContext(
     }
     return {
         ...(callId ? { callId } : {}),
-        requestId: request._id,
-        input: request.input,
-        status: request.status,
-        outcome: request.outcome ?? null,
-        ...(request.adoptionRefusalCode
-            ? {
-                  adoption: {
-                      kind: "refused",
-                      code: request.adoptionRefusalCode,
-                  },
-              }
-            : {}),
+        ...operationContextObservation(request),
+        historyReference:
+            (await operationHistoryReference(ctx, request._id)) ??
+            causeId ??
+            null,
         ...(analystInstruction ? { analystInstruction } : {}),
     };
 }
@@ -265,9 +267,7 @@ export async function buildMissionContext(
         definition: {
             id: definition.id,
             version: definition.version,
-            ...(definition.nativeConversation
-                ? {}
-                : { instructions: definition.instructions }),
+
             operationNames: Object.keys(definition.operations),
         },
         mission: {
@@ -278,12 +278,35 @@ export async function buildMissionContext(
             runId: run._id,
             scope: missionScope(mission),
         },
-        ...domainContext.context,
+        ...(definition.contextRendering
+            ? {
+                  contextRendering: definition.contextRendering,
+                  domain: Object.fromEntries(
+                      Object.entries(domainContext.context).filter(
+                          ([key]) => key !== "activeWork",
+                      ),
+                  ),
+              }
+            : domainContext.context),
         constraints: {
             generation: mission.generation,
             deadlineAt: mission.deadlineAt,
             operations: Object.keys(definition.operations),
             authority: definition.authority,
+            completion: definition.textCompletion
+                ? { format: "text" }
+                : {
+                      format: "json",
+                      schema: Object.fromEntries(
+                          Object.entries(
+                              operationResultSchema(
+                                  operationResultValidator(
+                                      definition.completionValidator,
+                                  ),
+                              ),
+                          ).filter(([key]) => key !== "convexValidator"),
+                      ),
+                  },
         },
         conversationInstructions:
             definition.nativeConversation && activeInstructions
@@ -307,7 +330,14 @@ export async function buildMissionContext(
                           : {}),
                       status: "observable_reply_not_established_facts",
                       ...(mission.executionRuntime === "pi-durable"
-                          ? { historyOperation: "consult_mission_state" }
+                          ? {
+                                historyOperation: "consult_mission_state",
+                                historyReference:
+                                    await invocationHistoryReference(
+                                        ctx,
+                                        previousInvocation._id,
+                                    ),
+                            }
                           : {
                                 outputJson:
                                     previousInvocation.outputJson ?? null,
@@ -345,6 +375,7 @@ export async function buildMissionContext(
                 prompt: inputJson,
                 operations,
                 nativeConversation: definition.nativeConversation,
+                contextRendering: definition.contextRendering,
                 definitionVersion: definition.version,
                 nativeRoute:
                     mission.executionRuntime === "pi-durable"

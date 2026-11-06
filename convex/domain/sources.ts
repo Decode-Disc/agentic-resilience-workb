@@ -17,8 +17,9 @@ import {
 import { SourceReviewReads } from "./sourceReviewReads";
 import { controlledDocumentaryUse } from "./sourceSelectionPolicy";
 import {
+    SOURCES_MAX_EVIDENCE_REFERENCES,
     type DocumentaryContribution,
-    type qualificationSubmissionInput,
+    type materializedQualificationInput,
     SOURCES_PROTOCOL,
     type SourcesPreparation,
     type sourcesCompletionValidator,
@@ -115,7 +116,7 @@ export async function initializeSources(
 
 /** Reconstruct an entire qualification while preserving independently identified contributions. */
 export function reconstructQualification(
-    input: Infer<typeof qualificationSubmissionInput>,
+    input: Infer<typeof materializedQualificationInput>,
     previous: Extract<
         Doc<"aiTaskResults">["output"],
         { kind: "documentary_qualification" }
@@ -154,8 +155,7 @@ export function reconstructQualification(
                 (id) => !data.needs.some((need) => need.id === id),
             ) ||
             !c.evidence.length ||
-            c.evidence.length > 8 ||
-            !c.evidence.some((q) => q.captureId === input.captureId) ||
+            c.evidence.length > SOURCES_MAX_EVIDENCE_REFERENCES ||
             c.evidence.some(
                 (q) =>
                     !q.quotation.trim() ||
@@ -165,6 +165,14 @@ export function reconstructQualification(
             )
         )
             throw executionError("qualification_invalid");
+        if (!c.evidence.some((q) => q.captureId === input.captureId))
+            throw executionError("qualification_invalid", [
+                {
+                    path: `changes[${index}].contribution.evidence`,
+                    expected:
+                        "At least one exact evidence reference from the submission's primary captureId; submit contributions supported only by another capture separately.",
+                },
+            ]);
         const prior = contributions[existing];
         if (prior) {
             const { id: _id, version: _version, ...priorContent } = prior;
@@ -287,6 +295,81 @@ export async function readEngagedSourcesWork(
     return blockers.filter((request) => request !== null);
 }
 
+/** Bounded observations accompany exact work/qualification references; previews never establish evidence. */
+export async function sourcesTaskObservations(
+    ctx: QueryCtx,
+    runId: Id<"researchRuns">,
+    data: SourcesPreparation,
+) {
+    const reads = new SourceReviewReads(
+        ctx.db,
+        runId,
+        SOURCES_HANDOFF_READ_CAPACITY,
+    );
+    const workOutcomes = await Promise.all(
+        data.work.map(async (work) => {
+            const request = await reads.request(work.requestId);
+            return {
+                requestId: work.requestId,
+                status: request?.status ?? "unavailable",
+                outcome: request?.outcome
+                    ? {
+                          kind: request.outcome.kind,
+                          ...("code" in request.outcome
+                              ? { code: request.outcome.code }
+                              : {}),
+                      }
+                    : null,
+                adopted:
+                    request?.status === "completed" &&
+                    request.outcome?.kind === "success" &&
+                    !request.adoptionRefusalCode,
+            };
+        }),
+    );
+    const contributionObservations = await Promise.all(
+        data.qualifications.map(async (taskId) => {
+            const task = await reads.task(taskId);
+            if (
+                !task ||
+                task.runId !== runId ||
+                task.output.kind !== "documentary_qualification"
+            )
+                throw executionError("qualification_invalid");
+            const qualification = task.output;
+            const control = await reads.task(qualification.controlTaskId);
+            const preview = qualification.contributions
+                .slice(0, 2)
+                .map((contribution) => ({
+                    id: contribution.id,
+                    version: contribution.version,
+                    statementPreview: Array.from(contribution.statement)
+                        .slice(0, 160)
+                        .join(""),
+                    statementComplete:
+                        Array.from(contribution.statement).length <= 160,
+                    permittedUse: controlledDocumentaryUse(
+                        contribution,
+                        control?.output.kind === "documentary_control"
+                            ? control.output.control
+                            : null,
+                        data.restrictedContributions,
+                    ),
+                }));
+            return {
+                taskId,
+                captureId: qualification.captureId,
+                version: qualification.version,
+                contributionCount: qualification.contributions.length,
+                preview,
+                previewComplete:
+                    preview.length === qualification.contributions.length,
+            };
+        }),
+    );
+    return { workOutcomes, contributionObservations };
+}
+
 /** Reserved controls hold completion capacity until their proposal is retained or cannot be adopted. */
 export async function hasEngagedSourcesControl(
     reads: SourceReviewReads,
@@ -311,7 +394,7 @@ export async function assertSourcesCompletionCapacity(
     preparation: Doc<"sourceSelectionProposalRebuilds">,
     data: SourcesPreparation,
     qualification: {
-        input: Infer<typeof qualificationSubmissionInput>;
+        input: Infer<typeof materializedQualificationInput>;
         contributions: DocumentaryContribution[];
         contentHash: string;
     } | null,
@@ -452,41 +535,85 @@ export async function assertSourcesCompletionCapacity(
 }
 
 /** Validates accounting and distinguishes new work from omissions in the admitted context. */
-export function sourcesCompletionFreshness(
+export function sourcesCompletionAccounting(
     data: SourcesPreparation,
     response: Infer<typeof sourcesCompletionValidator>,
     admittedWork: SourcesPreparation["work"] = data.work,
-): "current" | "stale" {
+) {
+    const issues: { path: string; expected: string; code: string }[] = [];
+    const add = (path: string, expected: string, code: string) =>
+        issues.push({ path, expected, code });
+    if (response.needsRevision !== data.needsRevision)
+        add(
+            "needsRevision",
+            `Current revision ${data.needsRevision}.`,
+            "sources_needs_unaccounted",
+        );
+    const actual = response.needs.map((need) => need.needId);
     if (
-        response.needsRevision !== data.needsRevision ||
         response.needs.length !== data.needs.length ||
-        new Set(response.needs.map((need) => need.needId)).size !==
-            data.needs.length
+        new Set(actual).size !== data.needs.length ||
+        data.needs.some((need) => !actual.includes(need.id))
     )
-        throw executionError("sources_needs_unaccounted");
+        add(
+            "needs",
+            `Exactly one outcome for each of the ${data.needs.length} current IDs in activeWork.needs; do not duplicate or invent an ID.`,
+            "sources_needs_unaccounted",
+        );
+    if (response.needs.length > data.envelope.maxNeeds)
+        throw executionError(
+            "sources_needs_unaccounted",
+            issues.map(({ path, expected }) => ({ path, expected })),
+        );
     const missing = new Set<Id<"agentOperationRequests">>();
-    for (const outcome of response.needs) {
-        if (
-            !data.needs.some((need) => need.id === outcome.needId) ||
-            outcome.unfinished.some((text) => !text.trim()) ||
-            (outcome.gap !== undefined && !outcome.gap.trim())
-        )
-            throw executionError("sources_need_invalid");
+    for (const [index, outcome] of response.needs.entries()) {
+        const path = `needs[${index}]`;
+        if (!data.needs.some((need) => need.id === outcome.needId))
+            add(
+                `${path}.needId`,
+                "Copy an ID from the current needs.",
+                "sources_need_invalid",
+            );
+        if (outcome.unfinished.some((text) => !text.trim()))
+            add(
+                `${path}.unfinished`,
+                "Nonempty explanations of work not completed; omit blank entries.",
+                "sources_need_invalid",
+            );
+        if (outcome.gap !== undefined && !outcome.gap.trim())
+            add(
+                `${path}.gap`,
+                "A nonempty examined documentary gap, or omit gap.",
+                "sources_need_invalid",
+            );
         if (
             new Set(outcome.workRequestIds).size !==
             outcome.workRequestIds.length
         )
-            throw executionError("sources_work_unaccounted");
-        for (const work of data.work)
-            if (
+            add(
+                `${path}.workRequestIds`,
+                "Each exact request ID once per need.",
+                "sources_work_unaccounted",
+            );
+        const omitted = data.work.filter(
+            (work) =>
                 work.needIds.includes(outcome.needId) &&
-                !outcome.workRequestIds.includes(work.requestId)
-            )
-                missing.add(work.requestId);
+                !outcome.workRequestIds.includes(work.requestId),
+        );
+        for (const work of omitted) missing.add(work.requestId);
+        const known = omitted.filter((work) =>
+            admittedWork.some(
+                (admitted) => admitted.requestId === work.requestId,
+            ),
+        );
+        if (known.length)
+            add(
+                `${path}.workRequestIds`,
+                `Include all ${known.length} omitted work references for this need from activeWork.work. Preserve failed or unknown work as unfinished.`,
+                "sources_work_unaccounted",
+            );
     }
-    if (admittedWork.some((work) => missing.has(work.requestId)))
-        throw executionError("sources_work_unaccounted");
-    return missing.size ? "stale" : "current";
+    return { issues, stale: missing.size > 0 };
 }
 
 /** Completion resolves persisted work and current restrictions; it never adopts model-authored source membership. */
@@ -508,7 +635,7 @@ export async function completeSources(
     if (blocked) throw executionError(blocked);
     if ((run.executionHarnessDeadlineAt ?? Infinity) <= Date.now())
         throw executionError("execution_deadline");
-    sourcesCompletionFreshness(data, response);
+    const accounting = sourcesCompletionAccounting(data, response);
     const coveredNeeds = new Map<
         string,
         Infer<
@@ -592,6 +719,17 @@ export async function completeSources(
                 })),
             });
     }
+    const issues = [...accounting.issues];
+    const invalid = (
+        outcome: (typeof response.needs)[number],
+        code: string,
+        expected: string,
+    ) =>
+        issues.push({
+            path: `needs[${response.needs.indexOf(outcome)}]`,
+            expected,
+            code,
+        });
     for (const outcome of response.needs) {
         const work = data.work.filter((w) =>
             w.needIds.includes(outcome.needId),
@@ -609,8 +747,12 @@ export async function completeSources(
                     !request.pin.expectedCaptureId ||
                     !data.captureIds.includes(request.pin.expectedCaptureId)
                 )
-                    throw executionError("sources_work_invalid");
-                if (request.missionId) {
+                    invalid(
+                        outcome,
+                        "sources_work_invalid",
+                        "Use only work belonging to this need and preparation, or exact saved-material reads within its retained captures.",
+                    );
+                if (request?.missionId) {
                     const owner = await ctx.db.get(request.missionId);
                     if (
                         !owner ||
@@ -618,23 +760,40 @@ export async function completeSources(
                         owner.scope.kind !== "sources_v1" ||
                         owner.scope.preparationId !== preparationId
                     )
-                        throw executionError("sources_work_invalid");
-                } else if (request.actor !== "system")
-                    throw executionError("sources_work_invalid");
+                        invalid(
+                            outcome,
+                            "sources_work_invalid",
+                            "Use only work belonging to this need and preparation, or exact saved-material reads within its retained captures.",
+                        );
+                } else if (request?.actor !== "system")
+                    invalid(
+                        outcome,
+                        "sources_work_invalid",
+                        "Use only work belonging to this need and preparation, or exact saved-material reads within its retained captures.",
+                    );
             }
             if (!request || request.runId !== run._id)
-                throw executionError("sources_work_invalid");
+                invalid(
+                    outcome,
+                    "sources_work_invalid",
+                    "Use only work belonging to this need and preparation, or exact saved-material reads within its retained captures.",
+                );
             if (
-                request.status !== "completed" ||
+                request?.status !== "completed" ||
                 request.outcome?.kind !== "success"
             ) {
                 if (!outcome.unfinished.length)
-                    throw executionError("sources_work_unfinished");
+                    invalid(
+                        outcome,
+                        "sources_work_unfinished",
+                        "Explain unfinished work explicitly; unperformed, failed or unknown work is not a documentary gap.",
+                    );
             } else if (
                 [
                     "discover_sources_for_need",
                     "search_available_material",
-                ].includes(request.input.kind) &&
+                ].includes(request?.input.kind ?? "") &&
+                request &&
                 "query" in request.input &&
                 request.input.query.trim().length > 0
             )
@@ -645,11 +804,42 @@ export async function completeSources(
             !outcome.gap &&
             !outcome.unfinished.length
         )
-            throw executionError("sources_need_unresolved");
+            invalid(
+                outcome,
+                "sources_need_unresolved",
+                "Provide usable controlled material, a supported examined gap, or an explicit unfinished explanation.",
+            );
         if (outcome.gap && !completedSearch)
-            throw executionError("documentary_gap_not_examined");
+            invalid(
+                outcome,
+                "documentary_gap_not_examined",
+                "Omit gap unless a successful nonblank discovery/search examined this need. Record unfinished work instead.",
+            );
         if (!outcome.workRequestIds.length && !outcome.unfinished.length)
-            throw executionError("sources_work_unfinished");
+            invalid(
+                outcome,
+                "sources_work_unfinished",
+                "Explain unfinished work explicitly; unperformed, failed or unknown work is not a documentary gap.",
+            );
+    }
+    if (issues.length) {
+        // Share repeated explanations while retaining every affected path within the correction budget.
+        const grouped = new Map<string, Set<string>>();
+        for (const { path, expected } of issues) {
+            const paths = grouped.get(expected) ?? new Set<string>();
+            paths.add(path);
+            grouped.set(expected, paths);
+        }
+        throw executionError(issues[0]?.code ?? "sources_completion_invalid", [
+            ...[...grouped].map(([expected, paths]) => ({
+                path: [...paths].join(", "),
+                expected,
+            })),
+            {
+                path: "needs",
+                expected: `Outcome indexes identify these need IDs: ${JSON.stringify(response.needs.map((outcome) => outcome.needId))}`,
+            },
+        ]);
     }
     const result: Infer<
         typeof import("./sourcesContracts").preparedMaterialValidator

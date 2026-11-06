@@ -35,6 +35,8 @@ import {
     type ModelRoute,
     modelCallSettings,
     modelConfigurationKey,
+    recommendedReasoningEffort,
+    reasoningChoices,
 } from "./modelRouting";
 
 /** Builds a supported chat model from validated OpenRouter metadata, without a bundled-ID dependency. */
@@ -147,7 +149,8 @@ export async function prepareNativeProfiles(
                 [
                     ...new Set([
                         route.reasoningEffort,
-                        ...(descriptor.reasoningEfforts ?? []),
+                        recommendedReasoningEffort(descriptor),
+                        ...reasoningChoices(descriptor),
                     ]),
                 ].map(async (effort) => {
                     const nativeRoute = {
@@ -160,6 +163,7 @@ export async function prepareNativeProfiles(
                         prompt: "",
                         definitionVersion: definition.version,
                         nativeConversation: definition.nativeConversation,
+                        contextRendering: definition.contextRendering,
                         nativeRoute,
                     });
                     return { key, nativeRoute };
@@ -183,6 +187,7 @@ export async function prepareNativeProfiles(
                             history,
                             0,
                             definition.nativeConversation,
+                            definition.contextRendering,
                         ),
                     }),
                     {

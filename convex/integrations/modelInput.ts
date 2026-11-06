@@ -111,11 +111,12 @@ export function piMissionMessages(
     history: TranscriptContext["messages"],
     timestamp = Date.now(),
     nativeConversation = false,
+    contextRendering?: "separated_v1",
 ): TranscriptContext["messages"] {
     return [
         {
             role: "system",
-            content: `${nativeConversation ? "" : `${instructions}\n\n`}Required current mission state:\n${prompt}`,
+            content: `${nativeConversation || contextRendering === "separated_v1" ? "" : `${instructions}\n\n`}Required current mission state:\n${prompt}`,
             timestamp,
         },
         ...history,
@@ -295,6 +296,7 @@ type AgentInput = {
     nativeRoute?: ModelRoute;
     definitionVersion?: number;
     nativeConversation?: boolean;
+    contextRendering?: "separated_v1";
 };
 
 /** Fingerprints every application-owned part of the required native request. SDK versions are checked by calibration. */
@@ -302,6 +304,12 @@ export async function piInputProfileKey(args: AgentInput): Promise<string> {
     return sha256Hex(
         stableStringify({
             version: args.definitionVersion,
+            ...(args.contextRendering
+                ? {
+                      contextRendering: args.contextRendering,
+                      rootInstructions: args.instructions,
+                  }
+                : {}),
             ...(args.nativeConversation
                 ? { nativeInstructions: args.instructions }
                 : {}),
@@ -311,6 +319,7 @@ export async function piInputProfileKey(args: AgentInput): Promise<string> {
                 [],
                 0,
                 args.nativeConversation,
+                args.contextRendering,
             ),
             tools: await serializedTools(args.operations),
             resultContracts: Object.fromEntries(
@@ -352,6 +361,7 @@ export async function piInputProfileKey(args: AgentInput): Promise<string> {
                               [],
                               0,
                               args.nativeConversation,
+                              args.contextRendering,
                           ),
                       ).json
                     : undefined,

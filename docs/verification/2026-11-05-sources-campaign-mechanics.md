@@ -1,0 +1,29 @@
+# Sources campaign mechanics qualification
+
+Date: 2026-11-05. Decision: the local deterministic Sources campaign mechanics are qualified on the retained candidate. Real-provider relevance, model judgment and analytical usefulness remain unqualified; this result does not supersede the [live Sources requalification](2026-11-05-sources-progress-excerpts-requalification.md).
+
+## Scope and evidence
+
+Base commit: `6cba6f4224afdda82b989cdb7c5ac51d90ce88ed`, plus the frozen working changes. Final candidate fingerprint: `7befacc58fcf1ab2c4f2ec56c269ae3f52acdb0b58c29205af4a0db40847483d`. The [verified final assessment archive](../../scripts/evaluations/archives/20261105T181718983Z-campaign-sources-final-verification-1793902323-lot-1-assessment/record.json) retains the protocol, source snapshots, actual requests and replies, captures, judgments and reconciliation. The final evidence root is `/home/abdwhb/.local/share/agentic-resilience-workbench/sources-final-verification-1793902323`; preceding failures remain separately retained under `/home/abdwhb/.local/share/agentic-resilience-workbench/sources-mechanics-1793900099`. Storage is local, with no off-machine backup claimed.
+
+The registered Sources simulator drives production discovery, acquisition, indexing, exact reads, evidence materialization, documentary control and prepared-material handoff. Only company/discovery/Contents/control responses and model generation are fixed fixtures. Campaign authority is checked at the local fixture boundary; closed or expired simulations cannot fall through to paid work. Controls are labelled showcase tasks with an explicit simulation identity and no provider receipt. The technical reference was updated for this approved fixture mechanism; ROADMAP records its qualified execution boundary without accepting live quality.
+
+## Observed results
+
+The final CCC and Adobe browser scenarios both pass through real anonymous authentication and access-code admission. Each adopts the five Sources operations, retains one normalized capture and a controlled contribution, and reaches `sources_prepared` / `idle` with an explicit partial result and unfinished real documentary needs. CCC exercises browser Pause, navigation/reconnection, public Resume into generation 3, and the existing mobile Ask AI composer at 390×844. Adobe exercises the desktop path at 1440×1000. Follow-up responses publish and their native sessions settle. Browser console errors: zero. Source/model/search/acquisition provider receipts: zero; reconciled spend: USD0.
+
+Controlled SIGKILL after protected fixture preparation proves cleanup without replay. The corrected recovery retains complete inventories showing zero missions, operations and receipts. Negative judgments permit subsequent lots within the same mandate. Unknown-charge retention, cumulative limits, closed/expired authority and incomplete-cleanup refusal are separately exercised through the real backend mutations in the focused campaign tests; no real provider outage or mid-provider crash was induced.
+
+The first test campaign stopped at its immutable six-lot limit and was closed. All six failed or incomplete stages remain preserved and assessed separately. They exposed fixture normalization/serialization and inspection-bound mistakes, plus launcher races around admission and subscription freshness and the missing mobile composer opening. A separate final development-verification mandate allowed at most two zero-provider lots; its first lot passed and the campaign was closed. No existing mandate was enlarged and no paid authority was introduced.
+
+## Validation and remaining limits
+
+The final frozen preflight passes `pnpm typecheck`, five protocol Node test files (44 tests), nine focused Convex/Vitest files (87 tests), focused Biome, `scripts/check-imports.ts` and `scripts/check-execution-boundaries.ts`. Exact commands are defined in the frozen `code/scripts/evaluations/workbench-browser/protocol.ts`; their outputs are retained in the final lot's `checks/` directory; RED evidence and scoped follow-up commands are retained with the implementation ledger. `pnpm check` and an application build were not run: the existing qualification preflight and actual local browser exercise cover this backend/tooling change. Documentation checks validate reference ownership and local links separately.
+
+Two boundaries remain explicit. The canned Workbench follow-up is generic and still suggests Start research after documentary preparation; delivery is a transport result, not a summary-fidelity pass. The existing presentation mapping at `src/lib/presentation/workbench.ts:105` labels a partial preparation as interrupted; both the final screenshot and persisted partial/idle state preserve this discrepancy. Correcting that interface status is outside the campaign's agreed correction paths and requires its separate decision. Neither gap is hidden by the mechanical pass.
+
+Both campaigns are closed. Fresh inspection confirms `E2E_FIXTURES_ENABLED`, `WORKBENCH_AGENT_ENABLED` and `SOURCES_MISSION_ENABLED` are unset; publication is unheld and no native workers remain active. The existing local development service is preserved. No dependency change, cloud deployment, commit or push was performed.
+
+## Archive closeout
+
+The [combined verified archive](../../scripts/evaluations/archives/20261105T182043560Z-sources-campaign-mechanics/record.json) preserves 14,918 files: both campaigns, all failed preflights and source stages, request/response and capture evidence, assessments, costs, teardown inspection and the RED/GREEN implementation ledger. It includes this report before this final archive reference and command-location clarification. Every original experiment record remains unchanged. Byte preservation does not establish live model quality or off-machine backup.

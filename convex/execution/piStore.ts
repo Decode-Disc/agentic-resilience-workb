@@ -30,11 +30,12 @@ export async function sessionForMission(
     ctx: QueryCtx,
     mission: Doc<"agentMissions">,
 ) {
-    const turn =
-        getAgentDefinition(mission.definitionId, mission.definitionVersion)
-            .nativeConversation && mission.conversationTurnId
-            ? await ctx.db.get(mission.conversationTurnId)
-            : null;
+    const owned = await ctx.db
+        .query("piSessions")
+        .withIndex("by_mission", (q) => q.eq("missionId", mission._id))
+        .unique();
+    if (owned || !mission.conversationTurnId) return owned;
+    const turn = await ctx.db.get(mission.conversationTurnId);
     return turn
         ? ctx.db
               .query("piSessions")
@@ -42,10 +43,7 @@ export async function sessionForMission(
                   q.eq("conversationId", turn.conversationId),
               )
               .unique()
-        : ctx.db
-              .query("piSessions")
-              .withIndex("by_mission", (q) => q.eq("missionId", mission._id))
-              .unique();
+        : null;
 }
 
 export function needsNativeSettlement(

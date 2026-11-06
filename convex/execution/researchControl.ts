@@ -3,6 +3,7 @@ import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
     internalMutation,
     type MutationCtx,
+    type QueryCtx,
     mutation,
 } from "@convex/_generated/server";
 import {
@@ -19,6 +20,7 @@ import {
     executionFailureCode,
     recordMissionEvent,
     requireDossierAuthority,
+    researchSlotBlock,
 } from "./authority";
 import { executionError } from "./errors";
 import { isRecoverableInterruption } from "./missionData";
@@ -334,6 +336,50 @@ export async function awaitResearchControl(
     return state.generation;
 }
 
+/** Reports the actual control transition without performing it; commands recheck in their transaction. */
+export async function readResearchControlReadiness(
+    ctx: QueryCtx,
+    run: Doc<"researchRuns">,
+    action: "pause" | "resume",
+) {
+    if (!supportsResearchControl(run))
+        return { block: "research_control_not_supported", transition: null };
+    if (action === "pause")
+        return {
+            block:
+                run.executionStatus === "running"
+                    ? null
+                    : "human_prerequisite_required",
+            transition: null,
+        };
+    if (
+        run.startMode === "framed" &&
+        run.executionStatus === "running" &&
+        run.researchPauseRequested
+    )
+        return { block: null, transition: "cancel_pause" };
+    if (!isResumableResearchPause(run))
+        return { block: "human_prerequisite_required", transition: null };
+    if (
+        run.startMode === "framed" &&
+        run.lifecycleState === "awaiting_source_review"
+    ) {
+        const preparation = run.sourcePreparationId
+            ? await ctx.db.get(run.sourcePreparationId)
+            : null;
+        if (run.sourcePreparationId && !preparation)
+            return { block: "stale_execution", transition: null };
+        if (preparation?.status !== "started")
+            return { block: null, transition: "human_review" };
+    }
+    return {
+        block: run.ownerVisitorId
+            ? await researchSlotBlock(ctx, run.ownerVisitorId)
+            : "not_authorized",
+        transition: "execute",
+    };
+}
+
 export async function pauseResearch(
     ctx: MutationCtx,
     args: { runId: Id<"researchRuns">; expectedGeneration: number },
@@ -349,8 +395,8 @@ export async function pauseResearch(
         return run.executionGeneration;
     if (run.executionGeneration !== args.expectedGeneration)
         throw executionError("stale_execution");
-    if (run.executionStatus !== "running")
-        throw executionError("human_prerequisite_required");
+    const { block } = await readResearchControlReadiness(ctx, run, "pause");
+    if (block) throw executionError(block);
     if (run.startMode === "framed") {
         await ctx.db.patch(run._id, {
             researchPauseRequested: true,
@@ -375,15 +421,19 @@ export async function resumeResearch(
     ctx: MutationCtx,
     args: { runId: Id<"researchRuns">; expectedGeneration: number },
 ): Promise<number> {
-    const { run, visitor } = await requireDossierAuthority(ctx, args.runId);
+    const { run } = await requireDossierAuthority(ctx, args.runId);
     if (!supportsResearchControl(run))
         throw executionError("research_control_not_supported");
     if (
-        run.startMode === "framed" &&
-        run.researchPauseRequested &&
         run.executionStatus === "running" &&
-        run.executionGeneration === args.expectedGeneration
-    ) {
+        run.executionGeneration === args.expectedGeneration + 1
+    )
+        return run.executionGeneration;
+    if (run.executionGeneration !== args.expectedGeneration)
+        throw executionError("human_prerequisite_required");
+    const readiness = await readResearchControlReadiness(ctx, run, "resume");
+    if (readiness.block) throw executionError(readiness.block);
+    if (readiness.transition === "cancel_pause") {
         await ctx.db.patch(run._id, {
             researchPauseRequested: false,
             researchControlRevision: (run.researchControlRevision ?? 0) + 1,
@@ -392,52 +442,23 @@ export async function resumeResearch(
         await recordControl(ctx, run, "research_pause_cancelled");
         return run.executionGeneration;
     }
-    if (
-        run.executionStatus === "running" &&
-        run.executionGeneration === args.expectedGeneration + 1
-    )
-        return run.executionGeneration;
-    if (
-        run.executionGeneration !== args.expectedGeneration ||
-        !isResumableResearchPause(run)
-    )
-        throw executionError("human_prerequisite_required");
-    if (
-        run.startMode === "framed" &&
-        run.lifecycleState === "awaiting_source_review"
-    ) {
-        const preparation = run.sourcePreparationId
-            ? await ctx.db.get(run.sourcePreparationId)
-            : null;
-        if (run.sourcePreparationId && !preparation)
-            throw executionError("stale_execution");
-        if (preparation?.status !== "started") {
-            const generation = run.executionGeneration + 1;
-            await ctx.db.patch(run._id, {
-                executionGeneration: generation,
-                researchControlRevision: (run.researchControlRevision ?? 0) + 1,
-                pauseReason: "source_review",
-                researchPauseRequested: false,
-                updatedAt: Date.now(),
-            });
-            await ctx.scheduler.runAfter(
-                0,
-                internal.workbench.processInstructions,
-                { runId: run._id },
-            );
-            await recordControl(ctx, run, "research_resumed");
-            return generation;
-        }
+    if (readiness.transition === "human_review") {
+        const generation = run.executionGeneration + 1;
+        await ctx.db.patch(run._id, {
+            executionGeneration: generation,
+            researchControlRevision: (run.researchControlRevision ?? 0) + 1,
+            pauseReason: "source_review",
+            researchPauseRequested: false,
+            updatedAt: Date.now(),
+        });
+        await ctx.scheduler.runAfter(
+            0,
+            internal.workbench.processInstructions,
+            { runId: run._id },
+        );
+        await recordControl(ctx, run, "research_resumed");
+        return generation;
     }
-    const active = await ctx.db
-        .query("researchRuns")
-        .withIndex("by_owner_and_execution_status", (q) =>
-            q
-                .eq("ownerVisitorId", visitor._id)
-                .eq("executionStatus", "running"),
-        )
-        .first();
-    if (active) throw executionError("execution_slot_unavailable");
     const generation = run.executionGeneration + 1;
     await ctx.db.patch(run._id, {
         executionStatus: "running",

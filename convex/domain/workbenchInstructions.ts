@@ -2,7 +2,8 @@ import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import { requireDossierAuthority } from "@convex/execution/authority";
-import { executionFailureCode } from "@convex/execution/errors";
+import { executionError, executionFailureCode } from "@convex/execution/errors";
+import { readConversationMessages } from "@convex/integrations/agentStorage";
 import { preparationFailureCode } from "./sourcePreparationAuthority";
 import { SourceReviewReads } from "./sourceReviewReads";
 import {
@@ -61,6 +62,75 @@ export async function readWorkbenchInstructions(
             };
         }),
     );
+}
+
+/** Model-facing requests preserve actual analyst wording and treatment without persistence metadata. */
+export async function projectWorkbenchInstructions(
+    ctx: QueryCtx,
+    requests: Awaited<ReturnType<typeof readWorkbenchInstructions>>,
+) {
+    const messageIds = [
+        ...new Set(requests.map((request) => request.messageId)),
+    ];
+    const messages = await Promise.all(messageIds.map((id) => ctx.db.get(id)));
+    const texts = new Map<Id<"agentMessageDeliveries">, string>();
+    const conversationIds = [
+        ...new Set(
+            messages.flatMap((message) =>
+                message ? [message.conversationId] : [],
+            ),
+        ),
+    ];
+    for (const conversationId of conversationIds) {
+        const conversation = await ctx.db.get(conversationId);
+        if (!conversation)
+            throw executionError("conversation_message_unavailable");
+        const group = messages.filter(
+            (message) => message?.conversationId === conversationId,
+        );
+        const selected = group.flatMap((message) => (message ? [message] : []));
+        if (
+            selected.some(
+                (message) =>
+                    message.role !== "user" ||
+                    message.runId !== conversation.runId ||
+                    !requests.some(
+                        (request) =>
+                            request.messageId === message._id &&
+                            request.runId === conversation.runId,
+                    ),
+            )
+        )
+            throw executionError("conversation_message_unavailable");
+        const original = await readConversationMessages(
+            ctx,
+            conversation.storageRef,
+            selected.map((message) => message.storageMessageRef),
+        );
+        selected.forEach((message, index) => {
+            const text = original[index];
+            if (text === undefined)
+                throw executionError("conversation_message_unavailable");
+            texts.set(message._id, text);
+        });
+    }
+    return requests.map((request) => {
+        const originalText = texts.get(request.messageId);
+        if (originalText === undefined)
+            throw executionError("conversation_message_unavailable");
+        return {
+            instructionId: request._id,
+            messageId: request.messageId,
+            originalText,
+            interpretedNeed: request.interpretedNeed,
+            needId: request.needId ?? null,
+            preparationId: request.preparationId ?? null,
+            framingRevisionId: request.framingRevisionId,
+            status: request.status,
+            transmissionStatus: request.transmissionStatus,
+            outcome: request.outcome,
+        };
+    });
 }
 
 /** A registered request must receive an outcome before preparation can close. */

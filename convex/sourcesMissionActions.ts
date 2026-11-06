@@ -10,7 +10,11 @@ import {
     discoveryResult,
     documentarySubmissionResult,
 } from "@convex/domain/sourcesContracts";
-import { executionFailureCode } from "@convex/execution/errors";
+import { documentaryQuotationMatches } from "@convex/domain/sourceUsage";
+import {
+    executionFailureCode,
+    executionFailureValidation,
+} from "@convex/execution/errors";
 import { operationOutcomeValidator } from "@convex/execution/executionProtocol";
 import { operationSuccess } from "@convex/execution/operationResults";
 import { examineDocumentaryContributions } from "@convex/integrations/documentaryControl";
@@ -18,6 +22,10 @@ import {
     createExaDiscoveryAdapter,
     exaDiscoveryDisposition,
 } from "@convex/integrations/exa";
+import {
+    simulatedDocumentaryControl,
+    simulatedSourceCandidate,
+} from "@convex/sourcesSimulation";
 import { type Infer, v } from "convex/values";
 import { validateExaCandidates } from "./exaDiscoveryActions";
 import { executePreparationModel } from "./sourcePreparationActions";
@@ -48,6 +56,10 @@ export const execute = internalAction({
             const active = async () => {
                 return ctx.runQuery(internal.sourcesMission.assertActive, args);
             };
+            const simulation = await ctx.runQuery(
+                internal.sourcesSimulation.enabled,
+                { runId: preparation.runId },
+            );
             if (input.kind === "make_source_consultable") {
                 if (!sourceId)
                     return {
@@ -96,7 +108,7 @@ export const execute = internalAction({
                 };
             }
             if (input.kind === "discover_sources_for_need") {
-                if (!process.env.EXA_API_KEY?.trim())
+                if (!simulation && !process.env.EXA_API_KEY?.trim())
                     return {
                         kind: "unavailable",
                         code: "missing_configuration",
@@ -121,11 +133,13 @@ export const execute = internalAction({
                 );
                 if (!searchLimit)
                     return { kind: "refused", code: "source_candidate_limit" };
-                const claimed = await ctx.runMutation(
-                    internal.providerCalls.recordAttempt,
-                    { ...attempt, status: "started" },
-                );
-                if (!claimed.shouldExecute)
+                const claimed = simulation
+                    ? null
+                    : await ctx.runMutation(
+                          internal.providerCalls.recordAttempt,
+                          { ...attempt, status: "started" },
+                      );
+                if (claimed && !claimed.shouldExecute)
                     return {
                         kind: "unavailable",
                         code: claimed.errorCode ?? "operation_outcome_unknown",
@@ -141,38 +155,47 @@ export const execute = internalAction({
                                 options,
                             ),
                     });
-                    const found = await adapter.search(
-                        input.query,
-                        searchLimit,
-                    );
+                    const found = simulation
+                        ? {
+                              candidates: [
+                                  simulatedSourceCandidate(preparation.runId),
+                              ],
+                              rejected: 0,
+                              costDollars: 0,
+                              searchTime: 0,
+                          }
+                        : await adapter.search(input.query, searchLimit);
                     responseReceived = true;
-                    await ctx.runMutation(
-                        internal.providerCalls.recordAttempt,
-                        {
-                            ...attempt,
-                            status: "succeeded",
-                            latencyMs: Date.now() - startedAt,
-                            reportedCost: found.costDollars,
-                            dispatchOutcome: "response_received",
-                            usage: {
-                                searchTime: found.searchTime,
-                                accepted: 0,
-                                rejected: found.rejected,
-                                returned: found.candidates.length,
-                                validationComplete: false,
+                    if (!simulation)
+                        await ctx.runMutation(
+                            internal.providerCalls.recordAttempt,
+                            {
+                                ...attempt,
+                                status: "succeeded",
+                                latencyMs: Date.now() - startedAt,
+                                reportedCost: found.costDollars,
+                                dispatchOutcome: "response_received",
+                                usage: {
+                                    searchTime: found.searchTime,
+                                    accepted: 0,
+                                    rejected: found.rejected,
+                                    returned: found.candidates.length,
+                                    validationComplete: false,
+                                },
                             },
-                        },
-                    );
+                        );
                     await active();
                     const validated = await validateExaCandidates(
                         found.candidates.slice(0, searchLimit),
                         async (hostname) =>
-                            (
-                                await lookup(hostname, {
-                                    all: true,
-                                    verbatim: true,
-                                })
-                            ).map((r) => r.address),
+                            simulation
+                                ? ["93.184.216.34"]
+                                : (
+                                      await lookup(hostname, {
+                                          all: true,
+                                          verbatim: true,
+                                      })
+                                  ).map((r) => r.address),
                         AbortSignal.timeout(20_000),
                     );
                     const rejected = found.rejected + validated.rejected;
@@ -181,24 +204,25 @@ export const execute = internalAction({
                         rejected,
                     );
                     if (disposition === "failed") {
-                        await ctx.runMutation(
-                            internal.providerCalls.recordAttempt,
-                            {
-                                ...attempt,
-                                status: "failed",
-                                errorCode: "invalid_provider_response",
-                                retryable: false,
-                                latencyMs: Date.now() - startedAt,
-                                reportedCost: found.costDollars,
-                                dispatchOutcome: "response_received",
-                                usage: {
-                                    accepted: 0,
-                                    rejected,
-                                    searchTime: found.searchTime,
-                                    validationComplete: true,
+                        if (!simulation)
+                            await ctx.runMutation(
+                                internal.providerCalls.recordAttempt,
+                                {
+                                    ...attempt,
+                                    status: "failed",
+                                    errorCode: "invalid_provider_response",
+                                    retryable: false,
+                                    latencyMs: Date.now() - startedAt,
+                                    reportedCost: found.costDollars,
+                                    dispatchOutcome: "response_received",
+                                    usage: {
+                                        accepted: 0,
+                                        rejected,
+                                        searchTime: found.searchTime,
+                                        validationComplete: true,
+                                    },
                                 },
-                            },
-                        );
+                            );
                         return {
                             kind: "unavailable",
                             code: "invalid_provider_response",
@@ -218,15 +242,17 @@ export const execute = internalAction({
                                 origin: "exa" as const,
                                 category: "research_lead",
                             })),
-                            providerCompletion: {
-                                providerCallId: claimed.providerCallId,
-                                status: disposition,
-                                latencyMs: Date.now() - startedAt,
-                                accepted: validated.candidates.length,
-                                rejected,
-                                searchTime: found.searchTime,
-                                reportedCost: found.costDollars,
-                            },
+                            providerCompletion: claimed
+                                ? {
+                                      providerCallId: claimed.providerCallId,
+                                      status: disposition,
+                                      latencyMs: Date.now() - startedAt,
+                                      accepted: validated.candidates.length,
+                                      rejected,
+                                      searchTime: found.searchTime,
+                                      reportedCost: found.costDollars,
+                                  }
+                                : undefined,
                         },
                     );
                     return operationSuccess(
@@ -245,7 +271,7 @@ export const execute = internalAction({
                         },
                     );
                 } catch (error) {
-                    if (!responseReceived)
+                    if (!simulation && !responseReceived)
                         await ctx.runMutation(
                             internal.providerCalls.recordAttempt,
                             {
@@ -288,7 +314,7 @@ export const execute = internalAction({
                     { progressKeys: [sha256Hex(`control:${inputHash}`)] },
                 );
             }
-            if (!process.env.OPENROUTER_API_KEY?.trim())
+            if (!simulation && !process.env.OPENROUTER_API_KEY?.trim())
                 return { kind: "unavailable", code: "missing_configuration" };
             const evidence = [];
             const grouped = new Map<
@@ -335,7 +361,14 @@ export const execute = internalAction({
                     );
                     if (
                         reading?.captureId !== reference.captureId ||
-                        reading.passage.quotation !== reference.quotation
+                        !documentaryQuotationMatches(
+                            {
+                                ...reading.passage,
+                                contentHash: reading.contentHash,
+                            },
+                            capture.contentHash,
+                            reference.quotation,
+                        )
                     )
                         return {
                             kind: "unavailable",
@@ -359,24 +392,32 @@ export const execute = internalAction({
                 }
             }
             const examination = { contributions, evidence, needs: needContext };
-            const outcome = await executePreparationModel<
-                import("@convex/integrations/documentaryControl").DocumentaryControlAttempt
-            >(ctx, {
-                preparation,
-                sourceId,
-                operation: "source_documentary_control",
-                inputHash,
-                invocationInputJson: JSON.stringify(examination),
-                validate: async () => {
-                    await active();
-                },
-                execute: (route, signal, beforeDispatch) =>
-                    examineDocumentaryContributions(examination, route, {
-                        apiKey: process.env.OPENROUTER_API_KEY ?? "",
-                        signal,
-                        beforeDispatch,
-                    }),
-            });
+            const outcome = simulation
+                ? {
+                      result: {
+                          status: "succeeded" as const,
+                          output: simulatedDocumentaryControl(contributions),
+                      },
+                      providerCallId: undefined,
+                  }
+                : await executePreparationModel<
+                      import("@convex/integrations/documentaryControl").DocumentaryControlAttempt
+                  >(ctx, {
+                      preparation,
+                      sourceId,
+                      operation: "source_documentary_control",
+                      inputHash,
+                      invocationInputJson: JSON.stringify(examination),
+                      validate: async () => {
+                          await active();
+                      },
+                      execute: (route, signal, beforeDispatch) =>
+                          examineDocumentaryContributions(examination, route, {
+                              apiKey: process.env.OPENROUTER_API_KEY ?? "",
+                              signal,
+                              beforeDispatch,
+                          }),
+                  });
             if ("reasonCode" in outcome)
                 return { kind: "unavailable", code: outcome.reasonCode };
             if (outcome.result.status !== "succeeded")
@@ -405,7 +446,12 @@ export const execute = internalAction({
             if (!code) throw error;
             if (code === "source_candidate_limit")
                 return { kind: "refused", code };
-            return { kind: "unavailable", code };
+            const validation = executionFailureValidation(error);
+            return {
+                kind: "unavailable",
+                code,
+                ...(validation ? { validation } : {}),
+            };
         }
     },
 });

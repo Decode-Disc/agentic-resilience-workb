@@ -801,63 +801,115 @@ export const approvedCaptureForMission = internalQuery({
     handler: validateMissionApprovedCapture,
 });
 
-/** One authority/scope check per bounded listing; each source retains its decision and capture checks. */
-export const availableCapturesForMission = internalQuery({
-    args: {
-        missionId: v.id("agentMissions"),
-        expectedGeneration: v.number(),
-        sourceIds: v.array(v.id("sources")),
-    },
-    returns: v.array(v.id("sources")),
-    handler: async (ctx, args) => {
-        if (args.sourceIds.length > 60)
-            throw sourcePreparationError("context_capacity");
-        const owner = await missionMaterialOwner(ctx, args);
-        const { mission, run, revision } = owner;
-        const proposal = await approvedCaptureProposal(ctx, revision);
-        const available = await Promise.all(
-            args.sourceIds.map(async (sourceId) => {
-                const scope = {
-                    runId: run._id,
-                    corpusRevisionId: revision._id,
-                    sourceId,
-                };
+const missionCaptureListingArgs = {
+    missionId: v.id("agentMissions"),
+    expectedGeneration: v.number(),
+    sourceIds: v.array(v.id("sources")),
+};
+const captureAvailabilityValidator = v.object({
+    sourceId: v.id("sources"),
+    captureId: v.id("sourceCaptures"),
+    contentHash: v.string(),
+    readingCompleteness:
+        schema.doc("sourceCaptures").fields.readingCompleteness,
+    representationCompleteness:
+        schema.doc("sourceCaptures").fields.representationCompleteness,
+    captureOmittedPassageCount: v.union(v.number(), v.null()),
+    index: v.union(
+        v.object({ status: v.literal("not_indexed") }),
+        v.object({
+            status: v.literal("indexed"),
+            candidateCount: v.number(),
+            coverage: v.literal("bounded_candidates"),
+        }),
+    ),
+});
+function captureAvailability(
+    capture: Doc<"sourceCaptures">,
+    state: Doc<"sourceSearchCaptures"> | null,
+) {
+    return {
+        sourceId: capture.sourceId,
+        captureId: capture._id,
+        contentHash: capture.contentHash ?? "",
+        readingCompleteness: capture.readingCompleteness,
+        representationCompleteness: capture.representationCompleteness,
+        captureOmittedPassageCount: capture.omittedPassageCount ?? null,
+        index: state
+            ? {
+                  status: "indexed" as const,
+                  candidateCount: state.candidateCount,
+                  coverage: "bounded_candidates" as const,
+              }
+            : { status: "not_indexed" as const },
+    };
+}
+/** One authorized traversal supplies both identity-only and descriptive bounded availability. */
+async function readMissionCaptureAvailability(
+    ctx: QueryCtx,
+    args: Infer<typeof missionCaptureListingValidator>,
+) {
+    if (args.sourceIds.length > 60)
+        throw sourcePreparationError("context_capacity");
+    const owner = await missionMaterialOwner(ctx, args);
+    const { mission, run, revision } = owner;
+    const proposal = await approvedCaptureProposal(ctx, revision);
+    const available = await Promise.all(
+        args.sourceIds.map(async (sourceId) => {
+            const scope = {
+                runId: run._id,
+                corpusRevisionId: revision._id,
+                sourceId,
+            };
+            if (
+                run.sourcesProtocol === "sources_mission_v1" &&
+                mission &&
+                "scope" in mission &&
+                mission.scope.kind === "workbench_v1"
+            ) {
                 if (
-                    run.sourcesProtocol === "sources_mission_v1" &&
-                    mission &&
-                    "scope" in mission &&
-                    mission.scope.kind === "workbench_v1"
-                ) {
-                    if (
-                        (await readPreparationSourceDecision(ctx.db, scope)) ===
-                        "rejected"
-                    )
-                        return null;
-                    const prepared = await validateMissionApprovedCapture(
-                        ctx,
-                        {
-                            ...args,
-                            sourceId,
-                        },
-                        owner,
-                    );
-                    return prepared.status === "available" ? sourceId : null;
-                }
-                if (
-                    (await readPreparationSourceDecision(ctx.db, scope)) !==
-                    "accepted"
+                    (await readPreparationSourceDecision(ctx.db, scope)) ===
+                    "rejected"
                 )
                     return null;
-                const capture = await validatePreparedCapture(
+                const prepared = await validateMissionApprovedCapture(
                     ctx,
-                    scope,
-                    proposal,
+                    {
+                        ...args,
+                        sourceId,
+                    },
+                    owner,
                 );
-                return capture.status === "available" ? sourceId : null;
-            }),
-        );
-        return available.filter((sourceId) => sourceId !== null);
-    },
+                return prepared.status === "available"
+                    ? captureAvailability(prepared.capture, prepared.state)
+                    : null;
+            }
+            if (
+                (await readPreparationSourceDecision(ctx.db, scope)) !==
+                "accepted"
+            )
+                return null;
+            const capture = await validatePreparedCapture(ctx, scope, proposal);
+            return capture.status === "available"
+                ? captureAvailability(capture.capture, capture.state)
+                : null;
+        }),
+    );
+    return available.filter((sourceId) => sourceId !== null);
+}
+const missionCaptureListingValidator = v.object(missionCaptureListingArgs);
+export const availableCapturesForMission = internalQuery({
+    args: missionCaptureListingArgs,
+    returns: v.array(v.id("sources")),
+    handler: async (ctx, args) =>
+        (await readMissionCaptureAvailability(ctx, args)).map(
+            (capture) => capture.sourceId,
+        ),
+});
+export const availableCaptureMetadataForMission = internalQuery({
+    args: missionCaptureListingArgs,
+    returns: v.array(captureAvailabilityValidator),
+    handler: readMissionCaptureAvailability,
 });
 
 async function searchApprovedCapture(

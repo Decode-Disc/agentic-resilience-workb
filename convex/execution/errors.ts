@@ -1,9 +1,11 @@
+import { sha256Hex } from "@convex/domain/sourcePassages";
 import type { Infer } from "convex/values";
 import { ConvexError } from "convex/values";
-import { sha256Hex } from "@convex/domain/sourcePassages";
-import type {
-    dispatchFailureValidator,
-    protectedDiagnosticValidator,
+import { validate } from "convex-helpers/validators";
+import {
+    type dispatchFailureValidator,
+    type protectedDiagnosticValidator,
+    validationFeedbackValidator,
 } from "./operationContracts";
 
 type Diagnostic = Infer<typeof protectedDiagnosticValidator>;
@@ -34,8 +36,11 @@ export function protectedDiagnostic(
     };
 }
 
-export function executionError(code: string) {
-    return new ConvexError({ code });
+export function executionError(
+    code: string,
+    issues?: { path: string; expected: string }[],
+) {
+    return new ConvexError({ code, ...(issues ? { issues } : {}) });
 }
 
 export function executionFailureCode(error: unknown): string | undefined {
@@ -47,6 +52,25 @@ export function executionFailureCode(error: unknown): string | undefined {
     )
         return undefined;
     return typeof error.data.code === "string" ? error.data.code : undefined;
+}
+
+/** Only domain-authored field guidance crosses the model boundary; exception text stays protected. */
+export function executionFailureValidation(error: unknown) {
+    if (
+        !(error instanceof ConvexError) ||
+        !error.data ||
+        typeof error.data !== "object" ||
+        !("issues" in error.data) ||
+        !Array.isArray(error.data.issues)
+    )
+        return undefined;
+    const issue: unknown = error.data.issues[0];
+    return validate(validationFeedbackValidator, issue)
+        ? {
+              path: issue.path.slice(0, 256),
+              expected: issue.expected.slice(0, 1024),
+          }
+        : undefined;
 }
 
 const AUTHORITY_FAILURES = new Set([

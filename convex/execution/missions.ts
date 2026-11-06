@@ -52,7 +52,7 @@ export const start = internalMutation({
             args.definitionId,
             conversation?.definitionId === args.definitionId
                 ? (conversation.definitionVersion ?? 1)
-                : 1,
+                : undefined,
         );
         const executionScope = definition.executionScope;
         const { run, visitor } =

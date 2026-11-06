@@ -65,14 +65,18 @@ export function createQualificationRelay(
     providerFetch = globalThis.fetch,
 ) {
     if (!key) throw new Error("Provider credential unavailable");
-    const maximumRequests = existsSync(`${root}/protocol.json`)
-        ? (JSON.parse(readFileSync(`${root}/protocol.json`, "utf8"))
-              .maximumRequests ?? 20)
-        : 20;
+    const protocol = existsSync(`${root}/protocol.json`)
+        ? JSON.parse(readFileSync(`${root}/protocol.json`, "utf8"))
+        : null;
+    const configurable = protocol?.manifest?.version === 2;
+    const maximumRequests = protocol?.maximumRequests ?? 20;
+    const maximumCostUsd = configurable ? protocol.maximumCostUsd : 0.5;
     if (
-        !Number.isInteger(maximumRequests) ||
+        !Number.isSafeInteger(maximumRequests) ||
         maximumRequests < 1 ||
-        maximumRequests > 20
+        (!configurable && maximumRequests > 20) ||
+        !Number.isFinite(maximumCostUsd) ||
+        maximumCostUsd <= 0
     )
         throw new Error("Invalid qualification request allowance");
     const prior = existsSync(`${root}/ledger.jsonl`)
@@ -197,28 +201,62 @@ export function createQualificationRelay(
                 payload: p,
                 mode: control.mode,
             });
-            if (
-                p.model !== "z-ai/glm-5.3-flash" ||
-                p.provider?.only !== undefined ||
-                p.provider?.order !== undefined ||
-                p.provider?.allow_fallbacks === false ||
-                p.provider.require_parameters !== true ||
-                p.temperature !== 0 ||
-                (p.max_tokens ?? p.max_completion_tokens) !== 6144 ||
-                p.reasoning?.enabled !== true ||
-                p.reasoning?.effort !== "low" ||
-                p.reasoning?.exclude !== true
-            )
-                throw new Error("Route or request contract changed");
-            if (
-                !Number.isFinite(p.provider.max_price.prompt) ||
-                p.provider.max_price.prompt < 0 ||
-                p.provider.max_price.prompt > 0.15 ||
-                !Number.isFinite(p.provider.max_price.completion) ||
-                p.provider.max_price.completion < 0 ||
-                p.provider.max_price.completion > 0.6
-            )
-                throw new Error("Price ceiling changed");
+            const route = configurable
+                ? JSON.parse(readFileSync(`${root}/relay-route.json`, "utf8"))
+                : null;
+            const inputPrice = route?.descriptor.inputPrice ?? 0.15,
+                outputPrice = route?.descriptor.outputPrice ?? 0.6,
+                maxTokens = route?.descriptor.maxTokens ?? 6144;
+            if (configurable) {
+                if (
+                    p.model !== route.model ||
+                    p.temperature !== 0 ||
+                    (p.max_tokens ?? p.max_completion_tokens) > maxTokens ||
+                    !Number.isSafeInteger(
+                        p.max_tokens ?? p.max_completion_tokens,
+                    ) ||
+                    (p.max_tokens ?? p.max_completion_tokens) < 1 ||
+                    p.reasoning?.effort !== route.reasoningEffort ||
+                    (route.provider
+                        ? JSON.stringify(p.provider?.only) !==
+                          JSON.stringify([route.provider])
+                        : p.provider?.only !== undefined) ||
+                    p.provider?.require_parameters !== true
+                )
+                    throw new Error("Route or request contract changed");
+                if (
+                    !Number.isFinite(p.provider.max_price?.prompt) ||
+                    p.provider.max_price.prompt < 0 ||
+                    p.provider.max_price.prompt > inputPrice ||
+                    !Number.isFinite(p.provider.max_price.completion) ||
+                    p.provider.max_price.completion < 0 ||
+                    p.provider.max_price.completion > outputPrice
+                )
+                    throw new Error("Price ceiling changed");
+            } else {
+                if (
+                    p.model !== "z-ai/glm-5.3-flash" ||
+                    p.provider?.only !== undefined ||
+                    p.provider?.order !== undefined ||
+                    p.provider?.allow_fallbacks === false ||
+                    p.provider.require_parameters !== true ||
+                    p.temperature !== 0 ||
+                    (p.max_tokens ?? p.max_completion_tokens) !== 6144 ||
+                    p.reasoning?.enabled !== true ||
+                    p.reasoning?.effort !== "low" ||
+                    p.reasoning?.exclude !== true
+                )
+                    throw new Error("Route or request contract changed");
+                if (
+                    !Number.isFinite(p.provider.max_price.prompt) ||
+                    p.provider.max_price.prompt < 0 ||
+                    p.provider.max_price.prompt > 0.15 ||
+                    !Number.isFinite(p.provider.max_price.completion) ||
+                    p.provider.max_price.completion < 0 ||
+                    p.provider.max_price.completion > 0.6
+                )
+                    throw new Error("Price ceiling changed");
+            }
             if (control.mode === "dry") {
                 json("dry-request.json", { payload: p, live: false });
                 event({
@@ -255,9 +293,12 @@ export function createQualificationRelay(
                 if (digest(readFileSync(path)) !== hash)
                     throw new Error("Frozen code changed");
             const reserve =
-                ((Buffer.byteLength(text) + 4096) * 0.15) / 1e6 +
-                (6144 * 0.6) / 1e6;
-            if (calls >= maximumRequests || reserved + reserve > 0.5) {
+                ((Buffer.byteLength(text) + 4096) * inputPrice) / 1e6 +
+                ((p.max_tokens ?? p.max_completion_tokens) * outputPrice) / 1e6;
+            if (
+                calls >= maximumRequests ||
+                reserved + reserve > maximumCostUsd
+            ) {
                 event({
                     event: "budget_exhausted",
                     scenario: control.scenario,
@@ -299,7 +340,8 @@ export function createQualificationRelay(
             }
             const bufferedFault =
                 gate ||
-                (control.injectInvalidFraming && !injected.has(scenario));
+                ((control.injectInvalidFraming || control.injectHttpRefusal) &&
+                    !injected.has(scenario));
             event({
                 event: "dispatch",
                 call,
@@ -412,6 +454,25 @@ export function createQualificationRelay(
             }
             if (response.ok && (!(terminal && done) || invalidFrame))
                 throw new Error("Incomplete upstream SSE response");
+            if (control.injectHttpRefusal && !injected.has(scenario)) {
+                injected.add(scenario);
+                event({
+                    event: "fault_applied",
+                    scenario,
+                    call,
+                    kind: "http_refusal",
+                });
+                res.writeHead(503, { "content-type": "application/json" });
+                res.end(
+                    JSON.stringify({
+                        error: {
+                            message:
+                                "Qualification: injected HTTP refusal after retained upstream response",
+                        },
+                    }),
+                );
+                return;
+            }
             if (control.injectInvalidFraming && !injected.has(scenario)) {
                 let changed = false;
                 body = body

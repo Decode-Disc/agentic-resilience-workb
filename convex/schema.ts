@@ -75,7 +75,14 @@ import {
 } from "./domain/validators";
 import { workbenchInstructionTransmissionStatus } from "./domain/workbenchContracts";
 import { executionTables } from "./execution/schema";
-import { modelConfigurationTables } from "./modelConfigurationSchema";
+import {
+    modelConfigurationTables,
+    qualificationReasoningSelection,
+} from "./modelConfigurationSchema";
+import {
+    campaignLimitsSchema,
+    campaignManifestSchema,
+} from "./qualificationCampaignPolicy";
 import { SOURCE_EMBEDDING_DIMENSIONS } from "./resourceLimits";
 import { preparationStudyEnvelopeValidator } from "./sourcePreparationStudyPolicy";
 
@@ -163,17 +170,97 @@ export default defineSchema({
             "ownerAuthUserId",
             "canonicalUrl",
         ]),
+    qualificationCampaigns: defineTable({
+        key: v.string(),
+        manifest: zodToConvex(campaignManifestSchema),
+        manifestHash: v.string(),
+        configurationHash: v.optional(v.string()),
+        configurationHashes: v.optional(
+            v.array(v.object({ id: v.string(), hash: v.string() })),
+        ),
+        lastCandidateHash: v.optional(v.string()),
+        ownerVisitorId: v.id("visitors"),
+        status: v.union(v.literal("active"), v.literal("closed")),
+        allocated: zodToConvex(campaignLimitsSchema),
+        lots: v.number(),
+        createdAt: v.number(),
+        activeLotId: v.optional(v.id("qualificationLots")),
+    }).index("by_owner_and_key", ["ownerVisitorId", "key"]),
+    qualificationUsage: defineTable({
+        contextId: v.id("browserTestContexts"),
+        runId: v.optional(v.id("researchRuns")),
+        usage: zodToConvex(campaignLimitsSchema),
+        technical: v.number(),
+        pending: v.number(),
+        unknown: v.number(),
+        overruns: v.number(),
+    }).index("by_context_and_run", ["contextId", "runId"]),
+    qualificationCoverage: defineTable({
+        campaignId: v.id("qualificationCampaigns"),
+        candidateHash: v.string(),
+        configurationId: v.string(),
+        attempts: v.number(),
+        passed: v.boolean(),
+    }).index("by_campaign_and_candidate_and_configuration", [
+        "campaignId",
+        "candidateHash",
+        "configurationId",
+    ]),
+    qualificationLots: defineTable({
+        campaignId: v.id("qualificationCampaigns"),
+        key: v.string(),
+        candidateHash: v.string(),
+        configurationId: v.optional(v.string()),
+        correction: v.optional(v.string()),
+        changedPaths: v.array(v.string()),
+        status: v.union(
+            v.literal("running"),
+            v.literal("closing"),
+            v.literal("review"),
+            v.literal("finished"),
+        ),
+        allocation: zodToConvex(campaignLimitsSchema),
+        createdAt: v.number(),
+        contextId: v.optional(v.id("browserTestContexts")),
+        contextKey: v.optional(v.string()),
+        assessmentHash: v.optional(v.string()),
+        verdict: v.optional(
+            v.union(
+                v.literal("passed"),
+                v.literal("failed"),
+                v.literal("inconclusive"),
+            ),
+        ),
+        configurationHash: v.optional(v.string()),
+    })
+        .index("by_campaign_and_key", ["campaignId", "key"])
+        .index("by_campaign", ["campaignId"]),
     browserTestContexts: defineTable({
+        campaignLotId: v.optional(v.id("qualificationLots")),
+        simulatedScenarios: v.optional(
+            v.array(v.object({ id: v.string(), runId: v.id("researchRuns") })),
+        ),
         paidQualification: v.optional(
             v.object({
                 runId: v.id("researchRuns"),
                 modelRevisionId: v.id("modelRevisions"),
                 sourcesModelRevisionId: v.optional(v.id("modelRevisions")),
+                reasoningSelection: v.optional(qualificationReasoningSelection),
                 relayOrigin: v.optional(v.string()),
+                maximumSearchAttempts: v.optional(v.number()),
+                maximumAcquisitions: v.optional(v.number()),
                 maximumRequests: v.number(),
                 maximumCostUsd: v.number(),
                 authorizedAt: v.number(),
                 sourcesLot: v.optional(v.array(v.id("researchRuns"))),
+                scenarios: v.optional(
+                    v.array(
+                        v.object({
+                            id: v.string(),
+                            runId: v.id("researchRuns"),
+                        }),
+                    ),
+                ),
                 responseControl: v.optional(responseControlPolicy),
             }),
         ),
@@ -859,6 +946,7 @@ export default defineSchema({
     providerCalls: defineTable({
         operationRequestId: v.optional(v.id("agentOperationRequests")),
         qualificationReservationUsd: v.optional(v.number()),
+        qualificationContextId: v.optional(v.id("browserTestContexts")),
         missionId: v.optional(v.id("agentMissions")),
         invocationId: v.optional(v.id("agentInvocations")),
         inputHash: v.optional(v.string()),
@@ -943,6 +1031,12 @@ export default defineSchema({
         completedAt: v.optional(v.number()),
     })
         .index("by_operation_key", ["operationKey"])
+        .index("by_qualification_context_and_status_and_lease", [
+            "qualificationContextId",
+            "status",
+            "leaseExpiresAt",
+        ])
+        .index("by_qualification_context", ["qualificationContextId"])
         .index("by_run_operation_input_and_attempt", [
             "runId",
             "operation",

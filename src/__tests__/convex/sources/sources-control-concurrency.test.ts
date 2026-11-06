@@ -3,7 +3,10 @@ import { completeSources } from "@convex/domain/sources";
 import type { SourcesOperation } from "@convex/domain/sourcesContracts";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import {
+    recordDocumentaryRead,
+    seedObservedSources,
+} from "@/__tests__/setup/sources-mission";
 
 const examiner = vi.hoisted(() => vi.fn());
 vi.mock("@convex/integrations/documentaryControl", () => ({
@@ -21,16 +24,16 @@ test.each([
     ["check", "qualification"],
     ["check", "check"],
 ] as const)("native %s and %s share one unsettled control per preparation without spending a refused allowance", async (first, second) => {
-    const f = await seedCapturedSources();
+    const f = await seedObservedSources();
     const input = (
         kind: "qualification" | "check",
         statement: string,
+        readRequestId: typeof f.readRequestId,
     ): SourcesOperation => {
         const evidence = [
             {
-                captureId: f.captureId,
+                readRequestId,
                 passageOrder: f.passage.order,
-                quotation: f.passage.quotation,
             },
         ];
         return kind === "check"
@@ -67,14 +70,14 @@ test.each([
             runId: f.runId,
             expectedGeneration: 4,
             cause: "first-control",
-            input: input(first, "First contribution"),
+            input: input(first, "First contribution", f.nativeReadRequestId),
         },
     );
     const secondId = await f.t.mutation(internal.execution.operations.enqueue, {
         missionId: f.missionId,
         expectedGeneration: 4,
         cause: "second-control",
-        input: input(second, "Second contribution"),
+        input: input(second, "Second contribution", f.readRequestId),
     });
     for (const requestId of [firstId, secondId])
         await f.t.mutation(internal.execution.operations.claim, {
@@ -114,7 +117,7 @@ test.each([
 test("overlapping native qualifications cannot admit material that exceeds final handoff capacity", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
-    const f = await seedCapturedSources();
+    const f = await seedObservedSources();
     await installModel(
         f.t,
         { model: "z-ai/glm-5.3-flash", reasoningEffort: "low" },
@@ -213,7 +216,19 @@ test("overlapping native qualifications cannot admit material that exceeds final
         };
     });
     const requestIds = [];
-    for (const document of documents)
+    for (const document of documents) {
+        const readRequestId = await f.t.run((ctx) =>
+            recordDocumentaryRead(ctx, {
+                runId: f.runId,
+                captureId: document.captureId,
+                evidence: [
+                    {
+                        passageOrder: f.passage.order,
+                        quotation: f.passage.quotation,
+                    },
+                ],
+            }),
+        );
         requestIds.push(
             await f.t.mutation(internal.execution.operations.enqueueNative, {
                 runId: f.runId,
@@ -233,9 +248,8 @@ test("overlapping native qualifications cannot admit material that exceeds final
                             kind: "context" as const,
                             evidence: [
                                 {
-                                    captureId: document.captureId,
+                                    readRequestId,
                                     passageOrder: f.passage.order,
-                                    quotation: f.passage.quotation,
                                 },
                             ],
                         },
@@ -243,6 +257,7 @@ test("overlapping native qualifications cannot admit material that exceeds final
                 },
             }),
         );
+    }
     const firstId = requestIds[0];
     assert(firstId);
     const first = f.t.action(internal.execution.operations.dispatch, {

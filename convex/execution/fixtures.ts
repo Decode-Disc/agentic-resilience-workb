@@ -11,16 +11,25 @@ import {
     claimCorpusApprovedRunExecution,
     claimPausedRunExecution,
 } from "@convex/domain/executionClaim";
-import { stableStringify } from "@convex/domain/sourcePassages";
+import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { upsertSourceReviewItem } from "@convex/domain/sourceReviewProjection";
 import { initializeFraming } from "@convex/framing";
 import { agentInputByteLength } from "@convex/integrations/modelInput";
+import { resolveReasoningPreference } from "@convex/integrations/modelRouting";
 import {
     readResponseControlPolicy,
+    requireReasoningEffort,
     resolveAgentModel,
     revisionRoute,
 } from "@convex/modelConfiguration";
+import {
+    effectiveModelConfiguration,
+    qualificationReasoningSelection,
+} from "@convex/modelConfigurationSchema";
 import { requireQualifiedBrowserMission } from "@convex/providerCalls";
+import { campaignConfiguration } from "@convex/qualificationCampaignPolicy";
+import { requireCampaignLot } from "@convex/qualificationCampaigns";
+import { initializeQualificationUsage } from "@convex/qualificationUsage";
 import {
     BROWSER_QUALIFICATION_MAX_COST_USD,
     BROWSER_QUALIFICATION_MAX_REQUESTS,
@@ -34,6 +43,10 @@ import {
 import schema from "@convex/schema";
 import { workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
+import {
+    paginationOptsValidator,
+    paginationResultValidator,
+} from "convex/server";
 import { type Infer, v } from "convex/values";
 import { getAgentDefinition } from "./agentCatalog";
 import { agentToolSchemas } from "./agentDefinition";
@@ -61,6 +74,73 @@ async function requireLocalFixtureRun(
         throw new Error("Local simulation scope required");
     return { run, visitor };
 }
+
+const campaignDossier = v.object({
+    runId: v.id("researchRuns"),
+    fixtureKey: v.string(),
+    scenarioId: v.string(),
+});
+async function requireCampaignScenarios(
+    ctx: QueryCtx,
+    dossiers: {
+        runId: Id<"researchRuns">;
+        fixtureKey: string;
+        scenarioId: string;
+    }[],
+) {
+    const visitor = await requireBrowserTestOwner(ctx, BROWSER_TEST_SLOT);
+    const contextId = await requireBrowserFixtureContext(ctx, visitor);
+    const context = await ctx.db.get(contextId);
+    if (!context?.campaignLotId)
+        throw new Error("Active campaign scenario scope required");
+    const { campaign } = await requireCampaignLot(ctx, context.campaignLotId);
+    const m = campaign.manifest;
+    if (
+        m.version !== 2 ||
+        dossiers.length !== m.scenarios.length ||
+        new Set(dossiers.map((d) => d.runId)).size !== dossiers.length ||
+        new Set(dossiers.map((d) => d.scenarioId)).size !== dossiers.length
+    )
+        throw new Error("Campaign scenario binding mismatch");
+    for (const entry of dossiers) {
+        const { run } = await requireLocalFixtureRun(ctx, entry);
+        const scenario = m.scenarios.find((s) => s.id === entry.scenarioId);
+        if (
+            !scenario ||
+            run.companySnapshot?.cik.replace(/^0+/, "") !==
+                scenario.company.cik.replace(/^0+/, "") ||
+            run.researchStartedAt !== undefined ||
+            run.lifecycleState !== "framing"
+        )
+            throw new Error("Campaign scenario binding mismatch");
+    }
+    return {
+        context,
+        manifest: m,
+        bindings: dossiers.map((d) => ({ id: d.scenarioId, runId: d.runId })),
+    };
+}
+/** Binds unpaid simulation dossiers before the first turn; the immutable mandate owns their identity. */
+export const bindCampaignScenarios = internalMutation({
+    args: { dossiers: v.array(campaignDossier) },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const { context, manifest, bindings } = await requireCampaignScenarios(
+            ctx,
+            args.dossiers,
+        );
+        if (manifest.mode !== "deterministic" || context.paidQualification)
+            throw new Error("Unpaid campaign scenarios required");
+        if (
+            context.simulatedScenarios &&
+            stableStringify(context.simulatedScenarios) !==
+                stableStringify(bindings)
+        )
+            throw new Error("Campaign scenario bindings are immutable");
+        await ctx.db.patch(context._id, { simulatedScenarios: bindings });
+        return null;
+    },
+});
 
 /** Uses the admitted local test workspace; an approved corpus is deliberately unnecessary. */
 export const startValidation = internalAction({
@@ -581,15 +661,21 @@ export const authorizeWorkbenchQualification = internalMutation({
     args: {
         runId: v.id("researchRuns"),
         fixtureKey: v.string(),
+        dossiers: v.optional(v.array(campaignDossier)),
         relayOrigin: v.optional(v.string()),
         maximumRequests: v.optional(v.number()),
         maximumCostUsd: v.optional(v.number()),
         responseControllerModel: v.optional(v.string()),
+        reasoningSelection: v.optional(qualificationReasoningSelection),
+        expectedModels: v.optional(
+            v.object({ workbench: v.string(), sources: v.string() }),
+        ),
         sourcesLot: v.optional(
             v.array(
                 v.object({
                     runId: v.id("researchRuns"),
                     fixtureKey: v.string(),
+                    scenarioId: v.optional(v.string()),
                 }),
             ),
         ),
@@ -597,12 +683,34 @@ export const authorizeWorkbenchQualification = internalMutation({
     returns: v.null(),
     handler: async (ctx, args) => {
         const { run, visitor } = await requireLocalFixtureRun(ctx, args);
-        const requestCeiling = args.sourcesLot
-            ? 40
-            : BROWSER_QUALIFICATION_MAX_REQUESTS;
-        const costCeiling = args.sourcesLot
-            ? 2
-            : BROWSER_QUALIFICATION_MAX_COST_USD;
+        const contextId = await requireBrowserFixtureContext(ctx, visitor);
+        const context = await ctx.db.get(contextId);
+        if (!context) throw new Error("Active browser context required");
+        const scope = context.campaignLotId
+            ? await requireCampaignLot(ctx, context.campaignLotId)
+            : null;
+        const configurable =
+            scope?.campaign.manifest.version === 2
+                ? scope.campaign.manifest
+                : null;
+        const dossierEntries =
+            args.dossiers ??
+            args.sourcesLot?.map((e) => ({
+                ...e,
+                scenarioId: e.scenarioId ?? "",
+            }));
+        const scenarioScope =
+            configurable && dossierEntries
+                ? await requireCampaignScenarios(ctx, dossierEntries)
+                : null;
+        if (configurable && !scenarioScope)
+            throw new Error("Declared campaign scenarios required");
+        const requestCeiling =
+            configurable?.perLot.model ??
+            (args.sourcesLot ? 40 : BROWSER_QUALIFICATION_MAX_REQUESTS);
+        const costCeiling =
+            configurable?.perLot.costUsd ??
+            (args.sourcesLot ? 2 : BROWSER_QUALIFICATION_MAX_COST_USD);
         const maximumRequests = args.maximumRequests ?? requestCeiling;
         const maximumCostUsd = args.maximumCostUsd ?? costCeiling;
         if (
@@ -626,32 +734,75 @@ export const authorizeWorkbenchQualification = internalMutation({
             !["framing", "awaiting_source_review"].includes(run.lifecycleState)
         )
             throw new Error("Unlaunched Workbench fixture required");
-        const contextId = await requireBrowserFixtureContext(ctx, visitor);
-        const context = await ctx.db.get(contextId);
-        if (!context) throw new Error("Active browser context required");
+
         const conversation = await ctx.db
             .query("agentConversations")
             .withIndex("by_run", (q) => q.eq("runId", run._id))
             .unique();
-        const model = await resolveAgentModel(
+        const configuredModel = await resolveAgentModel(
             ctx,
             "workbench",
             conversation?.modelCatalogId,
         );
+        const selectedProfile =
+            configurable && scope
+                ? campaignConfiguration(configurable, scope.lot.configurationId)
+                : null;
+        const model = selectedProfile
+            ? {
+                  ...configuredModel,
+                  reasoningEffort: resolveReasoningPreference(
+                      configuredModel.descriptor,
+                      selectedProfile.models.workbench.reasoning,
+                  ),
+              }
+            : configuredModel;
+        requireReasoningEffort(model, model.reasoningEffort);
         const sourcesLot = args.sourcesLot?.map((entry) => entry.runId);
         const sourcesModel = args.sourcesLot
             ? await resolveAgentModel(ctx, "sources")
             : undefined;
+        if (
+            args.expectedModels &&
+            (args.expectedModels.workbench !== model.model ||
+                args.expectedModels.sources !== sourcesModel?.model)
+        )
+            throw new Error("Qualification model configuration mismatch");
+        if (args.reasoningSelection) {
+            if (!sourcesModel)
+                throw new Error("Sources qualification models required");
+            for (const [role, configuration] of [
+                ["workbench", model],
+                ["sources", sourcesModel],
+            ] as const) {
+                const preference = args.reasoningSelection[role];
+                const effective = resolveReasoningPreference(
+                    configuration.descriptor,
+                    preference,
+                );
+                requireReasoningEffort(configuration, effective);
+                const configuredEffort =
+                    role === "workbench"
+                        ? (conversation?.reasoningEffort ??
+                          configuration.reasoningEffort)
+                        : configuration.reasoningEffort;
+                if (configuredEffort !== effective)
+                    throw new Error(
+                        `Prepare the ${role} reasoning preference before authorizing this lot`,
+                    );
+            }
+        }
         if (args.sourcesLot) {
             if (
                 args.relayOrigin ||
-                sourcesLot?.length !== 2 ||
-                new Set(sourcesLot).size !== 2 ||
+                sourcesLot?.length !== (configurable?.scenarios.length ?? 2) ||
+                new Set(sourcesLot).size !==
+                    (configurable?.scenarios.length ?? 2) ||
                 !sourcesLot.includes(run._id) ||
                 !sourcesModel
             )
                 throw new Error("Invalid Sources qualification lot");
-            const definition = getAgentDefinition("sources_v1", 1);
+            const definition = getAgentDefinition("sources_v1");
             for (const operations of definition.nativeToolSets?.(
                 definition.operations,
             ) ?? [agentToolSchemas(definition)]) {
@@ -662,6 +813,7 @@ export const authorizeWorkbenchQualification = internalMutation({
                         operations,
                         definitionVersion: definition.version,
                         nativeConversation: definition.nativeConversation,
+                        contextRendering: definition.contextRendering,
                         nativeRoute: revisionRoute(sourcesModel),
                     },
                     async (key) =>
@@ -675,6 +827,21 @@ export const authorizeWorkbenchQualification = internalMutation({
             }
             for (const entry of args.sourcesLot) {
                 const owned = await requireLocalFixtureRun(ctx, entry);
+                if (configurable) {
+                    const scenario = configurable.scenarios.find(
+                        (s) => s.id === entry.scenarioId,
+                    );
+                    if (
+                        !scenario ||
+                        args.sourcesLot.filter(
+                            (e) => e.scenarioId === scenario.id,
+                        ).length !== 1 ||
+                        owned.run.companySnapshot?.cik.replace(/^0+/, "") !==
+                            scenario.company.cik.replace(/^0+/, "")
+                    )
+                        throw new Error("Campaign scenario binding mismatch");
+                }
+
                 if (
                     owned.run.researchStartedAt !== undefined ||
                     owned.run.lifecycleState !== "framing"
@@ -693,6 +860,94 @@ export const authorizeWorkbenchQualification = internalMutation({
                 responseControl.model !== args.responseControllerModel)
         )
             throw new Error("Qualification controller configuration mismatch");
+        let campaignLimits: { search: number; acquisition: number } | undefined;
+        if (context.campaignLotId) {
+            const { lot, campaign } = await requireCampaignLot(
+                ctx,
+                context.campaignLotId,
+            );
+            const m = campaign.manifest;
+            if (
+                lot.contextId !== context._id ||
+                m.mode !== "live" ||
+                (m.capability === "sources") !== !!sourcesLot ||
+                maximumRequests > lot.allocation.model ||
+                maximumCostUsd > lot.allocation.costUsd
+            )
+                throw new Error("Campaign grant exceeds its reservation");
+            const profile = campaignConfiguration(m, lot.configurationId);
+            const configurations = [
+                { role: "workbench" as const, configuration: model },
+                ...(sourcesModel
+                    ? [
+                          {
+                              role: "sources" as const,
+                              configuration: sourcesModel,
+                          },
+                      ]
+                    : []),
+            ];
+            for (const { role, configuration } of configurations) {
+                const expected = profile.models[role];
+                if (
+                    !expected ||
+                    expected.model !== configuration.model ||
+                    expected.provider !== configuration.provider ||
+                    resolveReasoningPreference(
+                        configuration.descriptor,
+                        expected.reasoning,
+                    ) !== configuration.reasoningEffort
+                )
+                    throw new Error("Campaign model configuration mismatch");
+            }
+            const policy = await readResponseControlPolicy(ctx);
+            if (
+                (profile.controllerModel !== undefined) !== policy.enabled ||
+                (profile.controllerModel &&
+                    profile.controllerModel !== policy.model)
+            )
+                throw new Error("Campaign controller configuration mismatch");
+            const configurationHash = sha256Hex(
+                stableStringify({
+                    configurations: configurations.map(
+                        ({ role, configuration: c }) => ({
+                            role,
+                            model: c.model,
+                            provider: c.provider,
+                            descriptor: c.descriptor,
+                            effort: c.reasoningEffort,
+                        }),
+                    ),
+                    controller: policy.enabled
+                        ? {
+                              enabled: true,
+                              model: policy.model,
+                              contradictionThreshold:
+                                  policy.contradictionThreshold,
+                              supportThreshold: policy.supportThreshold,
+                          }
+                        : { enabled: false },
+                }),
+            );
+            const expectedHash =
+                m.version === 2
+                    ? campaign.configurationHashes?.find(
+                          (c) => c.id === lot.configurationId,
+                      )?.hash
+                    : campaign.configurationHash;
+            if (
+                (m.version === 2 && !expectedHash) ||
+                (expectedHash && expectedHash !== configurationHash)
+            )
+                throw new Error("Campaign route or price drift");
+            if (m.version === 1)
+                await ctx.db.patch(campaign._id, { configurationHash });
+            await ctx.db.patch(lot._id, { configurationHash });
+            campaignLimits = {
+                search: lot.allocation.search,
+                acquisition: lot.allocation.acquisition,
+            };
+        }
         if (context.paidQualification) {
             if (
                 context.paidQualification.runId !== run._id ||
@@ -704,8 +959,13 @@ export const authorizeWorkbenchQualification = internalMutation({
                 context.paidQualification.maximumRequests !== maximumRequests ||
                 context.paidQualification.maximumCostUsd !== maximumCostUsd ||
                 context.paidQualification.relayOrigin !== args.relayOrigin ||
+                stableStringify(context.paidQualification.scenarios ?? null) !==
+                    stableStringify(scenarioScope?.bindings ?? null) ||
                 JSON.stringify(context.paidQualification.sourcesLot) !==
                     JSON.stringify(sourcesLot) ||
+                stableStringify(
+                    context.paidQualification.reasoningSelection ?? null,
+                ) !== stableStringify(args.reasoningSelection ?? null) ||
                 stableStringify(context.paidQualification.responseControl) !==
                     stableStringify(responseControl)
             )
@@ -723,10 +983,20 @@ export const authorizeWorkbenchQualification = internalMutation({
                 maximumRequests,
                 maximumCostUsd,
                 authorizedAt: Date.now(),
+                maximumSearchAttempts: campaignLimits?.search,
+                maximumAcquisitions: campaignLimits?.acquisition,
                 sourcesLot,
+                scenarios: scenarioScope?.bindings,
+                reasoningSelection: args.reasoningSelection,
                 responseControl,
             },
         });
+        if (configurable)
+            await initializeQualificationUsage(
+                ctx,
+                contextId,
+                scenarioScope?.bindings.map((e) => e.runId) ?? [run._id],
+            );
         return null;
     },
 });
@@ -770,7 +1040,36 @@ export const activateWorkbench = internalMutation({
                 args.researchAngle?.trim().slice(0, 2000) ??
                 "Simulation: propose a claims workflow research program.",
         });
-        await initializeFraming(ctx, run._id);
+        const context = run.browserTestContextId
+            ? await ctx.db.get(run.browserTestContextId)
+            : null;
+        let initialModel:
+            | Infer<
+                  typeof import("@convex/modelConfigurationSchema").initialModelSelection
+              >
+            | undefined;
+        if (context?.campaignLotId && context.paidQualification?.scenarios) {
+            const { campaign, lot } = await requireCampaignLot(
+                ctx,
+                context.campaignLotId,
+            );
+            const profile = campaignConfiguration(
+                campaign.manifest,
+                lot.configurationId,
+            );
+            const model = await ctx.db.get(
+                context.paidQualification.modelRevisionId,
+            );
+            if (!model) throw new Error("Campaign model required");
+            initialModel = {
+                catalogId: model.catalogId,
+                reasoningEffort: resolveReasoningPreference(
+                    model.descriptor,
+                    profile.models.workbench.reasoning,
+                ),
+            };
+        }
+        await initializeFraming(ctx, run._id, initialModel);
         return run._id;
     },
 });
@@ -1007,8 +1306,6 @@ export const inspectSourcesQualification = internalQuery({
         captures: v.array(schema.doc("sourceCaptures")),
         tasks: v.array(schema.doc("aiTaskResults")),
         requests: v.array(schema.doc("agentOperationRequests")),
-        invocations: v.array(schema.doc("agentInvocations")),
-        payloads: v.array(schema.doc("agentInvocationPayloads")),
         captureDownloads: v.array(
             v.object({ captureId: v.id("sourceCaptures"), url: v.string() }),
         ),
@@ -1018,59 +1315,39 @@ export const inspectSourcesQualification = internalQuery({
         const preparation = run.sourcePreparationId
             ? await ctx.db.get(run.sourcePreparationId)
             : null;
-        const [sources, tasks, requests, invocations, captures] =
-            await Promise.all([
-                ctx.db
-                    .query("sources")
-                    .withIndex("by_run_and_url", (q) => q.eq("runId", run._id))
-                    .take(61),
-                ctx.db
-                    .query("aiTaskResults")
-                    .withIndex("by_run", (q) => q.eq("runId", run._id))
-                    .take(33),
-                ctx.db
-                    .query("agentOperationRequests")
-                    .withIndex("by_run_and_logical_key", (q) =>
-                        q.eq("runId", run._id),
-                    )
-                    .take(101),
-                ctx.db
-                    .query("agentInvocations")
-                    .withIndex("by_run_and_task_key", (q) =>
-                        q.eq("runId", run._id),
-                    )
-                    .take(41),
-                preparation
-                    ? ctx.db
-                          .query("sourceCaptures")
-                          .withIndex("by_preparation_and_source", (q) =>
-                              q.eq("preparationId", preparation._id),
-                          )
-                          .take(13)
-                    : [],
-            ]);
+        const [sources, tasks, requests, captures] = await Promise.all([
+            ctx.db
+                .query("sources")
+                .withIndex("by_run_and_url", (q) => q.eq("runId", run._id))
+                .take(61),
+            ctx.db
+                .query("aiTaskResults")
+                .withIndex("by_run", (q) => q.eq("runId", run._id))
+                .take(33),
+            ctx.db
+                .query("agentOperationRequests")
+                .withIndex("by_run_and_logical_key", (q) =>
+                    q.eq("runId", run._id),
+                )
+                .take(101),
+            preparation
+                ? ctx.db
+                      .query("sourceCaptures")
+                      .withIndex("by_preparation_and_source", (q) =>
+                          q.eq("preparationId", preparation._id),
+                      )
+                      .take(13)
+                : [],
+        ]);
         if (
             sources.length > 60 ||
             tasks.length > 32 ||
             requests.length > 100 ||
-            invocations.length > 40 ||
             captures.length > 12
         )
             throw new Error(
                 "Sources qualification inspection capacity exceeded",
             );
-        const payloads = (
-            await Promise.all(
-                invocations.map((invocation) =>
-                    ctx.db
-                        .query("agentInvocationPayloads")
-                        .withIndex("by_invocation_and_part", (q) =>
-                            q.eq("invocationId", invocation._id),
-                        )
-                        .take(2),
-                ),
-            )
-        ).flat();
         const captureDownloads = [];
         for (const capture of captures) {
             if (!capture.storageId) continue;
@@ -1083,10 +1360,262 @@ export const inspectSourcesQualification = internalQuery({
             sources,
             tasks,
             requests,
-            invocations,
-            payloads,
             captures,
             captureDownloads,
+        };
+    },
+});
+
+/** Keep transcript hydration in a separate, bounded transaction from documentary inventory. */
+export const inspectSourcesInvocations = internalQuery({
+    args: {
+        runId: v.id("researchRuns"),
+        fixtureKey: v.string(),
+        paginationOpts: paginationOptsValidator,
+    },
+    returns: v.object({
+        ...paginationResultValidator(schema.doc("agentInvocations")).fields,
+        payloads: v.array(schema.doc("agentInvocationPayloads")),
+    }),
+    handler: async (ctx, args) => {
+        const { run } = await requireLocalFixtureRun(ctx, args);
+        if (args.paginationOpts.numItems !== 1)
+            throw new Error(
+                "Sources transcript inspection requires one invocation per page",
+            );
+        const page = await ctx.db
+            .query("agentInvocations")
+            .withIndex("by_run_and_task_key", (q) => q.eq("runId", run._id))
+            .paginate(args.paginationOpts);
+        const payloads = (
+            await Promise.all(
+                page.page.map((invocation) =>
+                    ctx.db
+                        .query("agentInvocationPayloads")
+                        .withIndex("by_invocation_and_part", (q) =>
+                            q.eq("invocationId", invocation._id),
+                        )
+                        .take(2),
+                ),
+            )
+        ).flat();
+        return { ...page, payloads };
+    },
+});
+
+/** Small polling snapshot: no transcript scan or sample-dependent ceiling. */
+export const qualificationSnapshot = internalQuery({
+    returns: v.object({
+        run: schema.doc("researchRuns"),
+        conversation: v.union(schema.doc("agentConversations"), v.null()),
+        mission: v.union(schema.doc("agentMissions"), v.null()),
+        sourcesMission: v.union(schema.doc("agentMissions"), v.null()),
+        lastMessage: v.union(schema.doc("agentMessageDeliveries"), v.null()),
+        preparation: v.union(
+            schema.doc("sourceSelectionProposalRebuilds"),
+            v.null(),
+        ),
+        framing: v.union(schema.doc("framingRevisions"), v.null()),
+        nativeSettled: v.boolean(),
+    }),
+    args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
+    handler: async (ctx, args) => {
+        const { run } = await requireLocalFixtureRun(ctx, args);
+        const conversation = await ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", run._id))
+            .unique();
+        const session = conversation
+            ? await ctx.db
+                  .query("piSessions")
+                  .withIndex("by_conversation", (q) =>
+                      q.eq("conversationId", conversation._id),
+                  )
+                  .unique()
+            : null;
+        const turn = conversation?.activeTurnId
+            ? await ctx.db.get(conversation.activeTurnId)
+            : null;
+        const mission = turn?.missionId
+            ? await ctx.db.get(turn.missionId)
+            : null;
+        const sourcesMission = run.sourcePreparationId
+            ? await ctx.db
+                  .query("agentMissions")
+                  .withIndex("by_run_and_request_key", (q) =>
+                      q
+                          .eq("runId", run._id)
+                          .eq(
+                              "requestKey",
+                              `sources:${run.sourcePreparationId}`,
+                          ),
+                  )
+                  .unique()
+            : null;
+        return {
+            run,
+            conversation,
+            mission,
+            sourcesMission,
+            lastMessage: await ctx.db
+                .query("agentMessageDeliveries")
+                .withIndex("by_run", (q) => q.eq("runId", run._id))
+                .order("desc")
+                .first(),
+            preparation: run.sourcePreparationId
+                ? await ctx.db.get(run.sourcePreparationId)
+                : null,
+            framing: run.currentFramingRevisionId
+                ? await ctx.db.get(run.currentFramingRevisionId)
+                : null,
+            nativeSettled:
+                !!session &&
+                session.settledSequence === session.sequence &&
+                session.leaseUntil <= Date.now(),
+        };
+    },
+});
+/** Audit pages are bounded per transaction; the host follows the cursor until completion. */
+export const inspectQualificationPage = internalQuery({
+    returns: v.union(
+        paginationResultValidator(schema.doc("providerCalls")),
+        paginationResultValidator(schema.doc("agentMissions")),
+        paginationResultValidator(schema.doc("agentOperationRequests")),
+        paginationResultValidator(schema.doc("sources")),
+        paginationResultValidator(schema.doc("aiTaskResults")),
+        paginationResultValidator(schema.doc("agentMessageDeliveries")),
+        v.object({
+            ...paginationResultValidator(schema.doc("sourceCaptures")).fields,
+            downloads: v.array(
+                v.object({
+                    captureId: v.id("sourceCaptures"),
+                    url: v.string(),
+                }),
+            ),
+        }),
+    ),
+    args: {
+        runId: v.id("researchRuns"),
+        fixtureKey: v.string(),
+        kind: v.union(
+            v.literal("receipts"),
+            v.literal("missions"),
+            v.literal("requests"),
+            v.literal("sources"),
+            v.literal("tasks"),
+            v.literal("captures"),
+            v.literal("messages"),
+        ),
+        paginationOpts: paginationOptsValidator,
+    },
+    handler: async (ctx, args) => {
+        const { run } = await requireLocalFixtureRun(ctx, args);
+        if (
+            args.paginationOpts.numItems < 1 ||
+            args.paginationOpts.numItems > 32
+        )
+            throw new Error("Audit page size must be 1..32");
+        const o = args.paginationOpts;
+        switch (args.kind) {
+            case "receipts":
+                return ctx.db
+                    .query("providerCalls")
+                    .withIndex("by_run", (q) => q.eq("runId", run._id))
+                    .paginate(o);
+            case "missions":
+                return ctx.db
+                    .query("agentMissions")
+                    .withIndex("by_run_and_request_key", (q) =>
+                        q.eq("runId", run._id),
+                    )
+                    .paginate(o);
+            case "requests":
+                return ctx.db
+                    .query("agentOperationRequests")
+                    .withIndex("by_run_and_logical_key", (q) =>
+                        q.eq("runId", run._id),
+                    )
+                    .paginate(o);
+            case "sources":
+                return ctx.db
+                    .query("sources")
+                    .withIndex("by_run_and_url", (q) => q.eq("runId", run._id))
+                    .paginate(o);
+            case "tasks":
+                return ctx.db
+                    .query("aiTaskResults")
+                    .withIndex("by_run", (q) => q.eq("runId", run._id))
+                    .paginate(o);
+            case "messages":
+                return ctx.db
+                    .query("agentMessageDeliveries")
+                    .withIndex("by_run", (q) => q.eq("runId", run._id))
+                    .paginate(o);
+            case "captures": {
+                const preparationId = run.sourcePreparationId;
+                if (!preparationId)
+                    return {
+                        page: [],
+                        isDone: true,
+                        continueCursor: "",
+                        downloads: [],
+                    };
+                const page = await ctx.db
+                    .query("sourceCaptures")
+                    .withIndex("by_preparation_and_source", (q) =>
+                        q.eq("preparationId", preparationId),
+                    )
+                    .paginate(o);
+                const downloads = [];
+                for (const capture of page.page) {
+                    if (capture.storageId) {
+                        const url = await ctx.storage.getUrl(capture.storageId);
+                        if (url)
+                            downloads.push({ captureId: capture._id, url });
+                    }
+                }
+                return { ...page, downloads };
+            }
+        }
+    },
+});
+
+/** Exports the immutable admitted route for the local diagnostic relay, never credentials. */
+export const qualificationRoute = internalQuery({
+    args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
+    returns: effectiveModelConfiguration,
+    handler: async (ctx, args) => {
+        const { run } = await requireLocalFixtureRun(ctx, args);
+        const context = run.browserTestContextId
+            ? await ctx.db.get(run.browserTestContextId)
+            : null;
+        if (
+            !context?.paidQualification?.scenarios?.some(
+                (s) => s.runId === run._id,
+            )
+        )
+            throw new Error("Admitted campaign route required");
+        if (!context.campaignLotId) throw new Error("Campaign route required");
+        const { campaign, lot } = await requireCampaignLot(
+            ctx,
+            context.campaignLotId,
+        );
+        const revision = await ctx.db.get(
+            context.paidQualification.modelRevisionId,
+        );
+        if (!revision) throw new Error("Missing route");
+        const profile = campaignConfiguration(
+            campaign.manifest,
+            lot.configurationId,
+        );
+        return {
+            model: revision.model,
+            provider: revision.provider,
+            descriptor: revision.descriptor,
+            reasoningEffort: resolveReasoningPreference(
+                revision.descriptor,
+                profile.models.workbench.reasoning,
+            ),
         };
     },
 });

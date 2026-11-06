@@ -7,7 +7,10 @@ import {
     query,
 } from "@convex/_generated/server";
 import { framingContentValidator } from "@convex/domain/framingContracts";
-import { requireFramingEditAuthority } from "@convex/domain/framingEditAuthority";
+import {
+    requireFramingEditAuthority,
+    researchStartBlock,
+} from "@convex/domain/framingEditAuthority";
 import { MAX_RESEARCH_PLAN_QUESTIONS } from "@convex/domain/researchPlan";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { readPreparationConcurrency } from "@convex/domain/sourcePreparationAuthority";
@@ -24,16 +27,10 @@ import {
 import { executionError } from "@convex/execution/errors";
 import { retainOperationEffect } from "@convex/execution/operations";
 import { initialModelSelection } from "@convex/modelConfigurationSchema";
-import {
-    MAX_ANALYSES_PER_VISITOR,
-    sourcePreparationEnabled,
-} from "@convex/resourceLimits";
-import {
-    readWorkbenchQualification,
-    requireWorkspaceRun,
-    SOURCES_QUALIFICATION_ENVELOPE,
-} from "@convex/runWorkspace";
+import { sourcePreparationEnabled } from "@convex/resourceLimits";
+import { requireWorkspaceRun } from "@convex/runWorkspace";
 import schema from "@convex/schema";
+import { sourcesQualificationEnvelope } from "@convex/sourcesSimulation";
 import { workflow } from "@convex/workflow";
 import { type Infer, v } from "convex/values";
 
@@ -142,32 +139,11 @@ export const startResearch = mutation({
                 throw executionError("framing_fixed");
             return run._id;
         }
-        if (
-            run.startMode !== "framed" ||
-            run.lifecycleState !== "framing" ||
-            run.executionStatus !== "idle"
-        )
-            throw executionError("framing_fixed");
-        if (!framing.content.scope.trim() || !framing.content.questions.length)
-            throw executionError("framing_invalid");
-        const qualification = await readWorkbenchQualification(ctx, run);
-        const qualifiedSourcesStart = !!qualification?.sourcesLot;
-        if (
-            !qualifiedSourcesStart &&
-            visitor.analysesReserved >= MAX_ANALYSES_PER_VISITOR
-        )
-            throw executionError("analysis_limit_reached");
-        const running = await ctx.db
-            .query("researchRuns")
-            .withIndex("by_owner_and_execution_status", (q) =>
-                q
-                    .eq("ownerVisitorId", visitor._id)
-                    .eq("executionStatus", "running"),
-            )
-            .first();
-        if (running) throw executionError("execution_slot_unavailable");
-        const sourcesMissionEnvelope = qualifiedSourcesStart
-            ? SOURCES_QUALIFICATION_ENVELOPE
+        const startBlock = await researchStartBlock(ctx, run, framing, visitor);
+        if (startBlock) throw executionError(startBlock);
+        const qualifiedEnvelope = await sourcesQualificationEnvelope(ctx, run);
+        const sourcesMissionEnvelope = qualifiedEnvelope
+            ? qualifiedEnvelope
             : process.env.SOURCES_MISSION_ENABLED === "true"
               ? sourcesEnvelope()
               : undefined;
@@ -206,7 +182,7 @@ export const startResearch = mutation({
             nextEventSequence: run.nextEventSequence + 1,
             updatedAt: Date.now(),
         });
-        if (!qualifiedSourcesStart)
+        if (!qualifiedEnvelope)
             await ctx.db.patch(visitor._id, {
                 analysesReserved: visitor.analysesReserved + 1,
             });
