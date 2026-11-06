@@ -21,8 +21,14 @@ export async function prepareQualificationModel(
     let pages = 0;
     let complete = selected.compatible;
     if (!selected.compatible) {
+        // Descending history is bounded by the initial catalogue revision, plus a possible empty terminal page.
+        const maximumPages = selected.revision + 1;
+        assert(
+            Number.isSafeInteger(maximumPages) && maximumPages >= 2,
+            "Profile refresh revision bound unavailable",
+        );
         let cursor: string | null = null;
-        for (; pages < 20; ) {
+        for (; pages < maximumPages; ) {
             const refreshed: FunctionReturnType<
                 typeof api.modelConfigurationActions.refreshProfiles
             > = await client.action(

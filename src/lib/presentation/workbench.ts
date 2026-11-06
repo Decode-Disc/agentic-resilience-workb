@@ -97,8 +97,19 @@ export function sourceMissionState(
         | "pauseReason"
         | "completionOutcome"
     >,
-    preparation: Pick<Doc<"sourceSelectionProposalRebuilds">, "status"> | null,
+    preparation: Pick<
+        NonNullable<
+            FunctionReturnType<typeof api.workbench.snapshot>["preparation"]
+        >,
+        "status" | "missionStatus"
+    > | null,
 ): ConversationWorkItem["state"] {
+    if (preparation?.missionStatus === "completed") return "completed";
+    if (
+        preparation?.missionStatus &&
+        ["blocked", "failed", "cancelled"].includes(preparation.missionStatus)
+    )
+        return "interrupted";
     if (run.completionOutcome === "insufficient_public_evidence")
         return "blocked";
     if (run.pauseReason === "execution_interrupted") return "interrupted";
@@ -120,6 +131,40 @@ export function sourceMissionState(
     if (run.pauseReason === "analyst") return "paused";
     if (run.executionStatus === "running") return "running";
     return "waiting";
+}
+
+/** Keeps mission execution, retained material and the available next capability distinct in every Sources heading. */
+export function sourceMissionPresentation(
+    run: Parameters<typeof sourceMissionState>[0],
+    preparation: Parameters<typeof sourceMissionState>[1],
+) {
+    const state = sourceMissionState(run, preparation);
+    const limited =
+        state === "completed" &&
+        (preparation?.status === "partial" ||
+            preparation?.status === "blocked");
+    const title =
+        run.completionOutcome === "insufficient_public_evidence"
+            ? "Public evidence is insufficient"
+            : state === "completed"
+              ? limited
+                  ? "Documentary preparation completed with limits"
+                  : "Documentary material ready"
+              : state === "paused"
+                ? "Documentary preparation paused"
+                : state === "interrupted"
+                  ? "Documentary preparation interrupted"
+                  : state === "waiting" || state === "blocked"
+                    ? "Documentary preparation needs review"
+                    : "Collecting the documentary material";
+    const detail = limited
+        ? "Sources finished its mission. Retained material has unresolved gaps or unfinished work. Investigation is not available yet."
+        : state === "interrupted"
+          ? "Sources stopped before completing its mission. Retained material and unfinished work remain available. Investigation is not available yet."
+          : state === "completed"
+            ? "Inspect the retained material before continuing. Investigation is not available yet."
+            : "Inspect the retained material and preparation limits before continuing.";
+    return { state, title, detail };
 }
 
 /** A consistency estimate is scoped to recorded facts; it never becomes a general truth score. */

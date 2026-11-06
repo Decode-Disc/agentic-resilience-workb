@@ -1,5 +1,8 @@
 import { expect, test } from "vitest";
-import { sourceMissionState } from "@/lib/presentation/workbench";
+import {
+    sourceMissionPresentation,
+    sourceMissionState,
+} from "@/lib/presentation/workbench";
 
 test.each([
     "partial",
@@ -46,6 +49,61 @@ test("a research pause during documentary preparation is visible independently o
             null,
         ),
     ).toBe("paused");
+});
+
+test.each([
+    "partial",
+    "blocked",
+] as const)("completed Sources with %s material remains completed", (status) => {
+    expect(
+        sourceMissionState(
+            { lifecycleState: "sources_prepared", executionStatus: "idle" },
+            { status, missionStatus: "completed" },
+        ),
+    ).toBe("completed");
+});
+
+test("a later interruption does not rewrite a completed Sources mission", () => {
+    expect(
+        sourceMissionState(
+            {
+                lifecycleState: "extracting_evidence",
+                executionStatus: "failed",
+                pauseReason: "execution_interrupted",
+            },
+            { status: "partial", missionStatus: "completed" },
+        ),
+    ).toBe("completed");
+});
+
+test("an interrupted Sources mission retains its distinct state despite usable partial material", () => {
+    expect(
+        sourceMissionState(
+            { lifecycleState: "sources_prepared", executionStatus: "idle" },
+            { status: "partial", missionStatus: "blocked" },
+        ),
+    ).toBe("interrupted");
+});
+
+test.each([
+    "completed",
+    "blocked",
+] as const)("%s partial preparation explains material limits and unavailable Investigation", (missionStatus) => {
+    const copy = sourceMissionPresentation(
+        { lifecycleState: "sources_prepared", executionStatus: "idle" },
+        { status: "partial", missionStatus },
+    );
+    expect(copy.title).toBe(
+        missionStatus === "completed"
+            ? "Documentary preparation completed with limits"
+            : "Documentary preparation interrupted",
+    );
+    expect(copy.detail).toContain("Retained material");
+    expect(copy.detail).toContain("unfinished");
+    expect(copy.detail).toContain("Investigation is not available yet");
+    expect(copy.detail).not.toMatch(
+        /sources_prepared|investigation_unavailable|initial_fixture|Start research/,
+    );
 });
 
 test("a full conversation journal explains preservation without inviting a futile new request", async () => {

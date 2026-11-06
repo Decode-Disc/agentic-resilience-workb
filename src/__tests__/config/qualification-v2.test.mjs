@@ -54,11 +54,66 @@ test("prepare freezes three free scenarios and two configurations with allowance
 import { getFunctionName } from "convex/server";
 import { api } from "../../../convex/_generated/api.js";
 import { campaignManifestSchema } from "../../../convex/qualificationCampaignPolicy.ts";
+import { initialFixtureContent } from "../../../convex/qualificationInitialFixtures.ts";
+import { sha256 } from "../../../scripts/evaluations/workbench-browser/protocol.ts";
 import {
     inspectCampaignScenarios,
     prepareCampaignScenarios,
     runCampaignScenarios,
 } from "../../../scripts/evaluations/workbench-browser/scenarios.ts";
+
+test("prepare freezes an explicitly selected documentary starting fixture without changing ordinary scenarios", async () => {
+    const root = mkdtempSync(join(tmpdir(), "qualification-initial-fixture-"));
+    const input = join(root, "input.json");
+    const manifest = configurableCampaign();
+    const initialFixture = {
+        id: "sources_completed_partial",
+        hash: sha256(initialFixtureContent("sources_completed_partial")),
+    };
+    manifest.scenarios[0].initialFixture = initialFixture;
+    manifest.scenarios[0].steps = [
+        {
+            id: "inspect",
+            action: "send_message",
+            text: "Explain the retained fixture limits.",
+        },
+    ];
+    writeFileSync(input, JSON.stringify(manifest));
+    await runCampaign("prepare", root, { manifest: input });
+    const retained = JSON.parse(
+        readFileSync(join(root, "campaign.json"), "utf8"),
+    );
+    assert.deepEqual(
+        retained.manifest.scenarios[0].initialFixture,
+        initialFixture,
+    );
+    assert.equal(retained.manifest.scenarios[1].initialFixture, undefined);
+});
+
+test("prepare refuses a documentary starting fixture outside Sources capability", async () => {
+    const root = mkdtempSync(join(tmpdir(), "qualification-initial-scope-"));
+    const input = join(root, "input.json");
+    const manifest = configurableCampaign();
+    manifest.capability = "workbench";
+    for (const scenario of manifest.scenarios)
+        scenario.steps = [
+            {
+                id: "inspect",
+                action: "send_message",
+                text: "Explain retained material.",
+            },
+        ];
+    manifest.scenarios[0].initialFixture = {
+        id: "sources_completed_partial",
+        hash: sha256(initialFixtureContent("sources_completed_partial")),
+    };
+    writeFileSync(input, JSON.stringify(manifest));
+    await assert.rejects(
+        runCampaign("prepare", root, { manifest: input }),
+        /Sources/,
+    );
+    assert.equal(existsSync(join(root, "campaign.json")), false);
+});
 
 test("an unavailable retained capture fails export while preserving its metadata", async () => {
     const root = mkdtempSync(join(tmpdir(), "qualification-missing-capture-"));
@@ -533,108 +588,141 @@ test("backend campaigns retain an explicit execution boundary without changing h
     }
 });
 
-test("backend execution retains public-operation effects and snapshots without a browser", async () => {
-    const root = mkdtempSync(join(tmpdir(), "qualification-backend-"));
-    const base = configurableCampaign();
-    const manifest = campaignManifestSchema.parse({
-        ...base,
-        executionSurface: "backend",
-        mode: "deterministic",
-        scenarios: [
-            {
-                ...base.scenarios[0],
-                steps: [
-                    { id: "frame", action: "save_framing" },
-                    {
-                        id: "ask",
-                        action: "send_message",
-                        text: "Explain the scoped workflow.",
-                    },
-                ],
+for (const withInitialFixture of [false, true])
+    test(`backend execution retains public-operation effects and snapshots without a browser${withInitialFixture ? " from a prepared fixture" : ""}`, async () => {
+        const root = mkdtempSync(join(tmpdir(), "qualification-backend-"));
+        const base = configurableCampaign();
+        const manifest = campaignManifestSchema.parse({
+            ...base,
+            executionSurface: "backend",
+            mode: "deterministic",
+            scenarios: [
+                {
+                    ...base.scenarios[0],
+                    ...(withInitialFixture
+                        ? {
+                              initialFixture: {
+                                  id: "sources_completed_partial",
+                                  hash: sha256(
+                                      initialFixtureContent(
+                                          "sources_completed_partial",
+                                      ),
+                                  ),
+                              },
+                          }
+                        : {}),
+                    steps: [
+                        ...(!withInitialFixture
+                            ? [{ id: "frame", action: "save_framing" }]
+                            : []),
+                        {
+                            id: "ask",
+                            action: "send_message",
+                            text: "Explain the scoped workflow.",
+                        },
+                    ],
+                },
+            ],
+            expectations: [base.expectations[0]],
+            perLot: { model: 0, search: 0, acquisition: 0, costUsd: 0 },
+            total: { model: 0, search: 0, acquisition: 0, costUsd: 0 },
+            batteryHash: "a".repeat(64),
+        });
+        writeFileSync(
+            join(root, "protocol.json"),
+            `${JSON.stringify(
+                { boundary: "protected_local_backend_simulated_providers" },
+                null,
+                2,
+            )}\n`,
+        );
+        writeFileSync(
+            join(root, "prepared.json"),
+            JSON.stringify({
+                cases: [{ id: "claims", runId: "run", fixtureKey: "fixture" }],
+            }),
+        );
+        const snapshot = {
+            nativeSettled: true,
+            conversation: { activeTurnId: null, queuedCount: 0 },
+            framing: { revision: 1 },
+            run: { executionStatus: "idle" },
+            lastMessage: null,
+        };
+        const effects = [];
+        const client = {
+            action: async (reference) => {
+                effects.push(getFunctionName(reference));
+                return {
+                    preparationId: "preparation",
+                    missionId: "mission",
+                    captureId: "capture",
+                };
             },
-        ],
-        expectations: [base.expectations[0]],
-        perLot: { model: 0, search: 0, acquisition: 0, costUsd: 0 },
-        total: { model: 0, search: 0, acquisition: 0, costUsd: 0 },
-        batteryHash: "a".repeat(64),
-    });
-    writeFileSync(
-        join(root, "protocol.json"),
-        `${JSON.stringify(
-            { boundary: "protected_local_backend_simulated_providers" },
-            null,
-            2,
-        )}\n`,
-    );
-    writeFileSync(
-        join(root, "prepared.json"),
-        JSON.stringify({
-            cases: [{ id: "claims", runId: "run", fixtureKey: "fixture" }],
-        }),
-    );
-    const snapshot = {
-        nativeSettled: true,
-        conversation: { activeTurnId: null, queuedCount: 0 },
-        framing: { revision: 1 },
-        run: { executionStatus: "idle" },
-        lastMessage: null,
-    };
-    const client = {
-        query: async (reference) =>
-            getFunctionName(reference) ===
-            "execution/fixtures:qualificationSnapshot"
-                ? structuredClone(snapshot)
-                : {
-                      page: [],
-                      payloads: [],
-                      downloads: [],
-                      isDone: true,
-                      continueCursor: "",
-                  },
-        mutation: async (reference) => {
-            assert.equal(
-                getFunctionName(reference),
-                "execution/fixtures:activateWorkbench",
-            );
-        },
-    };
-    const admitted = {
-        query: async () => ({ status: "active" }),
-        mutation: async (reference, args) => {
-            if (getFunctionName(reference) === "framing:save")
-                snapshot.framing.revision++;
-            else {
+            query: async (reference) =>
+                getFunctionName(reference) ===
+                "execution/fixtures:qualificationSnapshot"
+                    ? structuredClone(snapshot)
+                    : {
+                          page: [],
+                          payloads: [],
+                          downloads: [],
+                          isDone: true,
+                          continueCursor: "",
+                      },
+            mutation: async (reference) => {
+                effects.push(getFunctionName(reference));
                 assert.equal(
                     getFunctionName(reference),
-                    "execution/conversations:submit",
+                    "execution/fixtures:activateWorkbench",
                 );
-                assert.equal(args.text, "Explain the scoped workflow.");
-                snapshot.lastMessage = {
-                    _id: "reply",
-                    text: "Scoped explanation retained",
-                };
-            }
-        },
-    };
-    await runCampaignScenarios(
-        null,
-        client,
-        undefined,
-        "http://127.0.0.1:3210",
-        root,
-        manifest,
-        () => false,
-        admitted,
-    );
-    const after = JSON.parse(readFileSync(join(root, "claims/ask-after.json")));
-    assert.equal(after.framing.revision, 2);
-    assert.equal(after.lastMessage.text, "Scoped explanation retained");
-    assert.equal(existsSync(join(root, "claims/published-ui.json")), false);
-    assert.match(
-        readFileSync(join(root, "progress.jsonl"), "utf8"),
-        /"executionIntegrity":"passed"/,
-    );
-});
+            },
+        };
+        const admitted = {
+            query: async () => ({ status: "active" }),
+            mutation: async (reference, args) => {
+                effects.push(getFunctionName(reference));
+                if (getFunctionName(reference) === "framing:save")
+                    snapshot.framing.revision++;
+                else {
+                    assert.equal(
+                        getFunctionName(reference),
+                        "execution/conversations:submit",
+                    );
+                    assert.equal(args.text, "Explain the scoped workflow.");
+                    snapshot.lastMessage = {
+                        _id: "reply",
+                        text: "Scoped explanation retained",
+                    };
+                }
+            },
+        };
+        await runCampaignScenarios(
+            null,
+            client,
+            undefined,
+            "http://127.0.0.1:3210",
+            root,
+            manifest,
+            () => false,
+            admitted,
+        );
+        const after = JSON.parse(
+            readFileSync(join(root, "claims/ask-after.json")),
+        );
+        assert.equal(after.framing.revision, withInitialFixture ? 1 : 2);
+        if (withInitialFixture)
+            assert.deepEqual(effects, [
+                "qualificationInitialFixtureSetup:install",
+                "execution/conversations:submit",
+            ]);
+        assert.equal(after.lastMessage.text, "Scoped explanation retained");
+        assert.equal(existsSync(join(root, "claims/published-ui.json")), false);
+        assert.match(
+            readFileSync(join(root, "progress.jsonl"), "utf8"),
+            /"executionIntegrity":"passed"/,
+        );
+    });
 
 import { withQualificationAdministrator } from "../../../scripts/evaluations/workbench-browser/model-preparation.ts";
 
@@ -810,6 +898,106 @@ test("backend execution records the first failure without starting another scena
     );
     assert.equal(existsSync(join(root, "creative")), false);
 });
+
+for (const workerCompletes of [false, true])
+    test(`a blocked conversation ${workerCompletes ? "waits for its active worker" : "stops qualification after its worker has stopped"}`, async () => {
+        const root = mkdtempSync(join(tmpdir(), "backend-blocked-response-"));
+        const base = configurableCampaign();
+        const selectedScenarios = workerCompletes
+            ? base.scenarios.slice(0, 1)
+            : base.scenarios;
+        const manifest = campaignManifestSchema.parse({
+            ...base,
+            executionSurface: "backend",
+            batteryHash: "a".repeat(64),
+            scenarios: selectedScenarios.map((s) => ({
+                ...s,
+                steps: [
+                    {
+                        id: "ask",
+                        action: "send_message",
+                        text: "Explain retained material.",
+                    },
+                ],
+            })),
+            expectations: workerCompletes
+                ? base.expectations.slice(0, 1)
+                : base.expectations,
+        });
+        writeFileSync(
+            join(root, "protocol.json"),
+            `${JSON.stringify({ boundary: "backend" }, null, 2)}\n`,
+        );
+        writeFileSync(
+            join(root, "prepared.json"),
+            JSON.stringify({
+                cases: selectedScenarios.map((s) => ({
+                    id: s.id,
+                    runId: s.id,
+                    fixtureKey: s.id,
+                })),
+            }),
+        );
+        let submitted = false,
+            reads = 0;
+        const client = {
+            mutation: async () => null,
+            query: async () => {
+                reads++;
+                const done = workerCompletes && reads >= 6;
+                return {
+                    nativeSettled: !submitted || done,
+                    conversation: {
+                        activeTurnId: submitted && !done ? "turn" : null,
+                        queuedCount: 0,
+                    },
+                    mission:
+                        submitted && !done
+                            ? {
+                                  status: "blocked",
+                                  blockCode: "qualification_budget_exhausted",
+                                  ...(workerCompletes
+                                      ? { piActiveWriter: "engaged-worker" }
+                                      : {}),
+                              }
+                            : null,
+                    lastMessage: submitted ? { _id: "new-message" } : null,
+                    run: { executionStatus: "idle" },
+                };
+            },
+        };
+        const execute = () =>
+            runCampaignScenarios(
+                null,
+                client,
+                undefined,
+                "http://127.0.0.1:3210",
+                root,
+                manifest,
+                () => reads > 8,
+                {
+                    query: async () => ({ status: "active" }),
+                    mutation: async () => {
+                        submitted = true;
+                    },
+                },
+            );
+        if (workerCompletes) {
+            // One response is enough to establish that active-writer settlement is allowed to finish.
+            await execute();
+            assert.equal(
+                existsSync(join(root, "claims/published-backend.json")),
+                true,
+            );
+        } else {
+            await assert.rejects(execute, /first failing scenario/);
+            assert.match(
+                readFileSync(join(root, "claims/failure.json"), "utf8"),
+                /qualification_budget_exhausted/,
+            );
+            assert.equal(existsSync(join(root, "creative")), false);
+        }
+    });
 
 test("new campaign preparation defaults to backend and freezes the choice without changing historical manifests", async () => {
     const root = mkdtempSync(join(tmpdir(), "qualification-backend-default-"));

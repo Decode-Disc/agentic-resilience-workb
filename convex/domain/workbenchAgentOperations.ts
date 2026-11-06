@@ -5,10 +5,14 @@ import type { AgentOperationDefinition } from "@convex/execution/executionProtoc
 import { operationReuseIdentity } from "@convex/execution/missionData";
 import { operationResultValidator } from "@convex/execution/operationResults";
 import { v } from "convex/values";
+import { validate } from "convex-helpers/validators";
 import { savedMaterialOperations } from "./savedMaterialAgentOperations";
+import { readPreparedNeed } from "./sources";
+import { preparedNeedInspectionValidator } from "./sourcesContracts";
 import { executionStatusValidator } from "./validators";
 import {
     adjustFramingInput,
+    consultPreparedMaterialInput,
     controlResearchInput,
     nativeAdjustFramingInput,
     nativeSourceRequestInput,
@@ -259,6 +263,64 @@ export const responseCoherenceOperation: Extract<
 };
 
 export const workbenchOperations: Record<string, AgentOperationDefinition> = {
+    consult_prepared_material: {
+        effectKind: "read",
+        nativeAuthority: "dossier",
+        version: 1,
+        description:
+            "Read the complete outcome of an observed documentary need, including its gap, unfinished reasons, contribution references and restrictions. Choose needId from documentaryPreparation.needReferences. Context previews are incomplete; this operation does not retrieve source passages or start research.",
+        inputValidator: consultPreparedMaterialInput,
+        resultValidator: operationResultValidator(
+            preparedNeedInspectionValidator,
+        ),
+        identity: operationReuseIdentity,
+        async pin(ctx, mission, input, runId) {
+            const id = mission?.runId ?? runId;
+            const run = id ? await ctx.db.get(id) : null;
+            if (!run || input.kind !== "consult_prepared_material")
+                return { kind: "unavailable", code: "not_authorized" };
+            const result = await readPreparedNeed(ctx, run, input.needId);
+            return result.kind === "available"
+                ? { kind: "available", pin: result.pin }
+                : result;
+        },
+        async execute(ctx, args) {
+            if (!args.requestId)
+                return {
+                    outcome: { kind: "refused", code: "request_unavailable" },
+                };
+            const result = await ctx.runQuery(
+                internal.sourcesMission.inspectPreparedNeed,
+                {
+                    requestId: args.requestId,
+                    expectedGeneration: args.expectedGeneration,
+                },
+            );
+            return {
+                outcome:
+                    result.kind === "available"
+                        ? { kind: "success", value: result.value }
+                        : result,
+            };
+        },
+        validateOutcome(request, outcome) {
+            if (outcome.kind !== "success") return outcome;
+            const value = preparedNeedInspectionValidator;
+            const parsed: unknown = JSON.parse(outcome.valueJson);
+            if (
+                !validate(value, parsed) ||
+                request.input.kind !== "consult_prepared_material" ||
+                request.pin?.kind !== "prepared_material" ||
+                parsed.preparationId !== request.pin.preparationId ||
+                parsed.need.id !== request.input.needId
+            )
+                return {
+                    kind: "refused",
+                    code: "prepared_material_identity_conflict",
+                };
+            return outcome;
+        },
+    },
     check_response_coherence: responseCoherenceOperation,
     adjust_framing: adjustFraming,
     ...savedMaterialOperations,

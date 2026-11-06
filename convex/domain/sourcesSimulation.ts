@@ -72,7 +72,6 @@ export const sourcesSimulation: NonNullable<AgentDefinition["simulate"]> = (
         return request("submit_documentary_qualification", {
             sourceId: source.sourceId,
             captureId: latest.outcome.captureId,
-            expectedTaskId: null,
             changes: [
                 {
                     contribution: {

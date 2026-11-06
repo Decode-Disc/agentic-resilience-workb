@@ -215,6 +215,65 @@ const messageInput = v.object({
     turnId: v.optional(v.id("agentConversationTurns")),
 });
 
+/** Creates the owned thread and pins its initial model without inventing an analyst message. */
+export async function ensureDossierConversation(
+    ctx: MutationCtx,
+    scope: Awaited<ReturnType<typeof requireDossierAuthority>>,
+    initialModel?: Infer<typeof initialModelSelection>,
+) {
+    const { run, visitor } = scope;
+    if (run.ownerVisitorId !== visitor._id)
+        throw executionError("not_authorized");
+    let conversation = await conversationForRun(ctx, run._id);
+    if (!conversation) {
+        const storageRef = await createConversationStorage(ctx, visitor._id);
+        const setting = await ctx.db
+            .query("agentModelSettings")
+            .withIndex("by_agent", (q) => q.eq("agent", "workbench"))
+            .unique();
+        const selected = initialModel;
+        const selectedConfiguration = selected
+            ? await resolveAgentModel(ctx, "workbench", selected.catalogId)
+            : null;
+        const defaultModel = selected
+            ? await ctx.db.get(selected.catalogId)
+            : setting
+              ? await ctx.db.get(setting.catalogId)
+              : null;
+        const defaultConfiguration =
+            selectedConfiguration ??
+            (defaultModel?.currentRevisionId
+                ? await ctx.db.get(defaultModel.currentRevisionId)
+                : null);
+        const effort =
+            selected?.reasoningEffort ?? defaultConfiguration?.reasoningEffort;
+        if (selectedConfiguration)
+            requireReasoningEffort(selectedConfiguration, effort);
+        const id = await ctx.db.insert("agentConversations", {
+            ...(defaultModel?.enabled && modelPrepared(defaultModel)
+                ? {
+                      modelCatalogId: defaultModel._id,
+                      ...(effort ? { reasoningEffort: effort } : {}),
+                  }
+                : {}),
+            ...((await ctx.db.get(run._id))?.startMode === "framed"
+                ? {
+                      definitionId: "workbench_v1" as const,
+                      definitionVersion:
+                          getAgentDefinition("workbench_v1").version,
+                  }
+                : {}),
+            runId: run._id,
+            storageRef,
+            queuedCount: 0,
+            createdAt: Date.now(),
+        });
+        conversation = await ctx.db.get(id);
+    }
+    if (!conversation) throw executionError("conversation_unavailable");
+    return conversation;
+}
+
 /** Shared admission for application callers and explicitly labelled native fixture messages. */
 export async function submitAuthorizedMessage(
     ctx: MutationCtx,
@@ -249,53 +308,11 @@ export async function submitAuthorizedMessage(
             throw executionError("message_identity_conflict");
         return previous._id;
     }
-    let conversation = await conversationForRun(ctx, args.runId);
-    if (!conversation) {
-        const storageRef = await createConversationStorage(ctx, visitor._id);
-        const setting = await ctx.db
-            .query("agentModelSettings")
-            .withIndex("by_agent", (q) => q.eq("agent", "workbench"))
-            .unique();
-        const selected = args.initialModel;
-        const selectedConfiguration = selected
-            ? await resolveAgentModel(ctx, "workbench", selected.catalogId)
-            : null;
-        const defaultModel = selected
-            ? await ctx.db.get(selected.catalogId)
-            : setting
-              ? await ctx.db.get(setting.catalogId)
-              : null;
-        const defaultConfiguration =
-            selectedConfiguration ??
-            (defaultModel?.currentRevisionId
-                ? await ctx.db.get(defaultModel.currentRevisionId)
-                : null);
-        const effort =
-            selected?.reasoningEffort ?? defaultConfiguration?.reasoningEffort;
-        if (selectedConfiguration)
-            requireReasoningEffort(selectedConfiguration, effort);
-        const id = await ctx.db.insert("agentConversations", {
-            ...(defaultModel?.enabled && modelPrepared(defaultModel)
-                ? {
-                      modelCatalogId: defaultModel._id,
-                      ...(effort ? { reasoningEffort: effort } : {}),
-                  }
-                : {}),
-            ...((await ctx.db.get(args.runId))?.startMode === "framed"
-                ? {
-                      definitionId: "workbench_v1" as const,
-                      definitionVersion:
-                          getAgentDefinition("workbench_v1").version,
-                  }
-                : {}),
-            runId: args.runId,
-            storageRef,
-            queuedCount: 0,
-            createdAt: Date.now(),
-        });
-        conversation = await ctx.db.get(id);
-    }
-    if (!conversation) throw executionError("conversation_unavailable");
+    const conversation = await ensureDossierConversation(
+        ctx,
+        { run, visitor },
+        args.initialModel,
+    );
     const turn = args.turnId ? await ctx.db.get(args.turnId) : null;
     if (
         args.delivery === "steer" &&

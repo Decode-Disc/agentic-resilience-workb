@@ -105,6 +105,7 @@ export const nativeSourceRequestInput = sourceRequestInput
     .extend({
         coverageRole: v.union(coverageRoleValidator, v.null()),
     });
+export const consultPreparedMaterialInput = v.object({ needId: v.string() });
 export const workbenchSchemas = {
     id: v.literal("workbench_v1"),
     scope: v.object({ kind: v.literal("workbench_v1") }),
@@ -116,6 +117,10 @@ export const workbenchSchemas = {
         workingNotes: v.optional(v.string()),
     }),
     operation: v.union(
+        v.object({
+            kind: v.literal("consult_prepared_material"),
+            ...consultPreparedMaterialInput.fields,
+        }),
         v.object({
             kind: v.literal("check_response_coherence"),
             ...responseReviewInput.fields,
@@ -138,6 +143,11 @@ export const workbenchSchemas = {
         }),
     ),
     pin: v.union(
+        v.object({
+            kind: v.literal("prepared_material"),
+            preparationId: v.id("sourceSelectionProposalRebuilds"),
+            hash: v.string(),
+        }),
         responseReviewPin,
         v.object({
             kind: v.literal("framing_revision"),

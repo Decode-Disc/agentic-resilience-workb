@@ -1,5 +1,3 @@
-import { getAgentDefinition } from "@convex/execution/agentCatalog";
-import { reasoningChoices } from "@convex/integrations/modelRouting";
 import { api, internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
@@ -10,6 +8,7 @@ import {
 } from "@convex/_generated/server";
 import { mergeRunCompanyMetadata } from "@convex/domain/companyMetadata";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import { readSourcesMission } from "@convex/domain/sources";
 import {
     isResumableResearchPause,
     supportsResearchControl,
@@ -24,6 +23,7 @@ import {
     processWorkbenchInstructions,
     readWorkbenchInstructions,
 } from "@convex/domain/workbenchInstructions";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import {
     requireDossierAuthority,
     requireMissionAuthority,
@@ -36,6 +36,7 @@ import {
     requireInstructionVersion,
 } from "@convex/execution/conversations";
 import { executionError, executionFailureCode } from "@convex/execution/errors";
+import { missionStatusValidator } from "@convex/execution/executionProtocol";
 import { retainOperationEffect } from "@convex/execution/operations";
 import {
     pauseResearch,
@@ -43,6 +44,7 @@ import {
     resumeResearch,
 } from "@convex/execution/researchControl";
 import { readConversationMessages } from "@convex/integrations/agentStorage";
+import { reasoningChoices } from "@convex/integrations/modelRouting";
 import {
     modelPrepared,
     requireReasoningEffort,
@@ -362,6 +364,7 @@ const operationTitles: Record<string, string> = {
     adjust_framing: "Adjust the research program",
     consult_run_state: "Inspect dossier progress",
     consult_mission_state: "Inspect recorded work",
+    consult_prepared_material: "Inspect documentary preparation",
     check_response_coherence: "Check response consistency",
     consult_conversation: "Read earlier conversation",
     search_available_material: "Search retained documentary material",
@@ -462,7 +465,9 @@ export const snapshot = query({
         ),
         activeWork: v.union(turnView, v.null()),
         preparation: v.union(
-            schema.doc("sourceSelectionProposalRebuilds"),
+            schema
+                .doc("sourceSelectionProposalRebuilds")
+                .extend({ missionStatus: v.optional(missionStatusValidator) }),
             v.null(),
         ),
         sources: v.array(
@@ -540,6 +545,12 @@ export const snapshot = query({
             status: request.status,
             outcome: request.outcome,
         }));
+        const preparation = run.sourcePreparationId
+            ? await ctx.db.get(run.sourcePreparationId)
+            : null;
+        const sourcesMission = preparation
+            ? await readSourcesMission(ctx, run)
+            : null;
         return {
             run,
             researchControlAvailable: supportsResearchControl(run),
@@ -558,8 +569,13 @@ export const snapshot = query({
             framing,
             instructions,
             activeWork: turn ? await readTurn(ctx, turn) : null,
-            preparation: run.sourcePreparationId
-                ? await ctx.db.get(run.sourcePreparationId)
+            preparation: preparation
+                ? {
+                      ...preparation,
+                      ...(sourcesMission
+                          ? { missionStatus: sourcesMission.status }
+                          : {}),
+                  }
                 : null,
             sources,
         };

@@ -31,7 +31,7 @@ import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
 import { SourcingLane } from "@/components/workbench-ui/sourcing-lane";
 import { useResponsive } from "@/hooks/use-responsive";
 import {
-    sourceMissionState,
+    sourceMissionPresentation,
     workbenchFailureCopy,
     workbenchTurn,
 } from "@/lib/presentation/workbench";
@@ -413,7 +413,11 @@ function StartWorkspaceContent({
     const captured = snapshot.sources.filter(
         (s) => s.state === "captured",
     ).length;
-    const sourceState = sourceMissionState(run, snapshot.preparation);
+    const sourcePresentation = sourceMissionPresentation(
+        run,
+        snapshot.preparation,
+    );
+    const sourceState = sourcePresentation.state;
     const missions: ConversationMissionSnapshot[] = launched
         ? [
               {
@@ -428,10 +432,7 @@ function StartWorkspaceContent({
                   summary: `${snapshot.sources.length} references · ${captured} captures`,
                   details: (
                       <>
-                          <p>
-                              Inspect the retained material and preparation
-                              limits before continuing.
-                          </p>
+                          <p>{sourcePresentation.detail}</p>
                           <Button
                               variant="ghost"
                               size="sm"
@@ -865,19 +866,7 @@ function StartWorkspaceContent({
                                           ? "// Sources · paused"
                                           : "// Sources"
                                 }
-                                title={
-                                    insufficient
-                                        ? "Public evidence is insufficient"
-                                        : sourceState === "completed"
-                                          ? "Documentary material ready"
-                                          : sourceState === "paused"
-                                            ? "Documentary preparation paused"
-                                            : sourceState === "waiting"
-                                              ? "Documentary preparation needs review"
-                                              : sourceState === "interrupted"
-                                                ? "Documentary preparation interrupted"
-                                                : "Collecting the documentary material"
-                                }
+                                title={sourcePresentation.title}
                                 onOpenProgress={() =>
                                     void navigate({
                                         to: "/workspace/$runId",
@@ -890,6 +879,14 @@ function StartWorkspaceContent({
                                 }
                             />
                             {researchControls}
+                            {(sourceState === "completed" ||
+                                sourceState === "interrupted") && (
+                                <p
+                                    className="text-sm text-muted-foreground"
+                                    role="status">
+                                    {sourcePresentation.detail}
+                                </p>
+                            )}
                         </>
                     }
                     summary={

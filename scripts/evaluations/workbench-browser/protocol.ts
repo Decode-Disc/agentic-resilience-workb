@@ -251,6 +251,11 @@ const checks = [
             "src/__tests__/convex/sources/sources-recovery.test.ts",
             "src/__tests__/convex/execution/workbench-continuity.test.ts",
             "src/__tests__/convex/execution/workbench-status-publication.test.ts",
+            "src/__tests__/convex/execution/qualification-initial-fixtures.test.ts",
+            "src/__tests__/convex/execution/workbench-prepared-material.test.ts",
+            "src/__tests__/convex/sources/sources-observed-evidence.test.ts",
+            "src/__tests__/convex/sources/sources-observed-qualification.test.ts",
+            "src/__tests__/lib/presentation/workbench.test.ts",
         ],
     },
     {

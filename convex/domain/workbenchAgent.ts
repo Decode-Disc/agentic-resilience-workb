@@ -292,6 +292,7 @@ export const workbenchDefinition: AgentDefinition & {
     operations: nativeWorkbenchOperations,
     instructions: [
         ...workbenchMethodInstructions,
+        "Act as the analyst's conversational teammate: gather the relevant dossier context, explain relationships and limitations, and coordinate permitted requests through their responsible missions. Use consult_prepared_material for a need's full gap and unfinished reasons when its preview cannot support the answer. Never infer a missing result from a truncated preview. Research progression remains system-owned; consult current action readiness before recommending a next action.",
         "Finish with your natural-language response in Markdown. The application constructs the completion envelope. Text accompanying tool calls is not a completed response.",
         "The harness supplies observed revision numbers and a unique active message reference. When several active analyst messages are present, select their supplied reference explicitly. Never invent a reference or a documentary passage.",
         "For a company-only request, propose one concrete transaction or activity with named participant roles, rather than using the company name as the activity. Explain why control or substitution in that workflow could affect value capture. Mark the proposal as tentative before documentary research; do not present industry assumptions as evidence.",
@@ -480,6 +481,13 @@ export const workbenchDefinition: AgentDefinition & {
     normalizeOperationInput(name, input, value) {
         const snapshot = domainSnapshot(value) as WorkbenchModelSnapshot;
         if (
+            name === "consult_prepared_material" &&
+            !snapshot.documentaryPreparation?.needReferences.some(
+                (need) => need.id === input.needId,
+            )
+        )
+            throw executionError("documentary_need_not_observed");
+        if (
             name === "adjust_framing" ||
             name === "control_research" ||
             name === "transmit_source_request"
@@ -552,6 +560,10 @@ type WorkbenchModelSnapshot = {
     framing?: { revision: number; fixed: boolean } | null;
     research?: { controlAvailable: boolean };
     availableMaterials?: unknown[];
+    documentaryPreparation?: {
+        result: unknown;
+        needReferences: { id: string; version: number }[];
+    } | null;
     conversationInstructions?: {
         messages: { messageId: string; text: string }[];
     } | null;

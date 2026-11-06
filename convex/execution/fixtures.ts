@@ -1,5 +1,5 @@
 import { internal } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
+import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
     internalAction,
     internalMutation,
@@ -81,7 +81,7 @@ async function readLocalFixtureRun(
     return { run, visitor };
 }
 
-async function requireLocalFixtureRun(
+export async function requireLocalFixtureRun(
     ctx: MutationCtx | QueryCtx,
     args: { runId: Id<"researchRuns">; fixtureKey: string },
 ) {
@@ -1039,6 +1039,43 @@ export const startWorkbench = internalAction({
         });
     },
 });
+/** Preserves the campaign's per-conversation Workbench choice when both roles share a catalogue. */
+export async function initialCampaignWorkbenchModel(
+    ctx: QueryCtx,
+    run: Doc<"researchRuns">,
+) {
+    const context = run.browserTestContextId
+        ? await ctx.db.get(run.browserTestContextId)
+        : null;
+    let initialModel:
+        | Infer<
+              typeof import("@convex/modelConfigurationSchema").initialModelSelection
+          >
+        | undefined;
+    if (context?.campaignLotId && context.paidQualification?.scenarios) {
+        const { campaign, lot } = await requireCampaignLot(
+            ctx,
+            context.campaignLotId,
+        );
+        const profile = campaignConfiguration(
+            campaign.manifest,
+            lot.configurationId,
+        );
+        const model = await ctx.db.get(
+            context.paidQualification.modelRevisionId,
+        );
+        if (!model) throw new Error("Campaign model required");
+        initialModel = {
+            catalogId: model.catalogId,
+            reasoningEffort: resolveReasoningPreference(
+                model.descriptor,
+                profile.models.workbench.reasoning,
+            ),
+        };
+    }
+    return initialModel;
+}
+
 export const activateWorkbench = internalMutation({
     args: {
         runId: v.id("researchRuns"),
@@ -1062,35 +1099,7 @@ export const activateWorkbench = internalMutation({
                 args.researchAngle?.trim().slice(0, 2000) ??
                 "Simulation: propose a claims workflow research program.",
         });
-        const context = run.browserTestContextId
-            ? await ctx.db.get(run.browserTestContextId)
-            : null;
-        let initialModel:
-            | Infer<
-                  typeof import("@convex/modelConfigurationSchema").initialModelSelection
-              >
-            | undefined;
-        if (context?.campaignLotId && context.paidQualification?.scenarios) {
-            const { campaign, lot } = await requireCampaignLot(
-                ctx,
-                context.campaignLotId,
-            );
-            const profile = campaignConfiguration(
-                campaign.manifest,
-                lot.configurationId,
-            );
-            const model = await ctx.db.get(
-                context.paidQualification.modelRevisionId,
-            );
-            if (!model) throw new Error("Campaign model required");
-            initialModel = {
-                catalogId: model.catalogId,
-                reasoningEffort: resolveReasoningPreference(
-                    model.descriptor,
-                    profile.models.workbench.reasoning,
-                ),
-            };
-        }
+        const initialModel = await initialCampaignWorkbenchModel(ctx, run);
         await initializeFraming(ctx, run._id, initialModel);
         return run._id;
     },
@@ -1195,6 +1204,25 @@ export const interruptWorkbench = internalMutation({
     },
 });
 
+/** No native session is expected before the first turn; a missing session after a turn is unresolved. */
+async function fixtureConversationSettled(
+    ctx: QueryCtx,
+    conversation: Doc<"agentConversations"> | null,
+    session: Doc<"piSessions"> | null,
+) {
+    if (session)
+        return (
+            session.settledSequence === session.sequence &&
+            session.leaseUntil <= Date.now()
+        );
+    if (!conversation || conversation.activeTurnId || conversation.queuedCount)
+        return false;
+    return !(await ctx.db
+        .query("agentConversationTurns")
+        .withIndex("by_run", (q) => q.eq("runId", conversation.runId))
+        .first());
+}
+
 export const inspectWorkbench = internalQuery({
     args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
     returns: v.object({
@@ -1279,10 +1307,11 @@ export const inspectWorkbench = internalQuery({
             executionStatus: run.executionStatus,
             definitionVersion: conversation?.definitionVersion ?? 1,
             nativeSessionId: session?._id ?? null,
-            nativeSettled:
-                !!session &&
-                session.settledSequence === session.sequence &&
-                session.leaseUntil <= Date.now(),
+            nativeSettled: await fixtureConversationSettled(
+                ctx,
+                conversation,
+                session,
+            ),
             providerCallCount: calls.length,
             missionCount: missions.length,
             invocationCount: invocations.length,
@@ -1498,10 +1527,11 @@ export const qualificationSnapshot = internalQuery({
             framing: run.currentFramingRevisionId
                 ? await ctx.db.get(run.currentFramingRevisionId)
                 : null,
-            nativeSettled:
-                !!session &&
-                session.settledSequence === session.sequence &&
-                session.leaseUntil <= Date.now(),
+            nativeSettled: await fixtureConversationSettled(
+                ctx,
+                conversation,
+                session,
+            ),
         };
     },
 });

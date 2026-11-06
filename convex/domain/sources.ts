@@ -232,9 +232,43 @@ export function sourcesInstructionTreatment(
     };
 }
 
+/** The objective identity is shared by mission admission and lookup across resumes. */
+export function sourcesMissionKey(
+    preparationId: Id<"sourceSelectionProposalRebuilds">,
+) {
+    return `sources:${preparationId}`;
+}
+
+export async function readSourcesMission(
+    ctx: QueryCtx,
+    run: Doc<"researchRuns">,
+) {
+    const preparationId = run.sourcePreparationId;
+    if (!preparationId || run.sourcesProtocol !== "sources_mission_v1")
+        return null;
+    const mission = await ctx.db
+        .query("agentMissions")
+        .withIndex("by_run_and_objective_key", (q) =>
+            q
+                .eq("runId", run._id)
+                .eq("objectiveKey", sourcesMissionKey(preparationId)),
+        )
+        .order("desc")
+        .first();
+    if (
+        mission &&
+        (!("scope" in mission) ||
+            mission.scope.kind !== "sources_v1" ||
+            mission.scope.preparationId !== preparationId)
+    )
+        throw executionError("mission_contract_invalid");
+    return mission;
+}
+
 /** Required conversational state stays bounded; exact source material remains available through saved-material reads. */
 export function summarizeSourcesPreparation(
     preparation: Doc<"sourceSelectionProposalRebuilds">,
+    missionStatus?: Doc<"agentMissions">["status"],
 ) {
     const data = preparation.sourcesMission;
     if (!data) return null;
@@ -242,9 +276,18 @@ export function summarizeSourcesPreparation(
         value ? Array.from(value).slice(0, limit).join("") : null;
     return {
         preparationId: preparation._id,
+        ...(missionStatus ? { missionStatus } : {}),
         needsRevision: data.needsRevision,
         phase: data.phase,
+        detailsHash: sha256Hex(
+            stableStringify({
+                needs: data.needs,
+                material: data.result ?? null,
+                restrictions: data.restrictedContributions,
+            }),
+        ),
         needCount: data.needs.length,
+        needReferences: data.needs.map(({ id, version }) => ({ id, version })),
         instructionTreatment: sourcesInstructionTreatment(preparation),
         needsPreviewComplete: data.needs.length <= 8,
         needs: data.needs.slice(0, 8).map((need) => {
@@ -256,6 +299,9 @@ export function summarizeSourcesPreparation(
                 contributionCount: result?.contributions.length ?? 0,
                 unfinishedCount: result?.unfinished.length ?? 0,
                 gapPreview: preview(result?.gap, 160),
+                gapPreviewComplete:
+                    !result?.gap || Array.from(result.gap).length <= 160,
+                detailOperation: "consult_prepared_material",
             };
         }),
         work: {
@@ -282,6 +328,113 @@ export function summarizeSourcesPreparation(
         inspection:
             "Use saved-material search and contextual reading for exact passages and current contribution permissions. Previews are incomplete status, not evidence.",
         nextCapability: "investigation_unavailable",
+    };
+}
+
+/** Shared inspection payload; authorization is enforced by each public or mission entrypoint. */
+export function projectPreparedMaterial(
+    preparation: Doc<"sourceSelectionProposalRebuilds">,
+) {
+    const data = preparation.sourcesMission;
+    return data
+        ? {
+              preparationId: preparation._id,
+              needs: data.needs,
+              material: data.result ?? null,
+              restrictions: data.restrictedContributions,
+              nextCapability: "investigation_unavailable" as const,
+          }
+        : null;
+}
+
+/** Reads one complete need without hydrating captures or silently trimming its limitations. */
+export async function readPreparedNeed(
+    ctx: QueryCtx,
+    run: Doc<"researchRuns">,
+    needId: string,
+) {
+    const preparation = run.sourcePreparationId
+        ? await ctx.db.get(run.sourcePreparationId)
+        : null;
+    if (!preparation || preparation.runId !== run._id)
+        return {
+            kind: "unavailable" as const,
+            code: "prepared_material_unavailable",
+        };
+    const prepared = projectPreparedMaterial(preparation);
+    if (!prepared?.material)
+        return {
+            kind: "unavailable" as const,
+            code: "prepared_material_unavailable",
+        };
+    const need = prepared.needs.find((entry) => entry.id === needId);
+    const outcome = prepared.material.needs.find(
+        (entry) => entry.needId === needId,
+    );
+    if (!need || !outcome)
+        return {
+            kind: "unavailable" as const,
+            code: "documentary_need_unavailable",
+        };
+    const qualifications = new Set(
+        outcome.contributions.map((entry) => entry.qualificationTaskId),
+    );
+    const restrictedVersions = new Set<string>();
+    if (prepared.restrictions.length) {
+        const reads = new SourceReviewReads(
+            ctx.db,
+            run._id,
+            SOURCES_HANDOFF_READ_CAPACITY,
+        );
+        for (const taskId of preparation.sourcesMission?.qualifications ?? []) {
+            const task = await reads.task(taskId);
+            if (
+                task?.runId !== run._id ||
+                task.output.kind !== "documentary_qualification" ||
+                task.output.preparationId !== preparation._id
+            )
+                throw executionError("qualification_invalid");
+            for (const contribution of task.output.contributions)
+                if (contribution.needIds.includes(needId))
+                    restrictedVersions.add(
+                        JSON.stringify([contribution.id, contribution.version]),
+                    );
+        }
+    }
+    const value = {
+        preparationId: prepared.preparationId,
+        needsRevision: prepared.material.needsRevision,
+        need,
+        outcome,
+        documents: prepared.material.documents.filter((document) =>
+            qualifications.has(document.qualificationTaskId),
+        ),
+        restrictions: prepared.restrictions.filter((restriction) =>
+            restrictedVersions.has(
+                JSON.stringify([
+                    restriction.contributionId,
+                    restriction.version,
+                ]),
+            ),
+        ),
+        nextCapability: prepared.nextCapability,
+    };
+    if (
+        new TextEncoder().encode(JSON.stringify(value)).length >
+        MAX_OPERATION_RESULT_BYTES
+    )
+        return {
+            kind: "unavailable" as const,
+            code: "operation_result_capacity",
+        };
+    return {
+        kind: "available" as const,
+        value,
+        pin: {
+            kind: "prepared_material" as const,
+            preparationId: prepared.preparationId,
+            hash: sha256Hex(stableStringify(value)),
+        },
     };
 }
 
@@ -363,6 +516,12 @@ export async function sourcesTaskObservations(
                 taskId,
                 captureId: qualification.captureId,
                 version: qualification.version,
+                contributions: qualification.contributions.map(
+                    ({ id, version }) => ({
+                        id,
+                        version,
+                    }),
+                ),
                 contributionCount: qualification.contributions.length,
                 preview,
                 previewComplete:

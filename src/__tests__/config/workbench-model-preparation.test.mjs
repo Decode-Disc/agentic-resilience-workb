@@ -12,6 +12,7 @@ function catalogue(compatible) {
                 workbenchSelectable: true,
                 status: "ready",
                 currentRevisionId: "revision",
+                revision: 3,
                 compatible,
             },
         ],
@@ -106,5 +107,24 @@ test("reaching the continuation bound remains blocked even if the current revisi
         }),
         /continuation bound/,
     );
-    assert.equal(calls, 20);
+    assert.equal(calls, 4);
+});
+
+test("profile preparation follows more than twenty retained revisions within the catalogue bound", async () => {
+    let calls = 0;
+    const result = await prepareQualificationModel({
+        query: async () => {
+            const state = catalogue(calls === 34);
+            state.models[0].revision = 44;
+            return state;
+        },
+        action: async () => {
+            calls++;
+            return calls === 34
+                ? { isDone: true, continueCursor: null }
+                : { isDone: false, continueCursor: `revision-${44 - calls}` };
+        },
+    });
+    assert.equal(result.pages, 34);
+    assert.equal(result.revisionId, "revision");
 });

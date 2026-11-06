@@ -13,6 +13,7 @@ import {
     readPreparationBudget,
     readPreparationLimits,
 } from "@convex/domain/sourcePreparationAuthority";
+import { preparedNeedInspectionValidator } from "@convex/domain/sourcesContracts";
 import { readWorkbenchFacts } from "@convex/domain/workbenchContext";
 import {
     coherenceDecision,
@@ -117,6 +118,36 @@ async function readResponseFacts(
         RESPONSE_CONTROL_LIMITS.inputBytes
     )
         return { kind: "blocked" as const, code: "context_capacity" };
+    const preparedReads = operations.filter(
+        (request) =>
+            request.input.kind === "consult_prepared_material" &&
+            request.status === "completed" &&
+            request.adoptedAt !== undefined &&
+            !request.adoptionRefusalCode &&
+            request.outcome?.kind === "success",
+    );
+    const retainedBytes = preparedReads.reduce(
+        (bytes, request) =>
+            bytes +
+            new TextEncoder().encode(
+                request.outcome?.kind === "success"
+                    ? request.outcome.valueJson
+                    : "",
+            ).length,
+        0,
+    );
+    if (retainedBytes > RESPONSE_CONTROL_LIMITS.inputBytes)
+        return { kind: "blocked" as const, code: "context_capacity" };
+    const consultedPreparedMaterial = preparedReads.map((request) => {
+        const value: unknown = JSON.parse(
+            request.outcome?.kind === "success"
+                ? request.outcome.valueJson
+                : "null",
+        );
+        if (!validate(preparedNeedInspectionValidator, value))
+            throw executionError("prepared_material_identity_conflict");
+        return { requestId: request._id, value };
+    });
     const facts = await readWorkbenchFacts(ctx, run, mission);
     if (facts.kind !== "ready")
         return { kind: "blocked" as const, code: "context_capacity" };
@@ -128,6 +159,9 @@ async function readResponseFacts(
         ...context,
         activeAnalystMessages: instructions?.messages ?? [],
         operations: observedOperations,
+        ...(consultedPreparedMaterial.length
+            ? { consultedPreparedMaterial }
+            : {}),
     });
     return { kind: "ready" as const, factsJson, operations, factsRevisionHash };
 }

@@ -18,7 +18,9 @@ import {
     assertSourcesCompletionCapacity,
     hasEngagedSourcesControl,
     initializeSources,
+    projectPreparedMaterial,
     readEngagedSourcesWork,
+    readPreparedNeed,
     reconstructQualification,
     requireSourcesPreparation,
     SOURCES_HANDOFF_READ_CAPACITY,
@@ -28,8 +30,8 @@ import {
     documentaryControlValidator,
     documentaryNeedValidator,
     documentaryStatusValidator,
-    preparedMaterialValidator,
-    restrictedContributionValidator,
+    preparedMaterialInspectionValidator,
+    preparedNeedInspectionValidator,
     SOURCES_MAX_EVIDENCE_REFERENCES,
     type SourcesOperation,
     sourcesEnvelopeValidator,
@@ -1081,29 +1083,65 @@ export const cachedControl = internalQuery({
 /** Analyst-owned inspection of the versioned handoff; membership never implies human approval. */
 export const getPreparedMaterial = query({
     args: { runId: v.id("researchRuns") },
-    returns: v.union(
-        v.null(),
-        v.object({
-            preparationId: v.id("sourceSelectionProposalRebuilds"),
-            needs: v.array(documentaryNeedValidator),
-            material: v.union(preparedMaterialValidator, v.null()),
-            restrictions: v.array(restrictedContributionValidator),
-            nextCapability: v.literal("investigation_unavailable"),
-        }),
-    ),
+    returns: v.union(v.null(), preparedMaterialInspectionValidator),
     handler: async (ctx, args) => {
         await requireWorkspaceRun(ctx, args.runId);
         const { run } = await requireDossierAuthority(ctx, args.runId);
         const preparation = run.sourcePreparationId
             ? await ctx.db.get(run.sourcePreparationId)
             : null;
-        if (!preparation?.sourcesMission) return null;
-        return {
-            preparationId: preparation._id,
-            needs: preparation.sourcesMission.needs,
-            material: preparation.sourcesMission.result ?? null,
-            restrictions: preparation.sourcesMission.restrictedContributions,
-            nextCapability: "investigation_unavailable" as const,
-        };
+        if (!preparation) return null;
+        if (preparation.runId !== run._id)
+            throw executionError("not_authorized");
+        return projectPreparedMaterial(preparation);
+    },
+});
+
+export const inspectPreparedNeed = internalQuery({
+    args: {
+        requestId: v.id("agentOperationRequests"),
+        expectedGeneration: v.number(),
+    },
+    returns: v.union(
+        v.object({
+            kind: v.literal("available"),
+            value: preparedNeedInspectionValidator,
+        }),
+        v.object({ kind: v.literal("unavailable"), code: v.string() }),
+    ),
+    handler: async (ctx, args) => {
+        const request = await ctx.db.get(args.requestId);
+        if (
+            request?.status !== "running" ||
+            !request.runId ||
+            request.expectedGeneration !== args.expectedGeneration ||
+            request.input.kind !== "consult_prepared_material" ||
+            request.pin?.kind !== "prepared_material"
+        )
+            throw executionError("operation_not_dispatched");
+        const { run } = request.missionId
+            ? await requireMissionObservationAuthority(
+                  ctx,
+                  request.missionId,
+                  args.expectedGeneration,
+              )
+            : await requireDossierAuthority(ctx, request.runId);
+        if (
+            run._id !== request.runId ||
+            (!request.missionId &&
+                run.executionGeneration !== args.expectedGeneration)
+        )
+            throw executionError("stale_execution");
+        const result = await readPreparedNeed(ctx, run, request.input.needId);
+        if (result.kind === "unavailable") return result;
+        if (
+            result.pin.preparationId !== request.pin.preparationId ||
+            result.pin.hash !== request.pin.hash
+        )
+            return {
+                kind: "unavailable" as const,
+                code: "prepared_material_version_conflict",
+            };
+        return { kind: "available" as const, value: result.value };
     },
 });

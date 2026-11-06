@@ -225,15 +225,26 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
     const profiles: Record<string, number> = {};
     const samples = [];
     for (const canonical of registeredAgentDefinitions()) {
-        const snapshots: unknown[] = [
-            undefined,
-            {
-                responseControl: {
-                    reminder:
-                        "Review the preceding explanation without repeating actions.",
-                },
-            },
-        ];
+        const snapshots: unknown[] =
+            canonical.id === "sources_v1"
+                ? [
+                      undefined,
+                      { activeWork: {} },
+                      {
+                          activeWork: {
+                              qualificationInputVersion: "observed_v1",
+                          },
+                      },
+                  ]
+                : [
+                      undefined,
+                      {
+                          responseControl: {
+                              reminder:
+                                  "Review the preceding explanation without repeating actions.",
+                          },
+                      },
+                  ];
         if (canonical.nativeConversation)
             for (const framing of [
                 null,

@@ -1,0 +1,64 @@
+{
+    "schemaVersion": 1,
+    "id": "20261106T222514980Z-harness-global-budget-closeout-20261106",
+    "createdAt": "2026-11-06T22:25:14.980Z",
+    "git": {
+        "head": "c58a4a75a25d5de524b5928d431b038bd48685f1",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-06-harness-targeted-regressions.md",
+            "archivePath": "repository/docs/verification/2026-11-06-harness-targeted-regressions.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/ROADMAP.md",
+            "archivePath": "repository/docs/ROADMAP.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.local-runtime/qualification-retry-20261106/final-cleanup.json",
+            "archivePath": "repository/.local-runtime/qualification-retry-20261106/final-cleanup.json"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.local-runtime/qualification-retry-20261106/final-status.log",
+            "archivePath": "repository/.local-runtime/qualification-retry-20261106/final-status.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.local-runtime/qualification-retry-20261106/docs.log",
+            "archivePath": "repository/.local-runtime/qualification-retry-20261106/docs.log"
+        }
+    ],
+    "files": [
+        {
+            "path": "repository/.local-runtime/qualification-retry-20261106/docs.log",
+            "bytes": 282,
+            "sha256": "c07655ac4f0063a7e502c6191cf2dbf15ac89e23deaa22532d9b4ff1372bba1e"
+        },
+        {
+            "path": "repository/.local-runtime/qualification-retry-20261106/final-cleanup.json",
+            "bytes": 107,
+            "sha256": "11dcbbe9453dca03ac1e94ccde7c9675f629d08ffe7282c2fac55e5a1b3aa441"
+        },
+        {
+            "path": "repository/.local-runtime/qualification-retry-20261106/final-status.log",
+            "bytes": 11997,
+            "sha256": "26bb9f2d100119a4058908a5788942e635b939b29cb99db91756d621305d5c37"
+        },
+        {
+            "path": "repository/docs/ROADMAP.md",
+            "bytes": 63087,
+            "sha256": "a3f03a125df4bb7610f3f116347b396ebe68f3788beaa0076aa36fadd9b3895a"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-06-harness-targeted-regressions.md",
+            "bytes": 31160,
+            "sha256": "e0e9f2bfc06c35e7bc7133d36ce48385c37eed66d9a70f3c6d79b5f245423036"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261106T222514980Z-harness-global-budget-closeout-20261106.tar.gz",
+        "bytes": 33180,
+        "sha256": "402cf871936db6c61521c9738d89f37728f90037643ed1a3b430f7863e2cf060"
+    },
+    "verification": "restored_and_verified"
+}

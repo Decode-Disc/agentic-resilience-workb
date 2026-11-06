@@ -50,8 +50,7 @@ export const enabled = internalQuery({
     handler: (ctx, args) => sourcesSimulationEnabled(ctx, args.runId),
 });
 
-export const simulatedSourceText =
-    "Simulation only. This fixture describes a documentary workflow. A researcher discovers a candidate, captures its text, reads an exact passage, and submits the passage for documentary control. It establishes no fact about any company and supports no economic conclusion.";
+export { simulatedSourceText } from "./qualificationInitialFixtures";
 
 /** Fixed advisory response; never evidence of model quality or a real company's facts. */
 export function simulatedDocumentaryControl(

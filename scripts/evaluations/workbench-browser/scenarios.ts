@@ -22,9 +22,9 @@ import {
 import { openQualificationJournal } from "./journal.ts";
 import { sha256 } from "./protocol.ts";
 
-function ref<R extends FunctionReference<"query" | "mutation", "internal">>(
-    r: R,
-) {
+function ref<
+    R extends FunctionReference<"query" | "mutation" | "action", "internal">,
+>(r: R) {
     return makeFunctionReference<
         R["_type"],
         FunctionArgs<R>,
@@ -359,6 +359,39 @@ export async function runCampaignScenarios(
                     async () => {
                         assert(!interrupted(), "Campaign interrupted");
                         const s = await inspect();
+                        if (
+                            (state === "conversation_settled" ||
+                                state === "sources_prepared") &&
+                            s.conversation?.activeTurnId &&
+                            s.mission?.status === "blocked" &&
+                            !s.mission.piActiveWriter
+                        )
+                            throw new Error(
+                                `Conversation blocked before native settlement: ${s.mission.blockCode ?? "mission_blocked"}`,
+                            );
+                        if (
+                            state === "sources_prepared" &&
+                            scenario.initialFixture?.id ===
+                                "sources_correction" &&
+                            s.run.lifecycleState !== "sources_prepared" &&
+                            s.sourcesMission &&
+                            ["completed", "blocked"].includes(
+                                s.sourcesMission.status,
+                            )
+                        ) {
+                            await client.mutation(
+                                ref(
+                                    internal.qualificationInitialFixtureSetup
+                                        .finish,
+                                ),
+                                {
+                                    runId: c.runId,
+                                    fixtureKey: c.fixtureKey,
+                                    scenarioId: c.id,
+                                },
+                            );
+                            return false;
+                        }
                         if (state === "conversation_settled") return settled(s);
                         if (state === "sources_prepared")
                             return (
@@ -414,14 +447,42 @@ export async function runCampaignScenarios(
                 mode: manifest.mode,
                 scenario: `${c.id}-initial`,
             });
-            await client.mutation(
-                ref(internal.execution.fixtures.activateWorkbench),
-                {
+            if (scenario.initialFixture) {
+                activeStep = "initial-fixture";
+                save(
+                    directory,
+                    "initial-fixture-intent",
+                    scenario.initialFixture,
+                );
+                const scope = {
                     runId: c.runId,
                     fixtureKey: c.fixtureKey,
-                    researchAngle: scenario.framing.scope,
-                },
-            );
+                    scenarioId: c.id,
+                };
+                const initial = await client.action(
+                    ref(internal.qualificationInitialFixtureSetup.install),
+                    scope,
+                );
+                save(directory, "initial-fixture", {
+                    ...scenario.initialFixture,
+                    ...initial,
+                    provenance:
+                        "retained_illustrative_material_not_live_evidence",
+                });
+                if (scenario.initialFixture.id === "sources_correction")
+                    await client.mutation(
+                        ref(internal.qualificationInitialFixtureSetup.activate),
+                        scope,
+                    );
+            } else
+                await client.mutation(
+                    ref(internal.execution.fixtures.activateWorkbench),
+                    {
+                        runId: c.runId,
+                        fixtureKey: c.fixtureKey,
+                        researchAngle: scenario.framing.scope,
+                    },
+                );
             if (page) {
                 await page.setViewportSize({ width: 1440, height: 1000 });
                 await page.goto(`${web}/workspace/${c.runId}`);

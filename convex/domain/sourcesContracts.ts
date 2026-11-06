@@ -135,6 +135,22 @@ export const restrictedContributionValidator = v.object({
     controlTaskId: v.id("aiTaskResults"),
     permittedUse: v.optional(documentaryFindingValidator.fields.permittedUse),
 });
+export const preparedMaterialInspectionValidator = v.object({
+    preparationId: v.id("sourceSelectionProposalRebuilds"),
+    needs: v.array(documentaryNeedValidator),
+    material: v.union(preparedMaterialValidator, v.null()),
+    restrictions: v.array(restrictedContributionValidator),
+    nextCapability: v.literal("investigation_unavailable"),
+});
+export const preparedNeedInspectionValidator = v.object({
+    preparationId: preparedMaterialInspectionValidator.fields.preparationId,
+    needsRevision: v.number(),
+    need: documentaryNeedValidator,
+    outcome: preparedNeedOutcomeValidator,
+    documents: v.array(preparedDocumentValidator),
+    restrictions: v.array(restrictedContributionValidator),
+    nextCapability: preparedMaterialInspectionValidator.fields.nextCapability,
+});
 /** Reading exposes bounded status and exact references; full snapshots stay with their owners. */
 export const documentaryStatusValidator = v.object({
     capture: v.object({

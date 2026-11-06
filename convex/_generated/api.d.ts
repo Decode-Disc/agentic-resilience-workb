@@ -159,6 +159,8 @@ import type * as policyEvaluations from "../policyEvaluations.js";
 import type * as providerCalls from "../providerCalls.js";
 import type * as qualificationCampaignPolicy from "../qualificationCampaignPolicy.js";
 import type * as qualificationCampaigns from "../qualificationCampaigns.js";
+import type * as qualificationInitialFixtureSetup from "../qualificationInitialFixtureSetup.js";
+import type * as qualificationInitialFixtures from "../qualificationInitialFixtures.js";
 import type * as qualificationUsage from "../qualificationUsage.js";
 import type * as rateLimiter from "../rateLimiter.js";
 import type * as researchLaunch from "../researchLaunch.js";
@@ -351,6 +353,8 @@ declare const fullApi: ApiFromModules<{
   providerCalls: typeof providerCalls;
   qualificationCampaignPolicy: typeof qualificationCampaignPolicy;
   qualificationCampaigns: typeof qualificationCampaigns;
+  qualificationInitialFixtureSetup: typeof qualificationInitialFixtureSetup;
+  qualificationInitialFixtures: typeof qualificationInitialFixtures;
   qualificationUsage: typeof qualificationUsage;
   rateLimiter: typeof rateLimiter;
   researchLaunch: typeof researchLaunch;

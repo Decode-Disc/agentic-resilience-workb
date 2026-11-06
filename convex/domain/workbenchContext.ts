@@ -10,7 +10,7 @@ import {
 import { researchStartBlock } from "./framingEditAuthority";
 import { requireSavedMaterialScope } from "./savedMaterialInspection";
 import { sha256Hex, stableStringify } from "./sourcePassages";
-import { summarizeSourcesPreparation } from "./sources";
+import { readSourcesMission, summarizeSourcesPreparation } from "./sources";
 import { supportsResearchControl } from "./transitions";
 import {
     projectWorkbenchInstructions,
@@ -104,6 +104,9 @@ export async function readWorkbenchFacts(
         run.sourcesProtocol === "sources_mission_v1" && run.sourcePreparationId
             ? await ctx.db.get(run.sourcePreparationId)
             : null;
+    const sourcesMission = preparation
+        ? await readSourcesMission(ctx, run)
+        : null;
     const context = {
         company: run.companySnapshot ?? null,
         originalRequest: run.researchAngle ?? null,
@@ -139,8 +142,10 @@ export async function readWorkbenchFacts(
         analystRequests: await projectWorkbenchInstructions(ctx, instructions),
         ...(preparation?.sourcesMission
             ? {
-                  documentaryPreparation:
-                      summarizeSourcesPreparation(preparation),
+                  documentaryPreparation: summarizeSourcesPreparation(
+                      preparation,
+                      sourcesMission?.status,
+                  ),
               }
             : {}),
         activeWork: {},

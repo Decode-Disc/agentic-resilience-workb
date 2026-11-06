@@ -38,7 +38,7 @@
     {
       "id": 3,
       "name": "ambiguous-quality-request",
-      "prompt": "Je veux am\u00e9liorer la qualit\u00e9 des dossiers, mais je ne sais pas si le probl\u00e8me vient des sources, des passages transmis ou de l'analyse finale. Dis-moi comment aborder \u00e7a. Ne lance rien et ne modifie aucun fichier.",
+      "prompt": "Je veux améliorer la qualité des dossiers, mais je ne sais pas si le problème vient des sources, des passages transmis ou de l'analyse finale. Dis-moi comment aborder ça. Ne lance rien et ne modifie aucun fichier.",
       "expected_output": "A project-grounded framing that separates the possible outcome failures, reuses current evidence and asks one focused question only if the intended decision remains unresolved.",
       "files": [
         "../../../PRODUCT.md",
@@ -71,7 +71,7 @@
     {
       "id": 5,
       "name": "frontend-check-boundary",
-      "prompt": "Planifie uniquement la v\u00e9rification du placement d'une ic\u00f4ne dans le rail Coverage. Aucun comportement ou sens de texte ne change. Ne modifie rien.",
+      "prompt": "Planifie uniquement la vérification du placement d'une icône dans le rail Coverage. Aucun comportement ou sens de texte ne change. Ne modifie rien.",
       "expected_output": "A narrowly scoped frontend verification proposal using the relevant UI workflow rather than the research evaluation procedure.",
       "files": [
         "../../../AGENTS.md",
@@ -183,7 +183,7 @@
     {
       "id": 12,
       "name": "explicit-control-cost-and-unwired-composer",
-      "prompt": "The backend /pause and /resume API retains a deterministic receipt without a model invocation. The composer is deliberately not connected yet. Ordinary text such as \u201cpause, then explain the current evidence\u201d still goes through the model. How should we qualify control costs now, and can we call the browser slash journey complete? Analysis only, no edits or calls.",
+      "prompt": "The backend /pause and /resume API retains a deterministic receipt without a model invocation. The composer is deliberately not connected yet. Ordinary text such as “pause, then explain the current evidence” still goes through the model. How should we qualify control costs now, and can we call the browser slash journey complete? Analysis only, no edits or calls.",
       "expected_output": "An entry-point-specific qualification proposal preserving typed controls, model-mediated natural language and the visible composer delivery gap.",
       "files": [
         "../../../convex/workbench.ts",
@@ -379,6 +379,86 @@
         "Uses native preparation and schema guidance for a reviewable mandate when no current authority covers the work.",
         "Does not authorize or execute a paid campaign from historical approval, an implicit default or the request to automate.",
         "Keeps mechanical lifecycle work with the runner and semantic assessment with the development agent rather than asking the user to coordinate each step."
+      ]
+    },
+    {
+      "id": 26,
+      "name": "adaptive-work-without-predicted-call-shares",
+      "prompt": "Prepare a targeted live qualification with three fixed cases and a cumulative twelve-model-attempt/USD0.50 mandate. The number of consultations each agent needs is unknown. A previous case consumed the budget before a later final reply could be observed. Prepare only; no authorization or inference. The user rejected predictive agent call shares.",
+      "expected_output": "A native campaign preparation using cumulative limits without invented per-case or final-response reservations. It preserves all cases and expected meanings, discloses any ordering change and keeps incomplete coverage possible.",
+      "files": [
+        "../SKILL.md",
+        "../references/campaigns.md"
+      ],
+      "expectations": [
+        "Does not introduce a six/three/three split, reserve a predicted final generation or ask the user to estimate tool needs.",
+        "Inspects the resolved manifest for unintended scenario limits and counts model generations, mandatory controls and tool operations separately.",
+        "If cases are reordered, states that condition explicitly without removing failed cases or changing expectations.",
+        "Keeps preparation separate from paid authority and does not promise all cases will complete within the envelope."
+      ]
+    },
+    {
+      "id": 27,
+      "name": "refusal-feedback-before-undispatched-recovery",
+      "prompt": "Explain this closed lot, read-only. Sources returns prose around JSON on its sixth paid attempt. Its invocation retains invalid_output correction feedback requesting one JSON object without prose or Markdown. The next invocation is created but has no providerCallId and stops with qualification_budget_exhausted. The evaluator imposed a six-attempt scenario cap; nine of twelve global attempts were consumed. Do not edit, spend, or propose a fix before checking existing recovery.",
+      "expected_output": "An evidence-led attribution: malformed output is rejected, feedback and continuation exist, but the evaluator cap prevents the next provider call. The actual model correction remains untested; the conclusion does not invent a missing recovery mechanism.",
+      "files": [
+        "../SKILL.md",
+        "../references/campaigns.md"
+      ],
+      "expectations": [
+        "Separates the invalid response, feedback generation, continuation admission and actual paid dispatch.",
+        "Identifies the evaluator-imposed scenario cap and remaining global authority as the demonstrated stop condition.",
+        "Does not claim the model received feedback merely because it is retained, or that it failed a correction it never generated.",
+        "Checks existing recovery code/tests and does not recommend a new completion mechanism or reopen the closed lot on this evidence."
+      ]
+    },
+    {
+      "id": 28,
+      "name": "announced-correction-versus-returned-arguments",
+      "prompt": "Interpret the preserved Sources trace, no new calls or edits. A qualification with two new contributions supplies contributionId=\"\" twice and is refused. The next provider request includes this refusal and current facts. The model says it will omit contributionId, but its returned tool arguments still contain two empty strings. The same request identity reuses the original refusal; no additional documentary control is dispatched. A later global limit stops generation.",
+      "expected_output": "A causal account grounded in the returned arguments: the repair was announced but not performed, the refusal is safely reused and no second control or adoption occurred. Budget truncation and untested completion remain separate.",
+      "files": [
+        "../SKILL.md",
+        "../references/campaigns.md"
+      ],
+      "expectations": [
+        "Compares actual tool arguments rather than accepting the model's statement that the fields were removed.",
+        "Distinguishes unchanged invalid input from missing feedback, unsupported tools and a new executed effect.",
+        "Keeps the successful prior material and exact versions separate from the refused proposal.",
+        "Names the existing input-normalization/domain boundary for an offline regression without silently repairing input, weakening evidence checks or starting another lot."
+      ]
+    },
+    {
+      "id": 29,
+      "name": "explicit-scenario-cap-boundary-test",
+      "prompt": "Prepare an unpaid manifest review for a user-authorized budget-boundary test. The user explicitly requires this scenario to stop at two paid generations even when the global mandate has room. Other adaptive qualification cases have no scenario cap. Do not run or enlarge anything.",
+      "expected_output": "Preserves the explicit two-generation test boundary and leaves ordinary adaptive cases uncapped beyond their cumulative authority. It judges refusal containment separately from task completion.",
+      "files": [
+        "../SKILL.md",
+        "../references/campaigns.md"
+      ],
+      "expectations": [
+        "Does not remove or enlarge the explicitly requested two-generation cap under the default cumulative-allocation policy.",
+        "Distinguishes a deliberate resource-boundary test from an evaluator prediction of sufficient consultations.",
+        "Does not propagate this test cap to ordinary scenarios or interpret expected budget refusal as model task failure.",
+        "Keeps resource containment, final-answer quality and paid-execution authority separate."
+      ]
+    },
+    {
+      "id": 30,
+      "name": "schema-in-prompt-is-not-enforced-output",
+      "prompt": "Read-only: a Sources request contains its completion schema in a system-context message but no response_format. The selected endpoint advertises structured_outputs and tools. Documentary controls use a separate structured one-shot transport, while Sources uses a native tool loop. The user deferred output-format changes. Explain whether prose around JSON proves structured output is unsupported.",
+      "expected_output": "Distinguishes prompt guidance from provider-enforced output. It identifies the unused capability and transport-specific integration uncertainty, keeps the native loop intact and respects the deferred implementation.",
+      "files": [
+        "../SKILL.md",
+        "../references/campaigns.md"
+      ],
+      "expectations": [
+        "Examines actual serialized request parameters and selected endpoint capabilities rather than inferring enforcement from a schema in context.",
+        "Distinguishes tool-argument schema, JSON-only mode, schema-enforced final output and separate one-shot controls.",
+        "Does not claim the native tools/stream/schema combination is proven compatible without verification or technically impossible because it is not wired today.",
+        "Does not implement the deferred change, add a parallel loop or claim schema validity would establish documentary or analytical truth."
       ]
     }
   ]

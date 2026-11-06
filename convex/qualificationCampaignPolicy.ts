@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { reasoningPreferenceValues } from "./modelConfigurationValues.ts";
+import { initialFixtureIds } from "./qualificationInitialFixtures.ts";
 
 export const MAX_QUALIFICATION_CONTEXT_DURATION_MS = 2 * 60 * 60 * 1000;
 
@@ -214,6 +215,13 @@ export const qualificationScenarioSchema = z
         steps: z.array(qualificationStepSchema).min(1),
         limits: campaignLimitsSchema.partial().optional(),
         sourcesEnvelope: qualificationEnvelopeSchema.optional(),
+        initialFixture: z
+            .object({
+                id: z.enum(initialFixtureIds),
+                hash: z.string().regex(/^[a-f0-9]{64}$/),
+            })
+            .strict()
+            .optional(),
     })
     .strict();
 export const qualificationConfigurationSchema = z
@@ -292,6 +300,8 @@ export const configurableCampaignManifestSchema = v2.superRefine((m, ctx) => {
             "Browser interaction steps require the browser execution surface",
         );
     for (const s of m.scenarios) {
+        if (s.initialFixture && m.capability !== "sources")
+            issue("Documentary starting fixtures require Sources capability");
         for (const [index, step] of s.steps.entries())
             if (step.action === "fault") {
                 if (

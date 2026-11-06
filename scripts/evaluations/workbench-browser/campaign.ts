@@ -27,6 +27,7 @@ import {
     campaignConfiguration,
     campaignManifestSchema,
 } from "../../../convex/qualificationCampaignPolicy.ts";
+import { initialFixtureContent } from "../../../convex/qualificationInitialFixtures.ts";
 import { resolveLocalRuntime } from "../../local-runtime.ts";
 import {
     configureCampaign,
@@ -409,8 +410,18 @@ async function executeCampaign(
             };
         }
         const manifest = campaignManifestSchema.parse(resolvedInput);
-        if (manifest.version === 2)
+        if (manifest.version === 2) {
+            for (const scenario of manifest.scenarios)
+                if (scenario.initialFixture)
+                    assert.equal(
+                        scenario.initialFixture.hash,
+                        sha256(
+                            initialFixtureContent(scenario.initialFixture.id),
+                        ),
+                        "Initial fixture content changed",
+                    );
             manifest.batteryHash = sha256(JSON.stringify(manifest.scenarios));
+        }
         if (manifest.version === 1)
             assert.equal(
                 sha256(readFileSync(batteryPath(manifest))),
