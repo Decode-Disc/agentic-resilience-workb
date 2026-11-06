@@ -1,11 +1,11 @@
 import type { IndexRangeBuilder } from "convex/server";
-import { stream } from "convex-helpers/server/stream";
 import {
     paginationOptsValidator,
     paginationResultValidator,
 } from "convex/server";
 import { v } from "convex/values";
-import type { Doc, DataModel } from "./_generated/dataModel";
+import { stream } from "convex-helpers/server/stream";
+import type { DataModel, Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./_generated/server";
 import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
@@ -292,21 +292,43 @@ async function projectRun(ctx: QueryCtx, run: Doc<"researchRuns">) {
         run.companySnapshot,
         company,
     );
-    const providerFailures = (
-        await ctx.db
-            .query("providerCalls")
-            .withIndex("by_run", (query) => query.eq("runId", run._id))
-            .filter((query) => query.eq(query.field("status"), "failed"))
-            .collect()
-    )
-        .sort((left, right) => right.createdAt - left.createdAt)
-        .slice(0, 5)
-        .map((call) => ({
+    const latestFailures = await ctx.db
+        .query("providerCalls")
+        .withIndex("by_run_and_status_and_created_at", (q) =>
+            q.eq("runId", run._id).eq("status", "failed"),
+        )
+        .order("desc")
+        .take(5);
+    const cutoff = latestFailures.at(-1)?.createdAt;
+    const newerFailures = latestFailures
+        .filter((call) => cutoff !== undefined && call.createdAt > cutoff)
+        .sort(
+            (left, right) =>
+                right.createdAt - left.createdAt ||
+                left._creationTime - right._creationTime,
+        );
+    // The old stable sort kept insertion order for ties, including ties across the fifth result.
+    const cutoffFailures =
+        cutoff === undefined
+            ? []
+            : await ctx.db
+                  .query("providerCalls")
+                  .withIndex("by_run_and_status_and_created_at", (q) =>
+                      q
+                          .eq("runId", run._id)
+                          .eq("status", "failed")
+                          .eq("createdAt", cutoff),
+                  )
+                  .order("asc")
+                  .take(5 - newerFailures.length);
+    const providerFailures = [...newerFailures, ...cutoffFailures].map(
+        (call) => ({
             service: call.service,
             operation: call.operation,
             errorCode: call.errorCode,
             occurredAt: call.completedAt ?? call.createdAt,
-        }));
+        }),
+    );
     return {
         runId: run._id,
         company: companySnapshot

@@ -13,7 +13,7 @@ const getMine = makeFunctionReference<
 >("researchRuns:getMine");
 
 test("projects only the current visitor runs with canonical company data", async () => {
-    const t = convexTest(schema, modules);
+    const t = convexTest({ schema, modules, transactionLimits: true });
     const fixture = await t.run(async (ctx) => {
         const userId = await ctx.db.insert("users", { isAnonymous: true });
         const otherUserId = await ctx.db.insert("users", { isAnonymous: true });
@@ -90,6 +90,41 @@ test("projects only the current visitor runs with canonical company data", async
             createdAt: 1,
             updatedAt: 3,
         });
+        for (let index = 0; index < 80; index++) {
+            await ctx.db.insert("providerCalls", {
+                runId,
+                service: "exa",
+                operation: "search",
+                operationKey: `success-${index}`,
+                status: "succeeded",
+                attempt: 1,
+                createdAt: 200 + index,
+            });
+        }
+        for (const [index, createdAt] of [
+            5, 10, 10, 10, 10, 10, 10, 20, 30, 40, 50,
+        ].entries()) {
+            await ctx.db.insert("providerCalls", {
+                runId,
+                service: "exa",
+                operation: `failure-${index}`,
+                operationKey: `failure-${index}`,
+                status: "failed",
+                attempt: 1,
+                createdAt,
+            });
+        }
+        for (let index = 0; index < 80; index++) {
+            await ctx.db.insert("providerCalls", {
+                runId,
+                service: "exa",
+                operation: `old-failure-${index}`,
+                operationKey: `old-failure-${index}`,
+                status: "failed",
+                attempt: 1,
+                createdAt: -100 - index,
+            });
+        }
         return { userId, runId };
     });
     const analyst = t.withIdentity({
@@ -108,6 +143,22 @@ test("projects only the current visitor runs with canonical company data", async
         lifecycleState: "awaiting_source_review",
         executionStatus: "paused",
     });
+    const measured = await analyst.run(async (ctx) => {
+        const value = await ctx.runQuery(api.researchRuns.getMine, {
+            runId: fixture.runId,
+        });
+        return { value, metrics: await ctx.meta.getTransactionMetrics() };
+    });
+    expect(measured.metrics.documentsRead.used).toBeLessThanOrEqual(30);
+    expect(
+        measured.value.providerFailures.map((failure) => failure.operation),
+    ).toEqual([
+        "failure-10",
+        "failure-9",
+        "failure-8",
+        "failure-7",
+        "failure-1",
+    ]);
     const visitor = await analyst.query(api.visitors.current, {});
     if (!visitor?.workspace) throw new Error("Expected admitted workspace");
     await expect(

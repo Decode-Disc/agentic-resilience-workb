@@ -218,7 +218,7 @@ test("administrative import prepares a model absent from Pi's bundled catalogue 
                 "structured_outputs",
             ],
         },
-        reasoningEffort: "low",
+        reasoningEffort: "high",
     });
 });
 
@@ -785,4 +785,94 @@ test("response coherence policy has central defaults and administrator-versioned
             supportThreshold: 0.8,
         }),
     ).rejects.toThrow("response_control_policy_invalid");
+});
+
+import { installModel } from "@/__tests__/setup/model-configuration";
+import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
+import { assert } from "vitest";
+test("an administrator changes reasoning through immutable revisions while explicit low remains selectable", async () => {
+    const { t } = await setup();
+    const { admin, catalogId } = await installModel(
+        t,
+        { ...nativePiFixtureRoute, reasoningEffort: "low" },
+        "workbench",
+        { reasoningEfforts: ["none", "low", "medium", "high"] },
+    );
+    const before = await admin.query(api.modelConfiguration.list, {});
+    const catalog = before.models.find((m) => m._id === catalogId);
+    assert(catalog?.currentRevisionId);
+    expect(catalog.reasoning).toMatchObject({
+        preference: "recommended",
+        recommended: "medium",
+        effective: "medium",
+    });
+    const originalRevisionId = catalog.currentRevisionId;
+    const original = await t.run((ctx) => ctx.db.get(originalRevisionId));
+    const args = {
+        catalogId,
+        expectedRevision: catalog.revision,
+        preference: "low" as const,
+        requestKey: "choose-low",
+    };
+    const changed = await admin.mutation(
+        api.modelConfiguration.setReasoningPreference,
+        args,
+    );
+    expect(
+        await admin.mutation(
+            api.modelConfiguration.setReasoningPreference,
+            args,
+        ),
+    ).toEqual(changed);
+    expect(await t.run((ctx) => ctx.db.get(originalRevisionId))).toEqual(
+        original,
+    );
+    const after = await admin.query(api.modelConfiguration.list, {});
+    expect(
+        after.models.find((m) => m._id === catalogId)?.reasoning,
+    ).toMatchObject({
+        preference: "low",
+        effective: "low",
+        recommended: "medium",
+    });
+    await expect(
+        admin.mutation(api.modelConfiguration.setReasoningPreference, {
+            ...args,
+            expectedRevision: changed.revision,
+            preference: "max",
+            requestKey: "unsupported",
+        }),
+    ).rejects.toThrow("model_effort_unavailable");
+});
+
+test("a failed preparation can change its preference before reprepare without enabling inference", async () => {
+    const { t } = await setup();
+    const { admin, catalogId } = await installModel(
+        t,
+        { ...nativePiFixtureRoute, reasoningEffort: "low" },
+        "workbench",
+        { reasoningEfforts: ["low", "medium"] },
+    );
+    const before = (
+        await admin.query(api.modelConfiguration.list, {})
+    ).models.find((model) => model._id === catalogId);
+    assert(before);
+    await t.run((ctx) =>
+        ctx.db.patch(catalogId, { status: "failed", enabled: false }),
+    );
+    await admin.mutation(api.modelConfiguration.setReasoningPreference, {
+        catalogId,
+        expectedRevision: before.revision,
+        requestKey: "recover-preference",
+        preference: "recommended",
+    });
+    const after = (
+        await admin.query(api.modelConfiguration.list, {})
+    ).models.find((model) => model._id === catalogId);
+    expect(after).toMatchObject({
+        status: "failed",
+        enabled: false,
+        compatible: false,
+        reasoning: { preference: "recommended", effective: "medium" },
+    });
 });

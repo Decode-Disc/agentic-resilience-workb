@@ -33,7 +33,10 @@ import {
     restoreCampaignConfiguration,
 } from "./campaign-configuration.ts";
 import { openQualificationJournal } from "./journal.ts";
-import { withQualificationAdministrator } from "./model-preparation.ts";
+import {
+    openQualificationSession,
+    withQualificationAdministrator,
+} from "./model-preparation.ts";
 import {
     browserBatteryPath,
     candidateHash,
@@ -332,7 +335,14 @@ async function executeCampaign(
             "version" in input &&
             input.version === 2
         ) {
-            let values = { ...input } as Record<string, unknown>;
+            let values = { executionSurface: "backend", ...input } as Record<
+                string,
+                unknown
+            >;
+            assert(
+                values.executionSurface !== "backend" || "scenarios" in values,
+                "Backend evaluation requires explicit targeted scenarios",
+            );
             if (!("scenarios" in values)) {
                 const sourceDefaults = read(
                     "scripts/evaluations/workbench-browser/sources-cases.json",
@@ -423,8 +433,11 @@ async function executeCampaign(
     const manifest = campaignManifestSchema.parse(state.manifest);
     if (action === "run" && options.configuration)
         campaignConfiguration(manifest, options.configuration);
+    const backend =
+        manifest.version === 2 && manifest.executionSurface === "backend";
     const runtime = await resolveLocalRuntime(process.cwd(), {
         requiredOrigins: ["convex"],
+        verificationScope: backend ? "required" : "all",
     });
     const web = runtime.origins.web;
     const client = new ConvexHttpClient(runtime.origins.convex, {
@@ -641,6 +654,10 @@ async function executeCampaign(
         diagnostics: ["operation_pending"],
     });
     let browser: Browser | undefined;
+    let session:
+        | Awaited<ReturnType<typeof openQualificationSession>>
+        | undefined;
+    let page: Page | null = null;
     let relay: Server | undefined;
     let lot:
         | FunctionReturnType<
@@ -669,48 +686,58 @@ async function executeCampaign(
         for (const flag of flags)
             if (previousFlags.get(flag.name) !== "true")
                 command(["env", "set", flag.name, "true"]);
-        assert(web, "Web service unavailable; backend cleanup will still run");
-        browser = await chromium.launch({
-            ...(process.env.WORKBENCH_UI_BROWSER_PATH
-                ? { executablePath: process.env.WORKBENCH_UI_BROWSER_PATH }
-                : {}),
-        });
         const analyst = material.invitations.find(
             (i) => i.slotKey === "analyst-4",
         );
         assert(analyst);
-        const admission = await browser.newContext({
-            reducedMotion: "reduce",
-            viewport: { width: 1440, height: 1000 },
-        });
-        const page = await admission.newPage();
-        await page.route("https://api.poly.io/og**", (route) =>
-            route.fulfill({
-                headers: { "access-control-allow-origin": "*" },
-                json: { ok: false, imageOk: false },
-            }),
-        );
-        await page.route(
-            /https:\/\/(www\.google\.com\/s2\/favicons|t[0-9]\.gstatic\.com\/faviconV2).*/,
-            (route) =>
+        if (backend) {
+            session = await openQualificationSession(
+                runtime.origins.convex,
+                analyst.code,
+            );
+        } else {
+            assert(
+                web,
+                "Web service unavailable; backend cleanup will still run",
+            );
+            browser = await chromium.launch({
+                ...(process.env.WORKBENCH_UI_BROWSER_PATH
+                    ? { executablePath: process.env.WORKBENCH_UI_BROWSER_PATH }
+                    : {}),
+            });
+            const admission = await browser.newContext({
+                reducedMotion: "reduce",
+                viewport: { width: 1440, height: 1000 },
+            });
+            page = await admission.newPage();
+            await page.route("https://api.poly.io/og**", (route) =>
                 route.fulfill({
-                    status: 200,
-                    contentType: "image/png",
-                    body: Buffer.from(
-                        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
-                        "base64",
-                    ),
+                    headers: { "access-control-allow-origin": "*" },
+                    json: { ok: false, imageOk: false },
                 }),
-        );
-        await page.goto(`${runtime.origins.web}/workspace/dossiers`);
-        page.setDefaultTimeout(20_000);
-        await page.locator("#invitation-code").fill(analyst.code);
-        await page
-            .locator("form:has(#invitation-code) button[type=submit]")
-            .click();
-        await expect(page.locator("#invitation-code")).toHaveCount(0, {
-            timeout: 20_000,
-        });
+            );
+            await page.route(
+                /https:\/\/(www\.google\.com\/s2\/favicons|t[0-9]\.gstatic\.com\/faviconV2).*/,
+                (route) =>
+                    route.fulfill({
+                        status: 200,
+                        contentType: "image/png",
+                        body: Buffer.from(
+                            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+                            "base64",
+                        ),
+                    }),
+            );
+            await page.goto(`${runtime.origins.web}/workspace/dossiers`);
+            page.setDefaultTimeout(20_000);
+            await page.locator("#invitation-code").fill(analyst.code);
+            await page
+                .locator("form:has(#invitation-code) button[type=submit]")
+                .click();
+            await expect(page.locator("#invitation-code")).toHaveCount(0, {
+                timeout: 20_000,
+            });
+        }
         if (action === "authorize") {
             verifyBattery();
             state.campaignId = await client.mutation(
@@ -809,7 +836,7 @@ async function executeCampaign(
         if (manifest.mode === "live") {
             assert(adminCode);
             await withQualificationAdministrator(
-                browser,
+                browser ?? null,
                 { web: web, convex: runtime.origins.convex },
                 adminCode,
                 (admin) =>
@@ -830,10 +857,7 @@ async function executeCampaign(
                 configurationId: lot.configurationId,
                 maximumRequests: manifest.perLot.model,
                 maximumCostUsd: manifest.perLot.costUsd,
-                boundary:
-                    manifest.mode === "deterministic"
-                        ? "protected_local_browser_simulated_providers"
-                        : "protected_local_browser_real_providers",
+                boundary: `protected_local_${backend ? "backend" : "browser"}_${manifest.mode === "deterministic" ? "simulated" : "real"}_providers`,
             });
             let relayOrigin: string | undefined;
             if (
@@ -866,6 +890,7 @@ async function executeCampaign(
                 lotRoot,
                 manifest,
                 () => interrupted,
+                session?.client,
             );
             completed = true;
         } else if (manifest.capability === "workbench") {
@@ -916,6 +941,10 @@ async function executeCampaign(
                 battery: sourceBattery,
                 lotId,
             });
+            assert(
+                page && web,
+                "Legacy Sources qualification requires browser execution",
+            );
             await runSourcesBrowser(
                 page,
                 web,
@@ -983,8 +1012,7 @@ async function executeCampaign(
         }
         if (
             lotRoot &&
-            browser &&
-            web &&
+            (backend || (browser && web)) &&
             existsSync(join(lotRoot, "configuration.json"))
         ) {
             try {
@@ -993,7 +1021,7 @@ async function executeCampaign(
                 )?.code;
                 assert(code);
                 await withQualificationAdministrator(
-                    browser,
+                    browser ?? null,
                     { web: web, convex: runtime.origins.convex },
                     code,
                     (admin) =>
@@ -1008,6 +1036,7 @@ async function executeCampaign(
         }
         if (
             lotRoot &&
+            !backend &&
             (!browser || !web) &&
             existsSync(join(lotRoot, "configuration.json"))
         )
@@ -1025,6 +1054,11 @@ async function executeCampaign(
             await browser?.close();
         } catch {
             diagnostics.push("browser_close_failed");
+        }
+        try {
+            await session?.close();
+        } catch {
+            diagnostics.push("qualification_signout_failed");
         }
         for (const flag of flags) {
             try {

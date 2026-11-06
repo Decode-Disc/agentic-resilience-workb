@@ -68,13 +68,105 @@ export async function prepareQualificationModel(
     };
 }
 
+/** Opens a genuine local anonymous session; invitation authority is acquired only through the public claim action. */
+export async function openQualificationSession(convex: string, code: string) {
+    const origin = new URL(convex);
+    assert(
+        ["127.0.0.1", "localhost"].includes(origin.hostname),
+        "Local qualification session required",
+    );
+    const boundedFetch: typeof fetch = (input, init) => {
+        const url = new URL(
+            input instanceof Request ? input.url : String(input),
+        );
+        assert.equal(
+            url.origin,
+            origin.origin,
+            "Qualification request changed origin",
+        );
+        return fetch(input, {
+            ...init,
+            redirect: "error",
+            signal: init?.signal
+                ? AbortSignal.any([init.signal, AbortSignal.timeout(120000)])
+                : AbortSignal.timeout(120000),
+        });
+    };
+    const authentication = new ConvexHttpClient(convex, {
+        logger: false,
+        fetch: boundedFetch,
+    });
+    const initialTokens = (
+        await authentication.action(api.auth.signIn, { provider: "anonymous" })
+    ).tokens;
+    assert(initialTokens, "Anonymous qualification authentication unavailable");
+    let tokens = initialTokens;
+    const expiresAt = () => {
+        const payload: unknown = JSON.parse(
+            Buffer.from(tokens.token.split(".")[1] ?? "", "base64url").toString(
+                "utf8",
+            ),
+        );
+        assert(
+            payload &&
+                typeof payload === "object" &&
+                "exp" in payload &&
+                typeof payload.exp === "number",
+            "Authentication expiry unavailable",
+        );
+        return payload.exp * 1000;
+    };
+    let refreshing: Promise<void> | undefined;
+    const client = new ConvexHttpClient(convex, {
+        logger: false,
+        fetch: async (input, init) => {
+            if (expiresAt() - Date.now() < 30000) {
+                refreshing ??= (async () => {
+                    const renewed = await authentication.action(
+                        api.auth.signIn,
+                        { refreshToken: tokens.refreshToken },
+                    );
+                    assert(
+                        renewed.tokens,
+                        "Qualification session refresh failed",
+                    );
+                    tokens = renewed.tokens;
+                })().finally(() => {
+                    refreshing = undefined;
+                });
+                await refreshing;
+            }
+            const headers = new Headers(init?.headers);
+            headers.set("Authorization", `Bearer ${tokens.token}`);
+            return boundedFetch(input, { ...init, headers });
+        },
+    });
+    const close = () => client.action(api.auth.signOut, {});
+    try {
+        await client.action(api.invitations.claim, { code });
+        return { client, close };
+    } catch (error) {
+        await close();
+        throw error;
+    }
+}
+
 /** Uses real anonymous admission; authentication material stays in memory and the temporary context is always closed. */
 export async function withQualificationAdministrator<T>(
-    browser: Browser,
-    origins: { web: string; convex: string },
+    browser: Browser | null,
+    origins: { web?: string; convex: string },
     code: string,
     use: (client: ConvexHttpClient) => Promise<T>,
 ) {
+    if (!browser) {
+        const session = await openQualificationSession(origins.convex, code);
+        try {
+            return await use(session.client);
+        } finally {
+            await session.close();
+        }
+    }
+    assert(origins.web, "Browser admission requires a web origin");
     const context = await browser.newContext();
     try {
         const page = await context.newPage();

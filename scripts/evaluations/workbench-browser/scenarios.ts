@@ -272,33 +272,47 @@ export async function inspectCampaignScenarios(
 
 /** Finite action interpreter. Configuration supplies domain actions and text, never executable code or selectors. */
 export async function runCampaignScenarios(
-    page: Page,
+    page: Page | null,
     client: ConvexHttpClient,
-    web: string,
+    web: string | undefined,
     convex: string,
     root: string,
     manifest: ConfigurableCampaignManifest,
     interrupted: () => boolean,
+    backendClient?: ConvexHttpClient,
 ) {
+    assert(
+        page
+            ? manifest.executionSurface !== "backend"
+            : manifest.executionSurface === "backend",
+        "Execution surface mismatch",
+    );
     const protocol = JSON.parse(
         readFileSync(join(root, "protocol.json"), "utf8"),
     );
     const journal = openQualificationJournal(root, protocol);
     const errors: string[] = [];
-    page.on("pageerror", () => errors.push("page_error"));
-    page.on("console", (m) => {
-        if (m.type() === "error") errors.push("console_error");
-    });
-    await page.goto(`${web}/workspace/dossiers`);
-    const token = await page.evaluate(() => {
-        const keys = Object.keys(localStorage).filter((k) =>
-            k.startsWith("__convexAuthJWT"),
-        );
-        return keys.length === 1 ? localStorage.getItem(keys[0] ?? "") : null;
-    });
-    assert(token, "Admitted session required");
-    const admitted = new ConvexHttpClient(convex, { logger: false });
-    admitted.setAuth(token);
+    let admitted = backendClient;
+    if (page) {
+        assert(web);
+        page.on("pageerror", () => errors.push("page_error"));
+        page.on("console", (m) => {
+            if (m.type() === "error") errors.push("console_error");
+        });
+        await page.goto(`${web}/workspace/dossiers`);
+        const token = await page.evaluate(() => {
+            const keys = Object.keys(localStorage).filter((k) =>
+                k.startsWith("__convexAuthJWT"),
+            );
+            return keys.length === 1
+                ? localStorage.getItem(keys[0] ?? "")
+                : null;
+        });
+        assert(token, "Admitted session required");
+        admitted = new ConvexHttpClient(convex, { logger: false });
+        admitted.setAuth(token);
+    }
+    assert(admitted, "Admitted backend session required");
     await expect
         .poll(() => admitted.query(api.visitors.current), { timeout: 20000 })
         .toMatchObject({ status: "active" });
@@ -321,6 +335,8 @@ export async function runCampaignScenarios(
             | "concurrent_edit";
         let controlKey: string | undefined;
         const requiredFaults: Array<{ key: string; event: string }> = [];
+        const requestKey = () =>
+            `qualification:${sha256(JSON.stringify([c.fixtureKey, activeStep]))}`;
         const inspect = () =>
             client.query(
                 ref(internal.execution.fixtures.qualificationSnapshot),
@@ -379,17 +395,18 @@ export async function runCampaignScenarios(
             await admitted.mutation(api.framing.save, {
                 runId: c.runId,
                 expectedRevision: before.framing.revision,
-                requestKey: `${c.fixtureKey}:${activeStep}`,
+                requestKey: requestKey(),
                 content,
             });
             const question = content.questions[0];
             assert(question);
-            await expect(
-                page.getByRole("button", {
-                    name: question.shortLabel,
-                    exact: true,
-                }),
-            ).toBeVisible({ timeout: 20000 });
+            if (page)
+                await expect(
+                    page.getByRole("button", {
+                        name: question.shortLabel,
+                        exact: true,
+                    }),
+                ).toBeVisible({ timeout: 20000 });
         };
         try {
             save(root, "control", {
@@ -405,8 +422,10 @@ export async function runCampaignScenarios(
                     researchAngle: scenario.framing.scope,
                 },
             );
-            await page.setViewportSize({ width: 1440, height: 1000 });
-            await page.goto(`${web}/workspace/${c.runId}`);
+            if (page) {
+                await page.setViewportSize({ width: 1440, height: 1000 });
+                await page.goto(`${web}/workspace/${c.runId}`);
+            }
             await wait("conversation_settled");
             for (const step of scenario.steps) {
                 activeStep = step.id;
@@ -438,37 +457,51 @@ export async function runCampaignScenarios(
                                         : "fault_applied",
                             });
                         armed = undefined;
-                        await expect
-                            .poll(
-                                async () =>
-                                    (await page
-                                        .getByRole("textbox")
-                                        .isVisible()) ||
-                                    (await page
-                                        .getByRole("button", {
-                                            name: "Ask AI",
-                                            exact: true,
-                                        })
-                                        .isVisible()),
-                                { timeout: 20000 },
-                            )
-                            .toBe(true);
-                        if (!(await page.getByRole("textbox").isVisible()))
+                        if (page) {
+                            await expect
+                                .poll(
+                                    async () =>
+                                        (await page
+                                            .getByRole("textbox")
+                                            .isVisible()) ||
+                                        (await page
+                                            .getByRole("button", {
+                                                name: "Ask AI",
+                                                exact: true,
+                                            })
+                                            .isVisible()),
+                                    { timeout: 20000 },
+                                )
+                                .toBe(true);
+                            if (!(await page.getByRole("textbox").isVisible()))
+                                await page
+                                    .getByRole("button", {
+                                        name: "Ask AI",
+                                        exact: true,
+                                    })
+                                    .click();
+                            await expect(page.getByRole("textbox")).toBeVisible(
+                                {
+                                    timeout: 20000,
+                                },
+                            );
+                            await page.getByRole("textbox").fill(step.text);
                             await page
                                 .getByRole("button", {
-                                    name: "Ask AI",
-                                    exact: true,
+                                    name: /Send (message|refinement)/,
                                 })
                                 .click();
-                        await expect(page.getByRole("textbox")).toBeVisible({
-                            timeout: 20000,
-                        });
-                        await page.getByRole("textbox").fill(step.text);
-                        await page
-                            .getByRole("button", {
-                                name: /Send (message|refinement)/,
-                            })
-                            .click();
+                        } else {
+                            await admitted.mutation(
+                                api.execution.conversations.submit,
+                                {
+                                    runId: c.runId,
+                                    requestKey: requestKey(),
+                                    text: step.text,
+                                    delivery: "queue",
+                                },
+                            );
+                        }
                         await expect
                             .poll(
                                 async () => (await inspect()).lastMessage?._id,
@@ -507,37 +540,83 @@ export async function runCampaignScenarios(
                         break;
                     }
                     case "start_research":
-                        await page
-                            .getByRole("button", {
-                                name: "Start research",
-                                exact: true,
-                            })
-                            .click();
+                        if (page)
+                            await page
+                                .getByRole("button", {
+                                    name: "Start research",
+                                    exact: true,
+                                })
+                                .click();
+                        else {
+                            const framing = (await inspect()).framing;
+                            assert(
+                                framing,
+                                "Current framing required before research start",
+                            );
+                            await admitted.mutation(api.framing.startResearch, {
+                                runId: c.runId,
+                                expectedRevision: framing.revision,
+                                requestKey: requestKey(),
+                            });
+                        }
                         break;
                     case "pause_research":
-                        await page
-                            .getByRole("button", {
-                                name: "Pause research",
-                                exact: true,
-                            })
-                            .click();
+                        if (page)
+                            await page
+                                .getByRole("button", {
+                                    name: "Pause research",
+                                    exact: true,
+                                })
+                                .click();
+                        else
+                            await admitted.mutation(
+                                api.execution.researchControl.pause,
+                                {
+                                    runId: c.runId,
+                                    expectedGeneration: (await inspect()).run
+                                        .executionGeneration,
+                                },
+                            );
                         await wait("paused");
                         break;
                     case "resume_research":
-                        await page
-                            .getByRole("button", {
-                                name: "Resume research",
-                                exact: true,
-                            })
-                            .click();
+                        if (page)
+                            await page
+                                .getByRole("button", {
+                                    name: "Resume research",
+                                    exact: true,
+                                })
+                                .click();
+                        else
+                            await admitted.mutation(
+                                api.execution.researchControl.resume,
+                                {
+                                    runId: c.runId,
+                                    expectedGeneration: (await inspect()).run
+                                        .executionGeneration,
+                                },
+                            );
                         break;
                     case "stop_response":
-                        await page
-                            .getByRole("button", {
-                                name: "Stop generation",
-                                exact: true,
-                            })
-                            .click();
+                        if (page)
+                            await page
+                                .getByRole("button", {
+                                    name: "Stop generation",
+                                    exact: true,
+                                })
+                                .click();
+                        else {
+                            const turnId = (await inspect()).conversation
+                                ?.activeTurnId;
+                            assert(
+                                turnId,
+                                "Active turn required before stopping a response",
+                            );
+                            await admitted.mutation(
+                                api.execution.conversations.stopResponse,
+                                { runId: c.runId, turnId },
+                            );
+                        }
                         if (held) {
                             await client.mutation(
                                 ref(
@@ -552,9 +631,22 @@ export async function runCampaignScenarios(
                         await wait("conversation_settled");
                         break;
                     case "reload":
+                        assert(page, "Reload requires browser execution");
                         await page.reload();
+                        await expect(
+                            page
+                                .getByRole("textbox")
+                                .or(
+                                    page.getByRole("button", {
+                                        name: "Ask AI",
+                                        exact: true,
+                                    }),
+                                )
+                                .first(),
+                        ).toBeVisible({ timeout: 20000 });
                         break;
                     case "navigate":
+                        assert(page, "Navigation requires browser execution");
                         if (step.target === "dossier_list")
                             await page.goto(`${web}/workspace/dossiers`);
                         else if (step.target === "dossier")
@@ -565,6 +657,7 @@ export async function runCampaignScenarios(
                             );
                         break;
                     case "viewport":
+                        assert(page, "Viewport requires browser execution");
                         await page.setViewportSize({
                             width: step.width,
                             height: step.height,
@@ -601,10 +694,11 @@ export async function runCampaignScenarios(
                     }
                 }
                 save(directory, `${step.id}-after`, await inspect());
-                await page.screenshot({
-                    path: join(directory, `${step.id}.png`),
-                    fullPage: true,
-                });
+                if (page)
+                    await page.screenshot({
+                        path: join(directory, `${step.id}.png`),
+                        fullPage: true,
+                    });
             }
             assert(!armed && !held, "Unconsumed fault recipe");
             release();
@@ -624,9 +718,11 @@ export async function runCampaignScenarios(
                         "Declared transport fault did not fire",
                     );
             }
-            save(directory, "published-ui", {
-                text: await page.locator("body").innerText(),
-            });
+            if (page)
+                save(directory, "published-ui", {
+                    text: await page.locator("body").innerText(),
+                });
+            else save(directory, "published-backend", await inspect());
             assert.equal(
                 errors.length - errorStart,
                 0,
@@ -643,10 +739,11 @@ export async function runCampaignScenarios(
                 reason:
                     error instanceof Error ? error.message : "Scenario failed",
             });
-            await page.screenshot({
-                path: join(directory, "failure.png"),
-                fullPage: true,
-            });
+            if (page)
+                await page.screenshot({
+                    path: join(directory, "failure.png"),
+                    fullPage: true,
+                });
             failed = true;
         } finally {
             release();
@@ -657,6 +754,15 @@ export async function runCampaignScenarios(
                 );
         }
         if (failed) {
+            if (!page) {
+                journal.finish(c.id, {
+                    executionIntegrity: "failed",
+                    semanticTask: "not_assessed",
+                });
+                throw new Error(
+                    "Backend evaluation stopped at its first failing scenario; evidence retained",
+                );
+            }
             assert(
                 !interrupted(),
                 "Campaign interrupted after scenario failure",

@@ -1,3 +1,5 @@
+"use node";
+
 import { registeredAgentDefinitions } from "@convex/execution/agentCatalog";
 import {
     type AgentDefinition,
@@ -35,8 +37,8 @@ import {
     type ModelRoute,
     modelCallSettings,
     modelConfigurationKey,
-    recommendedReasoningEffort,
     reasoningChoices,
+    recommendedReasoningEffort,
 } from "./modelRouting";
 
 /** Builds a supported chat model from validated OpenRouter metadata, without a bundled-ID dependency. */

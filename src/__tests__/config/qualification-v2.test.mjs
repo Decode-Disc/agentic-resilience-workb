@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -52,6 +52,7 @@ test("prepare freezes three free scenarios and two configurations with allowance
 });
 
 import { getFunctionName } from "convex/server";
+import { api } from "../../../convex/_generated/api.js";
 import { campaignManifestSchema } from "../../../convex/qualificationCampaignPolicy.ts";
 import {
     inspectCampaignScenarios,
@@ -335,11 +336,14 @@ test("context duration respects mandate expiry and the server maximum before set
     assert.equal(calls, 0);
 });
 
-test("omitted scenarios use the editable default battery and retain explicit steps", async () => {
+test("explicit browser preparation may use the editable default battery and retain explicit steps", async () => {
     const root = mkdtempSync(join(tmpdir(), "qualification-default-"));
     const { scenarios, expectations, ...input } = configurableCampaign();
     const path = join(root, "input.json");
-    writeFileSync(path, JSON.stringify(input));
+    writeFileSync(
+        path,
+        JSON.stringify({ ...input, executionSurface: "browser" }),
+    );
     await runCampaign("prepare", root, { manifest: path });
     const retained = JSON.parse(
         readFileSync(join(root, "campaign.json"), "utf8"),
@@ -505,4 +509,323 @@ test("campaign cleanup refuses a stalled backend cursor instead of looping silen
         /cursor did not advance/,
     );
     assert.equal(pages, 2);
+});
+
+test("backend campaigns retain an explicit execution boundary without changing historical mandates", () => {
+    const original = { ...configurableCampaign(), batteryHash: "a".repeat(64) };
+    const backend = campaignManifestSchema.parse({
+        ...original,
+        executionSurface: "backend",
+    });
+    assert.equal(backend.executionSurface, "backend");
+    assert.equal(
+        campaignManifestSchema.parse(original).executionSurface,
+        undefined,
+    );
+    for (const action of [
+        { action: "reload" },
+        { action: "navigate", target: "dossier" },
+        { action: "viewport", width: 390, height: 844 },
+    ]) {
+        const value = structuredClone(backend);
+        value.scenarios[0].steps.push({ id: "browser-only", ...action });
+        assert.equal(campaignManifestSchema.safeParse(value).success, false);
+    }
+});
+
+test("backend execution retains public-operation effects and snapshots without a browser", async () => {
+    const root = mkdtempSync(join(tmpdir(), "qualification-backend-"));
+    const base = configurableCampaign();
+    const manifest = campaignManifestSchema.parse({
+        ...base,
+        executionSurface: "backend",
+        mode: "deterministic",
+        scenarios: [
+            {
+                ...base.scenarios[0],
+                steps: [
+                    { id: "frame", action: "save_framing" },
+                    {
+                        id: "ask",
+                        action: "send_message",
+                        text: "Explain the scoped workflow.",
+                    },
+                ],
+            },
+        ],
+        expectations: [base.expectations[0]],
+        perLot: { model: 0, search: 0, acquisition: 0, costUsd: 0 },
+        total: { model: 0, search: 0, acquisition: 0, costUsd: 0 },
+        batteryHash: "a".repeat(64),
+    });
+    writeFileSync(
+        join(root, "protocol.json"),
+        `${JSON.stringify(
+            { boundary: "protected_local_backend_simulated_providers" },
+            null,
+            2,
+        )}\n`,
+    );
+    writeFileSync(
+        join(root, "prepared.json"),
+        JSON.stringify({
+            cases: [{ id: "claims", runId: "run", fixtureKey: "fixture" }],
+        }),
+    );
+    const snapshot = {
+        nativeSettled: true,
+        conversation: { activeTurnId: null, queuedCount: 0 },
+        framing: { revision: 1 },
+        run: { executionStatus: "idle" },
+        lastMessage: null,
+    };
+    const client = {
+        query: async (reference) =>
+            getFunctionName(reference) ===
+            "execution/fixtures:qualificationSnapshot"
+                ? structuredClone(snapshot)
+                : {
+                      page: [],
+                      payloads: [],
+                      downloads: [],
+                      isDone: true,
+                      continueCursor: "",
+                  },
+        mutation: async (reference) => {
+            assert.equal(
+                getFunctionName(reference),
+                "execution/fixtures:activateWorkbench",
+            );
+        },
+    };
+    const admitted = {
+        query: async () => ({ status: "active" }),
+        mutation: async (reference, args) => {
+            if (getFunctionName(reference) === "framing:save")
+                snapshot.framing.revision++;
+            else {
+                assert.equal(
+                    getFunctionName(reference),
+                    "execution/conversations:submit",
+                );
+                assert.equal(args.text, "Explain the scoped workflow.");
+                snapshot.lastMessage = {
+                    _id: "reply",
+                    text: "Scoped explanation retained",
+                };
+            }
+        },
+    };
+    await runCampaignScenarios(
+        null,
+        client,
+        undefined,
+        "http://127.0.0.1:3210",
+        root,
+        manifest,
+        () => false,
+        admitted,
+    );
+    const after = JSON.parse(readFileSync(join(root, "claims/ask-after.json")));
+    assert.equal(after.framing.revision, 2);
+    assert.equal(after.lastMessage.text, "Scoped explanation retained");
+    assert.equal(existsSync(join(root, "claims/published-ui.json")), false);
+    assert.match(
+        readFileSync(join(root, "progress.jsonl"), "utf8"),
+        /"executionIntegrity":"passed"/,
+    );
+});
+
+import { withQualificationAdministrator } from "../../../scripts/evaluations/workbench-browser/model-preparation.ts";
+
+test("backend admission uses real public auth and invitation APIs and signs out after a failed callback", async (t) => {
+    const paths = [];
+    const token = `test.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString("base64url")}.test`;
+    t.mock.method(globalThis, "fetch", async (_input, init) => {
+        const { path, args } = JSON.parse(init.body);
+        paths.push(path);
+        if (path !== "auth:signIn")
+            assert.equal(
+                new Headers(init.headers).get("Authorization"),
+                `Bearer ${token}`,
+            );
+        if (path === "invitations:claim") assert.equal(args[0].code, "1234");
+        return new Response(
+            JSON.stringify({
+                status: "success",
+                value:
+                    path === "auth:signIn"
+                        ? { tokens: { token, refreshToken: "test-refresh" } }
+                        : path === "visitors:current"
+                          ? { status: "active" }
+                          : null,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+    });
+    await assert.rejects(
+        () =>
+            withQualificationAdministrator(
+                null,
+                { convex: "http://127.0.0.1:3210" },
+                "1234",
+                async (client) => {
+                    assert.equal(
+                        (await client.query(api.visitors.current, {})).status,
+                        "active",
+                    );
+                    throw new Error("Retained evaluation failure");
+                },
+            ),
+        /Retained evaluation failure/,
+    );
+    assert.deepEqual(paths, [
+        "auth:signIn",
+        "invitations:claim",
+        "visitors:current",
+        "auth:signOut",
+    ]);
+});
+
+test("backend preparation refuses an implicit full browser battery", async () => {
+    const root = mkdtempSync(join(tmpdir(), "backend-explicit-scenarios-"));
+    const input = configurableCampaign();
+    delete input.scenarios;
+    const path = join(root, "input.json");
+    writeFileSync(
+        path,
+        JSON.stringify({ ...input, executionSurface: "backend" }),
+    );
+    await assert.rejects(
+        () => runCampaign("prepare", root, { manifest: path }),
+        /explicit targeted scenarios/,
+    );
+    assert.equal(existsSync(join(root, "campaign.json")), false);
+});
+
+test("backend authentication refreshes expiring credentials before protected requests", async (t) => {
+    let refreshed = false;
+    let signedOut = false;
+    const token = (seconds) =>
+        `test.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + seconds })).toString("base64url")}.test`;
+    const initial = token(5);
+    const renewed = token(3600);
+    t.mock.method(globalThis, "fetch", async (_input, init) => {
+        const { path, args } = JSON.parse(init.body);
+        if (path === "auth:signIn") {
+            if (args[0].refreshToken) {
+                assert.equal(args[0].refreshToken, "initial-refresh");
+                refreshed = true;
+            }
+        } else
+            assert.equal(
+                new Headers(init.headers).get("Authorization"),
+                `Bearer ${renewed}`,
+            );
+        if (path === "auth:signOut") signedOut = true;
+        return new Response(
+            JSON.stringify({
+                status: "success",
+                value:
+                    path === "auth:signIn"
+                        ? {
+                              tokens: {
+                                  token: refreshed ? renewed : initial,
+                                  refreshToken: refreshed
+                                      ? "renewed-refresh"
+                                      : "initial-refresh",
+                              },
+                          }
+                        : null,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+    });
+    await withQualificationAdministrator(
+        null,
+        { convex: "http://127.0.0.1:3210" },
+        "1234",
+        async () => assert(refreshed),
+    );
+    assert(signedOut);
+});
+
+test("backend execution records the first failure without starting another scenario", async () => {
+    const root = mkdtempSync(join(tmpdir(), "backend-first-failure-"));
+    const original = configurableCampaign();
+    const manifest = campaignManifestSchema.parse({
+        ...original,
+        executionSurface: "backend",
+        batteryHash: "a".repeat(64),
+    });
+    writeFileSync(
+        join(root, "protocol.json"),
+        `${JSON.stringify({ boundary: "backend" }, null, 2)}\n`,
+    );
+    writeFileSync(
+        join(root, "prepared.json"),
+        JSON.stringify({
+            cases: original.scenarios.map((s) => ({
+                id: s.id,
+                runId: s.id,
+                fixtureKey: s.id,
+            })),
+        }),
+    );
+    const snapshot = {
+        nativeSettled: true,
+        conversation: { activeTurnId: null, queuedCount: 0 },
+        framing: { revision: 1 },
+        run: { executionStatus: "idle" },
+    };
+    await assert.rejects(
+        () =>
+            runCampaignScenarios(
+                null,
+                {
+                    query: async () => snapshot,
+                    mutation: async () => null,
+                },
+                undefined,
+                "http://127.0.0.1:3210",
+                root,
+                manifest,
+                () => false,
+                {
+                    query: async () => ({ status: "active" }),
+                    mutation: async () => {
+                        throw new Error("Known framing rejection");
+                    },
+                },
+            ),
+        /first failing scenario/,
+    );
+    assert.match(
+        readFileSync(join(root, "claims/failure.json"), "utf8"),
+        /Known framing rejection/,
+    );
+    assert.match(
+        readFileSync(join(root, "progress.jsonl"), "utf8"),
+        /"executionIntegrity":"failed"/,
+    );
+    assert.equal(existsSync(join(root, "creative")), false);
+});
+
+test("new campaign preparation defaults to backend and freezes the choice without changing historical manifests", async () => {
+    const root = mkdtempSync(join(tmpdir(), "qualification-backend-default-"));
+    const input = join(root, "input.json");
+    writeFileSync(input, JSON.stringify(configurableCampaign()));
+    await runCampaign("prepare", root, { manifest: input });
+    const retained = JSON.parse(
+        readFileSync(join(root, "campaign.json"), "utf8"),
+    );
+    assert.equal(retained.manifest.executionSurface, "backend");
+    assert.equal(retained.campaignId, undefined);
+    assert.equal(
+        campaignManifestSchema.parse({
+            ...configurableCampaign(),
+            batteryHash: "a".repeat(64),
+        }).executionSurface,
+        undefined,
+    );
 });

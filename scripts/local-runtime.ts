@@ -64,6 +64,7 @@ export type LocalRuntimeReadiness = {
 
 export type ResolveLocalRuntimeOptions = {
     requiredOrigins?: readonly LocalRuntimeOrigin[];
+    verificationScope?: "all" | "required";
 };
 
 type RuntimeProjectionUpdate =
@@ -356,6 +357,32 @@ export async function resolveLocalRuntime(
     root: string,
     options: ResolveLocalRuntimeOptions = {},
 ): Promise<LocalRuntimeReadiness> {
+    const required = options.requiredOrigins ?? [];
+    const scopedManifest = (
+        value: LocalRuntimeManifest,
+    ): LocalRuntimeManifest => {
+        if (options.verificationScope !== "required") return value;
+        const origins: RuntimeOrigins = {
+            convex: value.origins.convex,
+            site: value.origins.site,
+        };
+        const originOwners: LocalRuntimeManifest["originOwners"] = {};
+        for (const role of ["web", "preview"] as const) {
+            if (required.includes(role)) {
+                origins[role] = value.origins[role];
+                originOwners[role] = value.originOwners[role];
+            }
+        }
+        return {
+            ...value,
+            origins,
+            originOwners,
+            ownedPids: value.ownedPids.filter(
+                (owner) =>
+                    owner.role === "convex" || required.includes(owner.role),
+            ),
+        };
+    };
     const deployment = readNativeLocalDeployment(root);
     const identity = {
         ...getLocalRuntimeIdentity(root),
@@ -366,10 +393,11 @@ export async function resolveLocalRuntime(
     const hadManifest = existsSync(manifestPath);
     let manifest: LocalRuntimeManifest;
     if (!hadManifest) {
-        manifest = createManifest(identity, deployment);
+        manifest = scopedManifest(createManifest(identity, deployment));
     } else {
         manifest = readManifest(manifestPath);
         assertManifestIdentity(manifest, identity);
+        manifest = scopedManifest(manifest);
         assertManifestOrigins(manifest, deployment);
         if (manifest.ownedPids.some(({ pid }) => !isRuntimeProcessAlive(pid))) {
             await writeProjection(identity.root, {
@@ -377,6 +405,7 @@ export async function resolveLocalRuntime(
             });
             manifest = readManifest(manifestPath);
             assertManifestIdentity(manifest, identity);
+            manifest = scopedManifest(manifest);
             assertManifestOrigins(manifest, deployment);
         }
         assertOwnedProcessesAreLive(manifest);
@@ -396,7 +425,6 @@ export async function resolveLocalRuntime(
     if (manifest.origins.preview)
         await verifyPreviewOrigin(manifest.origins.preview);
 
-    const required = options.requiredOrigins ?? [];
     for (const origin of required) {
         if (!manifest.origins[origin])
             throw new LocalRuntimeError(

@@ -2151,3 +2151,104 @@ it("reuses the actual owner of an explicitly reassigned web port while preservin
     expect((await fetch(before.origins.web)).status).toBe(200);
     expect((await fetch(`http://127.0.0.1:${port}`)).status).toBe(200);
 }, 15_000);
+
+it.each([
+    "web",
+    "preview",
+] as const)("resolves required backend independently of unhealthy recorded %s without weakening strict resolution", async (role) => {
+    const root = createProjectRoot();
+    const native = await backend("runtime-fixture");
+    const unhealthy = await backend("unhealthy-frontend");
+    writeNativeConfig(root, "runtime-fixture", native.origin);
+    const identity = runtimeModule.getLocalRuntimeIdentity(root);
+    mkdirSync(join(root, ".local-runtime"), { recursive: true });
+    const manifest = {
+        version: 1,
+        identity: {
+            ...identity,
+            deploymentName: "runtime-fixture",
+            deploymentSelector: "local:runtime-fixture",
+        },
+        ownedPids: [{ role, pid: process.pid, runId: "frontend-fixture" }],
+        origins: {
+            convex: native.origin,
+            site: `http://127.0.0.1:${Number(new URL(native.origin).port) + 1}`,
+            [role]: unhealthy.origin,
+        },
+        originOwners: {
+            [role]: { pid: process.pid, runId: "frontend-fixture" },
+        },
+        updatedAt: new Date().toISOString(),
+    };
+    const path = join(root, ".local-runtime/manifest.json");
+    writeFileSync(path, JSON.stringify(manifest));
+    const before = readFileSync(path, "utf8");
+    const result = await runtimeModule.resolveLocalRuntime(root, {
+        requiredOrigins: ["convex"],
+        verificationScope: "required",
+    });
+    expect(result.status).toBe("ready");
+    expect(result.origins[role]).toBeUndefined();
+    expect(unhealthy.state.requests).toBe(0);
+    expect(readFileSync(path, "utf8")).toBe(before);
+    await expect(
+        runtimeModule.resolveLocalRuntime(root, {
+            requiredOrigins: ["convex"],
+        }),
+    ).rejects.toThrow(/stale or foreign web listener|stale preview listener/);
+    await expect(
+        runtimeModule.resolveLocalRuntime(root, {
+            requiredOrigins: [role],
+            verificationScope: "required",
+        }),
+    ).rejects.toThrow();
+});
+
+it("required backend resolution ignores a dead frontend owner without rewriting unrelated readiness", async () => {
+    const root = createProjectRoot();
+    const native = await backend("runtime-fixture");
+    writeNativeConfig(root, "runtime-fixture", native.origin);
+    const identity = runtimeModule.getLocalRuntimeIdentity(root);
+    mkdirSync(join(root, ".local-runtime"), { recursive: true });
+    const path = join(root, ".local-runtime/manifest.json");
+    const owner = { pid: 2147483647, runId: "dead-frontend" };
+    writeFileSync(
+        path,
+        JSON.stringify({
+            version: 1,
+            identity: {
+                ...identity,
+                deploymentName: "runtime-fixture",
+                deploymentSelector: "local:runtime-fixture",
+            },
+            ownedPids: [{ role: "web", ...owner }],
+            origins: {
+                convex: native.origin,
+                site: `http://127.0.0.1:${Number(new URL(native.origin).port) + 1}`,
+                web: "http://127.0.0.1:5173",
+            },
+            originOwners: { web: owner },
+            updatedAt: new Date().toISOString(),
+        }),
+    );
+    const before = readFileSync(path, "utf8");
+    await expect(
+        runtimeModule.resolveLocalRuntime(root, {
+            requiredOrigins: ["convex"],
+            verificationScope: "required",
+        }),
+    ).resolves.toMatchObject({ status: "ready" });
+    expect(readFileSync(path, "utf8")).toBe(before);
+});
+
+it("required backend resolution still rejects the wrong native deployment", async () => {
+    const root = createProjectRoot();
+    const foreign = await backend("foreign-deployment");
+    writeNativeConfig(root, "runtime-fixture", foreign.origin);
+    await expect(
+        runtimeModule.resolveLocalRuntime(root, {
+            requiredOrigins: ["convex"],
+            verificationScope: "required",
+        }),
+    ).rejects.toThrow("another deployment");
+});

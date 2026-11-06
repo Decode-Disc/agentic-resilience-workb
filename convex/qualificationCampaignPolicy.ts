@@ -230,6 +230,7 @@ const v2 = z
     .object({
         ...legacyCampaignManifestSchema.shape,
         version: z.literal(2),
+        executionSurface: z.enum(["browser", "backend"]).optional(),
         contextDurationMs: z
             .number()
             .int()
@@ -279,6 +280,17 @@ export const configurableCampaignManifestSchema = v2.superRefine((m, ctx) => {
         new Set(m.expectations.map((e) => e.id)).size !== m.expectations.length
     )
         issue("Expectations must cover every scenario exactly once");
+    if (
+        m.executionSurface === "backend" &&
+        m.scenarios.some((s) =>
+            s.steps.some((step) =>
+                ["reload", "navigate", "viewport"].includes(step.action),
+            ),
+        )
+    )
+        issue(
+            "Browser interaction steps require the browser execution surface",
+        );
     for (const s of m.scenarios) {
         for (const [index, step] of s.steps.entries())
             if (step.action === "fault") {

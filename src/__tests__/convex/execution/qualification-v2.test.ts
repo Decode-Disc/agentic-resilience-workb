@@ -7,7 +7,7 @@ import {
     emptyCampaignLimits,
 } from "@convex/qualificationCampaignPolicy";
 import { makeFunctionReference } from "convex/server";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, assert, expect, test, vi } from "vitest";
 import { configurableCampaign } from "@/__tests__/setup/qualification-v2";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
@@ -567,4 +567,23 @@ test("one catalogue model can serve different declared Workbench and Sources eff
         workbench: "low",
         sources: "high",
     });
+});
+
+test("backend execution surface is retained in the immutable authorization and cannot replace browser authority", async () => {
+    const { t } = await seedWorkbench(true);
+    const input = manifest();
+    assert(input.version === 2);
+    const campaignId = await t.mutation(
+        internal.qualificationCampaigns.authorize,
+        {
+            manifest: { ...input, executionSurface: "backend" },
+        },
+    );
+    const retained = await t.run((ctx) => ctx.db.get(campaignId));
+    expect(retained?.manifest).toMatchObject({ executionSurface: "backend" });
+    await expect(
+        t.mutation(internal.qualificationCampaigns.authorize, {
+            manifest: input,
+        }),
+    ).rejects.toThrow("Campaign authorization conflict");
 });

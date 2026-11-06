@@ -1044,6 +1044,11 @@ export default defineSchema({
             "attempt",
         ])
         .index("by_run", ["runId"])
+        .index("by_run_and_status_and_created_at", [
+            "runId",
+            "status",
+            "createdAt",
+        ])
         .index("by_run_source_operation", ["runId", "sourceId", "operation"])
         .index("by_created_at", ["createdAt"]),
     paidWorkControls: defineTable({

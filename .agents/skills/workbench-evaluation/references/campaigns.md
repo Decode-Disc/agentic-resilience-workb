@@ -19,11 +19,15 @@ pnpm workbench:qualify --campaign close --output /absolute/evidence-directory
 
 After interruption, inspect `status` before using `run` for native cleanup and reconciliation. That recovery does not repeat paid effects or open a replacement lot. Preserve rejected evidence and inspect diagnostics if assessment or cleanup fails; do not regenerate an evidence index manually to make assessment pass.
 
+## Execution Surface
+
+For a targeted correction loop, prepare a version-2 manifest with explicit `scenarios`; omitted `executionSurface` is resolved and retained as `"backend"`. Keep `mode: "live"` for real providers or `"deterministic"` for zero-provider mechanics; execution surface and provider mode are independent. The backend surface requires only the verified local backend and uses real anonymous authentication and public access-code admission. It retains the production operations, agents, budgets, evidence and native cleanup, and stops at the first failed scenario. Browser-only steps (`navigate`, `reload`, `viewport`) are rejected at preparation. Use a browser campaign on the stabilized candidate when the decision requires UI or subscription evidence. Set `executionSurface: "browser"` explicitly for a new browser campaign. Historical already prepared or authorized manifests without the field retain their original browser path; they are not reinterpreted. The chosen surface is part of the immutable mandate; changing it requires a separately authorized campaign.
+
 ## Manifest Selection
 
 Use version 2 for new configurable campaigns. The exported `campaignManifestSchema` in [qualificationCampaignPolicy.ts](../../../../convex/qualificationCampaignPolicy.ts) is the input contract; consult it for required fields and supported combinations rather than maintaining a parallel schema here.
 
-- Declare `scenarios` with free identifiers, stable CIK identities, current company metadata, framing and ordered `steps`. Omit scenarios only to select the existing default battery, whose resolved content preparation freezes.
+- Declare `scenarios` with free identifiers, stable CIK identities, current company metadata, framing and ordered `steps`. Only explicit browser campaigns may omit scenarios to select the existing default battery, whose resolved content preparation freezes.
 - Declare `configurations` with explicit `quality` or `harness_stress` purpose and per-role model/reasoning choices. Live models must already be prepared and available in the catalogue. Quality qualification uses the configuration owner's recommended reasoning; do not invent levels the model does not advertise.
 - Declare mandatory expectations, correction paths, expiration, maximum lots, repetition allowance and per-lot/cumulative budgets. Per-lot limits are shared across scenarios; optional scenario caps can reduce them.
 

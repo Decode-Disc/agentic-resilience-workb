@@ -194,6 +194,9 @@ function ModelCatalogue({
 }) {
     const config = useQuery(api.modelConfiguration.list, {});
     const update = useMutation(api.modelConfiguration.updateAvailability);
+    const setReasoning = useMutation(
+        api.modelConfiguration.setReasoningPreference,
+    );
     const [saving, setSaving] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     if (!config)
@@ -246,6 +249,28 @@ function ModelCatalogue({
             setSaving(null);
         }
     };
+    const changeReasoning = async (
+        entry: CatalogModel,
+        preference: CatalogModel["reasoning"]["preference"],
+    ) => {
+        if (!preference || saving) return;
+        setSaving(entry._id);
+        setError(null);
+        try {
+            await setReasoning({
+                catalogId: entry._id,
+                expectedRevision: entry.revision,
+                preference,
+                requestKey: crypto.randomUUID(),
+            });
+        } catch {
+            setError(
+                "The reasoning setting could not be confirmed. Review the current setting before trying again.",
+            );
+        } finally {
+            setSaving(null);
+        }
+    };
     return (
         <div className="space-y-3">
             {error && (
@@ -285,6 +310,60 @@ function ModelCatalogue({
                             Edit configuration
                         </Button>
                     </div>
+                    {entry.currentRevisionId && (
+                        <div className="max-w-sm space-y-2">
+                            <Label>Reasoning</Label>
+                            <Select
+                                value={
+                                    entry.reasoning.preference ?? "recommended"
+                                }
+                                disabled={
+                                    pending ||
+                                    !!saving ||
+                                    entry.status === "preparing"
+                                }
+                                onValueChange={(value) => {
+                                    const preference =
+                                        value === "recommended"
+                                            ? value
+                                            : entry.reasoning.choices.find(
+                                                  (choice) => choice === value,
+                                              );
+                                    if (preference)
+                                        void changeReasoning(entry, preference);
+                                }}>
+                                <SelectTrigger
+                                    aria-label={`Reasoning for ${entry.label}`}>
+                                    <SelectValue>
+                                        {entry.reasoning.preference ===
+                                        "recommended"
+                                            ? `Recommended · ${entry.reasoning.recommended ?? "provider default"}`
+                                            : (entry.reasoning.preference ??
+                                              "Provider default")}
+                                    </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="recommended">
+                                        Recommended ·{" "}
+                                        {entry.reasoning.recommended ??
+                                            "provider default"}
+                                    </SelectItem>
+                                    {entry.reasoning.choices.map((choice) => (
+                                        <SelectItem key={choice} value={choice}>
+                                            {choice}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                                Current default:{" "}
+                                {entry.reasoning.effective ??
+                                    "provider default"}
+                                . Existing dossiers and active work keep their
+                                saved choice.
+                            </p>
+                        </div>
+                    )}
                     <div className="flex flex-wrap gap-6">
                         <Label className="flex items-center gap-2">
                             <Switch

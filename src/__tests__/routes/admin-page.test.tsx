@@ -52,6 +52,12 @@ test("administration exposes model setup separately from per-agent assignments",
     convexReactHarness
         .mutation(api.modelConfiguration.updateAvailability)
         .uses(vi.fn());
+    convexReactHarness
+        .mutation(api.modelConfiguration.setReasoningPreference)
+        .uses(vi.fn());
+    convexReactHarness
+        .mutation(api.modelConfiguration.setResponseControl)
+        .uses(vi.fn());
     convexReactHarness.mutation(api.modelConfiguration.assign).uses(vi.fn());
     render(<AdminPage />);
     fireEvent.click(await screen.findByRole("tab", { name: /^Models$/ }));
