@@ -31,6 +31,7 @@ import { initialFixtureContent } from "../../../convex/qualificationInitialFixtu
 import { resolveLocalRuntime } from "../../local-runtime.ts";
 import {
     configureCampaign,
+    prepareCampaignModels,
     restoreCampaignConfiguration,
 } from "./campaign-configuration.ts";
 import { openQualificationJournal } from "./journal.ts";
@@ -691,6 +692,9 @@ async function executeCampaign(
     const material = read("invitation-otp-codes.local") as {
         invitations: Array<{ slotKey: string; code: string }>;
     };
+    const adminCode = material.invitations.find(
+        (i) => i.slotKey === "admin",
+    )?.code;
     process.on("SIGINT", onSignal);
     process.on("SIGTERM", onSignal);
     try {
@@ -784,6 +788,21 @@ async function executeCampaign(
         }
         if (action === "close") return;
         verifyBattery();
+        if (manifest.mode === "live") {
+            assert(adminCode);
+            const prepared = await withQualificationAdministrator(
+                browser ?? null,
+                { web, convex: runtime.origins.convex },
+                adminCode,
+                (admin) =>
+                    prepareCampaignModels(
+                        admin,
+                        manifest,
+                        options.configuration,
+                    ),
+            );
+            save(root, "model-readiness", { preparedAt: Date.now(), prepared });
+        }
         const current = fingerprints();
         const previous = snapshot.lots.at(-1);
         const baseline = previous
@@ -810,6 +829,11 @@ async function executeCampaign(
         );
         lotRoot = join(root, "lots", key);
         mkdirSync(lotRoot, { recursive: true, mode: 0o700 });
+        if (manifest.mode === "live")
+            cpSync(
+                join(root, "model-readiness.json"),
+                join(lotRoot, "model-readiness.json"),
+            );
         save(lotRoot, "campaign-lot", {
             manifest,
             candidateHash: candidateHash(current),
@@ -841,9 +865,6 @@ async function executeCampaign(
             "Candidate changed before validation",
         );
         verifyQualificationCandidate(lotRoot, validatedFingerprints);
-        const adminCode = material.invitations.find(
-            (i) => i.slotKey === "admin",
-        )?.code;
         if (manifest.mode === "live") {
             assert(adminCode);
             await withQualificationAdministrator(

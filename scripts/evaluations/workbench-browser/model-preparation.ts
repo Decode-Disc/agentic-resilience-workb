@@ -4,19 +4,31 @@ import { ConvexHttpClient } from "convex/browser";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../convex/_generated/api.js";
 
+type ModelChoice = Pick<
+    FunctionReturnType<typeof api.modelConfiguration.list>["models"][number],
+    "model" | "provider"
+>;
+
 /** Repairs only stale input profiles through their authenticated owner, preserving the selected model and revision. */
 export async function prepareQualificationModel(
     client: Pick<ConvexHttpClient, "query" | "action">,
-    agent: "workbench" | "sources" = "workbench",
+    selection: "workbench" | "sources" | ModelChoice = "workbench",
 ) {
     const before = await client.query(api.modelConfiguration.list, {});
-    const assignment = before.assignments.find((a) => a.agent === agent);
-    const selected = before.models.find((m) => m._id === assignment?.catalogId);
+    const assignment =
+        typeof selection === "string"
+            ? before.assignments.find((a) => a.agent === selection)
+            : undefined;
+    const selected = before.models.find((m) =>
+        typeof selection === "string"
+            ? m._id === assignment?.catalogId
+            : m.model === selection.model && m.provider === selection.provider,
+    );
     assert(
         selected?.enabled &&
             selected.status === "ready" &&
             selected.currentRevisionId,
-        "Selected Workbench model is not available",
+        "Selected qualification model is not available",
     );
     let pages = 0;
     let complete = selected.compatible;

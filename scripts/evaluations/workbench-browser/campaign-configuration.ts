@@ -7,6 +7,7 @@ import { api } from "../../../convex/_generated/api.js";
 import {
     type CampaignManifest,
     campaignConfiguration,
+    campaignConfigurations,
 } from "../../../convex/qualificationCampaignPolicy.ts";
 import { prepareQualificationModel } from "./model-preparation.ts";
 
@@ -25,6 +26,35 @@ const save = (root: string, value: Saved) =>
         mode: 0o600,
     });
 
+function campaignModelRoles(manifest: CampaignManifest) {
+    return manifest.capability === "sources"
+        ? (["workbench", "sources"] as const)
+        : (["workbench"] as const);
+}
+
+/** Prepares selected catalogue profiles before admission without changing live role assignments. */
+export async function prepareCampaignModels(
+    client: Pick<ConvexHttpClient, "query" | "action">,
+    manifest: CampaignManifest,
+    configurationId?: string,
+) {
+    const profiles = configurationId
+        ? [campaignConfiguration(manifest, configurationId)]
+        : campaignConfigurations(manifest);
+    const prepared = [];
+    for (const profile of profiles)
+        for (const role of campaignModelRoles(manifest)) {
+            const choice = profile.models[role];
+            assert(choice);
+            prepared.push({
+                configurationId: profile.id,
+                role,
+                ...(await prepareQualificationModel(client, choice)),
+            });
+        }
+    return prepared;
+}
+
 /** Applies only already prepared model choices. Intent is durable before each optimistic mutation. */
 export async function configureCampaign(
     client: Pick<ConvexHttpClient, "query" | "mutation" | "action">,
@@ -37,9 +67,7 @@ export async function configureCampaign(
     const original = await client.query(api.modelConfiguration.list, {});
     const state: Saved = { original, changes: [] };
     save(root, state);
-    for (const role of manifest.capability === "sources"
-        ? (["workbench", "sources"] as const)
-        : (["workbench"] as const)) {
+    for (const role of campaignModelRoles(manifest)) {
         const choice = profile.models[role];
         assert(choice);
         let current = await client.query(api.modelConfiguration.list, {});
@@ -83,6 +111,7 @@ export async function configureCampaign(
                 },
             );
         }
+        await prepareQualificationModel(client, choice);
         current = await client.query(api.modelConfiguration.list, {});
         selected = current.models.find((m) => m._id === selected?._id);
         assert(selected);
@@ -103,7 +132,6 @@ export async function configureCampaign(
                 requestKey: `${manifest.key}:${role}:assign`,
             });
         }
-        await prepareQualificationModel(client, role);
     }
     const current = await client.query(api.modelConfiguration.list, {});
     const policy = current.responseControl;
