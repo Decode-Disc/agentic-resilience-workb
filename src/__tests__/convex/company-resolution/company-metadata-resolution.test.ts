@@ -1,4 +1,6 @@
+import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { mergeRunCompanyMetadata } from "@convex/domain/companyMetadata";
 import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
@@ -145,6 +147,192 @@ test("website persistence replaces a stale run snapshot value", async () => {
             websiteUrlSource: "exa",
         },
     });
+});
+
+test.each([
+    "",
+    "   ",
+    "not-a-url",
+    "http://example.com/",
+    "https://user:secret@example.com/",
+    " https://example.com/ ",
+])("website persistence rejects invalid websiteUrl %j without replacing metadata", async (websiteUrl) => {
+    const { t, fixture } = await seedRun("draft");
+    const before = await t.run(async (ctx) => ({
+        company: await ctx.db.get(fixture.companyId),
+        run: await ctx.db.get(fixture.runId),
+    }));
+    await expect(
+        t.mutation(persistRunCompanyWebsite, {
+            runId: fixture.runId,
+            companyId: fixture.companyId,
+            websiteUrl,
+            websiteUrlSource: "exa",
+        }),
+    ).rejects.toThrow(
+        "websiteUrl must be an absolute HTTPS URL without credentials",
+    );
+    expect(
+        await t.run(async (ctx) => ({
+            company: await ctx.db.get(fixture.companyId),
+            run: await ctx.db.get(fixture.runId),
+        })),
+    ).toEqual(before);
+});
+
+test("company reads report a legacy blank website instead of mixing its value with snapshot provenance", async () => {
+    const { t, fixture } = await seedRun("draft");
+    await t.run((ctx) => ctx.db.patch(fixture.companyId, { websiteUrl: "" }));
+    await expect(
+        t.query(getRunCompany, { runId: fixture.runId }),
+    ).rejects.toThrow(
+        "websiteUrl must be an absolute HTTPS URL without credentials",
+    );
+});
+
+test("an absent current website preserves the snapshot URL and its provenance", async () => {
+    const { t, fixture } = await seedRun("draft");
+    await t.run(async (ctx) => {
+        await ctx.db.patch(fixture.companyId, {
+            websiteUrl: undefined,
+            websiteUrlSource: "exa",
+        });
+        await ctx.db.patch(fixture.runId, {
+            companySnapshot: { ...staleSnapshot, websiteUrlSource: "sec_ir" },
+        });
+    });
+    expect(
+        await t.query(getRunCompany, { runId: fixture.runId }),
+    ).toMatchObject({
+        company: { websiteUrl: "https://old.example/" },
+    });
+    expect(
+        await t.run(async (ctx) =>
+            mergeRunCompanyMetadata(
+                (await ctx.db.get(fixture.runId))?.companySnapshot,
+                await ctx.db.get(fixture.companyId),
+            ),
+        ),
+    ).toMatchObject({
+        websiteUrl: "https://old.example/",
+        websiteUrlSource: "sec_ir",
+    });
+});
+
+test.each([
+    "",
+    "https://www.servicenow.com/",
+])("explicit valid website persistence repairs a legacy blank value with snapshot %j", async (snapshotUrl) => {
+    const { t, fixture } = await seedRun("draft");
+    await t.run(async (ctx) => {
+        await ctx.db.patch(fixture.companyId, { websiteUrl: "" });
+        await ctx.db.patch(fixture.runId, {
+            companySnapshot: {
+                ...staleSnapshot,
+                websiteUrl: snapshotUrl,
+                websiteUrlSource: "exa",
+            },
+        });
+    });
+    await t.mutation(persistRunCompanyWebsite, {
+        runId: fixture.runId,
+        companyId: fixture.companyId,
+        websiteUrl: "https://www.servicenow.com/",
+        websiteUrlSource: "exa",
+    });
+    expect(
+        await t.query(getRunCompany, { runId: fixture.runId }),
+    ).toMatchObject({
+        company: { websiteUrl: "https://www.servicenow.com/" },
+    });
+    expect(await t.run((ctx) => ctx.db.get(fixture.companyId))).toMatchObject({
+        websiteUrl: "https://www.servicenow.com/",
+        websiteUrlSource: "exa",
+    });
+    expect(await t.run((ctx) => ctx.db.get(fixture.runId))).toMatchObject({
+        companySnapshot: {
+            websiteUrl: "https://www.servicenow.com/",
+            websiteUrlSource: "exa",
+        },
+    });
+});
+
+test("website provider persistence rejects an empty URL before changing metadata or settling its receipt", async () => {
+    const { t, fixture } = await seedRun("draft");
+    const providerCallId = await t.run((ctx) =>
+        ctx.db.insert("providerCalls", {
+            service: "exa",
+            operation: "resolve_company_website",
+            operationKey: "empty-website",
+            status: "started",
+            attempt: 1,
+            createdAt: Date.now(),
+        }),
+    );
+    const before = await t.run(async (ctx) => ({
+        company: await ctx.db.get(fixture.companyId),
+        receipt: await ctx.db.get(providerCallId),
+    }));
+    await expect(
+        t.mutation(internal.companyResolution.persistWebsiteResolution, {
+            company: staleSnapshot,
+            websiteUrl: "",
+            websiteUrlSource: "exa",
+            providerCallId,
+            status: "succeeded",
+            latencyMs: 1,
+            accepted: 1,
+            rejected: 0,
+        }),
+    ).rejects.toThrow(
+        "websiteUrl must be an absolute HTTPS URL without credentials",
+    );
+    expect(
+        await t.run(async (ctx) => ({
+            company: await ctx.db.get(fixture.companyId),
+            receipt: await ctx.db.get(providerCallId),
+        })),
+    ).toEqual(before);
+});
+
+test.each([
+    "preflight",
+    "revalidation",
+])("%s rejects supplied blank website metadata instead of replacing a usable URL", async (boundary) => {
+    const { t, fixture } = await seedRun("draft");
+    const authUserId = await t.run((ctx) =>
+        ctx.db.insert("users", { isAnonymous: true }),
+    );
+    const session = t.withIdentity({
+        subject: `${authUserId}|metadata-contract`,
+    });
+    const before = await t.run(async (ctx) => ({
+        company: await ctx.db.get(fixture.companyId),
+        run: await ctx.db.get(fixture.runId),
+    }));
+    const company = { ...staleSnapshot, websiteUrl: "" };
+    const result =
+        boundary === "preflight"
+            ? session.mutation(internal.companyResolution.persistPreflight, {
+                  query: "NOW",
+                  company,
+                  expiresAt: Date.now() + 60_000,
+                  resolverVersion: "fixture",
+              })
+            : t.mutation(internal.companyResolution.verifyRevalidation, {
+                  runId: fixture.runId,
+                  executionGeneration: 3,
+                  resolved: company,
+              });
+    await expect(result).rejects.toThrow(
+        "websiteUrl must be an absolute HTTPS URL without credentials",
+    );
+    expect(
+        await t.run(async (ctx) => ({
+            company: await ctx.db.get(fixture.companyId),
+            run: await ctx.db.get(fixture.runId),
+        })),
+    ).toEqual(before);
 });
 
 test("website persistence clears provenance inherited from a replaced URL", async () => {

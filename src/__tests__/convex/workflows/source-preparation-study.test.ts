@@ -49,6 +49,14 @@ test("comparison studies pin qualifications from a completed owned reading study
             expectedContentHash: originalTask.output.contentHash,
         },
     );
+    await expect(
+        t.mutation(internal.sourcePreparationEvaluation.copySource, {
+            preparationId: reading.preparationId,
+            sourceId,
+            expectedContentHash: originalTask.output.contentHash,
+            replayInputHash: "c".repeat(64),
+        }),
+    ).rejects.toThrow("Replay hashes are offline-only");
     const args = {
         slotKey: "source-preparation-test",
         fixtureKey: "reference-comparison",
@@ -179,6 +187,71 @@ test("study seeding requires loopback fixtures and preserves the admitted visito
     ).rejects.toThrow("Frozen preparation study changed");
 });
 
+test.each([
+    "",
+    "   ",
+    "a".repeat(63),
+    "g".repeat(64),
+])("frozen imports reject invalid replayInputHash %j without copying material", async (replayInputHash) => {
+    vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
+    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
+    const { t, runId, sourceId } = await seedInspectedEvidence({
+        qualification: {
+            companyMatch: "uncertain",
+            companyPassages: [],
+            documentKind: "unknown",
+            reportingPeriodEnd: null,
+            reportingPeriodPassages: [],
+            findings: [],
+            limitations: [],
+        },
+    });
+    await t.run((ctx) => ctx.db.patch(runId, { executionStatus: "paused" }));
+    const study = await t.mutation(seedStudy, {
+        slotKey: "source-preparation-test",
+        fixtureKey: "invalid-replay-hash",
+        sourceRunId: runId,
+        manifestSha256: "b".repeat(64),
+        phase: "replay",
+        concurrency: 4,
+        executionPlanVersion: "inline_controls_v2",
+    });
+    const task = await t.run((ctx) =>
+        ctx.db
+            .query("aiTaskResults")
+            .withIndex("by_run", (q) => q.eq("runId", runId))
+            .first(),
+    );
+    if (task?.output.kind !== "source_qualification")
+        throw new Error("Missing fixture qualification");
+    await expect(
+        t.mutation(internal.sourcePreparationEvaluation.copySource, {
+            preparationId: study.preparationId,
+            sourceId,
+            qualificationTaskId: task._id,
+            expectedContentHash: task.output.contentHash,
+            replayInputHash,
+        }),
+    ).rejects.toThrow("replayInputHash must be a lowercase SHA-256 digest");
+    expect(
+        await t.run((ctx) =>
+            ctx.db
+                .query("sources")
+                .withIndex("by_run_and_url", (q) => q.eq("runId", study.runId))
+                .take(1),
+        ),
+    ).toEqual([]);
+    expect(
+        await t.run((ctx) =>
+            ctx.db
+                .query("aiTaskResults")
+                .withIndex("by_run", (q) => q.eq("runId", study.runId))
+                .take(1),
+        ),
+    ).toEqual([]);
+    expect(await t.run((ctx) => ctx.db.get(task._id))).toEqual(task);
+});
+
 test("frozen imports are idempotent and replay cannot dispatch a cache miss", async () => {
     vi.useFakeTimers();
     vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
@@ -229,6 +302,12 @@ test("frozen imports are idempotent and replay cannot dispatch a cache miss", as
     await expect(
         t.mutation(internal.sourcePreparationEvaluation.copySource, {
             ...args,
+            replayInputHash: "",
+        }),
+    ).rejects.toThrow("replayInputHash must be a lowercase SHA-256 digest");
+    await expect(
+        t.mutation(internal.sourcePreparationEvaluation.copySource, {
+            ...args,
             expectedContentHash: "f".repeat(64),
         }),
     ).rejects.toThrow("Frozen copy changed");
@@ -238,12 +317,22 @@ test("frozen imports are idempotent and replay cannot dispatch a cache miss", as
             replayInputHash: "d".repeat(64),
         }),
     ).rejects.toThrow("Frozen copy changed");
+    await expect(
+        t.mutation(internal.sourcePreparationEvaluation.copySource, {
+            ...args,
+            replayInputHash: undefined,
+        }),
+    ).rejects.toThrow("Frozen copy changed");
     expect(
         await t.run((ctx) => {
             if (!imported.taskId) throw new Error("Missing imported task");
             return ctx.db.get(imported.taskId);
         }),
-    ).toMatchObject({ executionMode: "showcase", runId: study.runId });
+    ).toMatchObject({
+        executionMode: "showcase",
+        runId: study.runId,
+        inputHash: "c".repeat(64),
+    });
     const handle = await t.mutation(
         internal.sourcePreparationEvaluation.start,
         { preparationId: study.preparationId, manifestSha256: "b".repeat(64) },

@@ -13,7 +13,10 @@ import {
     internalMutation,
     internalQuery,
 } from "./_generated/server";
-import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
+import {
+    mergeRunCompanyMetadata,
+    requireCompanyWebsiteUrl,
+} from "./domain/companyMetadata";
 import { companySnapshotValidator } from "./domain/validators";
 import { createExaWebsiteAdapter } from "./integrations/exa";
 import {
@@ -278,6 +281,7 @@ export const persistPreflight = internalMutation({
             .unique();
         const websiteUrl =
             args.company.websiteUrl ?? existingCompany?.websiteUrl;
+        if (websiteUrl !== undefined) requireCompanyWebsiteUrl(websiteUrl);
         const websiteUrlSource =
             args.company.websiteUrlSource ?? existingCompany?.websiteUrlSource;
         const websiteResolvedAt =
@@ -576,6 +580,7 @@ export const persistRunCompanyWebsite = internalMutation({
         if (!run || run.companyId !== args.companyId || !company) {
             throw new Error("Research run company metadata is unavailable");
         }
+        requireCompanyWebsiteUrl(args.websiteUrl);
 
         const snapshot = run.companySnapshot ?? {
             cik: company.cik,
@@ -586,8 +591,14 @@ export const persistRunCompanyWebsite = internalMutation({
             websiteUrl: company.websiteUrl,
             websiteUrlSource: company.websiteUrlSource,
         };
-        mergeRunCompanyMetadata(run.companySnapshot, company);
+        mergeRunCompanyMetadata(run.companySnapshot, {
+            ...company,
+            websiteUrl: args.websiteUrl,
+        });
         if (
+            company.websiteUrl === args.websiteUrl &&
+            (!args.websiteUrlSource ||
+                company.websiteUrlSource === args.websiteUrlSource) &&
             snapshot.websiteUrl === args.websiteUrl &&
             (!args.websiteUrlSource ||
                 snapshot.websiteUrlSource === args.websiteUrlSource)
@@ -686,6 +697,7 @@ export const persistWebsiteResolution = internalMutation({
         ) {
             throw new Error("Website provider lease is no longer active");
         }
+        requireCompanyWebsiteUrl(args.websiteUrl);
         const existing = await ctx.db
             .query("companies")
             .withIndex("by_cik", (query) => query.eq("cik", args.company.cik))
@@ -937,6 +949,8 @@ export const verifyRevalidation = internalMutation({
                     args.resolved.investorRelationsUrl ??
                     knownCompany.investorRelationsUrl,
             };
+            if (companyMetadata.websiteUrl !== undefined)
+                requireCompanyWebsiteUrl(companyMetadata.websiteUrl);
             await ctx.db.patch(company._id, {
                 ...companyMetadata,
                 canonicalizedAt: now,

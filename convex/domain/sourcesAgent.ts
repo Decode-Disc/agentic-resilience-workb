@@ -248,15 +248,14 @@ export const sourcesDefinition: AgentDefinition & { id: "sources_v1" } = {
             ...input,
             expectedTaskId: qualification?.taskId ?? null,
             changes: input.changes.map((change) => {
-                if (!change.contributionId) return change;
+                if (change.contributionId === undefined) return change;
                 const contribution = qualification?.contributions.find(
                     (candidate) => candidate.id === change.contributionId,
                 );
-                if (!contribution)
-                    throw executionError(
-                        "qualification_observation_unavailable",
-                    );
-                return { ...change, expectedVersion: contribution.version };
+                // The domain validates supplied identities; bind only versions actually observed.
+                return contribution
+                    ? { ...change, expectedVersion: contribution.version }
+                    : change;
             }),
         };
     },

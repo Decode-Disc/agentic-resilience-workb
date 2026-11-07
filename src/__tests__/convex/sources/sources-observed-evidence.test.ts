@@ -142,6 +142,99 @@ test("a qualification selects an observed passage and retains its exact quotatio
 });
 
 test.each([
+    { contributionId: "", legacy: false },
+    { contributionId: "   ", legacy: false },
+    { contributionId: "", legacy: true },
+    { contributionId: "   ", legacy: true },
+])("Sources refuses a supplied blank contribution identity $contributionId (legacy: $legacy) before documentary control", async ({
+    contributionId,
+    legacy,
+}) => {
+    const f = await qualifyObservedPassage();
+    assert(f.qualification.output.kind === "documentary_qualification");
+    const first = f.qualification.output.contributions[0];
+    assert(first);
+    const { id: _id, version: _version, ...contribution } = first;
+    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        taskKey: "blank-contribution-identity",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready");
+    if (legacy) {
+        const snapshot = JSON.parse(begun.inputJson);
+        const work = domainSnapshot(snapshot).activeWork as Record<
+            string,
+            unknown
+        >;
+        delete work.qualificationInputVersion;
+        await f.t.run((ctx) =>
+            ctx.db.patch(begun.invocationId, {
+                inputJson: JSON.stringify(snapshot),
+            }),
+        );
+    }
+    const finished = await f.t.mutation(internal.execution.invocations.finish, {
+        invocationId: begun.invocationId,
+        expectedGeneration: 4,
+        response: {
+            kind: "operations",
+            requests: [
+                {
+                    callId: "blank-identity",
+                    name: "submit_documentary_qualification",
+                    inputJson: JSON.stringify({
+                        sourceId: f.sourceId,
+                        captureId: f.captureId,
+                        ...(legacy
+                            ? { expectedTaskId: f.qualification._id }
+                            : {}),
+                        changes: [
+                            {
+                                contributionId,
+                                contribution: {
+                                    ...contribution,
+                                    evidence: [
+                                        {
+                                            readRequestId: f.readRequestId,
+                                            passageOrder: f.passage.order,
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    }),
+                },
+            ],
+        },
+    });
+    const requestId = finished.requestIds[0];
+    assert(requestId);
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 4,
+        }),
+    ).toMatchObject({
+        kind: "unavailable",
+        code: "qualification_invalid",
+        validation: {
+            path: "changes[0].contributionId",
+            expected: expect.stringContaining("Omit"),
+        },
+    });
+    expect(examiner).toHaveBeenCalledTimes(1);
+    const current = await f.t.run((ctx) => ctx.db.get(f.preparationId));
+    expect(current?.sourcesMission?.qualifications).toEqual([
+        f.qualification._id,
+    ]);
+    expect(await f.t.run((ctx) => ctx.db.get(f.qualification._id))).toEqual(
+        f.qualification,
+    );
+});
+
+test.each([
     false,
     true,
 ])("Sources replays a retained legacy qualification response with stale version %s using its admitted input contract", async (stale) => {

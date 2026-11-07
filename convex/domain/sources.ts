@@ -138,15 +138,27 @@ export function reconstructQualification(
         : [];
     const changed = new Set<string>();
     for (const [index, change] of input.changes.entries()) {
+        if (
+            change.contributionId !== undefined &&
+            !change.contributionId.trim()
+        )
+            throw executionError("qualification_invalid", [
+                {
+                    path: `changes[${index}].contributionId`,
+                    expected:
+                        "Omit contributionId for a new contribution; supply a nonblank observed identity for a correction.",
+                },
+            ]);
         const id = change.contributionId ?? sha256Hex(`${requestKey}:${index}`);
         const existing = contributions.findIndex((c) => c.id === id);
         if (
             changed.has(id) ||
-            (change.contributionId &&
+            (change.contributionId !== undefined &&
                 (existing < 0 ||
                     contributions[existing]?.version !==
                         change.expectedVersion)) ||
-            (!change.contributionId && change.expectedVersion !== undefined)
+            (change.contributionId === undefined &&
+                change.expectedVersion !== undefined)
         )
             throw executionError("qualification_version_conflict");
         const c = change.contribution;

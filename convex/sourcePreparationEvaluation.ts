@@ -198,6 +198,14 @@ export const copySource = internalMutation({
         });
         if (!p.preparationStudy || p.workflowId)
             throw new Error("Study is not awaiting frozen inputs");
+        if (args.replayInputHash !== undefined) {
+            if (!/^[a-f0-9]{64}$/.test(args.replayInputHash))
+                throw new Error(
+                    "replayInputHash must be a lowercase SHA-256 digest",
+                );
+            if (p.preparationStudy.phase !== "replay")
+                throw new Error("Replay hashes are offline-only");
+        }
         const source = await ctx.db.get(args.sourceId);
         if (!source || source.runId !== p.preparationStudy.sourceRunId)
             throw new Error("Source outside frozen dossier");
@@ -268,8 +276,9 @@ export const copySource = internalMutation({
             if (
                 !priorCapture ||
                 priorCapture.contentHash !== args.expectedContentHash ||
-                (args.replayInputHash &&
-                    task?.inputHash !== args.replayInputHash) ||
+                (task &&
+                    task.inputHash !==
+                        (args.replayInputHash ?? requestedTask?.inputHash)) ||
                 Boolean(task) !== Boolean(args.qualificationTaskId)
             )
                 throw new Error("Frozen copy changed");
@@ -300,8 +309,6 @@ export const copySource = internalMutation({
             throw new Error("Frozen capture unavailable");
         if (capture.contentHash !== args.expectedContentHash)
             throw new Error("Frozen capture changed");
-        if (args.replayInputHash && p.preparationStudy.phase !== "replay")
-            throw new Error("Replay hashes are offline-only");
         if (
             args.fixtureIndex !== undefined &&
             (p.preparationStudy.phase !== "replay" ||
